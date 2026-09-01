@@ -27896,7 +27896,13 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 .home-sync-line.is-warning { color: #c2410c; opacity: 1; font-weight: 600; }
 .home-sync-line span { font-size: 12px; }
 
-.home-metric-value.is-spend { color: #dc2626; }
+/* Kept as a no-op rather than deleted: `is-spend` may still be in a cached
+   bundle somewhere, and a stale class that resolves to the ordinary text
+   colour is harmless where one that resolves to red is the bug. */
+.home-metric-value.is-spend { color: inherit; }
+/* A tile with nothing to say about its figure. Spending is neutral: it gets a
+   mark and a number, not a verdict. */
+.home-money-tile.tone-neutral .home-money-tile-dot { background: rgba(100, 116, 139, 0.14); color: #475569; }
 
 /* 2x1 Banking: three figures divided by rules, then the feed beside what the
    workspace pays on repeat. Tiles were too heavy for three numbers. */
@@ -28147,6 +28153,16 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 .home-ratio-head, .home-ratio-foot { display: flex; justify-content: space-between; font-size: 11px; }
 .home-ratio-head em { font-style: normal; opacity: 0.62; }
 .home-ratio-foot b { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The foot is the bar's legend, so each figure takes its own segment's
+   colour — it was green against a blue segment and a warning orange
+   against the costs segment, which read as a verdict on ordinary costs
+   rather than as a key. Both are darkened to stay legible as text. */
+.home-ratio-foot b.is-revenue { color: #1d4ed8; }
+.home-ratio-foot b.is-costs { color: #c2410c; }
+/* Both are too dark to read on the dark ground, and nothing else in this file
+   would have lightened them — the older figure colours never got this far. */
+body[data-studio-theme="dark"] .home-ratio-foot b.is-revenue { color: #7dabfb; }
+body[data-studio-theme="dark"] .home-ratio-foot b.is-costs { color: #fb9a5c; }
 .home-ratio-bar { display: flex; height: 7px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.18); }
 .home-ratio-bar i.is-revenue { background: #2563eb; }
 .home-ratio-bar i.is-costs { background: #f97316; }

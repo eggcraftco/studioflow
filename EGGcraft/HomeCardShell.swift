@@ -305,6 +305,10 @@ struct HomeMetricTile: View {
     let label: String
     let value: String
     var tone: Color = HomeTone.accent
+    /// Spending is a fact, not a verdict. A tile whose figure carries no good
+    /// or bad news keeps its category colour on the disc and prints the number
+    /// in ordinary text, which is what `valueTone: .primary` asks for.
+    var valueTone: Color? = nil
     var sub: String = ""
     /// The mark inside the tinted disc, tinted by the tile's own colour.
     var symbol: String = ""
@@ -322,7 +326,7 @@ struct HomeMetricTile: View {
                 .lineLimit(1).minimumScaleFactor(0.8)
             Text(value)
                 .font(.system(size: 15, weight: .heavy))
-                .foregroundColor(tone)
+                .foregroundColor(valueTone ?? tone)
                 .lineLimit(1).minimumScaleFactor(0.6)
             if !sub.isEmpty {
                 Text(sub).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)

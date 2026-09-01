@@ -118,7 +118,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
             <i className="is-revenue" style={{ width: `${Math.max(0, 100 - costShare)}%` }} />
             <i className="is-costs" style={{ width: `${costShare}%` }} />
           </span>
-          <span className="home-ratio-foot"><b className="is-positive">{money(revenue)}</b><b className="is-warning">{money(costs)}</b></span>
+          <span className="home-ratio-foot"><b className="is-revenue">{money(revenue)}</b><b className="is-costs">{money(costs)}</b></span>
         </div>
       </div>
     );
@@ -155,7 +155,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
           {deductions.map((entry) => (
             <li key={entry.label} className="is-deduction">
               <em><span className="home-minus" aria-hidden="true">−</span><span>{t(entry.label)}</span></em>
-              <b className="is-warning">{money(entry.value)}</b>
+              <b>{money(entry.value)}</b>
             </li>
           ))}
           <li className="home-waterfall-arrow" aria-hidden="true">→</li>
@@ -214,7 +214,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 function MoneyTile({
   label, value, tone, sub, icon,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red"; sub?: string; icon?: HomeTileIconName;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string; icon?: HomeTileIconName;
 }) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
@@ -367,7 +367,11 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
       <div className="home-money">
         <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
         <p className="home-metric-label">{t("Spent this month")}</p>
-        <strong className="home-metric-value is-spend">−{money(spent)}</strong>
+        {/* Spending is not a loss and not an error. It is what a workshop does
+            every week, and painting it red with a minus made an ordinary month
+            look like a warning — the label already says "Spent", so the sign
+            was saying it twice and the colour was saying something untrue. */}
+        <strong className="home-metric-value">{money(spent)}</strong>
         <div className="home-split-pair">
           <span><em>{t("Incoming")}</em><b className="is-positive">+{money(incoming)}</b></span>
           <span>
@@ -385,7 +389,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   const tiles = (
     <div className="home-tile-row">
       <MoneyTile icon="in" label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
-      <MoneyTile icon="out" label={t("Spent this month")} value={`−${money(spent)}`} tone="orange" />
+      <MoneyTile icon="out" label={t("Spent this month")} value={money(spent)} tone="neutral" />
       <MoneyTile icon="receiptAlert" label={t("Missing receipts")} value={String(missingReceipts)}
                  tone={missingReceipts > 0 ? "red" : "blue"} />
       <MoneyTile icon="recurring" label={t("Fixed")}
@@ -403,7 +407,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
       <div className="home-money is-wide">
         <div className="home-figure-row">
           <span><em>{t("Incoming this month")}</em><b className="is-positive">+{money(incoming)}</b></span>
-          <span><em>{t("Spent this month")}</em><b className="is-negative">−{money(spent)}</b></span>
+          <span><em>{t("Spent this month")}</em><b>{money(spent)}</b></span>
           <span>
             <em>{t("missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b>
@@ -417,7 +421,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
                 <li key={tx.id}>
                   <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
                   <em>{tx.name || t("Transactions")}</em>
-                  <b className={tx.amount < 0 ? "is-negative" : "is-positive"}>
+                  <b className={tx.amount < 0 ? "" : "is-positive"}>
                     {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
                   </b>
                 </li>
@@ -459,7 +463,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
               <li key={tx.id}>
                 <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
                 <em>{tx.name || t("Transactions")}</em>
-                <b className={tx.amount < 0 ? "is-warning" : "is-positive"}>
+                <b className={tx.amount < 0 ? "" : "is-positive"}>
                   {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
                 </b>
               </li>
@@ -467,7 +471,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
           </ul>
           <p className="home-year-line">
             {t("This year")}: <em>{t("In")}</em> <b className="is-positive">{money(yearIn)}</b>
-            {" · "}<em>{t("Out")}</em> <b className="is-negative">{money(yearOut)}</b>
+            {" · "}<em>{t("Out")}</em> <b>{money(yearOut)}</b>
           </p>
         </div>
       </div>

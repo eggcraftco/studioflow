@@ -122,6 +122,10 @@ fun HomeEyebrow(text: String, strong: Boolean = true) {
 fun HomeMetricTile(
     label: String, value: String, tone: Color = HomeTone.accent, sub: String = "",
     modifier: Modifier = Modifier,
+    /** Spending is a fact, not a verdict. A tile whose figure carries no good or
+     *  bad news keeps its category colour on the disc and prints the number in
+     *  ordinary text, which is what a `valueTone` of `onSurface` asks for. */
+    valueTone: Color? = null,
     /** The mark inside the tinted disc, tinted by the tile's own colour. */
     icon: ImageVector? = null
 ) {
@@ -137,7 +141,7 @@ fun HomeMetricTile(
         }
         Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
             overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = tone,
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = valueTone ?: tone,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (sub.isNotEmpty()) {
             Text(sub, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

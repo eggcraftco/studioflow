@@ -1008,7 +1008,7 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
                         Text((if (minus) "− " else "") + label, fontSize = 10.5.sp, maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(money(value, state), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                            color = HomeTone.orange, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -1165,8 +1165,8 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
             HomeDivider()
             Spacer(Modifier.weight(1f))
             Text(t("Spent this month"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("−" + money(spent, state), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
-                color = HomeTone.red, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(money(spent, state), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
             HomeDivider()
             Row(Modifier.padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically,
@@ -1203,8 +1203,8 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SyncLine(state, t)
             Text(t("Spent this month"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("−" + money(spent, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
-                color = HomeTone.red, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(money(spent, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
             HomeSplitPair(
                 t("Incoming"), "+" + money(incoming, state), HomeTone.green,
                 t("missing receipts"), "$missing", if (missing > 0) HomeTone.red else Color.Unspecified
@@ -1225,7 +1225,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                 BankFigure(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(34.dp)
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
-                BankFigure(t("Spent this month"), "−" + money(spent, state), HomeTone.red, Modifier.weight(1f))
+                BankFigure(t("Spent this month"), money(spent, state), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(34.dp)
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
                 BankFigure(t("Missing receipts"), "$missing",
@@ -1245,7 +1245,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Text((if (top.amount < 0) "−" else "+") + money(kotlin.math.abs(top.amount), state),
                         fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                        color = if (top.amount < 0) HomeTone.red else HomeTone.green)
+                        color = if (top.amount < 0) MaterialTheme.colorScheme.onSurface else HomeTone.green)
                 }
                 Spacer(Modifier.height(8.dp)); HomeDivider(); Spacer(Modifier.height(8.dp))
             }
@@ -1264,7 +1264,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                 Text("${t("In")} ${money(yearIn, state)}", fontSize = 10.sp,
                     fontWeight = FontWeight.Bold, color = HomeTone.green, maxLines = 1)
                 Text("${t("Out")} ${money(yearOut, state)}", fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold, color = HomeTone.red, maxLines = 1)
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
             }
         }
         return
@@ -1279,7 +1279,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                 BankFigure(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(32.dp)
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
-                BankFigure(t("Spent this month"), "−" + money(spent, state), HomeTone.red, Modifier.weight(1f))
+                BankFigure(t("Spent this month"), money(spent, state), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(32.dp)
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
                 BankFigure(t("missing receipts"), "$missing",
@@ -1297,7 +1297,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
                                 fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                                color = if (tx.amount < 0) HomeTone.red else HomeTone.green)
+                                color = if (tx.amount < 0) MaterialTheme.colorScheme.onSurface else HomeTone.green)
                         }
                     }
                 }
@@ -1336,8 +1336,8 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 SlimTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green,
                     Icons.Filled.ArrowDownward, Modifier.weight(1f))
-                SlimTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange,
-                    Icons.Filled.ArrowUpward, Modifier.weight(1f))
+                SlimTile(t("Spent this month"), money(spent, state), HomeTone.slate,
+                    Icons.Filled.ArrowUpward, Modifier.weight(1f), valueTone = MaterialTheme.colorScheme.onSurface)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 SlimTile(t("Missing receipts"), "$missing",
@@ -1349,8 +1349,8 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
         } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green,
                 modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowDownward)
-            HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange,
-                modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowUpward)
+            HomeMetricTile(t("Spent this month"), money(spent, state), HomeTone.slate,
+                modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowUpward, valueTone = MaterialTheme.colorScheme.onSurface)
             HomeMetricTile(t("Missing receipts"), "$missing",
                 if (missing > 0) HomeTone.red else HomeTone.accent,
                 modifier = Modifier.weight(1f), icon = Icons.Filled.ReceiptLong)
@@ -1394,7 +1394,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
                             fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                            color = if (tx.amount < 0) HomeTone.red else HomeTone.green)
+                            color = if (tx.amount < 0) MaterialTheme.colorScheme.onSurface else HomeTone.green)
                     }
                 }
                 Spacer(Modifier.height(3.dp))
@@ -1435,7 +1435,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
                                     fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                                    color = if (tx.amount < 0) HomeTone.orange else HomeTone.green)
+                                    color = if (tx.amount < 0) MaterialTheme.colorScheme.onSurface else HomeTone.green)
                             }
                         }
                     }
@@ -1538,7 +1538,10 @@ private fun OrderThumb(link: String, name: String) {
 }
 
 @Composable
-private fun SlimTile(label: String, value: String, tone: Color, icon: ImageVector, modifier: Modifier) {
+/** [valueTone] is the same escape hatch as [HomeMetricTile]'s: the disc keeps
+ *  the category colour, the number reads as ordinary text. */
+private fun SlimTile(label: String, value: String, tone: Color, icon: ImageVector, modifier: Modifier,
+                     valueTone: Color? = null) {
     Row(
         modifier
             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
@@ -1553,7 +1556,7 @@ private fun SlimTile(label: String, value: String, tone: Color, icon: ImageVecto
         Column {
             Text(label, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = tone,
+            Text(value, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = valueTone ?: tone,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }

@@ -1059,7 +1059,7 @@ struct HomeWaterfall: View {
             cell(t("Revenue", lang: lang), money(revenue), HomeTone.green, minus: false)
             ForEach(Array(deductions.enumerated()), id: \.offset) { _, entry in
                 Divider().frame(height: 30)
-                cell(entry.0, money(entry.1), HomeTone.orange, minus: true)
+                cell(entry.0, money(entry.1), .primary, minus: true)
             }
             Divider().frame(height: 30)
             cell(t("Net profit", lang: lang), money(profit), HomeTone.green, minus: false)
@@ -1191,6 +1191,9 @@ struct HomeSlimTile: View {
     let label: String
     let value: String
     let tone: Color
+    /// See `HomeMetricTile.valueTone`: the disc keeps the category colour, the
+    /// number reads as ordinary text when it carries no verdict.
+    var valueTone: Color? = nil
     let symbol: String
     var body: some View {
         HStack(spacing: 7) {
@@ -1201,7 +1204,7 @@ struct HomeSlimTile: View {
                 .background(Circle().fill(tone.opacity(0.14)))
             VStack(alignment: .leading, spacing: 0) {
                 Text(label).font(.system(size: 9.5)).foregroundColor(.secondary).lineLimit(1)
-                Text(value).font(.system(size: 12.5, weight: .heavy)).foregroundColor(tone)
+                Text(value).font(.system(size: 12.5, weight: .heavy)).foregroundColor(valueTone ?? tone)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
             Spacer(minLength: 0)
@@ -1362,9 +1365,9 @@ struct HomeBankingBody: View {
                     Spacer(minLength: 8)
                     Text(t("Spent this month", lang: lang))
                         .font(.system(size: 11)).foregroundColor(.secondary)
-                    Text("−" + money(spent))
+                    Text(money(spent))
                         .font(.system(size: 27, weight: .heavy))
-                        .foregroundColor(HomeTone.red)
+                        .foregroundColor(.primary)
                         .lineLimit(1).minimumScaleFactor(0.45)
                     Spacer(minLength: 8)
                     Divider()
@@ -1396,9 +1399,9 @@ struct HomeBankingBody: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
                     Text(t("Spent this month", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
-                    Text("−" + money(spent))
+                    Text(money(spent))
                         .font(.system(size: compact ? 25 : 33, weight: .heavy))
-                        .foregroundColor(HomeTone.red)
+                        .foregroundColor(.primary)
                         .lineLimit(1).minimumScaleFactor(0.5)
                     Spacer(minLength: 0)
                     HomeSplitPair {
@@ -1420,7 +1423,7 @@ struct HomeBankingBody: View {
                     HStack(spacing: 0) {
                         HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                         Divider().frame(height: 34)
-                        HomeBankFigure(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.red)
+                        HomeBankFigure(label: t("Spent this month", lang: lang), value: money(spent), tone: .primary)
                         Divider().frame(height: 34)
                         HomeBankFigure(label: t("Missing receipts", lang: lang), value: "\(missing)",
                                        tone: missing > 0 ? HomeTone.orange : .primary)
@@ -1437,7 +1440,7 @@ struct HomeBankingBody: View {
                             Spacer(minLength: 6)
                             Text((top.amount < 0 ? "−" : "+") + money(abs(top.amount)))
                                 .font(.system(size: 12.5, weight: .bold))
-                                .foregroundColor(top.amount < 0 ? HomeTone.red : HomeTone.green)
+                                .foregroundColor(top.amount < 0 ? .primary : HomeTone.green)
                                 .lineLimit(1)
                         }
                         Divider().padding(.vertical, 8)
@@ -1457,7 +1460,7 @@ struct HomeBankingBody: View {
                             .font(.system(size: 10.5, weight: .bold)).foregroundColor(HomeTone.green)
                             .lineLimit(1).minimumScaleFactor(0.6)
                         Text(t("Out", lang: lang) + " " + money(yearOut))
-                            .font(.system(size: 10.5, weight: .bold)).foregroundColor(HomeTone.red)
+                            .font(.system(size: 10.5, weight: .bold)).foregroundColor(.primary)
                             .lineLimit(1).minimumScaleFactor(0.6)
                     }
                     Spacer(minLength: 0)
@@ -1470,7 +1473,7 @@ struct HomeBankingBody: View {
                     HStack(spacing: 0) {
                         HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                         Divider().frame(height: 32)
-                        HomeBankFigure(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.red)
+                        HomeBankFigure(label: t("Spent this month", lang: lang), value: money(spent), tone: .primary)
                         Divider().frame(height: 32)
                         HomeBankFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
                                        tone: missing > 0 ? HomeTone.orange : .primary)
@@ -1482,7 +1485,7 @@ struct HomeBankingBody: View {
                             ForEach(transactions.prefix(3), id: \.id) { tx in
                                 HomeRow(title: tx.counterparty.isEmpty ? tx.description : tx.counterparty,
                                         detail: (tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)),
-                                        tone: tx.amount < 0 ? HomeTone.red : HomeTone.green)
+                                        tone: tx.amount < 0 ? .primary : HomeTone.green)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1518,8 +1521,8 @@ struct HomeBankingBody: View {
                         HStack(spacing: 7) {
                             HomeSlimTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
                                          tone: HomeTone.green, symbol: "arrow.down")
-                            HomeSlimTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
-                                         tone: HomeTone.orange, symbol: "arrow.up")
+                            HomeSlimTile(label: t("Spent this month", lang: lang), value: money(spent),
+                                         tone: HomeTone.slate, valueTone: .primary, symbol: "arrow.up")
                         }
                         HStack(spacing: 7) {
                             HomeSlimTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
@@ -1533,8 +1536,8 @@ struct HomeBankingBody: View {
                         HStack(spacing: 10) {
                             HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
                                            tone: HomeTone.green, symbol: "arrow.down")
-                            HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
-                                           tone: HomeTone.orange, symbol: "arrow.up")
+                            HomeMetricTile(label: t("Spent this month", lang: lang), value: money(spent),
+                                           tone: HomeTone.slate, valueTone: .primary, symbol: "arrow.up")
                             HomeMetricTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
                                            tone: missing > 0 ? HomeTone.red : HomeTone.accent, symbol: "doc.text.magnifyingglass")
                             HomeMetricTile(label: t("Fixed", lang: lang),
@@ -1566,7 +1569,7 @@ struct HomeBankingBody: View {
                                     Spacer(minLength: 6)
                                     Text((tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)))
                                         .font(.system(size: 11.5, weight: .bold))
-                                        .foregroundColor(tx.amount < 0 ? HomeTone.red : HomeTone.green)
+                                        .foregroundColor(tx.amount < 0 ? .primary : HomeTone.green)
                                         .lineLimit(1).minimumScaleFactor(0.7)
                                 }
                                 .padding(.vertical, 3)
@@ -1580,7 +1583,7 @@ struct HomeBankingBody: View {
                                     .lineLimit(1).minimumScaleFactor(0.6)
                                 Text("·").foregroundColor(.secondary)
                                 Text(t("Out", lang: lang) + " " + money(homeYearTotals(transactions).spent))
-                                    .font(.system(size: 10, weight: .bold)).foregroundColor(HomeTone.red)
+                                    .font(.system(size: 10, weight: .bold)).foregroundColor(.primary)
                                     .lineLimit(1).minimumScaleFactor(0.6)
                                 Spacer(minLength: 0)
                             }
@@ -1609,7 +1612,7 @@ struct HomeBankingBody: View {
                                         Spacer(minLength: 6)
                                         Text((tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)))
                                             .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(tx.amount < 0 ? HomeTone.orange : HomeTone.green)
+                                            .foregroundColor(tx.amount < 0 ? .primary : HomeTone.green)
                                             .lineLimit(1)
                                     }
                                     .padding(.vertical, 5)
