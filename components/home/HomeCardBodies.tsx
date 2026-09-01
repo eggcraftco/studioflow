@@ -901,9 +901,8 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   // stages — the same rule the Production screen applies, never a second one.
   const resolved = open.map((order) => {
     const stage = resolveProductionStage(order, data.productionStages, data.productionSteps);
-    return { order, stageId: stage.stageId, delivered: stage.delivered };
+    return { order, stageId: stage.stageId };
   });
-  const deliveredIds = new Set(resolved.filter((entry) => entry.delivered).map((entry) => entry.order.id));
   const byStage = data.productionStages.map((stage) => ({
     id: stage.id,
     title: stage.title,
@@ -942,15 +941,10 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
             </span>
           ) : <span />}
           {stage ? (
-            <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>
-              {t(stage.title)}
-              {/* Done says it left the workshop. The tick says it got there —
-                  one mark beside the lane rather than a seventh lane, because
-                  arriving is not another thing the workshop does. */}
-              {deliveredIds.has(order.id)
-                ? <i className="home-delivered-tick" title={t("Delivered")} aria-label={t("Delivered")}>✓</i>
-                : null}
-            </span>
+            // This card counts live work — a delivered order is filtered out
+            // above and never reaches a row — so the arrival tick lives on the
+            // production board, where delivered orders are actually shown.
+            <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
           ) : <span />}
           <span className="home-order-chevron" aria-hidden="true">›</span>
         </Link>
