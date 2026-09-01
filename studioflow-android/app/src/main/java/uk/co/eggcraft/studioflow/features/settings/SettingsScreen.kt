@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
@@ -50,6 +51,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Description
@@ -71,6 +73,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Link
@@ -402,6 +405,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace Design"),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workflow"),
         SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workflow"),
+        SettingsSection("customerSms", "Customer SMS", "Text messages to customers: sender, triggers and usage.", Icons.Filled.Sms, "Workflow"),
         SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent, "Finance & Tax"),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People, "Team & Permissions"),
         SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat, "Team & Permissions"),
@@ -437,6 +441,9 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "workflow" -> access?.settingsWorkflow != false
                 "pdf" -> access?.settingsPdf != false
                 "quickReply" -> access?.settingsQuickReply != false
+                // Visible on every plan on purpose: a Demo or Starter workspace
+                // has to be able to read why it is off and what it would take.
+                "customerSms" -> access?.settingsWorkflow != false
                 "messages" -> plan.hasTeamAccess && access?.settingsMessageSettings != false
                 "financial" -> plan.hasAdvancedFinance && access?.settingsFinancial != false
                 "safety" -> access?.settingsSafetyUploads != false
@@ -607,6 +614,7 @@ private fun SettingsDetailScreen(
                 "pdf" -> PdfExportDetail(state, onUpdateWorkspaceSettings)
                 "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
                 "messages" -> MessageSettingsDetail(state, onSaveMessageWorkspaceSettings, onReloadMessageWorkspaceSettings)
+                "customerSms" -> CustomerSmsDetail(state)
                 "financial" -> FinancialSettingsDetail(state, onUpdateWorkspaceSettings, onRecalculateFinancialSettings)
                 // The three provider screens are what a card's Manage opens; an
                 // old deep link that still names one lands straight on it.
@@ -2713,6 +2721,315 @@ private fun ClientDomainRowCard(
                     color = Color(0xFFB45309)
                 )
             }
+        }
+    }
+}
+
+// ===================== CUSTOMER SMS =========================================
+// Settings → Customer SMS. Two callables do all of it: getWorkspaceSmsSettings
+// is member-readable, saveWorkspaceSmsSettings is owner-only and refuses Demo
+// and Starter outright — so members get the same screen with everything
+// disabled rather than a different one.
+//
+// The one thing this screen must not do is imply a text is going out. Twilio has
+// had the "NivaDesk" alphanumeric sender in review since 25 Aug 2026, and until
+// it is approved every send is refused at the provider. sendingLive is the only
+// field that decides that sentence: not providerConfigured, which is true, and
+// not a non-empty sender name, which is always non-empty.
+
+// Alphanumeric sender IDs are 11 characters, letters, digits and spaces. The
+// carrier rejects anything else, so the box refuses it here rather than letting
+// the server quietly strip it after the owner has read it back.
+private fun smsSenderInput(value: String): String =
+    value.filter { it.isLetterOrDigit() || it == ' ' }.take(11)
+
+private fun smsCallingCodeInput(value: String): String = value.filter { it.isDigit() }.take(4)
+
+private fun smsSpendText(value: Double): String = String.format(Locale.UK, "\$%.2f", value)
+
+// The server's sentences are English, and this screen is not. Codes carry the
+// same two facts and survive translation.
+private fun smsErrorMessage(failure: Throwable, t: (String) -> String): String {
+    val code = (failure as? com.google.firebase.functions.FirebaseFunctionsException)?.code
+    return when (code) {
+        com.google.firebase.functions.FirebaseFunctionsException.Code.PERMISSION_DENIED ->
+            t("Only the workspace owner can change these settings.")
+        com.google.firebase.functions.FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
+            t("Customer texts are part of NivaDesk Pro and Team.")
+        else -> failure.message ?: t("Something went wrong. Try again.")
+    }
+}
+
+@Composable
+private fun SmsStatLine(name: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(name, modifier = Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CustomerSmsDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    val plan = workspace?.billingPlan ?: StudioBillingPlan.Demo
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+
+    var loading by remember { mutableStateOf(true) }
+    var settings by remember { mutableStateOf<StudioFlowRepository.StudioSmsSettings?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+
+    // Drafts. The sender box stays empty unless the workspace's OWN sender is
+    // verified: until then the server hands back the platform's name, and
+    // prefilling that would offer "NivaDesk" back to the owner as if it were
+    // theirs — and then save it as theirs.
+    var senderDraft by remember { mutableStateOf("") }
+    var callingCodeDraft by remember { mutableStateOf("44") }
+    var triggers by remember { mutableStateOf(StudioFlowRepository.StudioSmsTriggers()) }
+
+    suspend fun reload() {
+        val ws = workspace ?: return
+        if (ws.id.isEmpty()) return
+        try {
+            val loaded = repository.workspaceSmsSettings(ws.id)
+            settings = loaded
+            senderDraft = loaded.ownSenderId
+            callingCodeDraft = loaded.defaultCallingCode
+            triggers = loaded.triggers
+        } catch (failure: Exception) {
+            errorText = smsErrorMessage(failure, t).ifBlank { t("The SMS settings could not be loaded.") }
+        } finally {
+            loading = false
+        }
+    }
+
+    LaunchedEffect(workspace?.id) { reload() }
+
+    val current = settings
+    val canEdit = isOwner && current?.available == true
+    val dirty = current != null && (
+        senderDraft.trim() != current.ownSenderId ||
+            callingCodeDraft != current.defaultCallingCode ||
+            triggers != current.triggers
+        )
+
+    fun save() {
+        val ws = workspace ?: return
+        if (busy) return
+        scope.launch {
+            busy = true
+            statusText = ""
+            errorText = ""
+            try {
+                val requested = senderDraft.trim()
+                val result = repository.saveWorkspaceSmsSettings(
+                    workspaceId = ws.id,
+                    senderId = requested,
+                    triggers = triggers,
+                    defaultCallingCode = callingCodeDraft.ifBlank { "44" },
+                )
+                reload()
+                // reload() blanks the box again for a sender that is still
+                // pending — the effective sender it reads back is the
+                // platform's. We know the name because we just sent it, so put
+                // it back rather than letting the box look empty on success.
+                if (result.senderId.isNotEmpty()) senderDraft = result.senderId
+                statusText = if (result.senderStatus == "pending")
+                    t("Saved. Your sender ID has gone to the mobile networks for approval.")
+                else t("Saved.")
+            } catch (failure: Exception) {
+                errorText = smsErrorMessage(failure, t)
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    DetailColumn {
+        Text(
+            t("A short text to your customer at the moments they actually care about: the estimate, the bench, and the day it is ready."),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (errorText.isNotEmpty()) Text(errorText, color = DangerRed, fontWeight = FontWeight.SemiBold)
+        else if (statusText.isNotEmpty()) Text(statusText, color = StudioGreen, fontWeight = FontWeight.SemiBold)
+
+        if (current == null) {
+            Text(
+                if (loading) t("Loading…") else t("The SMS settings could not be loaded."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@DetailColumn
+        }
+
+        // ---- Is it live? ----------------------------------------------------
+        DetailCard(title = t("Text messages"), icon = Icons.Filled.Sms) {
+            when {
+                !current.available -> {
+                    Text(
+                        t("Customer texts are part of NivaDesk Pro and Team. You can read the settings here, but nothing on this plan can be switched on."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SmsStatLine(t("Your plan"), plan.title)
+                    SmsStatLine(t("Needs"), "${StudioBillingPlan.ProMonthly.title} ${t("or")} ${StudioBillingPlan.TeamMonthly.title}")
+                }
+                !current.providerConfigured -> Text(
+                    t("The text-message provider is not set up on this server yet. Contact support and we will enable it."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                current.sendingLive -> Text(
+                    t("Texts are going out. Your customers see them arrive from the sender below."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> Text(
+                    t("Nothing is being sent yet. Our sender ID is registered with the mobile networks and still waiting for their approval, and until that lands every text is refused. Set it all up now — it starts working the day the approval comes through."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (current.available) {
+                SmsStatLine(t("Sending"), if (current.sendingLive) t("Live") else t("Not yet"))
+                SmsStatLine(t("Texts come from"), current.senderId)
+            }
+        }
+
+        // ---- When to text ---------------------------------------------------
+        DetailCard(title = t("When to text a customer"), icon = Icons.AutoMirrored.Filled.Send) {
+            MessageSettingsToggle(
+                title = t("Estimate is ready"),
+                description = t("When you send an estimate for them to approve."),
+                checked = triggers.estimateReady,
+                enabled = canEdit && !busy,
+                onChange = { triggers = triggers.copy(estimateReady = it) }
+            )
+            MessageSettingsToggle(
+                title = t("Work has started"),
+                description = t("When their item goes on the bench."),
+                checked = triggers.workStarted,
+                enabled = canEdit && !busy,
+                onChange = { triggers = triggers.copy(workStarted = it) }
+            )
+            MessageSettingsToggle(
+                title = t("Ready for collection"),
+                description = t("When the work is finished and it is waiting to be picked up."),
+                checked = triggers.readyForCollection,
+                enabled = canEdit && !busy,
+                onChange = { triggers = triggers.copy(readyForCollection = it) }
+            )
+            MessageSettingsToggle(
+                title = t("Every status change"),
+                description = t("A text at every internal step. Off unless you turn it on: most customers want the three above and nothing else."),
+                checked = triggers.everyStatusChange,
+                enabled = canEdit && !busy,
+                onChange = { triggers = triggers.copy(everyStatusChange = it) }
+            )
+        }
+
+        // ---- Who it comes from ----------------------------------------------
+        DetailCard(title = t("Who the text comes from"), icon = Icons.Filled.Badge) {
+            SmsStatLine(
+                current.platformSenderId.ifBlank { "NivaDesk" },
+                if (current.platformSenderStatus == "verified") t("Approved by the networks")
+                else t("Waiting for the networks to approve it")
+            )
+            Text(
+                t("Every workspace sends from the NivaDesk name until it registers one of its own. Your business name goes inside the message, where the customer reads it."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = senderDraft,
+                onValueChange = { senderDraft = smsSenderInput(it) },
+                enabled = canEdit && !busy,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(t("Your own sender ID")) },
+                placeholder = { Text(t("Your studio name")) }
+            )
+            SmsStatLine(
+                t("Your sender"),
+                when (current.senderStatus) {
+                    "verified" -> t("Approved — your texts carry this name")
+                    "pending" -> t("Waiting for the networks to approve it")
+                    else -> t("Not set")
+                }
+            )
+            Text(
+                t("Up to 11 letters, digits and spaces. A customer trusts a name they recognise more than ours."),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                t("Changing this name starts the registration again. The mobile networks approve each name themselves; NivaDesk cannot do it for you, and texts keep going out under the NivaDesk name until they do."),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // A pending sender is genuinely unreadable here: the server returns
+            // the platform's name in its place. Saying so beats an empty box
+            // that reads as "you never set one".
+            if (current.senderStatus == "pending" && senderDraft.isBlank()) {
+                Text(
+                    t("A sender ID of your own is already waiting for approval, and its name cannot be read back here. Type it again to keep it — saving with this box empty drops it and goes back to the NivaDesk name."),
+                    fontSize = 12.sp,
+                    color = StudioOrange
+                )
+            }
+        }
+
+        // ---- Phone numbers ---------------------------------------------------
+        DetailCard(title = t("Phone numbers"), icon = Icons.Filled.Public) {
+            OutlinedTextField(
+                value = callingCodeDraft,
+                onValueChange = { callingCodeDraft = smsCallingCodeInput(it) },
+                enabled = canEdit && !busy,
+                singleLine = true,
+                prefix = { Text("+") },
+                modifier = Modifier.width(160.dp),
+                label = { Text(t("Default country code")) }
+            )
+            Text(
+                t("Used when a customer's number is stored without a country code of its own. 44 is the United Kingdom."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // ---- Usage ------------------------------------------------------------
+        if (current.available) {
+            DetailCard(title = t("This month"), icon = Icons.Filled.Timeline) {
+                if (current.usage.month.isNotBlank()) SmsStatLine(t("Month"), current.usage.month)
+                SmsStatLine(t("Messages"), current.usage.messages.toString())
+                SmsStatLine(t("Segments"), current.usage.segments.toString())
+                SmsStatLine(t("Spend"), smsSpendText(current.usage.spendUsd))
+                if (current.usage.messages == 0) {
+                    Text(
+                        t("Nothing has been sent from this workspace yet."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    t("A long message is split into segments, and the networks charge for each one."),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (canEdit) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { scope.launch { reload() } }, enabled = !busy) { Text(t("Reload")) }
+                Spacer(modifier = Modifier.weight(1f))
+                Button(onClick = { save() }, enabled = dirty && !busy) {
+                    Text(if (busy) t("Saving…") else t("Save"), fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        } else if (current.available) {
+            Text(
+                t("Only the workspace owner can change these settings."),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

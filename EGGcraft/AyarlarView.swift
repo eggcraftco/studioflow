@@ -387,6 +387,11 @@ struct AyarlarView: View {
         case "Quick Reply":
             let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return role == "owner" || workspaceAccessAllows("settingsQuickReply")
+        case "Customer SMS":
+            // Members see the section read-only — the callable that saves is
+            // owner-checked server-side, and a member who cannot see what a
+            // customer is being told cannot answer a customer who asks.
+            return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "Financial":
             return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.advancedDashboardEnabled && workspaceAccessAllows("settingsFinancial")
         case "Plan & Access":
@@ -427,6 +432,7 @@ struct AyarlarView: View {
             ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace Design"),
             ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workflow"),
             ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workflow"),
+            ("Customer SMS", t("Customer SMS", lang: seciliDil), "message.fill", "Workflow"),
             ("Financial", t("Financial Settings", lang: seciliDil), "percent", "Finance & Tax"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill", "Team & Permissions"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill", "Team & Permissions"),
@@ -644,6 +650,8 @@ struct AyarlarView: View {
             return t("Invoice and PDF export options.", lang: seciliDil)
         case "Quick Reply":
             return t("Quick reply templates.", lang: seciliDil)
+        case "Customer SMS":
+            return t("Text messages to customers: when they go out and who they come from.", lang: seciliDil)
         case "Financial":
             return t("Fees, tax and calculations.", lang: seciliDil)
         case "Integrations":
@@ -694,6 +702,11 @@ struct AyarlarView: View {
                 if canUsePersonalQuickReplySettings {
                     quickReplyAyari
                 }
+            }
+            else if seciliAyarSekmesi == "Customer SMS" {
+                // No canEditWorkspace gate: a member is shown the same screen
+                // with every control disabled, which is what the server allows.
+                CustomerSmsSettingsView(companyId: activeSettingsCompanyId, language: seciliDil)
             }
             else if seciliAyarSekmesi == "Financial" { if canEditWorkspace { finansalAyar } }
             else if seciliAyarSekmesi == "Integrations" { if canEditWorkspace { integrationsHubAyari } }

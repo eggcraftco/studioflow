@@ -3813,6 +3813,150 @@ class StudioFlowRepository(
         )
     }
 
+    // ---------------------------------------------------------------------
+    // Customer SMS notifications
+    //
+    // Two callables, europe-west2, workspace-scoped. The read is open to any
+    // member — the screen is read-only for them — and the save is owner-only,
+    // rejecting Demo/Starter with failed-precondition.
+    //
+    // The senderId that comes back is the EFFECTIVE sender: the workspace's own
+    // name only once the aggregator has verified it, otherwise the platform's.
+    // So a sender that is still pending registration is not readable here at
+    // all, and the screen has to say that rather than show an empty box as if
+    // nothing had ever been registered.
+    // ---------------------------------------------------------------------
+
+    /** The four moments a customer can be texted about. */
+    data class StudioSmsTriggers(
+        val estimateReady: Boolean = true,
+        val workStarted: Boolean = true,
+        val readyForCollection: Boolean = true,
+        // Telling a customer about every internal step is a choice a business
+        // makes, not one made for them. Matches the server default.
+        val everyStatusChange: Boolean = false,
+    ) {
+        fun payload(): Map<String, Any?> = mapOf(
+            "estimateReady" to estimateReady,
+            "workStarted" to workStarted,
+            "readyForCollection" to readyForCollection,
+            "everyStatusChange" to everyStatusChange,
+        )
+
+        companion object {
+            fun from(raw: Map<*, *>?): StudioSmsTriggers {
+                val fallback = StudioSmsTriggers()
+                if (raw == null) return fallback
+                return StudioSmsTriggers(
+                    estimateReady = raw["estimateReady"] as? Boolean ?: fallback.estimateReady,
+                    workStarted = raw["workStarted"] as? Boolean ?: fallback.workStarted,
+                    readyForCollection = raw["readyForCollection"] as? Boolean ?: fallback.readyForCollection,
+                    everyStatusChange = raw["everyStatusChange"] as? Boolean ?: fallback.everyStatusChange,
+                )
+            }
+        }
+    }
+
+    data class StudioSmsUsage(
+        val month: String = "",
+        val messages: Int = 0,
+        val segments: Int = 0,
+        val spendUsd: Double = 0.0,
+    )
+
+    data class StudioSmsSettings(
+        /** The sender a message would actually go out from, right now. */
+        val senderId: String = "",
+        /** The WORKSPACE's own sender: unset / pending / verified. */
+        val senderStatus: String = "unset",
+        val defaultCallingCode: String = "44",
+        val triggers: StudioSmsTriggers = StudioSmsTriggers(),
+        /** The plan allows SMS at all (Pro and Team). */
+        val available: Boolean = false,
+        /** Provider credentials are set. Not the same as being able to send. */
+        val providerConfigured: Boolean = false,
+        val platformSenderId: String = "",
+        val platformSenderStatus: String = "pending",
+        /** The platform sender is registered, or this workspace's own one is. */
+        val sendingLive: Boolean = false,
+        val usage: StudioSmsUsage = StudioSmsUsage(),
+    ) {
+        /** Readable only when verified: until then senderId is the platform's. */
+        val ownSenderId: String get() = if (senderStatus == "verified") senderId else ""
+    }
+
+    data class StudioSmsSaveResult(
+        val senderId: String,
+        val senderStatus: String,
+        val triggers: StudioSmsTriggers,
+    )
+
+    private fun smsStatusName(value: Any?, fallback: String): String {
+        val raw = value?.toString()?.trim()?.lowercase().orEmpty()
+        return if (raw == "unset" || raw == "pending" || raw == "verified") raw else fallback
+    }
+
+    private suspend fun smsCall(
+        name: String,
+        workspaceId: String,
+        data: Map<String, Any?> = emptyMap(),
+    ): Map<*, *> {
+        val payload = data.toMutableMap()
+        payload["companyId"] = workspaceId
+        val result = functions.getHttpsCallable(name).call(payload).await()
+        return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
+    }
+
+    suspend fun workspaceSmsSettings(workspaceId: String): StudioSmsSettings {
+        val raw = smsCall("getWorkspaceSmsSettings", workspaceId)
+        val usage = raw["usage"] as? Map<*, *>
+        return StudioSmsSettings(
+            senderId = raw["senderId"]?.toString().orEmpty(),
+            senderStatus = smsStatusName(raw["senderStatus"], "unset"),
+            defaultCallingCode = raw["defaultCallingCode"]?.toString()?.filter { it.isDigit() }
+                ?.takeIf { it.isNotEmpty() } ?: "44",
+            triggers = StudioSmsTriggers.from(raw["triggers"] as? Map<*, *>),
+            available = raw["available"] as? Boolean ?: false,
+            providerConfigured = raw["providerConfigured"] as? Boolean ?: false,
+            platformSenderId = raw["platformSenderId"]?.toString().orEmpty(),
+            // Only "verified" means the platform sender can send; anything else
+            // read as pending, because guessing optimistically here is exactly
+            // how a screen ends up promising a message nobody can deliver.
+            platformSenderStatus = if (raw["platformSenderStatus"]?.toString() == "verified") "verified" else "pending",
+            sendingLive = raw["sendingLive"] as? Boolean ?: false,
+            usage = StudioSmsUsage(
+                month = usage?.get("month")?.toString().orEmpty(),
+                messages = longFromAny(usage?.get("messages"), 0L).toInt(),
+                segments = longFromAny(usage?.get("segments"), 0L).toInt(),
+                spendUsd = (usage?.get("spendUsd") as? Number)?.toDouble() ?: 0.0,
+            ),
+        )
+    }
+
+    /** Owner only, and refused outright on Demo and Starter. Changing the
+     *  sender name drops its status back to pending: the registration the
+     *  aggregator approved was for the old name. */
+    suspend fun saveWorkspaceSmsSettings(
+        workspaceId: String,
+        senderId: String,
+        triggers: StudioSmsTriggers,
+        defaultCallingCode: String,
+    ): StudioSmsSaveResult {
+        val raw = smsCall(
+            "saveWorkspaceSmsSettings", workspaceId,
+            mapOf(
+                "senderId" to senderId,
+                "triggers" to triggers.payload(),
+                "defaultCallingCode" to defaultCallingCode,
+            ),
+        )
+        return StudioSmsSaveResult(
+            senderId = raw["senderId"]?.toString().orEmpty(),
+            senderStatus = smsStatusName(raw["senderStatus"], "unset"),
+            triggers = StudioSmsTriggers.from(raw["triggers"] as? Map<*, *>),
+        )
+    }
+
 }
 
 private fun workspaceSettings(
