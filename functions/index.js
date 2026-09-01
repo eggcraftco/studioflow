@@ -17972,7 +17972,15 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
       .get();
   }
   const email = cleanWooText(info.email);
-  if (snap.empty && email) {
+  // A relay address is not an identity. Etsy hides most buyers behind
+  // something@convos.etsy.com, the same buyer can arrive under a different
+  // relay on their next receipt, and a relay can be reissued to somebody else
+  // entirely — which is why etsyCustomerMatch scores them at zero and says so
+  // in its own header. This fallback was matching on one anyway, so when that
+  // matcher had decided "this is a new person, create them", the mirror could
+  // still quietly attach the order to whoever already held that address.
+  // Shopify and WooCommerce hand over real addresses and are unaffected.
+  if (snap.empty && email && !etsyCustomerMatch.isEtsyRelayEmail(email)) {
     snap = await db.collection("musteriler")
       .where("companyId", "==", companyId)
       .where("email", "==", email)
