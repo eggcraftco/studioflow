@@ -29957,7 +29957,8 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-action-grid.is-rows .home-ac
   --warning-soft: rgba(217, 119, 6, 0.12);
   --danger: #d64545;
   --danger-soft: rgba(214, 69, 69, 0.12);
-  width: min(100%, 1150px);
+  /* Wider than the handoff's 1120–1180: the owner found the first cut narrow on a 1536 screen. */
+  width: min(100%, 1380px);
   grid-template-columns: 275px minmax(0, 1fr);
   border-color: var(--settings-border);
   border-radius: 16px;
@@ -30080,7 +30081,7 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-action-grid.is-rows .home-ac
 .settings-page-header-info { gap: 6px; }
 .settings-page-breadcrumb { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
 .settings-page-title-row h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
-.settings-page-subtitle { max-width: 64ch; font-size: 14px; font-weight: 500; line-height: 1.45; }
+.settings-page-subtitle { max-width: 80ch; font-size: 14px; font-weight: 500; line-height: 1.45; }
 .settings-page-header-side {
   display: flex;
   flex-wrap: wrap;
