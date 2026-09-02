@@ -31,6 +31,12 @@ function addressParts(addr) {
   };
 }
 
+function addressLine(p) {
+  if (!p) return "";
+  const cityLine = [p.city, p.state].filter(Boolean).join(", ");
+  return [p.street, cityLine, p.postalCode, p.country].filter(Boolean).join(", ");
+}
+
 function customerName(order) {
   const customer = order?.customer || {};
   const fromCustomer = [text(customer.first_name), text(customer.last_name)].filter(Boolean).join(" ");
@@ -64,6 +70,9 @@ function normalizeShopifyOrder(order, ctx = {}) {
   const fulfillment = text(order?.fulfillment_status).toLowerCase();
   const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
   const gateways = Array.isArray(order?.payment_gateway_names) ? order.payment_gateway_names.map(text).filter(Boolean) : [];
+  const orderNumber = text(order?.name || order?.order_number || order?.number) || externalId;
+  const paymentMethod = gateways.join(", ") || text(order?.gateway);
+  const lineSummary = lineItems.map((item) => `${text(item?.title || item?.name) || "Product"}${item?.quantity ? ` x${item.quantity}` : ""}`).filter(Boolean).join(", ");
   const reasons = [];
   if (order?.test === true) reasons.push("test_order");
   if (!lineItems.length) reasons.push("no_line_items");
@@ -130,12 +139,27 @@ function normalizeShopifyOrder(order, ctx = {}) {
       external_admin_url: shop && externalId ? `https://${shop}/admin/orders/${externalId}` : null,
       provider_metadata: {
         version: 1,
-        order_number: text(order?.name || order?.order_number || order?.number) || externalId,
-        payment_method: gateways.join(", ") || text(order?.gateway),
+        order_number: orderNumber,
+        payment_method: paymentMethod,
         order_status_url: text(order?.order_status_url),
         created_at_raw: text(order?.created_at),
         tags: text(order?.tags),
-        custom_fields: { "Shopify Store": text(ctx.shopName) || shop, "Shopify Domain": shop }
+        // What the live mapper writes, key for key — the clients display these.
+        design_name: lineSummary || text(lineItems[0]?.title || lineItems[0]?.name) || `Shopify ${orderNumber}`,
+        custom_fields: {
+          Source: "Shopify",
+          "Shopify Order ID": externalId,
+          "Shopify Order Number": orderNumber,
+          "Shopify Status": financial || "new",
+          "Shopify Payment Method": paymentMethod,
+          "Shopify Currency": text(order?.currency),
+          "Shopify Total": text(order?.total_price),
+          "Shopify Created At": text(order?.created_at),
+          "Shopify Products": lineSummary,
+          communicationAddress: addressLine(addressParts(order?.billing_address)),
+          "Shopify Store": text(ctx.shopName) || shop,
+          "Shopify Domain": shop
+        }
       }
     },
     review: { reasons },

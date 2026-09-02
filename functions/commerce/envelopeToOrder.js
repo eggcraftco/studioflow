@@ -17,16 +17,22 @@ function addressText(parts) {
   return [p.street, cityLine, p.postalCode, p.country].filter(Boolean).join(", ");
 }
 
+// The line item the clients read. Only the keys the live mappers wrote: a
+// provider that carries SKUs says so in its metadata (Etsy), the rest get
+// the five fields every client already renders.
 function legacyLineItems(envelope) {
-  return (envelope.order.line_items || []).map((item, index) => ({
-    id: item.external_line_id || `${envelope.identity.external_id}_${index}`,
-    name: item.title || "",
-    quantity: item.quantity,
-    unitPrice: toLegacyNumber(item.unit_price) ?? 0,
-    lineTotal: toLegacyNumber(item.line_total) ?? (toLegacyNumber(item.unit_price) ?? 0) * item.quantity,
-    sku: item.sku || "",
-    productId: item.product_external_id || ""
-  }));
+  const style = (envelope.source.provider_metadata || {}).legacy_line_items || {};
+  return (envelope.order.line_items || []).map((item, index) => {
+    const row = {
+      id: item.external_line_id || `${envelope.identity.external_id}_${index}`,
+      name: item.title || "",
+      quantity: item.quantity,
+      unitPrice: toLegacyNumber(item.unit_price) ?? 0,
+      lineTotal: toLegacyNumber(item.line_total) ?? (toLegacyNumber(item.unit_price) ?? 0) * item.quantity
+    };
+    if (style.include_sku) row.sku = item.sku || "";
+    return row;
+  });
 }
 
 // "Signet ring x1, Band x2" — the live mappers' format, kept so a shadow
@@ -41,6 +47,14 @@ function lineSummary(envelope) {
 function providerCustomFields(envelope) {
   const display = envelope.source.provider_display_name || envelope.identity.provider;
   const meta = envelope.source.provider_metadata || {};
+  // An adapter that hands over the provider's own key set (the keys the live
+  // mapper wrote, that four clients already display) is taken as complete.
+  if (meta.custom_fields && Object.keys(meta.custom_fields).length > 2) {
+    const own = {};
+    for (const [key, value] of Object.entries(meta.custom_fields)) own[key] = String(value ?? "");
+    if (own.communicationAddress === undefined) own.communicationAddress = addressText(envelope.customer.billing_address);
+    return own;
+  }
   const fields = {
     Source: display,
     [`${display} Order ID`]: envelope.identity.external_id,
@@ -83,7 +97,7 @@ function shopOwnedFields(envelope, ctx = {}) {
     remainingAmount: total === null || paid === null ? 0 : Math.max(0, Math.round((total - paid) * 100) / 100),
     orderValue: total ?? 0,
     watchRef: String(lineItems[0]?.sku || ""),
-    designName: lineSummary(envelope) || lineItems[0]?.name || `${display} ${meta.order_number || envelope.identity.external_id}`,
+    designName: String(meta.design_name || "") || lineSummary(envelope) || lineItems[0]?.name || `${display} ${meta.order_number || envelope.identity.external_id}`,
     lineItems,
     designLink: String(meta.order_status_url || ""),
     communication: [display],
@@ -99,9 +113,9 @@ function shopOwnedFields(envelope, ctx = {}) {
     shippingPhone: ship.phone || phone,
     deliveryCost: toLegacyNumber(envelope.order.shipping_total) ?? 0,
     taxAmount: toLegacyNumber(envelope.order.tax_total) ?? 0,
-    customFields: providerCustomFields(envelope),
-    source: envelope.identity.provider,
-    orderSource: envelope.identity.provider
+    customFields: providerCustomFields(envelope)
+    // No top-level `source`/`orderSource`: neither live mapper writes them; the
+    // order's provider identity lives in its `commerce` map.
   };
   return fields;
 }

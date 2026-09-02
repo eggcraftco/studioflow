@@ -143,6 +143,7 @@ check("the projection writes the document the clients read: provider custom fiel
   const doc = projection.shopOwnedFields(env, { companyId: "c1", reconcileLineItems: (items, total) => { const sum = items.reduce((a, i) => a + i.lineTotal, 0); if (Math.abs(total - sum) > 0.01) items.push({ id: "adj", name: total > sum ? "Shipping & other" : "Discount", quantity: 1, unitPrice: total - sum, lineTotal: total - sum }); return items; } });
   assert.strictEqual(doc.customFields["Shopify Order ID"], "1042");
   assert.strictEqual(doc.customFields["Shopify Order Number"], "#1042");
+  assert.strictEqual(doc.customFields["Shopify Total"], "113.00"); assert.strictEqual(doc.customFields.Source, "Shopify");
   assert.strictEqual(doc.customFields["Shopify Status"], "paid");
   assert.strictEqual(doc.customFields["Shopify Products"], "Signet ring x1, Band x2");
   assert.strictEqual(doc.customFields["Shopify Store"], "Eggcraft Store");
@@ -155,7 +156,7 @@ check("the projection writes the document the clients read: provider custom fiel
   assert.strictEqual(doc.paymentMethod, "shopify_payments");
   assert.strictEqual(doc.designLink, "https://shop.example/status/1");
   assert.ok(doc.paymentDate instanceof Date);
-  assert.strictEqual(doc.orderSource, "shopify");
+  assert.strictEqual(doc.orderSource, undefined, "no top-level source: the commerce map carries identity");
   const unpaid = projection.shopOwnedFields(normalizeShopifyOrder(restOrder({ financial_status: "pending" }), ctx), { companyId: "c1" });
   assert.strictEqual(unpaid.paidAmount, 0); assert.strictEqual(unpaid.remainingAmount, 113);
   const defaults = projection.newOrderDefaults({ defaultDeliveryTime: 12 });

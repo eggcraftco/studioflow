@@ -2,6 +2,7 @@
 // common engine would have written, recorded per event, never touching the
 // order. This is how the new engine earns the right to become primary.
 const { eventDocId } = require("./events");
+const { stableStringify } = require("./envelope");
 
 const SHADOW_COLLECTION = "commerceShadow";
 const SHADOW_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -24,8 +25,8 @@ function diffPatchAgainstDoc(patch, doc) {
   const diffs = [];
   for (const [key, value] of Object.entries(patch || {})) {
     if (IGNORED_KEYS.has(key)) continue;
-    const mine = JSON.stringify(toComparable(value));
-    const live = JSON.stringify(toComparable(doc ? doc[key] : undefined));
+    const mine = stableStringify(toComparable(value));
+    const live = doc && doc[key] !== undefined ? stableStringify(toComparable(doc[key])) : undefined;
     if (mine !== live) diffs.push({ field: key, engine: mine.slice(0, 300), live: live === undefined ? null : String(live).slice(0, 300) });
   }
   return diffs;

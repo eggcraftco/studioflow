@@ -64,7 +64,8 @@ async function wipe() {
     assert.strictEqual(row.live.orderId, etsy.nivadeskOrderIdFor(CID, SHOP, "910001"));
     assert.strictEqual(row.sameOrderId, true, "the engine derives the very same NivaDesk order id");
     assert.strictEqual(row.engine.result, "would_update");
-    console.log("   parity diffs (Etsy live vs engine):", row.diffCount, row.diffs.map((d) => d.field).join(", "));
+    console.log("   parity diffs (Etsy live vs engine):", row.diffCount);
+    for (const d of row.diffs) console.log(`     · ${d.field}\n       engine: ${String(d.engine).slice(0, 220)}\n       live:   ${String(d.live).slice(0, 220)}`);
     const live = (await db.collection("siparisler").doc(row.live.orderId).get()).data();
     assert.strictEqual(live.commerce, undefined, "shadow wrote nothing on the order");
     assert.strictEqual(live.customFields["Etsy Status"], "completed", "the live path did its normal work");

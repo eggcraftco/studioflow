@@ -57,7 +57,7 @@ check("the projection gives the Etsy order the live document's shape", () => {
   const env = normalizeEtsyReceipt(receipt(), ctx);
   const doc = projection.shopOwnedFields(env, { companyId: "c1" });
   assert.strictEqual(doc.customerName, "Ada Lovelace"); assert.strictEqual(doc.paidAmount, 113); assert.strictEqual(doc.taxAmount, 18); assert.strictEqual(doc.deliveryCost, 5);
-  assert.strictEqual(doc.notes, env.order.buyer_note); assert.strictEqual(doc.customFields["Etsy Receipt ID"], "3344"); assert.strictEqual(doc.customFields["Etsy Shop"], "Ada's Shop");
+  assert.strictEqual(doc.notes, env.order.buyer_note); assert.strictEqual(doc.customFields["Etsy Receipt ID"], "3344"); assert.strictEqual(doc.customFields["Etsy Shop"], "Ada's Shop"); assert.strictEqual(doc.customFields["Etsy Total"], "113"); assert.strictEqual(doc.designName, "Signet ring (Size: M) — Engraving: AL"); assert.strictEqual(doc.lineItems[0].sku, "RING-1");
   assert.deepStrictEqual(doc.communication, ["Etsy"]); assert.strictEqual(doc.shippingCountry, "GB");
   assert.strictEqual(contentHash(env), contentHash(normalizeEtsyReceipt(receipt(), { ...ctx, rawSnapshotRef: "x" })));
 });

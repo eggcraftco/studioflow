@@ -123,7 +123,22 @@ function normalizeEtsyReceipt(receipt, ctx = {}) {
         version: 1, order_number: receiptId, payment_method: text(receipt?.payment_method, 80), receipt_type: Number(receipt?.receipt_type) || 0,
         created_at_raw: createdAt || "", expected_ship_at: shipDates.length ? secondsToIso(shipDates[0]) : null,
         personalization: personalizationLines, gift_message: giftMessage || null,
-        custom_fields: { "Etsy Receipt ID": receiptId, "Etsy Shop": text(ctx.shopName, 200) }
+        design_name: personalizationLines.length
+          ? text(`${lineItems[0]?.title || "Etsy order"} — ${personalizationLines[0]}`, 300)
+          : text(lineItems.map((item) => item.title).filter(Boolean).join(", ") || `Etsy receipt ${receiptId}`, 300),
+        legacy_line_items: { include_sku: true },
+        custom_fields: {
+          Source: "Etsy",
+          "Etsy Receipt ID": receiptId,
+          "Etsy Shop": text(ctx.shopName, 200),
+          "Etsy Status": status,
+          "Etsy Payment Method": text(receipt?.payment_method, 80),
+          "Etsy Currency": currency || "",
+          "Etsy Total": grand ? String(Number(toDecimalString(grand) || 0)) : "0",
+          "Etsy Created At": createdAt || "",
+          "Etsy Products": lineItems.map((item) => item.title).filter(Boolean).join(", ").slice(0, 500),
+          communicationAddress: [address.name, address.street, address.city, address.state, address.postalCode, address.country].filter(Boolean).join(", ")
+        }
       }
     },
     review: { reasons },
