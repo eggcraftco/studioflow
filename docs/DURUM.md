@@ -96,6 +96,13 @@ https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
   bağlantısının Reconnect'i PayPal kartına, Banking'de kaynak çipleri + P
   işareti. Rehber: Banking bölümüne "PayPal beside the bank" 12 dilde,
   corpus + 7 fonksiyon deploy. Kullanıcı 15:47'de LIVE hesabı bağladı.
+- **Canlıda doğrulandı (16:33):** ikinci bug — bağlanırken düşen altı aylık
+  ilk içe alım hiç yeniden denenmiyordu (Sync now 14 günü tarıyor, sweep
+  aralığa takılıyordu). `historyImportedAt` yalnız tamamlanan tam içe alımda
+  yazılır; yoksa bağlantı "borçlu" sayılır, aralık kısıtı uygulanmaz ve ilk
+  başarılı senkron 180 günü alır (7fe009e, e2e senaryosu). Sonuç: 5 satır
+  (4 satış + ücretler, 1 alım), GBP, Nis–Ağu; HSBC bağlantısı aynı
+  workspace'te → gelecek çekimler eşleşecek. Web Round 146 CANLI (17:19).
 - **Açık:** brief §10 #4 (iade/chargeback ↔ sipariş bağı), ChatGPT araç
   metinleri (OpenAI incelemesi bitene kadar tools/list sabit), Pandle'da
   PayPal'ın ayrı banka hesabı olarak modellenmesi (Pandle işi).
