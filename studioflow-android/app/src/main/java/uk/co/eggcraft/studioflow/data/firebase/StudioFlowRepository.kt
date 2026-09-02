@@ -899,15 +899,6 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "This order layout was saved."
     }
 
-    // Returns this workspace's signed WooCommerce Delivery URL (with the per-workspace
-    // webhook token), minting the token on first use. Owner-only on the backend.
-    suspend fun getWooCommerceWebhookDeliveryUrl(workspace: StudioWorkspace): String {
-        val result = functions.getHttpsCallable("getWooCommerceWebhookToken")
-            .call(mapOf("companyId" to workspace.id))
-            .await()
-        val data = result.data as? Map<*, *>
-        return data?.get("deliveryUrl") as? String ?: ""
-    }
 
     /** Whether anything has actually arrived on a webhook channel, and whether the
      *  last one worked. The Integrations cards read this: a card that says
@@ -924,13 +915,6 @@ class StudioFlowRepository(
         )
     }
 
-    suspend fun getShopifyWebhookDeliveryUrl(workspace: StudioWorkspace): String {
-        val result = functions.getHttpsCallable("getShopifyWebhookToken")
-            .call(mapOf("companyId" to workspace.id))
-            .await()
-        val data = result.data as? Map<*, *>
-        return data?.get("deliveryUrl") as? String ?: ""
-    }
 
     // Stores connected through the official Shopify App Store app (member read).
     data class ShopifyAppStoreSummary(

@@ -619,7 +619,6 @@ private fun SettingsDetailScreen(
                 // The three provider screens are what a card's Manage opens; an
                 // old deep link that still names one lands straight on it.
                 "integrations" -> IntegrationsHubDetail(state)
-                "woo" -> WooCommerceDetail(state)
                 "shopify" -> ShopifyDetail(state)
                 "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
@@ -3057,8 +3056,6 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
         val ws = workspace ?: return@LaunchedEffect
         // Independent reads: one slow or refused answer must not blank the rest.
         val stores = runCatching { repository.getShopifyAppStores(ws) }.getOrDefault(emptyList())
-        val woo = runCatching { repository.integrationChannelStatus(ws, "getWooCommerceWebhookToken") }
-            .getOrDefault(Triple(0L, false, false))
         val inbound = runCatching { repository.integrationChannelStatus(ws, "getInboundWebhookToken") }
             .getOrDefault(Triple(0L, false, false))
         // Etsy's card state has to come from the shop itself, not from a flag we
@@ -3071,7 +3068,6 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             etsyShops = etsyRows.size,
             etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
             channels = mapOf(
-                "woocommerce" to IntegrationChannel(woo.first, woo.second, woo.third),
                 "inbound" to IntegrationChannel(inbound.first, inbound.second, inbound.third),
             ),
             bankConnections = state.bankConnections.count { it.isLinked },
@@ -3087,7 +3083,6 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             }
             when (managing) {
                 "shopify" -> ShopifyDetail(state)
-                "woo" -> WooCommerceDetail(state)
                 "etsy" -> EtsyDetail(state)
                 else -> InboundDetail(state)
             }
@@ -3174,66 +3169,10 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
 }
 
 @Composable
-private fun WooCommerceDetail(state: StudioFlowUiState) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
-    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
-    var tokenizedDeliveryUrl by remember { mutableStateOf("") }
-    var deliveryUrlLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(state.workspace?.id) {
-        val workspace = state.workspace ?: return@LaunchedEffect
-        if (workspace.id.isEmpty()) return@LaunchedEffect
-        deliveryUrlLoading = true
-        tokenizedDeliveryUrl = runCatching { repository.getWooCommerceWebhookDeliveryUrl(workspace) }.getOrDefault("")
-        deliveryUrlLoading = false
-    }
-    val deliveryUrl = when {
-        tokenizedDeliveryUrl.isNotEmpty() -> tokenizedDeliveryUrl
-        deliveryUrlLoading -> t("Loading...")
-        else -> "—"
-    }
-    DetailColumn {
-        DetailCard(title = t("Connect WooCommerce"), icon = Icons.Filled.ShoppingCart) {
-            Text(t("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(t("This setup only needs to be done once in WooCommerce."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
-            CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
-            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL", isSecret = true)
-        }
-        DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
-            StepRow("1", "Open WooCommerce webhooks", "In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")
-            StepRow("2", "Create a new webhook", "Create a new webhook for NivaDesk orders.")
-            StepRow("3", "Set it active", "Set Status to Active and Topic to Order created.")
-            StepRow("4", "Paste the Delivery URL", "Paste the copied Delivery URL, save the webhook, then place a test order.")
-        }
-        DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
-            Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
 private fun ShopifyDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    val companyId = state.workspace?.id.orEmpty().ifEmpty { "YOUR_COMPANY_ID" }
     val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
-    var tokenizedDeliveryUrl by remember { mutableStateOf("") }
-    var deliveryUrlLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(state.workspace?.id) {
-        val workspace = state.workspace ?: return@LaunchedEffect
-        if (workspace.id.isEmpty()) return@LaunchedEffect
-        deliveryUrlLoading = true
-        tokenizedDeliveryUrl = runCatching { repository.getShopifyWebhookDeliveryUrl(workspace) }.getOrDefault("")
-        deliveryUrlLoading = false
-    }
-    val deliveryUrl = when {
-        tokenizedDeliveryUrl.isNotEmpty() -> tokenizedDeliveryUrl
-        deliveryUrlLoading -> t("Loading...")
-        else -> "—"
-    }
     var appStores by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.ShopifyAppStoreSummary>>(emptyList()) }
     var appStoresLoading by remember { mutableStateOf(false) }
     var appStoreBusyShop by remember { mutableStateOf("") }
@@ -3308,23 +3247,6 @@ private fun ShopifyDetail(state: StudioFlowUiState) {
                     )
                 }
             }
-        }
-        DetailCard(title = t("Connect Shopify (manual webhook)"), icon = Icons.Filled.ShoppingBag) {
-            Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(t("This setup only needs to be done once in Shopify."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
-            CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
-            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL", isSecret = true)
-        }
-        DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
-            StepRow("1", "Open Shopify webhooks", "In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).")
-            StepRow("2", "Create an order webhook", "Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.")
-            StepRow("3", "Paste the Delivery URL", "Paste the copied Delivery URL as the webhook URL and save it.")
-            StepRow("4", "Place a test order", "Place a paid test order in your store; it appears in Orders within seconds.")
-        }
-        DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
-            Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

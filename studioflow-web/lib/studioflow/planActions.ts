@@ -173,23 +173,7 @@ export async function rotateIntegrationWebhookToken(
   return integrationWebhookInfo(response.data);
 }
 
-export async function getWooCommerceWebhookDeliveryUrl(companyId: string): Promise<string> {
-  const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
-    functions,
-    "getWooCommerceWebhookToken"
-  );
-  const response = await callable({ companyId });
-  return response.data?.deliveryUrl || "";
-}
 
-export async function getShopifyWebhookDeliveryUrl(companyId: string): Promise<string> {
-  const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
-    functions,
-    "getShopifyWebhookToken"
-  );
-  const response = await callable({ companyId });
-  return response.data?.deliveryUrl || "";
-}
 
 export async function getInboundWebhookDeliveryUrl(companyId: string): Promise<string> {
   const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(

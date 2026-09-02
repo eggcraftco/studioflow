@@ -39,10 +39,6 @@ struct AyarlarView: View {
     @State private var integrationSignalsLoaded = false
     @State private var integrationsQuery: String = ""
     @State private var integrationsFilter: String = "all"
-    @State private var wooCommerceDeliveryURL: String = ""
-    @State private var wooCommerceTokenLoading: Bool = false
-    @State private var shopifyDeliveryURL: String = ""
-    @State private var shopifyTokenLoading: Bool = false
     @State private var shopifyAppStores: [ShopifyAppStoreSummary] = []
     @State private var shopifyAppStoresLoading: Bool = false
     @State private var shopifyAppStoresLoaded: Bool = false
@@ -710,7 +706,6 @@ struct AyarlarView: View {
             }
             else if seciliAyarSekmesi == "Financial" { if canEditWorkspace { finansalAyar } }
             else if seciliAyarSekmesi == "Integrations" { if canEditWorkspace { integrationsHubAyari } }
-            else if seciliAyarSekmesi == "WooCommerce" { if canEditWorkspace { wooCommerceIntegrationAyari } }
             else if seciliAyarSekmesi == "Shopify" { if canEditWorkspace { shopifyIntegrationAyari } }
             else if seciliAyarSekmesi == "Inbound" { if canEditWorkspace { inboundIntegrationAyari } }
             else if seciliAyarSekmesi == "Upload Safety" { if canEditWorkspace { uploadSafetyAyari } }
@@ -6152,7 +6147,6 @@ struct AyarlarView: View {
                     .foregroundColor(.accentColor)
 
                     if integrationsManaging == "shopify" { shopifyIntegrationAyari }
-                    else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
                     else if integrationsManaging == "etsy" { etsyIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
@@ -6278,7 +6272,7 @@ struct AyarlarView: View {
                 integrationSignalsLoaded = true
             }
         }
-        for (name, channel) in [("getWooCommerceWebhookToken", "woocommerce"), ("getInboundWebhookToken", "inbound")] {
+        for (name, channel) in [("getInboundWebhookToken", "inbound")] {
             functions.httpsCallable(name).call(["companyId": companyId]) { result, _ in
                 DispatchQueue.main.async {
                     guard let data = result?.data as? [String: Any] else { return }
@@ -6291,100 +6285,6 @@ struct AyarlarView: View {
                 }
             }
         }
-    }
-
-    private var wooCommerceIntegrationAyari: some View {
-        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
-        // The signed Delivery URL (with this workspace's webhook token) is loaded from the
-        // backend; show it once available so the copied URL authenticates correctly.
-        let deliveryURL = wooCommerceDeliveryURL
-
-        return VStack(alignment: .leading, spacing: 18) {
-            SettingsCard(title: t("Connect WooCommerce", lang: seciliDil), iconName: "cart.badge.plus", footerText: t("This setup only needs to be done once in WooCommerce.", lang: seciliDil)) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(t("To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace automatically.", lang: seciliDil))
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if companyId.isEmpty {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(studioWarningOrange)
-                            Text(t("Company ID is not available yet. Sign in or reconnect your workspace first.", lang: seciliDil))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(10)
-                        .background(studioWarningOrange.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                }
-            }
-
-            SettingsCard(title: t("Copy Setup Details", lang: seciliDil), iconName: "doc.on.doc") {
-                VStack(alignment: .leading, spacing: 12) {
-                    copyableIntegrationValue(
-                        title: t("Your Company ID", lang: seciliDil),
-                        value: resolvedCompanyId,
-                        buttonTitle: t("Copy Company ID", lang: seciliDil),
-                        canCopy: !companyId.isEmpty
-                    )
-
-                    copyableIntegrationValue(
-                        title: t("Delivery URL with Company ID", lang: seciliDil),
-                        value: deliveryURL.isEmpty ? (wooCommerceTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
-                        buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !deliveryURL.isEmpty,
-                        isSecret: true
-                    )
-
-                    if !wooCommerceCopyFeedback.isEmpty {
-                        Text(wooCommerceCopyFeedback)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.green)
-                            .transition(.opacity)
-                    }
-                }
-            }
-
-            SettingsCard(title: t("What you need to do", lang: seciliDil), iconName: "checklist") {
-                VStack(alignment: .leading, spacing: 10) {
-                    integrationInfoRow(number: "1", title: t("Open WooCommerce webhooks", lang: seciliDil), detail: t("In WordPress, open WooCommerce > Settings > Advanced > Webhooks.", lang: seciliDil))
-                    integrationInfoRow(number: "2", title: t("Create a new webhook", lang: seciliDil), detail: t("Create a new webhook for NivaDesk orders.", lang: seciliDil))
-                    integrationInfoRow(number: "3", title: t("Set it active", lang: seciliDil), detail: t("Set Status to Active and Topic to Order created.", lang: seciliDil))
-                    integrationInfoRow(number: "4", title: t("Paste the Delivery URL", lang: seciliDil), detail: t("Paste the copied Delivery URL, save the webhook, then place a test order.", lang: seciliDil))
-                }
-            }
-
-            SettingsCard(title: t("What happens when it is active", lang: seciliDil), iconName: "bolt.horizontal.circle.fill") {
-                Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", lang: seciliDil))
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .onAppear { loadWooCommerceWebhookSetup() }
-    }
-
-    private func loadWooCommerceWebhookSetup() {
-        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !companyId.isEmpty, wooCommerceDeliveryURL.isEmpty, !wooCommerceTokenLoading else { return }
-        wooCommerceTokenLoading = true
-        Functions.functions(region: "europe-west2")
-            .httpsCallable("getWooCommerceWebhookToken")
-            .call(["companyId": companyId]) { result, _ in
-                DispatchQueue.main.async {
-                    wooCommerceTokenLoading = false
-                    if let data = result?.data as? [String: Any],
-                       let url = data["deliveryUrl"] as? String, !url.isEmpty {
-                        wooCommerceDeliveryURL = url
-                    }
-                }
-            }
     }
 
     struct ShopifyAppStoreSummary: Identifiable, Equatable {
@@ -6412,7 +6312,6 @@ struct AyarlarView: View {
     private var shopifyIntegrationAyari: some View {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
-        let deliveryURL = shopifyDeliveryURL
         let isOwner = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
 
         return VStack(alignment: .leading, spacing: 18) {
@@ -6471,74 +6370,8 @@ struct AyarlarView: View {
                 Text(t("Syncing stops immediately. Orders already imported into NivaDesk stay in this workspace.", lang: seciliDil))
             }
 
-            SettingsCard(title: t("Connect Shopify (manual webhook)", lang: seciliDil), iconName: "bag.fill", footerText: t("This setup only needs to be done once in Shopify.", lang: seciliDil)) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically.", lang: seciliDil))
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if companyId.isEmpty {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(studioWarningOrange)
-                            Text(t("Company ID is not available yet. Sign in or reconnect your workspace first.", lang: seciliDil))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(10)
-                        .background(studioWarningOrange.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                }
-            }
-
-            SettingsCard(title: t("Copy Setup Details", lang: seciliDil), iconName: "doc.on.doc") {
-                VStack(alignment: .leading, spacing: 12) {
-                    copyableIntegrationValue(
-                        title: t("Your Company ID", lang: seciliDil),
-                        value: resolvedCompanyId,
-                        buttonTitle: t("Copy Company ID", lang: seciliDil),
-                        canCopy: !companyId.isEmpty
-                    )
-
-                    copyableIntegrationValue(
-                        title: t("Delivery URL with Company ID", lang: seciliDil),
-                        value: deliveryURL.isEmpty ? (shopifyTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
-                        buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !deliveryURL.isEmpty,
-                        isSecret: true
-                    )
-
-                    if !wooCommerceCopyFeedback.isEmpty {
-                        Text(wooCommerceCopyFeedback)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.green)
-                            .transition(.opacity)
-                    }
-                }
-            }
-
-            SettingsCard(title: t("What you need to do", lang: seciliDil), iconName: "checklist") {
-                VStack(alignment: .leading, spacing: 10) {
-                    integrationInfoRow(number: "1", title: t("Open Shopify webhooks", lang: seciliDil), detail: t("In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).", lang: seciliDil))
-                    integrationInfoRow(number: "2", title: t("Create an order webhook", lang: seciliDil), detail: t("Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.", lang: seciliDil))
-                    integrationInfoRow(number: "3", title: t("Paste the Delivery URL", lang: seciliDil), detail: t("Paste the copied Delivery URL as the webhook URL and save it.", lang: seciliDil))
-                    integrationInfoRow(number: "4", title: t("Place a test order", lang: seciliDil), detail: t("Place a paid test order in your store; it appears in Orders within seconds.", lang: seciliDil))
-                }
-            }
-
-            SettingsCard(title: t("What happens when it is active", lang: seciliDil), iconName: "bolt.horizontal.circle.fill") {
-                Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.", lang: seciliDil))
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .onAppear {
-            loadShopifyWebhookSetup()
             loadShopifyAppStores()
         }
     }
@@ -6659,23 +6492,6 @@ struct AyarlarView: View {
                 DispatchQueue.main.async {
                     shopifyAppStoreActionBusyShop = ""
                     loadShopifyAppStores(force: true)
-                }
-            }
-    }
-
-    private func loadShopifyWebhookSetup() {
-        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !companyId.isEmpty, shopifyDeliveryURL.isEmpty, !shopifyTokenLoading else { return }
-        shopifyTokenLoading = true
-        Functions.functions(region: "europe-west2")
-            .httpsCallable("getShopifyWebhookToken")
-            .call(["companyId": companyId]) { result, _ in
-                DispatchQueue.main.async {
-                    shopifyTokenLoading = false
-                    if let data = result?.data as? [String: Any],
-                       let url = data["deliveryUrl"] as? String, !url.isEmpty {
-                        shopifyDeliveryURL = url
-                    }
                 }
             }
     }
