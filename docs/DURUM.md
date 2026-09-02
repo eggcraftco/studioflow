@@ -74,6 +74,18 @@ https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
   settlement modeli PayPal payout'larına `PROVIDERS` haritasında bir satırla
   uzanır.
 
+### 2 Eylül gece — QuickBooks Online muhasebe bağlayıcısı Faz 1–2 (kodda, deploy secret bekliyor)
+
+**Kaynak:** `NivaDesk_QuickBooks_Online_Entegrasyon_Spesifikasyonu.md`; mühendislik okuması `docs/accounting-connector.md`. Intuit gerçekleri tarayıcıdan doğrulandı (WebFetch JS sayfaları boş döner): webhook gövdesi CloudEvents dizisi + `intuit-signature` HMAC, OAuth uç noktaları, 100 günlük kayan/rotasyonlu refresh token, `minorversion=75`.
+
+**Sunucu (commit 125a6e9):** `functions/accounting/core` (adapter sözleşmesi, capability registry — QuickBooks For Review satırlarını hiç iddia etmez, Pandle confirm yeteneğini korur; posting state machine; fingerprint; `companies/{cid}/accounting*` deposu + tek-yazıcı kuralı), `functions/accounting/quickbooks` (saf client, OAuth, webhook parser eski+yeni şekil, normalize + eşleme/KDV önerileri + mükerrer müşteri adayları), `functions/accounting/pandle/adapter.js`, `functions/accountingFunctions.js` (13 fonksiyon; realm→workspace haritası kök `accountingRealms`). Rules: 11 alt koleksiyon üç yerde + kök state/realm blokları — **rules CANLI**. Testler: 10 saf + 9 e2e senaryo (sahte Intuit) geçti. **Fonksiyonlar DEPLOY EDİLMEDİ:** 4 secret kullanıcı tarafından girilecek (`NIVADESK_QBO_CLIENT_ID/SECRET/WEBHOOK_VERIFIER/TOKEN_KEY`).
+
+**Web (kodda, tsc temiz):** Integrations kartı `native` + `quickbooks`; `QuickBooksIntegrationSection` 9 sekme (Overview, Setup adım 2–5: şirket doğrulama, muhasebe kaynağı/geçiş tarihi, çift-yazıcı kontrol listesi, kaynak başına posting modu; Mappings: hesap + KDV seçimleri, öneriler, mükerrer raporu; Sales/Purchases/Inventory dürüst "salt-okunur" panelleri; Reconciliation; Sync activity; Settings/Disconnect), `/quickbooks/callback` yönlendirici, `lib/studioflow/quickbooks.ts`; rehber paragrafı 12 dil; 181 metin 11 dile çevrildi. **Round 150 "canlıya at" bekliyor.** Native yok (web-first, bilinçli).
+
+**Kullanıcı yapacak:** developer.intuit.com'da uygulama (Accounting scope), Development Keys → iki secret, redirect URI `https://europe-west2-eggcraft-studio.cloudfunctions.net/quickbooksOAuthCallback` (nivadesk.app/quickbooks/callback da çalışır), Webhooks → endpoint `…/quickbooksWebhook` + verifier secret; sonra 13 fonksiyon isimle deploy.
+
+**Sıradaki fazlar:** 3 satış posting (Estimate/Invoice/SalesReceipt/Payment, preview + onay, detailed/daily summary), 4 purchases, 5 clearing/payout/awaiting bank match, 6 COGS journal, 7 otomasyon + conflict akışı.
+
 ### 2 Eylül 18:05–18:33 — Banking sayfası kesintisi (Round 147 → hotfix Round 149)
 
 Round 147'deki sayfa geneli `item.amount < 0` → `isSpend(item)` değişimi, aynı betikte eklenen `isSpend` yardımcısının kendi gövdesini de değiştirdi → sonsuz özyineleme; `tsc` geçti, `/bank` canlıda açılışta çöktü (18:05'ten itibaren). Kullanıcı 18:30'da bildirdi; gövde düzeltildi, Round 149 (81cf450) 18:33'te canlı (`app/bank/page-6e4d…` chunk'ında `amount<0&&!outgoingKind` doğrulandı). Ders hafızada: toplu değişimden önce yardımcı tanımını hariç tut, deploy öncesi sayfayı tarayıcıda aç.
