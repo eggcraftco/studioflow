@@ -788,6 +788,7 @@ const TREE_EN: GuideNode[] = [
     title: "Bank Spending",
     blocks: [
       { kind: "para", text: "Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. NivaDesk only reads your transactions — it can never move money. Bank access is owner-only unless the owner grants a member the Bank Spending permission." },
+      { kind: "para", text: "PayPal beside the bank: connect your PayPal account from Integrations with the Client ID and Secret of your own PayPal app (create it in the PayPal Developer dashboard under Live and enable Transaction Search). NivaDesk checks the credentials, stores the secret encrypted and imports the last six months; from then on PayPal is read with every bank refresh. Payments received and sent, fees and refunds arrive as rows with the fee shown beside the gross, so categories, VAT, receipts and rules work exactly as for a bank row. A withdrawal from PayPal to your bank is not a row: it is matched to the bank statement's incoming row and marked as a processor payout, so the same sales are never counted twice." },
       { kind: "sub", text: "Connecting a bank" },
       { kind: "steps", items: [
         "Open Banking and choose Connect; pick your bank and approve access on the bank's own page.",
@@ -1960,6 +1961,7 @@ const TREE_TR: GuideNode[] = [
     title: "Banka Harcamaları",
     blocks: [
       { kind: "para", text: "İşletme bankanızı Open Banking ile bağlayın ve harcamayı olurken görün: kategoriler, KDV işlemi, hareketlere eşlenmiş fişler ve tekrarlayan ödemeler. NivaDesk hareketlerinizi yalnızca okur — asla para taşıyamaz. Banka erişimi, sahibi bir üyeye Banka Harcamaları iznini vermedikçe yalnız sahibindedir." },
+      { kind: "para", text: "Bankanın yanında PayPal: PayPal hesabını Integrations'tan, kendi PayPal uygulamanın Client ID ve Secret'ıyla bağla (uygulamayı PayPal Developer panelinde Live altında oluşturup Transaction Search'ü aç). NivaDesk kimlik bilgilerini doğrular, secret'ı şifreli saklar ve son altı ayı içe alır; sonrasında PayPal her banka yenilemesinde okunur. Alınan ve gönderilen ödemeler, ücretler ve iadeler satır olarak gelir, ücret brütün yanında gösterilir; kategoriler, KDV, fişler ve kurallar banka satırındaki gibi çalışır. PayPal'dan bankana çekim bir satır değildir: banka ekstresindeki gelen satırla eşleştirilir ve işlemci ödemesi olarak işaretlenir, aynı satışlar asla iki kez sayılmaz." },
       { kind: "sub", text: "Banka bağlama" },
       { kind: "steps", items: [
         "Banka bölümünü açıp Bağlan'ı seçin; bankanızı seçin ve erişimi bankanın kendi sayfasında onaylayın.",

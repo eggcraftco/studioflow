@@ -301,6 +301,10 @@ function BankPageContent() {
   const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
   // Banking tabs + the transaction drawer.
   type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules";
+  // Faz 5: the feed has more than one source now (bank, PayPal); the chips narrow every list and total.
+  const [sourceFilter, setSourceFilter] = useState<"all" | "bank" | "paypal">("all");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const matchesSource = useCallback((item: BankTransaction) => sourceFilter === "all" || ((item.provider === "paypal") === (sourceFilter === "paypal")), [sourceFilter]);
   const [tab, setTab] = useState<BankTab>(() => {
     if (typeof window === "undefined") return "overview";
     const value = new URLSearchParams(window.location.search).get("tab");
@@ -997,24 +1001,33 @@ function BankPageContent() {
     setSelectedMonth(next.getMonth());
   }
 
+  // Rows can carry more than one currency once PayPal is in the feed: the tiles add up the workspace's main one and say how many rows they left out.
+  const currencyMain = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of transactions) counts.set(item.currency, (counts.get(item.currency) || 0) + 1);
+    let best = transactions[0]?.currency || "GBP"; let n = -1;
+    counts.forEach((value, key) => { if (value > n) { n = value; best = key; } });
+    return best;
+  }, [transactions]);
+
   const monthTotal = useMemo(() => transactions
-    .filter(item => item.bookingDate.startsWith(monthPrefix) && item.amount < 0)
-    .reduce((acc, item) => acc + Math.abs(item.amount), 0), [transactions, monthPrefix]);
+    .filter(item => matchesSource(item) && item.currency === currencyMain && item.bookingDate.startsWith(monthPrefix) && item.amount < 0)
+    .reduce((acc, item) => acc + Math.abs(item.amount), 0), [transactions, monthPrefix, matchesSource, currencyMain]);
 
   // Spending per month of the selected year (outgoing only), for the Year view.
   const yearSeries = useMemo(() => {
     const totals = Array.from({ length: 12 }, () => 0);
     for (const item of transactions) {
-      if (item.amount >= 0 || !item.bookingDate.startsWith(String(selectedYear))) continue;
+      if (item.amount >= 0 || !matchesSource(item) || item.currency !== currencyMain || !item.bookingDate.startsWith(String(selectedYear))) continue;
       const month = Number(item.bookingDate.slice(5, 7)) - 1;
       if (month >= 0 && month < 12) totals[month] += Math.abs(item.amount);
     }
     return { year: selectedYear, totals, total: totals.reduce((acc, value) => acc + value, 0) };
-  }, [transactions, selectedYear]);
+  }, [transactions, selectedYear, matchesSource, currencyMain]);
 
   // The list follows the selected period; anything older stays reachable by
   // switching the tab back.
-  const visibleTransactions = useMemo(() => {
+  const periodTransactions = useMemo(() => {
     if (view === "custom") {
       if (!customStart || !customEnd) return transactions;
       return transactions.filter(item => item.bookingDate >= customStart && item.bookingDate <= customEnd);
@@ -1025,6 +1038,7 @@ function BankPageContent() {
     const prefix = view === "month" ? monthPrefix : String(selectedYear);
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
   }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso, customStart, customEnd]);
+  const visibleTransactions = useMemo(() => periodTransactions.filter(matchesSource), [periodTransactions, matchesSource]);
 
   // Previous period spend (week/month/year) for the "vs last …" delta.
   const previousPeriodSpent = useMemo(() => {
@@ -1435,11 +1449,13 @@ function BankPageContent() {
   }
 
   const currency0 = transactions[0]?.currency || "GBP";
+  const mainCurrency = currencyMain;
+  const otherCurrencyRows = useMemo(() => visibleTransactions.filter(item => item.currency !== mainCurrency).length, [visibleTransactions, mainCurrency]);
   // Transfers between the owner's own accounts, owner contributions and loans
   // are money in, but not revenue — once marked, they leave this tile.
   const incomingTotal = useMemo(() => visibleTransactions
-    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan", "payout"].includes(item.incomingKind))
-    .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions]);
+    .filter(item => item.amount > 0 && item.currency === mainCurrency && !["transfer", "owner_contribution", "loan", "payout"].includes(item.incomingKind))
+    .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions, mainCurrency]);
 
   // Sparkline for the "Total spent" tile: daily in month view, monthly in year view.
   const spentSeries = useMemo(() => {
@@ -1471,6 +1487,7 @@ function BankPageContent() {
     .filter(item => item.status === "linked")
     .reduce((acc, item) => acc + item.accounts.length, 0), [connections]);
   const linkedBanks = connections.filter(item => item.status === "linked");
+  const hasPayPal = connections.some(item => item.provider === "paypal") || transactions.some(item => item.provider === "paypal");
   const lastSync = linkedBanks.reduce<Date | null>((latest, item) =>
     item.lastSyncedAt && (!latest || item.lastSyncedAt > latest) ? item.lastSyncedAt : latest, null);
 
@@ -1513,7 +1530,7 @@ function BankPageContent() {
     : view === "week"
       ? `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
       : String(selectedYear);
-  const rangeTotal = visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+  const rangeTotal = visibleTransactions.filter(item => item.amount < 0 && item.currency === mainCurrency).reduce((acc, item) => acc + Math.abs(item.amount), 0);
   const weekTotal = view === "week" ? rangeTotal : 0;
   const spentTotal = view === "custom" ? rangeTotal : view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
   const spentDelta = previousPeriodSpent > 0 ? ((spentTotal - previousPeriodSpent) / previousPeriodSpent) * 100 : null;
@@ -1575,10 +1592,22 @@ function BankPageContent() {
               </button>
             </>
           ) : null}
+          {hasPayPal ? (
+            <div role="group" aria-label={t("Source")} style={{ display: "inline-flex", gap: 4 }}>
+              {(["all", "bank", "paypal"] as const).map(key => (
+                <button key={key} type="button" onClick={() => setSourceFilter(key)} style={{ ...bankBtnSm, ...(sourceFilter === key ? { background: "#2563eb", color: "#fff", borderColor: "#2563eb" } : {}) }}>
+                  {key === "all" ? t("All") : key === "bank" ? t("Bank") : "PayPal"}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {isOwner && linkedBanks.length === 0 ? (
-            <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={{ ...bankBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}>
-              {busy === "connect" ? t("Opening your bank…") : `+ ${t("Connect bank")}`}
-            </button>
+            <>
+              <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={{ ...bankBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}>
+                {busy === "connect" ? t("Opening your bank…") : `+ ${t("Connect bank")}`}
+              </button>
+              <a href="/settings?section=paypal" style={{ ...bankBtn, textDecoration: "none" }}>+ {t("Connect PayPal")}</a>
+            </>
           ) : null}
         </div>
 
@@ -1586,6 +1615,7 @@ function BankPageContent() {
           <p style={{ fontSize: 13, opacity: 0.75 }}>{t("Bank connections are managed by the workspace owner.")}</p>
         ) : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{t(status)}</p> : null}
+        {otherCurrencyRows > 0 ? <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>{otherCurrencyRows} {t("rows in other currencies are listed but not in these totals.")}</p> : null}
         {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{t(error)}</p> : null}
         {rulePrompt ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
@@ -1744,6 +1774,9 @@ function BankPageContent() {
                         ⟳ {busy === "connect" ? t("Opening your bank…") : t("Reconnect")}
                       </button>
                     ) : null}
+                    {isOwner && connection.provider === "paypal" && connection.status === "linked" && connection.syncState !== "needs_reconsent" ? (
+                      <a href="/settings?section=paypal" style={{ ...bankBtnSm, textDecoration: "none", fontSize: 11 }}>{t("Manage")}</a>
+                    ) : null}
                     {isOwner && connection.status === "disconnected" ? (
                       <>
                         {connection.provider !== "paypal" ? <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={bankBtnSm}>⟳ {t("Reconnect")}</button> : null}
@@ -1763,7 +1796,15 @@ function BankPageContent() {
                   <button type="button" style={{ ...bankBtnSm, opacity: 0.8 }} onClick={() => void toggleAuditLog()}>🕑 {t("Activity")}</button>
                 ) : null}
                 {isOwner && linkedBanks.length > 0 ? (
-                  <button type="button" style={bankBtnSm} disabled={busy === "connect"} onClick={() => void connectBank()}>＋ {t("Add account")}</button>
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <button type="button" style={bankBtnSm} disabled={busy === "connect"} onClick={() => setAddMenuOpen(value => !value)}>＋ {t("Add account")}</button>
+                    {addMenuOpen ? (
+                      <>
+                        <button type="button" style={bankBtnSm} disabled={busy === "connect"} onClick={() => { setAddMenuOpen(false); void connectBank(); }}>🏛 {busy === "connect" ? t("Opening your bank…") : t("Bank")}</button>
+                        <a href="/settings?section=paypal" style={{ ...bankBtnSm, textDecoration: "none" }} onClick={() => setAddMenuOpen(false)}>PayPal</a>
+                      </>
+                    ) : null}
+                  </span>
                 ) : null}
               </div>
             ) : null}
@@ -1818,7 +1859,7 @@ function BankPageContent() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
                   <div style={statTile}>
                     <p style={tileLabel}>{t("Total spent")}</p>
-                    <strong style={tileValue}>{money(spentTotal, currency0)}</strong>
+                    <strong style={tileValue}>{money(spentTotal, mainCurrency)}</strong>
                     {spentDelta !== null ? (
                       <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#6b7280" }}>
                         {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {deltaLabel}
@@ -1831,14 +1872,14 @@ function BankPageContent() {
                   </div>
                   <div style={statTile}>
                     <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Incoming")}</p>
-                    <strong style={{ ...tileValue, color: "#16a34a" }}>+{money(incomingTotal, currency0)}</strong>
+                    <strong style={{ ...tileValue, color: "#16a34a" }}>+{money(incomingTotal, mainCurrency)}</strong>
                     <span style={{ fontSize: 11.5, opacity: 0.65 }}>↗ {incomingCount} {t("payments received")}</span>
                     <button type="button" onClick={showIncoming} style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12 }}>{t("View all incoming")} →</button>
                     <TileIcon bg="rgba(22,163,74,0.12)">↗</TileIcon>
                   </div>
                   <div style={statTile}>
                     <p style={{ ...tileLabel, color: "#ea770b" }}>{t("Recurring spend")}</p>
-                    <strong style={tileValue}>{money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
+                    <strong style={tileValue}>{money(fixedMonthly, mainCurrency)} <span style={tileUnit}>/ {t("month")}</span></strong>
                     <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("recurring items")}</span>
                     <button type="button" onClick={() => setTab("recurring")} style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12 }}>{t("View recurring")} →</button>
                     <TileIcon bg="rgba(234,119,11,0.12)">📅</TileIcon>
@@ -1874,7 +1915,7 @@ function BankPageContent() {
                     </div>
                     <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                       <BankDonut rows={categoryBreakdown.rows} total={categoryBreakdown.total}
-                        centerLabel={t("Total spent")} centerValue={money(categoryBreakdown.total, currency0)}
+                        centerLabel={t("Total spent")} centerValue={money(categoryBreakdown.total, mainCurrency)}
                         uncategorisedLabel={t("Uncategorised")} translate={t} />
                       <div style={{ flex: 1, minWidth: 190, display: "flex", flexDirection: "column" }}>
                         {(showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 5)).map(row => {
@@ -1884,7 +1925,7 @@ function BankPageContent() {
                             <div key={row.name} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, padding: "5px 0" }}>
                               <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block", flexShrink: 0 }} />
                               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
-                              <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
+                              <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, mainCurrency)}</strong>
                               <span style={{ opacity: 0.5, minWidth: 30, textAlign: "right" }}>{row.share.toFixed(0)}%</span>
                             </div>
                           );
@@ -1900,7 +1941,7 @@ function BankPageContent() {
                         <div style={{ marginTop: "auto", paddingTop: 10, borderTop: "1px solid rgba(120,120,140,0.14)", display: "flex", flexDirection: "column", gap: 7, fontSize: 11.5 }}>
                           {hidden > 0.005 ? (
                             <span style={{ opacity: 0.7 }}>
-                              {`${money(hidden, currency0)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`}
+                              {`${money(hidden, mainCurrency)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`}
                             </span>
                           ) : null}
                           {unRow ? (
@@ -2006,7 +2047,7 @@ function BankPageContent() {
                           return (
                             <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>
                               <td style={{ ...miniTd, opacity: 0.6, whiteSpace: "nowrap" }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</td>
-                              <td style={{ ...miniTd, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</td>
+                              <td style={{ ...miniTd, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</td>
                               <td style={{ ...miniTd, paddingLeft: 4 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "2px 8px", display: "inline-block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: tx.amount >= 0 ? "rgba(22,163,74,0.12)" : rowCategory ? `${categoryColor(rowCategory)}1a` : "rgba(120,120,140,0.13)", color: tx.amount >= 0 ? "#16a34a" : rowCategory ? categoryColor(rowCategory) : "inherit" }}>
                                   {tx.amount >= 0 ? t("Incoming") : rowCategory ? t(rowCategory) : t("Uncategorised")}
@@ -2117,7 +2158,7 @@ function BankPageContent() {
                             <span style={{ width: 7, height: 7, borderRadius: 999, background: isUn ? "#5b6ee8" : categoryColor(row.name), display: "inline-block", flexShrink: 0 }} />
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
                           </div>
-                          <strong style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
+                          <strong style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(row.amount, mainCurrency)}</strong>
                         </div>
                       );
                     })}
@@ -2425,7 +2466,7 @@ function BankPageContent() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
                   <div style={bankCard}>
                     <p style={tileLabel}>{t("Monthly recurring spend")}</p>
-                    <strong style={tileValue}>{money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
+                    <strong style={tileValue}>{money(fixedMonthly, mainCurrency)} <span style={tileUnit}>/ {t("month")}</span></strong>
                     <TileIcon bg="rgba(234,119,11,0.12)">↻</TileIcon>
                   </div>
                   <div style={bankCard}>
@@ -2628,7 +2669,7 @@ function BankPageContent() {
                                   <button key={tx.id} type="button" disabled={busy === `waiting-${item.id}`} onClick={() => void assignWaitingReceipt(item, tx.id)}
                                     style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" }}>
                                     <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
-                                    <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</strong>
+                                    <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</strong>
                                     <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
                                     {tx.receiptPath ? <FileBadge name={tx.receiptName} size={16} /> : null}
                                   </button>
@@ -2670,7 +2711,7 @@ function BankPageContent() {
                           const category = effectiveCategory(tx);
                           return (
                             <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => openDrawer(tx)}>{tx.counterparty || tx.description}</td>
+                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => openDrawer(tx)}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</td>
                               <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
                               <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
                               <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
