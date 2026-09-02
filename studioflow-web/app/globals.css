@@ -30921,3 +30921,119 @@ body[data-studio-theme="dark"] .settings-save-bar,
 body[data-studio-theme="dark"] .settings-switch-line,
 body[data-studio-theme="dark"] .settings-status-option,
 body[data-studio-theme="dark"] .settings-status-band { background: var(--panel); }
+
+/* AI Reply Settings: engine choice cards, contributions */
+.settings-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 12px; }
+.settings-choice-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 14px 44px 14px 14px;
+  border: 1px solid var(--settings-border);
+  border-radius: 12px;
+  background: var(--settings-surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-choice-card:hover:not(:disabled) { border-color: rgba(88, 101, 232, 0.45); }
+.settings-choice-card.is-selected { border-color: var(--accent); background: var(--settings-row-active); box-shadow: 0 0 0 1px var(--accent); }
+.settings-choice-card:disabled { cursor: not-allowed; opacity: 0.7; }
+.settings-choice-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.settings-choice-card-head strong { font-size: 14.5px; font-weight: 700; }
+.settings-choice-card-detail { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.settings-choice-card-radio {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--settings-border);
+  border-radius: 999px;
+  background: var(--settings-surface);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.settings-choice-card.is-selected .settings-choice-card-radio { background: var(--accent); border-color: var(--accent); }
+.settings-field-hint.is-success { color: var(--settings-success-text); font-weight: 600; }
+.settings-content-pane .quick-reply-knowledge-panel { display: grid; gap: 8px; }
+.settings-content-pane .quick-reply-knowledge-panel > span:first-child { font-size: 13px; font-weight: 600; color: var(--text); }
+.settings-content-pane .quick-reply-settings-textarea { min-height: 140px; border-radius: 10px; border: 1px solid var(--settings-border); padding: 10px 12px; font: inherit; font-size: 14px; }
+.settings-contribution-list { display: grid; gap: 8px; margin-top: 12px; }
+.settings-contribution-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--settings-border); border-radius: 10px; background: var(--panel); }
+.settings-contribution-row > div { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; }
+.settings-contribution-row strong { font-size: 13px; font-weight: 700; color: var(--text); }
+.settings-contribution-row p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); white-space: pre-wrap; }
+body[data-studio-theme="dark"] .settings-choice-card { background: var(--panel); }
+body[data-studio-theme="dark"] .settings-choice-card.is-selected { background: var(--settings-row-active); }
+
+/* ==== Settings redesign, phase B: Message Settings, Safety & Uploads, Financial ==== */
+.settings-inline-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.settings-inline-link:hover { text-decoration: underline; }
+.settings-switch-line .settings-card-head-icon { width: 36px; height: 36px; }
+.settings-switch-line.is-plain { padding: 0; background: transparent; }
+.settings-overview-rows { display: grid; }
+.settings-overview-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--settings-border); font-size: 14px; font-weight: 500; color: var(--text); }
+.settings-overview-rows + .settings-notice { margin-top: 14px; }
+.settings-fact-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.settings-fact-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border: 1px solid var(--settings-border); border-radius: 12px; background: var(--settings-surface); }
+.settings-fact-card.is-caution .settings-card-head-icon { background: var(--warning-soft); color: var(--settings-caution-text); }
+.settings-fact-card.is-caution strong { color: var(--settings-caution-text); }
+.settings-fact-card-copy { display: grid; gap: 2px; min-width: 0; }
+.settings-fact-card-copy small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.settings-fact-card-copy strong { font-size: 16px; font-weight: 700; color: var(--text); }
+.settings-fact-card-copy em { font-style: normal; font-size: 12px; color: var(--muted); }
+.settings-field-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: 10px 16px; }
+.settings-field-row .settings-switch-line-copy { min-width: 0; }
+.settings-unit-input { display: flex; align-items: stretch; max-width: 220px; }
+.settings-unit-input .input { border-radius: 10px 0 0 10px; min-width: 0; }
+.settings-unit-input em { display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--settings-border); border-left: 0; border-radius: 0 10px 10px 0; background: var(--settings-canvas); color: var(--muted); font-style: normal; font-size: 13px; font-weight: 600; }
+.settings-segmented.is-compact { display: inline-grid; margin: 0; width: fit-content; }
+.settings-segmented.is-compact button { min-width: 110px; padding: 0 14px; }
+.settings-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--settings-border); border-radius: 999px; background: var(--settings-canvas); color: var(--text); font-size: 12.5px; font-weight: 600; }
+.settings-accordion { display: grid; gap: 8px; }
+.settings-accordion details { border: 1px solid var(--settings-border); border-radius: 10px; background: var(--settings-surface); }
+.settings-accordion summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; list-style: none; }
+.settings-accordion summary::-webkit-details-marker { display: none; }
+.settings-accordion summary::before { content: "›"; display: inline-grid; place-items: center; width: 18px; color: var(--muted); font-size: 18px; transition: transform 0.15s ease; }
+.settings-accordion details[open] summary::before { transform: rotate(90deg); }
+.settings-accordion summary .settings-tag { margin-left: auto; }
+.settings-accordion details > :not(summary) { padding: 0 14px 14px; }
+.settings-accordion details > .settings-field-hint { margin: 0; }
+.settings-rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 24px; }
+.settings-calc-preview { display: grid; gap: 10px; align-content: start; padding: 16px 18px; border: 1px solid var(--settings-border); border-radius: 12px; background: var(--settings-row-active); }
+.settings-calc-headline { font-size: 18px; font-weight: 700; color: var(--text); }
+.settings-calc-rows { display: grid; margin: 0; }
+.settings-calc-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(88, 101, 232, 0.18); font-size: 13.5px; }
+.settings-calc-rows dt { color: var(--muted); font-weight: 500; }
+.settings-calc-rows dd { margin: 0; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.settings-calc-preview .settings-tag { justify-self: start; }
+.settings-tools-panel { display: grid; gap: 10px; padding: 16px 18px; border: 1px solid rgba(217, 119, 6, 0.35); border-radius: 12px; background: var(--warning-soft); }
+.settings-tools-head { display: flex; gap: 12px; align-items: flex-start; }
+.settings-tools-head .settings-status-band-icon { background: rgba(217, 119, 6, 0.16); color: var(--settings-caution-text); }
+.settings-tools-head strong { display: block; font-size: 15px; font-weight: 700; color: var(--text); }
+.settings-tools-head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.settings-tools-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--settings-border); border-radius: 10px; background: var(--settings-surface); }
+.settings-tools-row-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--settings-canvas); color: var(--muted); font-size: 16px; }
+.settings-tools-row-icon.is-danger { background: var(--danger-soft); color: var(--danger); }
+.settings-tools-row-copy { flex: 1 1 260px; min-width: 0; }
+.settings-tools-row-copy strong { display: block; font-size: 14px; font-weight: 700; color: var(--text); }
+.settings-tools-row-copy p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.settings-tools-actions { display: flex; gap: 8px; margin-left: auto; }
+.settings-content-pane .financial-tax-choice { display: grid; gap: 10px; }
+.settings-content-pane .financial-tax-choice-card { border-radius: 12px; border: 1px solid var(--settings-border); background: var(--settings-surface); box-shadow: none; }
+.settings-content-pane .financial-tax-choice-card[data-active="true"] { border-color: var(--accent); background: var(--settings-row-active); box-shadow: 0 0 0 1px var(--accent); }
+@media (max-width: 640px) {
+  .settings-field-row { grid-template-columns: 1fr; }
+  .settings-tools-actions { margin-left: 0; }
+}
+body[data-studio-theme="dark"] .settings-fact-card,
+body[data-studio-theme="dark"] .settings-accordion details,
+body[data-studio-theme="dark"] .settings-tools-row { background: var(--panel); }
+body[data-studio-theme="dark"] .settings-tools-panel { background: rgba(242, 169, 59, 0.08); }
+body[data-studio-theme="dark"] .settings-calc-preview { background: rgba(123, 133, 240, 0.12); }

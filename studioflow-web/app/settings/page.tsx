@@ -1083,81 +1083,84 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
     }
   }
 
+  const permissionRows = [
+    { key: "direct", label: "Direct messages", detail: "Team members can start one-to-one conversations.", overview: "Start 1-to-1 chats", value: directMessages, set: setDirectMessages, icon: "reply" as const },
+    { key: "group", label: "Group conversations", detail: "Team members can add people and create group chats.", overview: "Create group chats", value: groupConversations, set: setGroupConversations, icon: "team" as const },
+    { key: "files", label: "File & image sharing", detail: "Team members can send images and files in Messages.", overview: "Send files & images", value: attachments, set: setAttachments, icon: "docText" as const }
+  ];
+
   return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="reply" eyebrow={t("Message Settings")} title={t("Workspace messaging permissions")} />
-        <p className="muted-copy">{t("Control workspace-wide messaging permissions for the team.")}</p>
-        {/* The three switches start ticked and disabled for about a second while
-            the real values load. With nothing on screen saying so, that looked
-            like the app had decided for you. */}
-        {loading ? <p className="muted-copy">{t("Loading permissions...")}</p> : null}
-        <div className="settings-toggle-stack">
-          <label className="settings-toggle-row">
-            <span>
-              <strong>{t("Allow Direct Messages")}</strong>
-              <small>{t("Team members can start one-to-one conversations.")}</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={directMessages}
-              disabled={!canEdit || saving || loading}
-              onChange={event => setDirectMessages(event.target.checked)}
-            />
-          </label>
+    <div className="settings-card-stack settings-messages-page">
+      <div className="settings-two-col settings-messages-columns">
+        <section className="card app-card">
+          <SettingsCardHead
+            title={t("Conversation permissions")}
+            subtitle={t("These settings apply to every team member.")}
+            aside={<span className="settings-tag">{t("Workspace-wide")}</span>}
+          />
+          {/* The three switches start ticked and disabled for about a second while
+              the real values load. With nothing on screen saying so, that looked
+              like the app had decided for you. */}
+          {loading ? <p className="settings-field-hint">{t("Loading permissions...")}</p> : null}
+          <div className="settings-switch-list">
+            {permissionRows.map(row => (
+              <label className="settings-switch-line" key={row.key}>
+                <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon={row.icon} /></span>
+                <span className="settings-switch-line-copy">
+                  <strong>{t(row.label)}</strong>
+                  <small>{t(row.detail)}</small>
+                  {row.key === "files" ? <a className="settings-inline-link" href="/settings?section=safety-uploads">{t("View upload rules")} ↗</a> : null}
+                </span>
+                <input
+                  type="checkbox"
+                  className="settings-switch"
+                  checked={row.value}
+                  disabled={!canEdit || saving || loading}
+                  onChange={event => row.set(event.target.checked)}
+                />
+              </label>
+            ))}
+          </div>
+        </section>
 
-          <label className="settings-toggle-row">
-            <span>
-              <strong>{t("Allow Group Conversations")}</strong>
-              <small>{t("Team members can add people and create group chats.")}</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={groupConversations}
-              disabled={!canEdit || saving || loading}
-              onChange={event => setGroupConversations(event.target.checked)}
-            />
-          </label>
+        <section className="card app-card">
+          <SettingsCardHead title={t("Permissions overview")} />
+          <div className="settings-overview-rows">
+            {permissionRows.map(row => (
+              <div className="settings-overview-row" key={row.key}>
+                <span>{t(row.overview)}</span>
+                <span className={row.value ? "settings-dot-status" : "settings-dot-status is-offline"}>{row.value ? t("Allowed") : t("Not allowed")}</span>
+              </div>
+            ))}
+          </div>
+          <p className="settings-notice">
+            {t("File types and upload limits are managed in Safety & Uploads.")}{" "}
+            <a className="settings-inline-link" href="/settings?section=safety-uploads">{t("Open Safety & Uploads")} ↗</a>
+          </p>
+        </section>
+      </div>
 
-          <label className="settings-toggle-row">
-            <span>
-              <strong>{t("Allow File & Image Sending")}</strong>
-              <small>
-                {t("Team members can send images and files in Messages.")}{" "}
-                <a href="/settings?section=safety-uploads">{t("Upload rules are set in Safety & Uploads.")}</a>
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={attachments}
-              disabled={!canEdit || saving || loading}
-              onChange={event => setAttachments(event.target.checked)}
-            />
-          </label>
-        </div>
-
-        <div className="settings-action-row">
-          <button
-            className="button secondary"
-            type="button"
-            disabled={loading}
-            onClick={() => {
-              // Reload silently threw away unsaved switches; now it says so first.
-              if (messageDirty && !window.confirm(t("Reload will discard your unsaved changes here. Continue?"))) return;
-              void loadSettings();
-            }}
-          >
-            {t("Reload")}
-          </button>
-          <button className="button" type="button" disabled={!canEdit || saving || loading || !messageDirty} onClick={() => { void handleSave(); }}>
-            {saving ? t("Saving...") : t("Save")}
-          </button>
-        </div>
-        <p className="muted-copy">{t("Reload re-fetches what is saved for the workspace and discards unsaved edits. Save applies your changes to everyone.")}</p>
-        {!canEdit ? <p className="muted-copy">{t("Only workspace owners or admins can change these settings.")}</p> : null}
+      <div className="settings-save-row settings-save-bar">
+        <button
+          className="button secondary"
+          type="button"
+          disabled={loading}
+          onClick={() => {
+            // Reload silently threw away unsaved switches; now it says so first.
+            if (messageDirty && !window.confirm(t("Reload will discard your unsaved changes here. Continue?"))) return;
+            void loadSettings();
+          }}
+        >
+          {t("Reload saved settings")}
+        </button>
+        <p className="settings-save-bar-note">{t("Reload discards unsaved edits. Changes apply to everyone.")}</p>
+        {!canEdit ? <p className="settings-field-hint">{t("Only workspace owners or admins can change these settings.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
+        <button className="button" type="button" disabled={!canEdit || saving || loading || !messageDirty} onClick={() => { void handleSave(); }}>
+          {saving ? t("Saving...") : t("Save changes")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -3039,6 +3042,11 @@ function QuickReplySettingsSection({
     () => handleSave(true)
   );
 
+  useSettingsHeaderActions(
+    <Link className="button secondary" href="/quick-reply">{t("Open Quick Reply")}</Link>,
+    [language]
+  );
+
   async function handleSave(rethrow = false) {
     if (!settings || !canEditPersonal) return;
     setSaving(true);
@@ -3108,267 +3116,290 @@ function QuickReplySettingsSection({
     }
   }
 
-  return (
-    <div className="settings-card-stack">
-      {clearKeyDialog}
-      <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
-        <div className="quick-reply-settings-main-title">
-          <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
-          <h2>{t("Quick Reply Settings")}</h2>
-        </div>
+  const engineOptions = [
+    { value: "Apple", label: "On-Device Settings", tag: "Private", detail: "Runs on the Mac or iPhone itself. Free and private, shorter replies, and only in the app — never in this browser." },
+    { value: "AI", label: "OpenAI Online", tag: "Online", detail: "Writes a fresh reply from your knowledge base. Needs an API key and internet. Costs money per reply." },
+    { value: "Offline", label: "Offline Template", tag: "No AI", detail: "Fills a fixed template. No AI, no key, no internet — the same wording every time." }
+  ];
+  const engineLabel = engineOptions.find(option => option.value === replyMode)?.label ?? "OpenAI Online";
+  const keyStatusText = keyTest
+    ? (keyTest.ok ? t("The key works.") : keyTest.message || t("The key did not answer."))
+    : settings.openAIKeyCheckedAtMs > 0
+      ? `${settings.openAIKeyWorks ? t("Last checked, working") : t("Last checked, failing")}: ${new Date(settings.openAIKeyCheckedAtMs).toLocaleDateString(studioLocaleTag(language))}`
+      : t("Never checked");
+  const keyStatusTone = keyTest ? (keyTest.ok ? "is-success" : "is-danger") : settings.openAIKeyWorks ? "is-success" : "";
 
-        {canEditCore ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "12px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-              <strong style={{ fontSize: 14 }}>{t("Show “AI Replies” in the menu")}</strong>
-              <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{t("Turn this off to hide the AI Replies item from your main menu.")}</span>
-            </div>
-            <button
-              type="button"
+  return (
+    <div className="settings-card-stack settings-ai-page">
+      {clearKeyDialog}
+      {canEditCore ? (
+        <div className="settings-status-band is-info">
+          <span className="settings-status-band-icon" aria-hidden="true">✦</span>
+          <div className="settings-status-band-copy">
+            <strong>{t("Show “AI Replies” in the menu")}</strong>
+            <p>{t("Turn this off to hide the AI Replies item from your main menu.")}</p>
+          </div>
+          <span className="settings-status-band-side">
+            <input
+              type="checkbox"
+              className="settings-switch"
               role="switch"
               aria-checked={menuEnabled}
-              onClick={toggleMenuEnabled}
+              aria-label={t("Show “AI Replies” in the menu")}
+              checked={menuEnabled}
               disabled={menuSaving}
-              style={{ flexShrink: 0, width: 46, height: 26, borderRadius: 999, border: "none", cursor: menuSaving ? "default" : "pointer", background: menuEnabled ? "#34c759" : "#c7ccd1", position: "relative", transition: "background .15s" }}
-            >
-              <span style={{ position: "absolute", top: 3, left: menuEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.2)", transition: "left .15s" }} />
-            </button>
-          </div>
-        ) : null}
-
-        <div className="quick-reply-engine-block">
-          <h3>{t("Your Reply Engine")}</h3>
-          <div className={canEditPersonal ? "quick-reply-engine-segment" : "quick-reply-engine-segment is-disabled"}>
-            {[
-              ["Apple", "◉", "On-Device Settings"],
-              ["AI", "◎", "OpenAI Online"],
-              ["Offline", "▤", "Offline Template"]
-            ].map(([value, icon, label]) => (
-              <button
-                key={value}
-                className={replyMode === value ? "active" : ""}
-                type="button"
-                disabled={!canEditPersonal}
-                onClick={() => setReplyMode(value)}
-              >
-                <span aria-hidden="true">{icon}</span>
-                {t(label)}
-              </button>
-            ))}
-          </div>
-          {/* The three names said nothing about what each can actually do, so the
-              choice was a guess. */}
-          <div className="settings-impact-grid quick-reply-engine-compare">
-            <span>{t("OpenAI Online")}</span>
-            <strong>{t("Writes a fresh reply from your knowledge base. Needs an API key and internet. Costs money per reply.")}</strong>
-            <span>{t("On-Device Settings")}</span>
-            <strong>{t("Runs on the Mac or iPhone itself. Free and private, shorter replies, and only in the app — never in this browser.")}</strong>
-            <span>{t("Offline Template")}</span>
-            <strong>{t("Fills a fixed template. No AI, no key, no internet — the same wording every time.")}</strong>
-          </div>
-          {replyMode === "Apple" ? (
-            <p className="muted-copy">{t("Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.")}</p>
-          ) : (
-            <p className="muted-copy">{t(quickReplyEngineDescription(replyMode))}</p>
-          )}
-        </div>
-
-        <div className="quick-reply-style-panel">
-          <h3>{t("Your Default Reply Style")}</h3>
-          <div className="quick-reply-setting-group">
-            <span>{t("Politeness")}</span>
-            <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
-              {["Direct", "Warm", "Very Polite"].map(option => (
-                <button key={option} className={politeness === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setPoliteness(option)}>{t(option)}</button>
-              ))}
-            </div>
-          </div>
-          <div className="quick-reply-setting-group">
-            <span>{t("Length")}</span>
-            <div className={canEditPersonal ? "quick-reply-purple-segment" : "quick-reply-purple-segment is-disabled"}>
-              {["Short", "Balanced", "Detailed"].map(option => (
-                <button key={option} className={replyLength === option ? "active" : ""} type="button" disabled={!canEditPersonal} onClick={() => setReplyLength(option)}>{t(option)}</button>
-              ))}
-            </div>
-          </div>
-          <p className="muted-copy">{t("These personal settings sync across your devices and do not change another team member’s templates.")}</p>
-        </div>
-
-        {replyMode === "Apple" ? (
-          <div className="quick-reply-settings-panel">
-            <CardTitle icon="dashboard" eyebrow={t("On-Device Settings")} title={t("Personal On-Device Knowledge")} />
-            <p className="muted-copy">{t("Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.")}</p>
-            <KnowledgeBaseEditor
-              title={t("My On-Device Knowledge")}
-              value={onDeviceKnowledgeBase}
-              disabled={!canEditPersonal}
-              onChange={setOnDeviceKnowledgeBase}
-              language={language}
+              onChange={() => { void toggleMenuEnabled(); }}
             />
+          </span>
+        </div>
+      ) : null}
+
+      <section className="card app-card">
+        <SettingsCardHead title={t("Reply engine")} subtitle={t("Choose where replies are created.")} />
+        <div className="settings-choice-grid" role="radiogroup" aria-label={t("Your Reply Engine")}>
+          {engineOptions.map(option => {
+            const selected = replyMode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={selected ? "settings-choice-card is-selected" : "settings-choice-card"}
+                disabled={!canEditPersonal}
+                onClick={() => setReplyMode(option.value)}
+              >
+                <span className="settings-choice-card-head">
+                  <strong>{t(option.label)}</strong>
+                  <span className="settings-tag">{t(option.tag)}</span>
+                </span>
+                <span className="settings-choice-card-detail">{t(option.detail)}</span>
+                <span className="settings-choice-card-radio" aria-hidden="true">{selected ? "✓" : ""}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="settings-field-hint">
+          {t("Currently using")} <strong>{t(engineLabel)}</strong>.{" "}
+          {replyMode === "Apple"
+            ? t("Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.")
+            : t(quickReplyEngineDescription(replyMode))}
+        </p>
+      </section>
+
+      <div className="settings-two-col">
+        <section className="card app-card">
+          <SettingsCardHead title={t("Default reply style")} />
+          <div className="settings-field-stack">
+            <div className="settings-field">
+              <span className="settings-field-label">{t("Politeness")}</span>
+              <div className="settings-segmented" role="group" aria-label={t("Politeness")}>
+                {["Direct", "Warm", "Very Polite"].map(option => (
+                  <button key={option} type="button" className={politeness === option ? "active" : ""} aria-pressed={politeness === option} disabled={!canEditPersonal} onClick={() => setPoliteness(option)}>{t(option)}</button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-field">
+              <span className="settings-field-label">{t("Length")}</span>
+              <div className="settings-segmented" role="group" aria-label={t("Length")}>
+                {["Short", "Balanced", "Detailed"].map(option => (
+                  <button key={option} type="button" className={replyLength === option ? "active" : ""} aria-pressed={replyLength === option} disabled={!canEditPersonal} onClick={() => setReplyLength(option)}>{t(option)}</button>
+                ))}
+              </div>
+            </div>
           </div>
-        ) : null}
+          <p className="settings-field-hint">{t("These personal settings sync across your devices and do not change another team member’s templates.")}</p>
+        </section>
 
         {replyMode === "AI" ? (
-          <>
-            {canEditCore ? (
-              <>
-                <div className="quick-reply-api-card">
-                  <span className="quick-reply-api-icon" aria-hidden="true">⌕</span>
-                  <div className="quick-reply-api-title">{t("OpenAI API Key")}</div>
-                  <div className="quick-reply-api-fields">
-                    <input
-                      className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
-                      type={showMaskedOpenAIKey ? "text" : "password"}
-                      value={showMaskedOpenAIKey ? "sk-proj-••••" : apiKeyInput}
-                      readOnly={showMaskedOpenAIKey}
-                      disabled={clearOpenAIKey}
-                      onFocus={() => { if (showMaskedOpenAIKey) setIsReplacingOpenAIKey(true); }}
-                      onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
-                      placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
-                    />
-                    <span>{t("Stored server-side and never shared with workspace members. If the website assistant is switched on below, the same key answers questions from the nivadesk.app chat widget.")}</span>
-                    {/* "Configured" said nothing about whether the key still
-                        works. A revoked key looked identical to a good one until
-                        a customer reply failed. */}
-                    {settings.hasOpenAIKey ? (
-                      <div className="quick-reply-key-row">
-                        <span className={keyTest ? (keyTest.ok ? "studio-pill success" : "studio-pill danger") : (settings.openAIKeyWorks ? "studio-pill success" : "studio-pill")}>
-                          {keyTest
-                            ? (keyTest.ok ? t("The key works.") : keyTest.message || t("The key did not answer."))
-                            : settings.openAIKeyCheckedAtMs > 0
-                              ? `${settings.openAIKeyWorks ? t("Last checked, working") : t("Last checked, failing")}: ${new Date(settings.openAIKeyCheckedAtMs).toLocaleDateString(studioLocaleTag(language))}`
-                              : t("Never checked")}
-                        </span>
-                        <button
-                          className="button secondary"
-                          type="button"
-                          disabled={testingKey}
-                          onClick={() => { void runKeyTest(); }}
-                        >
-                          {testingKey ? t("Testing...") : t("Test API Connection")}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                {assistant.visible ? (
-                  <div className="quick-reply-settings-panel">
-                    <CardTitle icon="notes" eyebrow={t("NivaDesk only")} title={t("Website assistant")} />
-                    <p className="muted-copy">{t("Let this OpenAI key answer first questions in the nivadesk.app chat widget. The assistant only answers from public NivaDesk facts, never from this workspace's Quick Reply knowledge base, and hands over to a person when it is unsure. Every question still reaches Support / Tickets and your email.")}</p>
-                    <div className="quick-reply-key-row">
-                      <span className={assistant.enabled ? "studio-pill success" : "studio-pill"}>
-                        {assistant.enabled ? t("Website assistant is on") : t("Website assistant is off")}
-                      </span>
-                      {assistant.enabled && !assistant.hasKey ? (
-                        <span className="studio-pill">{t("No API key configured")}</span>
-                      ) : null}
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={assistantBusy}
-                        onClick={() => void toggleWebsiteAssistant(!assistant.enabled)}
-                      >
-                        {assistantBusy ? t("Saving...") : (assistant.enabled ? t("Turn off") : t("Turn on"))}
-                      </button>
-                    </div>
-                    {assistantError ? <p className="layout-error">{t(assistantError)}</p> : null}
-                  </div>
-                ) : null}
-                <div className="quick-reply-key-row">
-                  <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
+          canEditCore ? (
+            <section className="card app-card">
+              <SettingsCardHead
+                title={t("OpenAI connection")}
+                aside={
+                  <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "settings-dot-status" : "settings-dot-status is-offline"}>
                     {clearOpenAIKey ? t("Key will be cleared") : settings.hasOpenAIKey ? t("API key configured") : t("No API key configured")}
                   </span>
+                }
+              />
+              <div className="settings-field-stack">
+                <input
+                  className={showMaskedOpenAIKey ? "input quick-reply-masked-key" : "input"}
+                  type={showMaskedOpenAIKey ? "text" : "password"}
+                  value={showMaskedOpenAIKey ? "sk-proj-••••" : apiKeyInput}
+                  readOnly={showMaskedOpenAIKey}
+                  disabled={clearOpenAIKey}
+                  aria-label={t("OpenAI API Key")}
+                  onFocus={() => { if (showMaskedOpenAIKey) setIsReplacingOpenAIKey(true); }}
+                  onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
+                  placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
+                />
+                {/* "Configured" said nothing about whether the key still works. A
+                    revoked key looked identical to a good one until a customer
+                    reply failed. */}
+                {settings.hasOpenAIKey ? <p className={`settings-field-hint ${keyStatusTone}`}>{keyStatusText}</p> : null}
+                <div className="settings-button-row">
+                  {settings.hasOpenAIKey ? (
+                    <button className="button secondary" type="button" disabled={testingKey} onClick={() => { void runKeyTest(); }}>
+                      {testingKey ? t("Testing...") : t("Test API Connection")}
+                    </button>
+                  ) : null}
                   {showMaskedOpenAIKey ? <button className="button secondary" type="button" onClick={() => setIsReplacingOpenAIKey(true)}>{t("Replace Key")}</button> : null}
                   {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{t("Cancel Replace")}</button> : null}
-                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { if (!clearOpenAIKey) { setConfirmClearKey(true); return; } setClearOpenAIKey(false); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
+                  {settings.hasOpenAIKey ? (
+                    <button className={clearOpenAIKey ? "button secondary" : "button danger secondary"} type="button" onClick={() => { if (!clearOpenAIKey) { setConfirmClearKey(true); return; } setClearOpenAIKey(false); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>
+                      {clearOpenAIKey ? t("Keep Key") : t("Clear Key")}
+                    </button>
+                  ) : null}
                 </div>
-                <KnowledgeBaseEditor title={t("Company Knowledge Base (For OpenAI)")} value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
-                {/* The one previous version the server keeps on every real
-                    change. Restoring only edits the draft — Save is still the
-                    moment anything is written, and the replaced text becomes
-                    the new previous version, so a restore can itself be undone. */}
-                {(settings.aiKnowledgeBasePrevious || "").trim() && settings.aiKnowledgeBasePrevious !== mainKnowledgeBase ? (
-                  <div className="settings-action-row">
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => setMainKnowledgeBase(settings.aiKnowledgeBasePrevious || "")}
-                    >
-                      {t("Restore previous version")}
-                      {settings.aiKnowledgeBasePreviousSavedAtMs ? ` (${new Date(settings.aiKnowledgeBasePreviousSavedAtMs).toLocaleDateString(studioLocaleTag(language))})` : ""}
-                    </button>
-                    <span className="muted-copy">{t("Puts the previous Knowledge Base text back into the editor. Nothing changes until you save.")}</span>
-                  </div>
-                ) : null}
-                {/* An empty box with a "add your pricing, process, policies"
-                    placeholder is a blank page problem: everyone left it empty,
-                    which is why the replies came out generic. */}
-                {mainKnowledgeBase.trim().length === 0 ? (
-                  <div className="settings-action-row">
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => setMainKnowledgeBase(QUICK_REPLY_STARTER_KNOWLEDGE)}
-                    >
-                      {t("Start from headings")}
-                    </button>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div className="quick-reply-settings-panel">
-                <CardTitle icon="lock" eyebrow={t("OpenAI Online")} title={t("Workspace AI Access")} />
-                <span className={settings.hasOpenAIKey ? "studio-pill success" : "studio-pill"}>
-                  {settings.hasOpenAIKey ? t("Workspace OpenAI key configured") : t("Workspace OpenAI key not configured")}
-                </span>
-                <p className="muted-copy">{t("Only the workspace owner can view or change the API key and main Company Knowledge Base. You can use OpenAI replies once a key is configured.")}</p>
+                <p className="settings-field-hint">{t("Stored server-side and never shared with workspace members. If the website assistant is switched on below, the same key answers questions from the nivadesk.app chat widget.")}</p>
               </div>
-            )}
-            {canContribute ? (
-              <section className="quick-reply-settings-panel">
-                <CardTitle icon="notes" eyebrow={t("Team Contributions")} title={t("Additional Knowledge for OpenAI")} />
-                <p className="muted-copy">{t("Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.")}</p>
-                <p className="muted-copy">{t("The AI reads one combined text: the owner's Company Knowledge Base first, then each contribution with its author's name. Nothing overrides anything — if a contribution contradicts the owner text, the AI sees both. Keep contributions consistent with it.")}</p>
-                <textarea className="quick-reply-settings-textarea" value={contributionDraft} maxLength={4000} onChange={event => setContributionDraft(event.target.value)} placeholder={t("Add an additional fact or instruction for AI replies...")} />
-                <span className="muted-copy">{contributionDraft.length.toLocaleString()} / 4,000 {t("characters")}.</span>
-                <button className="button" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? t("Adding...") : t("Add Contribution")}</button>
-                <div className="quick-reply-template-list">
-                  {contributions.map(item => (
-                    <div className="quick-reply-template-row" key={item.id}>
-                      <div><strong>{item.authorName}</strong><p className="muted-copy">{item.text}</p></div>
-                      {item.canDelete ? <button className="icon-action danger" type="button" onClick={() => removeTeamContribution(item.id)} aria-label={t("Remove")}>×</button> : null}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-          </>
-        ) : null}
+            </section>
+          ) : (
+            <section className="card app-card">
+              <SettingsCardHead
+                title={t("Workspace AI Access")}
+                aside={
+                  <span className={settings.hasOpenAIKey ? "settings-dot-status" : "settings-dot-status is-offline"}>
+                    {settings.hasOpenAIKey ? t("Workspace OpenAI key configured") : t("Workspace OpenAI key not configured")}
+                  </span>
+                }
+              />
+              <p className="settings-field-hint">{t("Only the workspace owner can view or change the API key and main Company Knowledge Base. You can use OpenAI replies once a key is configured.")}</p>
+            </section>
+          )
+        ) : replyMode === "Apple" ? (
+          <section className="card app-card">
+            <SettingsCardHead title={t("On-Device Settings")} aside={<span className="settings-tag">{t("Private")}</span>} />
+            <p className="settings-field-hint">{t("Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.")}</p>
+          </section>
+        ) : (
+          <section className="card app-card">
+            <SettingsCardHead title={t("Offline Template")} aside={<span className="settings-tag">{t("No AI")}</span>} />
+            <p className="settings-field-hint">{t("Your own reusable products and rules sync across your devices without changing the workspace owner’s Company Knowledge Base.")}</p>
+          </section>
+        )}
+      </div>
 
-        {replyMode === "Offline" ? (
-          <div className="quick-reply-settings-panel">
-            <CardTitle icon="notes" eyebrow={t("Offline Template")} title={t("My Offline Template")} />
-            <p className="muted-copy">{t("Your own reusable products and rules sync across your devices without changing the workspace owner’s Company Knowledge Base.")}</p>
-            <QuickReplyTemplateEditor title={t("Products / Services")} addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} language={language} />
-            <div className="settings-divider" />
-            <QuickReplyTemplateEditor title={t("Custom Rules / FAQs")} addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} language={language} />
+      {replyMode === "AI" && canEditCore && assistant.visible ? (
+        <section className="card app-card">
+          <SettingsCardHead
+            title={t("Website assistant")}
+            aside={<span className="settings-tag">{t("NivaDesk only")}</span>}
+          />
+          <p className="settings-field-hint">{t("Let this OpenAI key answer first questions in the nivadesk.app chat widget. The assistant only answers from public NivaDesk facts, never from this workspace's Quick Reply knowledge base, and hands over to a person when it is unsure. Every question still reaches Support / Tickets and your email.")}</p>
+          <div className="settings-action-row">
+            <span className={assistant.enabled ? "settings-dot-status" : "settings-dot-status is-offline"}>
+              {assistant.enabled ? t("Website assistant is on") : t("Website assistant is off")}
+            </span>
+            {assistant.enabled && !assistant.hasKey ? <span className="settings-tag is-muted">{t("No API key configured")}</span> : null}
+            <button className="button secondary" type="button" disabled={assistantBusy} onClick={() => void toggleWebsiteAssistant(!assistant.enabled)}>
+              {assistantBusy ? t("Saving...") : (assistant.enabled ? t("Turn off") : t("Turn on"))}
+            </button>
           </div>
-        ) : null}
+          {assistantError ? <p className="layout-error">{t(assistantError)}</p> : null}
+        </section>
+      ) : null}
 
-        <div className="quick-reply-settings-actions quick-reply-settings-footer">
-          <Link className="button secondary" href="/quick-reply">{t("Open Quick Reply")}</Link>
-          <button
-            className="button"
-            type="button"
-            disabled={!canEditPersonal || !personalLoaded || saving || (!quickReplyDirty && !apiKeyInput.trim() && !clearOpenAIKey)}
-            onClick={() => { void handleSave(); }}
-          >
-            {saving ? t("Saving...") : t("Save My Settings")}
-          </button>
-        </div>
+      {replyMode === "AI" && canEditCore ? (
+        <section className="card app-card">
+          <SettingsCardHead
+            title={t("Company knowledge base")}
+            subtitle={t("Pricing, process, policies, FAQs and common customer answers used by OpenAI.")}
+            aside={<span className="settings-tag">{t("Owner managed")}</span>}
+          />
+          <KnowledgeBaseEditor title={t("Company Knowledge Base (For OpenAI)")} value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
+          {/* The one previous version the server keeps on every real change.
+              Restoring only edits the draft — Save is still the moment anything
+              is written, and the replaced text becomes the new previous version,
+              so a restore can itself be undone. */}
+          {(settings.aiKnowledgeBasePrevious || "").trim() && settings.aiKnowledgeBasePrevious !== mainKnowledgeBase ? (
+            <div className="settings-action-row">
+              <button className="button secondary" type="button" onClick={() => setMainKnowledgeBase(settings.aiKnowledgeBasePrevious || "")}>
+                {t("Restore previous version")}
+                {settings.aiKnowledgeBasePreviousSavedAtMs ? ` (${new Date(settings.aiKnowledgeBasePreviousSavedAtMs).toLocaleDateString(studioLocaleTag(language))})` : ""}
+              </button>
+              <span className="settings-field-hint">{t("Puts the previous Knowledge Base text back into the editor. Nothing changes until you save.")}</span>
+            </div>
+          ) : null}
+          {/* An empty box with a "add your pricing, process, policies" placeholder
+              is a blank page problem: everyone left it empty, which is why the
+              replies came out generic. */}
+          {mainKnowledgeBase.trim().length === 0 ? (
+            <div className="settings-action-row">
+              <button className="button secondary" type="button" onClick={() => setMainKnowledgeBase(QUICK_REPLY_STARTER_KNOWLEDGE)}>
+                {t("Start from headings")}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {replyMode === "AI" && canContribute ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Team contributions")} subtitle={t("Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.")} />
+          <p className="settings-notice">{t("The AI reads one combined text: the owner's Company Knowledge Base first, then each contribution with its author's name. Nothing overrides anything — if a contribution contradicts the owner text, the AI sees both. Keep contributions consistent with it.")}</p>
+          <div className="settings-field-stack">
+            <textarea className="input" rows={3} value={contributionDraft} maxLength={4000} onChange={event => setContributionDraft(event.target.value)} placeholder={t("Add an additional fact or instruction for AI replies...")} aria-label={t("Team contributions")} />
+            <div className="settings-action-row settings-action-row-split">
+              <span className="settings-field-hint">{contributionDraft.length.toLocaleString()} / 4,000 {t("characters")}.</span>
+              <button className="button secondary" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? t("Adding...") : t("Add Contribution")}</button>
+            </div>
+          </div>
+          {contributions.length > 0 ? (
+            <div className="settings-contribution-list">
+              {contributions.map(item => (
+                <div className="settings-contribution-row" key={item.id}>
+                  <div>
+                    <strong>{item.authorName}</strong>
+                    <p>{item.text}</p>
+                  </div>
+                  {item.canDelete ? (
+                    <button className="settings-icon-button danger" type="button" onClick={() => removeTeamContribution(item.id)} aria-label={t("Remove")} title={t("Remove")}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {replyMode === "Apple" ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Personal On-Device Knowledge")} />
+          <KnowledgeBaseEditor
+            title={t("My On-Device Knowledge")}
+            value={onDeviceKnowledgeBase}
+            disabled={!canEditPersonal}
+            onChange={setOnDeviceKnowledgeBase}
+            language={language}
+          />
+        </section>
+      ) : null}
+
+      {replyMode === "Offline" ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("My Offline Template")} />
+          <QuickReplyTemplateEditor title={t("Products / Services")} addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} language={language} />
+          <div className="settings-divider" />
+          <QuickReplyTemplateEditor title={t("Custom Rules / FAQs")} addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} language={language} />
+        </section>
+      ) : null}
+
+      <div className="settings-save-row settings-save-bar">
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
+        <button
+          className="button"
+          type="button"
+          disabled={!canEditPersonal || !personalLoaded || saving || (!quickReplyDirty && !apiKeyInput.trim() && !clearOpenAIKey)}
+          onClick={() => { void handleSave(); }}
+        >
+          {saving ? t("Saving...") : t("Save My Settings")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -3569,127 +3600,170 @@ function SafetyUploadsSection({
     }
   }
 
+  const acceptedDate = acceptedAtMs > 0 ? new Date(acceptedAtMs).toLocaleDateString(studioLocaleTag(language)) : "";
+
   return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="lock" eyebrow={t("Safety & Uploads")} title={t("Upload safety policy")} />
-        <p className="muted-copy">
-          {t("Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in this workspace.")}
-        </p>
-        <div className="settings-toggle-stack">
-          <label className="settings-toggle-row">
-            <span>
-              <strong>{t("Require upload policy acceptance before upload")}</strong>
-              <small>{t("When enabled, every browser and device in this workspace must accept the upload policy before its first Client Files upload.")}</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={requirePolicy}
-              disabled={!canEdit || saving}
-              onChange={event => setRequirePolicy(event.target.checked)}
-            />
-          </label>
+    <div className="settings-card-stack settings-safety-page">
+      <div className="settings-fact-cards">
+        <div className="settings-fact-card">
+          <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="check" /></span>
+          <span className="settings-fact-card-copy">
+            <small>{t("Policy prompt")}</small>
+            <strong>{requirePolicy ? t("Required") : t("Not required")}</strong>
+          </span>
+        </div>
+        <div className="settings-fact-card">
+          <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="docText" /></span>
+          <span className="settings-fact-card-copy">
+            <small>{t("Maximum file size")}</small>
+            <strong>{Math.round(maxFileSizeMB)} MB</strong>
+          </span>
+        </div>
+        <div className={browserAccepted ? "settings-fact-card" : "settings-fact-card is-caution"}>
+          <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="warningTriangle" /></span>
+          <span className="settings-fact-card-copy">
+            <small>{t("This browser")}</small>
+            <strong>{browserAccepted ? t("Accepted") : t("Not accepted")}</strong>
+            <em>
+              {browserAccepted
+                ? `${t("Uploads will not ask again until you reset it.")}${acceptedDate ? ` (${acceptedDate})` : ""}`
+                : t("The next upload will ask for acceptance.")}
+            </em>
+          </span>
+        </div>
+      </div>
 
-          <label className="quick-reply-settings-label">
-            <span>{t("Workspace upload policy text")}</span>
-            <textarea
-              className="input"
-              rows={3}
-              maxLength={2000}
-              value={policyText}
-              disabled={!canEdit || saving}
-              placeholder={t("Optional. Shown to your team when they are asked to accept the upload policy. Leave empty to use the built-in wording.")}
-              onChange={event => setPolicyText(event.target.value)}
-            />
-          </label>
-
-          {/* This used to be a checkbox whose label read "This browser has
-              accepted the upload policy" — styled exactly like the status
-              sentence below it, so an un-accepted browser showed the claim and
-              its own contradiction one after the other. The state is stated
-              once now, and the control is only ever a reset: ticking a box
-              should not count as reading a policy. */}
-          <div className="settings-toggle-row">
-            <span>
-              <strong>{t("Upload policy acceptance")}</strong>
-              <small>{t("Acceptance is stored on this browser only, the same way each device accepts separately.")}</small>
-            </span>
-            {browserAccepted ? (
-              <button className="button secondary" type="button" onClick={() => updateBrowserAccepted(false)}>
-                {t("Reset for this browser")}
-              </button>
-            ) : null}
+      <div className="settings-two-col settings-safety-columns">
+        <section className="card app-card">
+          <SettingsCardHead title={t("Upload policy settings")} />
+          <div className="settings-field-stack">
+            <label className="settings-switch-line is-plain">
+              <span className="settings-switch-line-copy">
+                <strong>{t("Require policy acceptance")}</strong>
+                <small>{t("When enabled, every browser and device in this workspace must accept the upload policy before its first Client Files upload.")}</small>
+              </span>
+              <input
+                type="checkbox"
+                className="settings-switch"
+                checked={requirePolicy}
+                disabled={!canEdit || saving}
+                onChange={event => setRequirePolicy(event.target.checked)}
+              />
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Workspace upload policy text")}</span>
+              <textarea
+                className="input"
+                rows={3}
+                maxLength={2000}
+                value={policyText}
+                disabled={!canEdit || saving}
+                placeholder={t("Optional. Shown to your team when they are asked to accept the upload policy. Leave empty to use the built-in wording.")}
+                onChange={event => setPolicyText(event.target.value)}
+              />
+            </label>
+            <label className="settings-field-row">
+              <span className="settings-switch-line-copy">
+                <strong>{t("Maximum upload size")}</strong>
+                <small>{t("The NivaDesk apps block files larger than this before upload.")}</small>
+              </span>
+              <span className="settings-unit-input">
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={maxFileSizeMB}
+                  disabled={!canEdit || saving}
+                  onChange={event => setMaxFileSizeMB(Math.min(Math.max(Number(event.target.value) || 1, 1), 50))}
+                />
+                <em>MB</em>
+              </span>
+            </label>
+            {/* This used to be a checkbox whose label read "This browser has
+                accepted the upload policy" — styled exactly like the status
+                sentence below it, so an un-accepted browser showed the claim and
+                its own contradiction one after the other. The state is stated
+                once now, and the control is only ever a reset: ticking a box
+                should not count as reading a policy. */}
+            <div className="settings-action-row settings-action-row-split">
+              <span className="settings-field-hint">{t("Acceptance is stored on this browser only, the same way each device accepts separately.")}</span>
+              {browserAccepted ? (
+                <button className="button secondary" type="button" onClick={() => updateBrowserAccepted(false)}>
+                  {t("Reset for this browser")}
+                </button>
+              ) : null}
+            </div>
           </div>
+        </section>
 
-          <label className="settings-range-row">
-            <span>
-              <strong>{t("Maximum upload size")}</strong>
-              <small>{t("The NivaDesk apps block files larger than this before upload.")}</small>
-            </span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={50}
-              step={1}
-              value={maxFileSizeMB}
-              disabled={!canEdit || saving}
-              onChange={event => setMaxFileSizeMB(Math.min(Math.max(Number(event.target.value) || 1, 1), 50))}
-            />
-            <b>MB</b>
-          </label>
-        </div>
+        <section className="card app-card">
+          <SettingsCardHead title={t("Allowed file types")} />
+          <div className="settings-field-stack">
+            <div className="settings-field">
+              <span className="settings-field-label">{t("Client Files")}</span>
+              <div className="settings-chip-row">
+                {["PDF", "JPG", "PNG", "HEIC", "HEIF", "WEBP", "PSD", "PSB", "ZIP"].map(type => <span className="settings-chip" key={type}>{type}</span>)}
+              </div>
+            </div>
+            <div className="settings-field">
+              <span className="settings-field-label">{t("Previews, logos & avatars")}</span>
+              <div className="settings-chip-row"><span className="settings-chip">{t("Images only")}</span></div>
+            </div>
+            <p className="settings-field-hint">
+              {t("Cloud file upload is available on Pro and Team plans.")}{" "}
+              <a className="settings-inline-link" href="/settings?section=plan-access">{t("View plan & storage limits")}</a>
+            </p>
+          </div>
+        </section>
+      </div>
 
-        <div className="settings-mini-grid">
-          <InfoTile label={t("Policy prompt")} value={requirePolicy ? t("Required") : t("Not required")} />
-          <InfoTile label={t("Max file size")} value={`${Math.round(maxFileSizeMB)} MB`} />
+      <div className="settings-status-band is-caution" role="note">
+        <span className="settings-status-band-icon" aria-hidden="true"><CardIconGlyph icon="warningTriangle" /></span>
+        <div className="settings-status-band-copy">
+          <strong>{t("Human review still matters")}</strong>
+          <p>{t("This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.")} {t("NivaDesk does not virus-scan uploaded files. Your own device's antivirus still applies when files are downloaded.")}</p>
         </div>
-        <div className="quick-reply-settings-info">
-          <strong>{browserAccepted
-            ? `${t("Accepted on this browser. Uploads will not ask again until you reset it.")}${acceptedAtMs > 0 ? ` (${new Date(acceptedAtMs).toLocaleDateString(studioLocaleTag(language))})` : ""}`
-            : t("Not accepted on this browser. The next upload will ask you to accept the upload policy.")}</strong>
-          <p>{t("Order previews, logos and avatars accept image files. Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP.")}</p>
+      </div>
+
+      <section className="card app-card">
+        <SettingsCardHead title={t("Guidance & protection")} />
+        <div className="settings-accordion">
+          <details open>
+            <summary><span>{t("Upload rules")}</span><span className="settings-tag is-muted">4 · {t("What users must understand")}</span></summary>
+            <div className="settings-rule-grid">
+              <IntegrationInfoRow number="1" title={t("Only upload suitable files")} detail={t("Users must only upload legal, safe and work-related files that belong in this workspace.")} />
+              <IntegrationInfoRow number="2" title={t("No illegal or harmful content")} detail={t("Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded.")} />
+              <IntegrationInfoRow number="3" title={t("Client approval and rights")} detail={t("If a file belongs to a client or third party, the user should have permission to use it for the order.")} />
+              <IntegrationInfoRow number="4" title={t("Owner can remove files")} detail={t("Workspace owners should remove unsuitable files and can remove users from the workspace if needed.")} />
+            </div>
+          </details>
+          <details>
+            <summary><span>{t("Workspace upload protection")}</span><span className="settings-tag is-muted">4 · {t("What the app does")}</span></summary>
+            <div className="settings-rule-grid">
+              <IntegrationInfoRow number="1" title={t("Company workspace only")} detail={t("Uploads are saved under the active Company ID so they stay connected to this workspace.")} />
+              <IntegrationInfoRow number="2" title={t("Allowed file types only")} detail={t("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP, while previews, logos and avatars stay image-only.")} />
+              <IntegrationInfoRow number="3" title={t("File size limit")} detail={t("The NivaDesk apps block files larger than the selected limit before upload.")} />
+              <IntegrationInfoRow number="4" title={t("Upload audit log")} detail={t("Each upload records the company, user, file type, file size, upload date, source and related order when available.")} />
+            </div>
+          </details>
+          <details>
+            <summary><span>{t("Important limitation")}</span><span className="settings-tag is-muted">{t("Review required")}</span></summary>
+            <p className="settings-field-hint">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. Plan guards still keep cloud file upload on Pro and Team.")}</p>
+            <p className="settings-field-hint">{t("This per-file limit is separate from your plan's total storage, which is counted across Client Files and enforced on every upload.")}</p>
+          </details>
         </div>
-        <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving || !safetyDirty} onClick={() => { void handleSave(); }}>
-            {saving ? t("Saving...") : t("Save Upload Safety")}
-          </button>
-        </div>
+      </section>
+
+      <div className="settings-save-row settings-save-bar">
+        <p className="settings-save-bar-note">{t("The per-file limit is separate from your plan's total storage.")}</p>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
-        <p className="muted-copy">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. Plan guards still keep cloud file upload on Pro and Team.")}</p>
-        <p className="muted-copy">{t("This per-file limit is separate from your plan's total storage, which is counted across Client Files and enforced on every upload.")}</p>
-      </section>
-
-      <section className="card app-card">
-        <CardTitle icon="check" eyebrow={t("What users must understand")} title={t("Upload rules")} />
-        <div className="settings-rule-list">
-          <IntegrationInfoRow number="1" title={t("Only upload suitable files")} detail={t("Users must only upload legal, safe and work-related files that belong in this workspace.")} />
-          <IntegrationInfoRow number="2" title={t("No illegal or harmful content")} detail={t("Illegal, abusive, explicit, stolen, harmful or unrelated files must not be uploaded.")} />
-          <IntegrationInfoRow number="3" title={t("Client approval and rights")} detail={t("If a file belongs to a client or third party, the user should have permission to use it for the order.")} />
-          <IntegrationInfoRow number="4" title={t("Owner can remove files")} detail={t("Workspace owners should remove unsuitable files and can remove users from the workspace if needed.")} />
-        </div>
-      </section>
-
-      <section className="card app-card">
-        <CardTitle icon="lock" eyebrow={t("What the app does")} title={t("Workspace upload protection")} />
-        <div className="settings-rule-list">
-          <IntegrationInfoRow number="1" title={t("Company workspace only")} detail={t("Uploads are saved under the active Company ID so they stay connected to this workspace.")} />
-          <IntegrationInfoRow number="2" title={t("Allowed file types only")} detail={t("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP, while previews, logos and avatars stay image-only.")} />
-          <IntegrationInfoRow number="3" title={t("File size limit")} detail={t("The NivaDesk apps block files larger than the selected limit before upload.")} />
-          <IntegrationInfoRow number="4" title={t("Upload audit log")} detail={t("Each upload records the company, user, file type, file size, upload date, source and related order when available.")} />
-        </div>
-      </section>
-
-      <section className="card app-card">
-        <CardTitle icon="lock" eyebrow={t("Important limitation")} title={t("Human review still matters")} />
-        <p className="muted-copy">
-          {t("This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.")}
-        </p>
-        <p className="muted-copy">
-          {t("NivaDesk does not virus-scan uploaded files. Your own device's antivirus still applies when files are downloaded.")}
-        </p>
-      </section>
+        <button className="button" type="button" disabled={!canEdit || saving || !safetyDirty} onClick={() => { void handleSave(); }}>
+          {saving ? t("Saving...") : t("Save upload safety")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -4723,24 +4797,32 @@ function FinancialSettingsSection({
         </SettingsDialog>
       ) : null}
       {!canEdit ? (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Financial settings are read-only")} />
-          <p className="muted-copy">{t("Your current workspace role cannot edit Financial Settings.")}</p>
-        </section>
+        <p className="settings-notice is-caution"><strong>{t("Financial settings are read-only")}</strong> {t("Your current workspace role cannot edit Financial Settings.")}</p>
       ) : null}
 
       {status ? <p className="success-copy">{t(status)}</p> : null}
       {error ? <p className="layout-error">{t(error)}</p> : null}
 
-      <div className="financial-two-col">
-        <div className="financial-col">
-          <section className="card app-card financial-panel">
-            <CardTitle icon="finance" eyebrow={t("General")} title={t("Currency & formatting")} />
+      <nav className="settings-anchor-tabs" aria-label={t("Financial Settings")}>
+        {[
+          ["financial-general", "General"],
+          ["financial-tax", "Tax & VAT"],
+          ["financial-dates", "Effective dates"],
+          ["financial-invoice", "Invoice"],
+          ["financial-existing", "Existing orders"]
+        ].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{t(label)}</button>
+        ))}
+      </nav>
 
-            <label className="financial-settings-row">
-              <span>{t("Currency Symbol")}</span>
+      <div className="settings-two-col" id="financial-general">
+        <section className="card app-card">
+          <SettingsCardHead icon={<CardIconGlyph icon="finance" symbol={draft.selectedCurrency} />} title={t("Currency & formatting")} />
+          <div className="settings-field-stack">
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Currency")}</span>
               <select
-                className="input financial-control"
+                className="input"
                 value={draft.selectedCurrency}
                 disabled={!canEdit || saving}
                 onChange={event => updateString("selectedCurrency", event.target.value)}
@@ -4750,37 +4832,63 @@ function FinancialSettingsSection({
                 ))}
               </select>
             </label>
-
-            <label className="financial-settings-row">
-              <span>{t("Decimal Separator")}</span>
-              <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
-                <button
-                  type="button"
-                  className={draft.selectedDecimalSeparator === "." ? "active" : ""}
-                  disabled={!canEdit || saving}
-                  onClick={() => updateString("selectedDecimalSeparator", ".")}
-                >
-                  {t("Dot (.)")}
-                </button>
-                <button
-                  type="button"
-                  className={draft.selectedDecimalSeparator === "," ? "active" : ""}
-                  disabled={!canEdit || saving}
-                  onClick={() => updateString("selectedDecimalSeparator", ",")}
-                >
-                  {t("Comma (,)")}
-                </button>
+            <div className="settings-field-row">
+              <span className="settings-field-label">{t("Decimal Separator")}</span>
+              <div className="settings-segmented is-compact" role="group" aria-label={t("Decimal Separator")}>
+                <button type="button" className={draft.selectedDecimalSeparator === "." ? "active" : ""} aria-pressed={draft.selectedDecimalSeparator === "."} disabled={!canEdit || saving} onClick={() => updateString("selectedDecimalSeparator", ".")}>{t("Dot (.)")}</button>
+                <button type="button" className={draft.selectedDecimalSeparator === "," ? "active" : ""} aria-pressed={draft.selectedDecimalSeparator === ","} disabled={!canEdit || saving} onClick={() => updateString("selectedDecimalSeparator", ",")}>{t("Comma (,)")}</button>
               </div>
+            </div>
+          </div>
+          <p className="settings-field-hint">
+            {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
+          </p>
+        </section>
+
+        <section className="card app-card">
+          <SettingsCardHead icon={<CardIconGlyph icon="orders" />} title={t("Defaults for new orders")} />
+          <div className="settings-field-stack">
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Average platform fee")}</span>
+              <span className="settings-unit-input">
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={draft.feePercentage}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("feePercentage", Number(event.target.value))}
+                />
+                <em>%</em>
+              </span>
             </label>
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Default delivery time")}</span>
+              <span className="settings-unit-input">
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  max="730"
+                  step="1"
+                  value={draft.defaultDeliveryTime}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
+                />
+                <em>{t("days")}</em>
+              </span>
+            </label>
+          </div>
+          <p className="settings-field-hint">{t("Applied only to new orders after saving.")}</p>
+        </section>
+      </div>
 
-            <p className="muted-copy">
-              {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
-            </p>
-          </section>
-
-          <section className="card app-card financial-panel">
-            <CardTitle icon="docText" eyebrow={t("Tax / VAT Settings")} title={t("Tax calculation")} />
-
+      <section className="card app-card" id="financial-tax">
+        <SettingsCardHead icon={<CardIconGlyph icon="docText" />} title={t("Tax calculation")} />
+        <div className="settings-two-col">
+          <div className="settings-field-stack">
             <div className="financial-tax-choice" role="radiogroup" aria-label={t("Calculate Tax On")}>
               <button
                 type="button"
@@ -4807,52 +4915,19 @@ function FinancialSettingsSection({
                 <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
               </button>
             </div>
-
-            {/* The page named the rule and the rate and never said what either one
-                meant, so nobody could tell whether the price already contained the
-                VAT or had it added later. The arithmetic is spelled out with this
-                workspace's own rate instead of described. */}
-            <div className="financial-example-strip">
-              <strong>{t("What this means")}</strong>
-              {draft.taxCalculationType === "Profit" ? (
-                <p className="financial-tax-example">
-                  {t("Example")}: {previewMoney(1000)} {t("order")}, {previewMoney(600)} {t("cost")} →{" "}
-                  {previewMoney(400)} {t("margin")} = {previewMoney(taxExample.marginNet)} + {previewMoney(taxExample.marginVat)} {t("VAT")}
-                </p>
-              ) : (
-                <p className="financial-tax-example">
-                  {t("Example")}: {previewMoney(1000)} {t("order")} ={" "}
-                  {previewMoney(taxExample.net)} + {previewMoney(taxExample.vat)} {t("VAT")} {t("at")} {taxExample.rate}%
-                </p>
-              )}
-              <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
-            </div>
-
-            <label className="financial-settings-row wide-control">
-              <span>{t("Tax rule label — calculated on revenue")}</span>
-              <input
-                className="input financial-control"
-                value={draft.taxRuleNameRevenue}
-                disabled={!canEdit || saving}
-                onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
-              />
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Revenue tax label")}</span>
+              <input className="input" value={draft.taxRuleNameRevenue} disabled={!canEdit || saving} onChange={event => updateString("taxRuleNameRevenue", event.target.value)} />
             </label>
-
-            <label className="financial-settings-row wide-control">
-              <span>{t("Tax rule label — calculated on eligible profit")}</span>
-              <input
-                className="input financial-control"
-                value={draft.taxRuleNameProfit}
-                disabled={!canEdit || saving}
-                onChange={event => updateString("taxRuleNameProfit", event.target.value)}
-              />
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Eligible profit tax label")}</span>
+              <input className="input" value={draft.taxRuleNameProfit} disabled={!canEdit || saving} onChange={event => updateString("taxRuleNameProfit", event.target.value)} />
             </label>
-
-            <label className="financial-settings-row wide-control">
-              <span>{t("Default VAT Rate (%)")}</span>
-              <span className="financial-percent-control is-vat-rate">
+            <label className="settings-field-row">
+              <span className="settings-field-label">{t("Default VAT rate")}</span>
+              <span className="settings-unit-input">
                 <input
-                  className="input financial-control"
+                  className="input"
                   type="number"
                   min="0"
                   max="100"
@@ -4864,186 +4939,148 @@ function FinancialSettingsSection({
                 <em>%</em>
               </span>
             </label>
-          </section>
+          </div>
+          {/* The page named the rule and the rate and never said what either one
+              meant, so nobody could tell whether the price already contained the
+              VAT or had it added later. The arithmetic is spelled out with this
+              workspace's own rate instead of described. */}
+          <div className="settings-calc-preview">
+            <span className="settings-field-label">{t("Calculation preview")}</span>
+            <strong className="settings-calc-headline">{previewMoney(1000)} {t("customer price")}</strong>
+            <dl className="settings-calc-rows">
+              <div><dt>{t("Tax basis")}</dt><dd>{activeTaxBasisLabel}</dd></div>
+              <div><dt>{t("VAT rate")}</dt><dd>{taxExample.rate}%</dd></div>
+              {draft.taxCalculationType === "Profit" ? (
+                <>
+                  <div><dt>{t("Cost")}</dt><dd>{previewMoney(600)}</dd></div>
+                  <div><dt>{t("Margin")}</dt><dd>{previewMoney(400)}</dd></div>
+                  <div><dt>{t("VAT included")}</dt><dd>{previewMoney(taxExample.marginVat)}</dd></div>
+                  <div><dt>{t("Net margin")}</dt><dd>{previewMoney(taxExample.marginNet)}</dd></div>
+                </>
+              ) : (
+                <>
+                  <div><dt>{t("VAT included")}</dt><dd>{previewMoney(taxExample.vat)}</dd></div>
+                  <div><dt>{t("Net revenue")}</dt><dd>{previewMoney(taxExample.net)}</dd></div>
+                </>
+              )}
+            </dl>
+            <p className="settings-field-hint">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
+            <span className="settings-tag">{t("Applies to new orders")}</span>
+          </div>
         </div>
+      </section>
 
-        <div className="financial-col">
-          <section className="card app-card financial-panel">
-            <CardTitle icon="orders" eyebrow={t("General")} title={t("Defaults for new orders")} />
-
-            <label className="financial-settings-row">
-              <span>{t("Avg. Platform Fee (%)")}</span>
-              <span className="financial-percent-control">
-                <input
-                  className="input financial-control"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={draft.feePercentage}
-                  disabled={!canEdit || saving}
-                  onChange={event => updateNumber("feePercentage", Number(event.target.value))}
-                />
-                <em>%</em>
+      <div className="settings-two-col">
+        <section className="card app-card" id="financial-dates">
+          <SettingsCardHead icon={<CardIconGlyph icon="calendarClock" />} title={t("Effective dates & corporation tax")} />
+          <div className="settings-field-stack">
+            <label className="settings-switch-line is-plain">
+              <span className="settings-switch-line-copy">
+                <strong>{t("Use Tax Transition Date")}</strong>
+                <small>{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</small>
               </span>
+              <input type="checkbox" className="settings-switch" checked={draft.taxMilestoneEnabled} disabled={!canEdit || saving} onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)} />
             </label>
-
-            <label className="financial-settings-row wide-control">
-              <span>{t("Default delivery time for new orders (days)")}</span>
-              <input
-                className="input financial-control"
-                type="number"
-                min="1"
-                max="730"
-                step="1"
-                value={draft.defaultDeliveryTime}
-                disabled={!canEdit || saving}
-                onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
-              />
-            </label>
-          </section>
-
-          <section className="card app-card financial-panel">
-            <CardTitle icon="check" eyebrow={t("Workspace")} title={t("Current workspace calculation")} />
-            <div className="financial-summary-list">
-              <div className="financial-summary-row">
-                <span>{t("Currency")}</span>
-                <strong>{currencySummaryLabel}</strong>
-              </div>
-              <div className="financial-summary-row">
-                <span>{t("VAT")}</span>
-                <strong>{taxExample.rate}%</strong>
-              </div>
-              <div className="financial-summary-row">
-                <span>{t("Tax basis")}</span>
-                <strong>{activeTaxBasisLabel}</strong>
-              </div>
-              <div className="financial-summary-row">
-                <span>{t("Applies to")}</span>
-                <strong>{t("New orders")}</strong>
-              </div>
-            </div>
-            <p className="muted-copy">{t("Follows your edits above. New orders use these values once saved.")}</p>
-          </section>
-
-          <section className="card app-card financial-panel">
-            <CardTitle icon="calendarClock" eyebrow={t("Tax / VAT Settings")} title={t("Effective dates")} />
-
-            <label className="financial-settings-row">
-              <span>{t("Use Tax Transition Date")}</span>
-              <span className="financial-checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={draft.taxMilestoneEnabled}
-                  disabled={!canEdit || saving}
-                  onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
-                />
-                <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
-              </span>
-            </label>
-            <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
-
             {draft.taxMilestoneEnabled ? (
-              <label className="financial-settings-row wide-control">
-                <span>{t("VAT Registration Date")}</span>
-                <input
-                  className="input financial-control"
-                  type="date"
-                  value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
-                  disabled={!canEdit || saving}
-                  onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
-                />
+              <label className="settings-field-row">
+                <span className="settings-field-label">{t("VAT Registration Date")}</span>
+                <input className="input" type="date" value={dateInputValueFromSeconds(draft.taxMilestoneDate)} disabled={!canEdit || saving} onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))} />
               </label>
             ) : null}
-
-            <label className="financial-settings-row">
-              <span>{t("Enable Corporation Tax")}</span>
-              <span className="financial-checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={Boolean(draft.corporationTaxEnabled)}
-                  disabled={!canEdit || saving}
-                  onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
-                />
-                <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
+            <label className="settings-switch-line is-plain">
+              <span className="settings-switch-line-copy">
+                <strong>{t("Enable Corporation Tax")}</strong>
+                <small>{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</small>
               </span>
+              <input type="checkbox" className="settings-switch" checked={Boolean(draft.corporationTaxEnabled)} disabled={!canEdit || saving} onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)} />
             </label>
-            <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
-
             {draft.corporationTaxEnabled ? (
               <>
-                <label className="financial-settings-row wide-control">
-                  <span>{t("Corporation Tax Rate (%)")}</span>
-                  <span className="financial-percent-control is-vat-rate">
-                    <input
-                      className="input financial-control"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={draft.corporationTaxRate ?? 19}
-                      disabled={!canEdit || saving}
-                      onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
-                    />
+                <label className="settings-field-row">
+                  <span className="settings-field-label">{t("Corporation tax rate")}</span>
+                  <span className="settings-unit-input">
+                    <input className="input" type="number" min="0" max="100" step="0.1" value={draft.corporationTaxRate ?? 19} disabled={!canEdit || saving} onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))} />
                     <em>%</em>
                   </span>
                 </label>
-                <p className="muted-copy">{t("Estimated — a planning figure, not your filed liability.")}</p>
-                <label className="financial-settings-row wide-control">
-                  <span>{t("Invoice Footer / Payment Terms")}</span>
-                  <textarea
-                    className="input financial-control"
-                    rows={3}
-                    value={draft.invoiceFooterNote ?? ""}
-                    disabled={!canEdit || saving}
-                    placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
-                    onChange={event => updateString("invoiceFooterNote", event.target.value)}
-                  />
-                </label>
+                <p className="settings-notice is-caution">{t("Estimated — a planning figure, not your filed liability.")}</p>
               </>
             ) : null}
-          </section>
-        </div>
+          </div>
+        </section>
+
+        <section className="card app-card" id="financial-invoice">
+          <SettingsCardHead icon={<CardIconGlyph icon="notes" />} title={t("Invoice footer")} />
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Invoice Footer / Payment Terms")}</span>
+            <textarea
+              className="input"
+              rows={5}
+              value={draft.invoiceFooterNote ?? ""}
+              disabled={!canEdit || saving}
+              placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
+              onChange={event => updateString("invoiceFooterNote", event.target.value)}
+            />
+          </label>
+          <p className="settings-field-hint">{t("Shown on customer invoices.")}</p>
+        </section>
       </div>
 
-      <section className="financial-danger-zone">
-        <div className="financial-danger-zone-title">
-          <span aria-hidden="true">⚠</span>
-          <strong>{t("Existing order tools")}</strong>
-        </div>
-        <p className="muted-copy">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
+      <section className="card app-card">
+        <SettingsCardHead icon={<CardIconGlyph icon="check" />} title={t("Current workspace calculation")} />
+        <dl className="settings-facts">
+          <div><dt>{t("Currency")}</dt><dd>{currencySummaryLabel}</dd></div>
+          <div><dt>{t("VAT")}</dt><dd>{taxExample.rate}%</dd></div>
+          <div><dt>{t("Tax basis")}</dt><dd>{activeTaxBasisLabel}</dd></div>
+          <div><dt>{t("Applies to")}</dt><dd>{t("New orders")}</dd></div>
+        </dl>
+        <p className="settings-field-hint">{t("Follows your edits above. New orders use these values once saved.")}</p>
+      </section>
 
-        <div className="financial-danger-row">
-          <span className="financial-danger-row-icon" aria-hidden="true">↻</span>
-          <div className="financial-danger-row-text">
+      <section className="settings-tools-panel" id="financial-existing">
+        <div className="settings-tools-head">
+          <span className="settings-status-band-icon" aria-hidden="true"><CardIconGlyph icon="warningTriangle" /></span>
+          <div>
+            <strong>{t("Existing order tools")}</strong>
+            <p>{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
+          </div>
+        </div>
+        <div className="settings-tools-row">
+          <span className="settings-tools-row-icon" aria-hidden="true">↻</span>
+          <div className="settings-tools-row-copy">
             <strong>{t("Recalculate Taxes for Past Orders")}</strong>
             <p>{t("Apply the current VAT rule, default rate and platform fee to orders you already have.")}</p>
           </div>
-          <div className="financial-danger-row-actions">
-            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
+          <div className="settings-tools-actions">
+            <button className="button secondary" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
               {recalculating ? t("Recalculating...") : t("Recalculate")}
             </button>
           </div>
         </div>
-
-        <div className="financial-danger-row">
-          <span className="financial-danger-row-icon" aria-hidden="true">⊘</span>
-          <div className="financial-danger-row-text">
+        <div className="settings-tools-row">
+          <span className="settings-tools-row-icon is-danger" aria-hidden="true">⊘</span>
+          <div className="settings-tools-row-copy">
             <strong>{t("Remove VAT from all orders")}</strong>
             <p>{t("Use this when VAT does not apply — you sell abroad, or you are not VAT-registered.")}</p>
           </div>
-          <div className="financial-danger-row-actions">
+          <div className="settings-tools-actions">
             {clearTaxUndoRunId ? (
               <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
                 {t("Undo VAT removal")}
               </button>
             ) : null}
-            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
+            <button className="button danger secondary" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
               {clearingTax ? t("Removing VAT...") : t("Remove VAT")}
             </button>
           </div>
         </div>
       </section>
+
+      <div className="settings-save-row settings-save-bar">
+        <p className="settings-save-bar-note">{t("Your workspace is shared with other team members.")}</p>
+        <button type="button" className="button secondary" disabled={saving || !financialDirty} onClick={() => handleDiscard()}>{t("Discard changes")}</button>
+        <button type="button" className="button" disabled={!canEdit || saving || !financialDirty} onClick={() => { void handleSave(); }}>{saving ? t("Saving...") : t("Save changes")}</button>
+      </div>
     </div>
   );
 }
