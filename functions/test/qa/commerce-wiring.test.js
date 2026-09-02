@@ -11,7 +11,7 @@ function pass(name) { console.log("PASS ", name); }
   const at = source.indexOf("exports.commerceEventWorker = onTaskDispatched({");
   assert(at > 0, "the worker exists");
   const options = source.slice(at, source.indexOf("}, async (request) => {", at));
-  assert(/secrets: \[SHOPIFY_TOKEN_KEY\]/.test(options), "the worker reads tokens, so it declares the key");
+  assert(/secrets: \[[^\]]*SHOPIFY_TOKEN_KEY[^\]]*\]/.test(options), "the worker reads tokens, so it declares the key");
   assert(/maxAttempts: 1/.test(options), "Cloud Tasks does not retry blindly; the policy does");
   pass("the queue worker declares the key and owns its own retries");
 }
@@ -42,7 +42,7 @@ function pass(name) { console.log("PASS ", name); }
   assert(body.includes("requireWorkspaceForBilling(request, true)"), "owner only");
   assert(body.includes('["dead", "retrying", "failed"].includes'), "only a dead or waiting event");
   assert(body.includes("eventOrigin: \"retry\""), "the retry says it is one");
-  assert(/secrets: \[SHOPIFY_TOKEN_KEY\]/.test(source.slice(at, at + 200)), "it fetches from Shopify, so it declares the key");
+  assert(/secrets: \[[^\]]*SHOPIFY_TOKEN_KEY[^\]]*\]/.test(source.slice(at, at + 200)), "it fetches from Shopify, so it declares the key");
   console.log("PASS  a dead-letter event is retried by the owner under its own key, never by anyone else");
 }
 {
