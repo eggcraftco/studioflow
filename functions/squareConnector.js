@@ -648,7 +648,7 @@ function createSquareConnectorFunctions(deps) {
   async function reconcilePayouts(ref, data, client, { force, lookbackMs, maxPages }) {
     const companyId = String(data.companyId || "");
     const cursor = await cursors.readCursor(db(), "square", ref.id, "payout");
-    if (!force && cursor && now() - Number(cursor.lastPassAtMs || 0) < PAYOUT_PASS_MIN_INTERVAL_MS) return { scanned: 0, recorded: 0, failed: 0, complete: true, skipped: "interval" };
+    if (!force && cursor && now() - Number(cursor.lastPassAtMs || 0) < PAYOUT_PASS_MIN_INTERVAL_MS) return { scanned: 0, recorded: 0, unreconciled: 0, failed: 0, complete: true, skipped: "interval" };
     const window = cursors.cursorWindow(cursor, now(), { force, lookbackMs: lookbackMs || 7 * 24 * 60 * 60 * 1000, maxWindowMs: 7 * 24 * 60 * 60 * 1000 });
     const audit = { scanned: 0, recorded: 0, unreconciled: 0, failed: 0, truncated: false };
     let pageCursor = null; let pages = 0;
@@ -763,9 +763,11 @@ function createSquareConnectorFunctions(deps) {
     let recovered = { complete: true, configured: false, scanned: 0, applied: 0 };
     try { recovered = await recoverEvents(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { recovered = { complete: false, configured: true, scanned: 0, applied: 0, error: String(error?.message || error).slice(0, 120) }; }
     const complete = orders.complete && payments.complete;
+    // A pass that skipped (interval, scope) reports zeros, never undefined: one undefined field would reject the whole summary write.
+    const n = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, kind: orders.complete ? "success" : "attempt", now: now(), FieldValue });
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, entity: "finance", kind: payments.complete ? "success" : "attempt", now: now(), FieldValue });
-    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: orders.scanned, created: orders.created, updated: orders.updated, skipped: orders.skipped, failed: orders.failed }, payments: { scanned: payments.scanned, recorded: payments.recorded, unmatched: payments.unmatched, failed: payments.failed }, events: { configured: recovered.configured, scanned: recovered.scanned, applied: recovered.applied }, payouts: { scanned: payouts.scanned, recorded: payouts.recorded, unreconciled: payouts.unreconciled, failed: payouts.failed }, refunds: { scanned: refunds.scanned, recorded: refunds.recorded, failed: refunds.failed }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: n(orders.scanned), created: n(orders.created), updated: n(orders.updated), skipped: n(orders.skipped), failed: n(orders.failed) }, payments: { scanned: n(payments.scanned), recorded: n(payments.recorded), unmatched: n(payments.unmatched), failed: n(payments.failed) }, events: { configured: recovered.configured === true, scanned: n(recovered.scanned), applied: n(recovered.applied) }, payouts: { scanned: n(payouts.scanned), recorded: n(payouts.recorded), unreconciled: n(payouts.unreconciled), failed: n(payouts.failed) }, refunds: { scanned: n(refunds.scanned), recorded: n(refunds.recorded), failed: n(refunds.failed) }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { ...orders, payments, refunds, payouts, events: recovered, complete, locationsHealthy };
   }
 

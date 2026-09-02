@@ -106,20 +106,21 @@ function createSquareEventsClient({ environment = "production", appAccessToken, 
   const inner = createSquareClient({ environment, accessToken: appAccessToken, fetchImpl, timeoutMs });
   // Reuse the bearer plumbing through a private request: the shape differs only in the path.
   const base = `${squareHost(environment)}/v2`;
-  async function post(path, body) {
-    const response = await fetchImpl(base + path, { method: "POST", headers: { Authorization: `Bearer ${appAccessToken}`, Accept: "application/json", "Content-Type": "application/json", "Square-Version": SQUARE_API_VERSION }, body: JSON.stringify(body), redirect: "manual" });
+  async function send(method, path, body) {
+    const response = await fetchImpl(base + path, { method, headers: { Authorization: `Bearer ${appAccessToken}`, Accept: "application/json", "Content-Type": "application/json", "Square-Version": SQUARE_API_VERSION }, body: JSON.stringify(body), redirect: "manual" });
     let data = {};
     try { data = await response.json(); } catch { data = {}; }
     if (!response.ok) { const first = Array.isArray(data?.errors) ? data.errors[0] : null; throw new SquareApiError(`square_events_http_${response.status}${first?.code ? `: ${first.code}` : ""}`, response.status, String(first?.code || "")); }
     return data;
   }
   return {
-    async enableEvents() { return post("/events/enable", {}); },
+    // EnableEvents is a PUT in Square's reference (PUT /v2/events/enable); a POST answers 404 NOT_FOUND.
+    async enableEvents() { return send("PUT", "/events/enable", {}); },
     async searchEvents({ createdAfterIso, createdBeforeIso = null, merchantId = null, eventTypes = null, cursor = null, limit = DEFAULT_LIMIT } = {}) {
       const filter = { created_at: { start_at: createdAfterIso, ...(createdBeforeIso ? { end_at: createdBeforeIso } : {}) } };
       if (merchantId) filter.merchant_ids = [merchantId];
       if (Array.isArray(eventTypes) && eventTypes.length) filter.event_types = eventTypes;
-      const data = await post("/events", { query: { filter, sort: { field: "DEFAULT", order: "ASC" } }, limit, ...(cursor ? { cursor } : {}) });
+      const data = await send("POST", "/events", { query: { filter, sort: { field: "DEFAULT", order: "ASC" } }, limit, ...(cursor ? { cursor } : {}) });
       return { events: Array.isArray(data?.events) ? data.events : [], cursor: data?.cursor || null };
     },
     _merchantClient: inner

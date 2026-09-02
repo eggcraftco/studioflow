@@ -386,6 +386,16 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.ok(orderCursor.watermarkMs > 0 && orderCursor.lastPassComplete === true);
     const conn = (await connRef().get()).data();
     assert.ok(conn.lastSuccessAtMs > 0); assert.strictEqual(conn.locationsHealthy, true); assert.strictEqual(conn.lastReconcile.orders.scanned, out.scanned);
+    // The scheduled sweep runs unforced: inside the payout interval the payout pass is skipped, and the summary must still be a valid document.
+    // (Before the fix the skipped pass carried no `unreconciled`, Firestore rejected the whole write, and every 15-minute sweep failed after doing its work.)
+    const beforeSweep = Number(conn.lastSyncAtMs);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const sweep = await sq.reconcileConnection(connRef(), (await connRef().get()).data());
+    assert.strictEqual(sweep.payouts.skipped, "interval", "the payout pass is rate-limited between forced runs");
+    const afterSweep = (await connRef().get()).data();
+    assert.ok(Number(afterSweep.lastSyncAtMs) > beforeSweep, "the unforced sweep records its pass");
+    assert.deepStrictEqual(afterSweep.lastReconcile.payouts, { scanned: 0, recorded: 0, unreconciled: 0, failed: 0 });
+    assert.strictEqual(afterSweep.lastReconcile.events.configured, false);
     // A failing item leaves the watermark where it was.
     const failing = { ...square.orders.get("ORD_LATE"), line_items: null, total_money: null, id: "ORD_BROKEN", updated_at: new Date().toISOString() };
     square.orders.set("ORD_BROKEN", failing);
