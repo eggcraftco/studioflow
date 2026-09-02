@@ -316,18 +316,26 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.ok(health.finance?.lastSuccessAtMs > 0, "finance freshness is tracked apart from orders (SQ-UX-001)"); assert.ok(health.orders?.lastSuccessAtMs > 0);
   });
 
-  await check("a partial refund is recorded against its payment and order, the order shows partially refunded, and no order is created (SQ-TEST-015, SQ-REF-002/005)", async () => {
-    square.refunds.set("REF_1", { id: "REF_1", payment_id: "PAY_ORD_A", order_id: "ORD_A", location_id: "LOC_LONDON", status: "COMPLETED", amount_money: money(1000), reason: "chipped", created_at: "2026-09-03T00:00:00Z", updated_at: "2026-09-03T00:00:00Z" });
-    square.orders.set("ORD_A", onlineOrder("ORD_A", { version: 3, updated_at: "2026-09-03T00:01:00Z", refunds: [{ id: "REF_1", amount_money: money(1000), reason: "chipped" }] }));
+  await check("a partial refund arrives on Square's return order: it is linked to the sale through the payment, the sale shows partially refunded, and the return order never becomes an order (SQ-TEST-015, SQ-REF-002/005)", async () => {
+    // Square's shape: the refund's order_id is a RETURN order (no lines, no total) whose returns[] point back at the sale.
+    square.orders.set("RET_A", { id: "RET_A", location_id: "LOC_LONDON", state: "COMPLETED", version: 1, returns: [{ uid: "ret1", source_order_id: "ORD_A", return_amounts: { total_money: money(1000) } }], total_money: money(0), created_at: "2026-09-03T00:00:00Z", updated_at: "2026-09-03T00:00:00Z" });
+    square.refunds.set("REF_1", { id: "REF_1", payment_id: "PAY_ORD_A", order_id: "RET_A", location_id: "LOC_LONDON", status: "COMPLETED", amount_money: money(1000), reason: "chipped", created_at: "2026-09-03T00:00:00Z", updated_at: "2026-09-03T00:00:00Z" });
+    square.orders.set("ORD_A", onlineOrder("ORD_A", { version: 3, updated_at: "2026-09-03T00:01:00Z" }));
     const before = await orderCount();
-    const res = await deliver("refund.created", { refund: { id: "REF_1", payment_id: "PAY_ORD_A", order_id: "ORD_A" } }, { dataId: "REF_1" });
+    const res = await deliver("refund.created", { refund: { id: "REF_1", payment_id: "PAY_ORD_A", order_id: "RET_A" } }, { dataId: "REF_1" });
     assert.strictEqual(res.payload.results[0].result, "queued");
-    assert.strictEqual(await orderCount(), before);
+    await deliver("order.created", { order_created: { order_id: "RET_A", location_id: "LOC_LONDON" } });
+    await deliver("order.updated", { order_updated: { order_id: "RET_A", location_id: "LOC_LONDON" } });
+    assert.strictEqual(await orderCount(), before, "neither the refund nor the return order created an order");
+    assert.ok(!(await orderRef("RET_A").get()).exists);
     const refund = (await sub(sq.REFUNDS_SUBCOLLECTION).doc("REF_1").get()).data();
-    assert.strictEqual(refund.nivadeskOrderId, orderRef("ORD_A").id); assert.strictEqual(refund.amount, "10.00"); assert.strictEqual(refund.unmatched, false);
+    assert.strictEqual(refund.nivadeskOrderId, orderRef("ORD_A").id, "linked to the sale, not the return order"); assert.strictEqual(refund.orderExternalId, "ORD_A"); assert.strictEqual(refund.returnOrderExternalId, "RET_A"); assert.strictEqual(refund.amount, "10.00"); assert.strictEqual(refund.unmatched, false);
     assert.strictEqual((await sub(sq.PAYMENTS_SUBCOLLECTION).doc("PAY_ORD_A").get()).data().lastRefundExternalId, "REF_1");
     const order = (await orderRef("ORD_A").get()).data();
-    assert.strictEqual(order.commerce.externalUpdatedAt, "2026-09-03T00:01:00.000Z", "the order was refreshed after the refund"); assert.strictEqual(order.status, "In Progress", "a refund does not touch the workflow (SQ-REF-006)");
+    assert.strictEqual(order.commerce.externalUpdatedAt, "2026-09-03T00:01:00.000Z", "the sale was refreshed after the refund"); assert.strictEqual(order.status, "In Progress", "a refund does not touch the workflow (SQ-REF-006)");
+    assert.strictEqual(order.commerce.paymentStatus, "partially_refunded", "the sale shows the refund (SQ-REF-005)"); assert.strictEqual(order.customFields["Square Refunded"], "10.00");
+    const returnEvent = (await db.collection("commerceEvents").where("company_id", "==", COMPANY).get()).docs.map((d) => d.data()).find((r) => r.external_id === "RET_A");
+    assert.strictEqual(returnEvent.status, "skipped"); assert.ok(String(returnEvent.safe_message || "").includes("return_order"));
     assert.strictEqual((await sub(sq.SALES_SUBCOLLECTION).doc("ORD_A").get()).data().nivadeskOrderId, orderRef("ORD_A").id, "a later pass never blanks the sale's link to its order");
     assert.strictEqual(order.customFields["Square Status"], "COMPLETED");
   });
@@ -372,7 +380,8 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual((await sub(sq.PAYMENTS_SUBCOLLECTION).doc("PAY_LATE").get()).data().nivadeskOrderId, orderRef("ORD_LATE").id, "and its payment was matched on the finance pass");
     const cursorsSnap = await db.collection("commerceCursors").where("companyId", "==", COMPANY).get();
     const kinds = cursorsSnap.docs.map((d) => d.data().entityType).sort();
-    assert.deepStrictEqual(kinds, ["order", "payment", "payout"], "separate cursors per domain (SQ-REC-009); the events cursor only exists once the app token is configured");
+    assert.deepStrictEqual(kinds, ["order", "payment", "payout", "refund"], "separate cursors per domain (SQ-REC-009); the events cursor only exists once the app token is configured");
+    assert.strictEqual(out.refunds.complete, true);
     const orderCursor = cursorsSnap.docs.map((d) => d.data()).find((c) => c.entityType === "order");
     assert.ok(orderCursor.watermarkMs > 0 && orderCursor.lastPassComplete === true);
     const conn = (await connRef().get()).data();

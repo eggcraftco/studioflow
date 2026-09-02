@@ -79,14 +79,36 @@ function tendersOf(order) {
   }));
 }
 
-function refundsOf(order) {
+/**
+ * SQ-REF — a refund in Square lives on its own "return order": a second Order
+ * with `returns[].source_order_id` pointing at the sale, no line items and no
+ * total. It is never a sale and must never become a NivaDesk order.
+ */
+function isSquareReturnOrder(order) {
+  const returns = Array.isArray(order?.returns) ? order.returns : [];
+  const lines = Array.isArray(order?.line_items) ? order.line_items : [];
+  return returns.length > 0 && lines.length === 0;
+}
+function returnSourceOrderId(order) {
+  const returns = Array.isArray(order?.returns) ? order.returns : [];
+  return text(returns.find((r) => r?.source_order_id)?.source_order_id) || null;
+}
+
+/** The refunds of a sale: what the order object carries, plus what the connector already recorded for it (`ctx.refunds`), deduplicated by id. */
+function refundsOf(order, ctx = {}) {
   const rows = [];
+  const seen = new Set();
+  const push = (row) => { if (row.external_id && seen.has(row.external_id)) return; if (row.external_id) seen.add(row.external_id); rows.push(row); };
   for (const r of Array.isArray(order?.refunds) ? order.refunds : []) {
-    rows.push({ external_id: text(r?.id) || null, amount: squareMoneyToDecimal(r?.amount_money), currency: text(r?.amount_money?.currency) || null, reason: text(r?.reason, 300) || null, at: text(r?.created_at) || null });
+    push({ external_id: text(r?.id) || null, amount: squareMoneyToDecimal(r?.amount_money), currency: text(r?.amount_money?.currency) || null, reason: text(r?.reason, 300) || null, at: text(r?.created_at) || null });
   }
   for (const ret of Array.isArray(order?.returns) ? order.returns : []) {
     const money = ret?.return_amounts?.total_money;
-    if (money) rows.push({ external_id: text(ret?.uid) || null, amount: squareMoneyToDecimal(money), currency: text(money.currency) || null, reason: null, at: null });
+    if (money) push({ external_id: text(ret?.uid) || null, amount: squareMoneyToDecimal(money), currency: text(money.currency) || null, reason: null, at: null });
+  }
+  for (const r of Array.isArray(ctx.refunds) ? ctx.refunds : []) {
+    if (String(r?.status || "COMPLETED").toUpperCase() !== "COMPLETED" && String(r?.status || "").toUpperCase() !== "PENDING") continue;
+    push({ external_id: text(r?.externalId || r?.id) || null, amount: r?.amount === undefined ? null : String(r.amount), currency: text(r?.currency) || null, reason: text(r?.reason, 300) || null, at: text(r?.externalCreatedAt || r?.at) || null });
   }
   return rows;
 }
@@ -135,7 +157,7 @@ function normalizeSquareOrder(order, ctx = {}) {
   const externalId = text(order?.id);
   const fulfillments = fulfillmentsOf(order);
   const tenders = tendersOf(order);
-  const refunds = refundsOf(order);
+  const refunds = refundsOf(order, ctx);
   const lineItems = lineItemsOf(order);
   const product = squareProductOf(order);
   const reasons = [];
@@ -161,6 +183,7 @@ function normalizeSquareOrder(order, ctx = {}) {
   const serviceCharge = squareMoneyToDecimal(order?.total_service_charge_money);
   const locationId = text(order?.location_id);
   const orderNumber = text(order?.reference_id) || externalId.slice(-8).toUpperCase();
+  const refundedTotal = sumDecimal(refunds.map((r) => r.amount));
 
   return buildEnvelope({
     identity: {
@@ -217,7 +240,8 @@ function normalizeSquareOrder(order, ctx = {}) {
           "Square Currency": text(order?.total_money?.currency),
           "Square Total": squareMoneyToDecimal(order?.total_money) || "",
           "Square Created At": text(order?.created_at),
-          "Square Products": lineSummary
+          "Square Products": lineSummary,
+          ...(refundedTotal && Number(refundedTotal) > 0 ? { "Square Refunded": refundedTotal } : {})
         }
       }
     },
@@ -256,4 +280,4 @@ function normalizeSquareRefund(refund, ctx = {}) {
   };
 }
 
-module.exports = { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund, squareMoneyToDecimal, squareProductOf, paymentStatusOf, addressParts };
+module.exports = { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund, squareMoneyToDecimal, squareProductOf, paymentStatusOf, addressParts, isSquareReturnOrder, returnSourceOrderId, refundsOf };

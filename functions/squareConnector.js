@@ -32,7 +32,7 @@ const cursors = require("./commerce/cursors");
 const health = require("./commerce/health");
 const events = require("./commerce/events");
 const worker = require("./commerce/worker");
-const { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund, squareMoneyToDecimal } = require("./commerce/adapters/square");
+const { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund, squareMoneyToDecimal, isSquareReturnOrder, returnSourceOrderId } = require("./commerce/adapters/square");
 const { sumDecimal } = require("./commerce/money");
 const { verifySquareSignature } = require("./commerce/square/signature");
 const squareOAuth = require("./commerce/square/oauth");
@@ -315,15 +315,34 @@ function createSquareConnectorFunctions(deps) {
     return ref;
   }
 
-  async function applySquareOrder(ref, data, order, { eventKey = null, eventOrigin = "provider", eventType = "", client = null } = {}) {
+  /** The refunds NivaDesk already holds for a sale, so the order's payment status reflects them (SQ-REF-004/005). */
+  async function refundsRecordedFor(companyId, orderExternalId) {
+    if (!orderExternalId) return [];
+    const snap = await db().collection("companies").doc(companyId).collection(REFUNDS_SUBCOLLECTION).where("orderExternalId", "==", String(orderExternalId)).limit(50).get();
+    return snap.docs.map((d) => { const r = d.data() || {}; return { externalId: r.externalId, amount: r.amount, currency: r.currency, reason: r.reason, status: r.status, externalCreatedAt: r.externalCreatedAt }; });
+  }
+
+  async function applySquareOrder(ref, data, order, { eventKey = null, eventOrigin = "provider", eventType = "", client = null, viaReturn = false } = {}) {
     const companyId = String(data.companyId || "");
     const settings = settingsOf(data);
+    // SQ-REF-002 / SQ-AC-012: Square's return order is the refund's own record,
+    // never a sale. The sale it points at is refreshed instead, so the refund
+    // shows on the order the customer actually placed.
+    if (isSquareReturnOrder(order)) {
+      const sourceId = returnSourceOrderId(order);
+      if (sourceId && client && !viaReturn) {
+        try { const source = await client.getOrder(sourceId); if (source) await applySquareOrder(ref, data, source, { eventKey: eventKey ? `${eventKey}#source` : null, eventOrigin, eventType, client, viaReturn: true }); }
+        catch (error) { console.warn("square return→source refresh failed:", error?.message || error); }
+      }
+      return { result: "skipped", reason: "return_order", sourceOrderExternalId: sourceId };
+    }
     const locationId = String(order?.location_id || "");
     const selected = new Set(Array.isArray(data.selectedLocationIds) ? data.selectedLocationIds.map(String) : []);
     if (locationId && selected.size && !selected.has(locationId)) return { result: "skipped", reason: "location_not_selected" };   // SQ-TEST-017
     let customer = null;
     if (order?.customer_id && client) { try { customer = await client.getCustomer(String(order.customer_id)); } catch { customer = null; } }
-    const envelope = normalizeSquareOrder(order, { connectionId: ref.id, environment: env(), merchantId: data.merchantId, merchantName: data.merchantName, locationName: locationName(data, locationId), customer, eventOrigin, rawSnapshotRef: eventKey });
+    const refunds = await refundsRecordedFor(companyId, String(order?.id || "")).catch(() => []);
+    const envelope = normalizeSquareOrder(order, { connectionId: ref.id, environment: env(), merchantId: data.merchantId, merchantName: data.merchantName, locationName: locationName(data, locationId), customer, refunds, eventOrigin, rawSnapshotRef: eventKey });
     const externalId = envelope.identity.external_id;
     if (!externalId) return { result: "invalid", problems: ["missing_external_id"] };
     if (!settings.importSources.includes(envelope.source.provider_metadata.square_source)) return { result: "skipped", reason: "source_not_selected" };
@@ -384,17 +403,22 @@ function createSquareConnectorFunctions(deps) {
     const companyId = String(data.companyId || "");
     const row = normalizeSquareRefund(refund, { connectionId: ref.id, companyId });
     if (!row.externalId) return { result: "invalid", problems: ["missing_refund_id"] };
-    let orderExternalId = row.orderExternalId;
-    if (!orderExternalId && row.paymentExternalId) {
+    // A refund's own order_id is Square's return order; the sale is the one the
+    // payment was taken for (SQ-REF-002). Fall back to the refund's order only
+    // when the payment is unknown to us.
+    const returnOrderExternalId = row.orderExternalId || null;
+    let orderExternalId = "";
+    if (row.paymentExternalId) {
       const p = await db().collection("companies").doc(companyId).collection(PAYMENTS_SUBCOLLECTION).doc(safeIdPart(row.paymentExternalId)).get();
       orderExternalId = p.exists ? String((p.data() || {}).orderExternalId || "") : "";
     }
+    if (!orderExternalId) orderExternalId = returnOrderExternalId || "";
     const orderDoc = orderExternalId ? await orderDocRef(squareOrderDocId(companyId, orderExternalId)).get() : null;
     const linkedOrderId = orderDoc && orderDoc.exists ? orderDoc.id : null;
     const refundsRef = db().collection("companies").doc(companyId).collection(REFUNDS_SUBCOLLECTION).doc(safeIdPart(row.externalId));
     const before = await refundsRef.get();
     const prior = before.exists ? (before.data() || {}) : null;
-    await refundsRef.set({ ...row, orderExternalId: orderExternalId || null, nivadeskOrderId: linkedOrderId, unmatched: !linkedOrderId, updatedAtMs: now(), ...(prior ? {} : { createdAtMs: now() }) }, { merge: true });
+    await refundsRef.set({ ...row, orderExternalId: orderExternalId || null, returnOrderExternalId, nivadeskOrderId: linkedOrderId, unmatched: !linkedOrderId, updatedAtMs: now(), ...(prior ? {} : { createdAtMs: now() }) }, { merge: true });
     if (row.paymentExternalId) {
       await db().collection("companies").doc(companyId).collection(PAYMENTS_SUBCOLLECTION).doc(safeIdPart(row.paymentExternalId)).set({ lastRefundExternalId: row.externalId, lastRefundStatus: row.status, updatedAtMs: now() }, { merge: true }).catch(() => undefined);
     }
@@ -645,6 +669,35 @@ function createSquareConnectorFunctions(deps) {
     return { ...audit, complete };
   }
 
+  async function reconcileRefunds(ref, data, client, { force, lookbackMs, maxPages }) {
+    const companyId = String(data.companyId || "");
+    const cursor = await cursors.readCursor(db(), "square", ref.id, "refund");
+    const window = cursors.cursorWindow(cursor, now(), { force, lookbackMs: lookbackMs || undefined });
+    const audit = { scanned: 0, recorded: 0, failed: 0, truncated: false };
+    const touched = new Set();
+    let pageCursor = null; let pages = 0;
+    for (;;) {
+      const page = await client.listRefunds({ beginTimeIso: new Date(window.fromMs).toISOString(), endTimeIso: new Date(window.toMs).toISOString(), cursor: pageCursor });
+      pages += 1;
+      for (const refund of page.refunds) {
+        audit.scanned += 1;
+        try { const outcome = await recordRefund(ref, data, refund); if (["created", "updated"].includes(outcome.result)) { audit.recorded += 1; if (outcome.orderExternalId) touched.add(outcome.orderExternalId); } }
+        catch (error) { audit.failed += 1; console.warn("square reconcile: refund failed", ref.id, refund?.id, error?.message || error); }
+      }
+      if (!page.cursor || page.refunds.length === 0) break;
+      if (pages >= maxPages) { audit.truncated = true; break; }
+      pageCursor = page.cursor;
+    }
+    // The sales those refunds belong to show the new balance (SQ-REF-004/005).
+    for (const orderId of touched) {
+      try { const order = await client.getOrder(orderId); if (order) await applySquareOrder(ref, data, order, { eventOrigin: "reconcile", client, eventKey: events.idempotencyKey({ provider: "square", connectionId: ref.id, externalId: orderId, eventType: `refund-reconcile@${now()}` }) }); }
+      catch (error) { console.warn("square reconcile: refund→order refresh failed", ref.id, orderId, error?.message || error); }
+    }
+    const complete = !audit.truncated && audit.failed === 0;
+    await cursors.recordPass(db(), { provider: "square", connectionId: ref.id, entityType: "refund", companyId, fromMs: window.fromMs, toMs: window.toMs, complete, scanned: audit.scanned, applied: audit.recorded, failed: audit.failed, truncated: audit.truncated, now: now() });
+    return { ...audit, complete };
+  }
+
   let eventsEnabledAtMs = 0;
   /** SQ-REC-001..003 — the Events API pass: what Square told the application in the window, that we may not have heard. */
   async function recoverEvents(ref, data, client, { force, lookbackMs, maxPages }) {
@@ -703,6 +756,8 @@ function createSquareConnectorFunctions(deps) {
     const orders = await reconcileOrders(ref, data, client, { force, lookbackMs, maxPages, eventOrigin });
     let payments = { complete: true, scanned: 0, recorded: 0, unmatched: 0, failed: 0 };
     try { payments = await reconcilePayments(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { payments = { complete: false, scanned: 0, recorded: 0, unmatched: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
+    let refunds = { complete: true, scanned: 0, recorded: 0, failed: 0 };
+    try { refunds = await reconcileRefunds(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { refunds = { complete: false, scanned: 0, recorded: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
     let payouts = { complete: true, scanned: 0, recorded: 0, unreconciled: 0, failed: 0 };
     try { payouts = await reconcilePayouts(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { payouts = { complete: false, scanned: 0, recorded: 0, unreconciled: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
     let recovered = { complete: true, configured: false, scanned: 0, applied: 0 };
@@ -710,8 +765,8 @@ function createSquareConnectorFunctions(deps) {
     const complete = orders.complete && payments.complete;
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, kind: orders.complete ? "success" : "attempt", now: now(), FieldValue });
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, entity: "finance", kind: payments.complete ? "success" : "attempt", now: now(), FieldValue });
-    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: orders.scanned, created: orders.created, updated: orders.updated, skipped: orders.skipped, failed: orders.failed }, payments: { scanned: payments.scanned, recorded: payments.recorded, unmatched: payments.unmatched, failed: payments.failed }, events: { configured: recovered.configured, scanned: recovered.scanned, applied: recovered.applied }, payouts: { scanned: payouts.scanned, recorded: payouts.recorded, unreconciled: payouts.unreconciled, failed: payouts.failed }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { ...orders, payments, payouts, events: recovered, complete, locationsHealthy };
+    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: orders.scanned, created: orders.created, updated: orders.updated, skipped: orders.skipped, failed: orders.failed }, payments: { scanned: payments.scanned, recorded: payments.recorded, unmatched: payments.unmatched, failed: payments.failed }, events: { configured: recovered.configured, scanned: recovered.scanned, applied: recovered.applied }, payouts: { scanned: payouts.scanned, recorded: payouts.recorded, unreconciled: payouts.unreconciled, failed: payouts.failed }, refunds: { scanned: refunds.scanned, recorded: refunds.recorded, failed: refunds.failed }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { ...orders, payments, refunds, payouts, events: recovered, complete, locationsHealthy };
   }
 
   const reconcileSquareConnections = onSchedule

@@ -91,6 +91,17 @@ const ctx = { connectionId: "c1__MERCH", environment: "production", merchantId: 
     const shipped = normalizeSquareOrder(onlineOrder({ fulfillments: [{ uid: "f1", type: "SHIPMENT", state: "COMPLETED", shipment_details: { carrier: "Royal Mail", tracking_number: "RM77", tracking_url: "https://t.example/RM77", shipped_at: "2026-09-03T08:00:00Z", recipient: { display_name: "Ada" } } }] }), ctx);
     assert.strictEqual(shipped.order.fulfillment_status, "fulfilled"); assert.strictEqual(shipped.shipments[0].tracking_number, "RM77"); assert.strictEqual(shipped.shipments[0].carrier, "Royal Mail"); assert.strictEqual(shipped.shipments[0].status, "shipped");
   });
+  await check("Square's return order is recognised and never mistaken for a sale; recorded refunds show on the sale (SQ-REF-002/005)", () => {
+    const { isSquareReturnOrder, returnSourceOrderId } = require("../../commerce/adapters/square");
+    const ret = { id: "RET_1", location_id: "LOC_LONDON", state: "COMPLETED", returns: [{ uid: "r1", source_order_id: "ORD_ONLINE_1", return_amounts: { total_money: money(500) } }], total_money: money(0), created_at: "2026-09-03T00:00:00Z", updated_at: "2026-09-03T00:00:00Z" };
+    assert.strictEqual(isSquareReturnOrder(ret), true); assert.strictEqual(returnSourceOrderId(ret), "ORD_ONLINE_1");
+    assert.strictEqual(isSquareReturnOrder(onlineOrder()), false); assert.strictEqual(isSquareReturnOrder(onlineOrder({ returns: [{ uid: "x", source_order_id: "y" }] })), false, "a sale with returns listed is still a sale");
+    const env = normalizeSquareOrder(onlineOrder(), { ...ctx, refunds: [{ externalId: "REF_9", amount: "20.00", currency: "GBP", status: "COMPLETED", reason: "chipped" }, { externalId: "REF_10", amount: "5.00", currency: "GBP", status: "REJECTED" }] });
+    assert.strictEqual(env.order.payment_status, "partially_refunded"); assert.strictEqual(env.refunds.length, 1, "a rejected refund is not a refund");
+    assert.strictEqual(env.source.provider_metadata.custom_fields["Square Refunded"], "20.00");
+    const dedup = normalizeSquareOrder(onlineOrder({ refunds: [{ id: "REF_9", amount_money: money(2000) }] }), { ...ctx, refunds: [{ externalId: "REF_9", amount: "20.00", currency: "GBP", status: "COMPLETED" }] });
+    assert.strictEqual(dedup.refunds.length, 1, "the same refund from two sources counts once (SQ-REF-004)");
+  });
   await check("the same order normalizes to the same hash whichever path brought it; a newer version differs (SQ-TEST-009/010)", () => {
     const a = normalizeSquareOrder(onlineOrder(), { ...ctx, eventOrigin: "provider" }); const b = normalizeSquareOrder(onlineOrder(), { ...ctx, eventOrigin: "reconcile" });
     assert.strictEqual(contentHash(a), contentHash(b));
