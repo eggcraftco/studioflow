@@ -37,6 +37,9 @@ type BankConnection = {
   consentExpiresAt: Date | null;
   lastSyncError: string;
 };
+/** Spending is money out that stayed out. A refund or chargeback went back to a customer and lives on the order instead. */
+function isSpend(item: { amount: number; outgoingKind: string }): boolean { return isSpend(item) && !item.outgoingKind; }
+
 type BankTransaction = {
   id: string;
   amount: number;
@@ -70,6 +73,10 @@ type BankTransaction = {
   netAmount: number | null;
   // Faz 5: which processor payout this row settled (Square today), written by the settlement matcher.
   settlement: { provider: string; providerLabel?: string; payoutExternalId?: string; arrivalDate?: string | null; gross?: string | null; fee?: string | null; refunds?: string | null; net?: string | null; currency?: string | null } | null;
+  /** Money out that went back to a customer ("customer_refund" | "chargeback"): recorded on the order, never spending. */
+  outgoingKind: string;
+  /** A PayPal refund names the payment it reverses. */
+  paypalReferenceId: string;
   linkedPaymentId: string;
   receiptFileRecordId: string;
   splits: Array<{ amount: number; category: string; vatCode?: string; note?: string; orderId?: string; orderLabel?: string }>;
@@ -316,6 +323,10 @@ function BankPageContent() {
   const [drawerReview, setDrawerReview] = useState("unreviewed");
   const [drawerNote, setDrawerNote] = useState("");
   const [drawerOrderId, setDrawerOrderId] = useState("");
+  // Money out that went back to a customer: the kind the owner chose and the order it is recorded on.
+  const [drawerRefundKind, setDrawerRefundKind] = useState("");
+  const [drawerRefundOrderId, setDrawerRefundOrderId] = useState("");
+  const [refundHint, setRefundHint] = useState<{ txId: string; orderId: string; orderLabel: string; reason: string; suggestedKind: string } | null>(null);
   const [drawerRuleKeyword, setDrawerRuleKeyword] = useState("");
   const [receiptFilter, setReceiptFilter] = useState<"all" | "missing" | "matched">("all");
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
@@ -417,6 +428,8 @@ function BankPageContent() {
             providerReference: String(data.providerReference || ""),
             reviewStatus: String(data.reviewStatus || ""),
             incomingKind: String(data.incomingKind || ""),
+            outgoingKind: String(data.outgoingKind || ""),
+            paypalReferenceId: String(data.paypalReferenceId || ""),
             feeAmount: typeof data.feeAmount === "number" ? data.feeAmount : null,
             netAmount: typeof data.netAmount === "number" ? data.netAmount : null,
             settlement: data.settlement && typeof data.settlement === "object" ? (data.settlement as BankTransaction["settlement"]) : null,
@@ -1011,14 +1024,14 @@ function BankPageContent() {
   }, [transactions]);
 
   const monthTotal = useMemo(() => transactions
-    .filter(item => matchesSource(item) && item.currency === currencyMain && item.bookingDate.startsWith(monthPrefix) && item.amount < 0)
+    .filter(item => matchesSource(item) && item.currency === currencyMain && item.bookingDate.startsWith(monthPrefix) && isSpend(item))
     .reduce((acc, item) => acc + Math.abs(item.amount), 0), [transactions, monthPrefix, matchesSource, currencyMain]);
 
   // Spending per month of the selected year (outgoing only), for the Year view.
   const yearSeries = useMemo(() => {
     const totals = Array.from({ length: 12 }, () => 0);
     for (const item of transactions) {
-      if (item.amount >= 0 || !matchesSource(item) || item.currency !== currencyMain || !item.bookingDate.startsWith(String(selectedYear))) continue;
+      if (!isSpend(item) || !matchesSource(item) || item.currency !== currencyMain || !item.bookingDate.startsWith(String(selectedYear))) continue;
       const month = Number(item.bookingDate.slice(5, 7)) - 1;
       if (month >= 0 && month < 12) totals[month] += Math.abs(item.amount);
     }
@@ -1061,7 +1074,7 @@ function BankPageContent() {
     } else {
       inRange = date => date.startsWith(String(selectedYear - 1));
     }
-    return transactions.filter(item => item.amount < 0 && inRange(item.bookingDate)).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+    return transactions.filter(item => isSpend(item) && inRange(item.bookingDate)).reduce((acc, item) => acc + Math.abs(item.amount), 0);
   }, [transactions, view, weekStart, selectedYear, selectedMonth, customStart, customEnd]);
 
   // Spending per effective category for the selected period (Year/Month tab).
@@ -1118,7 +1131,7 @@ function BankPageContent() {
   const duplicateIds = useMemo(() => detectPossibleDuplicates(visibleTransactions), [visibleTransactions]);
   // What the owner should act on in this period — drives the Needs Attention tile.
   const attention = useMemo(() => {
-    const spending = visibleTransactions.filter(item => item.amount < 0);
+    const spending = visibleTransactions.filter(item => isSpend(item));
     const uncategorised = spending.filter(item => !effectiveCategory(item));
     // "Marked no receipt needed" is a resolved state, not an open action.
     const noReceipt = spending.filter(item => !item.receiptPath && !item.receiptNotNeeded);
@@ -1197,7 +1210,7 @@ function BankPageContent() {
 
   // Receipts tab numbers (spending only; incoming never needs a receipt).
   const receiptStats = useMemo(() => {
-    const spending = visibleTransactions.filter(item => item.amount < 0);
+    const spending = visibleTransactions.filter(item => isSpend(item));
     const matched = spending.filter(item => item.receiptPath).length;
     const notNeeded = spending.filter(item => !item.receiptPath && item.receiptNotNeeded).length;
     const missing = spending.length - matched - notNeeded;
@@ -1244,7 +1257,7 @@ function BankPageContent() {
     }
     return Array.from(byKey.values()).filter(item => item.count >= 2).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [transactions, rules]);
-  const autoAppliedCount = useMemo(() => visibleTransactions.filter(item => item.amount < 0 && !item.category && item.categoryAuto).length, [visibleTransactions]);
+  const autoAppliedCount = useMemo(() => visibleTransactions.filter(item => isSpend(item) && !item.category && item.categoryAuto).length, [visibleTransactions]);
 
   // ---- Transaction drawer ---------------------------------------------------
   const drawerTx = drawerTxId ? transactions.find(item => item.id === drawerTxId) ?? null : null;
@@ -1254,7 +1267,11 @@ function BankPageContent() {
     setDrawerVat(tx.vatCode);
     setDrawerReview(effectiveReviewStatus(tx));
     setDrawerNote(tx.note);
-    setDrawerOrderId(tx.linkedOrderId);
+    setDrawerOrderId(tx.outgoingKind ? "" : tx.linkedOrderId);
+    setDrawerRefundKind(tx.outgoingKind || "");
+    setDrawerRefundOrderId(tx.outgoingKind ? tx.linkedOrderId : "");
+    setRefundHint(prev => (prev && prev.txId === tx.id ? prev : null));
+    if (tx.amount < 0 && !tx.outgoingKind && tx.paypalReferenceId) void loadRefundHint(tx);
     setDrawerRuleKeyword(suggestions.get(tx.id)?.keyword || suggestRuleKeyword(tx));
     setCategoryPickerTxId(null);
     setDrawerOrderSearch("");
@@ -1275,7 +1292,7 @@ function BankPageContent() {
     setError(null);
     try {
       await call("bankUpdateTransaction", { transactionId: drawerTx.id, category: drawerCategory, vatCode: drawerVat, note: drawerNote, reviewStatus: drawerReview });
-      if (drawerOrderId !== drawerTx.linkedOrderId) {
+      if (!drawerTx.outgoingKind && drawerOrderId !== drawerTx.linkedOrderId) {
         if (drawerTx.linkedOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerTx.linkedOrderId });
         if (drawerOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerOrderId });
       }
@@ -1288,6 +1305,38 @@ function BankPageContent() {
       }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not save the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  /** What the feed already knows about an outgoing row: a PayPal refund names the payment it reverses, and that payment may sit on an order. */
+  async function loadRefundHint(tx: BankTransaction) {
+    try {
+      const result = await call<{ suggestedKind?: string; hint?: { orderId?: string; orderLabel?: string; reason?: string } | null }>("bankLinkRefundToOrder", { transactionId: tx.id, mode: "suggest" });
+      const hint = { txId: tx.id, orderId: String(result.hint?.orderId || ""), orderLabel: String(result.hint?.orderLabel || ""), reason: String(result.hint?.reason || ""), suggestedKind: String(result.suggestedKind || "") };
+      setRefundHint(hint);
+      if (hint.orderId) {
+        setDrawerRefundKind(prev => prev || hint.suggestedKind || "customer_refund");
+        setDrawerRefundOrderId(prev => prev || hint.orderId);
+      }
+    } catch {
+      // A hint is a courtesy; the owner can still pick the order by hand.
+    }
+  }
+  /** Records the row on the order as a negative payment (link) or takes that entry back out (unlink). */
+  async function refundAction(mode: "link" | "unlink") {
+    if (!drawerTx) return;
+    if (mode === "link" && (!drawerRefundKind || !drawerRefundOrderId)) return;
+    setBusy("refund");
+    setError(null);
+    try {
+      const result = await call<{ orderLabel?: string }>("bankLinkRefundToOrder", mode === "link"
+        ? { transactionId: drawerTx.id, mode, orderId: drawerRefundOrderId, kind: drawerRefundKind }
+        : { transactionId: drawerTx.id, mode });
+      setStatus(mode === "link" ? `${t("Refund recorded on the order.")}${result.orderLabel ? ` ⛓ ${result.orderLabel}` : ""}` : t("Refund removed from the order."));
+      if (mode === "unlink") { setDrawerRefundKind(""); setDrawerRefundOrderId(""); }
+    } catch (refundError) {
+      setError(refundError instanceof Error ? refundError.message : "Could not record the refund.");
     } finally {
       setBusy(null);
     }
@@ -1495,16 +1544,16 @@ function BankPageContent() {
     const list = visibleTransactions.filter(item => {
       if (accountFilter && item.accountId !== accountFilter) return false;
       if (txReview === "missing_vat") {
-        if (!(item.amount < 0 && effectiveCategory(item) && !effectiveVat(item))) return false;
+        if (!(isSpend(item) && effectiveCategory(item) && !effectiveVat(item))) return false;
       } else if (txReview === "missing_receipt") {
-        if (!(item.amount < 0 && !item.receiptPath && !item.receiptNotNeeded)) return false;
+        if (!(isSpend(item) && !item.receiptPath && !item.receiptNotNeeded)) return false;
       } else if (txReview && effectiveReviewStatus(item) !== txReview) return false;
       if (txFlow === "in" && item.amount <= 0) return false;
       if (txFlow === "out" && item.amount >= 0) return false;
-      if (txAttention === "uncategorised" && !(item.amount < 0 && !effectiveCategory(item))) return false;
-      if (txAttention === "noReceipt" && !(item.amount < 0 && !item.receiptPath)) return false;
+      if (txAttention === "uncategorised" && !(isSpend(item) && !effectiveCategory(item))) return false;
+      if (txAttention === "noReceipt" && !(isSpend(item) && !item.receiptPath)) return false;
       if (txAttention === "duplicate" && !duplicateIds.has(item.id)) return false;
-      if (txAttention === "any" && !(item.amount < 0 && (!effectiveCategory(item) || (!item.receiptPath && !item.receiptNotNeeded) || duplicateIds.has(item.id)))) return false;
+      if (txAttention === "any" && !(isSpend(item) && (!effectiveCategory(item) || (!item.receiptPath && !item.receiptNotNeeded) || duplicateIds.has(item.id)))) return false;
       const needle = txSearch.trim().toLowerCase();
       if (needle && !`${item.counterparty} ${item.description}`.toLowerCase().includes(needle)) return false;
       return true;
@@ -1515,7 +1564,7 @@ function BankPageContent() {
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
-  const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
+  const pageSpendingIds = pagedTransactions.filter(item => isSpend(item)).map(item => item.id);
   const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
   useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, customStart, customEnd, txFlow, txAttention, txSearch, txReview]);
 
@@ -1530,7 +1579,7 @@ function BankPageContent() {
     : view === "week"
       ? `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
       : String(selectedYear);
-  const rangeTotal = visibleTransactions.filter(item => item.amount < 0 && item.currency === mainCurrency).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+  const rangeTotal = visibleTransactions.filter(item => isSpend(item) && item.currency === mainCurrency).reduce((acc, item) => acc + Math.abs(item.amount), 0);
   const weekTotal = view === "week" ? rangeTotal : 0;
   const spentTotal = view === "custom" ? rangeTotal : view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
   const spentDelta = previousPeriodSpent > 0 ? ((spentTotal - previousPeriodSpent) / previousPeriodSpent) * 100 : null;
@@ -2264,6 +2313,9 @@ function BankPageContent() {
                                       {transaction.purchaseNumber ? (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: "#16a34a" }}>▣ {transaction.purchaseNumber}</span>
                                       ) : null}
+                                      {transaction.outgoingKind ? (
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626" }}>↩ {t(transaction.outgoingKind === "chargeback" ? "Chargeback" : "Customer refund")}</span>
+                                      ) : null}
                                       {transaction.linkedOrderId ? (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: "#2563eb" }}>⛓ {transaction.linkedOrderLabel || t("Order")}</span>
                                       ) : isOwner && orderSuggestions.get(transaction.id) ? (() => {
@@ -2665,7 +2717,7 @@ function BankPageContent() {
                             </div>
                             {picking ? (
                               <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", borderTop: "1px solid rgba(120,120,140,0.14)", paddingTop: 6 }}>
-                                {sortedTransactions.filter(tx => tx.amount < 0).slice(0, 40).map(tx => (
+                                {sortedTransactions.filter(isSpend).slice(0, 40).map(tx => (
                                   <button key={tx.id} type="button" disabled={busy === `waiting-${item.id}`} onClick={() => void assignWaitingReceipt(item, tx.id)}
                                     style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" }}>
                                     <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
@@ -2707,7 +2759,7 @@ function BankPageContent() {
                         </tr>
                       </thead>
                       <tbody>
-                        {visibleTransactions.filter(tx => tx.amount < 0).filter(tx => receiptFilter === "all" ? true : receiptFilter === "matched" ? Boolean(tx.receiptPath) : !tx.receiptPath && !tx.receiptNotNeeded).map(tx => {
+                        {visibleTransactions.filter(isSpend).filter(tx => receiptFilter === "all" ? true : receiptFilter === "matched" ? Boolean(tx.receiptPath) : !tx.receiptPath && !tx.receiptNotNeeded).map(tx => {
                           const category = effectiveCategory(tx);
                           return (
                             <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
@@ -3102,7 +3154,7 @@ function BankPageContent() {
             {isOwner && tab === "overview" ? (() => {
               // The accountant's worklist for the selected period: how ready
               // this period is to hand over, with one click into each pile.
-              const spending = visibleTransactions.filter(item => item.amount < 0);
+              const spending = visibleTransactions.filter(item => isSpend(item));
               const counts = {
                 ready: visibleTransactions.filter(item => effectiveReviewStatus(item) === "ready").length,
                 needsInfo: visibleTransactions.filter(item => effectiveReviewStatus(item) === "needs_info").length,
@@ -3227,7 +3279,60 @@ function BankPageContent() {
                     {!drawerTx.vatCode && drawerTx.vatCodeAuto ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(vatLabel(drawerTx.vatCodeAuto))}</div> : null}
                   </label>
                 </div>
+                {isOwner || drawerTx.outgoingKind ? (
+                  <div style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${drawerTx.outgoingKind ? "rgba(220,38,38,0.35)" : "rgba(120,120,140,0.25)"}`, display: "grid", gap: 6 }}>
+                    <div style={drawerLabel}>↩ {t("Refund or chargeback")}</div>
+                    {drawerTx.outgoingKind ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+                        <span style={{ color: "#dc2626", fontWeight: 800 }}>{t(drawerTx.outgoingKind === "chargeback" ? "Chargeback" : "Customer refund")}</span>
+                        <span style={{ color: "#2563eb", fontWeight: 700 }}>⛓ {drawerTx.linkedOrderLabel || t("Order")}</span>
+                        <span style={{ opacity: 0.65, flex: "1 1 200px" }}>{t("Recorded on the order as a negative payment. Not counted as spending.")}</span>
+                        {isOwner ? <button type="button" disabled={busy === "refund"} onClick={() => void refundAction("unlink")} style={{ ...attentionLink, color: "#dc2626", fontSize: 11 }}>{t("Remove from the order")}</button> : null}
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <select value={drawerRefundKind} onChange={event => { setDrawerRefundKind(event.target.value); if (event.target.value && !(refundHint && refundHint.txId === drawerTx.id)) void loadRefundHint(drawerTx); }} style={{ ...pickerInput, flex: "0 1 170px" }} aria-label={t("Refund or chargeback")}>
+                            <option value="">{t("Not a refund")}</option>
+                            <option value="customer_refund">{t("Customer refund")}</option>
+                            <option value="chargeback">{t("Chargeback")}</option>
+                          </select>
+                          {drawerRefundKind ? (
+                            <select value={drawerRefundOrderId} onChange={event => setDrawerRefundOrderId(event.target.value)} style={{ ...pickerInput, flex: "1 1 200px" }} aria-label={t("Refunded order")}>
+                              <option value="">{t("Choose the order")}…</option>
+                              {refundHint && refundHint.txId === drawerTx.id && refundHint.orderId && orderOptions && !orderOptions.some(order => order.id === refundHint.orderId) ? <option value={refundHint.orderId}>{refundHint.orderLabel || t("Order")}</option> : null}
+                              {(orderOptions ? rankOrdersForTransaction(drawerTx, orderOptions).map(item => item.order).slice(0, 60) : []).map(order => (
+                                <option key={order.id} value={order.id}>{order.customerName}{order.designName && order.designName !== "Untitled design" ? ` · ${order.designName}` : ""}</option>
+                              ))}
+                            </select>
+                          ) : null}
+                          {drawerRefundKind ? (
+                            <button type="button" style={{ ...bankBtnSm, color: "#dc2626", borderColor: "rgba(220,38,38,0.4)" }} disabled={!drawerRefundOrderId || busy === "refund"} onClick={() => void refundAction("link")}>
+                              {busy === "refund" ? t("Loading…") : t("Record on the order")}
+                            </button>
+                          ) : null}
+                        </div>
+                        {refundHint && refundHint.txId === drawerTx.id && refundHint.orderId ? (
+                          <button type="button" onClick={() => { setDrawerRefundKind(prev => prev || refundHint.suggestedKind || "customer_refund"); setDrawerRefundOrderId(refundHint.orderId); }} style={{ ...attentionLink, fontSize: 11 }}>
+                            ↩ {t("Reverses the PayPal payment recorded on this order")}: {refundHint.orderLabel || t("Order")}
+                          </button>
+                        ) : refundHint && refundHint.txId === drawerTx.id && refundHint.reason === "reverses_paypal_payment_unlinked" ? (
+                          <div style={{ fontSize: 11, opacity: 0.65 }}>↩ {t("Reverses a PayPal payment that is not matched to an order yet.")}</div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {drawerTx.outgoingKind ? (
+                    <div>
+                      <div style={drawerLabel}>{t("Linked order or project")}</div>
+                      <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
+                        <span style={{ color: "#2563eb", fontWeight: 700 }}>⛓ {drawerTx.linkedOrderLabel || t("Order")}</span>
+                        <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>{t("Recorded as a refund, not an expense.")}</div>
+                      </div>
+                    </div>
+                  ) : (
                   <label>
                     <div style={drawerLabel}>{t("Linked order or project")}</div>
                     <input type="search" value={drawerOrderSearch} disabled={!isOwner} onChange={event => setDrawerOrderSearch(event.target.value)} placeholder={t("Search orders")}
@@ -3249,6 +3354,7 @@ function BankPageContent() {
                       </button>
                     ) : null}
                   </label>
+                  )}
                   <div>
                     <div style={drawerLabel}>{t("Receipt / attachment")}</div>
                     <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
