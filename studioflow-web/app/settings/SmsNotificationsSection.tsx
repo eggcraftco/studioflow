@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CardTitle } from "@/components/CardTitle";
+import { SettingsCardHead } from "./pageHeader";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { useUnsavedGuard } from "./unsavedChanges";
@@ -254,42 +255,45 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
         ? t("Waiting for approval")
         : t("Not registered");
 
+  const bandTone = !settings.available || !settings.providerConfigured ? "is-caution" : settings.sendingLive ? "is-success" : "is-info";
+
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack settings-sms-page">
       {notice ? <p className="success-copy">{notice}</p> : null}
       {error ? <p className="layout-error">{error}</p> : null}
 
-      {/* ── What is actually happening ─────────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="reply" eyebrow={t("Customer SMS")} title={t("Text updates to your customers")} />
-        <p className="muted-copy">
-          {t("A short text at the moments a customer is waiting on: an estimate to approve, a piece ready to collect. One-way, and always about an order they already have with you — never a promotion.")}
-        </p>
-        <div className="quick-reply-settings-info">
-          <strong>{`${sendingState.pill} · ${sendingState.headline}`}</strong>
+      {/* ── What is actually happening: one calm band, one clear next step ── */}
+      <div className={`settings-status-band ${bandTone}`} role="status">
+        <span className="settings-status-band-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></svg>
+        </span>
+        <div className="settings-status-band-copy">
+          <strong>{sendingState.headline}</strong>
           <p>{sendingState.detail}</p>
         </div>
-        {!settings.available ? (
-          <div className="settings-action-row">
-            <a className="button secondary" href="/settings?section=plan-access">
-              {t("See plans")}
-            </a>
-          </div>
-        ) : null}
-      </section>
+        <span className="settings-status-band-side">
+          <span className="settings-tag">{sendingState.pill}</span>
+          {!settings.available ? (
+            <a className="button secondary" href="/settings?section=plan-access">{t("See plans")}</a>
+          ) : !settings.providerConfigured ? (
+            <a className="button secondary" href="/settings?section=support-tickets">{t("Contact support")}</a>
+          ) : null}
+        </span>
+      </div>
 
       {/* ── The four triggers ──────────────────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow={t("When a text goes out")} title={t("Choose the moments")} />
-        <div className="settings-toggle-stack">
+      <section className="card app-card">
+        <SettingsCardHead title={t("Notification moments")} subtitle={t("Choose which order events can send a customer text.")} />
+        <div className="settings-switch-list">
           {TRIGGER_ROWS.map(row => (
-            <label className="settings-toggle-row" key={row.key}>
-              <span>
+            <label className="settings-switch-line" key={row.key}>
+              <span className="settings-switch-line-copy">
                 <strong>{t(row.title)}</strong>
                 <small>{t(row.detail)}</small>
               </span>
               <input
                 type="checkbox"
+                className="settings-switch"
                 checked={triggers[row.key]}
                 disabled={!canEdit || busy === "save"}
                 onChange={event => setTriggers(current => ({ ...current, [row.key]: event.target.checked }))}
@@ -297,48 +301,44 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
             </label>
           ))}
         </div>
-        <p className="muted-copy">
+        <p className="settings-field-hint">
           {t("These choices apply to the whole workspace. A text still only goes to a customer whose order has Automatic Updates and SMS switched on, on the order's Customer Portal card.")}
         </p>
       </section>
 
       {/* ── Who the text is from ───────────────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="docText" eyebrow={t("Sender")} title={t("The name your text arrives from")} />
-        <div className="settings-rule-list">
-          <SmsFact
-            label={t("NivaDesk sender ID")}
-            value={settings.platformSenderId}
-            note={
-              settings.platformSenderStatus === "verified"
+      <section className="card app-card">
+        <SettingsCardHead title={t("Sender identity")} subtitle={t("Choose the name customers see when a message arrives.")} />
+        <div className="settings-two-col settings-sender-facts">
+          <div className="settings-subpanel">
+            <span className="settings-field-label">{t("NivaDesk sender ID")}</span>
+            <strong className="settings-fact-value">{settings.platformSenderId}</strong>
+            <span className={settings.platformSenderStatus === "verified" ? "settings-status-pill is-saved" : "settings-status-pill is-dirty"}>
+              <span className="settings-status-pill-mark" aria-hidden="true">{settings.platformSenderStatus === "verified" ? "✓" : "●"}</span>
+              {settings.platformSenderStatus === "verified" ? t("Verified") : t("Waiting for approval")}
+            </span>
+            <span className="settings-field-hint">
+              {settings.platformSenderStatus === "verified"
                 ? t("Approved by the networks. Used until your own sender ID is verified.")
-                : t("Registered and waiting for network approval. Until it lands, nothing sends from this name.")
-            }
-          />
-          <SmsFact
-            label={t("Your own sender ID")}
-            value={
-              settings.senderStatus === "verified"
-                ? settings.senderId
-                : settings.senderStatus === "pending"
-                  ? ownSenderStatusLabel
-                  : t("None")
-            }
-            note={
-              settings.senderStatus === "verified"
+                : t("Registered and waiting for network approval. Until it lands, nothing sends from this name.")}
+            </span>
+          </div>
+          <div className="settings-subpanel">
+            <span className="settings-field-label">{t("Your own sender ID")}</span>
+            <strong className="settings-fact-value">
+              {settings.senderStatus === "verified" ? settings.senderId : settings.senderStatus === "pending" ? ownSenderStatusLabel : t("None")}
+            </strong>
+            <span className="settings-field-hint">
+              {settings.senderStatus === "verified"
                 ? t("Your customers see this name.")
                 : settings.senderStatus === "pending"
                   ? t("Registration is with the networks. NivaDesk cannot approve it and neither can you.")
-                  : t("Your customers see NivaDesk, and your workspace name is put at the start of the message instead.")
-            }
-          />
+                  : t("Your customers see NivaDesk, and your workspace name is put at the start of the message instead.")}
+            </span>
+          </div>
         </div>
-
-        <label className="quick-reply-settings-label">
-          {t("Register your own sender ID")}
-          <span>
-            {t("Up to 11 letters, numbers and spaces. A customer trusts a text from your studio's name more than one from ours.")}
-          </span>
+        <label className="settings-field">
+          <span className="settings-field-label">{t("Register your own sender ID")}</span>
           <input
             className="input"
             value={senderDraft}
@@ -347,90 +347,97 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
             placeholder={cleanSmsSenderIdInput(workspace.name || "") || t("Your studio")}
             onChange={event => setSenderDraft(cleanSmsSenderIdInput(event.target.value))}
           />
+          <span className="settings-field-hint">
+            {t("Up to 11 letters, numbers and spaces. A customer trusts a text from your studio's name more than one from ours.")}
+          </span>
         </label>
-        <p className="muted-copy">
+        <p className="settings-field-hint is-caution">
           {t("Changing this name starts the registration again: the networks approve a name, not a workspace, so a new one goes back to waiting. NivaDesk cannot mark it verified itself — that answer only comes from them.")}
         </p>
         {settings.senderStatus === "pending" ? (
-          <p className="muted-copy">
+          <p className="settings-notice is-caution">
             {t("A sender ID of yours is already registered and waiting. Its name is not shown here until the networks approve it, and saving this screen with the box empty withdraws that registration — so type it again before you save anything else.")}
           </p>
         ) : null}
       </section>
 
-      {/* ── Numbers without a country code ─────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="customer" eyebrow={t("Phone numbers")} title={t("Default calling code")} />
-        <label className="quick-reply-settings-label">
-          {t("Calling code")}
-          <span>{t("Digits only, no plus sign. Used when a customer's saved number has no country code of its own — 44 is the United Kingdom.")}</span>
-          <input
-            className="input"
-            value={callingCode}
-            inputMode="numeric"
-            maxLength={4}
-            disabled={!canEdit || busy === "save"}
-            placeholder="44"
-            onChange={event => setCallingCode(cleanSmsCallingCodeInput(event.target.value))}
-            // An empty box is not a choice the server can store: it falls back
-            // to what is already saved, and the screen would then be showing a
-            // code that is not the one in use.
-            onBlur={() => setCallingCode(current => current || cleanSmsCallingCodeInput(settings.defaultCallingCode) || "44")}
-          />
-        </label>
-        <p className="muted-copy">
-          {t("A number that already carries its own country code is left exactly as it is.")}
-        </p>
-      </section>
+      <div className="settings-two-col">
+        {/* ── Numbers without a country code ─────────────────────────────── */}
+        <section className="card app-card">
+          <SettingsCardHead title={t("Phone numbers")} />
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Default calling code")}</span>
+            <div className="settings-domain-input settings-calling-code">
+              <span className="settings-domain-suffix">+</span>
+              <input
+                className="input"
+                value={callingCode}
+                inputMode="numeric"
+                maxLength={4}
+                disabled={!canEdit || busy === "save"}
+                placeholder="44"
+                onChange={event => setCallingCode(cleanSmsCallingCodeInput(event.target.value))}
+                // An empty box is not a choice the server can store: it falls back
+                // to what is already saved, and the screen would then be showing a
+                // code that is not the one in use.
+                onBlur={() => setCallingCode(current => current || cleanSmsCallingCodeInput(settings.defaultCallingCode) || "44")}
+              />
+            </div>
+            <span className="settings-field-hint">{t("Digits only, no plus sign. Used when a customer's saved number has no country code of its own — 44 is the United Kingdom.")}</span>
+          </label>
+          <p className="settings-field-hint">
+            {t("A number that already carries its own country code is left exactly as it is.")}
+          </p>
+        </section>
 
-      {/* ── What it has cost ───────────────────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="finance" eyebrow={monthLabel(usage.month, language)} title={t("Usage this month")} />
-        <div className="settings-rule-list">
-          <SmsFact label={t("Messages")} value={String(usage.messages || 0)} />
-          <SmsFact label={t("Segments")} value={String(usage.segments || 0)} />
-          <SmsFact label={t("Spend")} value={spendLabel(usage.spendUsd || 0, language)} />
-        </div>
-        <p className="muted-copy">
-          {nothingSentYet
-            ? t("No messages have been sent from this workspace yet, so there is nothing to charge for.")
-            : t("A long message is charged as more than one segment: 160 plain characters each, or 70 if it contains an emoji or an accented letter.")}
-        </p>
-      </section>
+        {/* ── What it has cost ───────────────────────────────────────────── */}
+        <section className="card app-card">
+          <SettingsCardHead title={t("Usage this month")} aside={<span className="settings-field-hint">{monthLabel(usage.month, language)}</span>} />
+          <dl className="settings-facts">
+            <div><dt>{t("Messages")}</dt><dd>{String(usage.messages || 0)}</dd></div>
+            <div><dt>{t("Segments")}</dt><dd>{String(usage.segments || 0)}</dd></div>
+            <div><dt>{t("Spend")}</dt><dd>{spendLabel(usage.spendUsd || 0, language)}</dd></div>
+          </dl>
+          <p className="settings-field-hint">
+            {nothingSentYet
+              ? t("No messages have been sent from this workspace yet, so there is nothing to charge for.")
+              : t("A long message is charged as more than one segment: 160 plain characters each, or 70 if it contains an emoji or an accented letter.")}
+          </p>
+          <div className="settings-action-row">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={busy === "save"}
+              onClick={() => {
+                // Reloading silently threw away unsaved switches, so it says so first.
+                if (dirty && !window.confirm(t("Reload will discard your unsaved changes here. Continue?"))) return;
+                setNotice("");
+                void load();
+              }}
+            >
+              {t("Reload usage")}
+            </button>
+          </div>
+        </section>
+      </div>
 
-      <section className="card app-card quick-reply-settings-card">
-        <div className="settings-action-row">
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy === "save"}
-            onClick={() => {
-              // Reloading silently threw away unsaved switches, so it says so first.
-              if (dirty && !window.confirm(t("Reload will discard your unsaved changes here. Continue?"))) return;
-              setNotice("");
-              void load();
-            }}
-          >
-            {t("Reload")}
-          </button>
-          <button
-            type="button"
-            className="button"
-            disabled={!canEdit || busy === "save" || !dirty}
-            onClick={() => {
-              void handleSave();
-            }}
-          >
-            {busy === "save" ? t("Saving…") : t("Save")}
-          </button>
-        </div>
-        {!isOwner ? (
-          <p className="muted-copy">{t("Only the workspace owner can change customer SMS settings. You can see what is set.")}</p>
-        ) : null}
-        {isOwner && !settings.available ? (
-          <p className="muted-copy">{t("Upgrade to NivaDesk Pro or Team to change these settings.")}</p>
-        ) : null}
-      </section>
+      <div className="settings-save-row settings-save-bar">
+        <p className="settings-save-bar-note">
+          {t("These choices apply to the whole workspace.")}
+        </p>
+        {!isOwner ? <p className="settings-field-hint">{t("Only the workspace owner can change customer SMS settings. You can see what is set.")}</p> : null}
+        {isOwner && !settings.available ? <p className="settings-field-hint">{t("Upgrade to NivaDesk Pro or Team to change these settings.")}</p> : null}
+        <button
+          type="button"
+          className="button"
+          disabled={!canEdit || busy === "save" || !dirty}
+          onClick={() => {
+            void handleSave();
+          }}
+        >
+          {busy === "save" ? t("Saving…") : t("Save SMS settings")}
+        </button>
+      </div>
     </div>
   );
 }

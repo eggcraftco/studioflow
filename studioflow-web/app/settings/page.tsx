@@ -3,7 +3,7 @@
 import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
@@ -36,6 +36,7 @@ import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { QuickBooksIntegrationSection } from "./QuickBooksIntegrationSection";
+import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
@@ -474,6 +475,24 @@ export default function SettingsPage() {
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
   const [sectionSearch, setSectionSearch] = useState("");
+  // The page header's action group, registered by the section that owns it.
+  const [headerActions, setHeaderActions] = useState<ReactNode>(null);
+  const headerActionsContext = useMemo(() => ({ setActions: setHeaderActions }), []);
+  // Sidebar groups fold; the choice is this browser's and survives reloads.
+  const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<SettingsGroup, boolean>>>({});
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("nivadesk-settings-collapsed-groups");
+      if (raw) setCollapsedGroups(JSON.parse(raw) as Partial<Record<SettingsGroup, boolean>>);
+    } catch { /* a fresh browser starts with every group open */ }
+  }, []);
+  const toggleGroup = useCallback((group: SettingsGroup) => {
+    setCollapsedGroups(prev => {
+      const next = { ...prev, [group]: !prev[group] };
+      try { window.localStorage.setItem("nivadesk-settings-collapsed-groups", JSON.stringify(next)); } catch { /* storage may be unavailable */ }
+      return next;
+    });
+  }, []);
   // Sections register their own unsaved edits here; see ./unsavedChanges.
   const settingsDirty = useProvideSettingsDirty();
   const unsavedSectionId = useMemo(
@@ -761,6 +780,7 @@ export default function SettingsPage() {
         </SettingsDialog>
       ) : null}
       <SettingsDirtyProvider value={settingsDirty}>
+      <SettingsHeaderActionsContext.Provider value={headerActionsContext}>
       <div className="settings-workspace" data-mobile-view={isPhone ? (mobileDetail ? "detail" : "list") : "both"}>
         <aside className="settings-sidebar">
           <div className="settings-sidebar-heading">
@@ -778,49 +798,63 @@ export default function SettingsPage() {
             />
           </label>
           <div className="settings-section-list">
-            {(sectionSearch.trim()
-              ? visibleSections.filter(section => {
-                  const query = sectionSearch.trim().toLowerCase();
-                  const haystack = [
-                    section.title,
-                    section.description,
-                    t(section.title),
-                    t(section.description),
-                    SETTINGS_SEARCH_KEYWORDS[section.id] || ""
-                  ].join(" ").toLowerCase();
-                  return query.split(/\s+/).every(word => haystack.includes(word));
-                })
-              : visibleSections
-            ).map((section, index, list) => {
-              const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
-              const showGroupHeading = index === 0 || list[index - 1].group !== section.group;
-              return (
-                <Fragment key={section.id}>
-                  {showGroupHeading ? (
-                    <p className="settings-section-group" role="presentation">
-                      {t(SETTINGS_GROUP_LABELS[section.group])}
-                    </p>
-                  ) : null}
-                  <button
-                    className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
-                    type="button"
-                    onClick={() => selectSection(section.id)}
-                  >
-                    <SettingsSectionIcon icon={section.icon} />
-                    <span>
-                      <strong style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                        {t(section.title)}
-                        {settingsDirty.dirtySections[section.id] ? (
-                          <span className="settings-unsaved-dot" title={t("Unsaved changes")} aria-label={t("Unsaved changes")} />
-                        ) : null}
-                        {unreadCount > 0 ? <span style={supportUnreadMenuBadgeStyle}>{unreadCount}</span> : null}
-                      </strong>
-                      <small>{t(section.description)}</small>
-                    </span>
-                  </button>
-                </Fragment>
-              );
-            })}
+            {(() => {
+              const searching = Boolean(sectionSearch.trim());
+              const list = searching
+                ? visibleSections.filter(section => {
+                    const query = sectionSearch.trim().toLowerCase();
+                    const haystack = [
+                      section.title,
+                      section.description,
+                      t(section.title),
+                      t(section.description),
+                      SETTINGS_SEARCH_KEYWORDS[section.id] || ""
+                    ].join(" ").toLowerCase();
+                    return query.split(/\s+/).every(word => haystack.includes(word));
+                  })
+                : visibleSections;
+              const groups: { group: SettingsGroup; sections: SettingsSection[] }[] = [];
+              for (const section of list) {
+                const last = groups[groups.length - 1];
+                if (last && last.group === section.group) last.sections.push(section);
+                else groups.push({ group: section.group, sections: [section] });
+              }
+              return groups.map(({ group, sections }) => {
+                // A search shows everything it found; the active section's group never hides it.
+                const collapsed = !searching && Boolean(collapsedGroups[group]) && !sections.some(section => section.id === selectedSection.id);
+                return (
+                  <div key={group} className={collapsed ? "settings-section-group-block is-collapsed" : "settings-section-group-block"}>
+                    <button type="button" className="settings-section-group" aria-expanded={!collapsed} onClick={() => toggleGroup(group)}>
+                      <span>{t(SETTINGS_GROUP_LABELS[group])}</span>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                    </button>
+                    {collapsed ? null : sections.map(section => {
+                      const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
+                      return (
+                        <button
+                          key={section.id}
+                          className={section.id === selectedSection.id ? "settings-section-button active" : "settings-section-button"}
+                          type="button"
+                          aria-current={section.id === selectedSection.id ? "page" : undefined}
+                          onClick={() => selectSection(section.id)}
+                        >
+                          <SettingsSectionIcon icon={section.icon} />
+                          <span>
+                            <strong>
+                              {t(section.title)}
+                              {settingsDirty.dirtySections[section.id] ? (
+                                <span className="settings-unsaved-dot" title={t("Unsaved changes")} aria-label={t("Unsaved changes")} />
+                              ) : null}
+                              {unreadCount > 0 ? <span className="settings-section-badge">{unreadCount}</span> : null}
+                            </strong>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </aside>
 
@@ -840,6 +874,20 @@ export default function SettingsPage() {
             </div>
           ) : null}
 
+          {workspace ? (
+            <SettingsPageHeader
+              eyebrow={t(SETTINGS_GROUP_LABELS[selectedSection.group])}
+              title={t(selectedSection.title)}
+              subtitle={t(selectedSection.description)}
+              status={(() => {
+                // Only sections that track a draft have a save state; the rest say nothing.
+                if (!(selectedSection.id in settingsDirty.dirtySections)) return null;
+                return settingsDirty.dirtySections[selectedSection.id] ? "dirty" : "saved";
+              })() as SettingsHeaderStatus}
+              statusLabels={{ saved: t("All changes saved"), dirty: t("Unsaved changes"), saving: t("Saving..."), readonly: t("Read-only") }}
+              actions={headerActions}
+            />
+          ) : null}
           {workspace ? renderSettingsSection({
             sectionId: selectedSection.id,
             workspace,
@@ -863,13 +911,9 @@ export default function SettingsPage() {
             onOpenSupport: () => setActiveSection("support-tickets")
           }) : null}
 
-          <div className="settings-dirty-bar" data-dirty={settingsDirty.dirtySections[selectedSection.id] ? "true" : "false"}>
-            {settingsDirty.dirtySections[selectedSection.id]
-              ? <>● {t("Unsaved changes")}</>
-              : <>✓ {t("No unsaved changes")}</>}
-          </div>
         </section>
       </div>
+      </SettingsHeaderActionsContext.Provider>
       </SettingsDirtyProvider>
     </AppShell>
   );
@@ -1139,117 +1183,114 @@ function PreferencesSection({
   language: string;
   onSaved: (settings: WorkspaceSettingsOverview) => void;
 }) {
-  // Personal preferences — theme and language live together on one page so the
-  // Account group stays tidy and each isn't a single-control screen of its own.
-  return (
-    <div className="settings-card-stack">
-      <AppearanceSection workspace={workspace} settings={settings} onSaved={onSaved} />
-      <LanguageLabelsSection workspace={workspace} settings={settings} language={language} onSaved={onSaved} />
-      <AutoLockSection language={language} />
-    </div>
-  );
-}
-
-function AutoLockSection({ language }: { language: string }) {
-  const t = (text: string) => studioT(text, language);
-  const [minutes, setMinutes] = useState(0);
-
-  useEffect(() => {
-    setMinutes(getAutoLockMinutes());
-  }, []);
-
-  return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="lock" eyebrow={t("Security")} title={t("Auto-lock")} />
-        <p className="muted-copy">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
-        <label className="quick-reply-settings-label">
-          <span>{t("Auto-lock")}</span>
-          <select
-            className="input"
-            value={minutes}
-            onChange={event => {
-              const next = parseInt(event.target.value, 10) || 0;
-              setMinutes(next);
-              setAutoLockMinutes(next);
-            }}
-          >
-            <option value={0}>{t("Off")}</option>
-            <option value={1}>{t("After 1 minute")}</option>
-            <option value={5}>{t("After 5 minutes")}</option>
-            <option value={15}>{t("After 15 minutes")}</option>
-            <option value={60}>{t("After 1 hour")}</option>
-          </select>
-        </label>
-        {/* Theme and Language next door have Save buttons; this one writes on
-            change, which read as "my choice was ignored". */}
-        <p className="muted-copy">{t("Saved automatically on this browser.")}</p>
-      </section>
-    </div>
-  );
-}
-
-function AppearanceSection({
-  workspace,
-  settings,
-  onSaved
-}: {
-  workspace: WorkspaceContext;
-  settings: WorkspaceSettingsOverview | null;
-  onSaved: (settings: WorkspaceSettingsOverview) => void;
-}) {
+  // Theme and language are personal to the signed-in user; the workspace values
+  // are only the fallback until the personal record has been read. One Save
+  // writes whichever of the two changed. Auto-lock is browser-local and saves
+  // itself on change, as before.
+  const canEditLanguage = workspaceAccessAllows(workspace.memberAccess, "settingsGeneral");
+  const [baseline, setBaseline] = useState<{ appTheme: string; selectedLanguage: string } | null>(null);
   const [appTheme, setAppTheme] = useState(settings?.appTheme ?? "System");
+  const [selectedLanguage, setSelectedLanguage] = useState(settings?.selectedLanguage ?? language ?? "English");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const language = settings?.selectedLanguage ?? "English";
-  const t = (text: string) => studioT(text, language);
+  const [autoLockMinutes, setAutoLockMinutesState] = useState(0);
+  const previewLanguage = selectedLanguage || language || "English";
+  const t = (text: string) => studioT(text, previewLanguage);
 
   useEffect(() => {
-    setAppTheme(settings?.appTheme ?? "System");
+    let cancelled = false;
+    const base = { appTheme: settings?.appTheme ?? "System", selectedLanguage: settings?.selectedLanguage ?? language ?? "English" };
+    setBaseline(null);
+    setAppTheme(base.appTheme);
+    setSelectedLanguage(base.selectedLanguage);
     setStatus("");
     setError("");
     getPersonalInterfaceSettings(workspace).then(personal => {
-      if (personal.appTheme) setAppTheme(personal.appTheme);
-    }).catch(() => undefined);
-  }, [settings, workspace.id]);
+      if (cancelled) return;
+      const next = { appTheme: personal.appTheme || base.appTheme, selectedLanguage: personal.selectedLanguage || base.selectedLanguage };
+      setAppTheme(next.appTheme);
+      setSelectedLanguage(next.selectedLanguage);
+      setBaseline(next);
+    }).catch(() => {
+      if (!cancelled) setBaseline(base);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [language, settings, workspace.id]);
 
-  async function handleSaveTheme() {
-    if (!settings) return;
+  useEffect(() => {
+    setAutoLockMinutesState(getAutoLockMinutes());
+  }, []);
+
+  const { dirty, markSaved } = useUnsavedGuard(
+    "preferences",
+    { appTheme, selectedLanguage },
+    baseline !== null && Boolean(settings),
+    () => handleSave(true)
+  );
+
+  async function handleSave(rethrow = false) {
+    if (!settings || !baseline) return;
     setSaving(true);
     setStatus("");
     setError("");
     try {
-      // Theme is ALWAYS personal — each user (owner included) keeps their own
-      // theme across their devices.
-      const personalResult = await savePersonalInterfaceSettings(workspace, { appTheme });
-      const savedTheme = personalResult.settings?.appTheme ?? appTheme;
-      onSaved({ ...settings, appTheme: savedTheme });
+      let savedSettings = settings;
+      let savedTheme = baseline.appTheme;
+      let savedLanguage = baseline.selectedLanguage;
+      if (appTheme !== baseline.appTheme) {
+        const result = await savePersonalInterfaceSettings(workspace, { appTheme });
+        savedTheme = result.settings?.appTheme ?? appTheme;
+        savedSettings = { ...savedSettings, appTheme: savedTheme };
+      }
+      if (selectedLanguage !== baseline.selectedLanguage) {
+        const result = await savePersonalInterfaceSettings(workspace, { selectedLanguage });
+        savedLanguage = result.settings?.selectedLanguage ?? selectedLanguage;
+        savedSettings = { ...savedSettings, selectedLanguage: savedLanguage };
+      }
+      setBaseline({ appTheme: savedTheme, selectedLanguage: savedLanguage });
       setAppTheme(savedTheme);
-      setStatus(personalResult.message || "Personal theme saved.");
+      setSelectedLanguage(savedLanguage);
+      markSaved();
+      onSaved(savedSettings);
+      setStatus(studioT("Preferences saved.", savedLanguage));
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Theme could not be saved.");
+      setError(saveError instanceof Error ? saveError.message : t("Preferences could not be saved."));
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
   }
 
+  const autoLockOptions: { minutes: number; label: string }[] = [
+    { minutes: 0, label: "Off" },
+    { minutes: 1, label: "1 min" },
+    { minutes: 5, label: "5 min" },
+    { minutes: 15, label: "15 min" },
+    { minutes: 60, label: "1 hour" }
+  ];
+
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack settings-preferences-page">
       <section className="card app-card">
-        <CardTitle icon="dashboard" eyebrow={t("Appearance")} title={t("Theme selector")} />
-        <p className="muted-copy">{t("This theme is personal to your account and synchronises across your devices.")}</p>
-        <label className="quick-reply-settings-label">
-          <span>{t("Theme")}</span>
-          {/* A segmented control instead of a native select: the chosen theme
-              is visibly pressed, and a screen reader hears it via aria-pressed. */}
-          <div className={saving || !settings ? "financial-segmented is-disabled" : "financial-segmented"} role="group" aria-label={t("Theme")}>
-            {(["System", "Light", "Dark"] as const).map(option => (
+        <SettingsCardHead
+          icon={<CardIconGlyph icon="paintbrush" />}
+          title={t("Appearance")}
+          subtitle={t("Choose a theme for your account across every device.")}
+        />
+        <div className="settings-theme-grid" role="radiogroup" aria-label={t("Theme")}>
+          {(["System", "Light", "Dark"] as const).map(option => {
+            const selected = appTheme === option;
+            return (
               <button
                 key={option}
                 type="button"
-                className={appTheme === option ? "active" : ""}
-                aria-pressed={appTheme === option}
+                role="radio"
+                aria-checked={selected}
+                className={selected ? "settings-theme-card is-selected" : "settings-theme-card"}
+                data-theme-preview={option.toLowerCase()}
                 disabled={saving || !settings}
                 onClick={() => {
                   setAppTheme(option);
@@ -1257,19 +1298,82 @@ function AppearanceSection({
                   setError("");
                 }}
               >
-                {t(option)}
+                <span className="settings-theme-preview" aria-hidden="true">
+                  <span className="settings-theme-preview-pane is-light"><i /><i /><i /></span>
+                  <span className="settings-theme-preview-pane is-dark"><i /><i /><i /></span>
+                </span>
+                <span className="settings-theme-label"><span className="settings-theme-radio" aria-hidden="true" />{t(option)}</span>
+                {selected ? <span className="settings-theme-check" aria-hidden="true">✓</span> : null}
               </button>
-            ))}
-          </div>
-        </label>
-        <div className="settings-action-row">
-          <button className="button" type="button" disabled={saving || !settings} onClick={handleSaveTheme}>
-            {saving ? t("Saving...") : t("Save Appearance")}
-          </button>
+            );
+          })}
         </div>
-        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{t(error)}</p> : null}
+        <p className="settings-field-hint">{t("Synced across your devices.")}</p>
       </section>
+
+      <section className="card app-card">
+        <SettingsCardHead
+          icon={<CardIconGlyph icon="language" />}
+          title={t("Language & region")}
+          subtitle={t("Choose the language used across NivaDesk.")}
+          aside={!canEditLanguage ? <span className="settings-tag">{t("Read-only")}</span> : null}
+        />
+        <label className="settings-field">
+          <span className="settings-field-label">{t("Language")}</span>
+          <select
+            className="input"
+            value={selectedLanguage}
+            disabled={!canEditLanguage || saving || !settings}
+            onChange={event => {
+              setSelectedLanguage(event.target.value);
+              setStatus("");
+              setError("");
+            }}
+          >
+            {SUPPORTED_STUDIO_LANGUAGES.map(option => (
+              <option value={option} key={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+        <p className="settings-field-hint">{t("Changes apply immediately after saving.")}</p>
+        {!canEditLanguage ? <p className="settings-field-hint">{t("Your current workspace role cannot edit Language & Labels.")}</p> : null}
+      </section>
+
+      <section className="card app-card">
+        <SettingsCardHead
+          icon={<CardIconGlyph icon="lock" />}
+          title={t("Auto-lock")}
+          subtitle={t("Require sign-in again after a period of inactivity.")}
+          aside={<span className="settings-tag">{t("This browser")}</span>}
+        />
+        <div className="settings-segmented" role="group" aria-label={t("Auto-lock")}>
+          {autoLockOptions.map(option => (
+            <button
+              key={option.minutes}
+              type="button"
+              className={autoLockMinutes === option.minutes ? "active" : ""}
+              aria-pressed={autoLockMinutes === option.minutes}
+              onClick={() => {
+                setAutoLockMinutesState(option.minutes);
+                setAutoLockMinutes(option.minutes);
+              }}
+            >
+              {t(option.label)}
+            </button>
+          ))}
+        </div>
+        {/* Theme and language above wait for Save; this one writes on change, so say so. */}
+        <p className="settings-field-hint">{t("Saved automatically on this browser.")}</p>
+        <p className="settings-field-hint">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
+      </section>
+
+      <div className="settings-save-row">
+        {status ? <p className="success-copy">{status}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
+        <button className="button" type="button" disabled={saving || !dirty || !settings} onClick={() => { void handleSave(); }}>
+          {saving ? t("Saving...") : t("Save changes")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1445,116 +1549,137 @@ function WorkspaceBrandingSection({
     }
   }
 
-  return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="storage" eyebrow={t("Branding")} title={t("Workspace name & subtitle")} />
-        <p className="muted-copy">{t("These details are shared by everyone in this workspace and appear in the app header.")}</p>
-        <label className="quick-reply-settings-label">
-          <span>{t("Company / Studio Name")}</span>
-          <input
-            className="input"
-            value={companyName}
-            disabled={!canEditCompanyName || savingIdentity || !settings}
-            placeholder={t("My Studio")}
-            onChange={event => {
-              setCompanyName(event.target.value);
-              setIdentityStatus("");
-              setIdentityError("");
-            }}
-          />
-        </label>
-        {!canEditCompanyName ? <p className="muted-copy">{t("Company / Studio Name can only be changed by the workspace owner.")}</p> : null}
-        <label className="quick-reply-settings-label">
-          <span>{t("Brand Subtitle")}</span>
-          <input
-            className="input"
-            value={appSubtitle}
-            disabled={!canEditBranding || savingIdentity || !settings}
-            placeholder="Bespoke Hand-Painted Dials"
-            onChange={event => {
-              setAppSubtitle(event.target.value);
-              setIdentityStatus("");
-              setIdentityError("");
-            }}
-          />
-        </label>
-        <div className="settings-action-row">
-          <button
-            className="button"
-            type="button"
-            disabled={savingIdentity || !brandingDirty || !settings || (!canEditCompanyName && !canEditBranding)}
-            onClick={() => { void handleSaveIdentity(); }}
-          >
-            {savingIdentity ? t("Saving...") : t("Save Branding")}
-          </button>
-        </div>
-        {identityStatus ? <p className="success-copy">{studioT(identityStatus, language)}</p> : null}
-        {identityError ? <p className="layout-error">{t(identityError)}</p> : null}
-      </section>
+  const previewInitials = (workspace.currentMemberDisplayName || "NivaDesk")
+    .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "N";
+  const previewName = companyName.trim() || workspace.name;
 
+  return (
+    <div className="settings-card-stack settings-branding-page">
       <section className="card app-card">
-        <CardTitle icon="storage" eyebrow={t("Workspace Logo")} title={t("Upload or replace only")} />
-        <div className="workspace-logo-row workspace-logo-editor">
-          {logoUrl ? (
-            <img src={logoUrl} alt={`${workspace.name} logo`} />
-          ) : (
-            <div className="workspace-logo-placeholder">
-              <span className="workspace-studio-fallback workspace-studio-fallback-preview" aria-label={t("Studio")}>
-                <span className="workspace-studio-mark" aria-hidden="true" />
-                <span className="workspace-studio-text">{t("Studio")}</span>
-              </span>
-            </div>
-          )}
-          <div className="workspace-logo-copy">
-            <strong>{logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}</strong>
-            <p className="muted-copy">{t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.")}</p>
-            {/* The picker accepted a file and then rejected it after the fact,
-                with nothing on screen saying what it would accept. */}
-            <p className="muted-copy">
-              {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
-              {" "}
-              {t("Maximum")} {maxSizeMB} MB.
-            </p>
-            <p className="muted-copy">
-              {t("Choosing a logo uploads and saves it immediately — it is separate from the Save Branding button, which saves only the name and subtitle.")}
-            </p>
-            <div className="workspace-logo-actions">
+        <SettingsCardHead title={t("Workspace identity")} subtitle={t("These details are shared by everyone in this workspace and appear in the app header.")} />
+        <div className="settings-two-col settings-branding-identity">
+          <div className="settings-field-stack">
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Company / Studio Name")}</span>
               <input
-                ref={logoInputRef}
-                type="file"
-                accept={WORKSPACE_LOGO_ACCEPT}
-                className="visually-hidden-file"
-                onClick={event => {
-                  event.currentTarget.value = "";
+                className="input"
+                value={companyName}
+                disabled={!canEditCompanyName || savingIdentity || !settings}
+                placeholder={t("My Studio")}
+                onChange={event => {
+                  setCompanyName(event.target.value);
+                  setIdentityStatus("");
+                  setIdentityError("");
                 }}
-                onChange={event => handleLogoFile(event.currentTarget.files?.[0])}
               />
+              {!canEditCompanyName ? <span className="settings-field-hint">{t("Company / Studio Name can only be changed by the workspace owner.")}</span> : null}
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Brand Subtitle")}</span>
+              <input
+                className="input"
+                value={appSubtitle}
+                disabled={!canEditBranding || savingIdentity || !settings}
+                placeholder="Bespoke Hand-Painted Dials"
+                onChange={event => {
+                  setAppSubtitle(event.target.value);
+                  setIdentityStatus("");
+                  setIdentityError("");
+                }}
+              />
+              <span className="settings-field-hint">{t("Shared with everyone in this workspace.")}</span>
+            </label>
+            <div className="settings-action-row">
               <button
                 className="button"
                 type="button"
-                disabled={uploadingLogo || !settings}
-                onClick={openLogoPicker}
+                disabled={savingIdentity || !brandingDirty || !settings || (!canEditCompanyName && !canEditBranding)}
+                onClick={() => { void handleSaveIdentity(); }}
               >
-                {uploadingLogo ? t("Uploading...") : logoUrl ? t("Replace Logo") : t("Upload Logo")}
+                {savingIdentity ? t("Saving...") : t("Save changes")}
               </button>
-              {logoUrl ? (
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={!canEditLogo || uploadingLogo || !settings}
-                  onClick={handleRemoveLogo}
-                >
-                  {t("Remove Logo")}
-                </button>
-              ) : null}
             </div>
-            {!canUploadLogo ? <p className="muted-copy">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
-            {!canEditLogo ? <p className="muted-copy">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
-            {logoStatus ? <p className="success-copy">{studioT(logoStatus, language)}</p> : null}
-            {logoError ? <p className="layout-error">{t(logoError)}</p> : null}
+            {identityStatus ? <p className="success-copy">{studioT(identityStatus, language)}</p> : null}
+            {identityError ? <p className="layout-error">{t(identityError)}</p> : null}
+          </div>
+          {/* What the header will look like, drawn from the unsaved drafts. */}
+          <div className="settings-branding-preview">
+            <div className="settings-branding-preview-head">
+              <span className="settings-field-label">{t("Header preview")}</span>
+              <span className="settings-tag">{t("Live preview")}</span>
+            </div>
+            <div className="settings-branding-header-mock" aria-hidden="true">
+              <span className="settings-branding-mock-menu"><i /><i /><i /></span>
+              {logoUrl ? <img src={logoUrl} alt="" /> : <span className="settings-branding-mock-mark">{previewName.trim().charAt(0).toUpperCase() || "N"}</span>}
+              <span className="settings-branding-mock-name">{previewName}</span>
+              {appSubtitle.trim() ? <span className="settings-branding-mock-divider" /> : null}
+              {appSubtitle.trim() ? <span className="settings-branding-mock-subtitle">{appSubtitle}</span> : null}
+              <span className="settings-branding-mock-actions"><i /><i /><b>{previewInitials}</b></span>
+            </div>
           </div>
         </div>
+      </section>
+
+      <section className="card app-card">
+        <SettingsCardHead title={t("Workspace Logo")} subtitle={t("Used in the app header and shared workspace surfaces.")} />
+        <div className="settings-logo-stage">
+          {logoUrl ? (
+            <img src={logoUrl} alt={`${workspace.name} logo`} />
+          ) : (
+            <span className="workspace-studio-fallback workspace-studio-fallback-preview" aria-label={t("Studio")}>
+              <span className="workspace-studio-mark" aria-hidden="true" />
+              <span className="workspace-studio-text">{t("Studio")}</span>
+            </span>
+          )}
+        </div>
+        <div className="settings-logo-meta">
+          <span className={logoUrl ? "settings-status-pill is-saved" : "settings-status-pill is-readonly"}>
+            <span className="settings-status-pill-mark" aria-hidden="true">{logoUrl ? "✓" : "○"}</span>
+            {logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}
+          </span>
+          {/* The picker accepted a file and then rejected it after the fact,
+              with nothing on screen saying what it would accept. */}
+          <span className="settings-field-hint">
+            {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
+            {" "}
+            {t("Maximum")} {maxSizeMB} MB.
+          </span>
+        </div>
+        <div className="workspace-logo-actions">
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept={WORKSPACE_LOGO_ACCEPT}
+            className="visually-hidden-file"
+            onClick={event => {
+              event.currentTarget.value = "";
+            }}
+            onChange={event => handleLogoFile(event.currentTarget.files?.[0])}
+          />
+          <button
+            className="button"
+            type="button"
+            disabled={uploadingLogo || !settings}
+            onClick={openLogoPicker}
+          >
+            {uploadingLogo ? t("Uploading...") : logoUrl ? t("Replace Logo") : t("Upload Logo")}
+          </button>
+          {logoUrl ? (
+            <button
+              className="button danger secondary"
+              type="button"
+              disabled={!canEditLogo || uploadingLogo || !settings}
+              onClick={handleRemoveLogo}
+            >
+              {t("Remove Logo")}
+            </button>
+          ) : null}
+        </div>
+        <p className="settings-field-hint">{t("Logo changes save immediately.")}</p>
+        {!canUploadLogo ? <p className="settings-field-hint">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
+        {!canEditLogo ? <p className="settings-field-hint">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
+        {logoStatus ? <p className="success-copy">{studioT(logoStatus, language)}</p> : null}
+        {logoError ? <p className="layout-error">{t(logoError)}</p> : null}
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
@@ -1570,95 +1695,6 @@ function WorkspaceBrandingSection({
   );
 }
 
-function LanguageLabelsSection({
-  workspace,
-  settings,
-  language,
-  onSaved
-}: {
-  workspace: WorkspaceContext;
-  settings: WorkspaceSettingsOverview | null;
-  language: string;
-  onSaved: (settings: WorkspaceSettingsOverview) => void;
-}) {
-  const [selectedLanguage, setSelectedLanguage] = useState(settings?.selectedLanguage ?? language ?? "English");
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const canEdit = workspaceAccessAllows(workspace.memberAccess, "settingsGeneral");
-  const previewLanguage = selectedLanguage || language || "English";
-  const t = (text: string) => studioT(text, previewLanguage);
-
-  useEffect(() => {
-    setSelectedLanguage(settings?.selectedLanguage ?? language ?? "English");
-    setStatus("");
-    setError("");
-    getPersonalInterfaceSettings(workspace).then(personal => {
-      if (personal.selectedLanguage) setSelectedLanguage(personal.selectedLanguage);
-    }).catch(() => undefined);
-  }, [language, settings, workspace.id]);
-
-  async function handleSave() {
-    if (!settings) return;
-    setSaving(true);
-    setStatus("");
-    setError("");
-    try {
-      // Language is ALWAYS personal — each user (owner included) keeps their own
-      // language preference across their devices.
-      const result = await savePersonalInterfaceSettings(workspace, { selectedLanguage });
-      const savedSettings = { ...settings, selectedLanguage: result.settings?.selectedLanguage ?? selectedLanguage };
-      onSaved(savedSettings);
-      setSelectedLanguage(savedSettings.selectedLanguage);
-      setStatus(studioT(result.message || "Language settings saved.", savedSettings.selectedLanguage));
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t("Language settings could not be saved."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="settings-card-stack">
-      {!canEdit ? (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Language settings are read-only")} />
-          <p className="muted-copy">{t("Your current workspace role cannot edit Language & Labels.")}</p>
-        </section>
-      ) : null}
-
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="language" eyebrow={t("Language & Labels")} title={t("Select Language")} />
-        <label className="quick-reply-settings-label">
-          <span>{t("Language")}</span>
-          <select
-            className="input"
-            value={selectedLanguage}
-            disabled={!canEdit || saving}
-            onChange={event => {
-              setSelectedLanguage(event.target.value);
-              setStatus("");
-              setError("");
-            }}
-          >
-            {SUPPORTED_STUDIO_LANGUAGES.map(language => (
-              <option value={language} key={language}>{language}</option>
-            ))}
-          </select>
-        </label>
-        <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
-            {saving ? t("Saving...") : t("Save Language Settings")}
-          </button>
-        </div>
-        {status ? <p className="success-copy">{t(status)}</p> : null}
-        {error ? <p className="layout-error">{t(error)}</p> : null}
-        <p className="muted-copy">{t("This language is personal to your account and synchronises across your devices.")}</p>
-        <p className="muted-copy">{t("The new language applies immediately after you save — no reload needed.")}</p>
-      </section>
-    </div>
-  );
-}
 
 function newHeadingItem(title: string): HeadingItem {
   const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1911,6 +1947,18 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     updateList(key, blockSettings[key].filter(item => item.id !== id));
   }
 
+  // The order of these rows is the order they take on every order card, so the
+  // list can be re-ordered here; it is the same array the save already writes.
+  function moveListItem(key: WorkflowHeadingListKey, id: string, direction: -1 | 1) {
+    if (!blockSettings) return;
+    const items = [...blockSettings[key]];
+    const index = items.findIndex(item => item.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= items.length) return;
+    [items[index], items[target]] = [items[target], items[index]];
+    updateList(key, items);
+  }
+
   function confirmStepRemoval() {
     if (!blockSettings || !pendingStepRemoval) return;
     updateList("customSteps", blockSettings.customSteps.filter(item => item.id !== pendingStepRemoval.id));
@@ -2044,22 +2092,30 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
   const [pendingTemplate, setPendingTemplate] = useState<WorkflowTemplate | null>(null);
   const [pendingStepRemoval, setPendingStepRemoval] = useState<{ id: string; title: string } | null>(null);
 
-  function renderHeadingList(key: WorkflowHeadingListKey, emptyTitle: string, addTitle: string, placeholder: string) {
+  function renderHeadingList(key: WorkflowHeadingListKey, emptyTitle: string, addTitle: string, placeholder: string, addLabel: string, emptyLabel: string) {
     const items = blockSettings?.[key] ?? [];
     return (
-      <div className="workflow-settings-list">
-        <div className="quick-reply-template-heading">
+      <div className="settings-heading-list">
+        <div className="settings-heading-list-head">
           <strong>{t(emptyTitle)}</strong>
-          <button className="button secondary" type="button" disabled={!canEdit || saving || !blockSettings} onClick={() => addListItem(key, addTitle)}>
-            {t("Add")}
+          <button className="settings-link-button" type="button" disabled={!canEdit || saving || !blockSettings} onClick={() => addListItem(key, addTitle)}>
+            + {t(addLabel)}
           </button>
         </div>
         {items.length === 0 ? (
-          <p className="muted-copy">{t("No custom rows yet.")}</p>
+          <p className="settings-empty-line">{t(emptyLabel)}</p>
         ) : null}
         {items.map((item, index) => (
-          <div className="workflow-settings-row" key={item.id}>
-            <span aria-hidden="true" title={t("Row number — the order these appear in on order cards.")}>{index + 1}</span>
+          <div className="settings-heading-row" key={item.id}>
+            <span className="settings-heading-row-index" aria-hidden="true" title={t("Row number — the order these appear in on order cards.")}>{index + 1}</span>
+            <span className="settings-heading-row-move">
+              <button type="button" className="settings-icon-button" disabled={!canEdit || saving || index === 0} onClick={() => moveListItem(key, item.id, -1)} aria-label={t("Move up")} title={t("Move up")}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5-5 5 5" /></svg>
+              </button>
+              <button type="button" className="settings-icon-button" disabled={!canEdit || saving || index === items.length - 1} onClick={() => moveListItem(key, item.id, 1)} aria-label={t("Move down")} title={t("Move down")}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5" /></svg>
+              </button>
+            </span>
             <input
               className="input"
               value={item.title}
@@ -2068,14 +2124,14 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
               onChange={event => renameListItem(key, item.id, event.target.value)}
             />
             <button
-              className="icon-action danger"
+              className="settings-icon-button danger"
               type="button"
               disabled={!canEdit || saving}
               onClick={() => removeListItem(key, item.id)}
               aria-label={t("Remove")}
               title={t("Remove this row. Existing orders keep their recorded values but stop showing this heading.")}
             >
-              ×
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
             </button>
           </div>
         ))}
@@ -2102,8 +2158,13 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     : DEFAULT_ACTIVE_STATUS_OPTIONS;
   const statusOptions = Array.from(new Set([...STATUS_OPTION_POOL, ...activeStatuses].map(item => item.trim()).filter(Boolean)));
 
+  const templatePreview = WORKFLOW_STANDARD_TEMPLATES[blockSettings.businessType] ?? DEFAULT_WORKFLOW_TEMPLATE;
+  const jumpTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack settings-workflow-page">
       {pendingStepRemoval ? (
         <SettingsDialog
           eyebrow={t("Workflow Steps")}
@@ -2144,167 +2205,194 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
         </SettingsDialog>
       ) : null}
       {!canEdit ? (
-        <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Starter") : t("Workflow settings are read-only")} />
-          <p className="muted-copy">
-            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Starter.") : t("Your current workspace role cannot edit workflow settings.")}
-          </p>
-        </section>
+        <p className="settings-notice is-caution">
+          <strong>{canEditRole ? t("Workflow customization starts with NivaDesk Starter") : t("Workflow settings are read-only")}</strong>
+          {" "}
+          {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Starter.") : t("Your current workspace role cannot edit workflow settings.")}
+        </p>
       ) : null}
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow={studioT("Business Type", language)} title={studioT("Standard workflow template", language)} />
-        <label className="quick-reply-settings-label">
-          <span>{studioT("Select Industry", language)}</span>
-          <select
-            className="input"
-            value={blockSettings.businessType}
-            disabled={!canEdit || saving}
-            onChange={event => selectBusinessType(event.target.value)}
-          >
-            {BUSINESS_TYPES.map(type => <option value={type} key={type}>{studioT(type, language)}</option>)}
-          </select>
-        </label>
-        <label className="quick-reply-settings-label">
-          <span>{studioT("Business description", language)}</span>
-          <textarea
-            className="input"
-            value={blockSettings.businessDescriptionPrompt}
-            disabled={!canEdit || saving}
-            rows={4}
-            placeholder={studioT("Describe what the business does and which workflow steps matter.", language)}
-            onChange={event => updateSetting("businessDescriptionPrompt", event.target.value)}
-          />
-        </label>
-        <div className="settings-action-row">
-          <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={applyStandardTemplate}>
-            {studioT("Apply Standard Template", language)}
-          </button>
-        </div>
-        {foreignTrades.length > 0 ? (
-          <div className="workflow-mixed-warning">
-            <strong>{t("This workflow mixes fields from more than one trade")}</strong>
-            <p className="muted-copy">
-              {t("Fields matching these industry templates are also in use:")} {foreignTrades.map(type => studioT(type, language)).join(", ")}.
-              {" "}
-              {t("That is fine if you built it deliberately. Applying the standard template replaces them — on existing orders too, since these headings are shared.")}
+      <nav className="settings-anchor-tabs" aria-label={t("Workflow Steps")}>
+        {[
+          ["workflow-template", "Template"],
+          ["workflow-status-menus", "Status menus"],
+          ["workflow-checks", "Checks"],
+          ["workflow-materials", "Materials"],
+          ["workflow-summary", "Order summary"]
+        ].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => jumpTo(id)}>{t(label)}</button>
+        ))}
+      </nav>
+
+      <section className="card app-card" id="workflow-template">
+        <SettingsCardHead title={t("Standard workflow template")} />
+        <div className="settings-two-col">
+          <div className="settings-field-stack">
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Industry")}</span>
+              <select
+                className="input"
+                value={blockSettings.businessType}
+                disabled={!canEdit || saving}
+                onChange={event => selectBusinessType(event.target.value)}
+              >
+                {BUSINESS_TYPES.map(type => <option value={type} key={type}>{studioT(type, language)}</option>)}
+              </select>
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Business description")}</span>
+              <textarea
+                className="input"
+                value={blockSettings.businessDescriptionPrompt}
+                disabled={!canEdit || saving}
+                rows={5}
+                placeholder={t("Describe what the business does and which workflow steps matter.")}
+                onChange={event => updateSetting("businessDescriptionPrompt", event.target.value)}
+              />
+            </label>
+            <div className="settings-action-row">
+              <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={applyStandardTemplate}>
+                {t("Apply template")}
+              </button>
+            </div>
+            <p className="settings-field-hint">{t("Applying a template updates shared headings for the whole workspace.")}</p>
+          </div>
+          <div className="settings-template-preview">
+            <p className="settings-field-label">
+              {t("Template preview")} <span className="settings-field-hint">({t("not saved workflow data")})</span>
+            </p>
+            <ol className="settings-template-flow" aria-label={t("Production Steps")}>
+              {templatePreview.customSteps.map((step, index) => (
+                <li key={step}>
+                  <span className="settings-template-flow-dot">{index + 1}</span>
+                  <span className="settings-template-flow-label">{studioT(step, language)}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="settings-field-hint">
+              {t("Yes / No checks")}: {templatePreview.customToggles.map(item => studioT(item, language)).join(", ") || "—"}
+              {" · "}
+              {t("Material checks")}: {templatePreview.inventoryLabels.map(item => studioT(item, language)).join(", ") || "—"}
             </p>
           </div>
+        </div>
+        {foreignTrades.length > 0 ? (
+          <p className="settings-notice is-caution">
+            <strong>{t("This workflow mixes fields from more than one trade")}</strong>
+            {" "}
+            {t("Fields matching these industry templates are also in use:")} {foreignTrades.map(type => studioT(type, language)).join(", ")}.
+            {" "}
+            {t("That is fine if you built it deliberately. Applying the standard template replaces them — on existing orders too, since these headings are shared.")}
+          </p>
         ) : null}
-        <p className="muted-copy">{t("Matches the app’s Business Type template flow. Saving updates these headings for everyone in the workspace, on every device.")}</p>
       </section>
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow={t("Status Menu Options")} title={t("Order status dropdowns")} />
-        <button className="status-menu-toggle-card" type="button" onClick={() => setStatusMenuOpen(open => !open)}>
-          <span className="status-menu-toggle-icon" aria-hidden="true">{statusMenuOpen ? "⌄" : "›"}</span>
-          <span>
-            <strong>{statusMenuOpen ? t("Hide Status Options") : t("Show Status Options")}</strong>
-            <small>{activeStatuses.length} {t("active statuses selected")}</small>
+      <section className="card app-card" id="workflow-status-menus">
+        <SettingsCardHead title={t("Status menu options")} />
+        <button className="settings-disclosure" type="button" aria-expanded={statusMenuOpen} onClick={() => setStatusMenuOpen(open => !open)}>
+          <span className="settings-disclosure-chevron" aria-hidden="true">{statusMenuOpen ? "⌄" : "›"}</span>
+          <span className="settings-disclosure-copy">
+            <strong>{t("Order status dropdowns")}</strong>
+            <small>{activeStatuses.length} {t("active statuses")}</small>
           </span>
-          <b>{statusMenuOpen ? t("Collapse") : t("Expand")}</b>
+          <span className="settings-tag">{statusMenuOpen ? t("Collapse") : t("Expand")}</span>
         </button>
-
         {statusMenuOpen ? (
-          <div className="workflow-status-option-list">
+          <div className="settings-status-option-grid">
             {statusOptions.map(option => {
               const checked = activeStatuses.some(active => active.toLowerCase() === option.toLowerCase());
               return (
-                <label className={checked ? "workflow-status-option active" : "workflow-status-option"} key={option}>
-                  <span aria-hidden="true">{checked ? "✓" : "○"}</span>
-                  <strong>{option}</strong>
+                <label className={checked ? "settings-status-option is-active" : "settings-status-option"} key={option}>
                   <input
                     type="checkbox"
                     checked={checked}
                     disabled={!canEdit || saving}
                     onChange={event => toggleActiveStatus(option, event.target.checked)}
                   />
+                  <span>{option}</span>
                 </label>
               );
             })}
           </div>
         ) : null}
-        <p className="muted-copy">{t("These options match the app’s status menu pool and control the dropdowns used in web order cards.")}</p>
+        <p className="settings-field-hint">{t("Controls the status choices used in web order cards.")}</p>
       </section>
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="checklist" eyebrow={t("Production Steps")} title={t("Status dropdown headings")} />
-        {renderHeadingList("customSteps", "Custom Status Menus", "New Step", "Step name")}
-      </section>
+      <div className="settings-two-col settings-workflow-columns">
+        <div className="settings-card-stack">
+          <section className="card app-card" id="workflow-checks">
+            <SettingsCardHead title={t("Production steps")} />
+            {renderHeadingList("customSteps", "Status dropdown headings", "New Step", "Step name", "Add step", "No custom steps yet")}
+            <div className="settings-divider" />
+            {renderHeadingList("customToggles", "Yes / No checks", "New Toggle", "Toggle name", "Add check", "No custom checks yet")}
+          </section>
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="check" eyebrow={t("Production Toggles")} title={t("Yes / No checks")} />
-        {renderHeadingList("customToggles", "Extra Yes / No checks", "New Toggle", "Toggle name")}
-      </section>
-
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="shippingBox" eyebrow={t("Materials & Inventory")} title={t("Material check headings")} />
-        {renderHeadingList("materialsDefaultChecks", "Default material checks", "New Material Check", "Material check name")}
-        <div className="settings-divider" />
-        {renderHeadingList("materialsToggles", "Extra Yes / No checks", "New Material Toggle", "Material toggle name")}
-        <div className="settings-divider" />
-        <label className="settings-toggle-row">
-          <span>
-            <strong>{t("Show Notes / Supplier")}</strong>
-            <small>{t("Matches the app’s Materials & Inventory notes/supplier field visibility.")}</small>
-          </span>
-          <input
-            type="checkbox"
-            checked={blockSettings.showMaterialsNotesSupplier}
-            disabled={!canEdit || saving}
-            onChange={event => updateSetting("showMaterialsNotesSupplier", event.target.checked)}
-          />
-        </label>
-        <label className="quick-reply-settings-label">
-          {t("Notes / Supplier heading")}
-          <input
-            className="input"
-            value={blockSettings.materialsNotesSupplierLabel}
-            disabled={!canEdit || saving}
-            onChange={event => updateSetting("materialsNotesSupplierLabel", event.target.value)}
-            placeholder={t("Notes / Supplier")}
-          />
-        </label>
-      </section>
-
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="orders" eyebrow={t("Order Summary")} title={t("Summary rows and small order badges")} />
-        <div className="workflow-select-grid">
-          {[
-            ["Summary 1", "summaryStep1"],
-            ["Summary 2", "summaryStep2"],
-            ["Badge 1", "orderListStep1"],
-            ["Badge 2", "orderListStep2"]
-          ].map(([label, key]) => (
-            <label className="quick-reply-settings-label" key={key}>
-              {t(label)}
-              <select
-                className="input"
-                value={String(blockSettings[key as keyof BlockHeadingSettings] || "")}
-                disabled={!canEdit || saving}
-                onChange={event => updateSetting(key as "summaryStep1" | "summaryStep2" | "orderListStep1" | "orderListStep2", event.target.value)}
-              >
-                {steps.map(step => <option key={step.id} value={step.title}>{step.title}</option>)}
-              </select>
-            </label>
-          ))}
+          <section className="card app-card" id="workflow-summary">
+            <SettingsCardHead title={t("Order summary")} />
+            <div className="settings-select-grid">
+              {[
+                ["Summary 1", "summaryStep1"],
+                ["Summary 2", "summaryStep2"],
+                ["Badge 1", "orderListStep1"],
+                ["Badge 2", "orderListStep2"]
+              ].map(([label, key]) => (
+                <label className="settings-field" key={key}>
+                  <span className="settings-field-label">{t(label)}</span>
+                  <select
+                    className="input"
+                    value={String(blockSettings[key as keyof BlockHeadingSettings] || "")}
+                    disabled={!canEdit || saving}
+                    onChange={event => updateSetting(key as "summaryStep1" | "summaryStep2" | "orderListStep1" | "orderListStep2", event.target.value)}
+                  >
+                    {steps.map(step => <option key={step.id} value={step.title}>{step.title}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <p className="settings-field-hint">{t("These selections map to summary rows and small order-card badges.")}</p>
+          </section>
         </div>
-        <p className="muted-copy">{t("These fields match the app’s Order Summary status rows and the shortened badges on the small order cards.")}</p>
-      </section>
 
-      <section className="card app-card quick-reply-settings-actions">
-        <div>
-          <strong>{t("Shared workflow settings")}</strong>
-          <p className="muted-copy">{t("These headings are shared by your whole workspace: every teammate and every device — Mac, iPhone, iPad, Android and web — sees the same list, on new and existing orders alike.")}</p>
-        </div>
-        <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving || !workflowDirty} onClick={() => { void handleSave(); }}>
-            {saving ? studioT("Saving...", language) : studioT("Save Workflow Settings", language)}
-          </button>
-        </div>
+        <section className="card app-card" id="workflow-materials">
+          <SettingsCardHead title={t("Materials & Inventory")} />
+          {renderHeadingList("materialsDefaultChecks", "Material check headings", "New Material Check", "Material check name", "Add material check", "No material checks yet")}
+          <div className="settings-divider" />
+          <label className="settings-switch-row">
+            <input
+              type="checkbox"
+              className="settings-switch"
+              checked={blockSettings.showMaterialsNotesSupplier}
+              disabled={!canEdit || saving}
+              onChange={event => updateSetting("showMaterialsNotesSupplier", event.target.checked)}
+            />
+            <span>{t("Show Notes / Supplier")}</span>
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Notes / Supplier heading")}</span>
+            <input
+              className="input"
+              value={blockSettings.materialsNotesSupplierLabel}
+              disabled={!canEdit || saving}
+              onChange={event => updateSetting("materialsNotesSupplierLabel", event.target.value)}
+              placeholder={t("Notes / Supplier")}
+            />
+          </label>
+          <div className="settings-divider" />
+          {renderHeadingList("materialsToggles", "Extra Yes / No checks", "New Material Toggle", "Material toggle name", "Add check", "No custom checks yet")}
+        </section>
+      </div>
+
+      <div className="settings-save-row settings-save-bar">
+        <p className="settings-save-bar-note">
+          <CardIconGlyph icon="team" />
+          {t("Shared with every teammate and device.")}
+        </p>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
+        <button className="button" type="button" disabled={!canEdit || saving || !workflowDirty} onClick={() => { void handleSave(); }}>
+          {saving ? studioT("Saving...", language) : t("Save workflow settings")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2321,10 +2409,12 @@ function settingsWithDefaultCompanyNumbers(settings: WorkspaceSettingsOverview |
   if (settings.companyNumbers.length > 0) return settings;
   return {
     ...settings,
+    // Fixed ids: the seed runs again whenever the settings document changes,
+    // and random ids made every re-seed look like an unsaved edit.
     companyNumbers: [
-      newCompanyNumber("VAT Number"),
-      newCompanyNumber("EORI Number"),
-      newCompanyNumber("Company No.")
+      { id: "default-vat-number", title: "VAT Number", value: "" },
+      { id: "default-eori-number", title: "EORI Number", value: "" },
+      { id: "default-company-number", title: "Company No.", value: "" }
     ]
   };
 }
@@ -2428,14 +2518,20 @@ function PdfExportSettingsSection({
     ? PDF_SETTING_TOGGLES.filter(([key]) => !["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"].includes(String(key)))
     : PDF_SETTING_TOGGLES;
 
+  // The unsaved-changes baseline must be the seeded draft (fresh ids for the
+  // default company-number rows), so the guard only arms once seeding is done.
+  const [pdfSeeded, setPdfSeeded] = useState(false);
   useEffect(() => {
+    setPdfSeeded(false);
     setDraft(settingsWithDefaultCompanyNumbers(settings));
     setStatus("");
     setError("");
     if (isWorkflowOnly && settings) {
       getPersonalInterfaceSettings(workspace).then(personal => {
         setDraft(current => current ? { ...current, ...personal } : current);
-      }).catch(() => undefined);
+      }).catch(() => undefined).finally(() => setPdfSeeded(true));
+    } else {
+      setPdfSeeded(true);
     }
   }, [settings, isWorkflowOnly, workspace]);
 
@@ -2443,13 +2539,50 @@ function PdfExportSettingsSection({
   // injects three company-number rows with fresh crypto.randomUUID() ids for a
   // workspace that has never saved any, so a document comparison could never
   // match.
-  const [pdfPreview, setPdfPreview] = useState<{ kind: "invoice" | "jobsheet"; html: string } | null>(null);
-
   const { dirty: pdfDirty, markSaved: markPdfSaved } = useUnsavedGuard(
     "pdf",
     draft,
-    Boolean(draft),
+    Boolean(draft) && pdfSeeded,
     () => handleSave(true)
+  );
+
+  // The live preview: the same generators the real print buttons use, loaded
+  // once from the order-detail module and re-run on every unsaved change.
+  type PdfPreviewModule = { invoice: (settings: WorkspaceSettingsOverview) => string; jobsheet: (settings: WorkspaceSettingsOverview, name: string) => string };
+  const [previewModule, setPreviewModule] = useState<PdfPreviewModule | null>(null);
+  const [previewKind, setPreviewKind] = useState<"invoice" | "jobsheet">("invoice");
+  const previewFrameRef = useRef<HTMLDivElement | null>(null);
+  const [previewScale, setPreviewScale] = useState(0.5);
+  useEffect(() => {
+    let cancelled = false;
+    import("@/app/orders/OrderDetailContent").then(mod => {
+      if (!cancelled) setPreviewModule({ invoice: mod.invoicePreviewHtml, jobsheet: mod.jobSheetPreviewHtml });
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    const node = previewFrameRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width > 0) setPreviewScale(Math.min(1, width / 794));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [draft === null]);
+  const previewHtml = useMemo(() => {
+    if (!previewModule || !draft || !settings) return "";
+    const previewSettings = { ...settings, ...draft } as WorkspaceSettingsOverview;
+    return previewKind === "invoice" ? previewModule.invoice(previewSettings) : previewModule.jobsheet(previewSettings, workspace.name);
+  }, [previewModule, draft, settings, previewKind, workspace.name]);
+
+  useSettingsHeaderActions(
+    <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
+      {t("Open Export page")}
+    </Link>,
+    [language]
   );
 
   if (!draft) {
@@ -2481,22 +2614,6 @@ function PdfExportSettingsSection({
         visiblePdfToggles.every(([key]) => Boolean(draft[key]) === preset.values[key])
       )?.id ?? null
     : null;
-
-  // Loaded on demand: the templates live in the order-detail module, which is
-  // the point — the preview and the real print buttons share one generator.
-  async function openPdfPreview(kind: "invoice" | "jobsheet") {
-    if (!draft || !settings) return;
-    try {
-      const mod = await import("@/app/orders/OrderDetailContent");
-      const previewSettings = { ...settings, ...draft } as WorkspaceSettingsOverview;
-      const html = kind === "invoice"
-        ? mod.invoicePreviewHtml(previewSettings)
-        : mod.jobSheetPreviewHtml(previewSettings, workspace.name);
-      setPdfPreview({ kind, html });
-    } catch (previewError) {
-      setError(previewError instanceof Error ? previewError.message : t("Preview could not be loaded."));
-    }
-  }
 
   function updateCompanyNumber(id: string, patch: Partial<CompanyNumberSetting>) {
     setDraft(current => current ? {
@@ -2567,140 +2684,163 @@ function PdfExportSettingsSection({
     }
   }
 
+  const toggleLabels = new Map<string, string>(PDF_SETTING_TOGGLES.map(([key, label]) => [String(key), label]));
+  const visibleKeys = new Set(visiblePdfToggles.map(([key]) => String(key)));
+  const financeKeys = ["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"];
+  const toggleGroups: { title: string; keys: PdfToggleKey[] }[] = [
+    { title: "Customer details", keys: ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowAddress", "pdfShowShippingAddress"] },
+    { title: "Operations", keys: ["pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping"] },
+    { title: "Payments", keys: ["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"] }
+  ];
+
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack settings-pdf-page">
       {!canEdit ? (
+        <p className="settings-notice">
+          {isWorkflowOnly
+            ? t("Payment and financial PDF fields remain hidden. You can edit your own non-financial export sections below.")
+            : t("Your current workspace role cannot edit PDF Export settings.")}
+        </p>
+      ) : null}
+
+      <div className="settings-pdf-layout">
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Safe access")} title={t("Finance-free PDF preferences")} />
-          <p className="muted-copy">
-            {isWorkflowOnly
-              ? t("Payment and financial PDF fields remain hidden. You can edit your own non-financial export sections below.")
-              : t("Your current workspace role cannot edit PDF Export settings.")}
-          </p>
+          <SettingsCardHead title={t("Document preset")} subtitle={t("Start with a recommended set of sections, then customise it.")} />
+          <div className="settings-preset-tabs" role="group" aria-label={t("PDF presets")}>
+            {PDF_SECTION_PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                className={activePdfPresetId === preset.id ? "is-active" : ""}
+                aria-pressed={activePdfPresetId === preset.id}
+                disabled={!canEdit || saving}
+                onClick={() => applyPdfPreset(preset)}
+              >
+                {t(preset.label)}
+              </button>
+            ))}
+            <span className={activePdfPresetId === null ? "is-active is-custom" : "is-custom"} aria-hidden={activePdfPresetId !== null}>
+              {t("Custom")}
+            </span>
+          </div>
+
+          <h4 className="settings-subheading">{t("Visible sections")}</h4>
+          <div className="settings-toggle-groups">
+            {toggleGroups.map(group => {
+              const keys = group.keys.filter(key => visibleKeys.has(String(key)));
+              if (keys.length === 0) return null;
+              return (
+                <div key={group.title} className="settings-toggle-group">
+                  <p className="settings-toggle-group-title">{t(group.title)}</p>
+                  {keys.map(key => {
+                    const isFinance = financeKeys.includes(String(key));
+                    const isInternal = String(key) === "pdfShowFinInternal";
+                    // Mirrors the server's personal-capable list: finance keys and
+                    // company numbers are always workspace-shared.
+                    const scope = isFinance || !isWorkflowOnly ? "Shared" : "Personal";
+                    return (
+                      <div key={String(key)} className={isInternal ? "settings-toggle-line is-caution" : "settings-toggle-line"}>
+                        <label className="settings-toggle-line-main">
+                          <input
+                            type="checkbox"
+                            className="settings-switch"
+                            checked={Boolean(draft[key])}
+                            disabled={!canEdit || saving}
+                            onChange={event => updateBoolean(key, event.target.checked)}
+                          />
+                          <span className="settings-toggle-line-label">{t(toggleLabels.get(String(key)) ?? String(key))}</span>
+                          <span className="settings-tag is-muted">{t(scope)}</span>
+                        </label>
+                        {isInternal ? (
+                          <p className={draft.pdfShowFinInternal ? "settings-field-hint is-danger" : "settings-field-hint"}>
+                            {draft.pdfShowFinInternal
+                              ? t("Internal Financials prints your cost, profit and supplier details. Do not send that PDF to a customer.")
+                              : t("Internal cost and profit are never included unless enabled.")}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+          <p className="settings-field-hint">{t("Finance-free preferences can be personal. Financial options are owner-managed and shared.")}</p>
+        </section>
+
+        <section className="card app-card settings-pdf-preview-card">
+          <SettingsCardHead title={t("PDF preview")} subtitle={t("Sample order · live preview")} />
+          <div className="settings-pdf-preview" ref={previewFrameRef} style={{ height: `${Math.round(1123 * previewScale)}px` }}>
+            {previewHtml ? (
+              <iframe
+                srcDoc={previewHtml}
+                sandbox=""
+                title={t("PDF preview")}
+                style={{ transform: `scale(${previewScale})` }}
+              />
+            ) : (
+              <p className="settings-field-hint">{t("Loading...")}</p>
+            )}
+          </div>
+          <div className="settings-button-row">
+            <button type="button" className={previewKind === "invoice" ? "button secondary is-selected" : "button secondary"} aria-pressed={previewKind === "invoice"} onClick={() => setPreviewKind("invoice")}>
+              {t("Preview invoice")}
+            </button>
+            <button type="button" className={previewKind === "jobsheet" ? "button secondary is-selected" : "button secondary"} aria-pressed={previewKind === "jobsheet"} onClick={() => setPreviewKind("jobsheet")}>
+              {t("Preview job sheet")}
+            </button>
+          </div>
+          <p className="settings-field-hint">{t("The preview uses a sample order and your current unsaved choices, rendered by the same template the real print buttons use.")}</p>
+        </section>
+      </div>
+
+      {!isWorkflowOnly ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Company invoice numbers")} subtitle={t("VAT, EORI, company number or another reference printed on invoices.")} />
+          <div className="settings-table settings-company-numbers">
+            <div className="settings-table-head" aria-hidden="true">
+              <span>{t("Label")}</span>
+              <span>{t("Number / value")}</span>
+              <span />
+            </div>
+            {draft.companyNumbers.map(item => (
+              <div className="settings-table-row" key={item.id}>
+                <input
+                  className="input"
+                  value={item.title}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateCompanyNumber(item.id, { title: event.target.value })}
+                  placeholder={t("Label")}
+                  aria-label={t("Label")}
+                />
+                <input
+                  className="input"
+                  value={item.value}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateCompanyNumber(item.id, { value: event.target.value })}
+                  placeholder={t("Number / value")}
+                  aria-label={t("Number / value")}
+                />
+                <button className="settings-icon-button danger" type="button" disabled={!canEdit || saving} onClick={() => removeCompanyNumber(item.id)} aria-label={t("Remove")} title={t("Remove")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="settings-action-row settings-action-row-split">
+            <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={addCompanyNumber}>+ {t("Add reference")}</button>
+            <span className="settings-field-hint">{t("Empty values are automatically omitted from PDFs.")}</span>
+          </div>
         </section>
       ) : null}
 
-      {pdfPreview ? (
-        <SettingsDialog
-          wide
-          eyebrow={t("PDF Export Settings")}
-          title={pdfPreview.kind === "invoice" ? t("Invoice preview") : t("Job sheet preview")}
-          onDismiss={() => setPdfPreview(null)}
-          actions={[{ label: t("Close"), tone: "secondary" as const, onClick: () => setPdfPreview(null) }]}
-        >
-          <iframe
-            srcDoc={pdfPreview.html}
-            sandbox=""
-            title={t("PDF preview")}
-            style={{ width: "100%", height: "65vh", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, background: "#fff" }}
-          />
-        </SettingsDialog>
-      ) : null}
-
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="docText" eyebrow={t("PDF Export Settings")} title={t("Visible PDF sections")} />
-        <div className="pdf-preset-row" role="group" aria-label={t("PDF presets")}>
-          {PDF_SECTION_PRESETS.map(preset => (
-            <button
-              key={preset.id}
-              type="button"
-              className={`pdf-preset-chip${activePdfPresetId === preset.id ? " is-active" : ""}`}
-              disabled={!canEdit || saving}
-              onClick={() => applyPdfPreset(preset)}
-            >
-              {t(preset.label)}
-            </button>
-          ))}
-          <span className={`pdf-preset-chip is-custom${activePdfPresetId === null ? " is-active" : ""}`} aria-hidden={activePdfPresetId !== null}>
-            {t("Custom")}
-          </span>
-        </div>
-        <p className="muted-copy">{t("A preset only flips the section toggles below — nothing prints internal cost or profit unless you turn Internal Financials on yourself. Review the result, preview it, then press Save.")}</p>
-        <div className="pdf-settings-grid">
-          {visiblePdfToggles.map(([key, label]) => (
-            <label className="pdf-settings-toggle" key={key}>
-              <span>
-                {t(label)}
-                {/* Mirrors the server's personal-capable list: finance keys and
-                    company numbers are always workspace-shared. */}
-                <small className="muted-copy" style={{ display: "block", fontSize: 11 }}>
-                  {["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"].includes(String(key))
-                    ? t("Workspace-shared")
-                    : t("Personal for workflow-only roles; shared otherwise")}
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={Boolean(draft[key])}
-                disabled={!canEdit || saving}
-                onChange={event => updateBoolean(key, event.target.checked)}
-              />
-            </label>
-          ))}
-        </div>
-        {/* Empty company numbers are filtered out of the printed document, but
-            the labels sit here with blank values and nothing said which way it
-            would go. */}
-        <p className="muted-copy">{t("Company numbers with no value are left out of the PDF — an empty VAT or EORI line never prints.")}</p>
-        {draft.pdfShowFinInternal ? (
-          <p className="layout-error">{t("Internal Financials prints your cost, profit and supplier details. Do not send that PDF to a customer.")}</p>
-        ) : null}
-      </section>
-
-      {!isWorkflowOnly ? <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="notes" eyebrow={t("Invoice Numbers")} title={t("Company invoice numbers")} />
-        <div className="quick-reply-template-heading">
-          <p className="muted-copy" style={{ margin: 0 }}>{t("VAT, EORI, company number or any reference you want to show on PDF invoices.")}</p>
-          <button className="button secondary" type="button" disabled={!canEdit || saving} onClick={addCompanyNumber}>{t("Add")}</button>
-        </div>
-        <div className="company-number-list">
-          {draft.companyNumbers.map(item => (
-            <div className="company-number-row" key={item.id}>
-              <input
-                className="input"
-                value={item.title}
-                disabled={!canEdit || saving}
-                onChange={event => updateCompanyNumber(item.id, { title: event.target.value })}
-                placeholder={t("Label")}
-              />
-              <input
-                className="input"
-                value={item.value}
-                disabled={!canEdit || saving}
-                onChange={event => updateCompanyNumber(item.id, { value: event.target.value })}
-                placeholder={t("Number / value")}
-              />
-              <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeCompanyNumber(item.id)} aria-label={t("Remove")}>
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      </section> : null}
-
-      <section className="card app-card quick-reply-settings-actions">
-        <div>
-          <strong>{isWorkflowOnly ? t("Safe PDF access") : t("Shared PDF settings")}</strong>
-          <p className="muted-copy">{t("Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.")}</p>
-        </div>
-        <div className="settings-action-row">
-          <button className="button secondary" type="button" onClick={() => { void openPdfPreview("invoice"); }}>
-            {t("Preview invoice")}
-          </button>
-          <button className="button secondary" type="button" onClick={() => { void openPdfPreview("jobsheet"); }}>
-            {t("Preview job sheet")}
-          </button>
-          <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
-            {t("Open Export page")}
-          </Link>
-          <button className="button" type="button" disabled={!canEdit || saving || !pdfDirty} onClick={() => { void handleSave(); }}>
-            {saving ? t("Saving...") : t("Save PDF Settings")}
-          </button>
-        </div>
-        <p className="muted-copy">{t("The preview uses a sample order and your current unsaved choices, rendered by the same template the real print buttons use.")}</p>
+      <div className="settings-save-row">
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
+        <button className="button" type="button" disabled={!canEdit || saving || !pdfDirty} onClick={() => { void handleSave(); }}>
+          {saving ? t("Saving...") : t("Save PDF Settings")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -3893,10 +4033,10 @@ function AccountSection({
   }
 
   return (
-    <div className="settings-card-stack">
-      <section className="card app-card account-profile-card">
-        <CardTitle icon="customer" eyebrow={t("Account")} title={t("Profile & Security")} />
-        <div className="account-profile-panel">
+    <div className="settings-card-stack settings-profile-page">
+      <section className="card app-card settings-profile-card">
+        <SettingsCardHead title={t("Profile")} />
+        <div className="settings-profile-photo">
           <div className="account-avatar-preview">
             {accountPhotoUrl ? (
               <img src={accountPhotoUrl} alt={displayName || userEmail || t("Account avatar")} />
@@ -3904,10 +4044,10 @@ function AccountSection({
               <span>{accountInitials}</span>
             )}
           </div>
-          <div className="account-profile-copy">
+          <div className="settings-profile-photo-copy">
             <strong>{t("Profile Photo")}</strong>
             <p className="muted-copy">{t("Your profile photo is shown to team members in this workspace.")}</p>
-            <div className="workspace-logo-actions">
+            <div className="settings-button-row">
               <input
                 ref={avatarInputRef}
                 type="file"
@@ -3932,9 +4072,9 @@ function AccountSection({
           </div>
         </div>
 
-        <div className="account-profile-fields">
-          <label className="quick-reply-settings-label">
-            {t("Email")}
+        <div className="settings-field-stack">
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Email")}</span>
             {isOAuthOnlyAccount ? (
               <>
                 <input
@@ -3944,7 +4084,7 @@ function AccountSection({
                   readOnly
                   type="email"
                 />
-                <span className="muted-copy">{t("Your sign-in email is managed by Google or Apple and can't be changed here.")}</span>
+                <span className="settings-field-hint">{t("Your sign-in email is managed by Google or Apple and can't be changed here.")}</span>
               </>
             ) : (
               <>
@@ -3969,12 +4109,13 @@ function AccountSection({
                     {savingEmail ? t("Changing...") : t("Change Email")}
                   </button>
                 </div>
-                <span className="muted-copy">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
+                {/* The 10-day rule stays right under the field it governs. */}
+                <span className="settings-field-hint">{t("After changing your sign-in email, you can change it again after 10 days.")}</span>
               </>
             )}
           </label>
-          <label className="quick-reply-settings-label">
-            {t("Your Name")}
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Your Name")}</span>
             <input
               className="input"
               value={displayName}
@@ -3984,8 +4125,8 @@ function AccountSection({
             />
           </label>
           {!hideWorkspaceIdentity ? (
-            <label className="quick-reply-settings-label">
-              {t("Company / Studio Name")}
+            <label className="settings-field">
+              <span className="settings-field-label">{t("Company / Studio Name")}</span>
               <input
                 className="input"
                 value={companyName}
@@ -3998,41 +4139,49 @@ function AccountSection({
         </div>
 
         {!hideWorkspaceIdentity && !canEditCompanyName ? <p className="muted-copy">{t("Company / Studio Name can only be changed by the workspace owner.")}</p> : null}
-        <div className="settings-mini-grid">
-          <InfoTile label={t("Workspace")} value={workspace.name} />
-          <InfoTile label={t("Role")} value={workspace.roleLabel} />
-          <InfoTile
-            label={t("User ID")}
-            value={user?.uid ? `${user.uid.slice(0, 6)}…${user.uid.slice(-4)}` : "-"}
-            action={user?.uid ? { label: t("Copy"), onClick: () => copyIdentifier(user.uid, t("User ID copied")) } : undefined}
-          />
+        {/* Workspace, role and user id: a compact read-only strip, not three cards. */}
+        <div className="settings-identity-grid">
+          <div className="settings-identity-item">
+            <span>{t("Workspace")}</span>
+            <strong>{workspace.name}</strong>
+          </div>
+          <div className="settings-identity-item">
+            <span>{t("Role")}</span>
+            <strong>{workspace.roleLabel}</strong>
+          </div>
+          <div className="settings-identity-item">
+            <span>{t("User ID")}</span>
+            <strong>{user?.uid ? `${user.uid.slice(0, 6)}…${user.uid.slice(-4)}` : "-"}</strong>
+            {user?.uid ? (
+              <button className="button secondary settings-identity-copy" type="button" onClick={() => copyIdentifier(user.uid, t("User ID copied"))}>
+                {t("Copy")}
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={savingProfile || !profileDirty} onClick={() => { void handleSaveProfile(); }}>
-            {savingProfile ? t("Saving...") : t("Save Profile")}
+            {savingProfile ? t("Saving...") : t("Save changes")}
           </button>
         </div>
         {profileStatus ? <p className="success-copy">{t(profileStatus)}</p> : null}
         {profileError ? <p className="layout-error">{t(profileError)}</p> : null}
       </section>
 
-      <section className="card app-card account-security-card">
-        <CardTitle icon="lock" eyebrow={t("Security")} title={t("Sign-in security")} />
-        <div className="account-security-panel">
-          <div>
-            <strong>{t("Face ID / device passcode")}</strong>
-            <p className="muted-copy">{t("The Mac and iPhone app can require Face ID, Touch ID or device passcode on launch. Browser Face ID is not enabled on web yet, so use Sign Out on shared computers.")}</p>
-          </div>
-          <span className="status-pill neutral">{t("App only")}</span>
+      <section className="card app-card settings-security-card">
+        <SettingsCardHead title={t("Sign-in security")} aside={<span className="settings-tag">{t("App only")}</span>} />
+        <div className="settings-security-item">
+          <strong>{t("Face ID / device passcode")}</strong>
+          <p className="muted-copy">{t("The Mac and iPhone app can require Face ID, Touch ID or device passcode on launch. Browser Face ID is not enabled on web yet, so use Sign Out on shared computers.")}</p>
         </div>
         <p className="muted-copy">{t("Password changes are handled securely by Firebase. Web sends a reset link to your account email instead of storing or editing your password here.")}</p>
-        <div className="settings-action-row">
+        <div className="settings-action-row settings-action-row-split">
           {/* The button sent a link without ever naming the address it was
               going to, which matters on an account whose email was changed. */}
           <button className="button secondary" type="button" disabled={sendingReset} onClick={handlePasswordReset}>
             {sendingReset ? t("Sending...") : `${t("Send reset link to")} ${accountEmail || userEmail}`}
           </button>
-          <button className="button secondary danger-button" type="button" disabled={signingOut} onClick={handleSignOut}>
+          <button className="button secondary" type="button" disabled={signingOut} onClick={handleSignOut}>
             {signingOut ? t("Signing out...") : t("Sign Out")}
           </button>
         </div>
@@ -4150,37 +4299,41 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
   }
 
   return (
-    <section className="card app-card" style={{ borderColor: "rgba(217, 45, 32, 0.4)" }}>
-      <CardTitle icon="lock" eyebrow={t("Danger zone")} title={t("Delete account")} />
-      {/* Two different losses, two separate lines — "your workspace dies" and
-          "you leave other people's workspaces" were buried in one sentence. */}
-      <p style={{ color: "#d92d20", fontWeight: 600, margin: "4px 0 6px" }}>
-        {t("This deletes your account permanently. It cannot be undone.")}
-      </p>
-      <ul className="muted-copy" style={{ margin: "0 0 4px", paddingLeft: 18, display: "grid", gap: 4 }}>
-        <li>{t("The workspace you own is deleted with all of its data: orders, customers, notes, messages and files.")}</li>
-        <li>{t("Your memberships in other teams' workspaces are removed. Their data stays with them.")}</li>
-      </ul>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
-        <input
-          className="input"
-          style={{ flex: "1 1 180px" }}
-          placeholder={t("Type DELETE to confirm")}
-          value={confirmText}
-          onChange={event => setConfirmText(event.target.value)}
-          disabled={busy}
-        />
-        <button
-          type="button"
-          className="button"
-          style={{ background: "#d92d20", borderColor: "#d92d20" }}
-          onClick={() => void handleDelete()}
-          disabled={busy || confirmText.trim().toUpperCase() !== "DELETE"}
-        >
-          {busy ? t("Deleting…") : t("Delete my account")}
-        </button>
+    <section className="card app-card settings-danger-card">
+      <SettingsCardHead title={t("Danger zone")} />
+      <div className="settings-danger-row">
+        <span className="settings-danger-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+        </span>
+        <div className="settings-danger-copy">
+          <strong>{t("Delete account")}</strong>
+          {/* Two different losses, two separate lines — "your workspace dies" and
+              "you leave other people's workspaces" were buried in one sentence. */}
+          <p>{t("This deletes your account permanently. It cannot be undone.")}</p>
+          <ul className="muted-copy">
+            <li>{t("The workspace you own is deleted with all of its data: orders, customers, notes, messages and files.")}</li>
+            <li>{t("Your memberships in other teams' workspaces are removed. Their data stays with them.")}</li>
+          </ul>
+        </div>
+        <div className="settings-danger-actions">
+          <input
+            className="input"
+            placeholder={t("Type DELETE to confirm")}
+            value={confirmText}
+            onChange={event => setConfirmText(event.target.value)}
+            disabled={busy}
+          />
+          <button
+            type="button"
+            className="button danger secondary"
+            onClick={() => void handleDelete()}
+            disabled={busy || confirmText.trim().toUpperCase() !== "DELETE"}
+          >
+            {busy ? t("Deleting…") : t("Delete my account")}
+          </button>
+        </div>
       </div>
-      {error ? <p style={{ color: "var(--danger)", marginTop: 8 }}>{t(error)}</p> : null}
+      {error ? <p className="layout-error">{t(error)}</p> : null}
     </section>
   );
 }
@@ -4243,6 +4396,17 @@ function FinancialSettingsSection({
     draft,
     Boolean(draft),
     () => handleSave(true)
+  );
+  // The shared page header carries Discard / Save; the handlers are function
+  // declarations below, read through a ref so a click always sees this render.
+  const financialActions = useRef({ save: () => handleSave(), discard: () => handleDiscard() });
+  financialActions.current = { save: () => handleSave(), discard: () => handleDiscard() };
+  useSettingsHeaderActions(
+    <>
+      <button type="button" className="button secondary" disabled={saving || !financialDirty} onClick={() => financialActions.current.discard()}>{t("Discard changes")}</button>
+      <button type="button" className="button" disabled={!canEdit || saving || !financialDirty} onClick={() => { void financialActions.current.save(); }}>{saving ? t("Saving...") : t("Save changes")}</button>
+    </>,
+    [saving, financialDirty, canEdit, language]
   );
 
   if (!draft) {
@@ -4565,36 +4729,8 @@ function FinancialSettingsSection({
         </section>
       ) : null}
 
-      <header className="settings-page-header">
-        <div className="settings-page-header-info">
-          <p className="settings-page-breadcrumb">{t("Settings")} / {t("Finance & Tax")}</p>
-          <div className="settings-page-title-row">
-            <h2>{t("Financial Settings")}</h2>
-            <span className="settings-scope-badge">{t("Workspace · Owner managed")}</span>
-          </div>
-          <p className="settings-page-subtitle">{t("Control currency, fees and tax calculations for this workspace.")}</p>
-        </div>
-        <div className="settings-page-header-actions">
-          <button
-            type="button"
-            className="button secondary"
-            disabled={saving || !financialDirty}
-            onClick={handleDiscard}
-          >
-            {t("Discard changes")}
-          </button>
-          <button
-            type="button"
-            className="button"
-            disabled={!canEdit || saving || !financialDirty}
-            onClick={() => { void handleSave(); }}
-          >
-            {saving ? t("Saving...") : t("Save changes")}
-          </button>
-        </div>
-        {status ? <p className="success-copy settings-page-header-note">{t(status)}</p> : null}
-        {error ? <p className="layout-error settings-page-header-note">{t(error)}</p> : null}
-      </header>
+      {status ? <p className="success-copy">{t(status)}</p> : null}
+      {error ? <p className="layout-error">{t(error)}</p> : null}
 
       <div className="financial-two-col">
         <div className="financial-col">
@@ -7759,10 +7895,33 @@ function formatSupportDate(value: number) {
 function AboutSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
   const [diagStatus, setDiagStatus] = useState("");
+  // The only live signal the web has about "sync": whether this browser is online.
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  async function copyText(value: string, feedback: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setDiagStatus(feedback);
+    } catch {
+      setDiagStatus(t("Copy failed. Select the value and copy it manually."));
+    }
+    window.setTimeout(() => setDiagStatus(""), 2000);
+  }
 
   // One block a support thread can paste in whole: what, where, which plan,
   // which browser. Nothing here is secret — it is the same data the screen shows.
-  async function copyDiagnostics() {
+  function copyDiagnostics() {
     const lines = [
       `NivaDesk ${CHANGELOG[0]?.version ?? ""} (${CHANGELOG[0]?.date ?? ""})`,
       `Workspace: ${workspace.name} (${workspace.id})`,
@@ -7771,50 +7930,65 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
       `Language: ${language}`,
       typeof navigator !== "undefined" ? `Browser: ${navigator.userAgent}` : ""
     ].filter(Boolean);
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      setDiagStatus(t("Diagnostic info copied."));
-    } catch {
-      setDiagStatus(t("Copy failed. Select the value and copy it manually."));
-    }
-    window.setTimeout(() => setDiagStatus(""), 2000);
+    return copyText(lines.join("\n"), t("Diagnostic info copied."));
   }
 
+  const isLocal = typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack settings-about-page">
       <section className="card app-card">
-        <CardTitle icon="notes" eyebrow={t("About")} title={t("NivaDesk")} />
-        <div className="about-app-panel">
-          <span className="about-app-mark" aria-hidden="true">⬢</span>
-          <div>
+        <div className="settings-about-hero">
+          <span className="settings-about-mark" aria-hidden="true">⬢</span>
+          <div className="settings-about-copy">
             <strong>NivaDesk</strong>
-            <p>
+            <p className="muted-copy">{t("An EGGcraft brand for studio workspace management.")}</p>
+            <p className="settings-about-version">
               {t("Version")} {CHANGELOG[0]?.version ?? ""}
               {CHANGELOG[0]?.date ? ` · ${CHANGELOG[0].date}` : ""}
               {" · "}
-              {typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-                ? t("Local")
-                : t("Web")}
+              {isLocal ? t("Local") : t("Web")}
             </p>
-            <p>{t("An EGGcraft brand for studio workspace management.")}</p>
-            <p>
-              <Link className="about-changelog-link" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>
-              {" · "}
-              <Link className="about-changelog-link" href="/changelog" target="_blank" rel="noopener noreferrer">{t("What's new")}</Link>
-            </p>
+            <div className="settings-button-row">
+              <Link className="button secondary" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>
+              <Link className="button secondary" href="/changelog" target="_blank" rel="noopener noreferrer">{t("What's new")}</Link>
+            </div>
           </div>
+          {/* The web build is the release: what is running is what is published. */}
+          <span className="settings-status-pill is-saved" title={t("The web app always runs the latest release.")}>
+            <span className="settings-status-pill-mark" aria-hidden="true">✓</span>
+            {t("Up to date")}
+          </span>
         </div>
-        <div className="settings-divider" />
-        <p className="muted-copy"><strong>{t("© 2026 All rights reserved.")}</strong></p>
-        <p className="muted-copy">{t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.")}</p>
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="storage" eyebrow={t("Workspace")} title={t("Current workspace")} />
-        <div className="settings-mini-grid">
-          <InfoTile label={t("Workspace")} value={workspace.name} />
-          <InfoTile label={t("Company ID")} value={workspace.id} />
-          <InfoTile label={t("Web portal")} value="Next.js + Firebase" />
+        <SettingsCardHead
+          icon={<CardIconGlyph icon="storage" />}
+          title={t("Current workspace")}
+          subtitle={t("Technical details for this signed-in workspace.")}
+        />
+        <div className="settings-kv-grid">
+          <div className="settings-kv">
+            <span>{t("Workspace")}</span>
+            <strong>{workspace.name}</strong>
+          </div>
+          <div className="settings-kv">
+            <span>{t("Company ID")}</span>
+            <strong>{workspace.id}</strong>
+            <button className="button secondary settings-kv-action" type="button" onClick={() => { void copyText(workspace.id, t("Copied.")); }}>
+              {t("Copy")}
+            </button>
+          </div>
+          <div className="settings-kv">
+            <span>{t("Platform")}</span>
+            <strong>Next.js + Firebase</strong>
+          </div>
+          <div className="settings-kv">
+            <span>{t("Sync")}</span>
+            <strong>{t("Web, Mac and iPhone")}</strong>
+            <span className={online ? "settings-dot-status" : "settings-dot-status is-offline"}>{online ? t("Online") : t("Offline")}</span>
+          </div>
         </div>
         <p className="muted-copy">{t("NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.")}</p>
         <div className="settings-action-row">
@@ -7824,6 +7998,11 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
         </div>
         {diagStatus ? <p className="success-copy">{t(diagStatus)}</p> : null}
       </section>
+
+      <footer className="settings-footer-note">
+        <p><strong>{t("© 2026 All rights reserved.")}</strong></p>
+        <p>{t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.")}</p>
+      </footer>
     </div>
   );
 }
