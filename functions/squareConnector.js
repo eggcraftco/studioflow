@@ -309,7 +309,8 @@ function createSquareConnectorFunctions(deps) {
       squareSource: envelope.source.provider_metadata.square_source, state: String(order?.state || ""), paymentStatus: envelope.order.payment_status,
       grandTotal: envelope.order.grand_total, taxTotal: envelope.order.tax_total, discountTotal: envelope.order.discount_total, tipTotal: envelope.source.provider_metadata.tip_total, currency: envelope.order.currency,
       lineSummary: envelope.source.provider_metadata.design_name, itemCount: envelope.order.line_items.length, hasFulfillment: envelope.source.provider_metadata.has_fulfillment,
-      nivadeskOrderId: null, externalCreatedAt: envelope.order.placed_at, externalUpdatedAt: envelope.identity.external_updated_at, updatedAtMs: now()
+      // nivadeskOrderId is set once the engine names the order (below) and never blanked by a later pass.
+      externalCreatedAt: envelope.order.placed_at, externalUpdatedAt: envelope.identity.external_updated_at, updatedAtMs: now()
     }, { merge: true });
     return ref;
   }
@@ -346,7 +347,7 @@ function createSquareConnectorFunctions(deps) {
       capacity: async () => { const c = await db().collection("companies").doc(companyId).get(); return integrationOrderCapacity(companyId, c.data() || {}); },
       hold: async (env2, capacity) => holdIntegrationOrder(companyId, "square", env2.identity.external_id, order, capacity, { squareConnectionId: ref.id, eventType })
     });
-    if (outcome.orderId && settings.recordAllSales && ["created", "updated", "noop"].includes(outcome.result)) {
+    if (outcome.orderId && settings.recordAllSales && ["created", "updated", "noop", "duplicate", "stale"].includes(outcome.result)) {
       await db().collection("companies").doc(companyId).collection(SALES_SUBCOLLECTION).doc(safeIdPart(externalId)).set({ nivadeskOrderId: outcome.orderId }, { merge: true }).catch(() => undefined);
     }
     if (outcome.result === "created") {

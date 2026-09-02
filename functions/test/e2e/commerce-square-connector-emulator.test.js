@@ -250,7 +250,7 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual(res.payload.results[0].result, "queued");
     assert.strictEqual(await orderCount(), before, "no workflow order");
     const sale = (await sub(sq.SALES_SUBCOLLECTION).doc("ORD_POS").get()).data();
-    assert.strictEqual(sale.grandTotal, "18.00"); assert.strictEqual(sale.hasFulfillment, false); assert.strictEqual(sale.nivadeskOrderId, null);
+    assert.strictEqual(sale.grandTotal, "18.00"); assert.strictEqual(sale.hasFulfillment, false); assert.ok(sale.nivadeskOrderId == null, "no order yet");
     const eventRow = (await db.collection("commerceEvents").where("company_id", "==", COMPANY).get()).docs.map((d) => d.data()).find((r) => r.external_id === "ORD_POS");
     assert.strictEqual(eventRow.status, "skipped");
     await index.updateSquareConnectionSettings.run({ auth, data: { companyId: COMPANY, connectionId: connId, importPolicy: "all" }, rawRequest: {} });
@@ -328,6 +328,7 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual((await sub(sq.PAYMENTS_SUBCOLLECTION).doc("PAY_ORD_A").get()).data().lastRefundExternalId, "REF_1");
     const order = (await orderRef("ORD_A").get()).data();
     assert.strictEqual(order.commerce.externalUpdatedAt, "2026-09-03T00:01:00.000Z", "the order was refreshed after the refund"); assert.strictEqual(order.status, "In Progress", "a refund does not touch the workflow (SQ-REF-006)");
+    assert.strictEqual((await sub(sq.SALES_SUBCOLLECTION).doc("ORD_A").get()).data().nivadeskOrderId, orderRef("ORD_A").id, "a later pass never blanks the sale's link to its order");
     assert.strictEqual(order.customFields["Square Status"], "COMPLETED");
   });
 
