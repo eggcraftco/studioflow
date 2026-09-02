@@ -36,7 +36,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks";
 
 export type IntegrationProvider = {
   id: string;
@@ -101,8 +101,9 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     blurb: "", capabilities: [], manage: "",
   },
   {
-    id: "quickbooks", name: "QuickBooks", category: "banking", kind: "planned", mark: "Q",
-    blurb: "", capabilities: [], manage: "",
+    id: "quickbooks", name: "QuickBooks Online", category: "banking", kind: "native", mark: "Q",
+    blurb: "Official accounting connection: reads your chart of accounts, VAT codes, customers and items, and keeps one set of books.",
+    capabilities: ["Chart of accounts", "VAT codes", "Customers & suppliers", "Change tracking"], manage: "quickbooks",
   },
   {
     id: "xero", name: "Xero", category: "banking", kind: "planned", mark: "X",
@@ -167,7 +168,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, accounting] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -175,6 +176,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     getEtsyConnections(companyId),
     getWooConnections(companyId),
     getSquareConnections(companyId),
+    getDocs(collection(db, "companies", companyId, "accountingConnections")),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -205,11 +207,15 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     squareConnections: square.status === "fulfilled"
       ? square.value.map((row) => ({ merchant: row.merchantName || row.merchantId, status: row.status, needsAttention: row.status === "reconnect_required" || Boolean(row.lastErrorCode) }))
       : [],
+    // Accounting providers (QuickBooks Online today): the owner-readable connection projection.
+    accountingConnections: accounting.status === "fulfilled"
+      ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production") }; })
+      : [],
   };
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [],
 };
 
 export type IntegrationSignals = {
@@ -226,6 +232,8 @@ export type IntegrationSignals = {
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
+  /** Accounting providers (QuickBooks Online), with the mode the owner chose. */
+  accountingConnections: { provider: string; status: string; mode: string; companyName: string; syncState: string; environment: string }[];
 };
 
 export function resolveIntegrationState(
@@ -279,6 +287,15 @@ export function resolveIntegrationState(
     if (live.length === 0) return { state: "available" };
     const broken = live.filter((row) => row.needsAttention).length;
     return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].merchant : `${live.length} accounts` };
+  }
+
+  if (provider.id === "quickbooks") {
+    const rows = (signals.accountingConnections || []).filter((row) => row.provider === "quickbooks_online" && row.status !== "disconnected" && row.status !== "none");
+    if (rows.length === 0) return { state: "available" };
+    const broken = rows.filter((row) => row.status === "reconnect_required" || (row.syncState && row.syncState !== "ok")).length;
+    const first = rows[0];
+    const mode = first.mode === "primary_write" ? "Primary" : first.mode === "migration_read" ? "Migration" : "Read-only";
+    return { state: broken === rows.length ? "attention" : "connected", detail: `${first.companyName || "QuickBooks"} · ${mode}${first.environment === "sandbox" ? " · Sandbox" : ""}` };
   }
 
   if (provider.id === "openbanking") {
