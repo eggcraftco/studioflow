@@ -46,6 +46,12 @@ struct SquareIntegrationView: View {
     @State private var previewText = ""
     @State private var unmatchedText = ""
     @State private var payoutsText = ""
+    // Faz 5: payout rows with their bank side, and the candidates of the one being resolved.
+    @State private var payoutRows: [[String: Any]] = []
+    @State private var settlePayoutId = ""
+    @State private var settleHeader = ""
+    @State private var settleCandidates: [[String: Any]] = []
+    @State private var settleNear: [[String: Any]] = []
     @State private var auditText = ""
 
     private static let sources: [(String, String)] = [
@@ -232,6 +238,16 @@ struct SquareIntegrationView: View {
                 if !payoutsText.isEmpty {
                     Text(payoutsText).font(.system(size: 12, design: .monospaced)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+                ForEach(Array(payoutRows.enumerated()), id: \.offset) { _, row in
+                    SquarePayoutRowView(row: row, isOwner: isOwner, busy: busy == "settle", tr: tr,
+                                        onFind: { findBankRow(payoutId: row["id"] as? String ?? "") },
+                                        onUnlink: { unlinkPayout(payoutId: row["id"] as? String ?? "") })
+                }
+                if !settlePayoutId.isEmpty {
+                    SquareSettlementCandidatesView(header: settleHeader, candidates: settleCandidates, near: settleNear, busy: busy == "settle", tr: tr,
+                                                   onMatch: { txId in confirmMatch(payoutId: settlePayoutId, transactionId: txId) },
+                                                   onClose: { settlePayoutId = ""; settleCandidates = []; settleNear = [] })
+                }
             }
         }
 
@@ -387,14 +403,49 @@ struct SquareIntegrationView: View {
             busy = ""
             if let error = error { errorText = error.localizedDescription; return }
             let rows = data?["payouts"] as? [[String: Any]] ?? []
-            if rows.isEmpty { payoutsText = tr("No payouts yet."); return }
-            payoutsText = rows.map { row in
-                let totals = row["totals"] as? [String: Any] ?? [:]
-                let amount = (row["amount"] as? String) ?? (totals["net"] as? String) ?? "—"
-                let matched = ((row["bankMatch"] as? [String: Any])?["transactionId"] as? String ?? "").isEmpty ? tr("Not matched") : tr("Matched")
-                let reconciled = (row["reconciled"] as? Bool ?? false) ? "" : " · \(tr("Needs attention"))"
-                return "\(row["arrivalDate"] as? String ?? "") · \(row["status"] as? String ?? "") · \(tr("Gross")) \(totals["gross"] as? String ?? "—") · \(tr("Refunds")) \(totals["refunds"] as? String ?? "—") · \(tr("Fees")) \(totals["fee"] as? String ?? "—") · \(tr("Net")) \(amount) \(row["currency"] as? String ?? "") · \(matched)\(reconciled)"
-            }.joined(separator: "\n")
+            payoutRows = rows
+            payoutsText = rows.isEmpty ? tr("No payouts yet.") : ""
+        }
+    }
+
+    // Faz 5: the bank side of one payout — find the window's rows, take one, or let go.
+    private func findBankRow(payoutId: String) {
+        guard !payoutId.isEmpty else { return }
+        busy = "settle"; errorText = ""
+        call("matchSquarePayoutToBank", ["payoutId": payoutId, "mode": "suggest"]) { data, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            let payout = data?["payout"] as? [String: Any] ?? [:]
+            let window = data?["window"] as? [String: Any]
+            var header = "\(tr("Bank row")) · \(payout["amount"] as? String ?? "—") \(payout["currency"] as? String ?? "")"
+            if let arrival = payout["arrivalDate"] as? String, !arrival.isEmpty { header += " · \(tr("Arrival")) \(arrival)" }
+            if let w = window, let from = w["from"] as? String, let to = w["to"] as? String { header += " · \(from) → \(to)" }
+            settleHeader = header
+            settleCandidates = data?["candidates"] as? [[String: Any]] ?? []
+            settleNear = data?["near"] as? [[String: Any]] ?? []
+            settlePayoutId = payoutId
+        }
+    }
+
+    private func confirmMatch(payoutId: String, transactionId: String) {
+        busy = "settle"; errorText = ""
+        call("matchSquarePayoutToBank", ["payoutId": payoutId, "mode": "confirm", "transactionId": transactionId]) { _, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            notice = tr("Payout matched to the bank row.")
+            settlePayoutId = ""; settleCandidates = []; settleNear = []
+            loadPayouts()
+        }
+    }
+
+    private func unlinkPayout(payoutId: String) {
+        busy = "settle"; errorText = ""
+        call("matchSquarePayoutToBank", ["payoutId": payoutId, "mode": "unlink"]) { _, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            notice = tr("Payout unlinked.")
+            settlePayoutId = ""; settleCandidates = []; settleNear = []
+            loadPayouts()
         }
     }
 
@@ -425,5 +476,98 @@ struct SquareIntegrationView: View {
         #else
         UIApplication.shared.open(url)
         #endif
+    }
+}
+
+/// One payout line with its bank side (Faz 5). A separate struct: nested view builders crash on a real iPhone.
+private struct SquarePayoutRowView: View {
+    let row: [String: Any]
+    let isOwner: Bool
+    let busy: Bool
+    let tr: (String) -> String
+    let onFind: () -> Void
+    let onUnlink: () -> Void
+
+    var body: some View {
+        let totals = row["totals"] as? [String: Any] ?? [:]
+        let amount = (row["amount"] as? String) ?? (totals["net"] as? String) ?? "—"
+        let bankMatch = row["bankMatch"] as? [String: Any] ?? [:]
+        let matchedId = bankMatch["transactionId"] as? String ?? ""
+        let reconciled = (row["reconciled"] as? Bool ?? false) ? "" : " · \(tr("Needs attention"))"
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(row["arrivalDate"] as? String ?? "") · \(row["status"] as? String ?? "") · \(tr("Gross")) \(totals["gross"] as? String ?? "—") · \(tr("Refunds")) \(totals["refunds"] as? String ?? "—") · \(tr("Fees")) \(totals["fee"] as? String ?? "—") · \(tr("Net")) \(amount) \(row["currency"] as? String ?? "")\(reconciled)")
+                .font(.system(size: 12, design: .monospaced)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                if matchedId.isEmpty {
+                    Text(tr("Not matched")).font(.system(size: 11)).foregroundColor(.secondary)
+                    if isOwner { Button(tr("Find bank row")) { onFind() }.buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundColor(.accentColor).disabled(busy) }
+                } else {
+                    Text("✓ \(tr("Matched"))\((bankMatch["bookingDate"] as? String).map { " · \($0)" } ?? "")").font(.system(size: 11, weight: .semibold)).foregroundColor(.green)
+                    if isOwner { Button(tr("Unlink")) { onUnlink() }.buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.accentColor).disabled(busy) }
+                }
+            }
+        }
+    }
+}
+
+/// The window's rows for the payout being resolved: exact amounts with a Match button, near amounts shown apart.
+private struct SquareSettlementCandidatesView: View {
+    let header: String
+    let candidates: [[String: Any]]
+    let near: [[String: Any]]
+    let busy: Bool
+    let tr: (String) -> String
+    let onMatch: (String) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack { Text(header).font(.system(size: 12, weight: .semibold)); Spacer(); Button(tr("Close")) { onClose() }.buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.accentColor) }
+            if candidates.isEmpty {
+                Text(tr("No bank row of this amount arrived in the window.")).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            ForEach(Array(candidates.enumerated()), id: \.offset) { _, c in
+                SquareSettlementCandidateRow(candidate: c, busy: busy, tr: tr, onMatch: onMatch)
+            }
+            if !near.isEmpty {
+                Text(tr("Nearby amounts (a fee or FX leg):")).font(.system(size: 11)).foregroundColor(.secondary)
+                ForEach(Array(near.enumerated()), id: \.offset) { _, c in
+                    Text("\(c["bookingDate"] as? String ?? "—") · \((c["counterparty"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (c["description"] as? String ?? "—")) · \(SquareSettlementCandidateRow.amountText(c))")
+                        .font(.system(size: 11)).foregroundColor(.secondary).opacity(0.8)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.25)))
+    }
+}
+
+private struct SquareSettlementCandidateRow: View {
+    let candidate: [String: Any]
+    let busy: Bool
+    let tr: (String) -> String
+    let onMatch: (String) -> Void
+
+    static func amountText(_ c: [String: Any]) -> String {
+        let amount = c["amount"].map { "\($0)" } ?? "—"
+        let currency = c["currency"] as? String ?? ""
+        return "\(amount) \(currency)".trimmingCharacters(in: .whitespaces)
+    }
+
+    var body: some View {
+        let free = candidate["free"] as? Bool ?? false
+        let reasons = candidate["reasons"] as? [String] ?? []
+        let shifted = reasons.contains { $0.hasPrefix("shift_") }
+        let who = (candidate["counterparty"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (candidate["description"] as? String ?? "—")
+        HStack(spacing: 8) {
+            Text("\(candidate["bookingDate"] as? String ?? "—") · \(who) · \(Self.amountText(candidate)) · \(tr("Score")) \(candidate["score"].map { "\($0)" } ?? "")\(shifted ? " · \(tr("Same amount, another day."))" : "")")
+                .font(.system(size: 11)).foregroundColor(.primary).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            if free {
+                Button(tr("Match")) { onMatch(candidate["transactionId"] as? String ?? "") }.buttonStyle(.bordered).controlSize(.small).disabled(busy)
+            } else {
+                Text(tr("Already classified")).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+        }
     }
 }

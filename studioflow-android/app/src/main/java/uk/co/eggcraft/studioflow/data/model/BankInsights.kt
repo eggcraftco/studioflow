@@ -67,11 +67,12 @@ val BANK_INCOMING_KINDS = listOf(
     "owner_contribution" to "Owner contribution",
     "loan" to "Loan",
     "transfer" to "Transfer between own accounts",
-    "other_income" to "Other income"
+    "other_income" to "Other income",
+    "payout" to "Processor payout (Square, PayPal…)"
 )
 
 /** Money in, but not revenue — these kinds leave every Incoming total. */
-val BANK_NON_REVENUE_INCOMING_KINDS = setOf("transfer", "owner_contribution", "loan")
+val BANK_NON_REVENUE_INCOMING_KINDS = setOf("transfer", "owner_contribution", "loan", "payout")
 
 fun bankIncomingKindLabel(code: String): String =
     BANK_INCOMING_KINDS.firstOrNull { it.first == code }?.second ?: BANK_INCOMING_KINDS.first().second

@@ -1002,7 +1002,9 @@ class StudioFlowRepository(
         val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
         return WooImportCounters(n("created"), n("updated"), n("skipped"), 0, n("held"))
     }
-    data class SquarePayoutRow(val externalId: String, val status: String, val arrivalDate: String, val amount: String, val currency: String, val gross: String, val refunds: String, val fee: String, val reconciled: Boolean, val bankMatched: Boolean)
+    data class SquarePayoutRow(val id: String, val externalId: String, val status: String, val arrivalDate: String, val amount: String, val currency: String, val gross: String, val refunds: String, val fee: String, val reconciled: Boolean, val bankMatched: Boolean, val bankMatchDate: String)
+    data class SquareSettlementCandidate(val transactionId: String, val bookingDate: String, val amount: String, val currency: String, val description: String, val counterparty: String, val score: Int, val shifted: Boolean, val free: Boolean)
+    data class SquarePayoutMatch(val header: String, val candidates: List<SquareSettlementCandidate>, val near: List<SquareSettlementCandidate>)
     data class SquareAuditReport(val atSquare: Int, val asOrders: Int, val financeOnly: Int, val missing: Int, val notSelected: Int, val missingIds: List<String>)
     suspend fun squarePayouts(workspaceId: String): List<SquarePayoutRow> {
         val raw = etsyCall("listSquarePayouts", workspaceId, mapOf("limit" to 50))
@@ -1010,12 +1012,42 @@ class StudioFlowRepository(
             val r = e as? Map<*, *> ?: return@mapNotNull null
             val totals = r["totals"] as? Map<*, *> ?: emptyMap<Any, Any>()
             SquarePayoutRow(
+                id = r["id"]?.toString().orEmpty(),
+                bankMatchDate = ((r["bankMatch"] as? Map<*, *>)?.get("bookingDate")?.toString()).orEmpty(),
                 externalId = r["externalId"]?.toString().orEmpty(), status = r["status"]?.toString().orEmpty(), arrivalDate = r["arrivalDate"]?.toString().orEmpty(),
                 amount = (r["amount"] ?: totals["net"])?.toString().orEmpty(), currency = r["currency"]?.toString().orEmpty(),
                 gross = totals["gross"]?.toString().orEmpty(), refunds = totals["refunds"]?.toString().orEmpty(), fee = totals["fee"]?.toString().orEmpty(),
                 reconciled = r["reconciled"] as? Boolean ?: false, bankMatched = ((r["bankMatch"] as? Map<*, *>)?.get("transactionId")?.toString()).orEmpty().isNotEmpty(),
             )
         }
+    }
+    /** Faz 5: the bank side of a payout — suggest lists the window's rows scored; confirm and unlink write both sides. */
+    suspend fun squarePayoutBankSuggest(workspaceId: String, payoutId: String): SquarePayoutMatch {
+        val raw = etsyCall("matchSquarePayoutToBank", workspaceId, mapOf("payoutId" to payoutId, "mode" to "suggest"))
+        val payout = raw["payout"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val window = raw["window"] as? Map<*, *>
+        fun rows(key: String) = (raw[key] as? List<*>).orEmpty().mapNotNull { e ->
+            val c = e as? Map<*, *> ?: return@mapNotNull null
+            val reasons = (c["reasons"] as? List<*>).orEmpty().map { it.toString() }
+            SquareSettlementCandidate(
+                transactionId = c["transactionId"]?.toString().orEmpty(), bookingDate = c["bookingDate"]?.toString().orEmpty(),
+                amount = c["amount"]?.toString().orEmpty(), currency = c["currency"]?.toString().orEmpty(),
+                description = c["description"]?.toString().orEmpty(), counterparty = c["counterparty"]?.toString().orEmpty(),
+                score = (c["score"] as? Number)?.toInt() ?: 0, shifted = reasons.any { it.startsWith("shift_") }, free = c["free"] as? Boolean ?: false
+            )
+        }
+        val header = buildString {
+            append(payout["amount"]?.toString() ?: "—"); append(" "); append(payout["currency"]?.toString().orEmpty())
+            payout["arrivalDate"]?.toString()?.takeIf { it.isNotBlank() }?.let { append(" · "); append(it) }
+            if (window != null) { append(" · "); append(window["from"]?.toString().orEmpty()); append(" → "); append(window["to"]?.toString().orEmpty()) }
+        }
+        return SquarePayoutMatch(header = header, candidates = rows("candidates"), near = rows("near"))
+    }
+    suspend fun squarePayoutBankConfirm(workspaceId: String, payoutId: String, transactionId: String) {
+        etsyCall("matchSquarePayoutToBank", workspaceId, mapOf("payoutId" to payoutId, "mode" to "confirm", "transactionId" to transactionId))
+    }
+    suspend fun squarePayoutBankUnlink(workspaceId: String, payoutId: String) {
+        etsyCall("matchSquarePayoutToBank", workspaceId, mapOf("payoutId" to payoutId, "mode" to "unlink"))
     }
     suspend fun squareAudit(workspaceId: String, connectionId: String, days: Int): SquareAuditReport {
         val raw = etsyCall("auditSquareOrders", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 300)

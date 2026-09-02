@@ -128,13 +128,14 @@ func bankVatLabel(_ code: String) -> String { bankVatCodes.first { $0.code == co
 let bankIncomingKinds: [(code: String, label: String)] = [
     ("order_payment", "Order payment"), ("invoice", "Invoice"), ("deposit", "Deposit"),
     ("refund_received", "Refund received"), ("owner_contribution", "Owner contribution"),
-    ("loan", "Loan"), ("transfer", "Transfer between own accounts"), ("other_income", "Other income")
+    ("loan", "Loan"), ("transfer", "Transfer between own accounts"), ("other_income", "Other income"),
+    ("payout", "Processor payout (Square, PayPal…)")
 ]
 func bankIncomingKindLabel(_ code: String) -> String { bankIncomingKinds.first { $0.code == code }?.label ?? code }
 
 /// Money in, but not revenue — once marked, these leave the Incoming total
 /// (mirrors the web's exclusion list).
-let bankNonRevenueIncomingKinds: Set<String> = ["transfer", "owner_contribution", "loan"]
+let bankNonRevenueIncomingKinds: Set<String> = ["transfer", "owner_contribution", "loan", "payout"]
 
 /// Where a transaction stands on its way to the accountant (field
 /// `reviewStatus`, absent = unreviewed). Labels are t()'d at render time.

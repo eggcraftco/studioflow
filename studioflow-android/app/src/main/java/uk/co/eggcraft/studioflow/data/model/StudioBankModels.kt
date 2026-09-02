@@ -52,7 +52,14 @@ data class StudioBankTransaction(
     /** Set when this incoming payment is matched to one payment entry on the linked order. */
     val linkedPaymentId: String = "",
     /** Set when the receipt references a central Files-library record instead of an upload. */
-    val receiptFileRecordId: String = ""
+    val receiptFileRecordId: String = "",
+    // ---- Faz 5: the processor payout this row settled (Square today), written by the settlement matcher ----
+    val settlementLabel: String = "",
+    val settlementPayout: String = "",
+    val settlementGross: String = "",
+    val settlementFee: String = "",
+    val settlementNet: String = "",
+    val settlementArrival: String = ""
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
@@ -263,7 +270,13 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         } ?: emptyList(),
         incomingKind = (data["incomingKind"] as? String) ?: "",
         linkedPaymentId = (data["linkedPaymentId"] as? String) ?: "",
-        receiptFileRecordId = (data["receiptFileRecordId"] as? String) ?: ""
+        receiptFileRecordId = (data["receiptFileRecordId"] as? String) ?: "",
+        settlementLabel = ((data["settlement"] as? Map<*, *>)?.let { (it["providerLabel"] ?: it["provider"])?.toString() }).orEmpty(),
+        settlementPayout = ((data["settlement"] as? Map<*, *>)?.get("payoutExternalId")?.toString()).orEmpty(),
+        settlementGross = ((data["settlement"] as? Map<*, *>)?.get("gross")?.toString()).orEmpty(),
+        settlementFee = ((data["settlement"] as? Map<*, *>)?.get("fee")?.toString()).orEmpty(),
+        settlementNet = ((data["settlement"] as? Map<*, *>)?.get("net")?.toString()).orEmpty(),
+        settlementArrival = ((data["settlement"] as? Map<*, *>)?.get("arrivalDate")?.toString()).orEmpty()
     )
 }
 

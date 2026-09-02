@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -3444,6 +3445,9 @@ private fun SquareDetail(state: StudioFlowUiState) {
     var previewText by remember { mutableStateOf("") }
     var unmatchedText by remember { mutableStateOf("") }
     var payoutsText by remember { mutableStateOf("") }
+    var payoutRows by remember { mutableStateOf<List<StudioFlowRepository.SquarePayoutRow>>(emptyList()) }
+    var settlePayoutId by remember { mutableStateOf("") }
+    var settle by remember { mutableStateOf<StudioFlowRepository.SquarePayoutMatch?>(null) }
     var auditText by remember { mutableStateOf("") }
     val connection = connections.firstOrNull { it.status == "connected" } ?: connections.firstOrNull { it.status != "disconnected" }
     val sources = listOf("SQUARE_POS" to "Square Point of Sale", "SQUARE_ONLINE" to "Square Online", "INVOICE" to "Square Invoices", "APPOINTMENTS" to "Square Appointments", "VIRTUAL_TERMINAL" to "Virtual Terminal", "API" to "API", "OTHER" to "Other")
@@ -3586,10 +3590,51 @@ private fun SquareDetail(state: StudioFlowUiState) {
                         run("payouts") {
                             val ws = workspace ?: return@run
                             val rows = repository.squarePayouts(ws.id)
-                            payoutsText = if (rows.isEmpty()) t("No payouts yet.") else rows.joinToString("\n") { "${it.arrivalDate} · ${it.status} · ${t("Gross")} ${it.gross.ifEmpty { "—" }} · ${t("Refunds")} ${it.refunds.ifEmpty { "—" }} · ${t("Fees")} ${it.fee.ifEmpty { "—" }} · ${t("Net")} ${it.amount} ${it.currency} · ${if (it.bankMatched) t("Matched") else t("Not matched")}${if (it.reconciled) "" else " · " + t("Needs attention")}" }
+                            payoutRows = rows
+                            payoutsText = if (rows.isEmpty()) t("No payouts yet.") else ""
                         }
                     }) { Text(t("Load")) }
                     if (payoutsText.isNotEmpty()) Text(payoutsText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    payoutRows.forEach { row ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("${row.arrivalDate} · ${row.status} · ${t("Gross")} ${row.gross.ifEmpty { "—" }} · ${t("Refunds")} ${row.refunds.ifEmpty { "—" }} · ${t("Fees")} ${row.fee.ifEmpty { "—" }} · ${t("Net")} ${row.amount} ${row.currency}${if (row.reconciled) "" else " · " + t("Needs attention")}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (row.bankMatched) {
+                                    Text("✓ ${t("Matched")}${if (row.bankMatchDate.isNotBlank()) " · " + row.bankMatchDate else ""}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                    if (isOwner) TextButton(enabled = busy != "settle", contentPadding = PaddingValues(0.dp), onClick = {
+                                        run("settle") { val ws = workspace ?: return@run; repository.squarePayoutBankUnlink(ws.id, row.id); notice = t("Payout unlinked."); settle = null; settlePayoutId = ""; payoutRows = repository.squarePayouts(ws.id) }
+                                    }) { Text(t("Unlink"), fontSize = 12.sp) }
+                                } else {
+                                    Text(t("Not matched"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (isOwner) TextButton(enabled = busy != "settle", contentPadding = PaddingValues(0.dp), onClick = {
+                                        run("settle") { val ws = workspace ?: return@run; settle = repository.squarePayoutBankSuggest(ws.id, row.id); settlePayoutId = row.id }
+                                    }) { Text(t("Find bank row"), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+                    settle?.let { match ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${t("Bank row")} · ${match.header}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                TextButton(contentPadding = PaddingValues(0.dp), onClick = { settle = null; settlePayoutId = "" }) { Text(t("Close"), fontSize = 12.sp) }
+                            }
+                            if (match.candidates.isEmpty()) Text(t("No bank row of this amount arrived in the window."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            match.candidates.forEach { c ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("${c.bookingDate.ifBlank { "—" }} · ${c.counterparty.ifBlank { c.description.ifBlank { "—" } }} · ${c.amount} ${c.currency} · ${t("Score")} ${c.score}${if (c.shifted) " · " + t("Same amount, another day.") else ""}", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    if (c.free) OutlinedButton(enabled = busy != "settle", contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), onClick = {
+                                        run("settle") { val ws = workspace ?: return@run; repository.squarePayoutBankConfirm(ws.id, settlePayoutId, c.transactionId); notice = t("Payout matched to the bank row."); settle = null; settlePayoutId = ""; payoutRows = repository.squarePayouts(ws.id) }
+                                    }) { Text(t("Match"), fontSize = 12.sp) }
+                                    else Text(t("Already classified"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            if (match.near.isNotEmpty()) {
+                                Text(t("Nearby amounts (a fee or FX leg):"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                match.near.forEach { c -> Text("${c.bookingDate.ifBlank { "—" }} · ${c.counterparty.ifBlank { c.description.ifBlank { "—" } }} · ${c.amount} ${c.currency}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                    }
                 }
                 if (isOwner) {
                     DetailCard(title = t("Missing order audit"), icon = Icons.Filled.CheckCircle) {

@@ -46,6 +46,34 @@ https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
   tahsilat (Faz 5), Shopify canlı parite ölçümü (dev mağazası bayrağı),
   16 Eyl SHOP-004 Faz B.
 
+### 2 Eylül öğleden sonra — Faz 5 finans 1. parça + canlı banka bug'ı
+
+- **Canlı bug kapandı (94c4c13):** `bankFeed.js` id taraması `>= prefix` ve
+  `< prefix` ile boş aralık soruyordu; `existingIds` hep boş kalıyor,
+  `firstImportedAt` her senkronda yeniden damgalanıyordu (brief §11'in
+  bulgusu). Üst sınır `prefix + U+F8FF`; emülatör e2e'si iki senkronla pinliyor
+  (kırmızı→yeşil doğrulandı). Üç banka fonksiyonu isimle deploy edildi.
+- **Square payout ↔ banka satırı eşleştirmesi (6def492/c2e8f19 + e69f871 +
+  native):** `commerce/settlements.js` saf puanlama (para girişi, kuruşuna
+  kadar tutar, aynı para birimi, varış ±3 gün; gün kayması −15, sağlayıcı
+  kelimesi +20, referans +25; otomatik ≥85 ve ikinciyle ≥15 fark) +
+  `settlementMatch.js` orkestratör (payout `bankMatch` ↔ satır
+  `settlement` + `incomingKind: payout`, iki taraflı batch; suggest/confirm/
+  unlink). Üç tetik: Square reconcile payout geçişi, banka senkronu import
+  sonrası, `matchSquarePayoutToBank` callable (owner). Kind'ı payout dışına
+  çevirmek iki tarafı da boşaltır. `payout` kind'ı üç istemcide ciro dışı.
+  Sunucu 7 fonksiyon CANLI. Web: payouts tablosunda Find bank row / Match /
+  Unlink, Banking'de "Processor payout" seçeneği + brüt/ücret/net çipi;
+  Mac/iPhone ve Android aynı (ayrı struct/composable). 13 string × 12 dil;
+  rehberde "Payouts and your bank" paragrafı 12 dilde + corpus + 7 rehber
+  fonksiyonu deploy. Testler: 8 birim + Square e2e 3 senaryo + banka e2e.
+  Android BUILD SUCCESSFUL, macOS + iOS BUILD SUCCEEDED. Web "canlıya at"
+  bekliyor.
+- **Neden bu sıra:** `NivaDesk_banka_pandle_paypal.md` brief'i PayPal için en
+  büyük engeli "yerleşme transferlerinin çifte sayımı" diye koyuyor; aynı
+  settlement modeli PayPal payout'larına `PROVIDERS` haritasında bir satırla
+  uzanır.
+
 
 ### 31 Ağustos — bir günde on iş, ve defterin kendisi yalan söylüyordu
 

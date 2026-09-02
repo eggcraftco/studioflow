@@ -64,6 +64,13 @@ struct StudioBankTransaction: Identifiable, Equatable {
     /// order payments — which existing payment entry it was matched to.
     let incomingKind: String
     let linkedPaymentId: String
+    /// Faz 5: the processor payout this row settled (Square today), written by the settlement matcher.
+    let settlementLabel: String
+    let settlementPayout: String
+    let settlementGross: String
+    let settlementFee: String
+    let settlementNet: String
+    let settlementArrival: String
     /// Set when the receipt references a central Files-library record
     /// instead of a copied upload.
     let receiptFileRecordId: String
@@ -108,6 +115,13 @@ struct StudioBankTransaction: Identifiable, Equatable {
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?? ""
         incomingKind = (data["incomingKind"] as? String) ?? ""
         linkedPaymentId = (data["linkedPaymentId"] as? String) ?? ""
+        let settlement = data["settlement"] as? [String: Any] ?? [:]
+        settlementLabel = (settlement["providerLabel"] as? String) ?? ((settlement["provider"] as? String) ?? "")
+        settlementPayout = (settlement["payoutExternalId"] as? String) ?? ""
+        settlementGross = (settlement["gross"] as? String) ?? ""
+        settlementFee = (settlement["fee"] as? String) ?? ""
+        settlementNet = (settlement["net"] as? String) ?? ""
+        settlementArrival = (settlement["arrivalDate"] as? String) ?? ""
         receiptFileRecordId = (data["receiptFileRecordId"] as? String) ?? ""
         splits = (data["splits"] as? [[String: Any]] ?? []).map(StudioBankSplitLine.init)
         vatCode = ((data["vatCode"] as? String) ?? "").uppercased()
@@ -2371,6 +2385,9 @@ struct BankIncomingMatchSection: View {
             if bankNonRevenueIncomingKinds.contains(kind) {
                 Text(fmt.t("Not counted as revenue.")).font(.system(size: 11)).foregroundColor(.secondary)
             }
+            if !tx.settlementLabel.isEmpty {
+                BankSettlementChipView(tx: tx, fmt: fmt)
+            }
             if kind == "order_payment" {
                 if tx.incomingKind == "order_payment", !tx.linkedPaymentId.isEmpty {
                     linkedView
@@ -3196,5 +3213,20 @@ private struct BankRulesSection: View {
             }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading).background(background).cornerRadius(14)
+    }
+}
+
+/// Faz 5: the payout a bank row settled — provider, gross, fees, net and arrival.
+private struct BankSettlementChipView: View {
+    let tx: StudioBankTransaction
+    let fmt: BankFormat
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("✓ \(fmt.t("Processor payout")) · \(tx.settlementLabel)\(tx.settlementPayout.isEmpty ? "" : " · \(tx.settlementPayout)")")
+                .font(.system(size: 11, weight: .bold)).foregroundColor(.green)
+            Text("\(fmt.t("Gross")) \(tx.settlementGross.isEmpty ? "—" : tx.settlementGross) · \(fmt.t("Fees")) \(tx.settlementFee.isEmpty ? "—" : tx.settlementFee) · \(fmt.t("Net")) \(tx.settlementNet.isEmpty ? "—" : tx.settlementNet)\(tx.settlementArrival.isEmpty ? "" : " · \(fmt.t("Arrival")) \(tx.settlementArrival)")")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -2288,6 +2288,10 @@ private fun TransactionDetailSheet(
                         if (tx.incomingKind in BANK_NON_REVENUE_INCOMING_KINDS) {
                             Text(t("Not counted as revenue."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        if (tx.settlementLabel.isNotBlank()) {
+                            Text("✓ ${t("Processor payout")} · ${tx.settlementLabel}${if (tx.settlementPayout.isNotBlank()) " · " + tx.settlementPayout else ""}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)
+                            Text("${t("Gross")} ${tx.settlementGross.ifBlank { "—" }} · ${t("Fees")} ${tx.settlementFee.ifBlank { "—" }} · ${t("Net")} ${tx.settlementNet.ifBlank { "—" }}${if (tx.settlementArrival.isNotBlank()) " · " + t("Arrival") + " " + tx.settlementArrival else ""}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     if (tx.incomingKind == "order_payment" && tx.linkedPaymentId.isNotBlank()) {
                         Text("✓ ${t("Matched to the order's existing payment — nothing was recorded twice.")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)
