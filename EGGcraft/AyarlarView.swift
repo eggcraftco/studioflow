@@ -6315,6 +6315,7 @@ struct AyarlarView: View {
         let isOwner = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
 
         return VStack(alignment: .leading, spacing: 18) {
+            CommerceSyncHealthView(companyId: companyId, provider: "shopify", isOwner: isOwner, language: seciliDil)
             SettingsCard(
                 title: t("Connected Shopify stores", lang: seciliDil),
                 iconName: "bag.badge.plus",

@@ -1920,6 +1920,7 @@ private fun EtsyDetail(state: StudioFlowUiState) {
     LaunchedEffect(workspace?.id) { reload() }
 
     DetailColumn {
+        CommerceSyncHealthCard(state, provider = "etsy")
         if (errorText.isNotEmpty()) Text(errorText, color = DangerRed, fontWeight = FontWeight.SemiBold)
         else if (statusText.isNotEmpty()) Text(statusText, color = StudioGreen, fontWeight = FontWeight.SemiBold)
 
@@ -3168,6 +3169,95 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
     }
 }
 
+// Faz 2 / OBS-003+004 — freshness per data type per connection, the events
+// behind it, and a Retry for a dead one (owner only). Reads the common
+// engine's health and event records; the same card sits under Shopify and Etsy.
+@Composable
+private fun CommerceSyncHealthCard(state: StudioFlowUiState, provider: String) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val isOwner = state.workspace?.role?.trim()?.lowercase() == "owner"
+    var connections by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.CommerceHealthConnection>?>(null) }
+    var events by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.CommerceEventRow>>(emptyList()) }
+    var error by remember { mutableStateOf("") }
+    var busyKey by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    var reloadKey by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(state.workspace?.id, provider, reloadKey) {
+        val workspace = state.workspace ?: return@LaunchedEffect
+        if (workspace.id.isEmpty()) return@LaunchedEffect
+        runCatching {
+            val health = repository.getCommerceHealth(workspace).filter { it.provider == provider }
+            val activity = repository.listCommerceEvents(workspace).filter { it.provider == provider }.take(20)
+            connections = health; events = activity; error = ""
+        }.onFailure { connections = emptyList(); error = it.message ?: t("Could not load.") }
+    }
+    fun agoText(ms: Long?): String {
+        if (ms == null || ms <= 0L) return "—"
+        val diff = (System.currentTimeMillis() - ms).coerceAtLeast(0L)
+        return when {
+            diff < 90_000L -> t("Just now")
+            diff < 90L * 60_000L -> "${diff / 60_000L} ${t("minutes ago")}"
+            diff < 36L * 3_600_000L -> "${diff / 3_600_000L} ${t("hours ago")}"
+            else -> "${diff / 86_400_000L} ${t("days ago")}"
+        }
+    }
+    val entityLabel = mapOf("orders" to "Orders", "products" to "Products", "inventory" to "Inventory", "finance" to "Finance")
+    val stateLabel = mapOf("fresh" to "Fresh", "stale" to "Stale", "never" to "Never synced", "unsupported" to "Not supported")
+    val statusLabel = mapOf("applied" to "Applied", "retrying" to "Retrying", "dead" to "Dead", "failed" to "Dead", "skipped" to "Skipped", "duplicate" to "Duplicate", "stale" to "Stale", "noop" to "No change", "held" to "Held", "queued" to "Queued", "processing" to "Processing", "received" to "Received")
+    DetailCard(title = t("Sync health"), icon = Icons.Filled.CheckCircle) {
+        Text(t("Freshness per data type for this connection, and the events behind it."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
+        when {
+            connections == null -> Text(t("Loading..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            connections!!.isEmpty() -> Text(t("No sync activity recorded yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> connections!!.forEach { row ->
+                Text(row.connectionId, fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOf("orders", "products", "inventory", "finance").joinToString("  ·  ") { entity ->
+                        val cell = row.health[entity]
+                        "${t(entityLabel.getValue(entity))}: ${t(stateLabel[cell?.state ?: "unsupported"] ?: "Not supported")}"
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val orders = row.health["orders"]
+                Text(
+                    "${t("Last successful sync")}: ${agoText(orders?.lastSuccessAtMs)} · ${t("Last webhook")}: ${agoText(orders?.lastWebhookAtMs)} · ${t("Pending retries")}: ${orders?.pendingRetries ?: 0} · ${t("Dead letters")}: ${orders?.deadLetters ?: 0}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (connections != null) {
+            Text(t("Recent activity"), fontWeight = FontWeight.SemiBold)
+            if (events.isEmpty()) {
+                Text(t("No events yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                events.forEach { row ->
+                    val dead = row.status == "dead" || row.status == "failed"
+                    val startedMs = runCatching { java.time.Instant.parse(row.startedAt).toEpochMilli() }.getOrNull()
+                    Text("${t(statusLabel[row.status] ?: row.status)} · ${row.eventType}${if (row.externalId.isNotEmpty()) " · #${row.externalId}" else ""} · ${agoText(startedMs)}")
+                    if (row.message.isNotEmpty()) Text(row.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (dead && isOwner) {
+                        OutlinedButton(enabled = busyKey != row.key, onClick = {
+                            val workspace = state.workspace ?: return@OutlinedButton
+                            scope.launch {
+                                busyKey = row.key; notice = ""
+                                runCatching { repository.retryCommerceEvent(workspace, row.key) }
+                                    .onSuccess { notice = t("Retried — see the result in the list."); reloadKey += 1 }
+                                    .onFailure { notice = it.message ?: t("Retry failed.") }
+                                busyKey = ""
+                            }
+                        }) { Text(t("Retry")) }
+                    }
+                }
+            }
+            if (notice.isNotEmpty()) Text(notice, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
 @Composable
 private fun ShopifyDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -3208,6 +3298,7 @@ private fun ShopifyDetail(state: StudioFlowUiState) {
         )
     }
     DetailColumn {
+        CommerceSyncHealthCard(state, provider = "shopify")
         DetailCard(title = t("Connected Shopify stores"), icon = Icons.Filled.ShoppingBag) {
             Text(
                 t("Stores connected through the official NivaDesk app on the Shopify App Store. Orders, customers and status updates sync automatically."),

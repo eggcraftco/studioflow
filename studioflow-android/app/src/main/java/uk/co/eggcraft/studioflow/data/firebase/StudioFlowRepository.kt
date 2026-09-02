@@ -917,6 +917,57 @@ class StudioFlowRepository(
 
 
     // Stores connected through the official Shopify App Store app (member read).
+    // Faz 2 — the common engine's health and event records (Sync Health card).
+    data class CommerceHealthEntity(val state: String, val lastSuccessAtMs: Long?, val lastAttemptAtMs: Long?, val lastWebhookAtMs: Long?, val pendingRetries: Int, val deadLetters: Int)
+    data class CommerceHealthConnection(val provider: String, val connectionId: String, val health: Map<String, CommerceHealthEntity>)
+    data class CommerceEventRow(val key: String, val provider: String, val connectionId: String, val externalId: String, val eventType: String, val status: String, val attempt: Int, val errorClass: String, val message: String, val startedAt: String)
+
+    suspend fun getCommerceHealth(workspace: StudioWorkspace): List<CommerceHealthConnection> {
+        val result = functions.getHttpsCallable("getCommerceHealth").call(mapOf("companyId" to workspace.id)).await()
+        val data = result.data as? Map<*, *>
+        val rows = data?.get("connections") as? List<*> ?: return emptyList()
+        return rows.mapNotNull { raw ->
+            val entry = raw as? Map<*, *> ?: return@mapNotNull null
+            val healthRaw = entry["health"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            val health = healthRaw.entries.mapNotNull { (k, v) ->
+                val cell = v as? Map<*, *> ?: return@mapNotNull null
+                (k as? String ?: return@mapNotNull null) to CommerceHealthEntity(
+                    state = (cell["state"] as? String).orEmpty(),
+                    lastSuccessAtMs = (cell["lastSuccessAtMs"] as? Number)?.toLong(),
+                    lastAttemptAtMs = (cell["lastAttemptAtMs"] as? Number)?.toLong(),
+                    lastWebhookAtMs = (cell["lastWebhookAtMs"] as? Number)?.toLong(),
+                    pendingRetries = (cell["pendingRetries"] as? Number)?.toInt() ?: 0,
+                    deadLetters = (cell["deadLetters"] as? Number)?.toInt() ?: 0,
+                )
+            }.toMap()
+            CommerceHealthConnection(
+                provider = (entry["provider"] as? String).orEmpty(),
+                connectionId = (entry["connectionId"] as? String).orEmpty(),
+                health = health,
+            )
+        }
+    }
+
+    suspend fun listCommerceEvents(workspace: StudioWorkspace, limit: Int = 40): List<CommerceEventRow> {
+        val result = functions.getHttpsCallable("listCommerceEvents").call(mapOf("companyId" to workspace.id, "limit" to limit)).await()
+        val data = result.data as? Map<*, *>
+        val rows = data?.get("events") as? List<*> ?: return emptyList()
+        return rows.mapNotNull { raw ->
+            val e = raw as? Map<*, *> ?: return@mapNotNull null
+            CommerceEventRow(
+                key = (e["key"] as? String).orEmpty(), provider = (e["provider"] as? String).orEmpty(), connectionId = (e["connectionId"] as? String).orEmpty(),
+                externalId = (e["externalId"] as? String).orEmpty(), eventType = (e["eventType"] as? String).orEmpty(), status = (e["status"] as? String).orEmpty(),
+                attempt = (e["attempt"] as? Number)?.toInt() ?: 1, errorClass = (e["errorClass"] as? String).orEmpty(), message = (e["message"] as? String).orEmpty(),
+                startedAt = (e["startedAt"] as? String).orEmpty(),
+            )
+        }
+    }
+
+    suspend fun retryCommerceEvent(workspace: StudioWorkspace, eventKey: String): String {
+        val result = functions.getHttpsCallable("retryCommerceEvent").call(mapOf("companyId" to workspace.id, "eventKey" to eventKey)).await()
+        return ((result.data as? Map<*, *>)?.get("status") as? String).orEmpty()
+    }
+
     data class ShopifyAppStoreSummary(
         val shop: String,
         val shopName: String,

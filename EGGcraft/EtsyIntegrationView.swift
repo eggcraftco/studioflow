@@ -95,6 +95,8 @@ struct EtsyIntegrationView: View {
             }
         }
 
+        CommerceSyncHealthView(companyId: firebaseManager.currentCompanyId, provider: "etsy", isOwner: isOwner, language: language)
+
         EtsyHeaderCard(
             connection: live,
             language: language,
