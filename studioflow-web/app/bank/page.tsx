@@ -63,6 +63,8 @@ type BankTransaction = {
   providerReference: string;
   reviewStatus: string;
   incomingKind: string;
+  // Faz 5: which processor payout this row settled (Square today), written by the settlement matcher.
+  settlement: { provider: string; providerLabel?: string; payoutExternalId?: string; arrivalDate?: string | null; gross?: string | null; fee?: string | null; refunds?: string | null; net?: string | null; currency?: string | null } | null;
   linkedPaymentId: string;
   receiptFileRecordId: string;
   splits: Array<{ amount: number; category: string; vatCode?: string; note?: string; orderId?: string; orderLabel?: string }>;
@@ -405,6 +407,7 @@ function BankPageContent() {
             providerReference: String(data.providerReference || ""),
             reviewStatus: String(data.reviewStatus || ""),
             incomingKind: String(data.incomingKind || ""),
+            settlement: data.settlement && typeof data.settlement === "object" ? (data.settlement as BankTransaction["settlement"]) : null,
             linkedPaymentId: String(data.linkedPaymentId || ""),
             receiptFileRecordId: String(data.receiptFileRecordId || ""),
             splits: Array.isArray(data.splits) ? (data.splits as BankTransaction["splits"]) : [],
@@ -1427,7 +1430,7 @@ function BankPageContent() {
   // Transfers between the owner's own accounts, owner contributions and loans
   // are money in, but not revenue — once marked, they leave this tile.
   const incomingTotal = useMemo(() => visibleTransactions
-    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan"].includes(item.incomingKind))
+    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan", "payout"].includes(item.incomingKind))
     .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions]);
 
   // Sparkline for the "Total spent" tile: daily in month view, monthly in year view.
@@ -3345,11 +3348,18 @@ function BankPageContent() {
                     <option value="loan">{t("Loan")}</option>
                     <option value="transfer">{t("Transfer between own accounts")}</option>
                     <option value="other_income">{t("Other income")}</option>
+                    <option value="payout">{t("Processor payout (Square, PayPal…)")}</option>
                   </select>
-                  {["transfer", "owner_contribution", "loan"].includes(drawerTx.incomingKind) ? (
+                  {["transfer", "owner_contribution", "loan", "payout"].includes(drawerTx.incomingKind) ? (
                     <span style={{ fontSize: 11, opacity: 0.65 }}>{t("Not counted as revenue.")}</span>
                   ) : null}
                 </div>
+                {drawerTx.settlement ? (
+                  <div style={{ marginTop: 8, fontSize: 12.5, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Processor payout")} · {drawerTx.settlement.providerLabel || drawerTx.settlement.provider}{drawerTx.settlement.payoutExternalId ? ` · ${drawerTx.settlement.payoutExternalId}` : ""}</span>
+                    <span className="muted-copy">{t("Gross")} {drawerTx.settlement.gross ?? "—"} · {t("Fees")} {drawerTx.settlement.fee ?? "—"} · {t("Net")} {drawerTx.settlement.net ?? "—"}{drawerTx.settlement.arrivalDate ? ` · ${t("Arrival")} ${drawerTx.settlement.arrivalDate}` : ""}</span>
+                  </div>
+                ) : null}
                 {drawerTx.incomingKind === "order_payment" && drawerTx.linkedPaymentId ? (
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched to the order's existing payment — nothing was recorded twice.")}</span>
