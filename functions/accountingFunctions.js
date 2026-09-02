@@ -432,6 +432,9 @@ function createAccountingFunctions(deps) {
     const { data: connData } = await connectionDoc(companyId, connectionId);
     const connection = { connectionId, ...connData };
     if (connection.status !== "linked") { await inboxRef.set({ status: "ignored", reason: "connection_not_linked", updatedAtMs: now() }, { merge: true }); return "ignored"; }
+    // The console subscribes to every entity by default; only the ones the
+    // engine understands are fetched, the rest are kept but marked ignored.
+    if (!qboWebhook.SUBSCRIBED_ENTITIES.includes(event.entityType)) { await inboxRef.set({ status: "ignored", reason: "entity_not_tracked", updatedAtMs: now() }, { merge: true }); return "ignored"; }
     const adapter = adapterFor(companyId, connection);
     let outcome = "";
     if (event.operation === "Delete" || event.operation === "Void") {
