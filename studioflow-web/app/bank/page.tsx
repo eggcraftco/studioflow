@@ -38,7 +38,7 @@ type BankConnection = {
   lastSyncError: string;
 };
 /** Spending is money out that stayed out. A refund or chargeback went back to a customer and lives on the order instead. */
-function isSpend(item: { amount: number; outgoingKind: string }): boolean { return isSpend(item) && !item.outgoingKind; }
+function isSpend(item: { amount: number; outgoingKind: string }): boolean { return item.amount < 0 && !item.outgoingKind; }
 
 type BankTransaction = {
   id: string;
