@@ -104,7 +104,7 @@ export function QuickBooksIntegrationSection({ workspace, language = "English" }
       setLoading(false);
     }
   }, [companyId, t]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh(true); }, [refresh]);
 
   // Drafts follow what is saved, so a reload never loses a confirmed mapping.
   useEffect(() => {
