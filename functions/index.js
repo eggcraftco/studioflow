@@ -5677,8 +5677,11 @@ const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 
 // Bank spending feed (TrueLayer Open Banking data API, read-only).
 const { createBankFeedFunctions } = require("./bankFeed");
+// Faz 5 finance: processor payouts (Square first) matched to the bank rows they settled into — shared by the bank feed and the connectors.
+const { createSettlementMatcher } = require("./commerce/settlementMatch");
+const settlementMatcher = createSettlementMatcher({ admin, db: () => admin.firestore() });
 const bankFeedExports = createBankFeedFunctions({
-  admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner,
+  admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, settlements: settlementMatcher,
   // Workspace notification + push when a waiting receipt finds its transaction.
   notifyCompany: async (companyId, payload) => {
     const notificationId = String(payload.id || `bank_${Date.now()}`);
@@ -5886,6 +5889,7 @@ const squareExports = createSquareConnectorFunctions({
   redirectUri: () => "",
   orderDocRef, integrationOrderCapacity, holdIntegrationOrder, upsertIntegrationCustomer, sendPushNotificationToCompany,
   reconcileLineItems, resolveDefaultDeliveryTime, companySettingsDocRef,
+  settlements: settlementMatcher,
   // SQ-WEB-008: the gateway records and queues; the worker fetches and applies.
   enqueue: (task, delaySeconds) => enqueueCommerceEvent(task, delaySeconds),
   ...(process.env.NIVADESK_E2E === "1" ? {
@@ -5908,6 +5912,7 @@ exports.runSquareImport = squareExports.runSquareImport;
 exports.listSquareUnmatched = squareExports.listSquareUnmatched;
 exports.listSquarePayouts = squareExports.listSquarePayouts;
 exports.auditSquareOrders = squareExports.auditSquareOrders;
+exports.matchSquarePayoutToBank = squareExports.matchSquarePayoutToBank;
 
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
@@ -31342,6 +31347,7 @@ if (process.env.NIVADESK_E2E === "1") {
     woo: wooExports._internal,
     // Square: the connector's internals for the suite.
     square: squareExports._internal,
+    settlements: settlementMatcher,
     // Faz 2: the shadow hook and the queue worker's brain, for the suite.
     shadowCompareShopifyOrder,
     processShopifyCommerceTask,

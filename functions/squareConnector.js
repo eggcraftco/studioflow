@@ -66,6 +66,8 @@ function squareOrderDocId(companyId, orderId) { return `square_${safeIdPart(comp
 function chunk(list, size) { const out = []; for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size)); return out; }
 
 function createSquareConnectorFunctions(deps) {
+  // Faz 5 finance: the settlement matcher ties a paid payout to the bank row it landed in (optional dependency; tests may omit it).
+  const settlements = deps.settlements || null;
   const {
     admin, onCall, onRequest, onSchedule = null, HttpsError,
     applicationId, applicationSecret, webhookSignatureKey, appAccessToken = () => "", tokenKey, environment = () => "production",
@@ -768,6 +770,12 @@ function createSquareConnectorFunctions(deps) {
     try { refunds = await reconcileRefunds(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { refunds = { complete: false, scanned: 0, recorded: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
     let payouts = { complete: true, scanned: 0, recorded: 0, unreconciled: 0, failed: 0 };
     try { payouts = await reconcilePayouts(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { payouts = { complete: false, scanned: 0, recorded: 0, unreconciled: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
+    // SQ-POUT-006 / Faz 5: a payout that reached the bank is matched to its statement row, so the money is never counted twice.
+    let settlementsAudit = null;
+    if (settlements && Number(payouts.scanned) > 0) {
+      try { settlementsAudit = await settlements.matchProviderPayouts(companyId, "square"); }
+      catch (error) { console.warn("square settlement match failed:", ref.id, error?.message || error); settlementsAudit = { provider: "square", error: String(error?.message || error).slice(0, 120) }; }
+    }
     let recovered = { complete: true, configured: false, scanned: 0, applied: 0 };
     try { recovered = await recoverEvents(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { recovered = { complete: false, configured: true, scanned: 0, applied: 0, error: String(error?.message || error).slice(0, 120) }; }
     const complete = orders.complete && payments.complete;
@@ -776,7 +784,7 @@ function createSquareConnectorFunctions(deps) {
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, kind: orders.complete ? "success" : "attempt", now: now(), FieldValue });
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, entity: "finance", kind: payments.complete ? "success" : "attempt", now: now(), FieldValue });
     await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: n(orders.scanned), created: n(orders.created), updated: n(orders.updated), skipped: n(orders.skipped), failed: n(orders.failed) }, payments: { scanned: n(payments.scanned), recorded: n(payments.recorded), unmatched: n(payments.unmatched), failed: n(payments.failed) }, events: { configured: recovered.configured === true, scanned: n(recovered.scanned), applied: n(recovered.applied), error: String(recovered.error || "") }, payouts: { scanned: n(payouts.scanned), recorded: n(payouts.recorded), unreconciled: n(payouts.unreconciled), failed: n(payouts.failed) }, refunds: { scanned: n(refunds.scanned), recorded: n(refunds.recorded), failed: n(refunds.failed) }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { ...orders, payments, refunds, payouts, events: recovered, complete, locationsHealthy };
+    return { ...orders, payments, refunds, payouts, events: recovered, settlements: settlementsAudit, complete, locationsHealthy };
   }
 
   const reconcileSquareConnections = onSchedule
@@ -910,9 +918,29 @@ function createSquareConnectorFunctions(deps) {
     return { ok: true, ...report };
   });
 
+  /** Faz 5: the owner's view of a payout's bank side — the window's rows scored (suggest), the owner's word (confirm), or letting go (unlink). */
+  const matchSquarePayoutToBank = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireWorkspaceOwner(request);
+    if (!settlements) throw new HttpsError("failed-precondition", "Settlement matching is not available.");
+    const payoutId = String(request.data?.payoutId || "").trim();
+    const mode = String(request.data?.mode || "suggest").trim();
+    if (!payoutId) throw new HttpsError("invalid-argument", "payoutId is required.");
+    const rethrow = (error) => { const code = ["not-found", "failed-precondition", "invalid-argument"].includes(error?.code) ? error.code : "internal"; throw new HttpsError(code, String(error?.message || error)); };
+    try {
+      if (mode === "suggest") return { ok: true, ...(await settlements.suggestForPayout(companyId, "square", payoutId)) };
+      if (mode === "confirm") {
+        const transactionId = String(request.data?.transactionId || "").trim();
+        if (!transactionId) throw Object.assign(new Error("transactionId is required."), { code: "invalid-argument" });
+        return settlements.confirmMatch(companyId, "square", payoutId, transactionId);
+      }
+      if (mode === "unlink") return settlements.unmatchPayout(companyId, "square", payoutId);
+      throw Object.assign(new Error("mode must be suggest, confirm or unlink."), { code: "invalid-argument" });
+    } catch (error) { rethrow(error); }
+  });
+
   return {
     beginSquareConnect, squareOAuthCallback, getSquareConnections, updateSquareConnectionSettings, disconnectSquare,
-    squareWebhook, reconcileSquareConnections, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders,
+    squareWebhook, reconcileSquareConnections, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders, matchSquarePayoutToBank,
     _internal: { recordPayout, reconcilePayouts, PAYOUTS_SUBCOLLECTION, applySquareOrder, recordPayment, recordRefund, handleEntityEvent, entityOfEvent, reconcileConnection, processSquareCommerceTask, refreshTokenWithLock, clientFor, publicView, settingsOf, connectionDocId, squareOrderDocId, notificationUrl, CONNECTION_COLLECTION, STATE_COLLECTION, PAYMENTS_SUBCOLLECTION, REFUNDS_SUBCOLLECTION, SALES_SUBCOLLECTION, IMPORT_POLICIES, SQUARE_SOURCES }
   };
 }

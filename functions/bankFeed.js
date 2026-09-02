@@ -58,7 +58,9 @@ const ENRICHMENT_FIELDS = [
   "category", "vatCode", "note", "receiptPath", "receiptName", "receiptNotNeeded",
   "receiptFileRecordId", "linkedOrderId", "linkedOrderLabel", "linkedPaymentId",
   "purchaseId", "purchaseNumber", "reviewStatus", "reviewedAt", "pandle",
-  "splits", "incomingKind"
+  "splits", "incomingKind",
+  // Faz 5: which processor payout this bank row settled (written by the settlement matcher, never by a sync).
+  "settlement"
 ];
 
 // What an incoming payment actually is — a transfer between the owner's own
@@ -66,10 +68,12 @@ const ENRICHMENT_FIELDS = [
 // order_payment may touch an order's payment ledger.
 const INCOMING_KINDS = [
   "order_payment", "invoice", "deposit", "refund_received",
-  "owner_contribution", "loan", "transfer", "other_income"
+  "owner_contribution", "loan", "transfer", "other_income",
+  // A processor's payout (Square, PayPal…): the sales behind it were counted when they happened, so it is not revenue either.
+  "payout"
 ];
 
-function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification }) {
+function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification, settlements = null }) {
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankReceiptInbox");
@@ -624,6 +628,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
         console.warn("matchWaitingReceipts failed:", companyId, error?.message || error);
       }
     }
+    // Faz 5: new rows may be a processor's payout landing — match them before the owner sees them as "unclassified income".
+    if (imported > 0 && settlements && typeof settlements.matchAll === "function") {
+      try { const out = await settlements.matchAll(companyId); const matched = Object.values(out).reduce((n, r) => n + (Number(r?.matched) || 0), 0); if (matched) console.log("bank sync matched settlements", companyId, JSON.stringify(out)); }
+      catch (error) { console.warn("settlement match after sync failed:", companyId, error?.message || error); }
+    }
 
     return { synced, skipped, imported };
   }
@@ -1064,7 +1073,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const transactionId = cleanText(request.data?.transactionId, 250);
     if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
     const txRef = transactionsRef(companyId).doc(transactionId);
-    if (!(await txRef.get()).exists) throw new HttpsError("not-found", "Transaction not found.");
+    const txDoc = await txRef.get();
+    if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    const current = txDoc.data() || {};
     const patch = {};
     const data = request.data || {};
     if (data.category !== undefined) {
@@ -1092,6 +1103,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       const incomingKind = cleanText(data.incomingKind, 24).toLowerCase();
       if (incomingKind && !INCOMING_KINDS.includes(incomingKind)) throw new HttpsError("invalid-argument", "Unknown incoming kind.");
       patch.incomingKind = incomingKind || admin.firestore.FieldValue.delete();
+      // Reclassifying a settled payout row lets go of the payout on both sides (the matcher clears `settlement`).
+      if (incomingKind !== "payout" && current.settlement && settlements && typeof settlements.unmatchTransaction === "function") {
+        await settlements.unmatchTransaction(companyId, { id: transactionId, ...current });
+      }
     }
     if (!Object.keys(patch).length) throw new HttpsError("invalid-argument", "Nothing to update.");
     patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();

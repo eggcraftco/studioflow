@@ -49,6 +49,8 @@ const millis = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : nu
   await company().collection("bankConnections").doc(CONN).set({ status: "linked", providerName: "Test Bank", accounts: [{ id: ACCOUNT, name: "Current" }] });
   await company().collection("bankTokens").doc(CONN).set({ refreshToken: "rt-0" });
   bank.transactions = [tx("t1", -12.5, "CAFE NERO", "2026-09-01T10:00:00Z"), tx("t2", 250, "STRIPE PAYOUT", "2026-09-01T12:00:00Z")];
+  // A paid Square payout of the same amount is waiting for its bank row: the sync's settlement pass should tie them.
+  await company().collection("squarePayouts").doc("PO_B").set({ provider: "square", connectionId: "sq_1", companyId: COMPANY, externalId: "PO_B", status: "PAID", amount: "250.00", currency: "GBP", arrivalDate: "2026-09-01", totals: { gross: "260.00", fee: "-10.00", net: "250.00", refunds: "0.00" }, entryCount: 1, externalCreatedAt: new Date().toISOString(), bankMatch: null });
 
   let first1 = null; let imported1 = null;
   await check("the first sync imports both rows and stamps firstImportedAt once", async () => {
@@ -59,6 +61,15 @@ const millis = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : nu
     first1 = millis(t1.firstImportedAt); imported1 = millis(t1.importedAt);
     assert.ok(first1 > 0 && imported1 > 0, "both stamps set on a brand-new row");
     assert.strictEqual((await company().collection("bankTransactions").get()).size, 2);
+  });
+
+  await check("a sync that imports a payout's bank row matches it to the waiting Square payout", async () => {
+    const t2 = (await txDoc("t2").get()).data();
+    assert.strictEqual(t2.incomingKind, "payout"); assert.strictEqual(t2.settlement.payoutId, "PO_B"); assert.strictEqual(t2.settlement.fee, "-10.00");
+    const po = (await company().collection("squarePayouts").doc("PO_B").get()).data();
+    assert.strictEqual(po.bankMatch.transactionId, `${ACCOUNT}_t2`); assert.strictEqual(po.bankMatch.method, "auto");
+    const t1 = (await txDoc("t1").get()).data();
+    assert.strictEqual(t1.settlement, undefined, "money out is never a payout");
   });
 
   await new Promise((resolve) => setTimeout(resolve, 1200));

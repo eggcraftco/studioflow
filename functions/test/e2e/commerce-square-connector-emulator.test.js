@@ -471,6 +471,69 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual(after.status, "FAILED", "PAID can become FAILED (SQ-POUT-005)"); assert.deepStrictEqual(after.bankMatch, { transactionId: "tx_9", confidence: "high" }, "a re-sync keeps the bank match");
   });
 
+  // ---- Faz 5 finance: a payout that reached the bank is matched to its statement row ----
+  const bankTx = (id, data) => sub("bankTransactions").doc(id).set({ accountId: "acc_1", connectionId: "bank_1", status: "booked", currency: "GBP", description: "", counterparty: "", provider: "truelayer", ...data });
+  const payoutDoc = (id) => sub(sq.PAYOUTS_SUBCOLLECTION).doc(id);
+  const settlements = index._e2e.settlements;
+  await check("a lone exact bank row in the payout's window is matched automatically, and both sides say so", async () => {
+    const created = new Date(Date.now() - 2 * 86400000).toISOString();
+    square.payouts.set("PO_2", { id: "PO_2", status: "PAID", amount_money: money(5660), location_id: "LOC_LONDON", arrival_date: "2026-09-03", end_to_end_id: "E2E-78", type: "BATCH", version: 1, destination: { type: "BANK_ACCOUNT" }, created_at: created, updated_at: created });
+    square.payoutEntries.set("PO_2", [{ id: "PO_2_e1", type: "CHARGE", effective_at: created, gross_amount_money: money(5900), fee_amount_money: money(-240), net_amount_money: money(5660), type_charge_details: { payment_id: "PAY_X" } }]);
+    await bankTx("acc_1_s1", { amount: 56.6, bookingDate: "2026-09-04", description: "SQUAREUP LTD PAYOUT", counterparty: "Squareup" });
+    await bankTx("acc_1_s2", { amount: 56.6, bookingDate: "2026-09-20", description: "SQUAREUP LTD PAYOUT" });   // outside the window
+    await bankTx("acc_1_s3", { amount: -56.6, bookingDate: "2026-09-03", description: "SQUAREUP LTD" });         // money out
+    await sq.recordPayout(connRef(), (await connRef().get()).data(), global.__nivadeskSquareFakeClient({ accessToken: "x" }), square.payouts.get("PO_2"));
+    const audit = await settlements.matchProviderPayouts(COMPANY, "square");
+    assert.strictEqual(audit.matched, 1, JSON.stringify(audit));
+    const po = (await payoutDoc("PO_2").get()).data();
+    assert.strictEqual(po.bankMatch.transactionId, "acc_1_s1"); assert.strictEqual(po.bankMatch.method, "auto"); assert.strictEqual(po.bankMatch.confidence, "high");
+    const row = (await sub("bankTransactions").doc("acc_1_s1").get()).data();
+    assert.strictEqual(row.incomingKind, "payout"); assert.strictEqual(row.settlement.payoutId, "PO_2"); assert.strictEqual(row.settlement.provider, "square"); assert.strictEqual(row.settlement.fee, "-2.40"); assert.strictEqual(row.settlement.net, "56.60");
+    assert.strictEqual((await sub("bankTransactions").doc("acc_1_s2").get()).data().settlement, undefined, "the row outside the window is untouched");
+    const again = await settlements.matchProviderPayouts(COMPANY, "square");
+    assert.strictEqual(again.scanned, 0, "a matched payout is not scanned again");
+  });
+
+  await check("two rows that cannot be told apart wait for the owner: suggest lists both, confirm takes one, reclassifying the row lets go, unlink clears", async () => {
+    const created = new Date(Date.now() - 86400000).toISOString();
+    square.payouts.set("PO_3", { id: "PO_3", status: "PAID", amount_money: money(1200), location_id: "LOC_LONDON", arrival_date: "2026-09-05", type: "BATCH", version: 1, destination: { type: "BANK_ACCOUNT" }, created_at: created, updated_at: created });
+    square.payoutEntries.set("PO_3", [{ id: "PO_3_e1", type: "CHARGE", effective_at: created, gross_amount_money: money(1250), fee_amount_money: money(-50), net_amount_money: money(1200), type_charge_details: { payment_id: "PAY_Y" } }]);
+    await bankTx("acc_1_a1", { amount: 12, bookingDate: "2026-09-05", description: "CREDIT A" });
+    await bankTx("acc_1_a2", { amount: 12, bookingDate: "2026-09-05", description: "CREDIT B" });
+    await sq.recordPayout(connRef(), (await connRef().get()).data(), global.__nivadeskSquareFakeClient({ accessToken: "x" }), square.payouts.get("PO_3"));
+    const audit = await settlements.matchProviderPayouts(COMPANY, "square");
+    assert.strictEqual(audit.ambiguous, 1); assert.strictEqual(audit.matched, 0);
+    assert.strictEqual((await payoutDoc("PO_3").get()).data().bankMatch, null);
+    const suggest = await index.matchSquarePayoutToBank.run({ auth, data: { companyId: COMPANY, payoutId: "PO_3", mode: "suggest" }, rawRequest: {} });
+    assert.strictEqual(suggest.candidates.length, 2); assert.strictEqual(suggest.payout.amount, "12.00"); assert.deepStrictEqual(suggest.window, { from: "2026-09-02", to: "2026-09-08" });
+    await assert.rejects(index.matchSquarePayoutToBank.run({ auth: { uid: "someone-else", token: {} }, data: { companyId: COMPANY, payoutId: "PO_3", mode: "suggest" }, rawRequest: {} }), /permission|not|member|owner/i, "owner only");
+    await assert.rejects(index.matchSquarePayoutToBank.run({ auth, data: { companyId: COMPANY, payoutId: "PO_3", mode: "confirm", transactionId: "acc_1_s1" }, rawRequest: {} }), /amount_differs|row_taken/, "a row of another amount is refused");
+    const confirmed = await index.matchSquarePayoutToBank.run({ auth, data: { companyId: COMPANY, payoutId: "PO_3", mode: "confirm", transactionId: "acc_1_a2" }, rawRequest: {} });
+    assert.strictEqual(confirmed.ok, true);
+    assert.strictEqual((await payoutDoc("PO_3").get()).data().bankMatch.method, "manual");
+    assert.strictEqual((await sub("bankTransactions").doc("acc_1_a2").get()).data().settlement.payoutId, "PO_3");
+    // The owner says the row was really a transfer: the payout is free again on both sides.
+    await index.bankUpdateTransaction.run({ auth, data: { companyId: COMPANY, transactionId: "acc_1_a2", incomingKind: "transfer" }, rawRequest: {} });
+    const rowAfter = (await sub("bankTransactions").doc("acc_1_a2").get()).data();
+    assert.strictEqual(rowAfter.incomingKind, "transfer"); assert.strictEqual(rowAfter.settlement, undefined);
+    assert.strictEqual((await payoutDoc("PO_3").get()).data().bankMatch, null);
+    // Confirm the other row, then let go explicitly.
+    await index.matchSquarePayoutToBank.run({ auth, data: { companyId: COMPANY, payoutId: "PO_3", mode: "confirm", transactionId: "acc_1_a1" }, rawRequest: {} });
+    const unlinked = await index.matchSquarePayoutToBank.run({ auth, data: { companyId: COMPANY, payoutId: "PO_3", mode: "unlink" }, rawRequest: {} });
+    assert.strictEqual(unlinked.unlinked, true);
+    const a1 = (await sub("bankTransactions").doc("acc_1_a1").get()).data();
+    assert.strictEqual(a1.settlement, undefined); assert.strictEqual(a1.incomingKind, undefined);
+    assert.strictEqual((await payoutDoc("PO_3").get()).data().bankMatch, null);
+  });
+
+  await check("the reconcile pass reports its settlement audit, and the payouts list carries the match", async () => {
+    const out = await sq.reconcileConnection(connRef(), (await connRef().get()).data(), { force: true, lookbackMs: 7 * 86400000 });
+    assert.strictEqual(out.settlements && out.settlements.provider, "square");
+    const listed = await index.listSquarePayouts.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
+    const po2 = listed.payouts.find((p) => p.externalId === "PO_2");
+    assert.strictEqual(po2.bankMatch.transactionId, "acc_1_s1");
+  });
+
   await check("the missing-order audit tells orders, finance-only sales and truly missing ones apart (§10.5)", async () => {
     square.orders.set("ORD_GHOST", onlineOrder("ORD_GHOST", { created_at: new Date(Date.now() - 3 * 86400000).toISOString(), updated_at: new Date(Date.now() - 3 * 86400000).toISOString() }));
     const report = await index.auditSquareOrders.run({ auth, data: { companyId: COMPANY, connectionId: connId, days: 30 }, rawRequest: {} });
