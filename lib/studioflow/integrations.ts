@@ -23,6 +23,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { getEtsyConnections } from "@/lib/studioflow/etsy";
+import { getWooConnections } from "@/lib/studioflow/woocommerce";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation";
@@ -34,7 +35,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "inbound" | "" | "etsy";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy";
 
 export type IntegrationProvider = {
   id: string;
@@ -59,10 +60,10 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Orders", "Customers"], manage: "shopify",
   },
   {
-    // SHOP-001/WOO-014: the paste-a-URL path is retired; WooCommerce returns as a connector.
-    id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "planned",
+    id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "native",
     logo: "/brand/integrations/woocommerce.svg",
-    blurb: "", capabilities: [], manage: "",
+    blurb: "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.",
+    capabilities: ["Orders", "Customers"], manage: "woocommerce",
   },
   {
     id: "etsy", name: "Etsy", category: "commerce", kind: "native", mark: "E",
@@ -159,12 +160,13 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
     getDocs(collection(db, "companies", companyId, "bankConnections")),
     getEtsyConnections(companyId),
+    getWooConnections(companyId),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -185,11 +187,14 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
         }))
       : [],
     bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
+    wooConnections: woo.status === "fulfilled"
+      ? woo.value.map((row) => ({ store: row.storeName || row.host, status: row.status, needsAttention: row.status === "needs_reconnect" || (row.status === "connected" && row.webhooksHealthy === false) }))
+      : [],
   };
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0,
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [],
 };
 
 export type IntegrationSignals = {
@@ -200,6 +205,8 @@ export type IntegrationSignals = {
   /** Connected Etsy shops, and whether each still holds a working authorisation. */
   etsyShops: { shop: string; status: string; needsReconnect: boolean }[];
   bankConnections: number;
+  /** Connected WooCommerce stores, and whether one needs the owner's attention. */
+  wooConnections: { store: string; status: string; needsAttention: boolean }[];
 };
 
 export function resolveIntegrationState(
@@ -232,6 +239,13 @@ export function resolveIntegrationState(
       state: broken === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} shops`,
     };
+  }
+
+  if (provider.id === "woocommerce") {
+    const live = (signals.wooConnections || []).filter((row) => row.status !== "disconnected");
+    if (live.length === 0) return { state: "available" };
+    const broken = live.filter((row) => row.needsAttention).length;
+    return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].store : `${live.length} stores` };
   }
 
   if (provider.id === "openbanking") {
