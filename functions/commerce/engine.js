@@ -11,6 +11,11 @@ const projection = require("./envelopeToOrder");
 
 const ENTITY_COLLECTION = "externalEntities";
 const ORDER_COLLECTION = "siparisler";
+// §10.5 Mapping Review Queue — one row per order the engine could apply but
+// could not vouch for (an ad-hoc line, a missing total, an unresolved
+// variation). Kept beside the order so the clients can list "needs review"
+// without a composite index, and cleared the moment a later apply is clean.
+const REVIEW_COLLECTION = "commerceReviewQueue";
 
 function isoNewer(a, b) {
   const ta = a ? Date.parse(a) : NaN; const tb = b ? Date.parse(b) : NaN;
@@ -104,6 +109,7 @@ async function applyEnvelope(db, envelope, ctx) {
       if (mode === "apply") {
         tx.set(orderRef, { ...patch, commerce, createdAtMs: now }, { merge: true });
         tx.set(identityRef, { ...identityWrite, createdAtMs: now }, { merge: true });
+        writeReview(tx, db, orderId, envelope, ctx, now);
       }
       return { result: mode === "apply" ? "created" : "would_create", orderId, patch };
     }
@@ -124,6 +130,7 @@ async function applyEnvelope(db, envelope, ctx) {
     if (mode === "apply") {
       tx.set(orderRef, { ...patch, commerce }, { merge: true });
       tx.set(identityRef, identityWrite, { merge: true });
+      writeReview(tx, db, orderId, envelope, ctx, now);
     }
     return { result: changed.length ? (mode === "apply" ? "updated" : "would_update") : "noop", orderId, patch };
   };
@@ -131,9 +138,24 @@ async function applyEnvelope(db, envelope, ctx) {
   return mode === "apply" ? db.runTransaction(decide) : decide(readOnlyTx(db));
 }
 
+/** The review row: written when the envelope asks for review, removed when a later apply is clean. */
+function writeReview(tx, db, orderId, envelope, ctx, now) {
+  const ref = db.collection(REVIEW_COLLECTION).doc(orderId);
+  if (envelope.review.required) {
+    tx.set(ref, {
+      companyId: ctx.companyId, orderId, provider: envelope.identity.provider, connectionId: envelope.identity.connection_id, externalId: envelope.identity.external_id,
+      providerDisplayName: envelope.source.provider_display_name || envelope.identity.provider, orderNumber: String((envelope.source.provider_metadata || {}).order_number || envelope.identity.external_id),
+      customerName: envelope.customer.name || null, grandTotal: envelope.order.grand_total || null, currency: envelope.order.currency || null,
+      reasons: envelope.review.reasons, resolved: false, updatedAtMs: now
+    }, { merge: true });
+  } else {
+    tx.delete(ref);
+  }
+}
+
 /** Shadow mode reads through a fake transaction so the decision code is identical. */
 function readOnlyTx(db) {
   return { get: (ref) => ref.get(), set: () => { throw new Error("shadow mode must not write"); } };
 }
 
-module.exports = { applyEnvelope, ENTITY_COLLECTION, ORDER_COLLECTION };
+module.exports = { applyEnvelope, ENTITY_COLLECTION, ORDER_COLLECTION, REVIEW_COLLECTION };

@@ -51,4 +51,12 @@ function pass(name) { console.log("PASS ", name); }
   assert(body.includes("commerce.cursors.recordPass(") && body.includes("complete = !audit.truncated && audit.failed === 0"), "the common cursor moves only on a complete pass");
   console.log("PASS  reconciliation writes the common cursor and moves it only when the pass was complete");
 }
+{
+  assert(source.includes("exports.listCommerceReviewQueue = onCall(") && source.includes("exports.resolveCommerceReview = onCall("), "review queue callables");
+  const rules = fs.readFileSync(path.join(__dirname, "..", "..", "..", "firestore.rules"), "utf8");
+  assert(/match \/commerceReviewQueue\/\{document=\*\*\} \{\s*allow read, write: if false;/.test(rules), "review queue denied to clients");
+  const engine = fs.readFileSync(path.join(__dirname, "..", "..", "commerce", "engine.js"), "utf8");
+  assert(engine.includes("writeReview(tx, db, orderId, envelope, ctx, now)") && engine.includes("tx.delete(ref)"), "the engine writes and clears the row in the same transaction");
+  console.log("PASS  the review queue is served through callables, denied to clients, and kept by the engine (§10.5)");
+}
 console.log("\n✅ COMMERCE WIRING GEÇTİ");

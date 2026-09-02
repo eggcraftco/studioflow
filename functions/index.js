@@ -31239,6 +31239,32 @@ exports.listCommerceEvents = onCall({ region: "europe-west2" }, async (request) 
 });
 
 
+// §10.5 Mapping Review Queue — the orders the engine applied but flagged
+// (ad-hoc line, missing total, unresolved variation), for a person to look at
+// and dismiss. Reading is a member's; dismissing is the owner's.
+exports.listCommerceReviewQueue = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const includeResolved = request.data?.includeResolved === true;
+  const snap = await admin.firestore().collection(commerce.engine.REVIEW_COLLECTION).where("companyId", "==", companyId).limit(300).get();
+  const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })).filter((r) => includeResolved || r.resolved !== true)
+    .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0)).slice(0, 100)
+    .map((r) => ({ orderId: r.orderId, provider: r.provider, providerDisplayName: r.providerDisplayName, connectionId: r.connectionId, externalId: r.externalId, orderNumber: r.orderNumber, customerName: r.customerName || null, grandTotal: r.grandTotal || null, currency: r.currency || null, reasons: Array.isArray(r.reasons) ? r.reasons : [], resolved: r.resolved === true, updatedAtMs: Number(r.updatedAtMs || 0) }));
+  return { ok: true, items: rows };
+});
+
+exports.resolveCommerceReview = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, uid } = await requireWorkspaceForBilling(request, true);
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+  const ref = admin.firestore().collection(commerce.engine.REVIEW_COLLECTION).doc(orderId);
+  const snap = await ref.get();
+  const row = snap.exists ? (snap.data() || {}) : null;
+  if (!row || String(row.companyId || "") !== companyId) throw new HttpsError("not-found", "No such review item in this workspace.");
+  await ref.set({ resolved: true, resolvedAtMs: Date.now(), resolvedByUid: uid }, { merge: true });
+  await admin.firestore().collection("siparisler").doc(orderId).set({ commerce: { reviewRequired: false, reviewResolvedAtMs: Date.now() } }, { merge: true }).catch(() => undefined);
+  return { ok: true };
+});
+
 // ARCH-004 — the UI reads what a provider can do from here, not from `if shopify`.
 exports.getCommerceCapabilities = onCall({ region: "europe-west2" }, async (request) => {
   await requireWorkspaceForBilling(request, false);

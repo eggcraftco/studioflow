@@ -240,6 +240,24 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual((await sub(sq.SALES_SUBCOLLECTION).doc("ORD_POS").get()).data().nivadeskOrderId, orderRef("ORD_POS").id);
   });
 
+  await check("an ad-hoc counter sale lands in the review queue; a member lists it, the owner resolves it, and a clean re-apply clears it (§10.5)", async () => {
+    const queue = await index.listCommerceReviewQueue.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
+    const item = queue.items.find((i) => i.externalId === "ORD_POS");
+    assert.ok(item, JSON.stringify(queue.items)); assert.ok(item.reasons.includes("ad_hoc_line_item")); assert.strictEqual(item.provider, "square"); assert.strictEqual(item.orderId, orderRef("ORD_POS").id);
+    assert.ok(!queue.items.some((i) => i.externalId === "ORD_A"), "a clean order is not in the queue");
+    await assert.rejects(index.resolveCommerceReview.run({ auth, data: { companyId: COMPANY, orderId: "nope" }, rawRequest: {} }), /No such/);
+    await index.resolveCommerceReview.run({ auth, data: { companyId: COMPANY, orderId: item.orderId }, rawRequest: {} });
+    const after = await index.listCommerceReviewQueue.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
+    assert.ok(!after.items.some((i) => i.externalId === "ORD_POS"), "resolved items leave the queue");
+    assert.strictEqual((await orderRef("ORD_POS").get()).data().commerce.reviewRequired, false);
+    const withResolved = await index.listCommerceReviewQueue.run({ auth, data: { companyId: COMPANY, includeResolved: true }, rawRequest: {} });
+    assert.ok(withResolved.items.some((i) => i.externalId === "ORD_POS" && i.resolved === true));
+    // A later clean apply (the item now carries a catalog variation) removes the row entirely.
+    square.orders.set("ORD_POS", posOrder("ORD_POS", { version: 2, updated_at: "2026-09-02T12:30:00Z", line_items: [{ uid: "ORD_POS_li", name: "Charm", quantity: "2", catalog_object_id: "VAR_9", total_money: money(1800) }] }));
+    await deliver("order.updated", { order_updated: { order_id: "ORD_POS", location_id: "LOC_FAIR", version: 2 } });
+    assert.strictEqual((await db.collection("commerceReviewQueue").doc(orderRef("ORD_POS").id).get()).exists, false, "a clean apply clears the queue row");
+  });
+
   await check("an order at a location the merchant did not select is skipped; a draft is skipped (SQ-TEST-017)", async () => {
     await index.updateSquareConnectionSettings.run({ auth, data: { companyId: COMPANY, connectionId: connId, selectedLocationIds: ["LOC_LONDON"] }, rawRequest: {} });
     square.orders.set("ORD_FAIR2", posOrder("ORD_FAIR2", { fulfillments: [{ uid: "x", type: "PICKUP", state: "PROPOSED", pickup_details: { recipient: { display_name: "Bob" } } }] }));

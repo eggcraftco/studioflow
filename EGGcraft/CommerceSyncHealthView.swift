@@ -32,6 +32,17 @@ struct CommerceEventRow: Identifiable {
     var id: String { key }
 }
 
+struct CommerceReviewRow: Identifiable {
+    let id: String
+    let providerDisplayName: String
+    let externalId: String
+    let orderNumber: String
+    let customerName: String
+    let grandTotal: String
+    let currency: String
+    let reasons: [String]
+}
+
 struct CommerceSyncHealthView: View {
     let companyId: String
     let provider: String
@@ -40,6 +51,8 @@ struct CommerceSyncHealthView: View {
 
     @State private var connections: [CommerceHealthConnection]? = nil
     @State private var events: [CommerceEventRow] = []
+    @State private var review: [CommerceReviewRow] = []
+    private static let reviewReasonLabels = ["ad_hoc_line_item": "Item not in the catalogue", "no_line_items": "No line items", "missing_total": "Missing total", "unresolved_variation": "Unresolved variation"]
     @State private var errorText = ""
     @State private var notice = ""
     @State private var busyKey = ""
@@ -70,6 +83,23 @@ struct CommerceSyncHealthView: View {
                                 Text("\(tr("Last successful sync")): \(ago(orders?.lastSuccessAtMs ?? 0)) · \(tr("Last webhook")): \(ago(orders?.lastWebhookAtMs ?? 0)) · \(tr("Pending retries")): \(orders?.pendingRetries ?? 0) · \(tr("Dead letters")): \(orders?.deadLetters ?? 0)")
                                     .font(.system(size: 12)).foregroundColor(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    Text(tr("Needs review")).font(.system(size: 13, weight: .semibold)).padding(.top, 4)
+                    Text(tr("Orders the sync could apply but could not vouch for: an item not in the catalogue, a missing total. Check the order, then resolve."))
+                        .font(.system(size: 11)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if review.isEmpty {
+                        Text(tr("Nothing needs review.")).font(.system(size: 12)).foregroundColor(.secondary)
+                    } else {
+                        ForEach(review) { row in
+                            HStack(spacing: 8) {
+                                pill(row.providerDisplayName, tone: "stale")
+                                Text("#\(row.orderNumber.isEmpty ? row.externalId : row.orderNumber)\(row.customerName.isEmpty ? "" : " · \(row.customerName)")\(row.grandTotal.isEmpty ? "" : " · \(row.grandTotal) \(row.currency)")").font(.system(size: 12))
+                                Text(row.reasons.map { tr(Self.reviewReasonLabels[$0] ?? $0) }.joined(separator: ", ")).font(.system(size: 11)).foregroundColor(.secondary)
+                                if isOwner {
+                                    Button(tr("Resolve")) { resolve(row.id) }.buttonStyle(.bordered).controlSize(.small).disabled(busyKey == "review:\(row.id)")
+                                }
                             }
                         }
                     }
@@ -154,6 +184,7 @@ struct CommerceSyncHealthView: View {
                 }
             }
         }
+        loadReview(companyId)
         functions.httpsCallable("listCommerceEvents").call(["companyId": companyId, "limit": 40]) { result, _ in
             DispatchQueue.main.async {
                 let raw = ((result?.data as? [String: Any])?["events"] as? [[String: Any]]) ?? []
@@ -165,6 +196,32 @@ struct CommerceSyncHealthView: View {
                     let ms = (formatter.date(from: started) ?? plain.date(from: started))?.timeIntervalSince1970 ?? 0
                     return CommerceEventRow(key: key, provider: provider, externalId: entry["externalId"] as? String ?? "", eventType: entry["eventType"] as? String ?? "", status: entry["status"] as? String ?? "", message: entry["message"] as? String ?? "", startedAtMs: ms * 1000)
                 }.prefix(20).map { $0 }
+            }
+        }
+    }
+
+    private func loadReview(_ companyId: String) {
+        Functions.functions(region: "europe-west2").httpsCallable("listCommerceReviewQueue").call(["companyId": companyId]) { result, _ in
+            DispatchQueue.main.async {
+                let raw = ((result?.data as? [String: Any])?["items"] as? [[String: Any]]) ?? []
+                review = raw.compactMap { entry in
+                    guard (entry["provider"] as? String) == provider, let orderId = entry["orderId"] as? String else { return nil }
+                    return CommerceReviewRow(id: orderId, providerDisplayName: entry["providerDisplayName"] as? String ?? provider, externalId: entry["externalId"] as? String ?? "",
+                                             orderNumber: entry["orderNumber"] as? String ?? "", customerName: entry["customerName"] as? String ?? "", grandTotal: entry["grandTotal"] as? String ?? "",
+                                             currency: entry["currency"] as? String ?? "", reasons: entry["reasons"] as? [String] ?? [])
+                }
+            }
+        }
+    }
+
+    private func resolve(_ orderId: String) {
+        guard busyKey.isEmpty else { return }
+        busyKey = "review:\(orderId)"; notice = ""
+        Functions.functions(region: "europe-west2").httpsCallable("resolveCommerceReview").call(["companyId": companyId, "orderId": orderId]) { _, error in
+            DispatchQueue.main.async {
+                busyKey = ""
+                notice = error == nil ? tr("Resolved.") : (error?.localizedDescription ?? tr("Could not load."))
+                load()
             }
         }
     }

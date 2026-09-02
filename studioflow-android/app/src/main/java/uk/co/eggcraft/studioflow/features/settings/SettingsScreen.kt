@@ -3189,6 +3189,7 @@ private fun CommerceSyncHealthCard(state: StudioFlowUiState, provider: String) {
     val isOwner = state.workspace?.role?.trim()?.lowercase() == "owner"
     var connections by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.CommerceHealthConnection>?>(null) }
     var events by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.CommerceEventRow>>(emptyList()) }
+    var review by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.CommerceReviewRow>>(emptyList()) }
     var error by remember { mutableStateOf("") }
     var busyKey by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
@@ -3200,7 +3201,8 @@ private fun CommerceSyncHealthCard(state: StudioFlowUiState, provider: String) {
         runCatching {
             val health = repository.getCommerceHealth(workspace).filter { it.provider == provider }
             val activity = repository.listCommerceEvents(workspace).filter { it.provider == provider }.take(20)
-            connections = health; events = activity; error = ""
+            val queue = runCatching { repository.listCommerceReviewQueue(workspace) }.getOrDefault(emptyList()).filter { it.provider == provider }
+            connections = health; events = activity; review = queue; error = ""
         }.onFailure { connections = emptyList(); error = it.message ?: t("Could not load.") }
     }
     fun agoText(ms: Long?): String {
@@ -3239,6 +3241,29 @@ private fun CommerceSyncHealthCard(state: StudioFlowUiState, provider: String) {
             }
         }
         if (connections != null) {
+            val reviewReasonLabels = mapOf("ad_hoc_line_item" to "Item not in the catalogue", "no_line_items" to "No line items", "missing_total" to "Missing total", "unresolved_variation" to "Unresolved variation")
+            Text(t("Needs review"), fontWeight = FontWeight.SemiBold)
+            Text(t("Orders the sync could apply but could not vouch for: an item not in the catalogue, a missing total. Check the order, then resolve."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (review.isEmpty()) {
+                Text(t("Nothing needs review."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                review.forEach { row ->
+                    Text("${row.providerDisplayName.ifEmpty { row.provider }} · #${row.orderNumber.ifEmpty { row.externalId }}${if (row.customerName.isNotEmpty()) " · ${row.customerName}" else ""}${if (row.grandTotal.isNotEmpty()) " · ${row.grandTotal} ${row.currency}" else ""}")
+                    Text(row.reasons.joinToString(", ") { t(reviewReasonLabels[it] ?: it) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (isOwner) {
+                        OutlinedButton(enabled = busyKey != "review:${row.orderId}", onClick = {
+                            val workspace = state.workspace ?: return@OutlinedButton
+                            scope.launch {
+                                busyKey = "review:${row.orderId}"; notice = ""
+                                runCatching { repository.resolveCommerceReview(workspace, row.orderId) }
+                                    .onSuccess { notice = t("Resolved."); reloadKey += 1 }
+                                    .onFailure { notice = it.message ?: t("Could not load.") }
+                                busyKey = ""
+                            }
+                        }) { Text(t("Resolve")) }
+                    }
+                }
+            }
             Text(t("Recent activity"), fontWeight = FontWeight.SemiBold)
             if (events.isEmpty()) {
                 Text(t("No events yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1066,6 +1066,23 @@ class StudioFlowRepository(
         }
     }
 
+    data class CommerceReviewRow(val orderId: String, val provider: String, val providerDisplayName: String, val externalId: String, val orderNumber: String, val customerName: String, val grandTotal: String, val currency: String, val reasons: List<String>)
+    suspend fun listCommerceReviewQueue(workspace: StudioWorkspace): List<CommerceReviewRow> {
+        val result = functions.getHttpsCallable("listCommerceReviewQueue").call(mapOf("companyId" to workspace.id)).await()
+        val rows = (result.data as? Map<*, *>)?.get("items") as? List<*> ?: return emptyList()
+        return rows.mapNotNull { raw ->
+            val e = raw as? Map<*, *> ?: return@mapNotNull null
+            CommerceReviewRow(
+                orderId = e["orderId"]?.toString().orEmpty(), provider = e["provider"]?.toString().orEmpty(), providerDisplayName = e["providerDisplayName"]?.toString().orEmpty(),
+                externalId = e["externalId"]?.toString().orEmpty(), orderNumber = e["orderNumber"]?.toString().orEmpty(), customerName = e["customerName"]?.toString().orEmpty(),
+                grandTotal = e["grandTotal"]?.toString().orEmpty(), currency = e["currency"]?.toString().orEmpty(), reasons = (e["reasons"] as? List<*>).orEmpty().map { it.toString() },
+            )
+        }
+    }
+    suspend fun resolveCommerceReview(workspace: StudioWorkspace, orderId: String) {
+        functions.getHttpsCallable("resolveCommerceReview").call(mapOf("companyId" to workspace.id, "orderId" to orderId)).await()
+    }
+
     suspend fun listCommerceEvents(workspace: StudioWorkspace, limit: Int = 40): List<CommerceEventRow> {
         val result = functions.getHttpsCallable("listCommerceEvents").call(mapOf("companyId" to workspace.id, "limit" to limit)).await()
         val data = result.data as? Map<*, *>
