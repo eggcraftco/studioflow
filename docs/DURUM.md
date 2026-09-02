@@ -1836,3 +1836,7 @@ KARIŞMASIN.
 **Tuzaklar:** (1) Chrome, dev sunucusunun `page.js` chunk'ını önbellekten sunar — HMR sonrası eski görünüm; `fetch(url,{cache:"reload"})` ile temizleyip yeniden yükle. (2) `useSettingsHeaderActions` deps'ine ebeveynden gelen callback koyma (her render yeni fonksiyon → "Maximum update depth"); ref üzerinden çağır. (3) Doğrulama ortamı: `firebase emulators:start --only auth,firestore,functions` (JAVA_HOME önce export) + `node test/qa/seed-qa.js` + `review@nivadesk.app` şifresi admin SDK ile + `preview_start web-emulator`.
 
 **Kalan:** kullanıcı dönünce "canlıya at" ile Round; mobil/koyu tema ince ayar; native (Mac/iPhone/Android) bu handoff'un kapsamı dışında.
+
+## QuickBooks sandbox bağlantısı canlıda doğrulandı (3 Eyl 00:30)
+
+Kullanıcı Intuit'te "Sandbox Company GB 5cdb"yi seçip bağladı → web'de **Connected · Read-only · 9341457840593750 · Sandbox**, katalog ve CDC okumaları "Just now", Needs attention 0, webhook henüz yok. Mappings sekmesinde "Suggest mappings" canlı çalıştı; ilk sonuçlar: ZR→"0.0% ECG", Bespoke→"Commission Income", fee'ler boş → `functions/accounting/quickbooks/normalize.js` kuralları düzeltildi (EC/RC kodlarına `avoid`, "usual UK code" tercihi, Services > Commission, "Merchant Account Fees" generic fee fallback); `accountingMappingSuggestions` yeniden deploy edildi (8187ace). **Kalan:** canlıda yeniden Suggest → Confirm; webhook testi; Production keys/URI/webhook; spec Faz 3–7.
