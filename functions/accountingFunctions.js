@@ -212,8 +212,9 @@ function createAccountingFunctions(deps) {
       // The company is whoever the token can read, not whatever the query said.
       const client = createClient({ environment, realmId, accessToken: tokens.accessToken, fetchImpl });
       const [info, prefs] = await Promise.all([client.companyInfo(), client.preferences()]);
-      const profile = qboNormalize.normalizeCompanyProfile(info, prefs);
-      if (profile.externalCompanyId && profile.externalCompanyId !== realmId) throw Object.assign(new Error("quickbooks_realm_mismatch"), { errorClass: "validation" });
+      // CompanyInfo.Id is the entity's own id ("1"), not the realm: the proof that
+      // this token belongs to the realm is that the read above succeeded at all.
+      const profile = { ...qboNormalize.normalizeCompanyProfile(info, prefs), externalCompanyId: realmId };
       const connectionId = store.connectionDocId(PROVIDER, realmId);
       const r = store.refs(db(), companyId);
       const existingSnap = await r.connections.doc(connectionId).get();

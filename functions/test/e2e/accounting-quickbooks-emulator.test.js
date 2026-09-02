@@ -18,7 +18,7 @@ process.env.NIVADESK_QBO_TOKEN_KEY = crypto.randomBytes(32).toString("hex");
 
 const REALM = "9130350000000001";
 const remote = {
-  companyInfo: { Id: REALM, CompanyName: "EGGcraft Ltd", LegalName: "EGGcraft Limited", Country: "GB", FiscalYearStartMonth: "April", SyncToken: "0", MetaData: { LastUpdatedTime: "2026-01-01T00:00:00Z" } },
+  companyInfo: { Id: "1", CompanyName: "EGGcraft Ltd", LegalName: "EGGcraft Limited", Country: "GB", FiscalYearStartMonth: "April", SyncToken: "0", MetaData: { LastUpdatedTime: "2026-01-01T00:00:00Z" } },
   preferences: { CurrencyPrefs: { HomeCurrency: { value: "GBP" }, MultiCurrencyEnabled: false }, TaxPrefs: { UsingSalesTax: true }, AccountingInfoPrefs: { BookCloseDate: "2025-12-31" } },
   Account: [
     { Id: "a1", Name: "Sales of Product Income", FullyQualifiedName: "Sales of Product Income", AccountType: "Income", AccountSubType: "SalesOfProductIncome", Active: true, SyncToken: "1", MetaData: { LastUpdatedTime: "2026-01-01T00:00:00Z" } },
