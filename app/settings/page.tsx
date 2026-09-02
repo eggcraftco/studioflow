@@ -34,6 +34,7 @@ import { httpsCallable } from "firebase/functions";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
+import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
@@ -517,7 +518,7 @@ export default function SettingsPage() {
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
-      rawRequested === "square"
+      rawRequested === "square" || rawRequested === "paypal"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5030,6 +5031,7 @@ function IntegrationsSection({
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
     );

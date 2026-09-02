@@ -36,7 +36,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal";
 
 export type IntegrationProvider = {
   id: string;
@@ -123,8 +123,9 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     blurb: "", capabilities: [], manage: "",
   },
   {
-    id: "paypal", name: "PayPal", category: "automation", kind: "planned", mark: "P",
-    blurb: "", capabilities: [], manage: "",
+    id: "paypal", name: "PayPal", category: "banking", kind: "native", mark: "P",
+    blurb: "Sales, fees and refunds from your PayPal account, beside your bank.",
+    capabilities: ["Payments received and sent", "Fees beside the gross", "Withdrawals matched to your bank"], manage: "paypal",
   },
   {
     id: "googledrive", name: "Google Drive", category: "automation", kind: "planned", mark: "G",
@@ -193,7 +194,11 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
           needsReconnect: Boolean(row.needsReconnect),
         }))
       : [],
-    bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
+    // A PayPal connection lives in the same collection but is its own card.
+    bankConnections: banks.status === "fulfilled" ? banks.value.docs.filter((doc) => doc.data().provider !== "paypal").length : 0,
+    paypalConnections: banks.status === "fulfilled"
+      ? banks.value.docs.filter((doc) => doc.data().provider === "paypal").map((doc) => ({ status: String(doc.data().status || ""), syncState: String(doc.data().syncState || ""), environment: String(doc.data().environment || "live") }))
+      : [],
     wooConnections: woo.status === "fulfilled"
       ? woo.value.map((row) => ({ store: row.storeName || row.host, status: row.status, needsAttention: row.status === "needs_reconnect" || (row.status === "connected" && row.webhooksHealthy === false) }))
       : [],
@@ -204,7 +209,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [],
 };
 
 export type IntegrationSignals = {
@@ -219,6 +224,8 @@ export type IntegrationSignals = {
   wooConnections: { store: string; status: string; needsAttention: boolean }[];
   /** Connected Square merchants, and whether one needs the owner's attention. */
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
+  /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
+  paypalConnections: { status: string; syncState: string; environment: string }[];
 };
 
 export function resolveIntegrationState(
@@ -251,6 +258,13 @@ export function resolveIntegrationState(
       state: broken === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} shops`,
     };
+  }
+
+  if (provider.id === "paypal") {
+    const live = (signals.paypalConnections || []).filter((row) => row.status === "linked");
+    if (live.length === 0) return { state: "available" };
+    const broken = live.filter((row) => row.syncState && row.syncState !== "ok").length;
+    return { state: broken === live.length ? "attention" : "connected", detail: live[0].environment === "sandbox" ? "Sandbox" : "PayPal" };
   }
 
   if (provider.id === "woocommerce") {

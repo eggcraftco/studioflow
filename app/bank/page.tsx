@@ -25,6 +25,8 @@ import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
   id: string;
+  /** "truelayer" (Open Banking) or "paypal" — PayPal connections are managed from their own card. */
+  provider: string;
   providerName: string;
   providerLogo: string;
   status: string;
@@ -63,6 +65,11 @@ type BankTransaction = {
   providerReference: string;
   reviewStatus: string;
   incomingKind: string;
+  /** PayPal keeps the fee beside the gross amount. */
+  feeAmount: number | null;
+  netAmount: number | null;
+  // Faz 5: which processor payout this row settled (Square today), written by the settlement matcher.
+  settlement: { provider: string; providerLabel?: string; payoutExternalId?: string; arrivalDate?: string | null; gross?: string | null; fee?: string | null; refunds?: string | null; net?: string | null; currency?: string | null } | null;
   linkedPaymentId: string;
   receiptFileRecordId: string;
   splits: Array<{ amount: number; category: string; vatCode?: string; note?: string; orderId?: string; orderLabel?: string }>;
@@ -361,6 +368,7 @@ function BankPageContent() {
           const data = doc.data() as Record<string, unknown>;
           return {
             id: doc.id,
+            provider: String(data.provider || "truelayer"),
             providerName: String(data.providerName || ""),
             providerLogo: String(data.providerLogo || ""),
             status: String(data.status || ""),
@@ -405,6 +413,9 @@ function BankPageContent() {
             providerReference: String(data.providerReference || ""),
             reviewStatus: String(data.reviewStatus || ""),
             incomingKind: String(data.incomingKind || ""),
+            feeAmount: typeof data.feeAmount === "number" ? data.feeAmount : null,
+            netAmount: typeof data.netAmount === "number" ? data.netAmount : null,
+            settlement: data.settlement && typeof data.settlement === "object" ? (data.settlement as BankTransaction["settlement"]) : null,
             linkedPaymentId: String(data.linkedPaymentId || ""),
             receiptFileRecordId: String(data.receiptFileRecordId || ""),
             splits: Array.isArray(data.splits) ? (data.splits as BankTransaction["splits"]) : [],
@@ -1427,7 +1438,7 @@ function BankPageContent() {
   // Transfers between the owner's own accounts, owner contributions and loans
   // are money in, but not revenue — once marked, they leave this tile.
   const incomingTotal = useMemo(() => visibleTransactions
-    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan"].includes(item.incomingKind))
+    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan", "payout"].includes(item.incomingKind))
     .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions]);
 
   // Sparkline for the "Total spent" tile: daily in month view, monthly in year view.
@@ -1698,7 +1709,7 @@ function BankPageContent() {
                     {connection.providerLogo ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={connection.providerLogo} alt="" width={34} height={34} style={{ borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)" }} />
-                    ) : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
+                    ) : connection.provider === "paypal" ? <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#003087" }}>P</span> : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
                     {(() => {
                       const disconnected = connection.status === "disconnected";
                       const unhealthy = connection.status === "linked" && connection.syncState !== "ok";
@@ -1725,14 +1736,17 @@ function BankPageContent() {
                         </div>
                       );
                     })()}
-                    {isOwner && connection.status === "linked" && connection.syncState === "needs_reconsent" ? (
+                    {isOwner && connection.provider === "paypal" && (connection.status === "disconnected" || connection.syncState === "needs_reconsent") ? (
+                      <a href="/settings?section=paypal" style={{ ...bankBtnSm, textDecoration: "none", ...(connection.syncState === "needs_reconsent" && connection.status === "linked" ? { background: "#dc2626", color: "#fff", borderColor: "#dc2626" } : {}) }}>⟳ {t("Reconnect")}</a>
+                    ) : null}
+                    {isOwner && connection.provider !== "paypal" && connection.status === "linked" && connection.syncState === "needs_reconsent" ? (
                       <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={{ ...bankBtnSm, background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}>
                         ⟳ {busy === "connect" ? t("Opening your bank…") : t("Reconnect")}
                       </button>
                     ) : null}
                     {isOwner && connection.status === "disconnected" ? (
                       <>
-                        <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={bankBtnSm}>⟳ {t("Reconnect")}</button>
+                        {connection.provider !== "paypal" ? <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={bankBtnSm}>⟳ {t("Reconnect")}</button> : null}
                         <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
                           onClick={() => void removeConnection(connection, "purge")} aria-label={t("Delete imported data")} title={t("Delete imported data")}
                           style={{ opacity: 0.5 }}>🗑</button>
@@ -3345,11 +3359,21 @@ function BankPageContent() {
                     <option value="loan">{t("Loan")}</option>
                     <option value="transfer">{t("Transfer between own accounts")}</option>
                     <option value="other_income">{t("Other income")}</option>
+                    <option value="payout">{t("Processor payout (Square, PayPal…)")}</option>
                   </select>
-                  {["transfer", "owner_contribution", "loan"].includes(drawerTx.incomingKind) ? (
+                  {["transfer", "owner_contribution", "loan", "payout"].includes(drawerTx.incomingKind) ? (
                     <span style={{ fontSize: 11, opacity: 0.65 }}>{t("Not counted as revenue.")}</span>
                   ) : null}
                 </div>
+                {drawerTx.provider === "paypal" && drawerTx.feeAmount !== null && drawerTx.feeAmount !== 0 ? (
+                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>{t("PayPal fee")} {drawerTx.feeAmount.toFixed(2)} · {t("Net")} {(drawerTx.netAmount ?? drawerTx.amount).toFixed(2)} {drawerTx.currency}</div>
+                ) : null}
+                {drawerTx.settlement ? (
+                  <div style={{ marginTop: 8, fontSize: 12.5, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Processor payout")} · {drawerTx.settlement.providerLabel || drawerTx.settlement.provider}{drawerTx.settlement.payoutExternalId ? ` · ${drawerTx.settlement.payoutExternalId}` : ""}</span>
+                    <span className="muted-copy">{t("Gross")} {drawerTx.settlement.gross ?? "—"} · {t("Fees")} {drawerTx.settlement.fee ?? "—"} · {t("Net")} {drawerTx.settlement.net ?? "—"}{drawerTx.settlement.arrivalDate ? ` · ${t("Arrival")} ${drawerTx.settlement.arrivalDate}` : ""}</span>
+                  </div>
+                ) : null}
                 {drawerTx.incomingKind === "order_payment" && drawerTx.linkedPaymentId ? (
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched to the order's existing payment — nothing was recorded twice.")}</span>

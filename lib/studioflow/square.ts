@@ -25,7 +25,9 @@ export type SquareSyncResult = {
   payments: { scanned: number; recorded: number; unmatched: number; failed: number; complete: boolean };
   events: { configured: boolean; scanned: number; applied: number; complete: boolean };
 };
-export type SquarePayoutRow = { id: string; externalId: string; status: string; amount: string | null; currency: string | null; locationId: string | null; arrivalDate: string | null; endToEndId: string | null; entryCount: number; totals: { gross?: string | null; fee?: string | null; net?: string | null; charges?: string | null; refunds?: string | null; adjustments?: string | null }; reconciled: boolean; bankMatch: { transactionId?: string; confidence?: string } | null; createdAt: string | null };
+export type SquarePayoutRow = { id: string; externalId: string; status: string; amount: string | null; currency: string | null; locationId: string | null; arrivalDate: string | null; endToEndId: string | null; entryCount: number; totals: { gross?: string | null; fee?: string | null; net?: string | null; charges?: string | null; refunds?: string | null; adjustments?: string | null }; reconciled: boolean; bankMatch: { transactionId?: string; accountId?: string | null; bookingDate?: string | null; amount?: number | null; currency?: string | null; confidence?: string; score?: number | null; method?: string; matchedAtMs?: number } | null; createdAt: string | null };
+export type SquareSettlementCandidate = { transactionId: string; accountId: string | null; bookingDate: string | null; amount: number; currency: string | null; description: string; counterparty: string; score: number; reasons: string[]; free: boolean };
+export type SquarePayoutMatchSuggestion = { ok: boolean; payout: { id: string; externalId: string; amount: string | null; currency: string | null; arrivalDate: string | null; status: string | null; bankMatch: SquarePayoutRow["bankMatch"] }; window: { from: string; to: string } | null; candidates: SquareSettlementCandidate[]; near: SquareSettlementCandidate[] };
 export type SquareAuditReport = { ok: boolean; days: number; atSquare: number; asOrders: number; financeOnly: number; missing: number; notSelected: number; truncated: boolean; missingIds: string[]; financeOnlyIds: string[] };
 export type SquareUnmatchedRow = { id: string; externalId: string; orderExternalId: string | null; paymentExternalId: string | null; status: string; amount: string | null; total: string | null; currency: string | null; sourceType: string | null; cardBrand: string | null; last4: string | null; locationId: string | null; receiptUrl: string | null; at: string | null };
 
@@ -60,4 +62,11 @@ export async function listSquarePayouts(companyId: string, limit = 50) {
 }
 export async function auditSquareOrders(companyId: string, connectionId: string, days: number) {
   return (await call<{ companyId: string; connectionId: string; days: number }, SquareAuditReport>("auditSquareOrders")({ companyId, connectionId, days })).data;
+}
+/** Faz 5: the bank side of a payout — the window's rows scored (suggest), the owner's word (confirm) or letting go (unlink). */
+export async function matchSquarePayoutToBank(companyId: string, payoutId: string, mode: "suggest"): Promise<SquarePayoutMatchSuggestion>;
+export async function matchSquarePayoutToBank(companyId: string, payoutId: string, mode: "confirm", transactionId: string): Promise<{ ok: boolean; transactionId: string }>;
+export async function matchSquarePayoutToBank(companyId: string, payoutId: string, mode: "unlink"): Promise<{ ok: boolean; unlinked: boolean }>;
+export async function matchSquarePayoutToBank(companyId: string, payoutId: string, mode: "suggest" | "confirm" | "unlink", transactionId?: string) {
+  return (await call<{ companyId: string; payoutId: string; mode: string; transactionId?: string }, SquarePayoutMatchSuggestion | { ok: boolean; transactionId?: string; unlinked?: boolean }>("matchSquarePayoutToBank")({ companyId, payoutId, mode, ...(transactionId ? { transactionId } : {}) })).data;
 }

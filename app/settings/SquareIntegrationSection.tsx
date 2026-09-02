@@ -11,8 +11,8 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
-  beginSquareConnect, getSquareConnections, updateSquareConnectionSettings, disconnectSquare, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders,
-  type SquareConnection, type SquareImportPolicy, type SquareImportPreview, type SquareImportResult, type SquareUnmatchedRow, type SquarePayoutRow, type SquareAuditReport
+  beginSquareConnect, getSquareConnections, updateSquareConnectionSettings, disconnectSquare, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders, matchSquarePayoutToBank,
+  type SquareConnection, type SquareImportPolicy, type SquareImportPreview, type SquareImportResult, type SquareUnmatchedRow, type SquarePayoutRow, type SquareAuditReport, type SquarePayoutMatchSuggestion
 } from "@/lib/studioflow/square";
 
 type Props = { workspace: WorkspaceContext; language?: string };
@@ -47,6 +47,8 @@ export function SquareIntegrationSection({ workspace, language = "English" }: Pr
   const [unmatched, setUnmatched] = useState<{ payments: SquareUnmatchedRow[]; refunds: SquareUnmatchedRow[] } | null>(null);
   const [payouts, setPayouts] = useState<SquarePayoutRow[] | null>(null);
   const [audit, setAudit] = useState<SquareAuditReport | null>(null);
+  // Faz 5: the bank side of one payout while the owner is resolving it.
+  const [settle, setSettle] = useState<{ payoutId: string; data: SquarePayoutMatchSuggestion } | null>(null);
   const connection = connections.find((row) => row.status === "connected") || connections.find((row) => row.status !== "disconnected") || connections[0] || null;
 
   const refresh = useCallback(async (keepError = false) => {
@@ -292,11 +294,52 @@ export function SquareIntegrationSection({ workspace, language = "English" }: Pr
                     <td style={{ padding: "6px 8px" }}>{row.status}{row.reconciled ? "" : ` · ${t("Needs attention")}`}</td>
                     <td style={{ padding: "6px 8px" }}>{row.totals.gross ?? "—"}</td><td style={{ padding: "6px 8px" }}>{row.totals.refunds ?? "—"}</td><td style={{ padding: "6px 8px" }}>{row.totals.fee ?? "—"}</td>
                     <td style={{ padding: "6px 8px" }}><strong>{row.amount ?? row.totals.net ?? "—"} {row.currency || ""}</strong></td>
-                    <td style={{ padding: "6px 8px" }}>{row.bankMatch?.transactionId ? t("Matched") : t("Not matched")}</td>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                      {row.bankMatch?.transactionId ? (
+                        <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ {t("Matched")}{row.bankMatch.bookingDate ? ` · ${row.bankMatch.bookingDate}` : ""}
+                          {isOwner ? <button type="button" className="link-button" style={{ marginLeft: 8, fontWeight: 400 }} disabled={busy === `settle:${row.id}`} onClick={() => guard(`settle:${row.id}`, async () => { await matchSquarePayoutToBank(companyId, row.id, "unlink"); setNotice(t("Payout unlinked.")); setSettle(null); setPayouts((await listSquarePayouts(companyId)).payouts); })}>{t("Unlink")}</button> : null}
+                        </span>
+                      ) : (
+                        <span>{t("Not matched")}
+                          {isOwner ? <button type="button" className="link-button" style={{ marginLeft: 8 }} disabled={busy === `settle:${row.id}`} onClick={() => guard(`settle:${row.id}`, async () => setSettle({ payoutId: row.id, data: await matchSquarePayoutToBank(companyId, row.id, "suggest") }))}>{t("Find bank row")}</button> : null}
+                        </span>
+                      )}
+                    </td>
                   </tr>))}</tbody>
               </table>
             </div>
           )
+        ) : null}
+        {settle ? (
+          <div style={{ marginTop: 10, padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+              <strong>{t("Bank row")} · {settle.data.payout.amount ?? "—"} {settle.data.payout.currency || ""}{settle.data.payout.arrivalDate ? ` · ${t("Arrival")} ${settle.data.payout.arrivalDate}` : ""}{settle.data.window ? ` · ${settle.data.window.from} → ${settle.data.window.to}` : ""}</strong>
+              <button type="button" className="link-button" onClick={() => setSettle(null)}>{t("Close")}</button>
+            </div>
+            {settle.data.candidates.length === 0 ? <p className="muted-copy" style={{ marginTop: 6 }}>{t("No bank row of this amount arrived in the window.")}</p> : (
+              <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 6 }}>
+                {settle.data.candidates.map((c) => (
+                  <li key={c.transactionId} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{c.bookingDate || "—"}</span>
+                    <span style={{ flex: "1 1 220px" }}>{c.counterparty || c.description || "—"}{c.counterparty && c.description ? <span className="muted-copy"> · {c.description}</span> : null}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}><strong>{c.amount} {c.currency || ""}</strong></span>
+                    <span className="muted-copy">{t("Score")} {c.score}{c.reasons.some((r) => r.startsWith("shift_")) ? ` · ${t("Same amount, another day.")}` : ""}</span>
+                    {c.free ? (
+                      <button type="button" className="button secondary" style={{ padding: "2px 10px" }} disabled={busy === `settle:${settle.payoutId}`} onClick={() => guard(`settle:${settle.payoutId}`, async () => { await matchSquarePayoutToBank(companyId, settle.payoutId, "confirm", c.transactionId); setNotice(t("Payout matched to the bank row.")); setSettle(null); setPayouts((await listSquarePayouts(companyId)).payouts); })}>{t("Match")}</button>
+                    ) : <span className="muted-copy">{t("Already classified")}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {settle.data.near.length ? (
+              <div style={{ marginTop: 8 }}>
+                <p className="muted-copy" style={{ margin: 0 }}>{t("Nearby amounts (a fee or FX leg):")}</p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0", display: "grid", gap: 4, opacity: 0.7, fontSize: 12.5 }}>
+                  {settle.data.near.map((c) => <li key={c.transactionId}>{c.bookingDate || "—"} · {c.counterparty || c.description || "—"} · {c.amount} {c.currency || ""}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </section>
 
