@@ -90,6 +90,9 @@ struct StudioBankTransaction: Identifiable, Equatable {
     // Permanent identities + the read-only bank layer shown in the detail panel.
     let accountId: String
     let provider: String
+    /// PayPal keeps the fee beside the gross amount.
+    let feeAmount: Double?
+    let netAmount: Double?
     let providerTransactionId: String
     let providerReference: String
     let firstImportedAt: Date?
@@ -136,6 +139,8 @@ struct StudioBankTransaction: Identifiable, Equatable {
         purchaseNumber = (data["purchaseNumber"] as? String) ?? ""
         accountId = (data["accountId"] as? String) ?? ""
         provider = (data["provider"] as? String) ?? ""
+        feeAmount = data["feeAmount"] as? Double
+        netAmount = data["netAmount"] as? Double
         providerTransactionId = (data["providerTransactionId"] as? String) ?? ""
         providerReference = (data["providerReference"] as? String) ?? ""
         firstImportedAt = (data["firstImportedAt"] as? Timestamp)?.dateValue()
@@ -164,6 +169,8 @@ struct StudioBankAccountInfo: Equatable {
 
 struct StudioBankConnection: Identifiable, Equatable {
     let id: String
+    /// "truelayer" (Open Banking) or "paypal" — a PayPal feed is managed from its own Integrations card.
+    let provider: String
     let providerName: String
     let providerLogo: String
     let status: String
@@ -176,6 +183,7 @@ struct StudioBankConnection: Identifiable, Equatable {
 
     init(id: String, data: [String: Any]) {
         self.id = id
+        provider = (data["provider"] as? String) ?? "truelayer"
         providerName = (data["providerName"] as? String) ?? ""
         providerLogo = (data["providerLogo"] as? String) ?? ""
         status = (data["status"] as? String) ?? ""
@@ -1031,7 +1039,7 @@ private struct BankConnectionRow: View {
                 }
             }
             Spacer()
-            if isOwner && connection.needsReconnect, let url = URL(string: "https://nivadesk.app/bank") {
+            if isOwner && connection.needsReconnect, let url = URL(string: connection.provider == "paypal" ? "https://nivadesk.app/settings?section=paypal" : "https://nivadesk.app/bank") {
                 Button { openURL(url) } label: { Label(fmt.t("Reconnect"), systemImage: "arrow.clockwise") }.tint(.red)
             }
             // Disconnect and delete are different decisions, kept apart on
@@ -1039,7 +1047,7 @@ private struct BankConnectionRow: View {
             // the bank consent and KEEPS everything already imported; purging
             // the data is a second, explicit step offered once disconnected.
             if isOwner && connection.isDisconnected {
-                if let url = URL(string: "https://nivadesk.app/bank") {
+                if let url = URL(string: connection.provider == "paypal" ? "https://nivadesk.app/settings?section=paypal" : "https://nivadesk.app/bank") {
                     Button { openURL(url) } label: { Label(fmt.t("Reconnect"), systemImage: "arrow.clockwise") }
                 }
                 Button(role: .destructive) { confirmPurge = true } label: { Image(systemName: "trash") }
@@ -2384,6 +2392,10 @@ struct BankIncomingMatchSection: View {
             }
             if bankNonRevenueIncomingKinds.contains(kind) {
                 Text(fmt.t("Not counted as revenue.")).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            if tx.provider == "paypal", let fee = tx.feeAmount, fee != 0 {
+                Text("\(fmt.t("PayPal fee")) \(String(format: "%.2f", fee)) · \(fmt.t("Net")) \(String(format: "%.2f", tx.netAmount ?? tx.amount)) \(tx.currency)")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
             }
             if !tx.settlementLabel.isEmpty {
                 BankSettlementChipView(tx: tx, fmt: fmt)

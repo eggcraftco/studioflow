@@ -1424,7 +1424,7 @@ private fun ConnectionRow(connection: StudioBankConnection, t: (String) -> Strin
             }
         }
         if (isOwner && connection.needsReconnect) {
-            OutlinedButton(onClick = { openUri("https://nivadesk.app/bank") }) { Text(t("Reconnect"), fontSize = 12.sp, color = RED) }
+            OutlinedButton(onClick = { openUri(if (connection.provider == "paypal") "https://nivadesk.app/settings?section=paypal" else "https://nivadesk.app/bank") }) { Text(t("Reconnect"), fontSize = 12.sp, color = RED) }
         }
     }
 }
@@ -2287,6 +2287,9 @@ private fun TransactionDetailSheet(
                         }
                         if (tx.incomingKind in BANK_NON_REVENUE_INCOMING_KINDS) {
                             Text(t("Not counted as revenue."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (tx.provider == "paypal" && tx.feeAmount != null && tx.feeAmount != 0.0) {
+                            Text("${t("PayPal fee")} ${"%.2f".format(tx.feeAmount)} · ${t("Net")} ${"%.2f".format(tx.netAmount ?: tx.amount)} ${tx.currency}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (tx.settlementLabel.isNotBlank()) {
                             Text("✓ ${t("Processor payout")} · ${tx.settlementLabel}${if (tx.settlementPayout.isNotBlank()) " · " + tx.settlementPayout else ""}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)

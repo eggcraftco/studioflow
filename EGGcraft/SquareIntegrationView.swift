@@ -480,7 +480,7 @@ struct SquareIntegrationView: View {
 }
 
 /// One payout line with its bank side (Faz 5). A separate struct: nested view builders crash on a real iPhone.
-private struct SquarePayoutRowView: View {
+struct SquarePayoutRowView: View {
     let row: [String: Any]
     let isOwner: Bool
     let busy: Bool
@@ -511,7 +511,7 @@ private struct SquarePayoutRowView: View {
 }
 
 /// The window's rows for the payout being resolved: exact amounts with a Match button, near amounts shown apart.
-private struct SquareSettlementCandidatesView: View {
+struct SquareSettlementCandidatesView: View {
     let header: String
     let candidates: [[String: Any]]
     let near: [[String: Any]]
@@ -542,7 +542,7 @@ private struct SquareSettlementCandidatesView: View {
     }
 }
 
-private struct SquareSettlementCandidateRow: View {
+struct SquareSettlementCandidateRow: View {
     let candidate: [String: Any]
     let busy: Bool
     let tr: (String) -> String

@@ -6150,6 +6150,7 @@ struct AyarlarView: View {
                     else if integrationsManaging == "etsy" { etsyIntegrationAyari }
                     else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
                     else if integrationsManaging == "square" { squareIntegrationAyari }
+                    else if integrationsManaging == "paypal" { paypalIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
             } else {
@@ -6251,7 +6252,11 @@ struct AyarlarView: View {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !companyId.isEmpty, !integrationSignalsLoaded else { return }
         let functions = Functions.functions(region: "europe-west2")
-        integrationSignals.bankConnections = firebaseManager.bankConnections.filter(\.isLinked).count
+        integrationSignals.bankConnections = firebaseManager.bankConnections.filter { $0.isLinked && $0.provider != "paypal" }.count
+        let paypalRows = firebaseManager.bankConnections.filter { $0.isLinked && $0.provider == "paypal" }
+        integrationSignals.paypalConnections = paypalRows.count
+        integrationSignals.paypalConnectionsNeedingAttention = paypalRows.filter { $0.syncState != "ok" }.count
+        integrationSignals.paypalSandbox = paypalRows.contains { $0.providerName.localizedCaseInsensitiveContains("sandbox") }
 
         functions.httpsCallable("getShopifyIntegrationsForWorkspace").call(["companyId": companyId]) { result, _ in
             DispatchQueue.main.async {
@@ -6324,6 +6329,14 @@ struct AyarlarView: View {
 
     private var squareIntegrationAyari: some View {
         SquareIntegrationView(
+            language: seciliDil,
+            isOwner: firebaseManager.currentWorkspaceRole
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+        )
+    }
+
+    private var paypalIntegrationAyari: some View {
+        PayPalIntegrationView(
             language: seciliDil,
             isOwner: firebaseManager.currentWorkspaceRole
                 .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"

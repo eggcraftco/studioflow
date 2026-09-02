@@ -53,10 +53,10 @@ function createPayPalClient({ environment = "live", clientId, clientSecret, fetc
     return bearer;
   }
 
-  /** One page of the Transaction Search API for a window of at most 31 days. */
+  /** One page of the Transaction Search API for a window of at most 31 days. PayPal takes ONE transaction_status (D, P, S or V); more than one is a 400, so rows are filtered by status after the fact. */
   async function listTransactions({ startMs, endMs, page = 1, pageSize = 500, statuses = null }) {
     if (endMs - startMs > MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000 + 1000) throw new PayPalApiError("paypal_window_too_wide", 400, "WINDOW", "data");
-    const data = await request("GET", "/v1/reporting/transactions", { query: { start_date: paypalIso(startMs), end_date: paypalIso(endMs), fields: "all", page_size: pageSize, page, transaction_status: statuses ? statuses.join(",") : null } });
+    const data = await request("GET", "/v1/reporting/transactions", { query: { start_date: paypalIso(startMs), end_date: paypalIso(endMs), fields: "all", page_size: pageSize, page, transaction_status: Array.isArray(statuses) && statuses.length === 1 ? statuses[0] : null } });
     return {
       transactions: Array.isArray(data?.transaction_details) ? data.transaction_details : [],
       page: Number(data?.page) || page, totalPages: Number(data?.total_pages) || 1, totalItems: Number(data?.total_items) || 0,

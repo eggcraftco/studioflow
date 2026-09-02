@@ -50,6 +50,10 @@ struct NivaDeskIntegrationSignals {
     /// Live Square merchants, from getSquareConnections.
     var squareConnections = 0
     var squareConnectionsNeedingAttention = 0
+    /// PayPal money feeds (first-party credentials), from the bank connections.
+    var paypalConnections = 0
+    var paypalConnectionsNeedingAttention = 0
+    var paypalSandbox = false
 }
 
 struct NivaDeskIntegration: Identifiable {
@@ -114,8 +118,9 @@ struct NivaDeskIntegration: Identifiable {
               capabilities: ["Automation"], manage: "inbound", asset: "", mark: "M"),
         .init(id: "stripe", name: "Stripe", category: "automation", kind: "planned",
               blurb: "", capabilities: [], manage: "", asset: "", mark: "S"),
-        .init(id: "paypal", name: "PayPal", category: "automation", kind: "planned",
-              blurb: "", capabilities: [], manage: "", asset: "", mark: "P"),
+        .init(id: "paypal", name: "PayPal", category: "banking", kind: "native",
+              blurb: "Sales, fees and refunds from your PayPal account, beside your bank.",
+              capabilities: ["Payments received and sent", "Fees beside the gross", "Withdrawals matched to your bank"], manage: "paypal", asset: "", mark: "P"),
         .init(id: "googledrive", name: "Google Drive", category: "automation", kind: "planned",
               blurb: "", capabilities: [], manage: "", asset: "", mark: "G"),
         .init(id: "dropbox", name: "Dropbox", category: "automation", kind: "planned",
@@ -132,6 +137,7 @@ struct NivaDeskIntegration: Identifiable {
             if signals.squareConnections == 0 { return "" }
             return signals.squareConnections == 1 ? "1 account" : "\(signals.squareConnections) accounts"
         }
+        if id == "paypal" { return signals.paypalConnections == 0 ? "" : (signals.paypalSandbox ? "Sandbox" : "PayPal") }
         guard id == "shopify" else { return "" }
         let live = signals.shopifyStores.filter { $0.1 != "unlinked" }
         if live.count == 1 { return live[0].0 }
@@ -156,6 +162,10 @@ struct NivaDeskIntegration: Identifiable {
         if id == "square" {
             if signals.squareConnections == 0 { return .available }
             return signals.squareConnectionsNeedingAttention == signals.squareConnections ? .attention : .connected
+        }
+        if id == "paypal" {
+            if signals.paypalConnections == 0 { return .available }
+            return signals.paypalConnectionsNeedingAttention == signals.paypalConnections ? .attention : .connected
         }
 
         // Everything else arrives over a webhook channel. A test delivery proves

@@ -67,6 +67,10 @@ data class IntegrationSignals(
     /** Live Square merchants, from getSquareConnections. */
     val squareConnections: Int = 0,
     val squareConnectionsNeedingAttention: Int = 0,
+    /** PayPal money feeds (first-party credentials), from the bank connections. */
+    val paypalConnections: Int = 0,
+    val paypalConnectionsNeedingAttention: Int = 0,
+    val paypalSandbox: Boolean = false,
 )
 
 data class IntegrationProvider(
@@ -92,6 +96,7 @@ data class IntegrationProvider(
             if (signals.squareConnections == 0) return ""
             return if (signals.squareConnections == 1) "1 account" else "${signals.squareConnections} accounts"
         }
+        if (id == "paypal") return if (signals.paypalConnections == 0) "" else if (signals.paypalSandbox) "Sandbox" else "PayPal"
         if (id != "shopify") return ""
         val live = signals.shopifyStores.filterValues { it != "unlinked" }
         return when {
@@ -119,6 +124,10 @@ data class IntegrationProvider(
         if (id == "square") {
             if (signals.squareConnections == 0) return IntegrationState.Available
             return if (signals.squareConnectionsNeedingAttention == signals.squareConnections) IntegrationState.Attention else IntegrationState.Connected
+        }
+        if (id == "paypal") {
+            if (signals.paypalConnections == 0) return IntegrationState.Available
+            return if (signals.paypalConnectionsNeedingAttention == signals.paypalConnections) IntegrationState.Attention else IntegrationState.Connected
         }
         // Everything else arrives over a webhook channel. A test delivery proves
         // the wiring, not the connection — it does not turn the card green.
@@ -163,7 +172,7 @@ val INTEGRATION_PROVIDERS = listOf(
     IntegrationProvider("make", "Make", "automation", "webhook",
         "Send anything into NivaDesk from a scenario.", listOf("Automation"), "inbound", "M"),
     IntegrationProvider("stripe", "Stripe", "automation", "planned", "", emptyList(), "", "S"),
-    IntegrationProvider("paypal", "PayPal", "automation", "planned", "", emptyList(), "", "P"),
+    IntegrationProvider("paypal", "PayPal", "banking", "native", "Sales, fees and refunds from your PayPal account, beside your bank.", listOf("Payments received and sent", "Fees beside the gross", "Withdrawals matched to your bank"), "paypal", "P"),
     IntegrationProvider("googledrive", "Google Drive", "automation", "planned", "", emptyList(), "", "G"),
     IntegrationProvider("dropbox", "Dropbox", "automation", "planned", "", emptyList(), "", "D"),
 )

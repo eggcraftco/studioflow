@@ -625,6 +625,7 @@ private fun SettingsDetailScreen(
                 "shopify" -> ShopifyDetail(state)
                 "woo" -> WooCommerceDetail(state)
                 "square" -> SquareDetail(state)
+                "paypal" -> PayPalDetail(state)
                 "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
                 "data" -> DataManagementDetail(state, onImportBackup, onConfirmImportBackup, onCancelImportBackup, onDeleteWorkspaceData)
@@ -3079,7 +3080,10 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             channels = mapOf(
                 "inbound" to IntegrationChannel(inbound.first, inbound.second, inbound.third),
             ),
-            bankConnections = state.bankConnections.count { it.isLinked },
+            bankConnections = state.bankConnections.count { it.isLinked && it.provider != "paypal" },
+            paypalConnections = state.bankConnections.count { it.isLinked && it.provider == "paypal" },
+            paypalConnectionsNeedingAttention = state.bankConnections.count { it.isLinked && it.provider == "paypal" && it.syncState != "ok" },
+            paypalSandbox = state.bankConnections.any { it.isLinked && it.provider == "paypal" && it.providerName.contains("sandbox", ignoreCase = true) },
         )
         loaded = true
     }
@@ -3094,6 +3098,7 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
                 "shopify" -> ShopifyDetail(state)
                 "woo" -> WooCommerceDetail(state)
                 "square" -> SquareDetail(state)
+                "paypal" -> PayPalDetail(state)
                 "etsy" -> EtsyDetail(state)
                 else -> InboundDetail(state)
             }
@@ -3419,6 +3424,139 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
                             OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect WooCommerce")) }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PayPalDetail(state: StudioFlowUiState) {
+    // PayPal as a money feed: the owner pastes the credentials of the workspace's own PayPal app; NivaDesk
+    // proves them before writing anything, stores the secret encrypted, and reads PayPal beside the bank.
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    var busy by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    var environment by remember { mutableStateOf("live") }
+    var clientId by remember { mutableStateOf("") }
+    var clientSecret by remember { mutableStateOf("") }
+    var showForm by remember { mutableStateOf(false) }
+    var confirmDisconnect by remember { mutableStateOf(false) }
+    var payoutRows by remember { mutableStateOf<List<StudioFlowRepository.SquarePayoutRow>>(emptyList()) }
+    var payoutsText by remember { mutableStateOf("") }
+    var settlePayoutId by remember { mutableStateOf("") }
+    var settle by remember { mutableStateOf<StudioFlowRepository.SquarePayoutMatch?>(null) }
+    val connection = state.bankConnections.firstOrNull { it.provider == "paypal" && it.isLinked } ?: state.bankConnections.firstOrNull { it.provider == "paypal" }
+    fun run(key: String, block: suspend () -> Unit) {
+        scope.launch { busy = key; errorText = ""; notice = ""; runCatching { block() }.onFailure { errorText = it.message ?: t("Could not load.") }; busy = "" }
+    }
+    val connectForm: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("In the PayPal Developer dashboard create an app under Live (or Sandbox to try), enable Transaction Search on it, then paste its Client ID and Secret here. NivaDesk stores the secret encrypted and only ever reads."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf("live" to t("Live"), "sandbox" to t("Sandbox")).forEach { (value, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = environment == value, onClick = { environment = value }, enabled = isOwner && busy != "connect")
+                        Text(label)
+                    }
+                }
+            }
+            OutlinedTextField(value = clientId, onValueChange = { clientId = it }, label = { Text(t("Client ID")) }, singleLine = true, enabled = isOwner && busy != "connect", modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = clientSecret, onValueChange = { clientSecret = it }, label = { Text(t("Secret")) }, singleLine = true, enabled = isOwner && busy != "connect", visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = isOwner && busy != "connect" && clientId.isNotBlank() && clientSecret.isNotBlank(), onClick = {
+                    run("connect") {
+                        val ws = workspace ?: return@run
+                        val out = repository.paypalConnect(ws.id, clientId.trim(), clientSecret.trim(), environment)
+                        clientSecret = ""; showForm = false
+                        notice = if (out.reconnected) t("PayPal credentials refreshed.") else "${t("PayPal connected.")} ${t("Imported")}: ${out.imported}"
+                    }
+                }) { Text(if (busy == "connect") t("Checking with PayPal…") else if (connection != null && !connection.isDisconnected) t("Save new credentials") else t("Connect PayPal")) }
+                if (showForm) OutlinedButton(onClick = { showForm = false; clientSecret = "" }) { Text(t("Cancel")) }
+            }
+            Text(t("The first sync takes the last six months; after that PayPal is read with every bank refresh, and withdrawals to your bank are matched to the statement so nothing is counted twice."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (notice.isNotEmpty()) Text(notice, color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)
+        if (errorText.isNotEmpty()) Text(errorText, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+        if (connection == null || connection.isDisconnected) {
+            DetailCard(title = t("Connect your PayPal account"), icon = Icons.Filled.CheckCircle) {
+                if (isOwner) connectForm() else Text(t("Only the workspace owner can connect PayPal."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            DetailCard(title = connection.providerName.ifBlank { "PayPal" }, icon = Icons.Filled.CheckCircle) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(t("Connection"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (connection.syncState == "ok") t("Healthy") else if (connection.syncState == "needs_reconsent") t("Credentials rejected") else t("Sync error"), fontWeight = FontWeight.Bold, color = if (connection.syncState == "ok") Color(0xFF16A34A) else MaterialTheme.colorScheme.error)
+                }
+                connection.lastSyncedAtMillis?.let { Text("${t("Last sync")} ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = isOwner && busy != "sync", onClick = { run("sync") { val ws = workspace ?: return@run; val n = repository.bankSync(ws.id); notice = "${t("Sync finished.")} ${t("Imported")}: $n" } }) { Text(if (busy == "sync") t("Syncing…") else t("Sync now")) }
+                    if (isOwner) OutlinedButton(onClick = { showForm = !showForm }) { Text(t("Enter new credentials")) }
+                }
+                if (showForm) connectForm()
+            }
+            DetailCard(title = t("PayPal withdrawals"), icon = Icons.Filled.CheckCircle) {
+                Text(t("Money PayPal sent to your bank. Each withdrawal is matched to the bank row it landed in, so the same sales are never counted twice."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(enabled = busy != "payouts", onClick = {
+                    run("payouts") { val ws = workspace ?: return@run; val rows = repository.providerPayouts(ws.id, "paypal"); payoutRows = rows; payoutsText = if (rows.isEmpty()) t("No withdrawals yet.") else "" }
+                }) { Text(t("Load")) }
+                if (payoutsText.isNotEmpty()) Text(payoutsText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                payoutRows.forEach { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("${row.arrivalDate} · ${row.amount} ${row.currency}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (row.bankMatched) {
+                                Text("✓ ${t("Matched")}${if (row.bankMatchDate.isNotBlank()) " · " + row.bankMatchDate else ""}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                if (isOwner) TextButton(enabled = busy != "settle", contentPadding = PaddingValues(0.dp), onClick = {
+                                    run("settle") { val ws = workspace ?: return@run; repository.payoutBankUnlink(ws.id, "paypal", row.id); notice = t("Payout unlinked."); settle = null; settlePayoutId = ""; payoutRows = repository.providerPayouts(ws.id, "paypal") }
+                                }) { Text(t("Unlink"), fontSize = 12.sp) }
+                            } else {
+                                Text(t("Not matched"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (isOwner) TextButton(enabled = busy != "settle", contentPadding = PaddingValues(0.dp), onClick = {
+                                    run("settle") { val ws = workspace ?: return@run; settle = repository.payoutBankSuggest(ws.id, "paypal", row.id); settlePayoutId = row.id }
+                                }) { Text(t("Find bank row"), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                    }
+                }
+                settle?.let { match ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${t("Bank row")} · ${match.header}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            TextButton(contentPadding = PaddingValues(0.dp), onClick = { settle = null; settlePayoutId = "" }) { Text(t("Close"), fontSize = 12.sp) }
+                        }
+                        if (match.candidates.isEmpty()) Text(t("No bank row of this amount arrived in the window."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        match.candidates.forEach { c ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("${c.bookingDate.ifBlank { "—" }} · ${c.counterparty.ifBlank { c.description.ifBlank { "—" } }} · ${c.amount} ${c.currency} · ${t("Score")} ${c.score}", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                if (c.free) OutlinedButton(enabled = busy != "settle", contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), onClick = {
+                                    run("settle") { val ws = workspace ?: return@run; repository.payoutBankConfirm(ws.id, "paypal", settlePayoutId, c.transactionId); notice = t("Payout matched to the bank row."); settle = null; settlePayoutId = ""; payoutRows = repository.providerPayouts(ws.id, "paypal") }
+                                }) { Text(t("Match"), fontSize = 12.sp) }
+                                else Text(t("Already classified"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+            if (isOwner) {
+                DetailCard(title = t("Disconnect PayPal"), icon = Icons.Filled.CheckCircle) {
+                    if (confirmDisconnect) {
+                        Text(t("Disconnect PayPal? The stored credentials are removed and new rows stop arriving. Rows already imported stay in Banking."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(enabled = busy != "disconnect", colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error), onClick = {
+                                run("disconnect") { val ws = workspace ?: return@run; repository.bankDisconnect(ws.id, connection.id, "disconnect"); confirmDisconnect = false; notice = t("PayPal disconnected."); payoutRows = emptyList(); payoutsText = "" }
+                            }) { Text(t("Disconnect")) }
+                            OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
+                        }
+                    } else OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect PayPal")) }
                 }
             }
         }

@@ -1024,6 +1024,9 @@ class StudioFlowRepository(
     /** Faz 5: the bank side of a payout — suggest lists the window's rows scored; confirm and unlink write both sides. */
     suspend fun squarePayoutBankSuggest(workspaceId: String, payoutId: String): SquarePayoutMatch {
         val raw = etsyCall("matchSquarePayoutToBank", workspaceId, mapOf("payoutId" to payoutId, "mode" to "suggest"))
+        return parsePayoutMatch(raw)
+    }
+    private fun parsePayoutMatch(raw: Map<*, *>): SquarePayoutMatch {
         val payout = raw["payout"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val window = raw["window"] as? Map<*, *>
         fun rows(key: String) = (raw[key] as? List<*>).orEmpty().mapNotNull { e ->
@@ -1048,6 +1051,40 @@ class StudioFlowRepository(
     }
     suspend fun squarePayoutBankUnlink(workspaceId: String, payoutId: String) {
         etsyCall("matchSquarePayoutToBank", workspaceId, mapOf("payoutId" to payoutId, "mode" to "unlink"))
+    }
+    // ---- PayPal money feed (first-party credentials; the bank module reads it) ----
+    data class PayPalConnectResult(val connectionId: String, val imported: Int, val reconnected: Boolean)
+    suspend fun paypalConnect(workspaceId: String, clientId: String, clientSecret: String, environment: String): PayPalConnectResult {
+        val raw = etsyCall("paypalConnect", workspaceId, mapOf("clientId" to clientId, "clientSecret" to clientSecret, "environment" to environment), timeoutSeconds = 300)
+        return PayPalConnectResult(raw["connectionId"]?.toString().orEmpty(), (raw["imported"] as? Number)?.toInt() ?: 0, raw["reconnected"] as? Boolean ?: false)
+    }
+    suspend fun bankDisconnect(workspaceId: String, connectionId: String, mode: String = "disconnect") {
+        etsyCall("bankDeleteConnection", workspaceId, mapOf("requisitionId" to connectionId, "mode" to mode), timeoutSeconds = 180)
+    }
+    /** Any provider's payouts with their bank side (Square rows keep their own list; PayPal uses this). */
+    suspend fun providerPayouts(workspaceId: String, provider: String): List<SquarePayoutRow> {
+        val raw = etsyCall("bankListPayouts", workspaceId, mapOf("provider" to provider, "limit" to 50))
+        return (raw["payouts"] as? List<*>).orEmpty().mapNotNull { e ->
+            val r = e as? Map<*, *> ?: return@mapNotNull null
+            val totals = r["totals"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            SquarePayoutRow(
+                id = r["id"]?.toString().orEmpty(), bankMatchDate = ((r["bankMatch"] as? Map<*, *>)?.get("bookingDate")?.toString()).orEmpty(),
+                externalId = r["externalId"]?.toString().orEmpty(), status = r["status"]?.toString().orEmpty(), arrivalDate = r["arrivalDate"]?.toString().orEmpty(),
+                amount = (r["amount"] ?: totals["net"])?.toString().orEmpty(), currency = r["currency"]?.toString().orEmpty(),
+                gross = totals["gross"]?.toString().orEmpty(), refunds = totals["refunds"]?.toString().orEmpty(), fee = totals["fee"]?.toString().orEmpty(),
+                reconciled = true, bankMatched = ((r["bankMatch"] as? Map<*, *>)?.get("transactionId")?.toString()).orEmpty().isNotEmpty(),
+            )
+        }
+    }
+    suspend fun payoutBankSuggest(workspaceId: String, provider: String, payoutId: String): SquarePayoutMatch {
+        val raw = etsyCall("matchPayoutToBank", workspaceId, mapOf("provider" to provider, "payoutId" to payoutId, "mode" to "suggest"))
+        return parsePayoutMatch(raw)
+    }
+    suspend fun payoutBankConfirm(workspaceId: String, provider: String, payoutId: String, transactionId: String) {
+        etsyCall("matchPayoutToBank", workspaceId, mapOf("provider" to provider, "payoutId" to payoutId, "mode" to "confirm", "transactionId" to transactionId))
+    }
+    suspend fun payoutBankUnlink(workspaceId: String, provider: String, payoutId: String) {
+        etsyCall("matchPayoutToBank", workspaceId, mapOf("provider" to provider, "payoutId" to payoutId, "mode" to "unlink"))
     }
     suspend fun squareAudit(workspaceId: String, connectionId: String, days: Int): SquareAuditReport {
         val raw = etsyCall("auditSquareOrders", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 300)

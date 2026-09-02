@@ -590,7 +590,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const endMs = Date.now();
     const startMs = endMs - (fullHistory ? PAYPAL_INITIAL_DAYS : PAYPAL_REGULAR_DAYS) * 24 * 60 * 60 * 1000;
     const writes = []; const payouts = []; let seen = 0;
-    for await (const page of api.transactionsBetween({ startMs, endMs, statuses: ["S", "P"] })) {
+    for await (const page of api.transactionsBetween({ startMs, endMs })) {   // every status; the normaliser keeps S (booked) and P (pending)
       for (const t of page.transactions) {
         seen += 1;
         const row = paypal.normalize(t, { accountId, connectionId });

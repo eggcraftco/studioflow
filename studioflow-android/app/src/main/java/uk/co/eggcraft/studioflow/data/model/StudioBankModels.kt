@@ -59,7 +59,10 @@ data class StudioBankTransaction(
     val settlementGross: String = "",
     val settlementFee: String = "",
     val settlementNet: String = "",
-    val settlementArrival: String = ""
+    val settlementArrival: String = "",
+    /** PayPal keeps the fee beside the gross amount. */
+    val feeAmount: Double? = null,
+    val netAmount: Double? = null
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
@@ -156,6 +159,8 @@ data class StudioBankAccount(val id: String, val name: String, val currency: Str
 
 data class StudioBankConnection(
     val id: String,
+    /** "truelayer" (Open Banking) or "paypal" — a PayPal feed is managed from its own Integrations card. */
+    val provider: String = "truelayer",
     val providerName: String,
     val providerLogo: String,
     val status: String,
@@ -276,7 +281,9 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         settlementGross = ((data["settlement"] as? Map<*, *>)?.get("gross")?.toString()).orEmpty(),
         settlementFee = ((data["settlement"] as? Map<*, *>)?.get("fee")?.toString()).orEmpty(),
         settlementNet = ((data["settlement"] as? Map<*, *>)?.get("net")?.toString()).orEmpty(),
-        settlementArrival = ((data["settlement"] as? Map<*, *>)?.get("arrivalDate")?.toString()).orEmpty()
+        settlementArrival = ((data["settlement"] as? Map<*, *>)?.get("arrivalDate")?.toString()).orEmpty(),
+        feeAmount = (data["feeAmount"] as? Number)?.toDouble(),
+        netAmount = (data["netAmount"] as? Number)?.toDouble()
     )
 }
 
@@ -291,6 +298,7 @@ fun bankConnectionFromDocument(id: String, data: Map<String, Any?>): StudioBankC
     } ?: emptyList()
     return StudioBankConnection(
         id = id,
+        provider = (data["provider"] as? String) ?: "truelayer",
         providerName = (data["providerName"] as? String) ?: "",
         providerLogo = (data["providerLogo"] as? String) ?: "",
         status = (data["status"] as? String) ?: "",
