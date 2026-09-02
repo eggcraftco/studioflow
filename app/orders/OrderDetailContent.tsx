@@ -95,6 +95,7 @@ import {
   type CompanyNumberSetting,
   type LineItemDetail,
   type OrderDetail,
+  type OrderChannelStamp,
   type TeamMemberDetail,
   type ToDoDetail,
   type WorkSessionDetail,
@@ -1397,6 +1398,54 @@ function ShopifySourceStrip({
       {adminUrl ? (
         <a className="shopify-source-link" href={adminUrl} target="_blank" rel="noreferrer">
           View in Shopify ↗
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+// UX-010/011/012 — the provider-agnostic strip for orders the common engine
+// applied (Square, WooCommerce, and Shopify/Etsy once the engine is primary).
+// Reads the engine's stamp first and the provider's custom fields as the
+// fallback, never a workflow field: what it shows is the platform's own view
+// of the order, read-only, with one safe link to open it at the provider.
+const CHANNEL_SOURCES = ["Square", "WooCommerce", "Etsy"];
+function ChannelSourceStrip({
+  order,
+}: {
+  order: { customFields: Record<string, string>; commerce: OrderChannelStamp | null; designLink: string };
+}) {
+  const language = useContext(DetailLanguageContext);
+  const t = (text: string) => studioT(text, language);
+  const cf = order.customFields || {};
+  const stamp = order.commerce;
+  const source = (stamp?.providerDisplayName || cf["Source"] || "").trim();
+  if (source === "Shopify" && !stamp) return null;   // the Shopify strip above owns that case
+  if (!stamp && !CHANNEL_SOURCES.includes(source)) return null;
+  const field = (suffix: string) => (cf[`${source} ${suffix}`] || "").trim();
+  const number = stamp?.orderNumber || field("Order Number") || field("Receipt ID");
+  const platformStatus = stamp?.platformStatus || field("Status");
+  const paymentStatus = stamp?.paymentStatus || "";
+  const currency = (stamp?.currency || field("Currency")).toUpperCase();
+  const total = stamp?.grandTotal || field("Total");
+  const location = field("Location");
+  const sourceName = field("Source");
+  const link = stamp?.externalAdminUrl || (/^https?:\/\//.test(order.designLink || "") ? order.designLink : "");
+  const connection = stamp?.connectionDisplayName || "";
+  return (
+    <div className="shopify-source-strip channel-source-strip">
+      <span className="shopify-source-badge">{source}</span>
+      {connection ? <span className="shopify-source-item">{connection}</span> : null}
+      {number ? <span className="shopify-source-item">· #{number}</span> : null}
+      {sourceName && sourceName !== source ? <span className="shopify-source-item">· {sourceName}</span> : null}
+      {location ? <span className="shopify-source-item">· {t("Location")}: {location}</span> : null}
+      {platformStatus ? <span className="shopify-source-item">· {t("Platform status")}: {platformStatus}</span> : null}
+      {paymentStatus ? <span className="shopify-source-item">· {t("Payment")}: {paymentStatus.replace(/_/g, " ")}</span> : null}
+      {total ? <span className="shopify-source-item">· {total} {currency}</span> : null}
+      {stamp?.reviewRequired ? <span className="shopify-source-item">· {t("Needs attention")}</span> : null}
+      {link ? (
+        <a className="shopify-source-link" href={link} target="_blank" rel="noreferrer">
+          {t("Open in")} {source} ↗
         </a>
       ) : null}
     </div>
@@ -8917,6 +8966,7 @@ export function OrderDetailContent({
 
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
+      <ChannelSourceStrip order={order} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">
@@ -11037,6 +11087,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
   return {
     id: "sample-preview-order",
     companyId: "",
+    commerce: null,
     assignedToUid: "",
     assignedToEmail: "",
     customerName: "Alex Carter",

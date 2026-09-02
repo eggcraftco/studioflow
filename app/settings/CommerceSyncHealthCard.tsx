@@ -23,6 +23,14 @@ type CommerceEventRow = {
   key: string; provider: string; connectionId: string; externalId: string; eventType: string; source: string; status: string;
   attempt: number; errorClass: string | null; message: string | null; orderId: string | null; startedAt: string | null; finishedAt: string | null; nextRetryAt: string | null;
 };
+type CommerceReviewRow = {
+  orderId: string; provider: string; providerDisplayName: string; connectionId: string; externalId: string; orderNumber: string;
+  customerName: string | null; grandTotal: string | null; currency: string | null; reasons: string[]; resolved: boolean; updatedAtMs: number;
+};
+// §10.5 — the review reasons the engine writes, in the merchant's words.
+const REVIEW_REASON_LABELS: Record<string, string> = {
+  ad_hoc_line_item: "Item not in the catalogue", no_line_items: "No line items", missing_total: "Missing total", unresolved_variation: "Unresolved variation"
+};
 const COMMERCE_STATUS_LABELS: Record<string, string> = {
   applied: "Applied", retrying: "Retrying", dead: "Dead", skipped: "Skipped", duplicate: "Duplicate", stale: "Stale", noop: "No change",
   held: "Held", queued: "Queued", processing: "Processing", received: "Received", failed: "Dead"
@@ -42,6 +50,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
   const isOwner = workspace.role === "owner";
   const [connections, setConnections] = useState<CommerceHealthConnection[] | null>(null);
   const [events, setEvents] = useState<CommerceEventRow[]>([]);
+  const [review, setReview] = useState<CommerceReviewRow[]>([]);
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const [notice, setNotice] = useState("");
@@ -49,12 +58,14 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
   const load = useCallback(async () => {
     if (!companyId) return;
     try {
-      const [health, activity] = await Promise.all([
+      const [health, activity, queue] = await Promise.all([
         httpsCallable<{ companyId: string }, { connections: CommerceHealthConnection[] }>(functions, "getCommerceHealth")({ companyId }),
-        httpsCallable<{ companyId: string; limit: number }, { events: CommerceEventRow[] }>(functions, "listCommerceEvents")({ companyId, limit: 40 })
+        httpsCallable<{ companyId: string; limit: number }, { events: CommerceEventRow[] }>(functions, "listCommerceEvents")({ companyId, limit: 40 }),
+        httpsCallable<{ companyId: string }, { items: CommerceReviewRow[] }>(functions, "listCommerceReviewQueue")({ companyId }).catch(() => ({ data: { items: [] as CommerceReviewRow[] } }))
       ]);
       setConnections((health.data?.connections ?? []).filter((row) => row.provider === provider));
       setEvents((activity.data?.events ?? []).filter((row) => row.provider === provider).slice(0, 20));
+      setReview((queue.data?.items ?? []).filter((row) => row.provider === provider));
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Could not load."));
@@ -72,6 +83,19 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
       await load();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : t("Retry failed."));
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function resolve(orderId: string) {
+    setBusyKey(`review:${orderId}`); setNotice("");
+    try {
+      await httpsCallable<{ companyId: string; orderId: string }, { ok: boolean }>(functions, "resolveCommerceReview")({ companyId, orderId });
+      setNotice(t("Resolved."));
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : t("Could not load."));
     } finally {
       setBusyKey("");
     }
@@ -115,7 +139,28 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
       )}
       {connections !== null ? (
         <div style={{ marginTop: 14 }}>
-          <strong style={{ fontSize: 13 }}>{t("Recent activity")}</strong>
+          <strong style={{ fontSize: 13 }}>{t("Needs review")}</strong>
+          <p className="muted-copy" style={{ fontSize: 12.5, margin: "2px 0 6px" }}>{t("Orders the sync could apply but could not vouch for: an item not in the catalogue, a missing total. Check the order, then resolve.")}</p>
+          {review.length === 0 ? (
+            <p className="muted-copy" style={{ fontSize: 12.5 }}>{t("Nothing needs review.")}</p>
+          ) : (
+            <div style={{ display: "grid", gap: 6 }}>
+              {review.map((row) => (
+                <div key={row.orderId} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12.5 }}>
+                  <span className="due-pill warning">{row.providerDisplayName || row.provider}</span>
+                  <span>#{row.orderNumber || row.externalId}{row.customerName ? ` · ${row.customerName}` : ""}{row.grandTotal ? ` · ${row.grandTotal} ${row.currency || ""}` : ""}</span>
+                  <span className="muted-copy">{row.reasons.map((r) => t(REVIEW_REASON_LABELS[r] || r)).join(", ")}</span>
+                  <a className="button secondary" style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 }} href={`/orders/${encodeURIComponent(row.orderId)}`}>{t("Open order")}</a>
+                  {isOwner ? (
+                    <button type="button" className="button" style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 }} disabled={busyKey === `review:${row.orderId}`} onClick={() => { void resolve(row.orderId); }}>
+                      {t("Resolve")}
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <strong style={{ fontSize: 13, display: "block", marginTop: 12 }}>{t("Recent activity")}</strong>
           {events.length === 0 ? (
             <p className="muted-copy" style={{ fontSize: 12.5 }}>{t("No events yet.")}</p>
           ) : (

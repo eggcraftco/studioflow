@@ -43,3 +43,7 @@ export async function previewWooImport(companyId: string, connectionId: string, 
 export async function runWooImport(companyId: string, connectionId: string, days: number) {
   return (await call<{ companyId: string; connectionId: string; days: number }, WooImportResult>("runWooImport")({ companyId, connectionId, days })).data;
 }
+export type WooAuditReport = { ok: boolean; days: number; atStore: number; asOrders: number; mergedAsPayments: number; unpaidSkipped: number; cancelled: number; missing: number; truncated: boolean; missingIds: string[] };
+export async function auditWooOrders(companyId: string, connectionId: string, days: number) {
+  return (await call<{ companyId: string; connectionId: string; days: number }, WooAuditReport>("auditWooOrders")({ companyId, connectionId, days })).data;
+}

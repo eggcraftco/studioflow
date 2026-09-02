@@ -24,6 +24,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { getEtsyConnections } from "@/lib/studioflow/etsy";
 import { getWooConnections } from "@/lib/studioflow/woocommerce";
+import { getSquareConnections } from "@/lib/studioflow/square";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation";
@@ -35,7 +36,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square";
 
 export type IntegrationProvider = {
   id: string;
@@ -64,6 +65,11 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     logo: "/brand/integrations/woocommerce.svg",
     blurb: "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.",
     capabilities: ["Orders", "Customers"], manage: "woocommerce",
+  },
+  {
+    id: "square", name: "Square", category: "commerce", kind: "native", mark: "S",
+    blurb: "Connect your Square account once; POS, Online and Invoice sales, payments and refunds arrive on their own.",
+    capabilities: ["Orders", "Payments", "Customers"], manage: "square",
   },
   {
     id: "etsy", name: "Etsy", category: "commerce", kind: "native", mark: "E",
@@ -160,13 +166,14 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
     getDocs(collection(db, "companies", companyId, "bankConnections")),
     getEtsyConnections(companyId),
     getWooConnections(companyId),
+    getSquareConnections(companyId),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -190,11 +197,14 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     wooConnections: woo.status === "fulfilled"
       ? woo.value.map((row) => ({ store: row.storeName || row.host, status: row.status, needsAttention: row.status === "needs_reconnect" || (row.status === "connected" && row.webhooksHealthy === false) }))
       : [],
+    squareConnections: square.status === "fulfilled"
+      ? square.value.map((row) => ({ merchant: row.merchantName || row.merchantId, status: row.status, needsAttention: row.status === "reconnect_required" || Boolean(row.lastErrorCode) }))
+      : [],
   };
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [],
 };
 
 export type IntegrationSignals = {
@@ -207,6 +217,8 @@ export type IntegrationSignals = {
   bankConnections: number;
   /** Connected WooCommerce stores, and whether one needs the owner's attention. */
   wooConnections: { store: string; status: string; needsAttention: boolean }[];
+  /** Connected Square merchants, and whether one needs the owner's attention. */
+  squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
 };
 
 export function resolveIntegrationState(
@@ -246,6 +258,13 @@ export function resolveIntegrationState(
     if (live.length === 0) return { state: "available" };
     const broken = live.filter((row) => row.needsAttention).length;
     return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].store : `${live.length} stores` };
+  }
+
+  if (provider.id === "square") {
+    const live = (signals.squareConnections || []).filter((row) => row.status !== "disconnected");
+    if (live.length === 0) return { state: "available" };
+    const broken = live.filter((row) => row.needsAttention).length;
+    return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].merchant : `${live.length} accounts` };
   }
 
   if (provider.id === "openbanking") {

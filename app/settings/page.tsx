@@ -33,6 +33,7 @@ import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
+import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
@@ -155,6 +156,7 @@ type SettingsSection = {
 // `?section=...` links and the avatar menu keep landing on the right screen.
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
+  square: "integrations",
   shopify: "integrations",
   inbound: "integrations",
   etsy: "integrations",
@@ -227,7 +229,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   "safety-uploads": "upload file size limit policy zip audit virus",
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
-  integrations: "integration connect webhook woocommerce shopify etsy wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
+  integrations: "integration connect webhook woocommerce shopify etsy square pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
   "support-tickets": "ticket help support contact"
 };
 
@@ -514,7 +516,8 @@ export default function SettingsPage() {
       rawRequested === "shopify" ||
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
-      rawRequested === "etsy"
+      rawRequested === "etsy" ||
+      rawRequested === "square"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5026,6 +5029,7 @@ function IntegrationsSection({
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
     );
