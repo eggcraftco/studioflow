@@ -6148,6 +6148,7 @@ struct AyarlarView: View {
 
                     if integrationsManaging == "shopify" { shopifyIntegrationAyari }
                     else if integrationsManaging == "etsy" { etsyIntegrationAyari }
+                    else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
             } else {
@@ -6299,6 +6300,14 @@ struct AyarlarView: View {
             guard !handle.isEmpty else { return nil }
             return URL(string: "https://admin.shopify.com/store/\(handle)")
         }
+    }
+
+    private var wooCommerceIntegrationAyari: some View {
+        WooCommerceIntegrationView(
+            language: seciliDil,
+            isOwner: firebaseManager.currentWorkspaceRole
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+        )
     }
 
     private var etsyIntegrationAyari: some View {

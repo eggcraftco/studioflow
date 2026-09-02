@@ -620,6 +620,7 @@ private fun SettingsDetailScreen(
                 // old deep link that still names one lands straight on it.
                 "integrations" -> IntegrationsHubDetail(state)
                 "shopify" -> ShopifyDetail(state)
+                "woo" -> WooCommerceDetail(state)
                 "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
                 "data" -> DataManagementDetail(state, onImportBackup, onConfirmImportBackup, onCancelImportBackup, onDeleteWorkspaceData)
@@ -3084,6 +3085,7 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             }
             when (managing) {
                 "shopify" -> ShopifyDetail(state)
+                "woo" -> WooCommerceDetail(state)
                 "etsy" -> EtsyDetail(state)
                 else -> InboundDetail(state)
             }
@@ -3254,6 +3256,124 @@ private fun CommerceSyncHealthCard(state: StudioFlowUiState, provider: String) {
                 }
             }
             if (notice.isNotEmpty()) Text(notice, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+// Faz 4 — WooCommerce as a full connector on Android: the owner types the
+// store's address, approves NivaDesk at the store in the browser, comes back
+// and presses Finish connection. Nothing here ever sees a key.
+@Composable
+private fun WooCommerceDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    var loading by remember { mutableStateOf(true) }
+    var connections by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.WooConnectionRow>>(emptyList()) }
+    var siteUrl by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    var pendingState by remember { mutableStateOf("") }
+    var confirmDisconnect by remember { mutableStateOf(false) }
+    var days by remember { mutableStateOf("30") }
+    var previewText by remember { mutableStateOf("") }
+    val connection = connections.firstOrNull { it.status == "connected" } ?: connections.firstOrNull { it.status != "disconnected" }
+    suspend fun reload() {
+        val ws = workspace ?: return
+        runCatching { repository.wooConnections(ws.id) }.onSuccess { connections = it }.onFailure { errorText = it.message ?: t("Could not load.") }
+        loading = false
+    }
+    fun run(key: String, block: suspend () -> Unit) {
+        scope.launch { busy = key; errorText = ""; notice = ""; runCatching { block() }.onFailure { errorText = it.message ?: t("Could not load.") }; busy = "" }
+    }
+    LaunchedEffect(workspace?.id) { reload() }
+    DetailColumn {
+        if (notice.isNotEmpty()) Text(notice, color = MaterialTheme.colorScheme.primary)
+        if (errorText.isNotEmpty()) Text(errorText, color = MaterialTheme.colorScheme.error)
+        when {
+            loading -> Text(t("Loading..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            connection == null -> DetailCard(title = t("Connect your store"), icon = Icons.Filled.ShoppingBag) {
+                Text(t("Enter your store's address and approve NivaDesk at your WooCommerce site. Orders, customers and status changes then sync automatically, and NivaDesk checks the store every fifteen minutes for anything a webhook missed."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(value = siteUrl, onValueChange = { siteUrl = it }, label = { Text(t("Store address")) }, placeholder = { Text("https://your-store.com") }, singleLine = true, enabled = isOwner && busy != "connect", modifier = Modifier.fillMaxWidth())
+                Button(enabled = isOwner && busy != "connect" && siteUrl.isNotBlank(), onClick = {
+                    run("connect") {
+                        val ws = workspace ?: return@run
+                        val (url, st) = repository.wooBeginConnect(ws.id, siteUrl.trim())
+                        if (url.isEmpty()) throw IllegalStateException(t("The WooCommerce connection could not be completed. Try connecting again."))
+                        pendingState = st
+                        uriHandler.openUri(url)
+                    }
+                }) { Text(if (busy == "connect") t("Opening your store…") else t("Connect WooCommerce")) }
+                if (pendingState.isNotEmpty()) {
+                    Text(t("Approve NivaDesk at your store in the browser, then come back here and press Finish connection."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(enabled = busy != "finish", onClick = {
+                        run("finish") {
+                            val ws = workspace ?: return@run
+                            val (status, message) = repository.wooFinishConnect(ws.id, pendingState)
+                            if (status == "connected") { pendingState = ""; notice = t("WooCommerce store connected."); reload() }
+                            else errorText = message.ifEmpty { t("The store has not sent its keys yet. If you cancelled at the store, start again.") }
+                        }
+                    }) { Text(t("Finish connection")) }
+                }
+                if (!isOwner) Text(t("Only the workspace owner can connect a store."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> {
+                val live = connection
+                val healthy = live.status == "connected" && live.webhooksHealthy
+                DetailCard(title = live.storeName.ifEmpty { live.host }, icon = Icons.Filled.ShoppingBag) {
+                    Text(live.siteUrl + if (live.permissions.isNotEmpty()) " · ${t("Permissions")}: ${live.permissions}" else "", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${t("Connection")}: ${if (healthy) t("Healthy") else if (live.status == "connected") t("Needs attention") else t("Connected")} · ${t("Webhooks")}: ${if (live.webhooksHealthy) t("Webhooks are healthy") else t("Needs attention")}")
+                    Text("${t("Last successful sync")}: ${if (live.lastSuccessAtMs > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(live.lastSuccessAtMs)) else "—"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!live.webhooksHealthy) Text(t("A webhook was switched off by WooCommerce. Recreate them to resume live sync."), color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(enabled = busy != "sync" && live.status == "connected", onClick = {
+                        run("sync") { val ws = workspace ?: return@run; repository.wooSyncNow(ws.id, live.id); notice = t("Sync finished."); reload() }
+                    }) { Text(if (busy == "sync") t("Syncing…") else t("Sync now")) }
+                    Text(t("Sync now checks the last 24 hours."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!live.webhooksHealthy && isOwner) OutlinedButton(enabled = busy != "recreate", onClick = {
+                        run("recreate") { val ws = workspace ?: return@run; repository.wooRecreateWebhooks(ws.id, live.id); notice = t("Webhooks recreated."); reload() }
+                    }) { Text(t("Recreate webhooks")) }
+                }
+                CommerceSyncHealthCard(state, provider = "woocommerce")
+                if (isOwner) {
+                    DetailCard(title = t("Import preview"), icon = Icons.Filled.CheckCircle) {
+                        Text(t("Preview shows what an import would bring in; nothing is written.") + " " + t("Import brings in paid orders from the chosen days; a buyer's second payment joins their open order."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(value = days, onValueChange = { days = it.filter { c -> c.isDigit() }.take(3) }, label = { Text(t("Days")) }, singleLine = true)
+                        val dayCount = (days.toIntOrNull() ?: 30).coerceIn(1, 365)
+                        OutlinedButton(enabled = busy != "preview" && live.status == "connected", onClick = {
+                            run("preview") {
+                                val ws = workspace ?: return@run
+                                val s = repository.wooPreviewImport(ws.id, live.id, dayCount)
+                                previewText = "${t("Orders found")}: ${s.total} · ${t("Paid")}: ${s.paid} · ${t("Unpaid")}: ${s.unpaid} · ${t("Cancelled")}: ${s.cancelled} · ${t("Already in NivaDesk")}: ${s.alreadyHere}"
+                            }
+                        }) { Text(t("Preview")) }
+                        Button(enabled = busy != "import" && live.status == "connected", onClick = {
+                            run("import") {
+                                val ws = workspace ?: return@run
+                                val c = repository.wooRunImport(ws.id, live.id, dayCount)
+                                notice = "${t("Imported")}: ${c.created} · ${t("Updated")}: ${c.updated} · ${t("Skipped")}: ${c.skipped}"
+                                previewText = ""; reload()
+                            }
+                        }) { Text(if (busy == "import") t("Importing…") else t("Import")) }
+                        if (previewText.isNotEmpty()) Text(previewText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DetailCard(title = t("Disconnect WooCommerce"), icon = Icons.Filled.CheckCircle) {
+                        if (confirmDisconnect) {
+                            Text(t("Disconnect this store? New orders stop arriving. Orders already imported stay in this workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Button(enabled = busy != "disconnect", onClick = {
+                                run("disconnect") { val ws = workspace ?: return@run; repository.wooDisconnect(ws.id, live.id); confirmDisconnect = false; notice = t("Store disconnected."); reload() }
+                            }) { Text(t("Disconnect")) }
+                            OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
+                        } else {
+                            OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect WooCommerce")) }
+                        }
+                    }
+                }
+            }
         }
     }
 }

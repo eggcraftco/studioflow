@@ -75,9 +75,9 @@ struct NivaDeskIntegration: Identifiable {
         .init(id: "shopify", name: "Shopify", category: "commerce", kind: "native",
               blurb: "Install the NivaDesk app and orders arrive as they are placed.",
               capabilities: ["Orders", "Customers"], manage: "shopify", asset: "IntegrationShopify", mark: "S"),
-        // SHOP-001/WOO-014: the paste-a-URL path is retired; WooCommerce returns as a connector.
-        .init(id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "planned",
-              blurb: "", capabilities: [], manage: "", asset: "IntegrationWooCommerce", mark: "W"),
+        .init(id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "native",
+              blurb: "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.",
+              capabilities: ["Orders", "Customers"], manage: "woocommerce", asset: "IntegrationWooCommerce", mark: "W"),
         .init(id: "etsy", name: "Etsy", category: "commerce", kind: "native",
               blurb: "Import orders and customers automatically.",
               capabilities: ["Orders", "Customers"], manage: "etsy", asset: "", mark: "E"),

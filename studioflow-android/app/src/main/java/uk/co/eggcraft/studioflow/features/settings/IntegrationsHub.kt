@@ -129,9 +129,8 @@ val INTEGRATION_PROVIDERS = listOf(
     IntegrationProvider("shopify", "Shopify", "commerce", "native",
         "Install the NivaDesk app and orders arrive as they are placed.",
         listOf("Orders", "Customers"), "shopify", "S"),
-    // SHOP-001/WOO-014: the paste-a-URL path is retired; WooCommerce returns as a connector.
-    IntegrationProvider("woocommerce", "WooCommerce", "commerce", "planned",
-        "", emptyList(), "", "W"),
+    IntegrationProvider("woocommerce", "WooCommerce", "commerce", "native",
+        "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.", listOf("Orders", "Customers"), "woo", "W"),
     IntegrationProvider("etsy", "Etsy", "commerce", "native",
         "Import orders and customers automatically.", listOf("Orders", "Customers"), "etsy", "E"),
     IntegrationProvider("wix", "Wix", "commerce", "webhook",

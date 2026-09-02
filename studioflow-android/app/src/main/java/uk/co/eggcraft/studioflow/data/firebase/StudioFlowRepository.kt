@@ -917,6 +917,47 @@ class StudioFlowRepository(
 
 
     // Stores connected through the official Shopify App Store app (member read).
+    // Faz 4 — the WooCommerce connector (wc-auth, webhooks we create, the common engine).
+    data class WooConnectionRow(val id: String, val siteUrl: String, val host: String, val storeName: String, val status: String, val permissions: String, val lastSuccessAtMs: Long, val webhooksHealthy: Boolean, val importState: String)
+    data class WooImportSummary(val total: Int, val paid: Int, val unpaid: Int, val cancelled: Int, val alreadyHere: Int)
+    data class WooImportCounters(val created: Int, val updated: Int, val skipped: Int, val merged: Int, val held: Int)
+
+    suspend fun wooConnections(workspaceId: String): List<WooConnectionRow> {
+        val raw = etsyCall("getWooConnections", workspaceId)
+        return (raw["connections"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            WooConnectionRow(
+                id = row["id"]?.toString().orEmpty(), siteUrl = row["siteUrl"]?.toString().orEmpty(), host = row["host"]?.toString().orEmpty(),
+                storeName = row["storeName"]?.toString().orEmpty(), status = row["status"]?.toString().orEmpty(), permissions = row["permissions"]?.toString().orEmpty(),
+                lastSuccessAtMs = longFromAny(row["lastSuccessAtMs"], 0L), webhooksHealthy = row["webhooksHealthy"] as? Boolean ?: true, importState = row["importState"]?.toString().orEmpty(),
+            )
+        }
+    }
+    /** Returns the store's authorize URL and the state to finish with. Owner only, server-side. */
+    suspend fun wooBeginConnect(workspaceId: String, siteUrl: String): Pair<String, String> {
+        val raw = etsyCall("beginWooConnect", workspaceId, mapOf("siteUrl" to siteUrl))
+        return raw["authorizeUrl"]?.toString().orEmpty() to raw["state"]?.toString().orEmpty()
+    }
+    /** "connected" when the store has sent its keys and our webhooks are in place; otherwise the server's message. */
+    suspend fun wooFinishConnect(workspaceId: String, state: String): Pair<String, String> {
+        val raw = etsyCall("finishWooConnect", workspaceId, mapOf("state" to state), timeoutSeconds = 120)
+        return raw["status"]?.toString().orEmpty() to raw["message"]?.toString().orEmpty()
+    }
+    suspend fun wooDisconnect(workspaceId: String, connectionId: String) { etsyCall("disconnectWooShop", workspaceId, mapOf("connectionId" to connectionId)) }
+    suspend fun wooSyncNow(workspaceId: String, connectionId: String) { etsyCall("syncWooNow", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300) }
+    suspend fun wooRecreateWebhooks(workspaceId: String, connectionId: String) { etsyCall("recreateWooWebhooks", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 120) }
+    suspend fun wooPreviewImport(workspaceId: String, connectionId: String, days: Int): WooImportSummary {
+        val raw = etsyCall("previewWooImport", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 120)
+        val s = raw["summary"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val n = { k: String -> longFromAny(s[k], 0L).toInt() }
+        return WooImportSummary(n("total"), n("paid"), n("unpaid"), n("cancelled"), n("alreadyHere"))
+    }
+    suspend fun wooRunImport(workspaceId: String, connectionId: String, days: Int): WooImportCounters {
+        val raw = etsyCall("runWooImport", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 540)
+        val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
+        return WooImportCounters(n("created"), n("updated"), n("skipped"), n("merged"), n("held"))
+    }
+
     // Faz 2 — the common engine's health and event records (Sync Health card).
     data class CommerceHealthEntity(val state: String, val lastSuccessAtMs: Long?, val lastAttemptAtMs: Long?, val lastWebhookAtMs: Long?, val pendingRetries: Int, val deadLetters: Int)
     data class CommerceHealthConnection(val provider: String, val connectionId: String, val health: Map<String, CommerceHealthEntity>)
