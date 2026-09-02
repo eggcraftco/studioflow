@@ -45,7 +45,8 @@ async function wipe() { await cursors.cursorRef(db, "shopify", SHOP).delete(); a
     const FieldValue = admin.firestore.FieldValue;
     const view0 = health.healthView(null, "shopify", { now: T0 });
     assert.strictEqual(view0.orders.state, "never"); assert.strictEqual(view0.finance.state, "fresh" === "x" ? "" : view0.finance.state);
-    assert.strictEqual(health.healthView(null, "woocommerce", { now: T0 }).orders.state, "unsupported");
+    assert.strictEqual(health.healthView(null, "inbound", { now: T0 }).products.state, "unsupported", "a website webhook has no products to be fresh about");
+    assert.strictEqual(health.healthView(null, "woocommerce", { now: T0 }).orders.state, "never", "WooCommerce reads orders now, so an empty row is never-synced, not unsupported");
     await health.touchHealth(db, { provider: "shopify", connectionId: SHOP, companyId: COMPANY, kind: "webhook", now: T0, FieldValue });
     await health.touchHealth(db, { provider: "shopify", connectionId: SHOP, companyId: COMPANY, kind: "success", now: T0 + 1000, FieldValue });
     await health.touchHealth(db, { provider: "shopify", connectionId: SHOP, companyId: COMPANY, kind: "retry_scheduled", now: T0 + 2000, FieldValue });

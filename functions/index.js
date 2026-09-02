@@ -100,6 +100,8 @@ const SHOPIFY_BRIDGE_SECRET = defineSecret("SHOPIFY_BRIDGE_SECRET");
 // SHOP-004: the key the Shopify offline token is boxed under at rest. Its own
 // key, not Etsy's, so the two can be rotated apart.
 const SHOPIFY_TOKEN_KEY = defineSecret("SHOPIFY_TOKEN_KEY");
+// WOO-002: the WooCommerce consumer pair and webhook secret are boxed under their own key.
+const WOO_TOKEN_KEY = defineSecret("WOO_TOKEN_KEY");
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -5809,6 +5811,42 @@ exports.syncEtsyNow = etsySyncExports.syncEtsyNow;
 exports.resolveEtsyCustomerMatch = etsySyncExports.resolveEtsyCustomerMatch;
 exports.reconcileEtsyConnections = etsySyncExports.reconcileEtsyConnections;
 
+// Faz 4 — the WooCommerce connector, on the common engine alone (spec §8).
+const { createWooConnectorFunctions } = require("./wooConnector");
+const wooExports = createWooConnectorFunctions({
+  admin, HttpsError,
+  onCall: (options, handler) => onCall({ ...options, secrets: [WOO_TOKEN_KEY] }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: [WOO_TOKEN_KEY] }, handler),
+  onSchedule: (options, handler) => onSchedule({ ...options, secrets: [WOO_TOKEN_KEY] }, handler),
+  tokenKey: () => WOO_TOKEN_KEY.value(),
+  encryptToken: etsyModule.encryptToken,
+  decryptToken: etsyModule.decryptToken,
+  requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  appReturnUrl: () => "https://nivadesk.app/settings",
+  functionsBaseUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net",
+  orderDocRef, wooOrderDocId, integrationOrderCapacity, holdIntegrationOrder, upsertIntegrationCustomer, sendPushNotificationToCompany,
+  reconcileLineItems, resolveDefaultDeliveryTime, companySettingsDocRef, historyLogWithEntry, amountHistoryValue, roundMoneyValue, dateFromFirestore,
+  // The emulator suite has no store: it hands in a fake REST client, a fake
+  // site fetch and a fake resolver through these globals. Production ignores them.
+  ...(process.env.NIVADESK_E2E === "1" ? {
+    createClient: (options) => (global.__nivadeskWooFakeClient ? global.__nivadeskWooFakeClient(options) : require("./commerce/woo/client").createWooClient(options)),
+    fetchImpl: (...args) => (global.__nivadeskWooFakeFetch ? global.__nivadeskWooFakeFetch(...args) : globalThis.fetch(...args)),
+    lookup: async (host) => (global.__nivadeskWooFakeLookup ? global.__nivadeskWooFakeLookup(host) : require("dns").promises.lookup(host, { all: true }))
+  } : {})
+});
+exports.beginWooConnect = wooExports.beginWooConnect;
+exports.wooAuthCallback = wooExports.wooAuthCallback;
+exports.finishWooConnect = wooExports.finishWooConnect;
+exports.getWooConnections = wooExports.getWooConnections;
+exports.disconnectWooShop = wooExports.disconnectWooShop;
+exports.wooConnectorWebhook = wooExports.wooConnectorWebhook;
+exports.reconcileWooConnections = wooExports.reconcileWooConnections;
+exports.syncWooNow = wooExports.syncWooNow;
+exports.recreateWooWebhooks = wooExports.recreateWooWebhooks;
+exports.previewWooImport = wooExports.previewWooImport;
+exports.runWooImport = wooExports.runWooImport;
+
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
   admin,
@@ -10742,7 +10780,7 @@ async function purgeProviderDataForWorkspace(companyId) {
   const db = admin.firestore();
   const report = {
     etsyConnections: 0, etsyOAuthStates: 0, etsyExternalOrders: 0, etsyCustomerLinks: 0,
-    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, errors: []
+    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, wooConnections: 0, wooConnectStates: 0, errors: []
   };
   if (!companyId) return report;
 
@@ -10782,6 +10820,13 @@ async function purgeProviderDataForWorkspace(companyId) {
   for (const key of ["etsyConnections", "etsyOAuthStates", "etsyExternalOrders", "etsyCustomerLinks"]) {
     await step(key, () => deleteMatching(db.collection(key).where("companyId", "==", companyId)));
   }
+  await step("wooConnections", async () => {
+    // Each connection carries a deliveries subcollection; take the tree.
+    const snap = await db.collection("wooConnections").where("companyId", "==", companyId).get();
+    for (const doc of snap.docs) await db.recursiveDelete(doc.ref);
+    return snap.size;
+  });
+  await step("wooConnectStates", () => deleteMatching(db.collection("wooConnectStates").where("companyId", "==", companyId)));
   await step("etsyWebhookEvents", async () => {
     let removed = 0;
     for (const shopId of shopIds) {
@@ -31003,6 +31048,17 @@ async function enqueueCommerceEvent(task, delaySeconds = 0) {
   await queue.enqueue(task, { scheduleDelaySeconds: Math.max(0, Math.round(delaySeconds)) });
 }
 
+// One queue, every provider: the task names its provider, and each provider
+// brings its own fetch-latest + apply. An unknown provider is a validation
+// error, which the worker turns into a dead letter rather than a retry loop.
+async function processCommerceTaskByProvider(task) {
+  if (task.provider === "shopify") return processShopifyCommerceTask(task);
+  if (task.provider === "woocommerce") return wooExports._internal.processWooCommerceTask(task);
+  const error = new Error(`unknown_provider_${String(task.provider || "").replace(/[^a-z]/gi, "")}`);
+  error.errorClass = "validation";
+  throw error;
+}
+
 async function processShopifyCommerceTask(task) {
   const db = admin.firestore();
   const shop = normalizeShopDomain(task.connectionId);
@@ -31032,14 +31088,10 @@ exports.commerceEventWorker = onTaskDispatched({
   region: "europe-west2",
   retryConfig: { maxAttempts: 1 },          // retries are the policy's, with its delays — not Cloud Tasks' blind ones
   rateLimits: { maxConcurrentDispatches: 5 },
-  secrets: [SHOPIFY_TOKEN_KEY]
+  secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY]
 }, async (request) => {
   const task = request.data || {};
-  if (task.provider !== "shopify") {
-    console.warn("commerceEventWorker: unknown provider", task.provider);
-    return;
-  }
-  const result = await processShopifyCommerceTask(task);
+  const result = await processCommerceTaskByProvider(task);
   try {
     const kind = result.status === "applied" ? "success" : (result.status === "retrying" ? "retry_scheduled" : (result.status === "dead" ? "dead" : "attempt"));
     await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId: task.companyId, kind, FieldValue: admin.firestore.FieldValue });
@@ -31056,7 +31108,7 @@ exports.commerceEventWorker = onTaskDispatched({
 // idempotency key (RETRY-005): the engine's duplicate/noop verdicts make a
 // second application harmless. Orders are the user-safe class; nothing else
 // is queued yet.
-exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
+exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, true);
   const eventKey = String(request.data?.eventKey || "").trim();
   if (!eventKey) throw new HttpsError("invalid-argument", "eventKey is required.");
@@ -31067,12 +31119,11 @@ exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_
   if (!["dead", "retrying", "failed"].includes(String(record.status || ""))) {
     throw new HttpsError("failed-precondition", `This event is ${record.status}; only a dead or waiting event can be retried.`);
   }
-  if (record.provider !== "shopify") throw new HttpsError("failed-precondition", "Only Shopify events can be retried here yet.");
   const task = {
     key: eventKey, provider: record.provider, connectionId: record.connection_id, companyId, externalId: record.external_id,
     eventType: record.event_type, attempt: 1, eventOrigin: "retry", correlationId: record.correlation_id || undefined
   };
-  const result = await processShopifyCommerceTask(task);
+  const result = await processCommerceTaskByProvider(task);
   try {
     const kind = result.status === "applied" ? "success" : (result.status === "dead" ? "dead" : "attempt");
     await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId, kind, FieldValue: admin.firestore.FieldValue });
@@ -31191,6 +31242,8 @@ if (process.env.NIVADESK_E2E === "1") {
     // SHOP-013: the reconciliation pass and the converter it feeds.
     reconcileShopifyStore,
     shopifyGraphQLOrderToRest,
+    // Faz 4: the WooCommerce connector's internals for the suite.
+    woo: wooExports._internal,
     // Faz 2: the shadow hook and the queue worker's brain, for the suite.
     shadowCompareShopifyOrder,
     processShopifyCommerceTask,

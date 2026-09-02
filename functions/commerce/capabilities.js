@@ -31,16 +31,16 @@ const REGISTRY = Object.freeze({
   },
   woocommerce: {
     display_name: "WooCommerce",
-    connection_model: "planned",
-    orders: { read: false, write: false, reconcile: false },
-    products: { read: false, write: false },
-    inventory: { read: false, write: false },
-    customers: { read: false, write: false },
-    payments: { read: false },
-    refunds: { read: false, write: false },
-    shipments: { read: false, write: false },
+    connection_model: "wc_auth",
+    orders: { read: true, write: false, reconcile: true },
+    products: { read: true, write: false },
+    inventory: { read: true, write: false },
+    customers: { read: "partial", write: false },
+    payments: { read: "partial" },
+    refunds: { read: true, write: false },
+    shipments: { read: "partial", write: false },
     financial_ledger: { read: false },
-    webhooks: { supported: false, coverage: "none", signature: null }
+    webhooks: { supported: true, coverage: "full", signature: "hmac_sha256_raw_body" }
   },
   inbound: {
     display_name: "Website",

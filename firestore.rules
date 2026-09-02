@@ -963,6 +963,13 @@ service cloud.firestore {
     match /etsyOAuthStates/{document=**} {
       allow read, write: if false;
     }
+    // WooCommerce connector: consumer keys and connect states are server-only.
+    match /wooConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /wooConnectStates/{document=**} {
+      allow read, write: if false;
+    }
     match /etsyExternalOrders/{document=**} {
       allow read, write: if false;
     }

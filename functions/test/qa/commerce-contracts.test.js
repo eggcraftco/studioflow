@@ -196,12 +196,14 @@ check("a log line never carries a token or an address, and the idempotency key i
   for (const field of ["correlation_id", "provider", "connection_id", "entity_type", "external_id", "event_type", "source", "attempt", "status", "started_at", "expireAtMs"]) assert.ok(record[field] !== undefined, field);
 });
 
-check("capabilities are declared per provider and WooCommerce honestly says it can do nothing yet", () => {
+check("capabilities are declared per provider, and WooCommerce now declares the connector it has become", () => {
   assert.deepStrictEqual(listProviders(), ["shopify", "etsy", "woocommerce", "inbound"]);
   const shopify = getCapabilities("shopify");
   assert.strictEqual(shopify.orders.reconcile, true); assert.strictEqual(shopify.webhooks.coverage, "full");
   assert.strictEqual(getCapabilities("etsy").webhooks.coverage, "partial");
-  assert.strictEqual(getCapabilities("woocommerce").orders.read, false);
+  const woo = getCapabilities("woocommerce");
+  assert.strictEqual(woo.orders.read, true); assert.strictEqual(woo.orders.reconcile, true);
+  assert.strictEqual(woo.webhooks.signature, "hmac_sha256_raw_body"); assert.strictEqual(woo.connection_model, "wc_auth");
   assert.strictEqual(getCapabilities("inbound").customers.read, "partial");
   assert.strictEqual(getCapabilities("amazon"), null);
   shopify.orders.read = false; assert.strictEqual(getCapabilities("shopify").orders.read, true, "the registry cannot be mutated through a copy");
