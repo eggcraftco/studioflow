@@ -18223,6 +18223,28 @@ function woocommerceDeliveryUrl(companyId, token) {
 // server-only subcollection now. Whatever is still on the company document is
 // moved across the first time it is read and the old field is cleared, so a
 // workspace migrates itself on its next webhook delivery or settings visit.
+// SHOP-001 / WOO-014 — the paste-a-delivery-URL paths are retired.
+//
+// Faz 0 counted them: eight tokens ever minted, not one real delivery. Shopify
+// connects through the official NivaDesk app now, and WooCommerce comes back as
+// a full connector rather than a URL a merchant pastes into WordPress. Until
+// then the endpoints answer 410 and write nothing, the token callables refuse
+// to mint, and the hubs say "Coming soon". The inbound channel (Zapier, Make,
+// Wix, Squarespace, a website) is not part of this — it stays live.
+const RETIRED_INTEGRATION_KINDS = new Set(["woocommerce", "shopify"]);
+const RETIRED_INTEGRATION_MESSAGE =
+  "This connection method has been retired. Shopify connects through the official NivaDesk app; WooCommerce is coming back as a full connector.";
+
+function assertIntegrationKindLive(kind) {
+  if (RETIRED_INTEGRATION_KINDS.has(String(kind || ""))) {
+    throw new HttpsError("failed-precondition", RETIRED_INTEGRATION_MESSAGE, { code: "integration_retired", kind: String(kind) });
+  }
+}
+
+function retiredWebhookResponse(res, kind) {
+  res.status(410).json({ ok: false, error: "integration_retired", kind, message: RETIRED_INTEGRATION_MESSAGE });
+}
+
 const INTEGRATION_KINDS = {
   woocommerce: { tokenField: "woocommerceWebhookToken", createdAtField: "woocommerceWebhookTokenCreatedAt" },
   shopify: { tokenField: "shopifyWebhookToken", createdAtField: "shopifyWebhookTokenCreatedAt" },
@@ -18392,6 +18414,7 @@ exports.sendTestInboundWebhook = onCall({ region: "europe-west2", timeoutSeconds
 exports.sendTestIntegrationWebhook = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, true);
   const kind = String(request.data?.kind || "");
+  assertIntegrationKindLive(kind);
   if (kind !== "woocommerce" && kind !== "shopify") {
     throw new HttpsError("invalid-argument", "kind must be woocommerce or shopify.");
   }
@@ -18468,6 +18491,7 @@ exports.rotateIntegrationWebhookToken = onCall({ region: "europe-west2" }, async
   const { companyId } = await requireWorkspaceForBilling(request, true);
   const kind = String(request.data && request.data.integration || "").trim();
   if (!INTEGRATION_KINDS[kind]) throw new HttpsError("invalid-argument", "Unknown integration.");
+  assertIntegrationKindLive(kind);
   const token = await mintIntegrationToken(companyId, kind);
   await integrationSecretRef(companyId, kind).set({
     lastDeliveryAt: admin.firestore.FieldValue.delete(),
@@ -18493,6 +18517,7 @@ exports.rotateIntegrationWebhookToken = onCall({ region: "europe-west2" }, async
 });
 
 exports.getWooCommerceWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  assertIntegrationKindLive("woocommerce");
   const { companyId } = await requireWorkspaceForBilling(request, true);
   // The raw token is deliberately not returned any more: the delivery URL is the
   // only thing a client needs, and nothing ever read the bare token.
@@ -18573,6 +18598,7 @@ exports._nvMessagingProvider = activeMessagingProvider;
 // token. Owner-only; the secret lives in the server-only integrationSecrets
 // store and is never echoed back in full.
 exports.saveWooSignatureSecret = onCall({ region: "europe-west2" }, async (request) => {
+  assertIntegrationKindLive("woocommerce");
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   const companyId = String(request.data?.companyId || "").trim();
@@ -18595,6 +18621,13 @@ exports.saveWooSignatureSecret = onCall({ region: "europe-west2" }, async (reque
 });
 
 exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
+  retiredWebhookResponse(res, "woocommerce");
+});
+
+// The retired handler, unexported: nothing calls it, and it goes with the
+// connector that replaces it (its mapper is what that connector reuses).
+// eslint-disable-next-line no-unused-vars
+async function woocommerceOrderWebhookRetired(req, res) {
   try {
     if (req.method !== "POST") {
       res.status(200).json({
@@ -18826,7 +18859,7 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
     console.error("woocommerceOrderWebhook error:", error);
     res.status(500).json({ ok: false, error: error.message || String(error) });
   }
-});
+}
 
 
 // ---------------------------------------------------------------------------
@@ -19058,6 +19091,7 @@ function shopifyDeliveryUrl(companyId, token) {
 // Owner-only: returns this workspace's Shopify webhook token + full Delivery URL,
 // minting a per-workspace token on first use (isolated, unguessable per workspace).
 exports.getShopifyWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  assertIntegrationKindLive("shopify");
   const { companyId } = await requireWorkspaceForBilling(request, true);
   // The raw token is deliberately not returned any more: the delivery URL is the
   // only thing a client needs, and nothing ever read the bare token.
@@ -19075,6 +19109,13 @@ exports.getShopifyWebhookToken = onCall({ region: "europe-west2" }, async (reque
 });
 
 exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
+  retiredWebhookResponse(res, "shopify");
+});
+
+// The retired handler, unexported: nothing calls it, and it goes with the
+// connector that replaces it (its mapper is what that connector reuses).
+// eslint-disable-next-line no-unused-vars
+async function shopifyOrderWebhookRetired(req, res) {
   try {
     if (req.method !== "POST") {
       res.status(200).json({
@@ -19236,7 +19277,7 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     console.error("shopifyOrderWebhook error:", error);
     res.status(500).json({ ok: false, error: error.message || String(error) });
   }
-});
+}
 
 
 // ---------------------------------------------------------------------------
