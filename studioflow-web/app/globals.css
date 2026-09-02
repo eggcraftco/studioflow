@@ -31208,3 +31208,12 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .settings-support-inbox .settings-segmented.is-compact { display: flex; flex-wrap: wrap; width: auto; }
 .settings-support-inbox .settings-segmented.is-compact button { min-width: 0; flex: 1 1 auto; padding: 0 10px; min-height: 36px; font-size: 13px; }
 .settings-support-inbox .settings-integrations-search { flex: 1 1 100%; }
+
+/* The redesign's desktop column rule sits later in the file than the original
+   phone rule, so the phone layout is restated here: one column, one scroller. */
+@media (max-width: 980px) {
+  .settings-workspace { grid-template-columns: 1fr; }
+  .settings-workspace[data-mobile-view="detail"] .settings-content-pane,
+  .settings-workspace[data-mobile-view="list"] .settings-sidebar { grid-column: 1 / -1; }
+  .settings-sidebar { padding: 16px 14px 20px; }
+}
