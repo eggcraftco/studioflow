@@ -963,9 +963,8 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "Connected apps: the Integrations screen" },
           { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
-            "WooCommerce: open its card, press Set up, then create one webhook (Order created) in WooCommerce and paste the delivery URL.",
-            "WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.",
-            "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
+            "Shopify: install the NivaDesk app from the Shopify App Store and press Connect inside it; orders, customers, payment status, fulfilment and refunds then sync on their own, and the Shopify card lists the connected stores with pause and remove. Every fifteen minutes NivaDesk also asks Shopify for anything the live sync missed — an order caught up that way appears in the store's sync log as \"reconcile\".",
+            "WooCommerce: coming back as a full connector. The old paste-a-URL webhook has been retired and the card says Coming soon; a URL set up earlier no longer delivers.",
             "Other platforms: Wix, Squarespace, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
             "Etsy is not one of those: it has a connection of its own, described in the next section.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
@@ -2122,9 +2121,8 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Bağlı uygulamalar: Integrations ekranı" },
           { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
-            "WooCommerce: kartını aç, Set up'a bas, sonra WooCommerce'te bir webhook (Order created) oluşturup delivery URL'ini yapıştır.",
-            "WooCommerce imza denetimi (isteğe bağlı, önerilir): WooCommerce webhook'unda bir Secret belirle, aynısını entegrasyon ekranındaki Signature check kartına yapıştır; NivaDesk her teslimatın imzasını doğrular — yanlış imza geçerli URL ile bile reddedilir.",
-            "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
+            "Shopify: NivaDesk uygulamasını Shopify App Store'dan kur ve içinden Connect'e bas; siparişler, müşteriler, ödeme durumu, kargo ve iadeler kendiliğinden senkron olur, Shopify kartı bağlı mağazaları duraklat/kaldır seçenekleriyle listeler. NivaDesk on beş dakikada bir canlı senkronun kaçırdığı bir şey var mı diye Shopify'a ayrıca sorar — o yoldan yakalanan sipariş mağazanın senkron günlüğünde \"reconcile\" olarak görünür.",
+            "WooCommerce: tam bir bağlayıcı olarak geri geliyor. Eski URL yapıştırmalı webhook emekliye ayrıldı, kart Coming soon diyor; daha önce kurulmuş bir URL artık teslimat yapmaz.",
             "Diğer platformlar: Wix, Squarespace, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
             "Etsy bunlardan biri değil: kendi bağlantısı var, bir sonraki bölümde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."

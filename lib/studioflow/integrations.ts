@@ -34,7 +34,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy";
+export type IntegrationManageTarget = "shopify" | "inbound" | "" | "etsy";
 
 export type IntegrationProvider = {
   id: string;
@@ -59,10 +59,10 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Orders", "Customers"], manage: "shopify",
   },
   {
-    id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "webhook",
+    // SHOP-001/WOO-014: the paste-a-URL path is retired; WooCommerce returns as a connector.
+    id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "planned",
     logo: "/brand/integrations/woocommerce.svg",
-    blurb: "Import orders and customers automatically.",
-    capabilities: ["Orders", "Customers"], manage: "woocommerce",
+    blurb: "", capabilities: [], manage: "",
   },
   {
     id: "etsy", name: "Etsy", category: "commerce", kind: "native", mark: "E",
@@ -159,10 +159,9 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, woo, inbound, banks, etsy] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
-    getIntegrationWebhookInfo("woocommerce", companyId),
     getIntegrationWebhookInfo("inbound", companyId),
     getDocs(collection(db, "companies", companyId, "bankConnections")),
     getEtsyConnections(companyId),
@@ -177,7 +176,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
       : { lastDeliveryAtMs: 0, lastDeliveryOk: false, lastDeliveryWasTest: false };
   return {
     shopifyStores: stores.status === "fulfilled" ? (stores.value.data?.stores ?? []) : [],
-    channels: { woocommerce: channel(woo), inbound: channel(inbound) },
+    channels: { inbound: channel(inbound) },
     etsyShops: etsy.status === "fulfilled"
       ? (etsy.value.connections ?? []).map((row) => ({
           shop: row.shopName || row.shopId,
@@ -241,7 +240,7 @@ export function resolveIntegrationState(
 
   // Everything else arrives over a webhook channel. A test delivery proves the
   // wiring, not the connection — the card only turns green for a real order.
-  const channel = signals.channels[provider.manage === "woocommerce" ? "woocommerce" : "inbound"];
+  const channel = signals.channels.inbound;
   if (!channel || channel.lastDeliveryAtMs <= 0 || channel.lastDeliveryWasTest) {
     return { state: provider.kind === "webhook" && provider.manage === "inbound" ? "webhook" : "available" };
   }
