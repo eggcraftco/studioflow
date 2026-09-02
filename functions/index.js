@@ -29402,6 +29402,20 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
       return;
     }
 
+    if (action === "reconcileNow") {
+      // "Check for missing orders": the last seven days, the same pass the
+      // scheduler runs, answered with what it found (SHOP-013).
+      if (String(data.status) !== "active" || !String(data.companyId || "")) {
+        res.status(400).json({ ok: false, error: data.companyId ? `store_${data.status}` : "store_not_connected" });
+        return;
+      }
+      const audit = await reconcileShopifyStore(shop, data, {
+        force: true, lookbackMs: SHOPIFY_RECONCILE_MANUAL_LOOKBACK_MS, maxPages: SHOPIFY_RECONCILE_MANUAL_MAX_PAGES
+      });
+      res.json({ ok: true, audit });
+      return;
+    }
+
     if (action === "getSettings") {
       res.json({ ok: true, settings: { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...(data.settings || {}) } });
       return;
@@ -30445,6 +30459,14 @@ async function fetchShopifyOrderById(shop, store, shopifyOrderId) {
 
 const SHOPIFY_ORDER_TOPICS = new Set(["orders/create", "orders/updated", "orders/paid", "orders/cancelled"]);
 
+// Shopify's display status → the REST fulfillment_status the appliers read.
+function shopifyGraphQLFulfilmentStatus(display) {
+  const value = String(display || "").toUpperCase();
+  if (value === "FULFILLED") return "fulfilled";
+  if (value === "PARTIALLY_FULFILLED") return "partial";
+  return null;
+}
+
 function shopifyGraphQLOrderToRest(node) {
   const n = node || {};
   return {
@@ -30454,6 +30476,15 @@ function shopifyGraphQLOrderToRest(node) {
     financial_status: String(n.displayFinancialStatus || "").trim().toLowerCase(),
     created_at: n.createdAt || "",
     processed_at: n.processedAt || "",
+    // Present on reconciliation nodes only (SHOPIFY_ORDER_RECONCILE_FIELDS);
+    // an import node leaves them empty and nothing downstream minds.
+    updated_at: n.updatedAt || "",
+    cancelled_at: n.cancelledAt || null,
+    fulfillment_status: shopifyGraphQLFulfilmentStatus(n.displayFulfillmentStatus),
+    fulfillments: (Array.isArray(n.fulfillments) ? n.fulfillments : []).map((f) => ({
+      tracking_number: String(f?.trackingInfo?.[0]?.number || ""),
+      tracking_company: String(f?.trackingInfo?.[0]?.company || "")
+    })),
     note: n.note || "",
     tags: Array.isArray(n.tags) ? n.tags.join(", ") : String(n.tags || ""),
     email: n.email || n.customer?.email || "",
@@ -30659,6 +30690,180 @@ exports.shopifyImportOrders = onRequest({
 // copy of them, which would drift — and runs them against a real Firestore.
 // Guarded by an env var, because a production deploy has no business carrying
 // a door into its own internals.
+// ---------------------------------------------------------------------------
+// SHOP-013 — reconciliation, and the Missing Order Audit it feeds.
+//
+// Webhooks are the fast path, not a guarantee: a delivery Shopify gave up on,
+// a store that was unlinked for an hour, a function that timed out — each is
+// an order that exists in Shopify and not here, and nobody is told. Every
+// fifteen minutes each active store is asked for what changed since the last
+// look (with an overlap, so a slow write cannot fall between two windows), and
+// every order found goes through the SAME appliers the webhooks use: a missing
+// one is created under the store's own rules, a cancellation or fulfilment we
+// never saw is applied. It cannot disagree with the live path because it is
+// the live path.
+//
+// What it finds is written down. The store's `reconcile` map carries the last
+// window and its counts, and every order caught up gets a "reconcile" sync-log
+// row the merchant can read. That record is the Missing Order Audit v1; the
+// bridge's reconcileNow action is the merchant asking for it by hand.
+// ---------------------------------------------------------------------------
+const SHOPIFY_RECONCILE_OVERLAP_MS = 10 * 60 * 1000;
+const SHOPIFY_RECONCILE_MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SHOPIFY_RECONCILE_MANUAL_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+const SHOPIFY_RECONCILE_PAGE = 50;
+const SHOPIFY_RECONCILE_MAX_PAGES = 4;           // 200 changed orders per store per sweep
+const SHOPIFY_RECONCILE_MANUAL_MAX_PAGES = 20;
+const SHOPIFY_RECONCILE_MAX_STORES = 25;
+
+const SHOPIFY_ORDER_RECONCILE_FIELDS = `${SHOPIFY_ORDER_IMPORT_FIELDS}
+  updatedAt
+  cancelledAt
+  displayFulfillmentStatus
+  fulfillments(first: 5) { trackingInfo { number company } }
+`;
+
+async function fetchShopifyOrdersUpdatedSince(shop, store, fromMs, { maxPages = SHOPIFY_RECONCILE_MAX_PAGES } = {}) {
+  const q = `updated_at:>='${new Date(fromMs).toISOString()}'`;
+  const pageQuery = `query($q: String, $cursor: String) {
+    orders(first: ${SHOPIFY_RECONCILE_PAGE}, after: $cursor, query: $q, sortKey: UPDATED_AT) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ${SHOPIFY_ORDER_RECONCILE_FIELDS} }
+    }
+  }`;
+  const orders = [];
+  let cursor = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const data = await shopifyAdminGraphQL(shop, store, pageQuery, { q, cursor });
+    const connection = data?.orders || {};
+    const nodes = connection.nodes || (connection.edges || []).map((edge) => edge?.node);
+    for (const node of nodes) if (node) orders.push(shopifyGraphQLOrderToRest(node));
+    if (!connection.pageInfo?.hasNextPage) return { orders, truncated: false };
+    cursor = connection.pageInfo.endCursor;
+  }
+  return { orders, truncated: true };
+}
+
+// The next window starts a little before the last one ended; a store never
+// looked at, or a merchant asking by hand, gets the lookback instead.
+function shopifyReconcileWindow(store, now, options) {
+  const lastTo = Number(store?.reconcile?.windowToMs || 0);
+  const lookback = Number(options.lookbackMs || SHOPIFY_RECONCILE_MAX_WINDOW_MS);
+  if (options.force || !lastTo) return { fromMs: now - lookback, toMs: now };
+  return { fromMs: Math.max(now - SHOPIFY_RECONCILE_MAX_WINDOW_MS, lastTo - SHOPIFY_RECONCILE_OVERLAP_MS), toMs: now };
+}
+
+async function reconcileShopifyStore(shop, store, options = {}) {
+  const companyId = String(store?.companyId || "");
+  if (!companyId || String(store?.status) !== "active") {
+    return { skippedStore: companyId ? `store_${store.status}` : "store_not_connected" };
+  }
+  const now = Number(options.now) || Date.now();
+  const { fromMs, toMs } = shopifyReconcileWindow(store, now, options);
+  const audit = {
+    windowFromMs: fromMs, windowToMs: toMs, scanned: 0, created: 0, updated: 0, cancelled: 0,
+    dispatched: 0, held: 0, skipped: 0, failed: 0, truncated: false, manual: Boolean(options.force)
+  };
+  const fetchOrders = options.fetchOrders || fetchShopifyOrdersUpdatedSince;
+  const fetched = await fetchOrders(shop, store, fromMs, { maxPages: options.maxPages || SHOPIFY_RECONCILE_MAX_PAGES });
+  audit.truncated = Boolean(fetched?.truncated);
+  const caughtUp = [];
+
+  for (const order of fetched?.orders || []) {
+    audit.scanned += 1;
+    const shopifyOrderId = cleanWooText(order?.id || "");
+    if (!shopifyOrderId) { audit.skipped += 1; continue; }
+    try {
+      const existing = await orderDocRef(shopifyOrderDocId(companyId, shopifyOrderId)).get();
+      if (!existing.exists) {
+        // Never seen here. The create path applies the store's own rules —
+        // auto-sync, filters, paid-only, the plan's capacity — as a webhook would.
+        const outcome = await applyShopifyOrderEvent(shop, store, "orders/create", order, { reconcile: true });
+        if (outcome.status === "ok" && outcome.created) { audit.created += 1; caughtUp.push({ what: "created", outcome }); }
+        else if (outcome.status === "held") audit.held += 1;
+        else audit.skipped += 1;
+        continue;
+      }
+      const current = existing.data() || {};
+      if (order.cancelled_at && String(current.status || "") !== "Cancelled") {
+        const outcome = await applyShopifyOrderEvent(shop, store, "orders/cancelled", order, { reconcile: true });
+        if (outcome.status === "ok") { audit.cancelled += 1; caughtUp.push({ what: "cancelled", outcome }); }
+      } else {
+        const outcome = await applyShopifyOrderEvent(shop, store, "orders/updated", order, { reconcile: true });
+        if (outcome.status === "ok") audit.updated += 1;
+      }
+      if (order.fulfillment_status === "fulfilled" && current.isDispatched !== true) {
+        const outcome = await applyShopifyFulfilmentEvent(shop, store, "orders/fulfilled", order);
+        if (outcome.status === "ok") { audit.dispatched += 1; caughtUp.push({ what: "dispatched", outcome }); }
+      }
+    } catch (error) {
+      audit.failed += 1;
+      console.warn("shopify reconcile: order failed", shop, shopifyOrderId, error?.message || error);
+    }
+  }
+
+  // The audit trail: a row per order this pass caught up, so the sync log says
+  // which orders the webhooks had missed; then the pass itself on the store.
+  for (const { what, outcome } of caughtUp) {
+    await writeShopifySyncRow(shop, {
+      topic: "reconcile",
+      status: "ok",
+      error: "",
+      reconcileAction: what,
+      shopifyOrderId: String(outcome.shopifyOrderId || ""),
+      shopifyOrderNumber: String(outcome.shopifyOrderNumber || ""),
+      nivadeskOrderId: String(outcome.nivadeskOrderId || "")
+    }, { synced: what === "created" ? 1 : 0 });
+  }
+  const missed = audit.created + audit.cancelled + audit.dispatched;
+  await shopifyStoreRef(shop).set({
+    reconcile: {
+      ...audit,
+      lastRunAt: admin.firestore.FieldValue.serverTimestamp(),
+      missedTotal: admin.firestore.FieldValue.increment(missed),
+      runs: admin.firestore.FieldValue.increment(1)
+    }
+  }, { merge: true });
+  if (audit.failed) {
+    await writeShopifySyncRow(shop, {
+      topic: "reconcile", status: "failed", error: `${audit.failed} order(s) failed to apply`,
+      shopifyOrderId: "", shopifyOrderNumber: "", nivadeskOrderId: ""
+    }, { failed: 1 });
+  }
+  return audit;
+}
+
+exports.shopifyReconcileOrders = onSchedule({
+  schedule: "every 15 minutes",
+  timeZone: "Europe/London",
+  region: "europe-west2",
+  timeoutSeconds: 540,
+  secrets: [SHOPIFY_TOKEN_KEY]
+}, async () => {
+  const snap = await admin.firestore().collection("shopifyStores").where("status", "==", "active").get();
+  const due = snap.docs
+    .map((doc) => ({ shop: doc.id, data: doc.data() || {} }))
+    .filter((row) => String(row.data.companyId || "") && shopifyMergedSettings(row.data).autoSync !== false && shopifyStoreAccessToken(row.data))
+    .sort((a, b) => Number(a.data.reconcile?.windowToMs || 0) - Number(b.data.reconcile?.windowToMs || 0))
+    .slice(0, SHOPIFY_RECONCILE_MAX_STORES);
+  let swept = 0; let missed = 0; let failed = 0;
+  for (const row of due) {
+    try {
+      const audit = await reconcileShopifyStore(row.shop, row.data);
+      swept += 1;
+      missed += (audit.created || 0) + (audit.cancelled || 0) + (audit.dispatched || 0);
+    } catch (error) {
+      failed += 1;
+      console.warn("shopify reconcile: store failed", row.shop, error?.message || error);
+      await writeShopifySyncRow(row.shop, {
+        topic: "reconcile", status: "failed", error: String(error?.message || error).slice(0, 300),
+        shopifyOrderId: "", shopifyOrderNumber: "", nivadeskOrderId: ""
+      }, { failed: 1 }).catch(() => undefined);
+    }
+  }
+  console.log(`shopify reconcile sweep: ${swept} store(s), ${missed} caught up, ${failed} failed, ${snap.size} active`);
+});
+
 if (process.env.NIVADESK_E2E === "1") {
   exports._e2e = {
     applyReceipt: etsySyncExports._internal.applyReceipt,
@@ -30691,6 +30896,9 @@ if (process.env.NIVADESK_E2E === "1") {
     // SHOP-004: the token at rest — box, read-back and the client-safe view.
     shopifyStoreAccessToken,
     shopifyEncryptToken,
-    shopifyPublicStoreView
+    shopifyPublicStoreView,
+    // SHOP-013: the reconciliation pass and the converter it feeds.
+    reconcileShopifyStore,
+    shopifyGraphQLOrderToRest
   };
 }
