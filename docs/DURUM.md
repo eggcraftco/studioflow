@@ -1827,7 +1827,7 @@ KARIŞMASIN.
 
 ## Settings yeniden tasarımı — `NivaDesk-Settings-AI-Design-Handoff.pdf` (2 Eyl 2026 gece)
 
-**Durum:** 17 ekranın tamamı web'de handoff'un onaylı yönüne göre yeniden kuruldu; kodda, commit'li (`d10f266`, `ed7be73`, `c84e301` + devamı). **Canlıya alınmadı** — kullanıcı "canlıya at" deyince Round olarak gider.
+**Durum:** 17 ekranın tamamı web'de handoff'un onaylı yönüne göre yeniden kuruldu; kodda, commit'li (`d10f266`, `ed7be73`, `c84e301` + devamı). **Round 152 ile CANLI** (3 Eyl 00:31, chunk `page-9e1aca72701bdaa3.js` doğrulandı).
 
 **Faz A (kabuk):** `.settings-workspace` içine scoped token'lar (canvas #F3F5F9, surface #FFF, text #141827, muted #667085, accent #5865E8, success #2F9A55, caution #D97706, danger #D64545); 275px kenar çubuğu, katlanabilir gruplar (localStorage `nivadesk-settings-collapsed-groups`), 44px satır + 20px çizgi ikon, periwinkle aktif satır; tek sayfa başlığı `app/settings/pageHeader.tsx` (`SettingsPageHeader`, `SettingsStatusPill`, `SettingsCardHead`, `useSettingsHeaderActions` — bölüm kendi düğmelerini context ile başlığa yerleştirir; Financial/PDF/AI Reply/Integrations/Plan/Team bunu kullanır). Kartlar radius 12, gölgesiz; `.button.danger`, `.settings-switch`, `.settings-segmented`, `.settings-status-band`, `.settings-notice`, `.settings-facts` ortak parçalar. Koyu tema aynı token setiyle.
 
@@ -1835,8 +1835,8 @@ KARIŞMASIN.
 
 **Tuzaklar:** (1) Chrome, dev sunucusunun `page.js` chunk'ını önbellekten sunar — HMR sonrası eski görünüm; `fetch(url,{cache:"reload"})` ile temizleyip yeniden yükle. (2) `useSettingsHeaderActions` deps'ine ebeveynden gelen callback koyma (her render yeni fonksiyon → "Maximum update depth"); ref üzerinden çağır. (3) Doğrulama ortamı: `firebase emulators:start --only auth,firestore,functions` (JAVA_HOME önce export) + `node test/qa/seed-qa.js` + `review@nivadesk.app` şifresi admin SDK ile + `preview_start web-emulator`.
 
-**Kalan:** kullanıcı dönünce "canlıya at" ile Round; mobil/koyu tema ince ayar; native (Mac/iPhone/Android) bu handoff'un kapsamı dışında.
+**Kalan:** mobil/koyu tema ince ayar; native (Mac/iPhone/Android) bu handoff'un kapsamı dışında.
 
 ## QuickBooks sandbox bağlantısı canlıda doğrulandı (3 Eyl 00:30)
 
-Kullanıcı Intuit'te "Sandbox Company GB 5cdb"yi seçip bağladı → web'de **Connected · Read-only · 9341457840593750 · Sandbox**, katalog ve CDC okumaları "Just now", Needs attention 0, webhook henüz yok. Mappings sekmesinde "Suggest mappings" canlı çalıştı; ilk sonuçlar: ZR→"0.0% ECG", Bespoke→"Commission Income", fee'ler boş → `functions/accounting/quickbooks/normalize.js` kuralları düzeltildi (EC/RC kodlarına `avoid`, "usual UK code" tercihi, Services > Commission, "Merchant Account Fees" generic fee fallback); `accountingMappingSuggestions` yeniden deploy edildi (8187ace). **Kalan:** canlıda yeniden Suggest → Confirm; webhook testi; Production keys/URI/webhook; spec Faz 3–7.
+Kullanıcı Intuit'te "Sandbox Company GB 5cdb"yi seçip bağladı → web'de **Connected · Read-only · 9341457840593750 · Sandbox**, katalog ve CDC okumaları "Just now", Needs attention 0, webhook henüz yok. Mappings sekmesinde "Suggest mappings" canlı çalıştı; ilk sonuçlar: ZR→"0.0% ECG", Bespoke→"Commission Income", fee'ler boş → `functions/accounting/quickbooks/normalize.js` kuralları düzeltildi (EC/RC kodlarına `avoid`, "usual UK code" tercihi, Services > Commission, "Merchant Account Fees" generic fee fallback); `accountingMappingSuggestions` yeniden deploy edildi (8187ace). **Devam (00:45):** kullanıcı Confirm'e bastı; eski öneriyle kalan üç satır (ZR→0.0% Z, RC→20.0% RC, Bespoke→Services, Product sales→Sales of Product Income) düzeltilip yeniden Confirm edildi ("Mappings confirmed."). Webhook testi için sandbox QBO arayüzünde "NivaDesk Webhook Test" müşterisi (nameId 68) oluşturuldu; "Last webhook" bekleniyor. **Kalan:** webhook teyidi; Production keys/URI/webhook; spec Faz 3–7.
