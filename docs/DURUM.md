@@ -74,6 +74,32 @@ https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
   settlement modeli PayPal payout'larına `PROVIDERS` haritasında bir satırla
   uzanır.
 
+### 2 Eylül akşam — PayPal para feed'i (brief §10) dört platformda
+
+- **Sunucu CANLI:** `commerce/paypal/client.js` + `normalize.js` (T-kod
+  grupları; bankaya çekim satır değil payout kaydı; ücret brütün yanında),
+  `bankFeed.js` PayPal dalı (`paypalConnect` owner callable: önce 1 günlük
+  deneme sorgusu, secret AES-256-GCM `NIVADESK_PAYPAL_TOKEN_KEY` ile kutulu,
+  180 gün içe alım; sweep'te provider dalı; purge payout'ları da siler;
+  `bankListPayouts` + `matchPayoutToBank` generic). 6 birim + 6 emülatör
+  senaryosu. Bug: `transaction_status` listesi PayPal'da 400 → tek değer / yok.
+- **Web Round 145 CANLI (16:45):** Integrations → Banking & accounting →
+  PayPal kartı (Live/Sandbox, Client ID, Secret, Sync now, çekimler + banka
+  eşleştirme, bağlantı kesme); Banking'de PayPal satırında ücret/net.
+- **Web Round 146 (kodda, "canlıya at" bekliyor):** Banking çok-kaynaklı:
+  All/Bank/PayPal çipleri her liste ve toplamı daraltır, PayPal satırlarında P
+  işareti, Add account → Banka (Open Banking) veya PayPal, bağlı PayPal'da
+  Manage, kaynak yoksa iki bağlama düğmesi; toplamlar yalnız ana para birimini
+  toplar ve dışarıda kalan satır sayısını söyler.
+- **Mac/iPhone + Android:** hub kartı planned→native, PayPal ekranı
+  (PayPalIntegrationView / PayPalDetail), banka satırında ücret, PayPal
+  bağlantısının Reconnect'i PayPal kartına, Banking'de kaynak çipleri + P
+  işareti. Rehber: Banking bölümüne "PayPal beside the bank" 12 dilde,
+  corpus + 7 fonksiyon deploy. Kullanıcı 15:47'de LIVE hesabı bağladı.
+- **Açık:** brief §10 #4 (iade/chargeback ↔ sipariş bağı), ChatGPT araç
+  metinleri (OpenAI incelemesi bitene kadar tools/list sabit), Pandle'da
+  PayPal'ın ayrı banka hesabı olarak modellenmesi (Pandle işi).
+
 
 ### 31 Ağustos — bir günde on iş, ve defterin kendisi yalan söylüyordu
 

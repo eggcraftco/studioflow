@@ -346,6 +346,8 @@ final class BankScreenModel: ObservableObject {
     @Published var newRuleKeyword = ""
     @Published var newRuleCategory = ""
     @Published var busy: String?
+    /// Faz 5: which money source the page shows — "all", "bank" or "paypal".
+    @Published var sourceFilter = "all"
     @Published var status: String?
     @Published var error: String?
     /// Which transaction a picked file should attach to ("" = OCR match flow).
@@ -611,9 +613,16 @@ struct BankSpendingView: View {
     private var isPhone: Bool { horizontalSizeClass == .compact }
     private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
     private var fmt: BankFormat { BankFormat(lang: seciliDil, hide: hideSensitiveNumbers, currency: firebaseManager.bankTransactions.first?.currency ?? "GBP") }
+    /// The rows the page works with: every source, or the one the chips picked.
+    private var sourceTransactions: [StudioBankTransaction] {
+        firebaseManager.bankTransactions.filter { model.sourceFilter == "all" || (($0.provider == "paypal") == (model.sourceFilter == "paypal")) }
+    }
+    private var hasPayPal: Bool {
+        firebaseManager.bankConnections.contains { $0.provider == "paypal" } || firebaseManager.bankTransactions.contains { $0.provider == "paypal" }
+    }
 
     var body: some View {
-        let derived = BankDerived.make(transactions: firebaseManager.bankTransactions, rules: firebaseManager.bankRules,
+        let derived = BankDerived.make(transactions: sourceTransactions, rules: firebaseManager.bankRules,
                                        vendors: firebaseManager.bankVendors, orders: firebaseManager.siparisler, model: model, lang: seciliDil)
         let selected = firebaseManager.bankTransactions.first { $0.id == model.selectedTxId }
         let categoryOptions = bankCategoryOptions(custom: firebaseManager.bankCustomCategories,
@@ -622,7 +631,8 @@ struct BankSpendingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: isPhone ? 12 : 16) {
                     BankHeaderView(model: model, fmt: fmt, isPhone: isPhone, isOwner: isOwner, hasBank: !firebaseManager.bankConnections.filter(\.isLinked).isEmpty,
-                                   onPickPhoto: { model.pendingAttachTxId = "" }, showFileImporter: $showFileImporter, photoItem: $photoItem)
+                                   onPickPhoto: { model.pendingAttachTxId = "" }, showFileImporter: $showFileImporter, photoItem: $photoItem,
+                                   sourceFilter: $model.sourceFilter, hasPayPal: hasPayPal)
                     if let status = model.status { BankNotice(text: status, color: .green) }
                     if let error = model.error { BankNotice(text: error, color: .red) }
                     if let ocr = model.ocr { BankOcrCard(ocr: ocr, model: model, fmt: fmt, background: cardBackground, isOwner: isOwner) }
@@ -736,12 +746,23 @@ private struct BankHeaderView: View {
     let onPickPhoto: () -> Void
     @Binding var showFileImporter: Bool
     @Binding var photoItem: PhotosPickerItem?
+    /// Faz 5: the source chips, shown once PayPal is in the feed.
+    @Binding var sourceFilter: String
+    let hasPayPal: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(fmt.t("Banking")).font(.system(size: isPhone ? 20 : 24, weight: .bold))
                 Text(fmt.t("Read-only Open Banking feed — NivaDesk can never move money.")).font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            if hasPayPal {
+                Picker("", selection: $sourceFilter) {
+                    Text(fmt.t("All")).tag("all")
+                    Text(fmt.t("Bank")).tag("bank")
+                    Text("PayPal").tag("paypal")
+                }
+                .pickerStyle(.segmented).frame(maxWidth: 240).labelsHidden()
             }
             Spacer()
             if isOwner && hasBank {
@@ -1594,6 +1615,7 @@ struct BankTransactionRow: View {
                             .accessibilityLabel(fmt.t(bankReviewStatusLabel(tx.effectiveReviewStatus)))
                     }
                     if isRecurring { Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9)).foregroundColor(.secondary) }
+                    if tx.provider == "paypal" { BankSourceMark() }
                     Text(tx.merchant).font(.system(size: 13, weight: .bold)).lineLimit(1)
                     if isDuplicate { BankChip(text: fmt.t("Duplicate?"), color: .orange) }
                 }
@@ -1820,7 +1842,10 @@ struct BankTransactionDetail: View {
                 HStack(spacing: 10) {
                     BankAvatar(name: tx.merchant, size: 38)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(tx.merchant).font(.system(size: 14, weight: .bold)).lineLimit(2)
+                        HStack(spacing: 5) {
+                            if tx.provider == "paypal" { BankSourceMark() }
+                            Text(tx.merchant).font(.system(size: 14, weight: .bold)).lineLimit(2)
+                        }
                         HStack(spacing: 6) {
                             if let meta = bankTxTypeMeta(tx.txType) { BankChip(text: meta.translate ? fmt.t(meta.label) : meta.label, color: meta.color) }
                             Text(fmt.date(tx.bookingDate)).font(.system(size: 11)).foregroundColor(.secondary)
@@ -3240,5 +3265,14 @@ private struct BankSettlementChipView: View {
                 .font(.system(size: 11)).foregroundColor(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Faz 5: the small "P" that says a row came from PayPal, not the bank.
+struct BankSourceMark: View {
+    var body: some View {
+        Text("P").font(.system(size: 9, weight: .heavy)).foregroundColor(.white)
+            .frame(width: 14, height: 14).background(Circle().fill(Color(red: 0, green: 0.19, blue: 0.53)))
+            .accessibilityLabel("PayPal")
     }
 }

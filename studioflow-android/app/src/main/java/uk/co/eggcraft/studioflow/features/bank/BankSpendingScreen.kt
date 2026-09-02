@@ -286,7 +286,12 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     // Candidates returned by bankMatchIncomingToOrder("suggest") for the open sheet.
     var incomingSuggest by remember { mutableStateOf<BankIncomingMatchResult?>(null) }
 
-    val transactions = state.bankTransactions
+    // Faz 5: the feed has more than one source now (bank, PayPal); the chips narrow every list and total.
+    var sourceFilter by rememberSaveable { mutableStateOf("all") }
+    val hasPayPal = state.bankConnections.any { it.provider == "paypal" } || state.bankTransactions.any { it.provider == "paypal" }
+    val transactions = remember(state.bankTransactions, sourceFilter) {
+        if (sourceFilter == "all") state.bankTransactions else state.bankTransactions.filter { (it.provider == "paypal") == (sourceFilter == "paypal") }
+    }
     val connections = state.bankConnections
     val rules = state.bankRules
     val waiting = state.bankWaitingReceipts
@@ -489,6 +494,13 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 Column(Modifier.weight(1f)) {
                     Text(t("Banking"), fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
                     Text(t("Read-only Open Banking feed — NivaDesk can never move money."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (hasPayPal) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("all" to t("All"), "bank" to t("Bank"), "paypal" to "PayPal").forEach { (key, label) ->
+                                FilterChip(selected = sourceFilter == key, onClick = { sourceFilter = key }, label = { Text(label, fontSize = 11.sp) })
+                            }
+                        }
+                    }
                 }
                 if (isOwner && linked.isNotEmpty()) {
                     IconButton(onClick = { pendingAttachTxId = ""; pickFile.launch("*/*") }, enabled = busy != "ocr") {
@@ -1491,6 +1503,7 @@ private fun TransactionRow(
                     Box(Modifier.size(7.dp).background(reviewStatusColor(reviewStatus), CircleShape))
                 }
                 if (isRecurring) Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (tx.provider == "paypal") Text("P", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF003087))
                 Text(tx.merchant.ifBlank { "—" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (isDuplicate) Chip(t("Duplicate?"), AMBER)
                 if (tx.isSpending && tx.splits.isNotEmpty()) Chip("⑃ ${t("Split")} (${tx.splits.size})", PURPLE)
@@ -1594,6 +1607,7 @@ private fun ReceiptRow(
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (tx.provider == "paypal") Text("P", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF003087))
             Text(tx.merchant, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(displayDate(tx.bookingDate, locale, true), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1655,6 +1669,7 @@ private fun WaitingRow(
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(displayDate(tx.bookingDate, locale, true), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(56.dp))
+                            if (tx.provider == "paypal") Text("P", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF003087))
                             Text(tx.merchant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             Text("−${fmt(abs(tx.amount), tx.currency)}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 color = if (abs(abs(tx.amount) - item.amount) < 0.015) GREEN else MaterialTheme.colorScheme.onSurface)
