@@ -222,19 +222,25 @@ function snapshotOf(entityType, raw, { ratesById } = {}) {
 // Suggestions. NivaDesk proposes, a person confirms (§4.2 step 6): every
 // suggestion carries a reason and a confidence and nothing is written by these.
 
+const FEE_FALLBACK_WORDS = ["merchant account fee", "merchant fee", "merchant", "processing fee", "card fee", "transaction fee", "bank charges", "bank fees"];
+
 const ACCOUNT_RULES = [
-  { key: "product_sales", subTypes: ["SalesOfProductIncome"], types: ["Income"], words: ["sales", "product"] },
-  { key: "bespoke_service", subTypes: ["ServiceFeeIncome"], types: ["Income"], words: ["service", "bespoke", "commission income", "design"] },
+  { key: "product_sales", subTypes: ["SalesOfProductIncome"], types: ["Income"], words: ["sales of product", "product sales", "sales", "product"], avoid: ["discount", "refund", "commission"] },
+  // "Commission Income" also carries the ServiceFeeIncome sub-type in Intuit's
+  // GB sandbox; a bespoke job is a service, never a commission.
+  { key: "bespoke_service", subTypes: ["ServiceFeeIncome"], types: ["Income"], words: ["services", "service", "bespoke", "design", "labour"], avoid: ["commission", "discount", "refund", "billable"] },
   { key: "shipping_income", subTypes: [], types: ["Income"], words: ["shipping", "postage", "delivery"] },
   { key: "discounts", subTypes: ["DiscountsRefundsGiven"], types: ["Income"], words: ["discount"] },
   { key: "refunds", subTypes: ["DiscountsRefundsGiven"], types: ["Income"], words: ["refund"] },
-  { key: "paypal_fees", subTypes: ["BankCharges"], types: ["Expense"], words: ["paypal fee", "paypal"] },
-  { key: "square_fees", subTypes: ["BankCharges"], types: ["Expense"], words: ["square fee", "square"] },
-  { key: "etsy_fees", subTypes: ["BankCharges"], types: ["Expense"], words: ["etsy fee", "etsy", "marketplace fee"] },
-  { key: "shopify_fees", subTypes: ["BankCharges"], types: ["Expense"], words: ["shopify fee", "shopify", "merchant fee"] },
+  // Fees: a provider-named account wins; otherwise the company's generic
+  // merchant / card / processing fee account is the honest fallback.
+  { key: "paypal_fees", subTypes: ["BankCharges"], types: ["Expense", "Cost of Goods Sold"], words: ["paypal fee", "paypal"], fallbackWords: FEE_FALLBACK_WORDS },
+  { key: "square_fees", subTypes: ["BankCharges"], types: ["Expense", "Cost of Goods Sold"], words: ["square fee", "square"], fallbackWords: FEE_FALLBACK_WORDS },
+  { key: "etsy_fees", subTypes: ["BankCharges"], types: ["Expense", "Cost of Goods Sold"], words: ["etsy fee", "etsy", "marketplace fee"], fallbackWords: FEE_FALLBACK_WORDS },
+  { key: "shopify_fees", subTypes: ["BankCharges"], types: ["Expense", "Cost of Goods Sold"], words: ["shopify fee", "shopify"], fallbackWords: FEE_FALLBACK_WORDS },
   { key: "materials_purchase", subTypes: ["SuppliesMaterials", "SuppliesMaterialsCogs"], types: ["Expense", "Cost of Goods Sold"], words: ["material", "supplies", "purchases"] },
   { key: "inventory_asset", subTypes: ["Inventory"], types: ["Other Current Asset"], words: ["inventory", "stock"] },
-  { key: "cogs", subTypes: ["SuppliesMaterialsCogs", "CostOfLaborCos", "OtherCostsOfServiceCos"], types: ["Cost of Goods Sold"], words: ["cost of goods", "cost of sales", "cogs"] },
+  { key: "cogs", subTypes: ["SuppliesMaterialsCogs", "CostOfLaborCos", "OtherCostsOfServiceCos"], types: ["Cost of Goods Sold"], words: ["cost of goods", "cost of sales", "cogs"], avoid: ["billable"] },
   { key: "clearing_paypal", subTypes: [], types: ["Other Current Asset", "Bank"], words: ["paypal clearing", "paypal"] },
   { key: "clearing_square", subTypes: [], types: ["Other Current Asset", "Bank"], words: ["square clearing", "square"] },
   { key: "clearing_shopify_payments", subTypes: [], types: ["Other Current Asset", "Bank"], words: ["shopify clearing", "shopify payments"] },
@@ -250,11 +256,18 @@ function suggestAccountMappings(accounts) {
       const name = `${account.name} ${account.fullyQualifiedName}`.toLowerCase();
       const typeOk = rule.types.length === 0 || rule.types.includes(account.accountType);
       if (!typeOk) continue;
+      if ((rule.avoid || []).some((word) => name.includes(word))) continue;
       let score = 0;
       let reason = "";
       if (rule.subTypes.includes(account.accountSubType)) { score += 50; reason = `type ${account.accountSubType}`; }
+      let matched = false;
       for (const word of rule.words) {
-        if (name.includes(word)) { score += Math.min(45, 12 + word.length * 2); reason = reason ? `${reason}, name` : `name matches "${word}"`; break; }
+        if (name.includes(word)) { score += Math.min(45, 12 + word.length * 2); reason = reason ? `${reason}, name` : `name matches "${word}"`; matched = true; break; }
+      }
+      if (!matched && rule.fallbackWords) {
+        for (const word of rule.fallbackWords) {
+          if (name.includes(word)) { score += 30; reason = reason ? `${reason}, generic fee account` : `generic fee account "${word}"`; matched = true; break; }
+        }
       }
       if (rule.key.startsWith("clearing_") && !name.includes("clearing") && !name.includes(rule.key.replace("clearing_", "").split("_")[0])) continue;
       if (score > 0 && (!best || score > best.score)) best = { externalId: account.externalId, name: account.fullyQualifiedName || account.name, accountType: account.accountType, score, reason };
@@ -264,15 +277,18 @@ function suggestAccountMappings(accounts) {
   return out;
 }
 
+// `avoid` keeps the EC-acquisition and reverse-charge codes (which also read
+// "zero rated ..." in their descriptions) away from the plain domestic rules;
+// `prefer` is the code name Intuit's UK companies actually use.
 const TAX_RULES = [
-  { key: "ST", rate: 20, words: ["standard", "20%", "20.0%"] },
-  { key: "RR", rate: 5, words: ["reduced", "5%", "5.0%"] },
-  { key: "ZR", rate: 0, words: ["zero", "0%", "0.0% z"] },
-  { key: "EX", rate: 0, words: ["exempt"] },
-  { key: "OS", rate: 0, words: ["out of scope", "outside", "no vat"] },
-  { key: "NR", rate: 0, words: ["no vat", "not registered", "out of scope"] },
-  { key: "RC", rate: 20, words: ["reverse charge", "reverse"] },
-  { key: "NV", rate: 0, words: ["no vat", "no tax", "out of scope"] }
+  { key: "ST", rate: 20, words: ["standard", "20%", "20.0%"], avoid: ["ec ", "ecg", "ecs", " rc", "reverse"], prefer: /^20\.0% s$/ },
+  { key: "RR", rate: 5, words: ["reduced", "5%", "5.0%"], avoid: ["ec ", "ecg", "ecs", " rc", "reverse"], prefer: /^5\.0% r$/ },
+  { key: "ZR", rate: 0, words: ["zero", "0%", "0.0% z"], avoid: ["ec ", "ecg", "ecs", " rc", "reverse", "exempt", "no vat"], prefer: /^0\.0% z$/ },
+  { key: "EX", rate: 0, words: ["exempt"], avoid: ["ecg", "ecs", "reverse"] },
+  { key: "OS", rate: 0, words: ["out of scope", "outside", "no vat"], avoid: ["ecg", "ecs", "reverse"] },
+  { key: "NR", rate: 0, words: ["no vat", "not registered", "out of scope"], avoid: ["ecg", "ecs", "reverse"] },
+  { key: "RC", rate: 20, words: ["reverse charge", "reverse", " rc"], prefer: /^20\.0% rc$/ },
+  { key: "NV", rate: 0, words: ["no vat", "no tax", "out of scope"], avoid: ["ecg", "ecs", "reverse"] }
 ];
 
 function suggestTaxMappings(taxCodes) {
@@ -281,13 +297,16 @@ function suggestTaxMappings(taxCodes) {
   for (const rule of TAX_RULES) {
     let best = null;
     for (const code of active) {
+      const codeName = String(code.name || "").toLowerCase();
       const name = `${code.name} ${code.description}`.toLowerCase();
+      if ((rule.avoid || []).some((word) => name.includes(word))) continue;
       let score = 0;
       let reason = "";
       const matchedWord = rule.words.find((word) => name.includes(word));
       if (matchedWord) { score += 55; reason = `name matches "${matchedWord}"`; }
       if (Math.abs(code.effectiveSalesRate - rule.rate) < 0.001) { score += 30; reason = reason ? `${reason}, rate ${rule.rate}%` : `rate ${rule.rate}%`; }
       if (rule.key === "ST" && !matchedWord && Math.abs(code.effectiveSalesRate - 20) < 0.001) score += 10;
+      if (rule.prefer && rule.prefer.test(codeName.trim())) { score += 10; reason = `${reason}, the usual UK code`; }
       if (score >= 55 && (!best || score > best.score)) best = { externalId: code.externalId, name: code.name, rate: code.effectiveSalesRate, score, reason };
     }
     if (best) out[rule.key] = { ...best, confidence: Math.min(0.95, best.score / 100) };
