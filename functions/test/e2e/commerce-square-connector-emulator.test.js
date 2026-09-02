@@ -195,15 +195,36 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.ok(customers.docs.some((d) => (d.data().email || "").toLowerCase() === "ada@example.com"), "the customer mirror was written");
   });
 
+  await check("when the queue cannot be reached the event is applied inline, and a failing inline apply hands the delivery claim back (SQ-WEB-008/010)", async () => {
+    square.orders.set("ORD_Q", onlineOrder("ORD_Q"));
+    const realEnqueue = global.__nivadeskSquareFakeEnqueue;
+    global.__nivadeskSquareFakeEnqueue = async () => { throw new Error("PERMISSION_DENIED: cloudtasks.tasks.create"); };
+    try {
+      const res = await deliver("order.created", { order_created: { order_id: "ORD_Q", location_id: "LOC_LONDON" } }, { eventId: "evt_Q" });
+      assert.strictEqual(res.statusCode, 200, JSON.stringify(res.payload)); assert.strictEqual(res.payload.results[0].result, "created", "applied inline, not queued");
+      assert.ok((await orderRef("ORD_Q").get()).exists);
+      const row = (await db.collection("commerceEvents").where("company_id", "==", COMPANY).get()).docs.map((d) => d.data()).find((r) => r.external_id === "ORD_Q");
+      assert.strictEqual(row.status, "applied");
+      // An inline apply that throws (the order cannot be fetched) gives the claim back: the next delivery of the same event id is not a duplicate.
+      const client = global.__nivadeskSquareFakeClient;
+      global.__nivadeskSquareFakeClient = (o) => ({ ...client(o), async getOrder() { const e = new Error("square_http_503"); e.status = 503; throw e; } });
+      try {
+        const failed = await deliver("order.updated", { order_updated: { order_id: "ORD_Q", location_id: "LOC_LONDON" } }, { eventId: "evt_Q2" });
+        assert.strictEqual(failed.payload.results[0].result, "retrying", "a transient failure is a retry verdict, not a loss");
+      } finally { global.__nivadeskSquareFakeClient = client; }
+    } finally { global.__nivadeskSquareFakeEnqueue = realEnqueue; }
+  });
+
   await check("the same event id again is a duplicate; a bad signature writes nothing; an unknown merchant routes nowhere (SQ-TEST-007/008, SQ-WEB-006)", async () => {
     const before = queued.length;
     const dup = await deliver("order.created", { order_created: { order_id: "ORD_A", location_id: "LOC_LONDON" } }, { eventId: "evt_A" });
     assert.strictEqual(dup.payload.results[0].result, "duplicate"); assert.strictEqual(queued.length, before);
     const eventsBefore = (await db.collection("commerceEvents").where("company_id", "==", COMPANY).get()).size;
+    const claimsBefore = (await connRef().collection("deliveries").get()).size;
     const bad = await deliver("order.created", { order_created: { order_id: "ORD_A", location_id: "LOC_LONDON" } }, { badSignature: true });
     assert.strictEqual(bad.statusCode, 401); assert.strictEqual(queued.length, before);
     assert.strictEqual((await db.collection("commerceEvents").where("company_id", "==", COMPANY).get()).size, eventsBefore, "no event record from a bad signature");
-    assert.strictEqual((await connRef().collection("deliveries").get()).size, 1, "no delivery claim either");
+    assert.strictEqual((await connRef().collection("deliveries").get()).size, claimsBefore, "no delivery claim either");
     const stranger = await deliver("order.created", { order_created: { order_id: "ORD_A" } }, { merchantId: "MERCH_UNKNOWN" });
     assert.strictEqual(stranger.payload.reason, "unknown_merchant"); assert.strictEqual(queued.length, before);
     const unknownType = await deliver("labor.shift.created", { shift: { id: "s1" } });

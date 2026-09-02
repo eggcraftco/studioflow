@@ -488,8 +488,23 @@ function createSquareConnectorFunctions(deps) {
         const eventKey = events.idempotencyKey({ provider: "square", connectionId: ref.id, eventId, externalId, eventType: type });
         const task = { key: eventKey, provider: "square", connectionId: ref.id, companyId: String(data.companyId || ""), entityType, externalId, eventType: type, attempt: 1, eventOrigin: "provider", correlationId: events.newCorrelationId() };
         await worker.recordReceived(db(), task, { status: enqueue ? "queued" : "received", now: now() }).catch(() => undefined);
-        if (enqueue) { await enqueue(task, 0); results.push({ connection: ref.id, result: "queued" }); continue; }   // SQ-WEB-008: durable, then 2xx
-        const outcome = await processSquareTaskCore(task);
+        // SQ-WEB-008: durable, then 2xx. The queue is the normal road; when it
+        // cannot be reached (an IAM gap, an outage) the event is applied here
+        // and now rather than lost — the delivery claim above would otherwise
+        // turn Square's retry into a "duplicate" of an event nobody handled.
+        let queued = false;
+        if (enqueue) {
+          try { await enqueue(task, 0); queued = true; }
+          catch (error) { console.error("squareWebhook enqueue failed, applying inline:", String(error?.message || error).slice(0, 200)); await worker.recordReceived(db(), task, { status: "received", now: now() }).catch(() => undefined); }
+        }
+        if (queued) { results.push({ connection: ref.id, result: "queued" }); continue; }
+        let outcome;
+        try { outcome = await processSquareTaskCore(task); }
+        catch (error) {
+          // Nothing was applied: give the claim back so Square's retry is not mistaken for a duplicate.
+          if (eventId) await ref.collection("deliveries").doc(safeIdPart(eventId)).delete().catch(() => undefined);
+          throw error;
+        }
         if (outcome.status === "applied") await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId: task.companyId, kind: "success", now: now(), FieldValue }).catch(() => undefined);
         results.push({ connection: ref.id, result: outcome.outcome?.result || outcome.status });
       }
