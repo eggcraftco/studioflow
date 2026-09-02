@@ -396,6 +396,39 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.ok(Number(afterSweep.lastSyncAtMs) > beforeSweep, "the unforced sweep records its pass");
     assert.deepStrictEqual(afterSweep.lastReconcile.payouts, { scanned: 0, recorded: 0, unreconciled: 0, failed: 0 });
     assert.strictEqual(afterSweep.lastReconcile.events.configured, false);
+    assert.strictEqual(afterSweep.lastReconcile.events.error, "", "no application token, no error to report");
+    // SQ-REC-001..003 with an application token: a rejected token names itself and is not followed by a doomed search;
+    // a good one recovers an order the webhook never delivered and that no order scan would reach (it is 30 days old).
+    const savedToken = process.env.SQUARE_APP_ACCESS_TOKEN;
+    process.env.SQUARE_APP_ACCESS_TOKEN = "EAAA-fake-app-token";
+    const eventsCalls = []; let enableStatus = 401; const missedId = "ORD_MISSED";
+    global.__nivadeskSquareFakeEventsClient = () => ({
+      async enableEvents() { eventsCalls.push("enable"); if (enableStatus !== 200) { const e = new Error(`square_events_http_${enableStatus}: UNAUTHORIZED`); e.status = enableStatus; throw e; } return {}; },
+      async searchEvents({ merchantId, eventTypes }) {
+        eventsCalls.push("search"); assert.strictEqual(merchantId, "MERCH_1"); assert.ok(eventTypes.includes("order.created"));
+        return { events: [{ event_id: "evt_missed_1", type: "order.created", merchant_id: "MERCH_1", created_at: new Date().toISOString(), data: { type: "order", id: missedId, object: { order_created: { order_id: missedId, location_id: "LOC_LONDON", state: "OPEN", version: 1 } } } }], cursor: null };
+      }
+    });
+    try {
+      const rejected = await sq.reconcileConnection(connRef(), (await connRef().get()).data(), { force: true, lookbackMs: 3600000 });
+      assert.strictEqual(rejected.events.error, "app_token_rejected"); assert.strictEqual(rejected.events.complete, false);
+      assert.deepStrictEqual(eventsCalls, ["enable"], "a rejected token is not followed by a search that would fail the same way");
+      assert.strictEqual((await connRef().get()).data().lastReconcile.events.error, "app_token_rejected", "the cause is on the connection, not only in a log line");
+      enableStatus = 200; eventsCalls.length = 0;
+      const old = new Date(Date.now() - 30 * 86400000).toISOString();
+      square.orders.set(missedId, onlineOrder(missedId, { created_at: old, updated_at: old }));
+      assert.strictEqual((await orderRef(missedId).get()).exists, false);
+      const recovered = await sq.reconcileConnection(connRef(), (await connRef().get()).data(), { force: true, lookbackMs: 3600000 });
+      assert.deepStrictEqual(eventsCalls, ["enable", "search"], "enable is retried after a failure, then the window is searched");
+      assert.strictEqual(recovered.events.error, undefined); assert.strictEqual(recovered.events.scanned, 1); assert.strictEqual(recovered.events.applied, 1);
+      assert.ok((await orderRef(missedId).get()).exists, "the missed order arrived through the Events API alone");
+      const claim = (await connRef().collection("deliveries").doc("evt_missed_1").get()).data();
+      assert.strictEqual(claim.via, "events_api"); assert.strictEqual(claim.type, "order.created");
+      const summary = (await connRef().get()).data().lastReconcile.events;
+      assert.deepStrictEqual(summary, { configured: true, scanned: 1, applied: 1, error: "" });
+      const eventsCursor = (await db.collection("commerceCursors").where("companyId", "==", COMPANY).get()).docs.map((d) => d.data()).find((c) => c.entityType === "events");
+      assert.ok(eventsCursor && eventsCursor.lastPassComplete === true, "the events pass keeps its own cursor (SQ-REC-009)");
+    } finally { process.env.SQUARE_APP_ACCESS_TOKEN = savedToken; delete global.__nivadeskSquareFakeEventsClient; }
     // A failing item leaves the watermark where it was.
     const failing = { ...square.orders.get("ORD_LATE"), line_items: null, total_money: null, id: "ORD_BROKEN", updated_at: new Date().toISOString() };
     square.orders.set("ORD_BROKEN", failing);

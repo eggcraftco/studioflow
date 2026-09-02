@@ -705,7 +705,15 @@ function createSquareConnectorFunctions(deps) {
     if (!token) return { scanned: 0, applied: 0, skipped: 0, failed: 0, complete: true, configured: false };
     const companyId = String(data.companyId || "");
     const eventsClient = createEventsClient({ environment: env(), appAccessToken: token, fetchImpl });
-    if (now() - eventsEnabledAtMs > 6 * 60 * 60 * 1000) { try { await eventsClient.enableEvents(); eventsEnabledAtMs = now(); } catch (error) { console.warn("square enableEvents failed:", String(error?.message || error).slice(0, 120)); } }
+    if (now() - eventsEnabledAtMs > 6 * 60 * 60 * 1000) {
+      try { await eventsClient.enableEvents(); eventsEnabledAtMs = now(); }
+      catch (error) {
+        console.warn("square enableEvents failed:", String(error?.message || error).slice(0, 120));
+        // A 401 here is the application token, not the merchant: it belongs to the other environment (sandbox vs production)
+        // or was revoked. Searching would fail the same way, so the pass reports the cause instead of scanning nothing.
+        if (Number(error?.status) === 401 || Number(error?.status) === 403) return { scanned: 0, applied: 0, skipped: 0, failed: 0, complete: false, configured: true, error: "app_token_rejected" };
+      }
+    }
     const cursor = await cursors.readCursor(db(), "square", ref.id, "events");
     const window = cursors.cursorWindow(cursor, now(), { force, lookbackMs: lookbackMs || undefined, maxWindowMs: 27 * 24 * 60 * 60 * 1000 });
     const audit = { scanned: 0, applied: 0, skipped: 0, failed: 0, truncated: false, configured: true };
@@ -767,7 +775,7 @@ function createSquareConnectorFunctions(deps) {
     const n = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, kind: orders.complete ? "success" : "attempt", now: now(), FieldValue });
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, entity: "finance", kind: payments.complete ? "success" : "attempt", now: now(), FieldValue });
-    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: n(orders.scanned), created: n(orders.created), updated: n(orders.updated), skipped: n(orders.skipped), failed: n(orders.failed) }, payments: { scanned: n(payments.scanned), recorded: n(payments.recorded), unmatched: n(payments.unmatched), failed: n(payments.failed) }, events: { configured: recovered.configured === true, scanned: n(recovered.scanned), applied: n(recovered.applied) }, payouts: { scanned: n(payouts.scanned), recorded: n(payouts.recorded), unreconciled: n(payouts.unreconciled), failed: n(payouts.failed) }, refunds: { scanned: n(refunds.scanned), recorded: n(refunds.recorded), failed: n(refunds.failed) }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: n(orders.scanned), created: n(orders.created), updated: n(orders.updated), skipped: n(orders.skipped), failed: n(orders.failed) }, payments: { scanned: n(payments.scanned), recorded: n(payments.recorded), unmatched: n(payments.unmatched), failed: n(payments.failed) }, events: { configured: recovered.configured === true, scanned: n(recovered.scanned), applied: n(recovered.applied), error: String(recovered.error || "") }, payouts: { scanned: n(payouts.scanned), recorded: n(payouts.recorded), unreconciled: n(payouts.unreconciled), failed: n(payouts.failed) }, refunds: { scanned: n(refunds.scanned), recorded: n(refunds.recorded), failed: n(refunds.failed) }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { ...orders, payments, refunds, payouts, events: recovered, complete, locationsHealthy };
   }
 
