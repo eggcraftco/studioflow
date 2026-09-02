@@ -340,4 +340,29 @@ function topPaths(question, limit = 4) {
   pass("the website assistant can answer whether we connect to a shop");
 }
 
+// Faz 2 — Sync health. A merchant who sees "Stale" or "Dead" on a connection
+// asks the bot what it means and what to press; the store-integrations chapter
+// must answer with the card, the retry and the six-hour rule.
+{
+  const section = CORPUS.find((s) => s.id === "set-woocommerce");
+  assert(section, "the guide has the store-integrations chapter");
+  assert(/Sync health/.test(section.text), "the chapter names the Sync health card");
+  assert(/Dead/.test(section.text) && /Retry/.test(section.text), "it explains a dead event and the retry");
+  assert(/six hours/i.test(section.text), "it says when a connection counts as stale");
+  for (const question of [
+    "what does sync health mean on my Shopify connection?",
+    "why does my Shopify connection say stale?",
+    "how do I retry a dead event?",
+    "what is a dead letter in NivaDesk?",
+    "where can I see the last webhook from Shopify?"
+  ]) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /integration/i.test(p)),
+      `"${question}" should reach the store-integrations chapter, got: ${paths.join(" | ")}`
+    );
+  }
+  pass("sync health questions reach the store-integrations chapter, which explains stale, dead and retry");
+}
+
 console.log("\n✅ GUIDE RETRIEVAL GEÇTİ");
