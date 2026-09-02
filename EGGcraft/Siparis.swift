@@ -30,6 +30,12 @@ struct PaymentEntry: Identifiable, Codable, Equatable {
     var note: String = ""     // optional free text
     var createdByUid: String = ""
     var createdByEmail: String = ""
+    /// Set by the bank module when this entry mirrors a bank row (a matched
+    /// incoming payment, or a refund/chargeback recorded from Banking). Optional
+    /// so older entries decode and a full-document save never drops the link.
+    var bankTransactionId: String? = nil
+    /// True on the negative entries Banking writes for a refund or chargeback.
+    var refund: Bool? = nil
 }
 
 // One billable line on an order's invoice: a product/service with quantity and price.
@@ -311,6 +317,10 @@ struct Siparis: Identifiable, Codable {
     var todoItems: [OrderToDoItem]?
     var workSessions: [OrderWorkSessionItem]?
     var payments: [PaymentEntry]?
+    /// Money handed back to the customer: the sum of the refund and chargeback
+    /// entries in the ledger. Kept by the server; optional so existing orders
+    /// decode and a full-document save carries it forward untouched.
+    var refundedAmount: Double?
     // Itemized invoice lines. Optional so existing single-design orders still decode; when
     // present, their sum drives the order total (see lineItemsTotal / hasLineItems).
     var lineItems: [LineItem]?

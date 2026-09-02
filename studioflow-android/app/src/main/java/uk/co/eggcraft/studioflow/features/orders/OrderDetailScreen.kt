@@ -772,7 +772,8 @@ private fun phoneCompactSummary(order: StudioOrder, cardId: OrderDetailCardId, t
         val minutes = (total % 3600) / 60
         if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
     }
-    OrderDetailCardId.Financial -> t("Paid") + " ${money(order.paidAmount)} • " + t("Remaining") + " ${money(order.remainingAmount)}"
+    OrderDetailCardId.Financial -> t("Paid") + " ${money(order.paidAmount)} • " + t("Remaining") + " ${money(order.remainingAmount)}" +
+        (if (order.refundedAmount > 0.0) " • " + t("Refunded") + " ${money(order.refundedAmount)}" else "")
     OrderDetailCardId.Status -> t(order.status)
     OrderDetailCardId.Shipping -> when {
         order.isDelivered -> t("Delivered")
@@ -7344,6 +7345,13 @@ private fun FinancialCard(
                     enabled = canEditFinance,
                     onCommit = { saveFinance() }
                 )
+                if (order.refundedAmount > 0.0) {
+                    // Money handed back: the sum of the refund and chargeback entries in the ledger — kept by the server, read here, never typed.
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(t("Refunded"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text(money(order.refundedAmount), color = StudioRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
                 FinanceMoneyInlineRow(
                     label = "Remaining",
                     value = remainingAmount,
@@ -13371,6 +13379,7 @@ private fun createOrderPdfFile(
         val rows = mutableListOf<Triple<String, String, Int>>()
         if (showFinCustomer) {
             rows.add(Triple("Paid:", money(order.paidAmount), cGreen))
+            if (order.refundedAmount > 0.0) rows.add(Triple("Refunded:", money(order.refundedAmount), cRed))
             rows.add(Triple("Remaining:", money(order.remainingAmount), cOrange))
             if (settings.pdfShowPaymentMethod) {
                 rows.add(Triple("Payment Method:", order.paymentMethod.ifBlank { "Card" }, cPrimary))

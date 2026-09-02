@@ -1116,7 +1116,11 @@ data class StudioPaymentEntry(
     val amount: Double,
     val date: Date?,
     val method: String,
-    val note: String
+    val note: String,
+    /** Set when the entry mirrors a bank row (a matched incoming payment, or a refund/chargeback recorded from Banking). */
+    val bankTransactionId: String = "",
+    /** True on the negative entries Banking writes for a refund or chargeback. */
+    val refund: Boolean = false
 )
 
 /** One billable invoice line (gross / VAT-inclusive). When an order has these, their sum
@@ -1257,6 +1261,8 @@ data class StudioOrder(
     val paymentDate: Date,
     val deliveryTime: Int,
     val paidAmount: Double,
+    /** Money handed back to the customer: the sum of the refund and chargeback entries in the ledger, kept by the server. */
+    val refundedAmount: Double = 0.0,
     val remainingAmount: Double,
     val watchPurchasePrice: Double,
     val paymentFee: Double,
@@ -1413,6 +1419,7 @@ data class StudioOrder(
                 paymentDate = document.getTimestamp("paymentDate")?.toDate() ?: Date(),
                 deliveryTime = document.getLong("deliveryTime")?.toInt() ?: 1,
                 paidAmount = document.getDouble("paidAmount") ?: 0.0,
+                refundedAmount = document.getDouble("refundedAmount") ?: 0.0,
                 remainingAmount = document.getDouble("remainingAmount") ?: 0.0,
                 watchPurchasePrice = document.getDouble("watchPurchasePrice") ?: 0.0,
                 paymentFee = document.getDouble("paymentFee") ?: 0.0,
@@ -1669,7 +1676,9 @@ private fun parsePayments(value: Any?): List<StudioPaymentEntry> {
             amount = doubleAny(item["amount"], 0.0),
             date = dateAny(item["date"]),
             method = stringAny(item["method"], ""),
-            note = stringAny(item["note"], "")
+            note = stringAny(item["note"], ""),
+            bankTransactionId = stringAny(item["bankTransactionId"], ""),
+            refund = item["refund"] == true
         )
     }.sortedByDescending { it.date?.time ?: 0L }
 }

@@ -270,6 +270,7 @@ extension Siparis: Equatable {
         lhs.customerName == rhs.customerName &&
         lhs.paymentDate == rhs.paymentDate &&
         lhs.paidAmount == rhs.paidAmount &&
+        lhs.refundedAmount == rhs.refundedAmount &&
         lhs.remainingAmount == rhs.remainingAmount &&
         lhs.watchPurchasePrice == rhs.watchPurchasePrice &&
         lhs.watchRef == rhs.watchRef &&
@@ -11771,6 +11772,7 @@ struct ContentView: View {
 
         sync(\.paymentMethod)
         sync(\.paidAmount)
+        sync(\.refundedAmount)
         sync(\.remainingAmount)
         sync(\.watchPurchasePrice)
         sync(\.paymentFee)
@@ -13019,6 +13021,7 @@ struct ViewOnlyOrderDetailView: View {
                 readOnlyCard(title: t("Financial", lang: seciliDil), icon: "sterlingsign.circle.fill") {
                     readOnlyRow("Order value", money(totalOrderValue))
                     readOnlyRow("Paid", money(siparis.paidAmount))
+                    if let refunded = siparis.refundedAmount, refunded > 0 { readOnlyRow("Refunded", money(refunded)) }
                     readOnlyRow("Remaining", money(siparis.remainingAmount))
                     readOnlyRow("Purchase cost", money(siparis.watchPurchasePrice))
                     readOnlyRow("Delivery cost", money(siparis.deliveryCost))

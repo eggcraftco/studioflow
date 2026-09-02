@@ -574,6 +574,7 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
     var customerName: String
     var paymentDate: Date
     var paidAmount: Double
+    var refundedAmount: Double?
     var remainingAmount: Double
     var watchPurchasePrice: Double
     var watchRef: String
@@ -623,6 +624,7 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         customerName = siparis.customerName
         paymentDate = siparis.paymentDate
         paidAmount = siparis.paidAmount
+        refundedAmount = siparis.refundedAmount
         remainingAmount = siparis.remainingAmount
         watchPurchasePrice = siparis.watchPurchasePrice
         watchRef = siparis.watchRef
@@ -672,6 +674,7 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         restored.customerName = customerName
         restored.paymentDate = paymentDate
         restored.paidAmount = paidAmount
+        restored.refundedAmount = refundedAmount
         restored.remainingAmount = remainingAmount
         restored.watchPurchasePrice = watchPurchasePrice
         restored.watchRef = watchRef
@@ -1534,6 +1537,7 @@ class FirebaseManager: ObservableObject {
             siparis.customerName = stringValue(data["customerName"], fallback: "New Project")
             siparis.paymentDate = dateValue(data["paymentDate"], fallback: Date())
             siparis.paidAmount = doubleValue(data["paidAmount"])
+            siparis.refundedAmount = (data["refundedAmount"] as? NSNumber)?.doubleValue
             siparis.remainingAmount = doubleValue(data["remainingAmount"])
             siparis.watchPurchasePrice = doubleValue(data["watchPurchasePrice"])
             siparis.watchRef = stringValue(data["watchRef"])

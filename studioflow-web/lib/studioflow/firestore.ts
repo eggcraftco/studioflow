@@ -566,6 +566,8 @@ export type OrderDetail = {
   deliveryTime: number;
   dueDate: Date | null;
   paidAmount: number;
+  /** Money handed back to the customer: the sum of the refund and chargeback entries in the ledger, kept by the server. */
+  refundedAmount: number;
   remainingAmount: number;
   watchPurchasePrice: number;
   paymentFee: number;
@@ -1620,6 +1622,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
         data.designLink
       ),
       paidAmount: numberValue(data.paidAmount, 0),
+      refundedAmount: numberValue(data.refundedAmount, 0),
       remainingAmount: numberValue(data.remainingAmount, 0),
       customRemainingTotal: Object.entries(
         data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
@@ -2098,6 +2101,7 @@ function mapOrderDetailSnapshot(
     deliveryTime,
     dueDate,
     paidAmount,
+    refundedAmount: numberValue(data.refundedAmount, 0),
     remainingAmount,
     watchPurchasePrice,
     paymentFee,

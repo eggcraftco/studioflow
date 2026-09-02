@@ -45,7 +45,7 @@ const index = require("../../index");
 const db = admin.firestore();
 let failures = 0;
 function pass(name) { console.log("PASS ", name); }
-function fail(name, error) { failures += 1; console.log("FAIL ", name, "-", String(error && error.message || error).replace(/\s+/g, " ").slice(0, 320)); }
+function fail(name, error) { failures += 1; const where = String(error && error.stack || "").split("\n").find((line) => line.includes("emulator.test.js")) || ""; console.log("FAIL ", name, "-", String(error && error.message || error).replace(/\s+/g, " ").slice(0, 320), where.trim()); }
 async function check(name, fn) { try { await fn(); pass(name); } catch (error) { fail(name, error); } }
 
 const COMPANY = "e2e-paypal-company"; const OWNER = COMPANY;
@@ -55,7 +55,7 @@ const rows = () => company().collection("bankTransactions");
 
 (async () => {
   await db.recursiveDelete(company());
-  await company().set({ companyName: "PayPal Co", ownerUid: OWNER });
+  await company().set({ companyName: "PayPal Co", ownerUid: OWNER, billingPlan: "pro_monthly", billingPlanName: "NivaDesk Pro", billingStatus: "active", billingProvider: "stripe" });
   paypal.transactions = [
     tx("SALE1", "T0006", "19.99", 2),
     tx("FEE1", "T0106", "-15.00", 3, { subject: "Chargeback", payer: {} }),
@@ -150,6 +150,16 @@ const rows = () => company().collection("bankTransactions");
     assert.strictEqual(order.paidAmount, 19.99); assert.strictEqual(order.refundedAmount, 0); assert.strictEqual(order.payments.some((p) => p.refund === true), false);
     const rowFree = (await rows().doc(`${accountId}_REF1`).get()).data();
     assert.strictEqual(rowFree.outgoingKind, undefined); assert.strictEqual(rowFree.linkedOrderId, "");
+    // Deleting the refund entry from the order itself (the web/Android ledger) is the same unlink: totals restored, the bank row freed.
+    const relinked = await index.bankLinkRefundToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, mode: "link", orderId: "order-refund-1", kind: "customer_refund" }, rawRequest: {} });
+    order = (await db.collection("siparisler").doc("order-refund-1").get()).data();
+    assert.strictEqual(order.refundedAmount, 19.99); assert.strictEqual(order.paidAmount, 0);
+    const deleted = await index.updateWebOrder.run({ auth, data: { companyId: COMPANY, orderId: "order-refund-1", finance: { deletePaymentId: relinked.paymentId } }, rawRequest: {} });
+    assert.strictEqual(deleted.ok, true);
+    order = (await db.collection("siparisler").doc("order-refund-1").get()).data();
+    assert.strictEqual(order.paidAmount, 19.99); assert.strictEqual(order.refundedAmount, 0); assert.strictEqual(order.payments.some((p) => p.refund === true), false);
+    const rowFreedAgain = (await rows().doc(`${accountId}_REF1`).get()).data();
+    assert.strictEqual(rowFreedAgain.outgoingKind, undefined); assert.strictEqual(rowFreedAgain.linkedOrderId, ""); assert.strictEqual(rowFreedAgain.linkedPaymentId, "");
     await db.collection("siparisler").doc("order-refund-1").delete();
   });
 

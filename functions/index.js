@@ -11848,7 +11848,7 @@ function orderCustomExpenseTotal(customFields, valueOverrides = null) {
   return orderCustomFinancialTotal(customFields, "financialExpense::", "orderExpenseItemsJSON", valueOverrides);
 }
 
-function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, email, entitlements, financialSettings }) {
+function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, email, entitlements, financialSettings, freedBankRows = null }) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
 
   const knownFields = new Set([
@@ -11965,9 +11965,24 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
       const amt = roundMoneyValue(removed.amount);
       nextPayments = nextPayments.filter((entry) => entry !== removed);
       paymentsChanged = true;
-      paidAmount = Math.max(0, roundMoneyValue(paidAmount - amt));
-      remainingAmount = roundMoneyValue(remainingAmount + amt);
-      orderValue = paidAmount + remainingAmount;
+      const bankTransactionId = cleanOrderText(removed.bankTransactionId, "", 250);
+      const rawAmount = Number(removed.amount) || 0;
+      if (removed.refund === true || (rawAmount < 0 && bankTransactionId)) {
+        // A refund or chargeback entry came from a bank row (its amount is
+        // negative, which roundMoneyValue would clamp away). It only ever lowered
+        // the paid total, so taking it out restores that total and shrinks the
+        // refunded one; the outstanding balance was never part of it. The row is
+        // handed back to Banking once the order write has committed.
+        const magnitude = roundMoneyValue(Math.abs(rawAmount));
+        paidAmount = roundMoneyValue(paidAmount + magnitude);
+        orderValue = paidAmount + remainingAmount;
+        updates.refundedAmount = Math.max(0, roundMoneyValue((Number(orderData.refundedAmount) || 0) - magnitude));
+        if (bankTransactionId && Array.isArray(freedBankRows)) freedBankRows.push({ transactionId: bankTransactionId, paymentId: targetId });
+      } else {
+        paidAmount = Math.max(0, roundMoneyValue(paidAmount - amt));
+        remainingAmount = roundMoneyValue(remainingAmount + amt);
+        orderValue = paidAmount + remainingAmount;
+      }
       pushHistoryChange(historyEntries, "Payment removed", amountHistoryValue(amt), "-", uid, email);
     }
   }
@@ -15086,6 +15101,8 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const email = String(request.auth?.token?.email || "");
   const db = admin.firestore();
   const orderRef = db.collection("siparisler").doc(orderId);
+  // Bank rows whose refund entry was deleted from the ledger in this call; freed once the order write has committed.
+  const freedBankRows = [];
   const fullEditFields = [
     "customerName",
     "designName",
@@ -15287,6 +15304,7 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     }
 
     if (canEditFullOrder && attemptedFinanceEdit) {
+      freedBankRows.length = 0; // a retried transaction starts the list again
       applyWebFinancePatch({
         patch: requestData.finance,
         orderData: {
@@ -15299,7 +15317,8 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
         uid,
         email,
         entitlements,
-        financialSettings
+        financialSettings,
+        freedBankRows
       });
     }
 
@@ -15423,6 +15442,15 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
       historyCount: historyEntries.length
     };
   });
+
+  // The ledger no longer carries the refund entry, so the bank row goes back to
+  // being an unrecorded outgoing payment — only if it still points at that entry.
+  for (const row of freedBankRows) {
+    const rowRef = db.collection("companies").doc(companyId).collection("bankTransactions").doc(row.transactionId);
+    const rowDoc = await rowRef.get();
+    if (!rowDoc.exists || cleanOrderText(rowDoc.data()?.linkedPaymentId, "", 80) !== row.paymentId) continue;
+    await rowRef.set({ outgoingKind: admin.firestore.FieldValue.delete(), linkedOrderId: "", linkedOrderLabel: "", linkedPaymentId: "", reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  }
 
   return {
     ok: true,
