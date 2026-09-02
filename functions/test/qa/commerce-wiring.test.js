@@ -35,4 +35,20 @@ function pass(name) { console.log("PASS ", name); }
   assert(/shadow: \{ enabled: false/.test(flags) && /queue: \{ enabled: false/.test(flags), "both switches default to off");
   pass("with no flag document, production behaves exactly as before Faz 2");
 }
+{
+  const at = source.indexOf("exports.retryCommerceEvent = onCall(");
+  assert(at > 0, "a dead event can be retried by hand");
+  const body = source.slice(at, source.indexOf("\n});", at));
+  assert(body.includes("requireWorkspaceForBilling(request, true)"), "owner only");
+  assert(body.includes('["dead", "retrying", "failed"].includes'), "only a dead or waiting event");
+  assert(body.includes("eventOrigin: \"retry\""), "the retry says it is one");
+  assert(/secrets: \[SHOPIFY_TOKEN_KEY\]/.test(source.slice(at, at + 200)), "it fetches from Shopify, so it declares the key");
+  console.log("PASS  a dead-letter event is retried by the owner under its own key, never by anyone else");
+}
+{
+  const at = source.indexOf("async function reconcileShopifyStore(");
+  const body = source.slice(at, source.indexOf("\n}\n", at));
+  assert(body.includes("commerce.cursors.recordPass(") && body.includes("complete = !audit.truncated && audit.failed === 0"), "the common cursor moves only on a complete pass");
+  console.log("PASS  reconciliation writes the common cursor and moves it only when the pass was complete");
+}
 console.log("\n✅ COMMERCE WIRING GEÇTİ");

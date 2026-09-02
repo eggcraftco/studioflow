@@ -5730,7 +5730,9 @@ const commerce = {
   worker: require("./commerce/worker"),
   events: require("./commerce/events"),
   capabilities: require("./commerce/capabilities"),
-  shopify: require("./commerce/adapters/shopify")
+  shopify: require("./commerce/adapters/shopify"),
+  cursors: require("./commerce/cursors"),
+  health: require("./commerce/health")
 };
 const { createEtsyConnectFunctions } = require("./etsyConnect");
 // Etsy's callback URL is registered with Etsy itself and cannot drift: it is
@@ -30505,6 +30507,11 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
         order_id: outcome.nivadeskOrderId || null, finished_at: new Date().toISOString()
       }, { merge: true });
     } catch (error) { console.warn("commerce event close failed:", error?.message || error); }
+    try {
+      const db = admin.firestore();
+      await commerce.health.touchHealth(db, { provider: "shopify", connectionId: shop, companyId: String(store.companyId || ""), kind: "webhook", FieldValue: admin.firestore.FieldValue });
+      if (outcome.status === "ok") await commerce.health.touchHealth(db, { provider: "shopify", connectionId: shop, companyId: String(store.companyId || ""), kind: "success", FieldValue: admin.firestore.FieldValue });
+    } catch (error) { console.warn("commerce health (webhook) failed:", error?.message || error); }
     res.status(200).json({ ok: true, result: outcome.status });
   } catch (error) {
     console.error("shopifyAppWebhook error:", error?.message || error);
@@ -30954,6 +30961,19 @@ async function reconcileShopifyStore(shop, store, options = {}) {
       runs: admin.firestore.FieldValue.increment(1)
     }
   }, { merge: true });
+  // Faz 2: the common cursor (moves only on a complete pass) and the connection's
+  // order freshness, written beside the store's own reconcile map for now.
+  try {
+    const complete = !audit.truncated && audit.failed === 0;
+    await commerce.cursors.recordPass(admin.firestore(), {
+      provider: "shopify", connectionId: shop, companyId, fromMs, toMs, complete,
+      scanned: audit.scanned, applied: audit.created + audit.updated + audit.cancelled + audit.dispatched, failed: audit.failed,
+      truncated: audit.truncated, error: audit.failed ? `${audit.failed} order(s) failed` : null, now
+    });
+    await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: shop, companyId, kind: complete ? "success" : "attempt", now, FieldValue: admin.firestore.FieldValue });
+  } catch (error) {
+    console.warn("commerce cursor/health (reconcile) failed:", error?.message || error);
+  }
   if (audit.failed) {
     await writeShopifySyncRow(shop, {
       topic: "reconcile", status: "failed", error: `${audit.failed} order(s) failed to apply`,
@@ -31017,10 +31037,83 @@ exports.commerceEventWorker = onTaskDispatched({
     return;
   }
   const result = await processShopifyCommerceTask(task);
+  try {
+    const kind = result.status === "applied" ? "success" : (result.status === "retrying" ? "retry_scheduled" : (result.status === "dead" ? "dead" : "attempt"));
+    await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId: task.companyId, kind, FieldValue: admin.firestore.FieldValue });
+    if (Number(task.attempt || 1) > 1 && result.status !== "retrying") {
+      await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId: task.companyId, kind: "retry_cleared", FieldValue: admin.firestore.FieldValue });
+    }
+  } catch (error) { console.warn("commerce health (worker) failed:", error?.message || error); }
   if (result.status === "retrying" && result.nextRetryInMs) {
     await enqueueCommerceEvent({ ...task, attempt: Number(task.attempt || 1) + 1 }, result.nextRetryInMs / 1000);
   }
 });
+
+// RETRY-004 — a dead or waiting event, run again by the owner, under the same
+// idempotency key (RETRY-005): the engine's duplicate/noop verdicts make a
+// second application harmless. Orders are the user-safe class; nothing else
+// is queued yet.
+exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const eventKey = String(request.data?.eventKey || "").trim();
+  if (!eventKey) throw new HttpsError("invalid-argument", "eventKey is required.");
+  const ref = commerce.worker.eventRef(admin.firestore(), eventKey);
+  const snap = await ref.get();
+  const record = snap.exists ? (snap.data() || {}) : null;
+  if (!record || String(record.company_id || "") !== companyId) throw new HttpsError("not-found", "No such event in this workspace.");
+  if (!["dead", "retrying", "failed"].includes(String(record.status || ""))) {
+    throw new HttpsError("failed-precondition", `This event is ${record.status}; only a dead or waiting event can be retried.`);
+  }
+  if (record.provider !== "shopify") throw new HttpsError("failed-precondition", "Only Shopify events can be retried here yet.");
+  const task = {
+    key: eventKey, provider: record.provider, connectionId: record.connection_id, companyId, externalId: record.external_id,
+    eventType: record.event_type, attempt: 1, eventOrigin: "retry", correlationId: record.correlation_id || undefined
+  };
+  const result = await processShopifyCommerceTask(task);
+  try {
+    const kind = result.status === "applied" ? "success" : (result.status === "dead" ? "dead" : "attempt");
+    await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId, kind, FieldValue: admin.firestore.FieldValue });
+  } catch { /* best-effort */ }
+  return { ok: true, status: result.status, result: result.outcome?.result || null, orderId: result.outcome?.orderId || null, errorClass: result.errorClass || null, message: result.safeMessage || null };
+});
+
+// OBS-003/004 — what the clients render on Sync Health: freshness per entity
+// per connection, with the numbers behind it, plus the provider's capabilities.
+exports.getCommerceHealth = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const db = admin.firestore();
+  const snap = await db.collection(commerce.health.COLLECTION).where("companyId", "==", companyId).limit(50).get();
+  const now = Date.now();
+  const connections = snap.docs.map((doc) => {
+    const data = doc.data() || {};
+    return {
+      provider: data.provider, connectionId: data.connectionId,
+      health: commerce.health.healthView(data, data.provider, { now }),
+      capabilities: commerce.capabilities.getCapabilities(data.provider)
+    };
+  });
+  return { ok: true, connections };
+});
+
+// The activity behind the health: the latest events for the workspace, dead ones first when asked.
+exports.listCommerceEvents = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const status = String(request.data?.status || "").trim();
+  const limit = Math.min(200, Math.max(1, Number(request.data?.limit) || 50));
+  let query = admin.firestore().collection(commerce.worker.EVENT_COLLECTION).where("company_id", "==", companyId);
+  if (status) query = query.where("status", "==", status);
+  const snap = await query.limit(200).get();
+  const events = snap.docs.map((doc) => {
+    const d = doc.data() || {};
+    return {
+      key: d.idempotency_key, provider: d.provider, connectionId: d.connection_id, externalId: d.external_id, eventType: d.event_type,
+      source: d.source, status: d.status, attempt: d.attempt, errorClass: d.error_class, message: d.safe_message,
+      orderId: d.order_id || null, startedAt: d.started_at, finishedAt: d.finished_at, nextRetryAt: d.next_retry_at, correlationId: d.correlation_id
+    };
+  }).sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || ""))).slice(0, limit);
+  return { ok: true, events };
+});
+
 
 // ARCH-004 — the UI reads what a provider can do from here, not from `if shopify`.
 exports.getCommerceCapabilities = onCall({ region: "europe-west2" }, async (request) => {

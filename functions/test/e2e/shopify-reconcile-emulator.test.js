@@ -64,6 +64,8 @@ async function wipe() {
   }
   await db.recursiveDelete(storeRef());
   await db.recursiveDelete(db.collection("companies").doc(COMPANY));
+  await db.collection("commerceCursors").doc(`shopify__${SHOP}__order`).delete();
+  await db.collection("commerceHealth").doc(`shopify__${SHOP}`).delete();
 }
 async function seed() {
   await db.collection("companies").doc(COMPANY).set({ companyName: "Recon Co", ownerUid: COMPANY, ...PAID });
@@ -184,9 +186,16 @@ async function seed() {
   });
 
   await check("a page limit is reported as truncated so the next pass, with its overlap, finishes the job", async () => {
+    const cursorBefore = (await db.collection("commerceCursors").doc(`shopify__${SHOP}__order`).get()).data();
+    assert.ok(cursorBefore && cursorBefore.watermarkMs, "the common cursor was written by the complete passes above");
     const { audit } = await pass_([order(506)], { now: T0 + 160 * 60 * 1000, truncated: true });
     assert.strictEqual(audit.truncated, true);
     assert.strictEqual((await storeData()).reconcile.truncated, true);
+    const cursorAfter = (await db.collection("commerceCursors").doc(`shopify__${SHOP}__order`).get()).data();
+    assert.strictEqual(cursorAfter.watermarkMs, cursorBefore.watermarkMs, "a truncated pass does not move the common cursor (REC-003)");
+    assert.strictEqual(cursorAfter.lastPassTruncated, true);
+    const healthDoc = (await db.collection("commerceHealth").doc(`shopify__${SHOP}`).get()).data();
+    assert.ok(healthDoc && healthDoc.orders && healthDoc.orders.lastSuccessAtMs, "order freshness recorded by the complete passes");
   });
 
   await check("the merchant's hand-run audit looks back seven days with a wider page budget", async () => {
