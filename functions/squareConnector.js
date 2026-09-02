@@ -32,7 +32,8 @@ const cursors = require("./commerce/cursors");
 const health = require("./commerce/health");
 const events = require("./commerce/events");
 const worker = require("./commerce/worker");
-const { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund } = require("./commerce/adapters/square");
+const { normalizeSquareOrder, normalizeSquarePayment, normalizeSquareRefund, squareMoneyToDecimal } = require("./commerce/adapters/square");
+const { sumDecimal } = require("./commerce/money");
 const { verifySquareSignature } = require("./commerce/square/signature");
 const squareOAuth = require("./commerce/square/oauth");
 const { createSquareClient, createSquareEventsClient } = require("./commerce/square/client");
@@ -42,6 +43,8 @@ const STATE_COLLECTION = "squareConnectStates";
 const PAYMENTS_SUBCOLLECTION = "squarePayments";
 const REFUNDS_SUBCOLLECTION = "squareRefunds";
 const SALES_SUBCOLLECTION = "squareSales";
+const PAYOUTS_SUBCOLLECTION = "squarePayouts";
+const PAYOUT_PASS_MIN_INTERVAL_MS = 60 * 60 * 1000;   // §14.3: payouts every 1–6 hours is plenty
 const STATE_TTL_MS = 10 * 60 * 1000;
 const DELIVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_REFRESH_AHEAD_MS = 3 * 24 * 60 * 60 * 1000;
@@ -553,6 +556,79 @@ function createSquareConnectorFunctions(deps) {
     return { ...audit, complete };
   }
 
+  /** SQ-POUT-001..005 — a payout is its own entity, with every entry page taken, gross/fee/net kept in minor-unit-derived decimals, and a version that only moves forward. */
+  async function recordPayout(ref, data, client, payout) {
+    const companyId = String(data.companyId || "");
+    const id = safeIdPart(payout?.id);
+    if (!id) return { result: "invalid" };
+    const payoutRef = db().collection("companies").doc(companyId).collection(PAYOUTS_SUBCOLLECTION).doc(id);
+    const before = await payoutRef.get();
+    const prior = before.exists ? (before.data() || {}) : null;
+    const version = Number(payout?.version) || 0;
+    if (prior && Number(prior.version || 0) > version) return { result: "stale", payoutId: id };
+    const entries = [];
+    let cursor = null; let pages = 0;
+    for (;;) {
+      const page = await client.listPayoutEntries(String(payout.id), { cursor });
+      pages += 1;
+      for (const e of page.entries) {
+        entries.push({
+          id: String(e?.id || ""), type: String(e?.type || "").toUpperCase(), effectiveAt: String(e?.effective_at || "") || null,
+          gross: squareMoneyToDecimal(e?.gross_amount_money), fee: squareMoneyToDecimal(e?.fee_amount_money), net: squareMoneyToDecimal(e?.net_amount_money),
+          currency: String(e?.net_amount_money?.currency || e?.gross_amount_money?.currency || "") || null,
+          sourceType: e?.type_charge_details ? "payment" : (e?.type_refund_details ? "refund" : (e?.type_app_fee_revenue_details || e?.type_app_fee_refund_details ? "app_fee" : "other")),
+          sourceExternalId: String(e?.type_charge_details?.payment_id || e?.type_refund_details?.refund_id || e?.type_refund_details?.payment_id || "") || null
+        });
+      }
+      if (!page.cursor || page.entries.length === 0) break;
+      if (pages >= 20) { const err = new Error("square_payout_entries_truncated"); err.errorClass = "transient"; throw err; }   // SQ-POUT-002: all pages or nothing
+      cursor = page.cursor;
+    }
+    const totals = {
+      gross: sumDecimal(entries.map((e) => e.gross)), fee: sumDecimal(entries.map((e) => e.fee)), net: sumDecimal(entries.map((e) => e.net)),
+      charges: sumDecimal(entries.filter((e) => e.type === "CHARGE").map((e) => e.net)), refunds: sumDecimal(entries.filter((e) => e.type === "REFUND").map((e) => e.net)),
+      adjustments: sumDecimal(entries.filter((e) => !["CHARGE", "REFUND"].includes(e.type)).map((e) => e.net))
+    };
+    const amount = squareMoneyToDecimal(payout?.amount_money);
+    await payoutRef.set({
+      provider: "square", connectionId: ref.id, companyId, externalId: String(payout.id), status: String(payout?.status || "").toUpperCase() || "UNKNOWN",
+      amount, currency: String(payout?.amount_money?.currency || "") || null, locationId: String(payout?.location_id || "") || null,
+      arrivalDate: String(payout?.arrival_date || "") || null, endToEndId: String(payout?.end_to_end_id || "") || null, payoutType: String(payout?.type || "") || null,
+      destinationType: String(payout?.destination?.type || "") || null, version, entryCount: entries.length, totals,
+      reconciled: totals.net !== null && amount !== null && Number(totals.net) === Number(amount),   // SQ-TEST-016
+      bankMatch: prior?.bankMatch || null,   // Faz 5 writes here; a re-sync never clears a match
+      externalCreatedAt: String(payout?.created_at || "") || null, externalUpdatedAt: String(payout?.updated_at || "") || null, updatedAtMs: now(), ...(prior ? {} : { createdAtMs: now() })
+    }, { merge: true });
+    const batch = db().batch();
+    for (const e of entries.slice(0, 450)) batch.set(payoutRef.collection("entries").doc(safeIdPart(e.id) || crypto.randomUUID()), { ...e, updatedAtMs: now() }, { merge: true });
+    await batch.commit();
+    return { result: prior ? "updated" : "created", payoutId: id, entries: entries.length, reconciled: totals.net !== null && amount !== null && Number(totals.net) === Number(amount) };
+  }
+
+  async function reconcilePayouts(ref, data, client, { force, lookbackMs, maxPages }) {
+    const companyId = String(data.companyId || "");
+    const cursor = await cursors.readCursor(db(), "square", ref.id, "payout");
+    if (!force && cursor && now() - Number(cursor.lastPassAtMs || 0) < PAYOUT_PASS_MIN_INTERVAL_MS) return { scanned: 0, recorded: 0, failed: 0, complete: true, skipped: "interval" };
+    const window = cursors.cursorWindow(cursor, now(), { force, lookbackMs: lookbackMs || 7 * 24 * 60 * 60 * 1000, maxWindowMs: 7 * 24 * 60 * 60 * 1000 });
+    const audit = { scanned: 0, recorded: 0, unreconciled: 0, failed: 0, truncated: false };
+    let pageCursor = null; let pages = 0;
+    for (;;) {
+      const page = await client.listPayouts({ beginTimeIso: new Date(window.fromMs).toISOString(), endTimeIso: new Date(window.toMs).toISOString(), cursor: pageCursor });
+      pages += 1;
+      for (const payout of page.payouts) {
+        audit.scanned += 1;
+        try { const outcome = await recordPayout(ref, data, client, payout); if (["created", "updated"].includes(outcome.result)) audit.recorded += 1; if (outcome.reconciled === false) audit.unreconciled += 1; }
+        catch (error) { audit.failed += 1; console.warn("square reconcile: payout failed", ref.id, payout?.id, error?.message || error); }
+      }
+      if (!page.cursor || page.payouts.length === 0) break;
+      if (pages >= maxPages) { audit.truncated = true; break; }
+      pageCursor = page.cursor;
+    }
+    const complete = !audit.truncated && audit.failed === 0;
+    await cursors.recordPass(db(), { provider: "square", connectionId: ref.id, entityType: "payout", companyId, fromMs: window.fromMs, toMs: window.toMs, complete, scanned: audit.scanned, applied: audit.recorded, failed: audit.failed, truncated: audit.truncated, now: now() });
+    return { ...audit, complete };
+  }
+
   let eventsEnabledAtMs = 0;
   /** SQ-REC-001..003 — the Events API pass: what Square told the application in the window, that we may not have heard. */
   async function recoverEvents(ref, data, client, { force, lookbackMs, maxPages }) {
@@ -611,13 +687,15 @@ function createSquareConnectorFunctions(deps) {
     const orders = await reconcileOrders(ref, data, client, { force, lookbackMs, maxPages, eventOrigin });
     let payments = { complete: true, scanned: 0, recorded: 0, unmatched: 0, failed: 0 };
     try { payments = await reconcilePayments(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { payments = { complete: false, scanned: 0, recorded: 0, unmatched: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
+    let payouts = { complete: true, scanned: 0, recorded: 0, unreconciled: 0, failed: 0 };
+    try { payouts = await reconcilePayouts(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { payouts = { complete: false, scanned: 0, recorded: 0, unreconciled: 0, failed: 1, error: String(error?.message || error).slice(0, 120) }; }
     let recovered = { complete: true, configured: false, scanned: 0, applied: 0 };
     try { recovered = await recoverEvents(ref, data, client, { force, lookbackMs, maxPages }); } catch (error) { recovered = { complete: false, configured: true, scanned: 0, applied: 0, error: String(error?.message || error).slice(0, 120) }; }
     const complete = orders.complete && payments.complete;
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, kind: orders.complete ? "success" : "attempt", now: now(), FieldValue });
     await health.touchHealth(db(), { provider: "square", connectionId: ref.id, companyId, entity: "finance", kind: payments.complete ? "success" : "attempt", now: now(), FieldValue });
-    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: orders.scanned, created: orders.created, updated: orders.updated, skipped: orders.skipped, failed: orders.failed }, payments: { scanned: payments.scanned, recorded: payments.recorded, unmatched: payments.unmatched, failed: payments.failed }, events: { configured: recovered.configured, scanned: recovered.scanned, applied: recovered.applied }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return { ...orders, payments, events: recovered, complete, locationsHealthy };
+    await ref.set({ lastSyncAtMs: now(), ...(complete ? { lastSuccessAtMs: now() } : {}), lastErrorCode: locationsHealthy ? "" : "location_inactive", locationsHealthy, lastReconcile: { orders: { scanned: orders.scanned, created: orders.created, updated: orders.updated, skipped: orders.skipped, failed: orders.failed }, payments: { scanned: payments.scanned, recorded: payments.recorded, unmatched: payments.unmatched, failed: payments.failed }, events: { configured: recovered.configured, scanned: recovered.scanned, applied: recovered.applied }, payouts: { scanned: payouts.scanned, recorded: payouts.recorded, unreconciled: payouts.unreconciled, failed: payouts.failed }, atMs: now() }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { ...orders, payments, payouts, events: recovered, complete, locationsHealthy };
   }
 
   const reconcileSquareConnections = onSchedule
@@ -716,11 +794,45 @@ function createSquareConnectorFunctions(deps) {
     return { ok: true, payments: payments.docs.map(strip), refunds: refunds.docs.map(strip) };
   });
 
+  /** SQ-POUT-009 — what the bank screen and the Square screen show: each payout with its gross/refunds/fees/net breakdown. */
+  const listSquarePayouts = onCall({ region: "europe-west2" }, async (request) => {
+    const { companyId } = await requireWorkspaceMember(request);
+    const limit = Math.min(200, Math.max(1, Number(request.data?.limit) || 50));
+    const snap = await db().collection("companies").doc(companyId).collection(PAYOUTS_SUBCOLLECTION).orderBy("externalCreatedAt", "desc").limit(limit).get();
+    return { ok: true, payouts: snap.docs.map((d) => { const r = d.data() || {}; return { id: d.id, externalId: r.externalId, status: r.status, amount: r.amount, currency: r.currency, locationId: r.locationId, arrivalDate: r.arrivalDate, endToEndId: r.endToEndId, entryCount: r.entryCount || 0, totals: r.totals || {}, reconciled: r.reconciled === true, bankMatch: r.bankMatch || null, createdAt: r.externalCreatedAt || null }; }) };
+  });
+
+  /** §10.5 Missing Order Audit — Square's orders in the window against what NivaDesk holds: as an order, as a finance-only sale, or not at all. */
+  const auditSquareOrders = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+    const { companyId } = await requireWorkspaceOwner(request);
+    const { ref, data } = await loadOwnedConnection(companyId, request.data?.connectionId);
+    const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 365);
+    const client = await clientFor(ref, data);
+    const settings = settingsOf(data);
+    const report = { days, atSquare: 0, asOrders: 0, financeOnly: 0, missing: 0, notSelected: 0, truncated: false, missingIds: [], financeOnlyIds: [] };
+    for await (const { order, truncated } of importOrders(client, data, days, IMPORT_MAX_PAGES)) {
+      if (truncated) { report.truncated = true; continue; }
+      if (String(order?.state || "").toUpperCase() === "DRAFT") continue;
+      report.atSquare += 1;
+      const externalId = String(order?.id || "");
+      const orderDoc = await orderDocRef(squareOrderDocId(companyId, externalId)).get();
+      if (orderDoc.exists) { report.asOrders += 1; continue; }
+      const sale = await db().collection("companies").doc(companyId).collection(SALES_SUBCOLLECTION).doc(safeIdPart(externalId)).get();
+      const env2 = normalizeSquareOrder(order, { connectionId: ref.id, environment: env(), eventOrigin: "reconcile" });
+      const shouldBeOrder = settings.importPolicy === "all" || (settings.importPolicy === "fulfillment_only" && env2.source.provider_metadata.has_fulfillment);
+      if (sale.exists && !shouldBeOrder) { report.financeOnly += 1; if (report.financeOnlyIds.length < 50) report.financeOnlyIds.push(externalId); continue; }
+      if (!settings.importSources.includes(env2.source.provider_metadata.square_source)) { report.notSelected += 1; continue; }
+      report.missing += 1;
+      if (report.missingIds.length < 50) report.missingIds.push(externalId);
+    }
+    return { ok: true, ...report };
+  });
+
   return {
     beginSquareConnect, squareOAuthCallback, getSquareConnections, updateSquareConnectionSettings, disconnectSquare,
-    squareWebhook, reconcileSquareConnections, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched,
-    _internal: { applySquareOrder, recordPayment, recordRefund, handleEntityEvent, entityOfEvent, reconcileConnection, processSquareCommerceTask, refreshTokenWithLock, clientFor, publicView, settingsOf, connectionDocId, squareOrderDocId, notificationUrl, CONNECTION_COLLECTION, STATE_COLLECTION, PAYMENTS_SUBCOLLECTION, REFUNDS_SUBCOLLECTION, SALES_SUBCOLLECTION, IMPORT_POLICIES, SQUARE_SOURCES }
+    squareWebhook, reconcileSquareConnections, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders,
+    _internal: { recordPayout, reconcilePayouts, PAYOUTS_SUBCOLLECTION, applySquareOrder, recordPayment, recordRefund, handleEntityEvent, entityOfEvent, reconcileConnection, processSquareCommerceTask, refreshTokenWithLock, clientFor, publicView, settingsOf, connectionDocId, squareOrderDocId, notificationUrl, CONNECTION_COLLECTION, STATE_COLLECTION, PAYMENTS_SUBCOLLECTION, REFUNDS_SUBCOLLECTION, SALES_SUBCOLLECTION, IMPORT_POLICIES, SQUARE_SOURCES }
   };
 }
 
-module.exports = { createSquareConnectorFunctions, CONNECTION_COLLECTION, STATE_COLLECTION, PAYMENTS_SUBCOLLECTION, REFUNDS_SUBCOLLECTION, SALES_SUBCOLLECTION, connectionDocId, squareOrderDocId, IMPORT_POLICIES, SQUARE_SOURCES };
+module.exports = { createSquareConnectorFunctions, CONNECTION_COLLECTION, STATE_COLLECTION, PAYMENTS_SUBCOLLECTION, REFUNDS_SUBCOLLECTION, SALES_SUBCOLLECTION, PAYOUTS_SUBCOLLECTION, connectionDocId, squareOrderDocId, IMPORT_POLICIES, SQUARE_SOURCES };

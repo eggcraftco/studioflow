@@ -502,8 +502,36 @@ function createWooConnectorFunctions(deps) {
     return { ok: true, days, ...counters };
   });
 
+  /** §10.5 Missing Order Audit — the store's orders in the window against what NivaDesk holds. */
+  const auditWooOrders = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+    const { companyId } = await requireWorkspaceOwner(request);
+    const { ref, data } = await loadOwnedConnection(companyId, request.data?.connectionId);
+    const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 365);
+    const client = clientFor(data);
+    const afterIso = new Date(now() - days * 86400000).toISOString();
+    const settings = { importUnpaid: data.settings?.importUnpaid === true };
+    const report = { days, atStore: 0, asOrders: 0, mergedAsPayments: 0, unpaidSkipped: 0, cancelled: 0, missing: 0, truncated: false, missingIds: [] };
+    for (let page = 1; page <= IMPORT_MAX_PAGES; page += 1) {
+      const result = await client.listOrders({ afterIso, page, perPage: 50 });
+      for (const order of result.orders) {
+        report.atStore += 1;
+        const externalId = String(order?.id || "");
+        if ((await orderDocRef(wooOrderDocId(companyId, externalId)).get()).exists) { report.asOrders += 1; continue; }
+        if ((await db().collection("companies").doc(companyId).collection("wooMergedPayments").doc(safeIdPart(externalId)).get()).exists) { report.mergedAsPayments += 1; continue; }
+        const env = normalizeWooOrder(order, { connectionId: ref.id, siteUrl: data.siteUrl, storeName: data.storeName, eventOrigin: "reconcile" });
+        if (env.order.platform_status === "cancelled") { report.cancelled += 1; continue; }
+        if (!settings.importUnpaid && !["paid", "partially_refunded", "refunded"].includes(env.order.payment_status)) { report.unpaidSkipped += 1; continue; }
+        report.missing += 1;
+        if (report.missingIds.length < 50) report.missingIds.push(externalId);
+      }
+      if (page >= result.totalPages || result.orders.length === 0) break;
+      if (page === IMPORT_MAX_PAGES && result.totalPages > IMPORT_MAX_PAGES) report.truncated = true;
+    }
+    return { ok: true, ...report };
+  });
+
   return {
-    beginWooConnect, wooAuthCallback, finishWooConnect, getWooConnections, disconnectWooShop,
+    beginWooConnect, wooAuthCallback, finishWooConnect, getWooConnections, disconnectWooShop, auditWooOrders,
     wooConnectorWebhook, reconcileWooConnections, syncWooNow, recreateWooWebhooks, previewWooImport, runWooImport,
     _internal: { applyWooOrder, applyWooCustomer, reconcileConnection, processWooCommerceTask, publicView, connectionDocId, ensureWebhooks, findInstallmentCandidate, CONNECTION_COLLECTION, STATE_COLLECTION, WEBHOOK_TOPICS }
   };

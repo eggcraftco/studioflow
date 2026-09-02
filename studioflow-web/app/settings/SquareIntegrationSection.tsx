@@ -11,8 +11,8 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
-  beginSquareConnect, getSquareConnections, updateSquareConnectionSettings, disconnectSquare, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched,
-  type SquareConnection, type SquareImportPolicy, type SquareImportPreview, type SquareImportResult, type SquareUnmatchedRow
+  beginSquareConnect, getSquareConnections, updateSquareConnectionSettings, disconnectSquare, syncSquareNow, previewSquareImport, runSquareImport, listSquareUnmatched, listSquarePayouts, auditSquareOrders,
+  type SquareConnection, type SquareImportPolicy, type SquareImportPreview, type SquareImportResult, type SquareUnmatchedRow, type SquarePayoutRow, type SquareAuditReport
 } from "@/lib/studioflow/square";
 
 type Props = { workspace: WorkspaceContext; language?: string };
@@ -45,6 +45,8 @@ export function SquareIntegrationSection({ workspace, language = "English" }: Pr
   const [preview, setPreview] = useState<SquareImportPreview | null>(null);
   const [imported, setImported] = useState<SquareImportResult | null>(null);
   const [unmatched, setUnmatched] = useState<{ payments: SquareUnmatchedRow[]; refunds: SquareUnmatchedRow[] } | null>(null);
+  const [payouts, setPayouts] = useState<SquarePayoutRow[] | null>(null);
+  const [audit, setAudit] = useState<SquareAuditReport | null>(null);
   const connection = connections.find((row) => row.status === "connected") || connections.find((row) => row.status !== "disconnected") || connections[0] || null;
 
   const refresh = useCallback(async (keepError = false) => {
@@ -272,6 +274,53 @@ export function SquareIntegrationSection({ workspace, language = "English" }: Pr
           )
         ) : null}
       </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="orders" eyebrow={t("Finance")} title={t("Square payouts")} />
+        <p className="muted-copy">{t("What Square sent to your bank, explained: gross sales, refunds, fees and adjustments per payout. A payout is not a payment; the two are kept apart.")}</p>
+        <div className="settings-action-row">
+          <button type="button" className="button secondary" disabled={busy === "payouts"} onClick={() => guard("payouts", async () => setPayouts((await listSquarePayouts(companyId)).payouts))}>{t("Load")}</button>
+        </div>
+        {payouts ? (
+          payouts.length === 0 ? <p className="muted-copy">{t("No payouts yet.")}</p> : (
+            <div style={{ overflowX: "auto", marginTop: 8 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead><tr>{[t("Date"), t("Status"), t("Gross"), t("Refunds"), t("Fees"), t("Net"), t("Bank")].map((h) => <th key={h} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>{h}</th>)}</tr></thead>
+                <tbody>{payouts.map((row) => (
+                  <tr key={row.id}>
+                    <td style={{ padding: "6px 8px" }}>{row.arrivalDate || (row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—")}</td>
+                    <td style={{ padding: "6px 8px" }}>{row.status}{row.reconciled ? "" : ` · ${t("Needs attention")}`}</td>
+                    <td style={{ padding: "6px 8px" }}>{row.totals.gross ?? "—"}</td><td style={{ padding: "6px 8px" }}>{row.totals.refunds ?? "—"}</td><td style={{ padding: "6px 8px" }}>{row.totals.fee ?? "—"}</td>
+                    <td style={{ padding: "6px 8px" }}><strong>{row.amount ?? row.totals.net ?? "—"} {row.currency || ""}</strong></td>
+                    <td style={{ padding: "6px 8px" }}>{row.bankMatch?.transactionId ? t("Matched") : t("Not matched")}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+          )
+        ) : null}
+      </section>
+
+      {isOwner ? (
+        <section className="card app-card quick-reply-settings-card">
+          <CardTitle icon="check" eyebrow={t("Audit")} title={t("Missing order audit")} />
+          <p className="muted-copy">{t("Compares Square's orders from the chosen days with what NivaDesk holds: as an order, as a finance-only sale, or not at all.")}</p>
+          <div className="settings-action-row">
+            <button type="button" className="button secondary" disabled={busy === "audit" || connection.status !== "connected"} onClick={() => guard("audit", async () => setAudit(await auditSquareOrders(companyId, connection.id, days)))}>{busy === "audit" ? t("Checking…") : t("Run audit")}</button>
+            <span className="muted-copy">{t("Days")}: {days}</span>
+          </div>
+          {audit ? (
+            <div style={{ marginTop: 8 }}>
+              <p className="muted-copy">{t("At Square")}: {audit.atSquare} · {t("As orders")}: {audit.asOrders} · {t("Finance only")}: {audit.financeOnly} · {t("Missing")}: {audit.missing} · {t("Not selected")}: {audit.notSelected}{audit.truncated ? ` · ${t("Truncated")}` : ""}</p>
+              {audit.missing === 0 ? <p className="success-copy">{t("Nothing is missing.")}</p> : (
+                <>
+                  <p className="layout-error">{t("These Square orders are not in NivaDesk. Sync now or Import brings them in.")}</p>
+                  <p className="muted-copy" style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{audit.missingIds.join(", ")}</p>
+                </>
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {isOwner ? (
         <section className="card app-card quick-reply-settings-card">

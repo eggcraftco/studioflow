@@ -25,6 +25,8 @@ export type SquareSyncResult = {
   payments: { scanned: number; recorded: number; unmatched: number; failed: number; complete: boolean };
   events: { configured: boolean; scanned: number; applied: number; complete: boolean };
 };
+export type SquarePayoutRow = { id: string; externalId: string; status: string; amount: string | null; currency: string | null; locationId: string | null; arrivalDate: string | null; endToEndId: string | null; entryCount: number; totals: { gross?: string | null; fee?: string | null; net?: string | null; charges?: string | null; refunds?: string | null; adjustments?: string | null }; reconciled: boolean; bankMatch: { transactionId?: string; confidence?: string } | null; createdAt: string | null };
+export type SquareAuditReport = { ok: boolean; days: number; atSquare: number; asOrders: number; financeOnly: number; missing: number; notSelected: number; truncated: boolean; missingIds: string[]; financeOnlyIds: string[] };
 export type SquareUnmatchedRow = { id: string; externalId: string; orderExternalId: string | null; paymentExternalId: string | null; status: string; amount: string | null; total: string | null; currency: string | null; sourceType: string | null; cardBrand: string | null; last4: string | null; locationId: string | null; receiptUrl: string | null; at: string | null };
 
 const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, name);
@@ -52,4 +54,10 @@ export async function runSquareImport(companyId: string, connectionId: string, d
 }
 export async function listSquareUnmatched(companyId: string) {
   return (await call<{ companyId: string }, { ok: boolean; payments: SquareUnmatchedRow[]; refunds: SquareUnmatchedRow[] }>("listSquareUnmatched")({ companyId })).data;
+}
+export async function listSquarePayouts(companyId: string, limit = 50) {
+  return (await call<{ companyId: string; limit: number }, { ok: boolean; payouts: SquarePayoutRow[] }>("listSquarePayouts")({ companyId, limit })).data;
+}
+export async function auditSquareOrders(companyId: string, connectionId: string, days: number) {
+  return (await call<{ companyId: string; connectionId: string; days: number }, SquareAuditReport>("auditSquareOrders")({ companyId, connectionId, days })).data;
 }

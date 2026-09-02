@@ -2271,6 +2271,11 @@ struct SiparisDetayView: View {
                 language: seciliDil,
                 workspaceCurrency: seciliParaBirimi
             )
+            ChannelOrderSourceStrip(
+                customFields: siparis.customFields ?? [:],
+                designLink: siparis.designLink,
+                language: seciliDil
+            )
 
             if isPhoneLayout {
                 phoneCalismaAlani
@@ -17715,6 +17720,62 @@ struct PickerField: View {
 // store · order no · payment · original amount on currency mismatch ·
 // fulfilment · deep link into the Shopify admin. Separate struct on purpose —
 // deeply nested bodies overflow the stack on real iPhones.
+// UX-010/011/012 — the provider-agnostic strip for orders that arrived from a
+// connected channel (Square, WooCommerce, Etsy): the platform's own number,
+// status, source and total, read from the provider's custom fields, with one
+// safe link to open it at the provider. Never a workflow field.
+struct ChannelOrderSourceStrip: View {
+    let customFields: [String: String]
+    let designLink: String
+    let language: String
+
+    private static let sources = ["Square", "WooCommerce", "Etsy"]
+    private var source: String { (customFields["Source"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    private func field(_ suffix: String) -> String { (customFields["\(source) \(suffix)"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var link: URL? {
+        let raw = designLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard raw.hasPrefix("http://") || raw.hasPrefix("https://") else { return nil }
+        return URL(string: raw)
+    }
+
+    var body: some View {
+        if Self.sources.contains(source) {
+            let number = field("Order Number").isEmpty ? field("Receipt ID") : field("Order Number")
+            let status = field("Status")
+            let total = field("Total")
+            let currency = field("Currency").uppercased()
+            let location = field("Location")
+            let sourceName = field("Source")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Text(source)
+                        .font(.system(size: 10.5, weight: .bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.blue.opacity(0.14))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                    if !number.isEmpty { Text("#\(number)").font(.system(size: 12, weight: .semibold)).foregroundColor(.primary) }
+                    if !sourceName.isEmpty && sourceName != source { Text("· \(sourceName)").font(.system(size: 12)).foregroundColor(.secondary) }
+                    if !location.isEmpty { Text("· \(t("Location", lang: language)): \(location)").font(.system(size: 12)).foregroundColor(.secondary) }
+                    if !status.isEmpty { Text("· \(t("Platform status", lang: language)): \(status)").font(.system(size: 12)).foregroundColor(.secondary) }
+                    if !total.isEmpty { Text("· \(total) \(currency)").font(.system(size: 12, weight: .semibold)).foregroundColor(.primary) }
+                    if let url = link {
+                        Link(destination: url) {
+                            Text("\(t("Open in", lang: language)) \(source) ↗")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+            }
+            .background(Color.blue.opacity(0.06))
+        }
+    }
+}
+
 struct ShopifyOrderSourceStrip: View {
     let customFields: [String: String]
     let isDispatched: Bool

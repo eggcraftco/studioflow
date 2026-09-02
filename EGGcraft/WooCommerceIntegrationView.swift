@@ -33,6 +33,7 @@ struct WooCommerceIntegrationView: View {
     @State private var confirmDisconnect = false
     @State private var days = 30
     @State private var previewText = ""
+    @State private var auditText = ""
 
     private func tr(_ text: String) -> String { t(text, lang: language) }
     private var companyId: String { firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -132,6 +133,20 @@ struct WooCommerceIntegrationView: View {
                     }
                     if !previewText.isEmpty {
                         Text(previewText).font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            SettingsCard(title: tr("Missing order audit"), iconName: "checklist") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(tr("Compares the store's orders from the chosen days with what NivaDesk holds: as an order, joined to an order as a payment, skipped as unpaid, or missing."))
+                        .font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        Button(busy == "audit" ? tr("Checking…") : tr("Run audit")) { runAudit(live) }.buttonStyle(.bordered).disabled(busy == "audit" || live.status != "connected")
+                        Text("\(tr("Days")): \(days)").font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    if !auditText.isEmpty {
+                        Text(auditText).font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -255,6 +270,19 @@ struct WooCommerceIntegrationView: View {
             notice = "\(tr("Imported")): \(n("created")) · \(tr("Updated")): \(n("updated")) · \(tr("Skipped")): \(n("skipped"))"
             previewText = ""
             reload()
+        }
+    }
+
+    private func runAudit(_ live: WooConnectionInfo) {
+        busy = "audit"; errorText = ""; auditText = ""
+        call("auditWooOrders", ["connectionId": live.id, "days": days]) { data, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            let n = { (key: String) -> Int in (data?[key] as? NSNumber)?.intValue ?? 0 }
+            var text = "\(tr("At the store")): \(n("atStore")) · \(tr("As orders")): \(n("asOrders")) · \(tr("Payments")): \(n("mergedAsPayments")) · \(tr("Unpaid")): \(n("unpaidSkipped")) · \(tr("Cancelled")): \(n("cancelled")) · \(tr("Missing")): \(n("missing"))"
+            if n("missing") == 0 { text += "\n" + tr("Nothing is missing.") }
+            else { text += "\n" + tr("These store orders are not in NivaDesk. Sync now or Import brings them in.") + "\n" + ((data?["missingIds"] as? [String]) ?? []).joined(separator: ", ") }
+            auditText = text
         }
     }
 

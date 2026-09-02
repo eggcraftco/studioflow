@@ -599,6 +599,7 @@ fun OrderDetailScreen(
                 )
             }
             item { ShopifyOrderSourceStrip(order = order) }
+            item { ChannelOrderSourceStrip(order = order) }
             if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) {
                 item {
                     HiddenCardsBar(
@@ -1225,6 +1226,7 @@ private fun DesktopOrderDetailBoard(
                 onMergeOrder = onMergeOrder
             )
             ShopifyOrderSourceStrip(order = order)
+            ChannelOrderSourceStrip(order = order)
             CompositionLocalProvider(
                 LocalDetailCardsUnlocked provides (cardsUnlocked && canManageCardLayout),
                 LocalOrderCardLabels provides workspaceSettings.orderCardLabels,
@@ -13712,6 +13714,50 @@ private val ShopifySymbolToCode = mapOf(
 private val ShopifyCodeToSymbol = mapOf(
     "GBP" to "£", "USD" to "$", "EUR" to "€", "TRY" to "₺", "JPY" to "¥"
 )
+
+// UX-010/011/012 — the provider-agnostic strip for orders that arrived from a
+// connected channel (Square, WooCommerce, Etsy): the platform's own number,
+// status, source and total from the provider's custom fields, with one safe
+// link to open it at the provider. Mirrors web/Mac. Never a workflow field.
+private val ChannelStripSources = listOf("Square", "WooCommerce", "Etsy")
+
+@Composable
+private fun ChannelOrderSourceStrip(order: StudioOrder) {
+    val fields = order.customFields
+    val source = (fields["Source"] ?: "").trim()
+    if (source !in ChannelStripSources) return
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val uriHandler = LocalUriHandler.current
+    val blue = Color(0xFF1E5AA8)
+    fun field(suffix: String) = (fields["$source $suffix"] ?: "").trim()
+    val number = field("Order Number").ifEmpty { field("Receipt ID") }
+    val status = field("Status")
+    val total = field("Total")
+    val currency = field("Currency").uppercase()
+    val location = field("Location")
+    val sourceName = field("Source")
+    val link = order.designLink.trim().takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
+    Surface(shape = RoundedCornerShape(10.dp), color = blue.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(shape = RoundedCornerShape(999.dp), color = blue.copy(alpha = 0.14f)) {
+                Text(source, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = blue, fontWeight = FontWeight.Bold)
+            }
+            if (number.isNotEmpty()) Text("#$number", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            if (sourceName.isNotEmpty() && sourceName != source) Text("· $sourceName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (location.isNotEmpty()) Text("· ${t("Location")}: $location", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (status.isNotEmpty()) Text("· ${t("Platform status")}: $status", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (total.isNotEmpty()) Text("· $total $currency", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            if (link.isNotEmpty()) {
+                Text("${t("Open in")} $source ↗", style = MaterialTheme.typography.bodySmall, color = blue, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { uriHandler.openUri(link) })
+            }
+        }
+    }
+}
 
 @Composable
 private fun ShopifyOrderSourceStrip(order: StudioOrder) {

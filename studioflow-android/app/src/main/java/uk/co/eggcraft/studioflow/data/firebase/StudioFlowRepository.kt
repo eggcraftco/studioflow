@@ -1002,10 +1002,37 @@ class StudioFlowRepository(
         val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
         return WooImportCounters(n("created"), n("updated"), n("skipped"), 0, n("held"))
     }
+    data class SquarePayoutRow(val externalId: String, val status: String, val arrivalDate: String, val amount: String, val currency: String, val gross: String, val refunds: String, val fee: String, val reconciled: Boolean, val bankMatched: Boolean)
+    data class SquareAuditReport(val atSquare: Int, val asOrders: Int, val financeOnly: Int, val missing: Int, val notSelected: Int, val missingIds: List<String>)
+    suspend fun squarePayouts(workspaceId: String): List<SquarePayoutRow> {
+        val raw = etsyCall("listSquarePayouts", workspaceId, mapOf("limit" to 50))
+        return (raw["payouts"] as? List<*>).orEmpty().mapNotNull { e ->
+            val r = e as? Map<*, *> ?: return@mapNotNull null
+            val totals = r["totals"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            SquarePayoutRow(
+                externalId = r["externalId"]?.toString().orEmpty(), status = r["status"]?.toString().orEmpty(), arrivalDate = r["arrivalDate"]?.toString().orEmpty(),
+                amount = (r["amount"] ?: totals["net"])?.toString().orEmpty(), currency = r["currency"]?.toString().orEmpty(),
+                gross = totals["gross"]?.toString().orEmpty(), refunds = totals["refunds"]?.toString().orEmpty(), fee = totals["fee"]?.toString().orEmpty(),
+                reconciled = r["reconciled"] as? Boolean ?: false, bankMatched = ((r["bankMatch"] as? Map<*, *>)?.get("transactionId")?.toString()).orEmpty().isNotEmpty(),
+            )
+        }
+    }
+    suspend fun squareAudit(workspaceId: String, connectionId: String, days: Int): SquareAuditReport {
+        val raw = etsyCall("auditSquareOrders", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 300)
+        val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
+        return SquareAuditReport(n("atSquare"), n("asOrders"), n("financeOnly"), n("missing"), n("notSelected"), (raw["missingIds"] as? List<*>).orEmpty().map { it.toString() })
+    }
     suspend fun squareUnmatched(workspaceId: String): List<SquareUnmatchedRow> {
         val raw = etsyCall("listSquareUnmatched", workspaceId)
         fun rows(key: String, kind: String) = (raw[key] as? List<*>).orEmpty().mapNotNull { e -> (e as? Map<*, *>)?.let { SquareUnmatchedRow(kind, it["externalId"]?.toString().orEmpty(), it["status"]?.toString().orEmpty(), (it["total"] ?: it["amount"])?.toString().orEmpty(), it["currency"]?.toString().orEmpty()) } }
         return rows("payments", "payment") + rows("refunds", "refund")
+    }
+
+    data class WooAuditReport(val atStore: Int, val asOrders: Int, val mergedAsPayments: Int, val unpaidSkipped: Int, val cancelled: Int, val missing: Int, val missingIds: List<String>)
+    suspend fun wooAudit(workspaceId: String, connectionId: String, days: Int): WooAuditReport {
+        val raw = etsyCall("auditWooOrders", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 300)
+        val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
+        return WooAuditReport(n("atStore"), n("asOrders"), n("mergedAsPayments"), n("unpaidSkipped"), n("cancelled"), n("missing"), (raw["missingIds"] as? List<*>).orEmpty().map { it.toString() })
     }
 
     // Faz 2 — the common engine's health and event records (Sync Health card).

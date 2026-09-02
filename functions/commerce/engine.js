@@ -70,7 +70,19 @@ async function applyEnvelope(db, envelope, ctx) {
       lastEventOrigin: envelope.identity.event_origin,
       lastAppliedAtMs: now,
       reviewRequired: envelope.review.required,
-      reviewReasons: envelope.review.reasons
+      reviewReasons: envelope.review.reasons,
+      // UX-010/012 — what the Channel Details strip shows on every client,
+      // provider-agnostic: a badge, the connection's name, the platform's own
+      // number and statuses, and a safe "open at the provider" link.
+      providerDisplayName: envelope.source.provider_display_name || envelope.identity.provider,
+      connectionDisplayName: envelope.source.connection_display_name || null,
+      orderNumber: String((envelope.source.provider_metadata || {}).order_number || envelope.identity.external_id),
+      externalAdminUrl: envelope.source.external_admin_url || null,
+      platformStatus: envelope.order.platform_status || null,
+      paymentStatus: envelope.order.payment_status || null,
+      fulfillmentStatus: envelope.order.fulfillment_status || null,
+      currency: envelope.order.currency || null,
+      grandTotal: envelope.order.grand_total || null
     };
     const identityWrite = {
       provider: envelope.identity.provider, connectionId: envelope.identity.connection_id,

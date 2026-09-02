@@ -25,7 +25,7 @@ process.env.SQUARE_ENVIRONMENT = "sandbox";
 // ---- the fake Square ----------------------------------------------------------
 const money = (amount, currency = "GBP") => ({ amount, currency });
 const square = {
-  orders: new Map(), payments: new Map(), refunds: new Map(), customers: new Map(),
+  orders: new Map(), payments: new Map(), refunds: new Map(), customers: new Map(), payouts: new Map(), payoutEntries: new Map(),
   locations: [{ id: "LOC_LONDON", name: "London Studio", status: "ACTIVE", currency: "GBP" }, { id: "LOC_FAIR", name: "Fair Stand", status: "ACTIVE", currency: "GBP" }, { id: "LOC_OLD", name: "Old Shop", status: "INACTIVE", currency: "GBP" }],
   merchant: { id: "MERCH_1", business_name: "EGGcraft Square", country: "GB", currency: "GBP" },
   tokens: [], refreshes: 0, revoked: [], exchanges: 0, clients: []
@@ -67,8 +67,11 @@ global.__nivadeskSquareFakeClient = (options) => {
     async getRefund(id) { return square.refunds.get(id) || null; },
     async listRefunds() { return { refunds: [...square.refunds.values()], cursor: null }; },
     async getCustomer(id) { return square.customers.get(id) || null; },
-    async listPayouts() { return { payouts: [], cursor: null }; },
-    async listPayoutEntries() { return { entries: [], cursor: null }; },
+    async listPayouts({ beginTimeIso, endTimeIso = null }) { return { payouts: [...square.payouts.values()].filter((p) => inWindow(p.created_at, beginTimeIso, endTimeIso)), cursor: null }; },
+    async listPayoutEntries(id, { cursor = null } = {}) {
+      const all = square.payoutEntries.get(id) || []; const start = Number(cursor || 0); const page = all.slice(start, start + 2);
+      return { entries: page, cursor: start + 2 < all.length ? String(start + 2) : null };
+    },
     async probe() { return { ok: true, merchantId: "MERCH_1" }; }
   };
 };
@@ -329,7 +332,7 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.strictEqual((await sub(sq.PAYMENTS_SUBCOLLECTION).doc("PAY_LATE").get()).data().nivadeskOrderId, orderRef("ORD_LATE").id, "and its payment was matched on the finance pass");
     const cursorsSnap = await db.collection("commerceCursors").where("companyId", "==", COMPANY).get();
     const kinds = cursorsSnap.docs.map((d) => d.data().entityType).sort();
-    assert.deepStrictEqual(kinds, ["order", "payment"], "separate cursors per domain (SQ-REC-009); the events cursor only exists once the app token is configured");
+    assert.deepStrictEqual(kinds, ["order", "payment", "payout"], "separate cursors per domain (SQ-REC-009); the events cursor only exists once the app token is configured");
     const orderCursor = cursorsSnap.docs.map((d) => d.data()).find((c) => c.entityType === "order");
     assert.ok(orderCursor.watermarkMs > 0 && orderCursor.lastPassComplete === true);
     const conn = (await connRef().get()).data();
@@ -342,6 +345,48 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     const audit = await sq.reconcileConnection(fakeRef, (await fakeRef.get()).data(), { force: true, lookbackMs: 3600000 });
     assert.ok(audit.scanned >= 2);
     square.orders.delete("ORD_BROKEN"); void originalGet;
+  });
+
+  await check("a payout is its own entity: every entry page is taken, gross/fee/net reconcile against the amount, a lower version never wins (SQ-TEST-016, SQ-POUT-001..005)", async () => {
+    const created = new Date(Date.now() - 2 * 3600000).toISOString();
+    square.payouts.set("PO_1", { id: "PO_1", status: "PAID", amount_money: money(5660), location_id: "LOC_LONDON", arrival_date: "2026-09-03", end_to_end_id: "E2E-77", type: "BATCH", version: 2, destination: { type: "BANK_ACCOUNT" }, created_at: created, updated_at: created });
+    square.payoutEntries.set("PO_1", [
+      { id: "PE_1", type: "CHARGE", effective_at: created, gross_amount_money: money(4000), fee_amount_money: money(-85), net_amount_money: money(3915), type_charge_details: { payment_id: "PAY_ORD_A" } },
+      { id: "PE_2", type: "CHARGE", effective_at: created, gross_amount_money: money(1800), fee_amount_money: money(-40), net_amount_money: money(1760), type_charge_details: { payment_id: "PAY_LOOSE" } },
+      { id: "PE_3", type: "REFUND", effective_at: created, gross_amount_money: money(-1000), fee_amount_money: money(0), net_amount_money: money(-1000), type_refund_details: { payment_id: "PAY_ORD_A", refund_id: "REF_1" } },
+      { id: "PE_4", type: "ADJUSTMENT", effective_at: created, gross_amount_money: money(985), fee_amount_money: money(0), net_amount_money: money(985) }
+    ]);
+    const before = await orderCount();
+    const out = await index.syncSquareNow.run({ auth, data: { companyId: COMPANY, connectionId: connId }, rawRequest: {} });
+    assert.strictEqual(out.payouts.scanned, 1, JSON.stringify(out.payouts)); assert.strictEqual(out.payouts.recorded, 1);
+    assert.strictEqual(await orderCount(), before, "a payout creates no order");
+    const payout = (await sub(sq.PAYOUTS_SUBCOLLECTION).doc("PO_1").get()).data();
+    assert.strictEqual(payout.status, "PAID"); assert.strictEqual(payout.amount, "56.60"); assert.strictEqual(payout.entryCount, 4, "three entry pages of two, all taken"); assert.strictEqual(payout.endToEndId, "E2E-77");
+    assert.strictEqual(payout.totals.gross, "57.85"); assert.strictEqual(payout.totals.fee, "-1.25"); assert.strictEqual(payout.totals.net, "56.60"); assert.strictEqual(payout.totals.refunds, "-10.00"); assert.strictEqual(payout.totals.adjustments, "9.85");
+    assert.strictEqual(payout.reconciled, true, "entries explain the payout to the penny");
+    assert.strictEqual((await sub(sq.PAYOUTS_SUBCOLLECTION).doc("PO_1").collection("entries").get()).size, 4);
+    const listed = await index.listSquarePayouts.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
+    assert.strictEqual(listed.payouts[0].externalId, "PO_1"); assert.strictEqual(listed.payouts[0].totals.net, "56.60");
+    const cursorsSnap = await db.collection("commerceCursors").where("companyId", "==", COMPANY).get();
+    assert.ok(cursorsSnap.docs.map((d) => d.data().entityType).includes("payout"), "payouts have a cursor of their own (SQ-POUT-008)");
+    // A stale snapshot (lower version) never overwrites; a newer one moves the status.
+    const stale = await sq.recordPayout(connRef(), (await connRef().get()).data(), global.__nivadeskSquareFakeClient({ accessToken: "x" }), { ...square.payouts.get("PO_1"), version: 1, status: "SENT" });
+    assert.strictEqual(stale.result, "stale"); assert.strictEqual((await sub(sq.PAYOUTS_SUBCOLLECTION).doc("PO_1").get()).data().status, "PAID");
+    await sub(sq.PAYOUTS_SUBCOLLECTION).doc("PO_1").set({ bankMatch: { transactionId: "tx_9", confidence: "high" } }, { merge: true });
+    const newer = await sq.recordPayout(connRef(), (await connRef().get()).data(), global.__nivadeskSquareFakeClient({ accessToken: "x" }), { ...square.payouts.get("PO_1"), version: 3, status: "FAILED" });
+    assert.strictEqual(newer.result, "updated");
+    const after = (await sub(sq.PAYOUTS_SUBCOLLECTION).doc("PO_1").get()).data();
+    assert.strictEqual(after.status, "FAILED", "PAID can become FAILED (SQ-POUT-005)"); assert.deepStrictEqual(after.bankMatch, { transactionId: "tx_9", confidence: "high" }, "a re-sync keeps the bank match");
+  });
+
+  await check("the missing-order audit tells orders, finance-only sales and truly missing ones apart (§10.5)", async () => {
+    square.orders.set("ORD_GHOST", onlineOrder("ORD_GHOST", { created_at: new Date(Date.now() - 3 * 86400000).toISOString(), updated_at: new Date(Date.now() - 3 * 86400000).toISOString() }));
+    const report = await index.auditSquareOrders.run({ auth, data: { companyId: COMPANY, connectionId: connId, days: 30 }, rawRequest: {} });
+    assert.ok(report.atSquare >= 4, JSON.stringify(report));
+    assert.ok(report.asOrders >= 2); assert.ok(report.missingIds.includes("ORD_GHOST"), "an order Square has and NivaDesk never saw is missing");
+    assert.ok(!report.missingIds.includes("ORD_A") && !report.missingIds.includes("ORD_LATE"));
+    assert.strictEqual(report.truncated, false);
+    square.orders.delete("ORD_GHOST");
   });
 
   await check("import preview counts what the policy would create; import backfills by created_at under it (SQ-OPEN-002)", async () => {

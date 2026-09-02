@@ -223,6 +223,20 @@ const secretOf = (conn) => etsy.decryptToken(conn.webhookSecretEncrypted, proces
     assert.strictEqual((await connRef().get()).data().webhooksHealthy, true);
   });
 
+  await check("the missing-order audit tells imported, merged, unpaid and truly missing orders apart (§10.5)", async () => {
+    const stamp = new Date(Date.now() - 86400000).toISOString().slice(0, 19);
+    const ghost = wooOrder(9901, { date_created_gmt: stamp, date_modified_gmt: stamp, date_paid_gmt: stamp });
+    ghost.billing = { ...ghost.billing, email: "ghost@example.com" };
+    store.orders.set(9901, ghost);
+    store.orders.set(9902, wooOrder(9902, { status: "pending", date_paid_gmt: null, transaction_id: "", date_created_gmt: stamp, date_modified_gmt: stamp }));
+    const report = await index.auditWooOrders.run({ auth, data: { companyId: COMPANY, connectionId: connId, days: 30 }, rawRequest: {} });
+    assert.ok(report.atStore >= 2, JSON.stringify(report));
+    assert.ok(report.missingIds.includes("9901"), "an order the store has and NivaDesk never saw is missing");
+    assert.ok(!report.missingIds.includes("9902") && report.unpaidSkipped >= 1, "an unpaid order is skipped by policy, not missing");
+    assert.ok(report.asOrders >= 1);
+    store.orders.delete(9901); store.orders.delete(9902);
+  });
+
   await check("sync now is locked per connection, preview writes nothing, and disconnect removes our webhooks and the keys", async () => {
     await connRef().set({ syncLockUntilMs: Date.now() + 60000 }, { merge: true });
     await assert.rejects(index.syncWooNow.run({ auth, data: { companyId: COMPANY, connectionId: connId }, rawRequest: {} }), /already running/);

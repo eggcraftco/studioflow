@@ -45,6 +45,8 @@ struct SquareIntegrationView: View {
     @State private var days = 90
     @State private var previewText = ""
     @State private var unmatchedText = ""
+    @State private var payoutsText = ""
+    @State private var auditText = ""
 
     private static let sources: [(String, String)] = [
         ("SQUARE_POS", "Square Point of Sale"), ("SQUARE_ONLINE", "Square Online"), ("INVOICE", "Square Invoices"),
@@ -222,7 +224,32 @@ struct SquareIntegrationView: View {
             }
         }
 
+        SettingsCard(title: tr("Square payouts"), iconName: "building.columns") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(tr("What Square sent to your bank, explained: gross sales, refunds, fees and adjustments per payout. A payout is not a payment; the two are kept apart."))
+                    .font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(tr("Load")) { loadPayouts() }.buttonStyle(.bordered).disabled(busy == "payouts")
+                if !payoutsText.isEmpty {
+                    Text(payoutsText).font(.system(size: 12, design: .monospaced)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+
         if isOwner {
+            SettingsCard(title: tr("Missing order audit"), iconName: "checklist") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(tr("Compares Square's orders from the chosen days with what NivaDesk holds: as an order, as a finance-only sale, or not at all."))
+                        .font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        Button(busy == "audit" ? tr("Checking…") : tr("Run audit")) { runAudit(live) }.buttonStyle(.bordered).disabled(busy == "audit" || live.status != "connected")
+                        Text("\(tr("Days")): \(days)").font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    if !auditText.isEmpty {
+                        Text(auditText).font(.system(size: 12)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
             SettingsCard(title: tr("Disconnect Square"), iconName: "xmark.circle") {
                 VStack(alignment: .leading, spacing: 10) {
                     if confirmDisconnect {
@@ -351,6 +378,36 @@ struct SquareIntegrationView: View {
             let lines = payments.map { "\(tr("Payment")) \($0["externalId"] as? String ?? "") · \($0["status"] as? String ?? "") · \($0["total"] as? String ?? $0["amount"] as? String ?? "") \($0["currency"] as? String ?? "")" }
                 + refunds.map { "\(tr("Refund")) \($0["externalId"] as? String ?? "") · \($0["status"] as? String ?? "") · \($0["amount"] as? String ?? "") \($0["currency"] as? String ?? "")" }
             unmatchedText = lines.joined(separator: "\n")
+        }
+    }
+
+    private func loadPayouts() {
+        busy = "payouts"; errorText = ""
+        call("listSquarePayouts", ["limit": 50]) { data, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            let rows = data?["payouts"] as? [[String: Any]] ?? []
+            if rows.isEmpty { payoutsText = tr("No payouts yet."); return }
+            payoutsText = rows.map { row in
+                let totals = row["totals"] as? [String: Any] ?? [:]
+                let amount = (row["amount"] as? String) ?? (totals["net"] as? String) ?? "—"
+                let matched = ((row["bankMatch"] as? [String: Any])?["transactionId"] as? String ?? "").isEmpty ? tr("Not matched") : tr("Matched")
+                let reconciled = (row["reconciled"] as? Bool ?? false) ? "" : " · \(tr("Needs attention"))"
+                return "\(row["arrivalDate"] as? String ?? "") · \(row["status"] as? String ?? "") · \(tr("Gross")) \(totals["gross"] as? String ?? "—") · \(tr("Refunds")) \(totals["refunds"] as? String ?? "—") · \(tr("Fees")) \(totals["fee"] as? String ?? "—") · \(tr("Net")) \(amount) \(row["currency"] as? String ?? "") · \(matched)\(reconciled)"
+            }.joined(separator: "\n")
+        }
+    }
+
+    private func runAudit(_ live: SquareConnectionInfo) {
+        busy = "audit"; errorText = ""; auditText = ""
+        call("auditSquareOrders", ["connectionId": live.id, "days": days]) { data, error in
+            busy = ""
+            if let error = error { errorText = error.localizedDescription; return }
+            let n = { (key: String) -> Int in (data?[key] as? NSNumber)?.intValue ?? 0 }
+            var text = "\(tr("At Square")): \(n("atSquare")) · \(tr("As orders")): \(n("asOrders")) · \(tr("Finance only")): \(n("financeOnly")) · \(tr("Missing")): \(n("missing")) · \(tr("Not selected")): \(n("notSelected"))"
+            if n("missing") == 0 { text += "\n" + tr("Nothing is missing.") }
+            else { text += "\n" + tr("These Square orders are not in NivaDesk. Sync now or Import brings them in.") + "\n" + ((data?["missingIds"] as? [String]) ?? []).joined(separator: ", ") }
+            auditText = text
         }
     }
 

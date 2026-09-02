@@ -526,6 +526,27 @@ export type LineItemDetail = {
   lineTotal: number;
 };
 
+export type OrderChannelStamp = {
+  provider: string; providerDisplayName: string; connectionDisplayName: string; connectionId: string; externalId: string; orderNumber: string;
+  externalAdminUrl: string; platformStatus: string; paymentStatus: string; fulfillmentStatus: string; currency: string; grandTotal: string;
+  externalUpdatedAt: string; lastAppliedAtMs: number; lastEventOrigin: string; reviewRequired: boolean; reviewReasons: string[];
+};
+
+function channelStampValue(value: unknown): OrderChannelStamp | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const provider = stringValue(v.provider, "");
+  if (!provider) return null;
+  return {
+    provider, providerDisplayName: stringValue(v.providerDisplayName, provider), connectionDisplayName: stringValue(v.connectionDisplayName, ""),
+    connectionId: stringValue(v.connectionId, ""), externalId: stringValue(v.externalId, ""), orderNumber: stringValue(v.orderNumber, ""),
+    externalAdminUrl: stringValue(v.externalAdminUrl, ""), platformStatus: stringValue(v.platformStatus, ""), paymentStatus: stringValue(v.paymentStatus, ""),
+    fulfillmentStatus: stringValue(v.fulfillmentStatus, ""), currency: stringValue(v.currency, ""), grandTotal: stringValue(v.grandTotal, ""),
+    externalUpdatedAt: stringValue(v.externalUpdatedAt, ""), lastAppliedAtMs: Number(v.lastAppliedAtMs) || 0, lastEventOrigin: stringValue(v.lastEventOrigin, ""),
+    reviewRequired: booleanValue(v.reviewRequired, false), reviewReasons: stringArrayValue(v.reviewReasons)
+  };
+}
+
 export type OrderDetail = {
   id: string;
   companyId: string;
@@ -574,6 +595,8 @@ export type OrderDetail = {
   courier: string;
   isDispatched: boolean;
   isDelivered: boolean;
+  /** UX-010/012 — the common engine's stamp on an order it applied (Woo, Square, and Shopify/Etsy once primary): provider-agnostic channel details. */
+  commerce: OrderChannelStamp | null;
   customFields: Record<string, string>;
   customToggles: Record<string, boolean>;
   extraStatuses: Record<string, string>;
@@ -2104,6 +2127,7 @@ function mapOrderDetailSnapshot(
     isDispatched: booleanValue(data.isDispatched, false),
     isDelivered: booleanValue(data.isDelivered, false),
     customFields: stringMapValue(data.customFields),
+    commerce: channelStampValue(data.commerce),
     customToggles: booleanMapValue(data.customToggles),
     extraStatuses: stringMapValue(data.extraStatuses),
     productionStageOverride: stringValue(data.productionStageOverride, ""),

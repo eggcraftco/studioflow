@@ -3289,6 +3289,7 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
     var confirmDisconnect by remember { mutableStateOf(false) }
     var days by remember { mutableStateOf("30") }
     var previewText by remember { mutableStateOf("") }
+    var auditText by remember { mutableStateOf("") }
     val connection = connections.firstOrNull { it.status == "connected" } ?: connections.firstOrNull { it.status != "disconnected" }
     suspend fun reload() {
         val ws = workspace ?: return
@@ -3368,6 +3369,19 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
                         }) { Text(if (busy == "import") t("Importing…") else t("Import")) }
                         if (previewText.isNotEmpty()) Text(previewText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    DetailCard(title = t("Missing order audit"), icon = Icons.Filled.CheckCircle) {
+                        Text(t("Compares the store's orders from the chosen days with what NivaDesk holds: as an order, joined to an order as a payment, skipped as unpaid, or missing."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val auditDays = (days.toIntOrNull() ?: 30).coerceIn(1, 365)
+                        OutlinedButton(enabled = busy != "audit" && live.status == "connected", onClick = {
+                            run("audit") {
+                                val ws = workspace ?: return@run
+                                val r = repository.wooAudit(ws.id, live.id, auditDays)
+                                auditText = "${t("At the store")}: ${r.atStore} · ${t("As orders")}: ${r.asOrders} · ${t("Payments")}: ${r.mergedAsPayments} · ${t("Unpaid")}: ${r.unpaidSkipped} · ${t("Cancelled")}: ${r.cancelled} · ${t("Missing")}: ${r.missing}\n" +
+                                    if (r.missing == 0) t("Nothing is missing.") else t("These store orders are not in NivaDesk. Sync now or Import brings them in.") + "\n" + r.missingIds.joinToString(", ")
+                            }
+                        }) { Text(if (busy == "audit") t("Checking…") else t("Run audit")) }
+                        if (auditText.isNotEmpty()) Text(auditText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     DetailCard(title = t("Disconnect WooCommerce"), icon = Icons.Filled.CheckCircle) {
                         if (confirmDisconnect) {
                             Text(t("Disconnect this store? New orders stop arriving. Orders already imported stay in this workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3404,6 +3418,8 @@ private fun SquareDetail(state: StudioFlowUiState) {
     var days by remember { mutableStateOf("90") }
     var previewText by remember { mutableStateOf("") }
     var unmatchedText by remember { mutableStateOf("") }
+    var payoutsText by remember { mutableStateOf("") }
+    var auditText by remember { mutableStateOf("") }
     val connection = connections.firstOrNull { it.status == "connected" } ?: connections.firstOrNull { it.status != "disconnected" }
     val sources = listOf("SQUARE_POS" to "Square Point of Sale", "SQUARE_ONLINE" to "Square Online", "INVOICE" to "Square Invoices", "APPOINTMENTS" to "Square Appointments", "VIRTUAL_TERMINAL" to "Virtual Terminal", "API" to "API", "OTHER" to "Other")
     val policies = listOf(Triple("fulfillment_only", "Sales with a shipment, pickup or delivery", "Recommended. Quick counter sales stay in finance only."), Triple("all", "Every sale", "Every Square sale becomes a NivaDesk order."), Triple("none", "None", "Record sales for finance only; create no orders."))
@@ -3539,7 +3555,31 @@ private fun SquareDetail(state: StudioFlowUiState) {
                     }) { Text(t("Load")) }
                     if (unmatchedText.isNotEmpty()) Text(unmatchedText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                DetailCard(title = t("Square payouts"), icon = Icons.Filled.CheckCircle) {
+                    Text(t("What Square sent to your bank, explained: gross sales, refunds, fees and adjustments per payout. A payout is not a payment; the two are kept apart."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(enabled = busy != "payouts", onClick = {
+                        run("payouts") {
+                            val ws = workspace ?: return@run
+                            val rows = repository.squarePayouts(ws.id)
+                            payoutsText = if (rows.isEmpty()) t("No payouts yet.") else rows.joinToString("\n") { "${it.arrivalDate} · ${it.status} · ${t("Gross")} ${it.gross.ifEmpty { "—" }} · ${t("Refunds")} ${it.refunds.ifEmpty { "—" }} · ${t("Fees")} ${it.fee.ifEmpty { "—" }} · ${t("Net")} ${it.amount} ${it.currency} · ${if (it.bankMatched) t("Matched") else t("Not matched")}${if (it.reconciled) "" else " · " + t("Needs attention")}" }
+                        }
+                    }) { Text(t("Load")) }
+                    if (payoutsText.isNotEmpty()) Text(payoutsText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (isOwner) {
+                    DetailCard(title = t("Missing order audit"), icon = Icons.Filled.CheckCircle) {
+                        Text(t("Compares Square's orders from the chosen days with what NivaDesk holds: as an order, as a finance-only sale, or not at all."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val dayCount = (days.toIntOrNull() ?: 90).coerceIn(1, 365)
+                        OutlinedButton(enabled = busy != "audit" && live.status == "connected", onClick = {
+                            run("audit") {
+                                val ws = workspace ?: return@run
+                                val r = repository.squareAudit(ws.id, live.id, dayCount)
+                                auditText = "${t("At Square")}: ${r.atSquare} · ${t("As orders")}: ${r.asOrders} · ${t("Finance only")}: ${r.financeOnly} · ${t("Missing")}: ${r.missing} · ${t("Not selected")}: ${r.notSelected}\n" +
+                                    if (r.missing == 0) t("Nothing is missing.") else t("These Square orders are not in NivaDesk. Sync now or Import brings them in.") + "\n" + r.missingIds.joinToString(", ")
+                            }
+                        }) { Text(if (busy == "audit") t("Checking…") else t("Run audit")) }
+                        if (auditText.isNotEmpty()) Text(auditText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     DetailCard(title = t("Disconnect Square"), icon = Icons.Filled.CheckCircle) {
                         if (confirmDisconnect) {
                             Text(t("Disconnect this Square account? NivaDesk's access is revoked at Square and new sales stop arriving. Orders and payments already imported stay in this workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)

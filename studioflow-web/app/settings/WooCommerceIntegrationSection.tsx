@@ -10,8 +10,8 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
-  beginWooConnect, finishWooConnect, getWooConnections, disconnectWooShop, syncWooNow, recreateWooWebhooks, previewWooImport, runWooImport,
-  type WooConnection, type WooImportPreview, type WooImportResult
+  beginWooConnect, finishWooConnect, getWooConnections, disconnectWooShop, syncWooNow, recreateWooWebhooks, previewWooImport, runWooImport, auditWooOrders,
+  type WooConnection, type WooImportPreview, type WooImportResult, type WooAuditReport
 } from "@/lib/studioflow/woocommerce";
 
 type Props = { workspace: WorkspaceContext; language?: string };
@@ -39,6 +39,7 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
   const [days, setDays] = useState(30);
   const [preview, setPreview] = useState<WooImportPreview | null>(null);
   const [imported, setImported] = useState<WooImportResult | null>(null);
+  const [audit, setAudit] = useState<WooAuditReport | null>(null);
   const connection = connections.find((row) => row.status === "connected") || connections.find((row) => row.status !== "disconnected") || connections[0] || null;
 
   const refresh = useCallback(async (keepError = false) => {
@@ -190,6 +191,28 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
           ) : null}
           {imported ? (
             <p className="success-copy">{t("Imported")}: {imported.created} · {t("Updated")}: {imported.updated} · {t("Skipped")}: {imported.skipped}{imported.merged ? ` · ${t("Payments")}: ${imported.merged}` : ""}{imported.held ? ` · ${t("Held")}: ${imported.held}` : ""}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {isOwner ? (
+        <section className="card app-card quick-reply-settings-card">
+          <CardTitle icon="check" eyebrow={t("Audit")} title={t("Missing order audit")} />
+          <p className="muted-copy">{t("Compares the store's orders from the chosen days with what NivaDesk holds: as an order, joined to an order as a payment, skipped as unpaid, or missing.")}</p>
+          <div className="settings-action-row">
+            <button type="button" className="button secondary" disabled={busy === "audit" || connection.status !== "connected"} onClick={() => guard("audit", async () => setAudit(await auditWooOrders(companyId, connection.id, days)))}>{busy === "audit" ? t("Checking…") : t("Run audit")}</button>
+            <span className="muted-copy">{t("Days")}: {days}</span>
+          </div>
+          {audit ? (
+            <div style={{ marginTop: 8 }}>
+              <p className="muted-copy">{t("At the store")}: {audit.atStore} · {t("As orders")}: {audit.asOrders} · {t("Payments")}: {audit.mergedAsPayments} · {t("Unpaid")}: {audit.unpaidSkipped} · {t("Cancelled")}: {audit.cancelled} · {t("Missing")}: {audit.missing}{audit.truncated ? ` · ${t("Truncated")}` : ""}</p>
+              {audit.missing === 0 ? <p className="success-copy">{t("Nothing is missing.")}</p> : (
+                <>
+                  <p className="layout-error">{t("These store orders are not in NivaDesk. Sync now or Import brings them in.")}</p>
+                  <p className="muted-copy" style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{audit.missingIds.join(", ")}</p>
+                </>
+              )}
+            </div>
           ) : null}
         </section>
       ) : null}

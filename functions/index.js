@@ -5860,6 +5860,7 @@ exports.syncWooNow = wooExports.syncWooNow;
 exports.recreateWooWebhooks = wooExports.recreateWooWebhooks;
 exports.previewWooImport = wooExports.previewWooImport;
 exports.runWooImport = wooExports.runWooImport;
+exports.auditWooOrders = wooExports.auditWooOrders;
 
 // Square (Square spec Faz 1–2) — a merchant as one connection on the common engine.
 const { createSquareConnectorFunctions } = require("./squareConnector");
@@ -5905,6 +5906,8 @@ exports.syncSquareNow = squareExports.syncSquareNow;
 exports.previewSquareImport = squareExports.previewSquareImport;
 exports.runSquareImport = squareExports.runSquareImport;
 exports.listSquareUnmatched = squareExports.listSquareUnmatched;
+exports.listSquarePayouts = squareExports.listSquarePayouts;
+exports.auditSquareOrders = squareExports.auditSquareOrders;
 
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
