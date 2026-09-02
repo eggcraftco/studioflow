@@ -691,6 +691,53 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Accounting connector (QuickBooks Online and the providers after it).
+    // Connections, identities, catalogue, mappings, events, postings, the
+    // Needs Attention queue and the audit trail are readable with bank access
+    // and written only through the callables; tokens, the webhook inbox and
+    // the reconciliation cursors never leave the server.
+    match /companies/{companyId}/accountingConnections/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingIdentities/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingCatalog/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingMappings/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingEvents/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingPostings/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingAttention/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingAudit/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+    match /companies/{companyId}/accountingTokens/{document=**} {
+      allow read, write: if false;
+    }
+    match /companies/{companyId}/accountingInbox/{document=**} {
+      allow read, write: if false;
+    }
+    match /companies/{companyId}/accountingCursors/{document=**} {
+      allow read, write: if false;
+    }
+
     match /companies/{companyId}/orderDeletionRequests/{document=**} {
       // Workflow deletion approval is validated by callable functions only.
       allow read, write: if false;
@@ -769,6 +816,17 @@ service cloud.firestore {
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && collectionId != 'pandleSyncRuns'
+        && collectionId != 'accountingConnections'
+        && collectionId != 'accountingTokens'
+        && collectionId != 'accountingIdentities'
+        && collectionId != 'accountingCatalog'
+        && collectionId != 'accountingMappings'
+        && collectionId != 'accountingEvents'
+        && collectionId != 'accountingPostings'
+        && collectionId != 'accountingInbox'
+        && collectionId != 'accountingAttention'
+        && collectionId != 'accountingCursors'
+        && collectionId != 'accountingAudit'
         && collectionId != 'bankCategories'
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
@@ -812,6 +870,17 @@ service cloud.firestore {
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && collectionId != 'pandleSyncRuns'
+        && collectionId != 'accountingConnections'
+        && collectionId != 'accountingTokens'
+        && collectionId != 'accountingIdentities'
+        && collectionId != 'accountingCatalog'
+        && collectionId != 'accountingMappings'
+        && collectionId != 'accountingEvents'
+        && collectionId != 'accountingPostings'
+        && collectionId != 'accountingInbox'
+        && collectionId != 'accountingAttention'
+        && collectionId != 'accountingCursors'
+        && collectionId != 'accountingAudit'
         && collectionId != 'bankCategories'
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
@@ -975,6 +1044,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /squareConnectStates/{document=**} {
+      allow read, write: if false;
+    }
+    // Accounting connector: OAuth state pool and the realm → workspace map are server-only.
+    match /accountingConnectStates/{document=**} {
+      allow read, write: if false;
+    }
+    match /accountingRealms/{document=**} {
       allow read, write: if false;
     }
     // Common engine's review queue: read and resolved through callables only.

@@ -116,6 +116,13 @@ const SQUARE_TOKEN_KEY = defineSecret("SQUARE_TOKEN_KEY");
 const SQUARE_APP_ACCESS_TOKEN = defineSecret("SQUARE_APP_ACCESS_TOKEN");
 const SQUARE_ENVIRONMENT = defineSecret("SQUARE_ENVIRONMENT");
 const SQUARE_SECRETS = [SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_TOKEN_KEY, SQUARE_APP_ACCESS_TOKEN, SQUARE_ENVIRONMENT];
+// Accounting connector — QuickBooks Online app credentials, the webhook
+// verifier and the key that boxes the OAuth tokens at rest.
+const NIVADESK_QBO_CLIENT_ID = defineSecret("NIVADESK_QBO_CLIENT_ID");
+const NIVADESK_QBO_CLIENT_SECRET = defineSecret("NIVADESK_QBO_CLIENT_SECRET");
+const NIVADESK_QBO_WEBHOOK_VERIFIER = defineSecret("NIVADESK_QBO_WEBHOOK_VERIFIER");
+const NIVADESK_QBO_TOKEN_KEY = defineSecret("NIVADESK_QBO_TOKEN_KEY");
+const QBO_SECRETS = [NIVADESK_QBO_CLIENT_ID, NIVADESK_QBO_CLIENT_SECRET, NIVADESK_QBO_WEBHOOK_VERIFIER, NIVADESK_QBO_TOKEN_KEY];
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -6049,6 +6056,43 @@ Object.assign(exports, filesLibraryCallables);
 // in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
 const { createPandleFunctions } = require("./pandle");
 Object.assign(exports, createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner }));
+
+// Accounting connector (QuickBooks Online read-only, phases 1–2): the generic
+// core in ./accounting, owner-only writes, every function exported by name.
+const { createAccountingFunctions } = require("./accountingFunctions");
+const accountingExports = createAccountingFunctions({
+  admin, HttpsError, uidIsCompanyOwner,
+  onCall: (options, handler) => onCall({ ...options, secrets: QBO_SECRETS }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: QBO_SECRETS }, handler),
+  onSchedule: (options, handler) => onSchedule({ ...options, secrets: QBO_SECRETS }, handler),
+  qboClientId: () => NIVADESK_QBO_CLIENT_ID.value(),
+  qboClientSecret: () => NIVADESK_QBO_CLIENT_SECRET.value(),
+  qboWebhookVerifier: () => NIVADESK_QBO_WEBHOOK_VERIFIER.value(),
+  qboTokenKey: () => NIVADESK_QBO_TOKEN_KEY.value(),
+  encryptToken: etsyModule.encryptToken,
+  decryptToken: etsyModule.decryptToken,
+  appReturnUrl: () => "https://nivadesk.app/settings",
+  functionsBaseUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net",
+  listLocalCustomers: async (companyId) => {
+    const snap = await admin.firestore().collection("musteriler").where("companyId", "==", companyId).limit(5000).get();
+    return snap.docs.map((doc) => { const d = doc.data() || {}; return { id: doc.id, name: String(d.customerName || d.name || d.displayName || ""), email: String(d.emailAddress || d.email || "").toLowerCase() }; });
+  },
+  createClient: (options) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskQboFakeClient ? global.__nivadeskQboFakeClient(options) : require("./accounting/quickbooks/client").createQuickBooksClient(options)),
+  oauth: new Proxy(require("./accounting/quickbooks/oauth"), { get: (target, key) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskQboFakeOAuth && global.__nivadeskQboFakeOAuth[key]) || target[key] })
+});
+exports.quickbooksConnectStart = accountingExports.quickbooksConnectStart;
+exports.quickbooksOAuthCallback = accountingExports.quickbooksOAuthCallback;
+exports.quickbooksSyncNow = accountingExports.quickbooksSyncNow;
+exports.quickbooksWebhook = accountingExports.quickbooksWebhook;
+exports.quickbooksDisconnect = accountingExports.quickbooksDisconnect;
+exports.scheduledAccountingReconcile = accountingExports.scheduledAccountingReconcile;
+exports.accountingSetMode = accountingExports.accountingSetMode;
+exports.accountingPlanMigration = accountingExports.accountingPlanMigration;
+exports.accountingSaveMappings = accountingExports.accountingSaveMappings;
+exports.accountingMappingSuggestions = accountingExports.accountingMappingSuggestions;
+exports.accountingOverview = accountingExports.accountingOverview;
+exports.accountingAttentionResolve = accountingExports.accountingAttentionResolve;
+exports.accountingSyncActivity = accountingExports.accountingSyncActivity;
 
 
 const ORDER_DETAIL_CARD_IDS = [
@@ -31380,6 +31424,7 @@ if (process.env.NIVADESK_E2E === "1") {
     square: squareExports._internal,
     settlements: settlementMatcher,
     bank: bankFeedInternal,
+    accounting: accountingExports._internal,
     // Faz 2: the shadow hook and the queue worker's brain, for the suite.
     shadowCompareShopifyOrder,
     processShopifyCommerceTask,
