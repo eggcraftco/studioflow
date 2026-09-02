@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { beforeUserCreated } = require("firebase-functions/v2/identity");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onTaskDispatched } = require("firebase-functions/v2/tasks");
+const { getFunctions } = require("firebase-admin/functions");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const archiver = require("archiver");
 const nodemailer = require("nodemailer");
@@ -5719,6 +5721,17 @@ Object.assign(exports, inventoryCallables);
 // now" and deliberately keeps that answer apart from order, payment and
 // delivery status — see the header of production.js for the reasoning.
 const etsyModule = require("./etsy");
+// Faz 2 — the common commerce contracts: envelope, ownership, engine, flags,
+// shadow comparison, the queue worker's brain and the capability registry.
+const commerce = {
+  engine: require("./commerce/engine"),
+  shadow: require("./commerce/shadow"),
+  flags: require("./commerce/flags"),
+  worker: require("./commerce/worker"),
+  events: require("./commerce/events"),
+  capabilities: require("./commerce/capabilities"),
+  shopify: require("./commerce/adapters/shopify")
+};
 const { createEtsyConnectFunctions } = require("./etsyConnect");
 // Etsy's callback URL is registered with Etsy itself and cannot drift: it is
 // the one address their consent screen is allowed to return the seller to.
@@ -29935,7 +29948,56 @@ async function writeShopifySyncRow(shop, entry, deltas = {}) {
   await ref.set({ stats }, { merge: true });
 }
 
+// Faz 2 / MIG-002 — the live applier, wrapped: when the shadow flag is on for
+// this store the same order is also put through the common engine WITHOUT
+// writing, and the two verdicts are recorded side by side. The live outcome is
+// returned untouched whatever the shadow does; a failure in it is a log line.
 async function applyShopifyOrderEvent(shop, store, topic, order, options = {}) {
+  const outcome = await applyShopifyOrderEventLive(shop, store, topic, order, options);
+  try {
+    const flags = await commerce.flags.readCommerceFlags(admin.firestore());
+    if (commerce.flags.flagEnabled(flags, "shadow", "shopify", shop)) {
+      await shadowCompareShopifyOrder(shop, store, topic, order, options, outcome);
+    }
+  } catch (error) {
+    console.warn("commerce shadow (shopify) failed:", error?.message || error);
+  }
+  return outcome;
+}
+
+function commerceContextForShopify(shop, store, options = {}) {
+  const companyId = String(store.companyId || "");
+  const settings = shopifyMergedSettings(store);
+  return {
+    companyId,
+    source: "shopify",
+    eventKey: options.eventKey || null,
+    orderIdFor: (envelope) => shopifyOrderDocId(companyId, envelope.identity.external_id),
+    defaultStatus: settings.defaultStatus,
+    syncCancellations: settings.syncCancellations !== false,
+    reconcileLineItems
+  };
+}
+
+async function shadowCompareShopifyOrder(shop, store, topic, order, options, liveOutcome) {
+  const db = admin.firestore();
+  const companyId = String(store.companyId || "");
+  if (!companyId) return null;
+  const settingsSnap = await companySettingsDocRef(companyId).get();
+  const envelope = commerce.shopify.normalizeShopifyOrder(order, {
+    shop, shopName: store.shopName, eventOrigin: options.manualImport ? "import" : (options.release ? "retry" : "provider")
+  });
+  const ctx = { ...commerceContextForShopify(shop, store, options), mode: "shadow", defaultDeliveryTime: resolveDefaultDeliveryTime(settingsSnap.data()) };
+  const engineOutcome = await commerce.engine.applyEnvelope(db, envelope, ctx);
+  const liveId = String(liveOutcome?.nivadeskOrderId || ctx.orderIdFor(envelope));
+  const liveSnap = await orderDocRef(liveId).get();
+  return commerce.shadow.recordShadow(db, {
+    companyId, envelope, eventKey: ctx.eventKey || commerce.events.idempotencyKey({ provider: "shopify", connectionId: shop, externalId: envelope.identity.external_id, eventType: topic }),
+    eventType: topic, liveOutcome, engineOutcome, liveDoc: liveSnap.exists ? liveSnap.data() : null
+  });
+}
+
+async function applyShopifyOrderEventLive(shop, store, topic, order, options = {}) {
   const companyId = String(store.companyId || "");
   const settings = shopifyMergedSettings(store);
   const shopifyOrderId = cleanWooText(order?.id || order?.order_number || order?.name);
@@ -30257,7 +30319,7 @@ async function handleShopifyPrivacyTopic(shop, storeData, topic, payload, eventI
   }
 }
 
-async function routeShopifyAppTopic(shop, store, topic, payload) {
+async function routeShopifyAppTopic(shop, store, topic, payload, options = {}) {
   if (String(store.status) !== "active" || !String(store.companyId || "")) {
     return { status: "skipped", error: store.companyId ? `store_${store.status}` : "store_not_connected" };
   }
@@ -30266,7 +30328,7 @@ async function routeShopifyAppTopic(shop, store, topic, payload) {
     case "orders/updated":
     case "orders/paid":
     case "orders/cancelled":
-      return applyShopifyOrderEvent(shop, store, topic, payload);
+      return applyShopifyOrderEvent(shop, store, topic, payload, options);
     case "orders/fulfilled":
     case "fulfillments/create":
     case "fulfillments/update":
@@ -30388,9 +30450,29 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
       }
     }
 
+    // Faz 2 — the common event record for every delivery that got past the
+    // claim (OBS-004 needs the count of what arrived, not only what failed),
+    // and the durable queue when this store has been switched to it.
+    const eventKey = commerce.events.idempotencyKey({ provider: "shopify", connectionId: shop, eventId, externalId: cleanWooText(payload?.id || payload?.order_id || ""), eventType: topic });
+    const eventTask = {
+      key: eventKey, provider: "shopify", connectionId: shop, companyId: String(store.companyId || ""),
+      externalId: cleanWooText(payload?.id || payload?.order_id || ""), eventType: topic, attempt: 1, eventOrigin: "provider",
+      correlationId: commerce.events.newCorrelationId()
+    };
+    try { await commerce.worker.recordReceived(admin.firestore(), eventTask, { status: "received" }); } catch (error) { console.warn("commerce event record failed:", error?.message || error); }
+    if (SHOPIFY_ORDER_TOPICS.has(topic) && store.status === "active" && store.companyId) {
+      const flags = await commerce.flags.readCommerceFlags(admin.firestore());
+      if (commerce.flags.flagEnabled(flags, "queue", "shopify", shop)) {
+        await enqueueCommerceEvent(eventTask, 0);
+        await commerce.worker.eventRef(admin.firestore(), eventKey).set({ status: "queued" }, { merge: true });
+        res.status(200).json({ ok: true, result: "queued" });
+        return;
+      }
+    }
+
     let outcome;
     try {
-      outcome = await routeShopifyAppTopic(shop, store, topic, payload);
+      outcome = await routeShopifyAppTopic(shop, store, topic, payload, { eventKey });
     } catch (error) {
       const message = String(error?.message || error).slice(0, 500);
       await writeShopifySyncRow(shop, {
@@ -30416,6 +30498,13 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
       shopifyOrderNumber: String(outcome.shopifyOrderNumber || ""),
       nivadeskOrderId: String(outcome.nivadeskOrderId || "")
     }, { synced: outcome.created ? 1 : 0 });
+    try {
+      await commerce.worker.eventRef(admin.firestore(), eventKey).set({
+        status: outcome.status === "ok" ? "applied" : (outcome.status === "held" ? "held" : "skipped"),
+        result: String(outcome.status || ""), safe_message: outcome.error ? String(outcome.error).slice(0, 200) : null,
+        order_id: outcome.nivadeskOrderId || null, finished_at: new Date().toISOString()
+      }, { merge: true });
+    } catch (error) { console.warn("commerce event close failed:", error?.message || error); }
     res.status(200).json({ ok: true, result: outcome.status });
   } catch (error) {
     console.error("shopifyAppWebhook error:", error?.message || error);
@@ -30874,6 +30963,71 @@ async function reconcileShopifyStore(shop, store, options = {}) {
   return audit;
 }
 
+// ---------------------------------------------------------------------------
+// Faz 2 / OPEN-008 — the durable queue (Cloud Tasks) and its worker.
+//
+// With the queue flag on for a store, the gateway records the event, enqueues
+// it and answers 200 in milliseconds (SYNC-004); the worker fetches the order
+// again from Shopify (SYNC-010), normalizes it and applies it through the
+// common engine. A transient failure re-enqueues itself with the policy's
+// delay; a dead event stays in commerceEvents with its class and message
+// (RETRY-003) for the audit and for a manual retry.
+// ---------------------------------------------------------------------------
+const COMMERCE_QUEUE_FUNCTION = "commerceEventWorker";
+
+async function enqueueCommerceEvent(task, delaySeconds = 0) {
+  const queue = getFunctions().taskQueue(`locations/europe-west2/functions/${COMMERCE_QUEUE_FUNCTION}`);
+  await queue.enqueue(task, { scheduleDelaySeconds: Math.max(0, Math.round(delaySeconds)) });
+}
+
+async function processShopifyCommerceTask(task) {
+  const db = admin.firestore();
+  const shop = normalizeShopDomain(task.connectionId);
+  const storeSnap = await shopifyStoreRef(shop).get();
+  const store = storeSnap.exists ? (storeSnap.data() || {}) : null;
+  if (!store || String(store.status) !== "active" || !String(store.companyId || "")) {
+    const error = new Error(store ? `store_${store.status}` : "store_not_connected"); error.errorClass = "validation"; throw error;
+  }
+  const settingsSnap = await companySettingsDocRef(String(store.companyId)).get();
+  const ctxBase = { ...commerceContextForShopify(shop, store, { eventKey: task.key }), mode: "apply", defaultDeliveryTime: resolveDefaultDeliveryTime(settingsSnap.data()) };
+  return commerce.worker.processCommerceEvent(db, task, {
+    fetchLatest: async () => fetchShopifyOrderById(shop, store, String(task.externalId || "")),
+    normalize: (raw) => commerce.shopify.normalizeShopifyOrder(raw, { shop, shopName: store.shopName, eventOrigin: task.eventOrigin || "provider", rawSnapshotRef: task.key }),
+    apply: (envelope) => commerce.engine.applyEnvelope(db, envelope, {
+      ...ctxBase,
+      capacity: async () => {
+        const companySnap = await db.collection("companies").doc(ctxBase.companyId).get();
+        return integrationOrderCapacity(ctxBase.companyId, companySnap.data() || {});
+      },
+      hold: async (envelope, capacity) => holdIntegrationOrder(ctxBase.companyId, "shopify", envelope.identity.external_id, { id: envelope.identity.external_id }, capacity, { shop, topic: task.eventType, viaQueue: true })
+    }),
+    retryAfterOf: (error) => commerce.events.parseRetryAfter(error?.retryAfter || error?.headers?.["retry-after"])
+  });
+}
+
+exports.commerceEventWorker = onTaskDispatched({
+  region: "europe-west2",
+  retryConfig: { maxAttempts: 1 },          // retries are the policy's, with its delays — not Cloud Tasks' blind ones
+  rateLimits: { maxConcurrentDispatches: 5 },
+  secrets: [SHOPIFY_TOKEN_KEY]
+}, async (request) => {
+  const task = request.data || {};
+  if (task.provider !== "shopify") {
+    console.warn("commerceEventWorker: unknown provider", task.provider);
+    return;
+  }
+  const result = await processShopifyCommerceTask(task);
+  if (result.status === "retrying" && result.nextRetryInMs) {
+    await enqueueCommerceEvent({ ...task, attempt: Number(task.attempt || 1) + 1 }, result.nextRetryInMs / 1000);
+  }
+});
+
+// ARCH-004 — the UI reads what a provider can do from here, not from `if shopify`.
+exports.getCommerceCapabilities = onCall({ region: "europe-west2" }, async (request) => {
+  await requireWorkspaceForBilling(request, false);
+  return { providers: commerce.capabilities.listProviders().map((provider) => commerce.capabilities.getCapabilities(provider)) };
+});
+
 exports.shopifyReconcileOrders = onSchedule({
   schedule: "every 15 minutes",
   timeZone: "Europe/London",
@@ -30940,6 +31094,10 @@ if (process.env.NIVADESK_E2E === "1") {
     shopifyPublicStoreView,
     // SHOP-013: the reconciliation pass and the converter it feeds.
     reconcileShopifyStore,
-    shopifyGraphQLOrderToRest
+    shopifyGraphQLOrderToRest,
+    // Faz 2: the shadow hook and the queue worker's brain, for the suite.
+    shadowCompareShopifyOrder,
+    processShopifyCommerceTask,
+    commerceContextForShopify
   };
 }
