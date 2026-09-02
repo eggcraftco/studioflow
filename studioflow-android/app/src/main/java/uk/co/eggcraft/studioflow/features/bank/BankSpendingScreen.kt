@@ -103,6 +103,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uk.co.eggcraft.studioflow.data.firebase.BankIncomingMatchResult
+import uk.co.eggcraft.studioflow.data.firebase.BankRefundHint
 import uk.co.eggcraft.studioflow.data.firebase.BankOcrResult
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.BANK_CATEGORIES
@@ -285,6 +286,8 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     var auditEntries by remember { mutableStateOf<List<StudioBankAuditEntry>?>(null) }
     // Candidates returned by bankMatchIncomingToOrder("suggest") for the open sheet.
     var incomingSuggest by remember { mutableStateOf<BankIncomingMatchResult?>(null) }
+    // (txId → hint) from bankLinkRefundToOrder("suggest") for the open sheet; a PayPal refund names the payment it reverses.
+    var refundHint by remember { mutableStateOf<Pair<String, BankRefundHint?>?>(null) }
 
     // Faz 5: the feed has more than one source now (bank, PayPal); the chips narrow every list and total.
     var sourceFilter by rememberSaveable { mutableStateOf("all") }
@@ -1151,7 +1154,7 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 onSave = { category, vat, note, orderId, reviewStatus, createRule, keyword ->
                     run("drawer") {
                         repository.bankUpdateTransaction(workspaceId, selectedTx.id, category, vat, note, reviewStatus)
-                        if (orderId != selectedTx.linkedOrderId) {
+                        if (selectedTx.outgoingKind.isBlank() && orderId != selectedTx.linkedOrderId) {
                             if (selectedTx.linkedOrderId.isNotBlank()) repository.bankLinkOrder(workspaceId, selectedTx.id, "")
                             if (orderId.isNotBlank()) repository.bankLinkOrder(workspaceId, selectedTx.id, orderId)
                         }
@@ -1192,6 +1195,18 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                             result.created -> { incomingSuggest = null; t("Payment recorded on the order.") }
                             result.linked || result.already -> { incomingSuggest = null; t("Matched to the order's existing payment — nothing was recorded twice.") }
                             result.unlinked -> { incomingSuggest = null; t("Match removed — the payment entry stays on the order.") }
+                            else -> null
+                        }
+                    }
+                },
+                refundHint = refundHint,
+                onRefundAction = { mode, refundOrderId, kind ->
+                    run(if (mode == "suggest") "refund-hint" else "refund") {
+                        val result = repository.bankLinkRefundToOrder(workspaceId, selectedTx.id, mode, refundOrderId, kind)
+                        when {
+                            mode == "suggest" -> { refundHint = selectedTx.id to (result.hint ?: BankRefundHint()); null }
+                            result.linked -> t("Refund recorded on the order.") + (result.orderLabel.takeIf { it.isNotBlank() }?.let { " ⛓ $it" } ?: "")
+                            result.unlinked -> t("Refund removed from the order.")
                             else -> null
                         }
                     }
@@ -1506,6 +1521,7 @@ private fun TransactionRow(
                 if (tx.provider == "paypal") Text("P", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF003087))
                 Text(tx.merchant.ifBlank { "—" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (isDuplicate) Chip(t("Duplicate?"), AMBER)
+                if (tx.outgoingKind.isNotBlank()) Chip("↩ ${t(tx.outgoingKindLabel)}", RED)
                 if (tx.isSpending && tx.splits.isNotEmpty()) Chip("⑃ ${t("Split")} (${tx.splits.size})", PURPLE)
                 if (tx.linkedOrderLabel.isNotBlank()) Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(12.dp), tint = BLUE)
             }
@@ -1517,7 +1533,7 @@ private fun TransactionRow(
         }
         if (!compact && tx.isSpending) ReceiptStatus(tx, t)
         Column(horizontalAlignment = Alignment.End) {
-            Text((if (tx.isSpending) "−" else "+") + amountText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (tx.isSpending) RED else GREEN)
+            Text((if (tx.isOutgoing) "−" else "+") + amountText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (tx.isOutgoing) RED else GREEN)
             if (compact && tx.isSpending) {
                 Icon(
                     if (tx.hasReceipt) Icons.Filled.Description else if (tx.receiptNotNeeded) Icons.Filled.Remove else Icons.Filled.AttachFile,
@@ -1886,6 +1902,10 @@ private fun TransactionDetailSheet(
     onDismissSuggest: () -> Unit,
     /** (mode, orderId, paymentId) → bankMatchIncomingToOrder. */
     onIncomingAction: (String, String, String) -> Unit,
+    /** (txId → hint) from bankLinkRefundToOrder("suggest"); null until asked. */
+    refundHint: Pair<String, BankRefundHint?>?,
+    /** (mode, orderId, kind) → bankLinkRefundToOrder. */
+    onRefundAction: (String, String, String) -> Unit,
     /** "View in Inventory" on the linked-purchase row — switches to the Inventory section. */
     onOpenInventory: () -> Unit
 ) {
@@ -1952,7 +1972,7 @@ private fun TransactionDetailSheet(
                     Text(displayDate(tx.bookingDate, locale), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text((if (tx.isSpending) "−" else "+") + fmt(abs(tx.amount), tx.currency), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = if (tx.isSpending) RED else GREEN)
+            Text((if (tx.isOutgoing) "−" else "+") + fmt(abs(tx.amount), tx.currency), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = if (tx.isOutgoing) RED else GREEN)
         }
         Column {
             Text(t("Raw bank description"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1992,7 +2012,10 @@ private fun TransactionDetailSheet(
                 }
             }
         }
-        if (tx.isSpending) {
+        if (tx.isOutgoing && (isOwner || tx.outgoingKind.isNotBlank())) {
+            RefundLinkSection(tx, t, isOwner, orders, busy, refundHint, onRefundAction)
+        }
+        if (tx.isOutgoing) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(t("Bookkeeping"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2027,6 +2050,14 @@ private fun TransactionDetailSheet(
                     // A rule filled the VAT in — effective VAT is vatCode || vatCodeAuto || category default.
                     Text("⚡ ${t("Auto-applied")}: ${t(bankVatLabel(tx.vatCodeAuto))}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (tx.outgoingKind.isNotBlank()) {
+                    // The order is spoken for by the refund section above.
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(t("Linked order or project"), fontSize = 12.sp, modifier = Modifier.width(110.dp))
+                        Text("⛓ ${tx.linkedOrderLabel.ifBlank { t("Order") }}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BLUE, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text(t("Recorded as a refund, not an expense."), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(t("Linked order or project"), fontSize = 12.sp, modifier = Modifier.width(110.dp))
                     Box {
@@ -2051,6 +2082,7 @@ private fun TransactionDetailSheet(
                     TextButton(onClick = { orderId = orderSuggestion.orderId }, contentPadding = PaddingValues(0.dp)) {
                         Text("⛓ ${t("Likely related to this order")}: ${orderSuggestion.label} (${(orderSuggestion.confidence * 100).toInt()}%)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
+                }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2486,6 +2518,90 @@ private fun TransactionDetailSheet(
         if (isOwner) {
             Button(onClick = { onSave(category, vat, note, orderId, review, false, "") }, enabled = busy != "drawer", modifier = Modifier.fillMaxWidth()) {
                 Text(if (busy == "drawer") t("Saving…") else t("Save"), fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+/** Money out that went back to a customer — a refund you chose or a chargeback the card scheme took —
+ *  is recorded on the order it reverses as a negative payment entry and leaves the spending totals.
+ *  A PayPal refund names the payment it reverses, so the order can be offered before anyone searches. */
+@Composable
+private fun RefundLinkSection(
+    tx: StudioBankTransaction, t: (String) -> String, isOwner: Boolean,
+    orders: List<uk.co.eggcraft.studioflow.data.model.StudioOrder>, busy: String?,
+    refundHint: Pair<String, BankRefundHint?>?, onRefundAction: (String, String, String) -> Unit
+) {
+    var kind by remember(tx.id) { mutableStateOf(tx.outgoingKind) }
+    var orderId by remember(tx.id) { mutableStateOf(if (tx.outgoingKind.isBlank()) "" else tx.linkedOrderId) }
+    var search by remember(tx.id) { mutableStateOf("") }
+    var kindMenu by remember { mutableStateOf(false) }
+    var orderMenu by remember { mutableStateOf(false) }
+    val hint = refundHint?.takeIf { it.first == tx.id }?.second
+    LaunchedEffect(tx.id) {
+        if (tx.outgoingKind.isBlank() && tx.paypalReferenceId.isNotBlank() && refundHint?.first != tx.id) onRefundAction("suggest", "", "")
+    }
+    LaunchedEffect(hint) {
+        val found = hint ?: return@LaunchedEffect
+        if (found.orderId.isNotBlank()) {
+            if (kind.isBlank()) kind = found.suggestedKind.ifBlank { "customer_refund" }
+            if (orderId.isBlank()) orderId = found.orderId
+        }
+    }
+    val ranked = remember(tx.id, orders, search) {
+        val needle = search.trim().lowercase()
+        bankRankOrders(tx, orders).map { it.first }
+            .filter { needle.isBlank() || "${it.customerName} ${it.designName}".lowercase().contains(needle) }
+            .take(60)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("↩ ${t("Refund or chargeback")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (tx.outgoingKind.isNotBlank()) {
+            Text(t(tx.outgoingKindLabel), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = RED)
+            if (tx.linkedOrderLabel.isNotBlank()) Text("⛓ ${tx.linkedOrderLabel}", fontSize = 11.5.sp, color = BLUE, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(t("Recorded on the order as a negative payment. Not counted as spending."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (isOwner) {
+                TextButton(onClick = { onRefundAction("unlink", "", "") }, enabled = busy != "refund", contentPadding = PaddingValues(0.dp)) {
+                    Text(t("Remove from the order"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = RED)
+                }
+            }
+        } else {
+            Box {
+                OutlinedButton(onClick = { kindMenu = true }) {
+                    Text(t(when (kind) { "chargeback" -> "Chargeback"; "customer_refund" -> "Customer refund"; else -> "Not a refund" }), fontSize = 12.sp, maxLines = 1)
+                }
+                DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                    DropdownMenuItem(text = { Text(t("Not a refund")) }, onClick = { kind = ""; kindMenu = false })
+                    DropdownMenuItem(text = { Text(t("Customer refund")) }, onClick = { kind = "customer_refund"; kindMenu = false })
+                    DropdownMenuItem(text = { Text(t("Chargeback")) }, onClick = { kind = "chargeback"; kindMenu = false })
+                }
+            }
+            if (kind.isNotBlank()) {
+                OutlinedTextField(value = search, onValueChange = { search = it }, placeholder = { Text(t("Search orders"), fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { orderMenu = true }) {
+                            val label = ranked.firstOrNull { it.id == orderId }?.let { orderOptionLabel(it) }
+                                ?: if (orderId.isNotBlank()) (hint?.orderLabel?.ifBlank { null } ?: t("Order")) else "${t("Choose the order")}…"
+                            Text(label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
+                            ranked.forEach { order ->
+                                DropdownMenuItem(text = { Text(orderOptionLabel(order)) }, onClick = { orderId = order.id; orderMenu = false })
+                            }
+                        }
+                    }
+                    Button(onClick = { onRefundAction("link", orderId, kind) }, enabled = orderId.isNotBlank() && busy != "refund") {
+                        Text(if (busy == "refund") t("Loading…") else t("Record on the order"), fontSize = 12.sp)
+                    }
+                }
+            }
+            if (hint != null && hint.orderId.isNotBlank()) {
+                TextButton(onClick = { if (kind.isBlank()) kind = hint.suggestedKind.ifBlank { "customer_refund" }; orderId = hint.orderId }, contentPadding = PaddingValues(0.dp)) {
+                    Text("↩ ${t("Reverses the PayPal payment recorded on this order")}: ${hint.orderLabel.ifBlank { t("Order") }}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            } else if (hint != null && hint.reason == "reverses_paypal_payment_unlinked") {
+                Text("↩ ${t("Reverses a PayPal payment that is not matched to an order yet.")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

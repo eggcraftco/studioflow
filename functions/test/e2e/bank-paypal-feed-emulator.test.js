@@ -118,6 +118,41 @@ const rows = () => company().collection("bankTransactions");
     assert.strictEqual(suggest.candidates.length, 1); assert.ok(suggest.candidates[0].reasons.includes("provider_keyword"));
   });
 
+  await check("a PayPal refund names the payment it reverses; recorded on that order it becomes a negative ledger entry, and unlink takes it back", async () => {
+    // The order the sale was paid into, and the sale row matched to it (create mode records the payment).
+    await db.collection("siparisler").doc("order-refund-1").set({ companyId: COMPANY, customerName: "Ada Lovelace", designName: "Signet ring", paidAmount: 0, remainingAmount: 19.99, payments: [], status: "In progress" });
+    const created = await index.bankMatchIncomingToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_SALE1`, mode: "create", orderId: "order-refund-1" }, rawRequest: {} });
+    assert.strictEqual(created.ok, true);
+    // PayPal's refund of that sale (T1107) names it through paypal_reference_id.
+    paypal.transactions.push({ ...tx("REF1", "T1107", "-19.99", 1, { subject: "Refund", fee: "0.54" }), transaction_info: { ...tx("REF1", "T1107", "-19.99", 1, { fee: "0.54" }).transaction_info, paypal_reference_id: "SALE1", paypal_reference_id_type: "TXN" } });
+    await index.bankSyncTransactions.run({ auth, data: { companyId: COMPANY, force: true }, rawRequest: {} });
+    const refundRow = (await rows().doc(`${accountId}_REF1`).get()).data();
+    assert.strictEqual(refundRow.txType, "PAYPAL_REFUND"); assert.strictEqual(refundRow.paypalReferenceId, "SALE1"); assert.strictEqual(refundRow.amount, -19.99);
+    const suggest = await index.bankLinkRefundToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, mode: "suggest" }, rawRequest: {} });
+    assert.strictEqual(suggest.suggestedKind, "customer_refund"); assert.strictEqual(suggest.hint.orderId, "order-refund-1"); assert.strictEqual(suggest.hint.reason, "reverses_paypal_payment");
+    await assert.rejects(index.bankLinkTransactionToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_SALE1`, orderId: "order-refund-1" }, rawRequest: {} }), /outgoing/, "a sale is not an expense");
+    const linked = await index.bankLinkRefundToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, mode: "link", orderId: "order-refund-1", kind: "customer_refund" }, rawRequest: {} });
+    assert.strictEqual(linked.linked, true);
+    let order = (await db.collection("siparisler").doc("order-refund-1").get()).data();
+    assert.strictEqual(order.paidAmount, 0); assert.strictEqual(order.refundedAmount, 19.99);
+    const entry = order.payments.find((p) => p.refund === true);
+    assert.ok(entry, "a refund entry sits in the ledger"); assert.strictEqual(entry.amount, -19.99); assert.strictEqual(entry.method, "Refund"); assert.strictEqual(entry.bankTransactionId, `${accountId}_REF1`);
+    const rowAfter = (await rows().doc(`${accountId}_REF1`).get()).data();
+    assert.strictEqual(rowAfter.outgoingKind, "customer_refund"); assert.strictEqual(rowAfter.linkedOrderId, "order-refund-1"); assert.strictEqual(rowAfter.linkedPaymentId, entry.id);
+    await assert.rejects(index.bankLinkTransactionToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, orderId: "order-refund-1" }, rawRequest: {} }), /recorded as a refund/, "a refund row is not an expense");
+    const again = await index.bankLinkRefundToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, mode: "link", orderId: "order-refund-1", kind: "chargeback" }, rawRequest: {} });
+    assert.strictEqual(again.already, true, "the same row never becomes a second entry");
+    order = (await db.collection("siparisler").doc("order-refund-1").get()).data();
+    assert.strictEqual(order.payments.filter((p) => p.refund === true).length, 1); assert.strictEqual(order.payments.find((p) => p.refund === true).method, "Chargeback");
+    const unlinked = await index.bankLinkRefundToOrder.run({ auth, data: { companyId: COMPANY, transactionId: `${accountId}_REF1`, mode: "unlink" }, rawRequest: {} });
+    assert.strictEqual(unlinked.unlinked, true);
+    order = (await db.collection("siparisler").doc("order-refund-1").get()).data();
+    assert.strictEqual(order.paidAmount, 19.99); assert.strictEqual(order.refundedAmount, 0); assert.strictEqual(order.payments.some((p) => p.refund === true), false);
+    const rowFree = (await rows().doc(`${accountId}_REF1`).get()).data();
+    assert.strictEqual(rowFree.outgoingKind, undefined); assert.strictEqual(rowFree.linkedOrderId, "");
+    await db.collection("siparisler").doc("order-refund-1").delete();
+  });
+
   await check("a refused secret on a later sync is a reconnect, not a silent nothing", async () => {
     paypal.goodSecret = "secret-2";   // PayPal rotated; ours is now wrong
     const out = await index.bankSyncTransactions.run({ auth, data: { companyId: COMPANY, force: true }, rawRequest: {} });

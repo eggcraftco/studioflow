@@ -143,6 +143,21 @@ data class BankPaymentCandidate(
 )
 
 /** What bankMatchIncomingToOrder came back with — candidates to pick from, or what was done. */
+/** What the feed already knows about an outgoing row (bankLinkRefundToOrder "suggest"). */
+data class BankRefundHint(
+    val orderId: String = "",
+    val orderLabel: String = "",
+    val reason: String = "",
+    val suggestedKind: String = ""
+)
+
+data class BankRefundLinkResult(
+    val orderLabel: String = "",
+    val linked: Boolean = false,
+    val unlinked: Boolean = false,
+    val hint: BankRefundHint? = null
+)
+
 data class BankIncomingMatchResult(
     val orderLabel: String = "",
     val candidates: List<BankPaymentCandidate> = emptyList(),
@@ -3698,6 +3713,32 @@ class StudioFlowRepository(
      *  referenced, never copied or re-uploaded. */
     suspend fun bankAttachReceiptFromLibrary(workspaceId: String, transactionId: String, fileRecordId: String) {
         bankCall("bankSetTransactionReceipt", workspaceId, mapOf("transactionId" to transactionId, "fileRecordId" to fileRecordId))
+    }
+
+    /** Records an outgoing row on the order it reverses ("link": a negative payment entry, paidAmount down,
+     *  refundedAmount up), lifts it back out ("unlink"), or asks what the feed already knows ("suggest"). */
+    suspend fun bankLinkRefundToOrder(
+        workspaceId: String, transactionId: String, mode: String, orderId: String = "", kind: String = ""
+    ): BankRefundLinkResult {
+        val payload = mutableMapOf<String, Any?>("transactionId" to transactionId, "mode" to mode)
+        if (orderId.isNotBlank()) payload["orderId"] = orderId
+        if (kind.isNotBlank()) payload["kind"] = kind
+        val raw = bankCall("bankLinkRefundToOrder", workspaceId, payload)
+        val suggestedKind = (raw["suggestedKind"] as? String).orEmpty()
+        val hint = (raw["hint"] as? Map<*, *>)?.let {
+            BankRefundHint(
+                orderId = it["orderId"]?.toString().orEmpty(),
+                orderLabel = it["orderLabel"]?.toString().orEmpty(),
+                reason = it["reason"]?.toString().orEmpty(),
+                suggestedKind = suggestedKind
+            )
+        }
+        return BankRefundLinkResult(
+            orderLabel = (raw["orderLabel"] as? String).orEmpty(),
+            linked = (raw["linked"] as? Boolean) == true,
+            unlinked = (raw["unlinked"] as? Boolean) == true,
+            hint = hint
+        )
     }
 
     suspend fun bankLinkOrder(workspaceId: String, transactionId: String, orderId: String) {

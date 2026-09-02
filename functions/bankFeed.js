@@ -62,8 +62,13 @@ const ENRICHMENT_FIELDS = [
   "purchaseId", "purchaseNumber", "reviewStatus", "reviewedAt", "pandle",
   "splits", "incomingKind",
   // Faz 5: which processor payout this bank row settled (written by the settlement matcher, never by a sync).
-  "settlement"
+  "settlement",
+  // Money out that is not spending: a customer refund or a chargeback, recorded on the order it reverses.
+  "outgoingKind"
 ];
+
+/** What an outgoing row is when it is not an expense: money handed back to a customer, by choice or by the card scheme. */
+const OUTGOING_KINDS = ["customer_refund", "chargeback"];
 
 // What an incoming payment actually is — a transfer between the owner's own
 // accounts or an owner contribution is not revenue, and only an explicit
@@ -870,6 +875,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const spend = round2(Math.abs(Number(tx.amount) || 0));
     if (!(spend > 0) || Number(tx.amount) >= 0) {
       throw new HttpsError("failed-precondition", "Only outgoing transactions can be linked as expenses.");
+    }
+    if (cleanText(tx.outgoingKind, 24)) {
+      throw new HttpsError("failed-precondition", "This row is recorded as a refund on an order; remove that first if it was an expense after all.");
     }
 
     const alreadyLinkedOrderId = cleanText(tx.linkedOrderId, 120);
@@ -1805,9 +1813,121 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     } catch (error) { rethrow(error); }
   });
 
+  /**
+   * Money out that went back to a customer — a refund you chose, or a
+   * chargeback the card scheme took — is recorded on the order it reverses:
+   * a negative entry in the order's payment ledger with the bank row's id,
+   * paidAmount reduced, refundedAmount raised. "suggest" hands back what the
+   * feed already knows (a PayPal refund names the payment it reverses, and
+   * that payment may already sit on an order); "link" writes both sides;
+   * "unlink" takes the entry back out. Never an expense and never revenue:
+   * the row leaves the spending totals once it carries an outgoingKind.
+   */
+  const bankLinkRefundToOrder = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId, uid } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 250);
+    const mode = cleanText(request.data?.mode, 12) || "suggest";
+    if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
+    const txRef = transactionsRef(companyId).doc(transactionId);
+    const txDoc = await txRef.get();
+    if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    const tx = txDoc.data() || {};
+    const amount = round2(Math.abs(Number(tx.amount) || 0));
+    if (!(amount > 0) || Number(tx.amount) >= 0) throw new HttpsError("failed-precondition", "Only outgoing transactions can be recorded as refunds.");
+    const currentKind = cleanText(tx.outgoingKind, 24);
+    const guessKind = () => {
+      const code = cleanText(tx.paypalEventCode, 8).toUpperCase();
+      if (code.startsWith("T12")) return "chargeback";
+      if (/chargeback|charge back|dispute/i.test(`${tx.description || ""} ${tx.counterparty || ""}`)) return "chargeback";
+      return "customer_refund";
+    };
+    const orderLabelOf = (orderData, orderId) => cleanText(orderData.designName, 80) || cleanText(orderData.customerName, 80) || orderId;
+
+    if (mode === "suggest") {
+      // A PayPal refund names the payment it reverses; if that payment's row was matched to an order, that order is the answer.
+      let hint = null;
+      const reference = cleanText(tx.paypalReferenceId, 160);
+      if (tx.provider === "paypal" && reference) {
+        const originalDoc = await transactionsRef(companyId).doc(transactionDocId(cleanText(tx.accountId, 60), { transaction_id: reference })).get();
+        const original = originalDoc.exists ? (originalDoc.data() || {}) : null;
+        if (original && cleanText(original.linkedOrderId, 120)) {
+          hint = { orderId: cleanText(original.linkedOrderId, 120), orderLabel: cleanText(original.linkedOrderLabel, 120), reason: "reverses_paypal_payment", originalTransactionId: originalDoc.id, originalAmount: round2(Number(original.amount) || 0) };
+        } else if (original) {
+          hint = { orderId: "", orderLabel: "", reason: "reverses_paypal_payment_unlinked", originalTransactionId: originalDoc.id, originalAmount: round2(Number(original.amount) || 0) };
+        }
+      }
+      return { ok: true, kind: currentKind, suggestedKind: currentKind || guessKind(), hint, linkedOrderId: cleanText(tx.linkedOrderId, 120), linkedOrderLabel: cleanText(tx.linkedOrderLabel, 120), linkedPaymentId: cleanText(tx.linkedPaymentId, 80) };
+    }
+
+    if (mode === "unlink") {
+      const orderId = cleanText(tx.linkedOrderId, 120);
+      const paymentId = cleanText(tx.linkedPaymentId, 80);
+      if (!currentKind) throw new HttpsError("failed-precondition", "This row is not recorded as a refund.");
+      if (orderId && paymentId) {
+        const orderRef = db().collection("siparisler").doc(orderId);
+        const orderDoc = await orderRef.get();
+        const orderData = orderDoc.data();
+        if (orderData && cleanText(orderData.companyId, 120) === companyId && Array.isArray(orderData.payments)) {
+          const entry = orderData.payments.find((item) => item && cleanText(item.id, 80) === paymentId && cleanText(item.bankTransactionId, 250) === transactionId);
+          if (entry) {
+            const refunded = round2(Math.abs(Number(entry.amount) || 0));
+            await orderRef.set({
+              payments: orderData.payments.filter((item) => !(item && cleanText(item.id, 80) === paymentId)),
+              paidAmount: round2((Number(orderData.paidAmount) || 0) + refunded),
+              refundedAmount: Math.max(0, round2((Number(orderData.refundedAmount) || 0) - refunded))
+            }, { merge: true });
+          }
+        }
+      }
+      await txRef.set({ linkedOrderId: "", linkedOrderLabel: "", linkedPaymentId: "", outgoingKind: admin.firestore.FieldValue.delete(), reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { ok: true, unlinked: true };
+    }
+
+    if (mode !== "link") throw new HttpsError("invalid-argument", "mode must be suggest, link or unlink.");
+    const kind = cleanText(request.data?.kind, 24).toLowerCase() || guessKind();
+    if (!OUTGOING_KINDS.includes(kind)) throw new HttpsError("invalid-argument", "kind must be customer_refund or chargeback.");
+    if (cleanText(tx.linkedOrderId, 120) && !currentKind) throw new HttpsError("failed-precondition", "This row is linked to an order as an expense; unlink that first.");
+    const orderId = cleanText(request.data?.orderId, 120) || cleanText(tx.linkedOrderId, 120);
+    if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+    const orderRef = db().collection("siparisler").doc(orderId);
+    const orderDoc = await orderRef.get();
+    const orderData = orderDoc.data();
+    if (!orderData || cleanText(orderData.companyId, 120) !== companyId) throw new HttpsError("not-found", "Order not found in this workspace.");
+    const orderLabel = orderLabelOf(orderData, orderId);
+    const payments = Array.isArray(orderData.payments) ? orderData.payments : [];
+    const existing = payments.find((entry) => entry && cleanText(entry.bankTransactionId, 250) === transactionId);
+    if (existing) {
+      // The same bank row already sits on this order → idempotent; only the kind may change.
+      const nextPayments = payments.map((entry) => (entry && cleanText(entry.bankTransactionId, 250) === transactionId ? { ...entry, method: kind === "chargeback" ? "Chargeback" : "Refund" } : entry));
+      await orderRef.set({ payments: nextPayments }, { merge: true });
+      await txRef.set({ outgoingKind: kind, linkedOrderId: orderId, linkedOrderLabel: orderLabel, linkedPaymentId: cleanText(existing.id, 80), reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { ok: true, linked: true, paymentId: cleanText(existing.id, 80), already: true, orderLabel };
+    }
+    if (currentKind && cleanText(tx.linkedOrderId, 120) && cleanText(tx.linkedOrderId, 120) !== orderId) throw new HttpsError("failed-precondition", "This refund is recorded on another order; unlink it first.");
+    const entry = {
+      id: crypto.randomUUID(),
+      amount: -amount,
+      date: tx.bookingDate ? admin.firestore.Timestamp.fromDate(new Date(`${cleanText(tx.bookingDate, 10)}T12:00:00Z`)) : admin.firestore.Timestamp.now(),
+      method: kind === "chargeback" ? "Chargeback" : "Refund",
+      note: cleanText(tx.counterparty || tx.description, 160),
+      createdByUid: uid || "",
+      createdByEmail: "",
+      bankTransactionId: transactionId,
+      refund: true
+    };
+    await orderRef.set({
+      payments: [...payments, entry],
+      paidAmount: Math.max(0, round2((Number(orderData.paidAmount) || 0) - amount)),
+      refundedAmount: round2((Number(orderData.refundedAmount) || 0) + amount)
+    }, { merge: true });
+    await txRef.set({ outgoingKind: kind, linkedOrderId: orderId, linkedOrderLabel: orderLabel, linkedPaymentId: entry.id, reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { ok: true, linked: true, paymentId: entry.id, orderLabel };
+  });
+
   return {
     bankCreateRequisition,
     paypalConnect,
+    bankLinkRefundToOrder,
     bankListPayouts,
     matchPayoutToBank,
     bankFinalizeRequisition,
@@ -1839,4 +1959,4 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   };
 }
 
-module.exports = { createBankFeedFunctions, BANK_VAT_CODES, BANK_REVIEW_STATUSES };
+module.exports = { createBankFeedFunctions, BANK_VAT_CODES, BANK_REVIEW_STATUSES, OUTGOING_KINDS };

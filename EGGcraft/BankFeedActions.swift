@@ -58,6 +58,21 @@ struct BankPaymentCandidate: Identifiable, Equatable {
 
 /// What bankMatchIncomingToOrder answered — either a candidate list to choose
 /// from, or which terminal action actually happened.
+/// What the feed already knows about an outgoing row (bankLinkRefundToOrder "suggest").
+struct BankRefundHint {
+    let orderId: String
+    let orderLabel: String
+    let reason: String
+    let suggestedKind: String
+}
+
+struct BankRefundLinkResult {
+    let orderLabel: String
+    let linked: Bool
+    let unlinked: Bool
+    let hint: BankRefundHint?
+}
+
 struct BankIncomingMatchResult {
     let orderLabel: String
     let candidates: [BankPaymentCandidate]
@@ -146,6 +161,22 @@ extension FirebaseManager {
 
     func bankSetReceiptNotNeeded(transactionId: String, value: Bool) async throws {
         try await bankCall("bankUpdateTransaction", ["transactionId": transactionId, "receiptNotNeeded": value])
+    }
+
+    /// Records an outgoing row on the order it reverses ("link": a negative
+    /// payment entry, paidAmount down, refundedAmount up), lifts it back out
+    /// ("unlink"), or asks what the feed already knows ("suggest": a PayPal
+    /// refund names the payment it reverses, and that payment may sit on an order).
+    func bankRefundLink(transactionId: String, mode: String, orderId: String, kind: String) async throws -> BankRefundLinkResult {
+        var payload: [String: Any] = ["transactionId": transactionId, "mode": mode]
+        if !orderId.isEmpty { payload["orderId"] = orderId }
+        if !kind.isEmpty { payload["kind"] = kind }
+        let raw = try await bankCall("bankLinkRefundToOrder", payload)
+        let suggestedKind = (raw["suggestedKind"] as? String) ?? ""
+        let hint = (raw["hint"] as? [String: Any]).map {
+            BankRefundHint(orderId: ($0["orderId"] as? String) ?? "", orderLabel: ($0["orderLabel"] as? String) ?? "", reason: ($0["reason"] as? String) ?? "", suggestedKind: suggestedKind)
+        }
+        return BankRefundLinkResult(orderLabel: (raw["orderLabel"] as? String) ?? "", linked: (raw["linked"] as? Bool) ?? false, unlinked: (raw["unlinked"] as? Bool) ?? false, hint: hint)
     }
 
     /// Links when `orderId` is given, unlinks when the transaction is already linked and `orderId` is empty.

@@ -62,13 +62,21 @@ data class StudioBankTransaction(
     val settlementArrival: String = "",
     /** PayPal keeps the fee beside the gross amount. */
     val feeAmount: Double? = null,
-    val netAmount: Double? = null
+    val netAmount: Double? = null,
+    /** Money out that went back to a customer ("customer_refund" | "chargeback"): recorded on the order, never spending. */
+    val outgoingKind: String = "",
+    /** A PayPal refund names the payment it reverses. */
+    val paypalReferenceId: String = ""
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
     val year: Int get() = bookingDate.take(4).toIntOrNull() ?: 0
     val month: Int get() = bookingDate.drop(5).take(2).toIntOrNull() ?: 0
-    val isSpending: Boolean get() = amount < 0
+    /** Money out, whatever it was for — drives the sign and colour of a row. */
+    val isOutgoing: Boolean get() = amount < 0
+    /** Spending is money out that stayed out; a refund or chargeback went back to a customer and lives on the order instead. */
+    val isSpending: Boolean get() = amount < 0 && outgoingKind.isBlank()
+    val outgoingKindLabel: String get() = if (outgoingKind == "chargeback") "Chargeback" else "Customer refund"
 
     /** Where the row stands on its way to the accountant. A confirmed Pandle
      *  push implies "confirmed" even on rows saved before review statuses existed. */
@@ -283,7 +291,9 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         settlementNet = ((data["settlement"] as? Map<*, *>)?.get("net")?.toString()).orEmpty(),
         settlementArrival = ((data["settlement"] as? Map<*, *>)?.get("arrivalDate")?.toString()).orEmpty(),
         feeAmount = (data["feeAmount"] as? Number)?.toDouble(),
-        netAmount = (data["netAmount"] as? Number)?.toDouble()
+        netAmount = (data["netAmount"] as? Number)?.toDouble(),
+        outgoingKind = (data["outgoingKind"] as? String).orEmpty(),
+        paypalReferenceId = (data["paypalReferenceId"] as? String).orEmpty()
     )
 }
 

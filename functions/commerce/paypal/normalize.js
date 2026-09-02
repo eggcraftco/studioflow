@@ -84,6 +84,8 @@ function normalizePayPalTransaction(t, { accountId, connectionId }) {
     normalisedProviderId: id,
     providerReference: clean(info.invoice_id, 200) || clean(info.paypal_reference_id, 200) || "",
     paypalEventCode: clean(info.transaction_event_code, 8).toUpperCase(),
+    // A refund or chargeback names the transaction it reverses (paypal_reference_id of type TXN): the bridge to the order it was paid into.
+    paypalReferenceId: clean(info.paypal_reference_id_type, 8).toUpperCase() === "TXN" ? clean(info.paypal_reference_id, 160) : "",
     payerEmail: clean(t.payer_info?.email_address, 160) || "",
     feeAmount: fee === null ? null : round2(fee),
     netAmount: fee === null ? amount : round2(amount + fee)

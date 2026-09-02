@@ -64,6 +64,10 @@ struct StudioBankTransaction: Identifiable, Equatable {
     /// order payments — which existing payment entry it was matched to.
     let incomingKind: String
     let linkedPaymentId: String
+    /// Money out that went back to a customer ("customer_refund" | "chargeback"): recorded on the order, never spending.
+    let outgoingKind: String
+    /// A PayPal refund names the payment it reverses.
+    let paypalReferenceId: String
     /// Faz 5: the processor payout this row settled (Square today), written by the settlement matcher.
     let settlementLabel: String
     let settlementPayout: String
@@ -118,6 +122,8 @@ struct StudioBankTransaction: Identifiable, Equatable {
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?? ""
         incomingKind = (data["incomingKind"] as? String) ?? ""
         linkedPaymentId = (data["linkedPaymentId"] as? String) ?? ""
+        outgoingKind = (data["outgoingKind"] as? String) ?? ""
+        paypalReferenceId = (data["paypalReferenceId"] as? String) ?? ""
         let settlement = data["settlement"] as? [String: Any] ?? [:]
         settlementLabel = (settlement["providerLabel"] as? String) ?? ((settlement["provider"] as? String) ?? "")
         settlementPayout = (settlement["payoutExternalId"] as? String) ?? ""
@@ -151,7 +157,11 @@ struct StudioBankTransaction: Identifiable, Equatable {
     var merchant: String { counterparty.isEmpty ? description : counterparty }
     var year: Int { Int(bookingDate.prefix(4)) ?? 0 }
     var month: Int { Int(bookingDate.dropFirst(5).prefix(2)) ?? 0 }
-    var isSpending: Bool { amount < 0 }
+    /// Money out, whatever it was for — drives the sign and colour of a row.
+    var isOutgoing: Bool { amount < 0 }
+    /// Spending is money out that stayed out; a refund or chargeback went back to a customer and lives on the order instead.
+    var isSpending: Bool { amount < 0 && outgoingKind.isEmpty }
+    var outgoingKindLabel: String { outgoingKind == "chargeback" ? "Chargeback" : "Customer refund" }
     var pandleConfirmed: Bool { pandleStatus == "confirmed" }
     /// The field is enrichment; a confirmed Pandle push implies "confirmed"
     /// even on rows saved before review statuses existed (mirror of the web).
@@ -1623,6 +1633,9 @@ struct BankTransactionRow: View {
                     Text(fmt.date(tx.bookingDate, short: compact)).font(.system(size: 11)).foregroundColor(.secondary)
                     if tx.status == "pending" { Text("· \(fmt.t("pending"))").font(.system(size: 10.5)).foregroundColor(.secondary) }
                     if let meta { BankChip(text: meta.translate ? fmt.t(meta.label) : meta.label, color: meta.color) }
+                    if !tx.outgoingKind.isEmpty {
+                        BankChip(text: "↩ \(fmt.t(tx.outgoingKindLabel))", color: .red)
+                    }
                     if tx.isSpending {
                         // A split payment shows the split badge where the
                         // category chip would sit — the lines carry the categories.
@@ -1638,7 +1651,7 @@ struct BankTransactionRow: View {
             Spacer()
             if !compact { BankReceiptStatus(tx: tx, fmt: fmt).frame(width: 96, alignment: .leading) }
             VStack(alignment: .trailing, spacing: 2) {
-                Text(fmt.signed(tx)).font(.system(size: 13, weight: .bold)).monospacedDigit().foregroundColor(tx.isSpending ? .red : .green)
+                Text(fmt.signed(tx)).font(.system(size: 13, weight: .bold)).monospacedDigit().foregroundColor(tx.isOutgoing ? .red : .green)
                 if compact && tx.isSpending {
                     Image(systemName: tx.hasReceipt ? "doc.text.fill" : tx.receiptNotNeeded ? "minus.circle" : "paperclip")
                         .font(.system(size: 10)).foregroundColor(tx.hasReceipt ? .green : tx.receiptNotNeeded ? .secondary : .red)
@@ -1852,7 +1865,7 @@ struct BankTransactionDetail: View {
                         }
                     }
                     Spacer()
-                    Text(fmt.signed(tx)).font(.system(size: 16, weight: .bold)).monospacedDigit().foregroundColor(tx.isSpending ? .red : .green)
+                    Text(fmt.signed(tx)).font(.system(size: 16, weight: .bold)).monospacedDigit().foregroundColor(tx.isOutgoing ? .red : .green)
                 }
                 LabeledContent(fmt.t("Raw bank description")) { Text(tx.description.isEmpty ? "—" : tx.description).font(.system(size: 12)).foregroundColor(.secondary).multilineTextAlignment(.trailing) }
             }
@@ -1878,7 +1891,10 @@ struct BankTransactionDetail: View {
             if tx.amount > 0 {
                 BankIncomingMatchSection(tx: tx, model: model, fmt: fmt, isOwner: isOwner, orders: orders)
             }
-            if tx.isSpending {
+            if tx.isOutgoing, isOwner || !tx.outgoingKind.isEmpty {
+                BankRefundLinkSection(tx: tx, model: model, fmt: fmt, isOwner: isOwner, orders: orders)
+            }
+            if tx.isOutgoing {
                 Section {
                     Picker(fmt.t("Category"), selection: $category) {
                         Text(fmt.t("Uncategorised")).tag("")
@@ -1901,16 +1917,26 @@ struct BankTransactionDetail: View {
                     if tx.vatCode.isEmpty, !tx.vatCodeAuto.isEmpty {
                         Text("⚡ \(fmt.t("Auto-applied")): \(fmt.t(bankVatLabel(tx.vatCodeAuto)))").font(.system(size: 11)).foregroundColor(.secondary)
                     }
-                    Picker(fmt.t("Linked order or project"), selection: $orderId) {
-                        Text(fmt.t("Not linked")).tag("")
-                        ForEach(rankedOrders, id: \.id) { order in
-                            Text(order.designName.isEmpty || order.designName == "Untitled design" ? order.customerName : "\(order.customerName) · \(order.designName)").tag(order.id ?? "")
+                    if !tx.outgoingKind.isEmpty {
+                        // The order is spoken for by the refund section above.
+                        HStack(spacing: 6) {
+                            Text(fmt.t("Linked order or project")).font(.system(size: 12))
+                            Spacer()
+                            Text("⛓ \(tx.linkedOrderLabel.isEmpty ? fmt.t("Order") : tx.linkedOrderLabel)").font(.system(size: 12, weight: .semibold)).foregroundColor(.accentColor).lineLimit(1)
                         }
-                        if !orderId.isEmpty && !rankedOrders.contains(where: { $0.id == orderId }) { Text(tx.linkedOrderLabel.isEmpty ? fmt.t("Order") : tx.linkedOrderLabel).tag(orderId) }
-                    }
-                    if orderId.isEmpty, let hint = d.orderSuggestions[tx.id] {
-                        Button { orderId = hint.orderId } label: {
-                            Label("\(fmt.t("Likely related to this order")): \(hint.label) (\(Int(hint.confidence * 100))%)", systemImage: "link").font(.system(size: 12, weight: .semibold))
+                        Text(fmt.t("Recorded as a refund, not an expense.")).font(.system(size: 11)).foregroundColor(.secondary)
+                    } else {
+                        Picker(fmt.t("Linked order or project"), selection: $orderId) {
+                            Text(fmt.t("Not linked")).tag("")
+                            ForEach(rankedOrders, id: \.id) { order in
+                                Text(order.designName.isEmpty || order.designName == "Untitled design" ? order.customerName : "\(order.customerName) · \(order.designName)").tag(order.id ?? "")
+                            }
+                            if !orderId.isEmpty && !rankedOrders.contains(where: { $0.id == orderId }) { Text(tx.linkedOrderLabel.isEmpty ? fmt.t("Order") : tx.linkedOrderLabel).tag(orderId) }
+                        }
+                        if orderId.isEmpty, let hint = d.orderSuggestions[tx.id] {
+                            Button { orderId = hint.orderId } label: {
+                                Label("\(fmt.t("Likely related to this order")): \(hint.label) (\(Int(hint.confidence * 100))%)", systemImage: "link").font(.system(size: 12, weight: .semibold))
+                            }
                         }
                     }
                 } header: { Text(fmt.t("Bookkeeping")) }
@@ -2151,7 +2177,7 @@ struct BankTransactionDetail: View {
         let category = self.category, vat = self.vat, review = self.review, orderId = self.orderId, note = self.note, tx = self.tx, fmt = self.fmt
         model.run("drawer") {
             try await manager.bankUpdateTransaction(transactionId: tx.id, category: category, vatCode: vat, note: note, reviewStatus: review)
-            if orderId != tx.linkedOrderId {
+            if tx.outgoingKind.isEmpty, orderId != tx.linkedOrderId {
                 if !tx.linkedOrderId.isEmpty { try await manager.bankLinkOrder(transactionId: tx.id, orderId: "") }
                 if !orderId.isEmpty { try await manager.bankLinkOrder(transactionId: tx.id, orderId: orderId) }
             }
@@ -2378,6 +2404,132 @@ struct BankSplitSection: View {
 /// The "Match to" area for money coming in: classify the kind, and for order
 /// payments match the bank line to the payment already recorded on the order
 /// — or record a new one, exactly once. Separate struct on purpose (stack).
+/// Money out that went back to a customer — a refund you chose or a chargeback
+/// the card scheme took — is recorded on the order it reverses as a negative
+/// payment entry, and leaves the spending totals. A PayPal refund names the
+/// payment it reverses, so the order can be offered before anyone searches.
+struct BankRefundLinkSection: View {
+    let tx: StudioBankTransaction
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let isOwner: Bool
+    let orders: [Siparis]
+
+    @State private var kind = ""
+    @State private var orderId = ""
+    @State private var orderSearch = ""
+    @State private var hint: BankRefundHint?
+
+    private var busy: Bool { model.busy == "refund" }
+
+    private var rankedOrders: [Siparis] {
+        let ranked = bankRankOrders(for: tx, orders: orders.filter { $0.id != nil }).map(\.order)
+        let needle = orderSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        let filtered = needle.isEmpty ? ranked : ranked.filter { "\($0.customerName) \($0.designName)".lowercased().contains(needle) }
+        return Array(filtered.prefix(60))
+    }
+
+    var body: some View {
+        Section {
+            if !tx.outgoingKind.isEmpty {
+                linkedView
+            } else if isOwner {
+                chooseFlow
+            }
+        } header: { Text("↩ \(fmt.t("Refund or chargeback"))") }
+        .onAppear(perform: load)
+        .onChange(of: tx.id) { _ in load() }
+    }
+
+    private var linkedView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(fmt.t(tx.outgoingKindLabel)).font(.system(size: 12.5, weight: .bold)).foregroundColor(.red)
+            if !tx.linkedOrderLabel.isEmpty {
+                Text("⛓ \(tx.linkedOrderLabel)").font(.system(size: 11.5)).foregroundColor(.accentColor).lineLimit(2)
+            }
+            Text(fmt.t("Recorded on the order as a negative payment. Not counted as spending.")).font(.system(size: 11)).foregroundColor(.secondary)
+            if isOwner {
+                Button(fmt.t("Remove from the order")) { unlink() }
+                    .buttonStyle(.plain).font(.system(size: 12, weight: .bold)).foregroundColor(.red).disabled(busy)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder private var chooseFlow: some View {
+        Picker(fmt.t("Refund or chargeback"), selection: $kind) {
+            Text(fmt.t("Not a refund")).tag("")
+            Text(fmt.t("Customer refund")).tag("customer_refund")
+            Text(fmt.t("Chargeback")).tag("chargeback")
+        }
+        .disabled(busy)
+        if !kind.isEmpty {
+            TextField(fmt.t("Search orders"), text: $orderSearch).textFieldStyle(.roundedBorder).font(.system(size: 12))
+            Picker(fmt.t("Refunded order"), selection: $orderId) {
+                Text("\(fmt.t("Choose the order"))…").tag("")
+                ForEach(rankedOrders, id: \.id) { order in Text(bankOrderPickTitle(order)).tag(order.id ?? "") }
+                if !orderId.isEmpty && !rankedOrders.contains(where: { $0.id == orderId }) { Text(hint?.orderLabel.isEmpty == false ? hint!.orderLabel : fmt.t("Order")).tag(orderId) }
+            }
+            Button { link() } label: {
+                Label(busy ? fmt.t("Loading…") : fmt.t("Record on the order"), systemImage: "arrow.uturn.backward").font(.system(size: 12, weight: .semibold))
+            }
+            .disabled(orderId.isEmpty || busy)
+        }
+        if let hint, !hint.orderId.isEmpty {
+            Button {
+                if kind.isEmpty { kind = hint.suggestedKind.isEmpty ? "customer_refund" : hint.suggestedKind }
+                orderId = hint.orderId
+            } label: {
+                Label("\(fmt.t("Reverses the PayPal payment recorded on this order")): \(hint.orderLabel.isEmpty ? fmt.t("Order") : hint.orderLabel)", systemImage: "link").font(.system(size: 12, weight: .semibold))
+            }
+        } else if let hint, hint.reason == "reverses_paypal_payment_unlinked" {
+            Text(fmt.t("Reverses a PayPal payment that is not matched to an order yet.")).font(.system(size: 11)).foregroundColor(.secondary)
+        }
+    }
+
+    private func load() {
+        kind = tx.outgoingKind
+        orderId = tx.outgoingKind.isEmpty ? "" : tx.linkedOrderId
+        orderSearch = ""
+        hint = nil
+        if tx.outgoingKind.isEmpty, !tx.paypalReferenceId.isEmpty { suggest() }
+    }
+
+    private func suggest() {
+        guard let manager = model.manager else { return }
+        let txId = tx.id
+        model.run("refund-hint") {
+            let result = try await manager.bankRefundLink(transactionId: txId, mode: "suggest", orderId: "", kind: "")
+            await MainActor.run {
+                hint = result.hint
+                if let found = result.hint, !found.orderId.isEmpty {
+                    if kind.isEmpty { kind = found.suggestedKind.isEmpty ? "customer_refund" : found.suggestedKind }
+                    if orderId.isEmpty { orderId = found.orderId }
+                }
+            }
+            return nil
+        }
+    }
+
+    private func link() {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, orderId = self.orderId, kind = self.kind, fmt = self.fmt
+        model.run("refund") {
+            let result = try await manager.bankRefundLink(transactionId: txId, mode: "link", orderId: orderId, kind: kind)
+            return result.orderLabel.isEmpty ? fmt.t("Refund recorded on the order.") : "\(fmt.t("Refund recorded on the order.")) ⛓ \(result.orderLabel)"
+        }
+    }
+
+    private func unlink() {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, fmt = self.fmt
+        model.run("refund") {
+            _ = try await manager.bankRefundLink(transactionId: txId, mode: "unlink", orderId: "", kind: "")
+            return fmt.t("Refund removed from the order.")
+        }
+    }
+}
+
 struct BankIncomingMatchSection: View {
     let tx: StudioBankTransaction
     @ObservedObject var model: BankScreenModel
