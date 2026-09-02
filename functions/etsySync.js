@@ -27,6 +27,14 @@ const RECONCILE_OVERLAP_MS = 10 * 60 * 1000;  // re-ask a small window either si
 // watermark first, so a shop skipped this run is first in line on the next.
 const MAX_CONNECTIONS_PER_SWEEP = 25;
 
+// Faz 2 / MIG-002 — the common engine runs beside applyReceipt in shadow mode
+// when appConfig/commerce says so for this connection; it never writes an order.
+const commerceEngine = require("./commerce/engine");
+const commerceShadow = require("./commerce/shadow");
+const commerceFlags = require("./commerce/flags");
+const commerceEvents = require("./commerce/events");
+const etsyAdapter = require("./commerce/adapters/etsy");
+
 function createEtsySyncFunctions(deps) {
   const {
     admin,
@@ -339,7 +347,46 @@ function createEtsySyncFunctions(deps) {
   // Applying one receipt — the single path every arrival takes
   // -------------------------------------------------------------------------
 
-  async function applyReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null, rules = null, notify = true }) {
+  // The live applier, wrapped exactly as Shopify's is: the outcome is returned
+  // untouched whatever the shadow does, and a failure in the shadow is a log line.
+  async function applyReceipt(args) {
+    const outcome = await applyReceiptLive(args);
+    try {
+      const flags = await commerceFlags.readCommerceFlags(db());
+      if (commerceFlags.flagEnabled(flags, "shadow", "etsy", String(args.connectionRef?.id || ""))) {
+        await shadowCompareReceipt(args, outcome);
+      }
+    } catch (error) {
+      console.warn("commerce shadow (etsy) failed:", error?.message || error);
+    }
+    return outcome;
+  }
+
+  async function shadowCompareReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime }, liveOutcome) {
+    const shopId = String(connectionData.externalShopId || "");
+    const connectionId = String(connectionRef.id);
+    const envelope = etsyAdapter.normalizeEtsyReceipt(receipt, {
+      connectionId, shopId, shopName: String(connectionData.externalShopName || ""), shopCurrency: String(connectionData.shopCurrency || ""), eventOrigin: "provider"
+    });
+    const receiptId = envelope.identity.external_id;
+    const eventKey = commerceEvents.idempotencyKey({ provider: "etsy", connectionId, externalId: receiptId, eventType: `receipt@${envelope.identity.external_updated_at || ""}` });
+    const ctx = {
+      companyId, mode: "shadow", source: "etsy", eventKey,
+      orderIdFor: () => etsy.nivadeskOrderIdFor(companyId, shopId, receiptId),
+      defaultDeliveryTime: etsyAdapter.deliveryTimeDaysFor(envelope) || defaultDeliveryTime,
+      defaultStatus: "Not Yet", syncCancellations: true, reconcileLineItems
+    };
+    const engineOutcome = await commerceEngine.applyEnvelope(db(), envelope, ctx);
+    const liveId = String(liveOutcome?.orderId || ctx.orderIdFor());
+    const liveSnap = await orderDocRef(liveId).get();
+    return commerceShadow.recordShadow(db(), {
+      companyId, envelope, eventKey, eventType: "etsy.receipt",
+      liveOutcome: { status: ["created", "updated"].includes(String(liveOutcome?.status)) ? "ok" : String(liveOutcome?.status || ""), created: liveOutcome?.status === "created", nivadeskOrderId: liveOutcome?.orderId || "" },
+      engineOutcome, liveDoc: liveSnap.exists ? liveSnap.data() : null
+    });
+  }
+
+  async function applyReceiptLive({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null, rules = null, notify = true }) {
     const shopId = String(connectionData.externalShopId || "");
     const normalised = etsy.normalizeEtsyReceipt(receipt, {
       companyId,
