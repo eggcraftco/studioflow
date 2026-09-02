@@ -2,11 +2,50 @@
 
 Amaç: yapılanlar ile yapılacakların birbirine karışmaması. Her büyük iş bittiğinde
 buraya taşınır; yeni raporlar "SIRADA" bölümüne girer ve bitince yukarı çıkar.
-Son güncelleme: 31 Ağustos 2026.
+Son güncelleme: 2 Eylül 2026.
 
 ---
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
+
+### 1–2 Eylül — Commerce motoru, WooCommerce, Square: sandbox'tan production'a
+
+Kaynak: `NivaDesk_Commerce_Integration_AI_Spec.md` (Faz 0–4) ve
+`NivaDesk_Square_Integration_AI_Spec.md` (Faz 1–2). Rapor artifact'ı:
+https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
+
+- **Commerce Faz 1 (P0) + Faz 2 (ortak motor) CANLI.** `functions/commerce/`:
+  zarf, sahiplik (NivaDesk'e ait 23 alan asla yazılmaz), motor, gölge
+  karşılaştırma, Cloud Tasks işçisi, cursor/health/flags, inceleme kuyruğu
+  (`commerceReviewQueue`, dört istemcide listele + Resolve). Shopify gölge
+  modda (dev mağazası), Etsy adaptörü 0 fark. CI yeşil.
+- **WooCommerce tam connector CANLI (2 Eyl):** 23 fonksiyon, wc-auth, şifreli
+  REST kimlikleri, 10 webhook, önizleme/backfill/mutabakat, eksik-sipariş
+  denetimi; taksit birleştirme kuralı aynen kaldı (kullanıcı kararı). EGGcraft
+  mağazası EGGcraft workspace'ine bağlı; test7'deki kopya bağlantı kesildi.
+- **Square Faz 1–2 CANLI ve PRODUCTION'DA (2 Eyl 14:06):** OAuth (read-first 7
+  izin), uygulama-seviyesi webhook (URL+gövde HMAC), sipariş/ödeme/iade/payout,
+  Events API ile kaçan-olay kurtarma (28 gün), 15 dk mutabakat, import
+  politikası (`fulfillment_only` varsayılan), audit, payouts+entries, kanal
+  şeridi her istemcide. Sandbox'ta uçtan uca 12 senaryo geçti; production'da
+  gerçek hesapla: bağlantı, ilk Sync now, Console test olayı 200, £1 nakit API
+  ödemesi → 5 webhook 4 sn'de 200 + kuyruk işçisi + ödeme/satış kaydı.
+- **Bugün bulunup kapatılan iki gerçek bug (e916090):** Events API
+  `EnableEvents` POST atıyordu (Square 404) → olaylar hiç aranabilir olmamıştı;
+  doğrusu PUT. Zamanlanmış 15 dk sweep payout aralığında `unreconciled`
+  alanı olmadan dönüyor, Firestore özet yazımını reddediyordu → her sweep işi
+  yapıp kaydı düşüremiyordu. Reddedilen app token artık bağlantıda
+  `app_token_rejected` (da4490e).
+- **Kurallar (yaşayarak öğrenildi):** beş `SQUARE_*` secret aynı ortamdan
+  olmalı (Console Credentials sayfası varsayılan olarak Production'da açılır —
+  sandbox için Sandbox sekmesi); `secrets:set` sonrası "re-deploy…destroy
+  stale version" sorusuna hep N, deploy isimle; secret sürümü deploy anında
+  bağlanır (yeni sürüm = yeniden deploy); NivaDesk siparişleri kökteki
+  `siparisler/square_{cid}_{orderId}` dokümanında.
+- **Bilinçli dışarıda:** Square Faz 3+ (catalog/inventory/iki-yön), Square ile
+  tahsilat (Faz 5), Shopify canlı parite ölçümü (dev mağazası bayrağı),
+  16 Eyl SHOP-004 Faz B.
+
 
 ### 31 Ağustos — bir günde on iş, ve defterin kendisi yalan söylüyordu
 

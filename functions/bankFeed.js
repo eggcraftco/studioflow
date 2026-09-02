@@ -285,7 +285,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       const idField = admin.firestore.FieldPath.documentId();
       const idSnap = await transactionsRef(companyId)
         .where(idField, ">=", prefix)
-        .where(idField, "<", `${prefix}`)
+        .where(idField, "<", `${prefix}\uf8ff`)   // every id that starts with the prefix; the old upper bound equalled the lower one, an empty range
         .select()
         .get();
       idSnap.docs.forEach((doc) => existingIds.add(doc.id));
