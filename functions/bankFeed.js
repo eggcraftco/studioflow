@@ -33,6 +33,8 @@ const crypto = require("node:crypto");
 const { defineSecret } = require("firebase-functions/params");
 
 const TL_CLIENT_ID = defineSecret("NIVADESK_TL_CLIENT_ID");
+// PayPal feed: the workspace's own PayPal app secret is stored encrypted (AES-256-GCM, Etsy's box) under this key.
+const PAYPAL_TOKEN_KEY = defineSecret("NIVADESK_PAYPAL_TOKEN_KEY");
 const TL_CLIENT_SECRET = defineSecret("NIVADESK_TL_CLIENT_SECRET");
 
 const TL_AUTH_BASE = "https://auth.truelayer.com";
@@ -73,7 +75,7 @@ const INCOMING_KINDS = [
   "payout"
 ];
 
-function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification, settlements = null }) {
+function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification, settlements = null, paypal = null }) {
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankReceiptInbox");
@@ -215,14 +217,19 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       providerReference: cleanText(tx.meta?.provider_reference, 200),
       importedAt: admin.firestore.FieldValue.serverTimestamp()
     };
-    const auto = matchRule(rules, normalized);
+    return applyRules(normalized, rules);
+  }
+
+  /** The workspace's keyword rules, applied to any canonical row — a bank's or PayPal's. */
+  function applyRules(row, rules) {
+    const auto = matchRule(rules || [], row);
     if (auto) {
-      normalized.categoryAuto = cleanText(auto.category, 60);
+      row.categoryAuto = cleanText(auto.category, 60);
       // The audit trail: which rule made this decision.
-      normalized.categoryAutoRule = cleanText(auto.keyword, 120);
-      if (auto.vatCode) normalized.vatCodeAuto = cleanText(auto.vatCode, 4);
+      row.categoryAutoRule = cleanText(auto.keyword, 120);
+      if (auto.vatCode) row.vatCodeAuto = cleanText(auto.vatCode, 4);
     }
-    return normalized;
+    return row;
   }
 
   async function accessTokenForConnection(companyId, connectionId) {
@@ -280,6 +287,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     for (const tx of booked) writes.push({ id: transactionDocId(accountId, tx), data: normalizeTransaction(accountId, connectionId, tx, "booked", rules) });
     for (const tx of pending) writes.push({ id: transactionDocId(accountId, tx), data: normalizeTransaction(accountId, connectionId, tx, "pending", rules) });
 
+    return upsertTransactionWrites(companyId, accountId, writes);
+  }
+
+  /** Every source's rows go in the same way: new ids get firstImportedAt, all get importedAt, pending rows fold into their booked twin. */
+  async function upsertTransactionWrites(companyId, accountId, writes) {
     // Which of these ids already exist? One id-only query per account, so a
     // brand-new row gets a firstImportedAt that later syncs never touch
     // (importedAt is rewritten every sync and doubles as "last updated").
@@ -556,6 +568,50 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   }
 
   // Shared by the manual Refresh callable and the scheduled background sync.
+  // ---- PayPal feed (first-party: the workspace's own PayPal app) ----------------
+  const PAYPAL_INITIAL_DAYS = 180;
+  const PAYPAL_REGULAR_DAYS = 14;   // the search API runs ~3 hours behind; a two-week overlap re-reads what settled late
+  const paypalAccountId = (connectionId) => `pp_${String(connectionId).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 24)}`;
+
+  async function paypalClientFor(companyId, connectionId, data) {
+    if (!paypal) throw new HttpsError("failed-precondition", "PayPal feed is not available.");
+    const tokenDoc = await tokensRef(companyId).doc(connectionId).get();
+    const stored = tokenDoc.data() || {};
+    const clientId = cleanText(stored.clientId, 200);
+    const clientSecret = stored.secretBox ? paypal.decryptToken(stored.secretBox, PAYPAL_TOKEN_KEY.value()) : "";
+    if (!clientId || !clientSecret) { const err = new Error("PayPal credentials are missing; connect again."); err.tlStage = "auth"; err.tlStatus = 401; throw err; }
+    return paypal.createClient({ environment: data.environment === "sandbox" ? "sandbox" : "live", clientId, clientSecret });
+  }
+
+  /** Walk the search API over the window, write rows and payout records, return the counts. */
+  async function syncPayPalConnection(companyId, connectionId, data, rules, { fullHistory = false, client = null } = {}) {
+    const api = client || await paypalClientFor(companyId, connectionId, data);
+    const accountId = paypalAccountId(connectionId);
+    const endMs = Date.now();
+    const startMs = endMs - (fullHistory ? PAYPAL_INITIAL_DAYS : PAYPAL_REGULAR_DAYS) * 24 * 60 * 60 * 1000;
+    const writes = []; const payouts = []; let seen = 0;
+    for await (const page of api.transactionsBetween({ startMs, endMs, statuses: ["S", "P"] })) {
+      for (const t of page.transactions) {
+        seen += 1;
+        const row = paypal.normalize(t, { accountId, connectionId });
+        if (row) { row.importedAt = admin.firestore.FieldValue.serverTimestamp(); writes.push({ id: transactionDocId(accountId, { transaction_id: row.providerTransactionId }), data: applyRules(row, rules) }); continue; }
+        const payout = paypal.payoutOf(t, { connectionId });
+        if (payout) payouts.push(payout);
+      }
+    }
+    const written = await upsertTransactionWrites(companyId, accountId, writes);
+    // Withdrawals to the bank are payout records, not rows: the bank feed already has that money, and the settlement matcher ties the two.
+    for (let i = 0; i < payouts.length; i += 400) {
+      const batch = db().batch();
+      for (const payout of payouts.slice(i, i + 400)) {
+        const ref = db().collection("companies").doc(companyId).collection("paypalPayouts").doc(String(payout.externalId).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 200));
+        batch.set(ref, { ...payout, companyId, updatedAtMs: Date.now() }, { merge: true });   // merge keeps bankMatch across re-syncs
+      }
+      await batch.commit();
+    }
+    return { rows: written, payouts: payouts.length, seen };
+  }
+
   async function syncCompanyConnections(companyId, { force = false } = {}) {
     const snap = await connectionsRef(companyId).where("status", "==", "linked").get();
     if (snap.empty) return { synced: 0, skipped: 0, imported: 0 };
@@ -577,6 +633,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       let failure = null; // { kind: "needs_reconsent" | "error" | "rate_limited", message }
       let importedForConnection = 0;
       try {
+        if (data.provider === "paypal") {
+          const out = await syncPayPalConnection(companyId, doc.id, data, rules, { fullHistory: false });
+          imported += out.rows; importedForConnection += out.rows; ok = true;
+          throw Object.assign(new Error("__paypal_done__"), { paypalDone: true });
+        }
         const accessToken = await accessTokenForConnection(companyId, doc.id);
         const accounts = Array.isArray(data.accounts) ? data.accounts : [];
         for (const account of accounts) {
@@ -592,8 +653,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
           }
         }
       } catch (error) {
-        console.warn("bank sync connection failed:", doc.id, error?.message || error);
-        failure = classifySyncError(error);
+        if (!error?.paypalDone) {
+          console.warn("bank sync connection failed:", doc.id, error?.message || error);
+          failure = classifySyncError(error);
+        }
       }
       if (ok) {
         synced += 1;
@@ -637,7 +700,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { synced, skipped, imported };
   }
 
-  const bankSyncTransactions = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 300 }, async (request) => {
+  const bankSyncTransactions = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, PAYPAL_TOKEN_KEY], timeoutSeconds: 300 }, async (request) => {
     const { companyId } = await requireOwner(request);
     return syncCompanyConnections(companyId, { force: request.data?.force === true });
   });
@@ -650,7 +713,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     schedule: "every 8 hours",
     timeZone: "Europe/London",
     region: REGION,
-    secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET],
+    secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, PAYPAL_TOKEN_KEY],
     timeoutSeconds: 540
   }, async () => {
     const companies = await db().collection("companies").where("bankFeedEnabled", "==", true).limit(300).get();
@@ -705,6 +768,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       if (page.size < 400) break;
     }
 
+    if ((connectionDoc.data() || {}).provider === "paypal") {
+      const payouts = await db().collection("companies").doc(companyId).collection("paypalPayouts").where("connectionId", "==", connectionId).limit(400).get();
+      if (!payouts.empty) { const batch = db().batch(); payouts.docs.forEach((d) => batch.delete(d.ref)); await batch.commit(); }
+    }
     await connectionsRef(companyId).doc(connectionId).delete();
 
     // Last linked bank gone → drop out of the scheduled background sync.
@@ -1654,8 +1721,91 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { transactionId, receiptPath: destination, receiptName: safeName, transaction: txDoc.data() || {} };
   }
 
+  /**
+   * PayPal, first-party: the owner pastes the client id and secret of their own
+   * PayPal app (Transaction Search enabled). The secret is stored encrypted,
+   * the credentials are proved before anything is written, and the first sync
+   * takes the last months. One PayPal connection per workspace; entering the
+   * credentials again refreshes it in place.
+   */
+  const paypalConnect = onCall({ region: REGION, secrets: [PAYPAL_TOKEN_KEY], timeoutSeconds: 300 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    if (!paypal) throw new HttpsError("failed-precondition", "PayPal feed is not available.");
+    const clientId = cleanText(request.data?.clientId, 200);
+    const clientSecret = cleanText(request.data?.clientSecret, 300);
+    const environment = cleanText(request.data?.environment, 10).toLowerCase() === "sandbox" ? "sandbox" : "live";
+    if (!clientId || !clientSecret) throw new HttpsError("invalid-argument", "PayPal client ID and secret are required.");
+    const tokenKey = PAYPAL_TOKEN_KEY.value();
+    if (!tokenKey || tokenKey.trim().length < 32) throw new HttpsError("failed-precondition", "PayPal feed is not configured on the server yet.");
+    const api = paypal.createClient({ environment, clientId, clientSecret });
+    let probe;
+    try { probe = await api.probe(); }
+    catch (error) {
+      const status = Number(error?.status) || 0;
+      if (status === 401) throw new HttpsError("failed-precondition", "PayPal rejected the client ID or secret. Check both in the PayPal Developer dashboard (Live and Sandbox have separate credentials).");
+      if (status === 403) throw new HttpsError("failed-precondition", "PayPal accepted the credentials but the app may not search transactions. In the PayPal Developer dashboard, enable Transaction Search on the app and try again.");
+      throw new HttpsError("unavailable", `PayPal could not be reached: ${String(error?.message || error).slice(0, 160)}`);
+    }
+    const existing = await connectionsRef(companyId).where("provider", "==", "paypal").limit(1).get();
+    const connectionId = existing.empty ? crypto.randomUUID() : existing.docs[0].id;
+    await tokensRef(companyId).doc(connectionId).set({ provider: "paypal", clientId, secretBox: paypal.encryptToken(clientSecret, tokenKey), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: false });
+    const accountId = paypalAccountId(connectionId);
+    await connectionsRef(companyId).doc(connectionId).set({
+      provider: "paypal", environment, status: "linked", syncState: "ok", syncFailures: 0,
+      providerName: environment === "sandbox" ? "PayPal (Sandbox)" : "PayPal", providerLogo: "",
+      accounts: [{ id: accountId, name: "PayPal", currency: "", accountNumber: cleanText(probe.accountNumber, 40) }],
+      clientIdHint: clientId.slice(0, 6) + "…" + clientId.slice(-4),
+      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastSyncError: admin.firestore.FieldValue.delete(), lastSyncErrorAt: admin.firestore.FieldValue.delete(),
+      consentExpiresAt: admin.firestore.FieldValue.delete()
+    }, { merge: true });
+    await db().collection("companies").doc(companyId).set({ bankFeedEnabled: true }, { merge: true });
+    const rules = await loadRules(companyId);
+    let imported = { rows: 0, payouts: 0, seen: 0 };
+    try { imported = await syncPayPalConnection(companyId, connectionId, { environment, provider: "paypal" }, rules, { fullHistory: true, client: api }); }
+    catch (error) { console.warn("paypalConnect initial sync failed:", connectionId, error?.message || error); }
+    await connectionsRef(companyId).doc(connectionId).set({ lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await logBankAudit(companyId, { kind: "connected", ok: true, connectionId, bank: "PayPal", imported: imported.rows, reconnected: !existing.empty });
+    if (imported.rows > 0 && settlements && typeof settlements.matchAll === "function") { try { await settlements.matchAll(companyId); } catch (error) { console.warn("settlement match after PayPal connect failed:", error?.message || error); } }
+    return { status: "linked", connectionId, accountId, imported: imported.rows, payouts: imported.payouts, reconnected: !existing.empty };
+  });
+
+  /** Faz 5: a provider's payouts with their bank side — for cards that are not Square's. */
+  const bankListPayouts = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const provider = cleanText(request.data?.provider, 20).toLowerCase();
+    if (!settlements || !settlements.PROVIDERS || !settlements.PROVIDERS[provider]) throw new HttpsError("invalid-argument", "Unknown payout provider.");
+    const limit = Math.min(200, Math.max(1, Number(request.data?.limit) || 50));
+    const snap = await db().collection("companies").doc(companyId).collection(settlements.PROVIDERS[provider].collection).orderBy("externalCreatedAt", "desc").limit(limit).get();
+    return { ok: true, provider, payouts: snap.docs.map((d) => { const r = d.data() || {}; return { id: d.id, externalId: r.externalId || d.id, status: r.status || null, amount: r.amount ?? null, currency: r.currency || null, arrivalDate: r.arrivalDate || null, payoutType: r.payoutType || null, totals: r.totals || {}, bankMatch: r.bankMatch || null, createdAt: r.externalCreatedAt || null }; }) };
+  });
+
+  /** Faz 5: suggest / confirm / unlink a payout's bank row, any provider. */
+  const matchPayoutToBank = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    if (!settlements) throw new HttpsError("failed-precondition", "Settlement matching is not available.");
+    const provider = cleanText(request.data?.provider, 20).toLowerCase();
+    const payoutId = cleanText(request.data?.payoutId, 200);
+    const mode = cleanText(request.data?.mode, 10) || "suggest";
+    if (!payoutId) throw new HttpsError("invalid-argument", "payoutId is required.");
+    const rethrow = (error) => { const code = ["not-found", "failed-precondition", "invalid-argument"].includes(error?.code) ? error.code : "internal"; throw new HttpsError(code, String(error?.message || error)); };
+    try {
+      if (mode === "suggest") return { ok: true, ...(await settlements.suggestForPayout(companyId, provider, payoutId)) };
+      if (mode === "confirm") {
+        const transactionId = cleanText(request.data?.transactionId, 250);
+        if (!transactionId) throw Object.assign(new Error("transactionId is required."), { code: "invalid-argument" });
+        return await settlements.confirmMatch(companyId, provider, payoutId, transactionId);
+      }
+      if (mode === "unlink") return await settlements.unmatchPayout(companyId, provider, payoutId);
+      throw Object.assign(new Error("mode must be suggest, confirm or unlink."), { code: "invalid-argument" });
+    } catch (error) { rethrow(error); }
+  });
+
   return {
     bankCreateRequisition,
+    paypalConnect,
+    bankListPayouts,
+    matchPayoutToBank,
     bankFinalizeRequisition,
     bankSyncTransactions,
     bankDeleteConnection,
@@ -1681,7 +1831,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankMatchWaitingReceipts,
     bankDeleteInboxReceipt,
     scheduledBankSync,
-    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts, normalizeTransaction, transactionDocId, reconcilePendingToBooked }
+    _internal: { syncPayPalConnection, upsertTransactionWrites, applyRules, paypalAccountId, visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts, normalizeTransaction, transactionDocId, reconcilePendingToBooked }
   };
 }
 

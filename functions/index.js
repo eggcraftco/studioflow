@@ -5680,8 +5680,11 @@ const { createBankFeedFunctions } = require("./bankFeed");
 // Faz 5 finance: processor payouts (Square first) matched to the bank rows they settled into — shared by the bank feed and the connectors.
 const { createSettlementMatcher } = require("./commerce/settlementMatch");
 const settlementMatcher = createSettlementMatcher({ admin, db: () => admin.firestore() });
+const paypalFeedModules = { createClient: require("./commerce/paypal/client").createPayPalClient, normalize: require("./commerce/paypal/normalize").normalizePayPalTransaction, payoutOf: require("./commerce/paypal/normalize").payoutOfPayPalTransaction, encryptToken: require("./etsy").encryptToken, decryptToken: require("./etsy").decryptToken };
 const bankFeedExports = createBankFeedFunctions({
   admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, settlements: settlementMatcher,
+  // PayPal money feed (first-party credentials, encrypted with NIVADESK_PAYPAL_TOKEN_KEY); tests may swap the client for a fake.
+  paypal: process.env.NIVADESK_E2E === "1" ? { ...paypalFeedModules, createClient: (options) => (global.__nivadeskPayPalFakeClient ? global.__nivadeskPayPalFakeClient(options) : paypalFeedModules.createClient(options)) } : paypalFeedModules,
   // Workspace notification + push when a waiting receipt finds its transaction.
   notifyCompany: async (companyId, payload) => {
     const notificationId = String(payload.id || `bank_${Date.now()}`);
@@ -31348,6 +31351,7 @@ if (process.env.NIVADESK_E2E === "1") {
     // Square: the connector's internals for the suite.
     square: squareExports._internal,
     settlements: settlementMatcher,
+    bank: bankFeedInternal,
     // Faz 2: the shadow hook and the queue worker's brain, for the suite.
     shadowCompareShopifyOrder,
     processShopifyCommerceTask,

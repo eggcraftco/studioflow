@@ -5,7 +5,7 @@
 // it unchanged (each keeps its own `<provider>Payouts` subcollection).
 const { pickSettlementMatch, scoreSettlementCandidate, settlementWindow } = require("./settlements");
 
-const PROVIDERS = Object.freeze({ square: { collection: "squarePayouts", label: "Square" } });
+const PROVIDERS = Object.freeze({ square: { collection: "squarePayouts", label: "Square" }, paypal: { collection: "paypalPayouts", label: "PayPal" } });
 /** Payouts that have left the processor and can be on a statement. */
 const MATCHABLE_STATUSES = new Set(["PAID", "SENT"]);
 /** How far back an automatic pass looks for still-unmatched payouts. */
