@@ -124,13 +124,17 @@ const NIVADESK_QBO_WEBHOOK_VERIFIER = defineSecret("NIVADESK_QBO_WEBHOOK_VERIFIE
 const NIVADESK_QBO_TOKEN_KEY = defineSecret("NIVADESK_QBO_TOKEN_KEY");
 const QBO_SECRETS = [NIVADESK_QBO_CLIENT_ID, NIVADESK_QBO_CLIENT_SECRET, NIVADESK_QBO_WEBHOOK_VERIFIER, NIVADESK_QBO_TOKEN_KEY];
 // Xero app credentials and the webhook signing key; Xero tokens are boxed with
-// the QuickBooks token key. Only the Xero functions and the shared sweep bind
-// these, so QuickBooks keeps deploying while the Xero secrets do not exist yet.
-const NIVADESK_XERO_CLIENT_ID = defineSecret("NIVADESK_XERO_CLIENT_ID");
-const NIVADESK_XERO_CLIENT_SECRET = defineSecret("NIVADESK_XERO_CLIENT_SECRET");
-const NIVADESK_XERO_WEBHOOK_KEY = defineSecret("NIVADESK_XERO_WEBHOOK_KEY");
-const XERO_SECRETS = [NIVADESK_XERO_CLIENT_ID, NIVADESK_XERO_CLIENT_SECRET, NIVADESK_XERO_WEBHOOK_KEY, NIVADESK_QBO_TOKEN_KEY];
-const ACCOUNTING_SECRET_SETS = { quickbooks: QBO_SECRETS, xero: XERO_SECRETS, core: [NIVADESK_QBO_TOKEN_KEY], all: [...QBO_SECRETS, NIVADESK_XERO_CLIENT_ID, NIVADESK_XERO_CLIENT_SECRET, NIVADESK_XERO_WEBHOOK_KEY] };
+// the QuickBooks token key. The CLI refuses ANY deploy while a declared secret
+// has no value in Secret Manager, so these are declared only when the shell
+// says they exist: deploy the Xero functions and the shared sweep with
+//   NIVADESK_XERO_SECRETS_READY=1 npx firebase deploy --only functions:xeroConnectStart,…
+// once the owner has created the three secrets. At runtime the values arrive
+// as plain environment variables either way.
+const XERO_SECRETS_READY = process.env.NIVADESK_XERO_SECRETS_READY === "1";
+const XERO_SECRET_PARAMS = XERO_SECRETS_READY ? [defineSecret("NIVADESK_XERO_CLIENT_ID"), defineSecret("NIVADESK_XERO_CLIENT_SECRET"), defineSecret("NIVADESK_XERO_WEBHOOK_KEY")] : [];
+const XERO_SECRETS = [...XERO_SECRET_PARAMS, NIVADESK_QBO_TOKEN_KEY];
+const ACCOUNTING_SECRET_SETS = { quickbooks: QBO_SECRETS, xero: XERO_SECRETS, core: [NIVADESK_QBO_TOKEN_KEY], all: [...QBO_SECRETS, ...XERO_SECRET_PARAMS] };
+const xeroSecretValue = (name) => process.env[name] || "";
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -6080,9 +6084,9 @@ const accountingExports = createAccountingFunctions({
   qboClientSecret: () => NIVADESK_QBO_CLIENT_SECRET.value(),
   qboWebhookVerifier: () => NIVADESK_QBO_WEBHOOK_VERIFIER.value(),
   qboTokenKey: () => NIVADESK_QBO_TOKEN_KEY.value(),
-  xeroClientId: () => NIVADESK_XERO_CLIENT_ID.value(),
-  xeroClientSecret: () => NIVADESK_XERO_CLIENT_SECRET.value(),
-  xeroWebhookKey: () => NIVADESK_XERO_WEBHOOK_KEY.value(),
+  xeroClientId: () => xeroSecretValue("NIVADESK_XERO_CLIENT_ID"),
+  xeroClientSecret: () => xeroSecretValue("NIVADESK_XERO_CLIENT_SECRET"),
+  xeroWebhookKey: () => xeroSecretValue("NIVADESK_XERO_WEBHOOK_KEY"),
   encryptToken: etsyModule.encryptToken,
   decryptToken: etsyModule.decryptToken,
   appReturnUrl: () => "https://nivadesk.app/settings",

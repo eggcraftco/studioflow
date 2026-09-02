@@ -127,7 +127,8 @@ status; `app/xero/callback/page.tsx` forwards to the function. Not deployed to t
 `https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroOAuthCallback` and `https://nivadesk.app/xero/callback`;
 webhook URL `https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroWebhook`, Contacts + Invoices + Credit notes)
 → `firebase functions:secrets:set NIVADESK_XERO_CLIENT_ID`, `NIVADESK_XERO_CLIENT_SECRET`, `NIVADESK_XERO_WEBHOOK_KEY`
-(Xero tokens are boxed with `NIVADESK_QBO_TOKEN_KEY`) → deploy by name `xeroConnectStart, xeroOAuthCallback,
-xeroListTenants, xeroSelectTenant, xeroSyncNow, xeroWebhook, xeroDisconnect, scheduledAccountingReconcile` → save the
+(Xero tokens are boxed with `NIVADESK_QBO_TOKEN_KEY`) → deploy by name with the flag that lets index.js declare the secrets, `NIVADESK_XERO_SECRETS_READY=1 npx firebase deploy --only
+functions:xeroConnectStart,functions:xeroOAuthCallback,functions:xeroListTenants,functions:xeroSelectTenant,functions:xeroSyncNow,functions:xeroWebhook,functions:xeroDisconnect,functions:scheduledAccountingReconcile`
+(without the flag the CLI refuses every deploy: "no value for the secret") → save the
 webhook in the portal (intent-to-receive runs against the live endpoint) → connect the Demo Company from Settings →
 Integrations → Xero. Not built: native panels (web-first, as QuickBooks), phases 3+.
