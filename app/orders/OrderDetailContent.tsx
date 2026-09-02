@@ -790,6 +790,7 @@ function orderPdfHtml(
   const financeRows: OrderPdfRow[] = [];
   if (showFinCustomer) {
     financeRows.push({ title: "Paid", value: formatMoney(order.paidAmount), tone: "green" });
+    if (order.refundedAmount > 0) financeRows.push({ title: "Refunded", value: formatMoney(order.refundedAmount), tone: "red" });
     financeRows.push({ title: "Remaining", value: formatMoney(order.remainingAmount), tone: "orange" });
     if (showPaymentMethod) financeRows.push({ title: "Payment Method", value: order.paymentMethod || "-" });
   }
@@ -6715,6 +6716,18 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Paid"}
                       onSave={savePaidFinanceValue}
                     />
+                    {order.refundedAmount > 0 ? (
+                      // Money handed back: the sum of the refund and chargeback entries below, kept by the server — read here, never typed.
+                      <FinanceInlineRow
+                        label={t("Refunded")}
+                        displayValue={money(order.refundedAmount, hideNumbers)}
+                        value={order.refundedAmount}
+                        tone="negative"
+                        disabled
+                        saving={false}
+                        onSave={() => undefined}
+                      />
+                    ) : null}
                     <FinanceInlineRow
                       label={t("Remaining")}
                       displayValue={money(order.remainingAmount, hideNumbers)}
@@ -6806,7 +6819,7 @@ export function OrderDetailContent({
                         <ul className="finance-payments-list">
                           {order.payments.map(payment => (
                             <li key={payment.id} className="finance-payments-item">
-                              <span className="finance-payments-amount">{money(payment.amount, hideNumbers)}</span>
+                              <span className="finance-payments-amount" style={payment.amount < 0 ? { color: "#dc2626" } : undefined}>{payment.amount < 0 ? "↩ " : ""}{money(payment.amount, hideNumbers)}</span>
                               {editingPaymentNoteId === payment.id ? (
                                 <span className="finance-payments-meta" style={{ display: "inline-flex", gap: 6, alignItems: "center", flex: 1 }}>
                                   <input
@@ -6989,6 +7002,18 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Paid"}
                       onSave={savePaidFinanceValue}
                     />
+                    {order.refundedAmount > 0 ? (
+                      // Money handed back: the sum of the refund and chargeback entries below, kept by the server — read here, never typed.
+                      <FinanceInlineRow
+                        label={t("Refunded")}
+                        displayValue={money(order.refundedAmount, hideNumbers)}
+                        value={order.refundedAmount}
+                        tone="negative"
+                        disabled
+                        saving={false}
+                        onSave={() => undefined}
+                      />
+                    ) : null}
                     <FinanceInlineRow
                       label={t("Base Cost")}
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
@@ -11104,6 +11129,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     deliveryTime: 42,
     dueDate,
     paidAmount: 850,
+    refundedAmount: 0,
     remainingAmount: 350,
     watchPurchasePrice: 180,
     paymentFee: 12.75,
