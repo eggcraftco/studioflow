@@ -74,6 +74,10 @@ https://claude.ai/code/artifact/fe522b34-1611-4965-86fa-e42f48ffe7fe
   settlement modeli PayPal payout'larına `PROVIDERS` haritasında bir satırla
   uzanır.
 
+### 2 Eylül 18:05–18:33 — Banking sayfası kesintisi (Round 147 → hotfix Round 149)
+
+Round 147'deki sayfa geneli `item.amount < 0` → `isSpend(item)` değişimi, aynı betikte eklenen `isSpend` yardımcısının kendi gövdesini de değiştirdi → sonsuz özyineleme; `tsc` geçti, `/bank` canlıda açılışta çöktü (18:05'ten itibaren). Kullanıcı 18:30'da bildirdi; gövde düzeltildi, Round 149 (81cf450) 18:33'te canlı (`app/bank/page-6e4d…` chunk'ında `amount<0&&!outgoingKind` doğrulandı). Ders hafızada: toplu değişimden önce yardımcı tanımını hariç tut, deploy öncesi sayfayı tarayıcıda aç.
+
 ### 2 Eylül gece — İade/chargeback ↔ sipariş bağı (brief §10 yapısal #4) dört platformda
 
 **Model.** Müşteriye geri dönen para harcama değildir. Giden bir banka/PayPal satırı `bankLinkRefundToOrder` (owner) ile siparişe bağlanır: `link` siparişin `payments[]` defterine `{amount: -X, method: "Refund"|"Chargeback", bankTransactionId, refund: true, createdByUid}` girdisi yazar, `paidAmount = max(0, paid − X)`, `refundedAmount += X`; satır `outgoingKind` (customer_refund | chargeback) + `linkedOrderId/Label/PaymentId` alır ve harcama toplamlarından çıkar. `unlink` girdiyi siler, tutarları geri alır, `outgoingKind`'ı düşürür. `suggest`: PayPal iadesi (`paypal_reference_id_type=TXN`) geri aldığı satışı adıyla bildirir → o satış bir siparişe eşleşmişse sipariş `hint` olarak döner (`reverses_paypal_payment`; eşleşmemişse `reverses_paypal_payment_unlinked`); tür tahmini T12xx / "chargeback|dispute" → chargeback, aksi customer_refund. Aynı satır ikinci girdi olmaz (`bankTransactionId` ile idempotent; sadece tür değişir). `bankLinkTransactionToOrder` (gider bağı) `outgoingKind` taşıyan satırı reddeder; gider olarak bağlı satıra iade yazılmaz ("önce çöz").
