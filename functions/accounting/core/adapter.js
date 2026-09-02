@@ -7,8 +7,9 @@
 // functions/commerce/envelope.js PROVIDERS.
 
 const PROVIDERS = Object.freeze({
-  quickbooks_online: { displayName: "QuickBooks Online", connectionModel: "oauth" },
-  pandle: { displayName: "Pandle", connectionModel: "oauth" }
+  quickbooks_online: { displayName: "QuickBooks Online", connectionModel: "oauth", conflictStrategy: "sync_token" },
+  xero: { displayName: "Xero", connectionModel: "oauth", conflictStrategy: "updated_date_and_hash" },
+  pandle: { displayName: "Pandle", connectionModel: "oauth", conflictStrategy: "none" }
 });
 
 // REQ-ARCH-002 — one primary writer per company and period.
@@ -36,7 +37,7 @@ function canTransition(from, to) {
 
 // §8 — how a posted document stands against the provider's own bank feed.
 const BANK_MATCH_STATUSES = Object.freeze([
-  "not_applicable", "awaiting_bank_transaction", "awaiting_match_in_quickbooks", "matched", "mismatch", "unknown_api_limitation"
+  "not_applicable", "awaiting_bank_transaction", "awaiting_match_in_quickbooks", "awaiting_reconciliation_in_provider", "matched", "mismatch", "unknown_api_limitation"
 ]);
 
 // §4.2 step 5 — how each sales source reaches the ledger.
@@ -109,6 +110,42 @@ function defaultCapabilities(provider) {
       // screen's For Review rows. Never assumed, never faked.
       bankFeedPendingRows: { read: false, write: false },
       bankFeedMatchWrite: false
+    };
+  }
+  if (provider === "xero") {
+    // Xero spec §20 / §4 / §14.1: no unreconciled bank lines through the public
+    // API, webhooks only for contacts, invoices, credit notes, overpayments and
+    // prepayments, the full Journals feed a premium tier NivaDesk does not hold,
+    // ManualJournals a scope and plan question answered per organisation.
+    return {
+      provider,
+      invoices: { read: true, write: true },
+      payments: { read: true, write: true },
+      estimates: { read: true, write: true },
+      salesReceipts: { read: false, write: false },
+      creditMemos: { read: true, write: true },
+      bills: { read: true, write: true },
+      purchases: { read: true, write: true },
+      purchaseOrders: { read: true, write: true },
+      vendorCredits: { read: true, write: true },
+      attachments: { write: true },
+      journals: { read: false, write: "verify_scope_and_plan", manualWrite: "verify", fullJournalRead: false },
+      transfers: { read: true, write: true },
+      taxCodes: { read: true },
+      accounts: { read: true },
+      customers: { read: true, write: true },
+      vendors: { read: true, write: true },
+      items: { read: true, write: "mapping_only" },
+      multiCurrency: { enabled: false },
+      webhooks: { contacts: true, invoices: true, creditNotes: true, overpayments: true, prepayments: true, payments: false, bankTransactions: false, items: false, accounts: false },
+      cdc: false,
+      incrementalSync: "if_modified_since",
+      bankFeedPendingRows: { read: false, write: false },
+      bankFeedMatchWrite: false,
+      reconciledBankTransactionsRead: true,
+      bankTransactionsWrite: true,
+      bankTransfersWrite: true,
+      scopes: { granted: [], level: "read" }
     };
   }
   if (provider === "pandle") {

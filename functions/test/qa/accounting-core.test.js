@@ -164,3 +164,135 @@ test("token exchange sends Basic auth and keeps the rotated refresh token", asyn
   const denied = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: "invalid_grant", error_description: "Token invalid" }) });
   await assert.rejects(oauth.refreshTokens({ clientId: "cid", clientSecret: "sec", refreshToken: "x", fetchImpl: denied }), (error) => error.errorClass === "auth" && error.code === "invalid_grant");
 });
+
+// ---------------------------------------------------------------------------
+// Xero (XR phases 1–2): the registry, the OAuth scope sets, the webhook
+// contract with its intent-to-receive handshake, the client's error classes
+// and .NET dates, the UK chart suggestions, the provider prefix.
+
+const xeroOAuth = require("../../accounting/xero/oauth");
+const xeroWebhook = require("../../accounting/xero/webhook");
+const xeroNormalize = require("../../accounting/xero/normalize");
+const { createXeroClient, XeroApiError, parseXeroDate } = require("../../accounting/xero/client");
+const matching = require("../../accounting/core/matching");
+const { providerOf, PROVIDER_IDS } = require("../../accountingFunctions");
+
+test("Xero is a registered provider with honest capabilities: no bank-feed rows, webhooks only for the five entities, no full journal read", () => {
+  assert.deepStrictEqual(PROVIDER_IDS, ["quickbooks_online", "xero"]);
+  const xero = core.defaultCapabilities("xero");
+  assert.deepStrictEqual(xero.bankFeedPendingRows, { read: false, write: false });
+  assert.strictEqual(xero.bankFeedMatchWrite, false);
+  assert.strictEqual(xero.webhooks.contacts, true);
+  assert.strictEqual(xero.webhooks.payments, false);
+  assert.strictEqual(xero.webhooks.bankTransactions, false);
+  assert.strictEqual(xero.journals.fullJournalRead, false);
+  assert.strictEqual(xero.salesReceipts.write, false, "Xero has receive-money bank transactions, not sales receipts");
+  assert.ok(core.BANK_MATCH_STATUSES.includes("awaiting_reconciliation_in_provider"));
+  assert.strictEqual(providerOf("xero__1f8b-tenant"), "xero");
+  assert.strictEqual(providerOf("quickbooks_online__9341"), "quickbooks_online");
+  assert.strictEqual(providerOf("pandle__main"), "");
+});
+
+test("Xero OAuth: granular read scopes only in the read phase, the write set on request, never the retiring broad scope; the JWT payload names the consent", () => {
+  const read = xeroOAuth.scopesFor("read");
+  assert.ok(read.includes("offline_access") && read.includes("accounting.invoices.read") && read.includes("accounting.settings.read"));
+  assert.ok(!read.includes("accounting.invoices") && !read.some((scope) => scope.startsWith("accounting.transactions")));
+  const write = xeroOAuth.scopesFor("write", { manualJournals: true });
+  assert.ok(write.includes("accounting.invoices") && write.includes("accounting.manualjournals") && !write.includes("accounting.invoices.read"));
+  const url = new URL(xeroOAuth.authorizeUrl({ clientId: "cid", redirectUri: "https://x/cb", state: "st", scopes: read }));
+  assert.strictEqual(url.origin + url.pathname, "https://login.xero.com/identity/connect/authorize");
+  assert.strictEqual(url.searchParams.get("response_type"), "code");
+  assert.strictEqual(url.searchParams.get("scope"), read.join(" "));
+  const payload = { authentication_event_id: "evt-1", xero_userid: "u-1", scope: ["openid", "accounting.contacts.read"] };
+  const jwt = `${Buffer.from("{}").toString("base64url")}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
+  assert.deepStrictEqual(xeroOAuth.decodeJwtPayload(jwt), payload);
+  assert.deepStrictEqual(xeroOAuth.decodeJwtPayload("not-a-jwt"), {});
+  const error = new xeroOAuth.XeroOAuthError("x", { status: 400, code: "invalid_grant" });
+  assert.strictEqual(error.errorClass, "auth");
+});
+
+test("Xero webhook: base64 HMAC over the raw body, empty events are the intent-to-receive handshake, events map to the engine's shape with a stable derived id", () => {
+  const key = "webhook-key";
+  const itr = Buffer.from(JSON.stringify({ events: [], firstEventSequence: 0, lastEventSequence: 0, entropy: "S0m3" }));
+  const header = crypto.createHmac("sha256", key).update(itr).digest("base64");
+  assert.ok(xeroWebhook.verifySignature({ rawBody: itr, header, key }));
+  assert.ok(!xeroWebhook.verifySignature({ rawBody: itr, header, key: "other" }));
+  assert.ok(!xeroWebhook.verifySignature({ rawBody: itr, header: "", key }));
+  const parsedItr = xeroWebhook.parseNotifications(itr);
+  assert.strictEqual(parsedItr.format, "xero_v1"); assert.strictEqual(parsedItr.intentToReceive, true); assert.strictEqual(parsedItr.events.length, 0);
+  const body = { events: [{ resourceUrl: "https://api.xero.com/api.xro/2.0/Invoices/inv-1", resourceId: "inv-1", eventDateUtc: "2026-09-03T10:00:00.000Z", eventType: "UPDATE", eventCategory: "INVOICE", tenantId: "t-1", tenantType: "ORGANISATION" }], firstEventSequence: 5, lastEventSequence: 5, entropy: "x" };
+  const parsed = xeroWebhook.parseNotifications(JSON.stringify(body));
+  assert.strictEqual(parsed.intentToReceive, false);
+  const [event] = parsed.events;
+  assert.strictEqual(event.entity, "Invoice"); assert.strictEqual(event.realmId, "t-1"); assert.strictEqual(event.externalId, "inv-1"); assert.strictEqual(event.operation, "Update"); assert.strictEqual(event.format, "xero_v1");
+  assert.strictEqual(event.eventId, xeroWebhook.parseNotifications(JSON.stringify(body)).events[0].eventId, "the same delivery derives the same id");
+  assert.strictEqual(xeroWebhook.parseNotifications("not json").format, "unknown");
+  assert.deepStrictEqual(xeroWebhook.SUBSCRIBED_ENTITIES, ["Contact", "Invoice", "CreditNote", "Overpayment", "Prepayment"]);
+});
+
+test("Xero client: tenant header, If-Modified-Since, paging on paged resources only, rate-limit headers, and .NET dates", async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url, headers: init.headers });
+    const page = Number(new URL(url).searchParams.get("page") || 0);
+    const rows = page === 1 ? Array.from({ length: 100 }, (_, i) => ({ InvoiceID: `p1-${i}` })) : page === 2 ? [{ InvoiceID: "p2-0" }] : [];
+    const body = url.includes("/Invoices") ? { Invoices: rows } : url.includes("/Accounts") ? { Accounts: [{ AccountID: "a" }] } : { Organisations: [{ Name: "Org" }] };
+    return { ok: true, status: 200, headers: { get: (name) => ({ "x-daylimit-remaining": "990", "x-minlimit-remaining": "59", "x-appminlimit-remaining": "9999" })[name] || null }, text: async () => JSON.stringify(body) };
+  };
+  const client = createXeroClient({ tenantId: "t-1", accessToken: "tok", fetchImpl });
+  const invoices = await client.invoices({ ifModifiedSince: "2026-09-01T00:00:00.000Z" });
+  assert.strictEqual(invoices.length, 101);
+  assert.strictEqual(seen.filter((row) => row.url.includes("/Invoices")).length, 2, "stops after the short page");
+  assert.strictEqual(seen[0].headers["xero-tenant-id"], "t-1");
+  assert.strictEqual(seen[0].headers["If-Modified-Since"], "Tue, 01 Sep 2026 00:00:00 GMT");
+  assert.strictEqual(seen[0].headers.Authorization, "Bearer tok");
+  await client.accounts();
+  assert.ok(!seen[seen.length - 1].url.includes("page="), "Accounts does not page");
+  assert.strictEqual(client.lastLimits.dayRemaining, 990); assert.strictEqual(client.lastLimits.minuteRemaining, 59);
+  assert.strictEqual(parseXeroDate("/Date(1439434356790+0000)/"), "2015-08-13T02:52:36.790Z");
+  assert.strictEqual(parseXeroDate("2026-09-01T00:00:00"), "2026-09-01T00:00:00.000Z", "a zone-less Xero date is the organisation's calendar date, not local time");
+  assert.strictEqual(parseXeroDate("2026-09-01"), "2026-09-01T00:00:00.000Z");
+  assert.strictEqual(parseXeroDate(""), "");
+  const limited = new XeroApiError("xero_429", { status: 429, retryAfterSeconds: 12, limitProblem: "minute" });
+  assert.strictEqual(limited.errorClass, "transient"); assert.strictEqual(limited.retryAfterSeconds, 12);
+  const scope = new XeroApiError("xero_403", { status: 403, detail: "AuthorizationUnsuccessful: scope accounting.journals.read missing" });
+  assert.strictEqual(scope.errorClass, "permission"); assert.strictEqual(scope.scopeProblem, true);
+  assert.strictEqual(new XeroApiError("xero_401", { status: 401 }).errorClass, "auth");
+  assert.throws(() => createXeroClient({ tenantId: "", accessToken: "tok", fetchImpl }), /xero_tenant_required/);
+});
+
+test("Xero normalisation keeps the QuickBooks snapshot shape; suggestions follow the UK chart and prefer income tax types over expense and EC ones", () => {
+  const account = xeroNormalize.normalizeAccount({ AccountID: "a1", Code: "200", Name: "Sales", Type: "REVENUE", Class: "REVENUE", Status: "ACTIVE", UpdatedDateUTC: "/Date(1700000000000+0000)/" });
+  assert.strictEqual(account.fullyQualifiedName, "200 · Sales"); assert.strictEqual(account.accountType, "REVENUE"); assert.strictEqual(account.active, true); assert.strictEqual(account.syncToken, ""); assert.strictEqual(account.updatedAt, "2023-11-14T22:13:20.000Z");
+  const rate = xeroNormalize.normalizeTaxRate({ Name: "20% (VAT on Income)", TaxType: "OUTPUT2", Status: "ACTIVE", EffectiveRate: 20, CanApplyToRevenue: true });
+  assert.strictEqual(rate.externalId, "OUTPUT2"); assert.strictEqual(rate.effectiveSalesRate, 20); assert.strictEqual(rate.canApplyToRevenue, true);
+  const contact = xeroNormalize.normalizeContact({ ContactID: "c1", Name: "Ada", EmailAddress: "ADA@example.com", ContactStatus: "ARCHIVED", IsCustomer: true, Balances: { AccountsReceivable: { Outstanding: 12.5 } } });
+  assert.strictEqual(contact.email, "ada@example.com"); assert.strictEqual(contact.active, false); assert.strictEqual(contact.balance, 12.5);
+  const invoice = xeroNormalize.normalizeTransaction("Invoice", { InvoiceID: "i1", Type: "ACCREC", InvoiceNumber: "INV-1", DateString: "2026-09-01T00:00:00", Total: 100, AmountDue: 40, Status: "VOIDED", Contact: { ContactID: "c1", Name: "Ada" }, LineItems: [{}, {}] });
+  assert.strictEqual(invoice.customerId, "c1"); assert.strictEqual(invoice.vendorId, ""); assert.strictEqual(invoice.lineCount, 2); assert.strictEqual(invoice.voided, true); assert.strictEqual(invoice.txnDate, "2026-09-01");
+  assert.strictEqual(xeroNormalize.snapshotOf("Customer", { ContactID: "c2", Name: "B" }).payableBalance, undefined);
+  assert.strictEqual(xeroNormalize.idOf("BankTransaction", { BankTransactionID: "bt-1" }), "bt-1");
+  assert.ok(xeroNormalize.INCREMENTAL_ENTITIES.includes("BankTransaction") && !xeroNormalize.INCREMENTAL_ENTITIES.includes("TaxRate"));
+  const accounts = xeroNormalize.suggestAccountMappings([
+    { externalId: "a1", name: "Sales", fullyQualifiedName: "200 · Sales", accountType: "REVENUE", active: true },
+    { externalId: "a2", name: "Other Revenue", fullyQualifiedName: "260 · Other Revenue", accountType: "REVENUE", active: true },
+    { externalId: "a3", name: "Bank Fees", fullyQualifiedName: "404 · Bank Fees", accountType: "EXPENSE", active: true },
+    { externalId: "a4", name: "Purchases", fullyQualifiedName: "300 · Purchases", accountType: "DIRECTCOSTS", active: true },
+    { externalId: "a5", name: "Cost of Goods Sold", fullyQualifiedName: "310 · Cost of Goods Sold", accountType: "DIRECTCOSTS", active: true },
+    { externalId: "a6", name: "Inventory", fullyQualifiedName: "630 · Inventory", accountType: "INVENTORY", active: true },
+    { externalId: "a7", name: "Old Sales", fullyQualifiedName: "999 · Old Sales", accountType: "REVENUE", active: false }
+  ]);
+  assert.strictEqual(accounts.product_sales.externalId, "a1"); assert.strictEqual(accounts.paypal_fees.externalId, "a3"); assert.strictEqual(accounts.materials_purchase.externalId, "a4"); assert.strictEqual(accounts.cogs.externalId, "a5"); assert.strictEqual(accounts.inventory_asset.externalId, "a6");
+  assert.strictEqual(accounts.clearing_paypal, undefined, "no clearing account is invented");
+  const taxes = xeroNormalize.suggestTaxMappings([
+    { externalId: "OUTPUT2", name: "20% (VAT on Income)", description: "20%", active: true, effectiveSalesRate: 20, canApplyToRevenue: true },
+    { externalId: "INPUT2", name: "20% (VAT on Expenses)", description: "20%", active: true, effectiveSalesRate: 20, canApplyToRevenue: false },
+    { externalId: "ZERORATEDOUTPUT", name: "Zero Rated Income", description: "0%", active: true, effectiveSalesRate: 0, canApplyToRevenue: true },
+    { externalId: "ECZROUTPUT", name: "Zero Rated EC Goods Income", description: "0%", active: true, effectiveSalesRate: 0, canApplyToRevenue: true },
+    { externalId: "EXEMPTOUTPUT", name: "Exempt Income", description: "0%", active: true, effectiveSalesRate: 0, canApplyToRevenue: true },
+    { externalId: "NONE", name: "No VAT", description: "0%", active: true, effectiveSalesRate: 0, canApplyToRevenue: true },
+    { externalId: "REVERSECHARGES", name: "Reverse Charge Expenses (20%)", description: "20%", active: true, effectiveSalesRate: 20, canApplyToRevenue: false }
+  ]);
+  assert.strictEqual(taxes.ST.externalId, "OUTPUT2"); assert.strictEqual(taxes.ZR.externalId, "ZERORATEDOUTPUT"); assert.strictEqual(taxes.EX.externalId, "EXEMPTOUTPUT"); assert.strictEqual(taxes.OS.externalId, "NONE"); assert.strictEqual(taxes.RC.externalId, "REVERSECHARGES");
+  assert.strictEqual(matching.duplicateContactCandidates, normalize.duplicateContactCandidates, "one matcher for every provider");
+});

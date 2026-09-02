@@ -123,6 +123,14 @@ const NIVADESK_QBO_CLIENT_SECRET = defineSecret("NIVADESK_QBO_CLIENT_SECRET");
 const NIVADESK_QBO_WEBHOOK_VERIFIER = defineSecret("NIVADESK_QBO_WEBHOOK_VERIFIER");
 const NIVADESK_QBO_TOKEN_KEY = defineSecret("NIVADESK_QBO_TOKEN_KEY");
 const QBO_SECRETS = [NIVADESK_QBO_CLIENT_ID, NIVADESK_QBO_CLIENT_SECRET, NIVADESK_QBO_WEBHOOK_VERIFIER, NIVADESK_QBO_TOKEN_KEY];
+// Xero app credentials and the webhook signing key; Xero tokens are boxed with
+// the QuickBooks token key. Only the Xero functions and the shared sweep bind
+// these, so QuickBooks keeps deploying while the Xero secrets do not exist yet.
+const NIVADESK_XERO_CLIENT_ID = defineSecret("NIVADESK_XERO_CLIENT_ID");
+const NIVADESK_XERO_CLIENT_SECRET = defineSecret("NIVADESK_XERO_CLIENT_SECRET");
+const NIVADESK_XERO_WEBHOOK_KEY = defineSecret("NIVADESK_XERO_WEBHOOK_KEY");
+const XERO_SECRETS = [NIVADESK_XERO_CLIENT_ID, NIVADESK_XERO_CLIENT_SECRET, NIVADESK_XERO_WEBHOOK_KEY, NIVADESK_QBO_TOKEN_KEY];
+const ACCOUNTING_SECRET_SETS = { quickbooks: QBO_SECRETS, xero: XERO_SECRETS, core: [NIVADESK_QBO_TOKEN_KEY], all: [...QBO_SECRETS, NIVADESK_XERO_CLIENT_ID, NIVADESK_XERO_CLIENT_SECRET, NIVADESK_XERO_WEBHOOK_KEY] };
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -6057,18 +6065,24 @@ Object.assign(exports, filesLibraryCallables);
 const { createPandleFunctions } = require("./pandle");
 Object.assign(exports, createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner }));
 
-// Accounting connector (QuickBooks Online read-only, phases 1–2): the generic
-// core in ./accounting, owner-only writes, every function exported by name.
+// Accounting connector (QuickBooks Online and Xero, read-only phases): the
+// generic core in ./accounting, owner-only writes, every function exported by
+// name. Each function names the secret set it needs (secretsFor) so a provider
+// whose secrets are not created yet never blocks the others from deploying.
 const { createAccountingFunctions } = require("./accountingFunctions");
+const accountingSecrets = ({ secretsFor, ...options }) => ({ ...options, secrets: ACCOUNTING_SECRET_SETS[secretsFor] || QBO_SECRETS });
 const accountingExports = createAccountingFunctions({
   admin, HttpsError, uidIsCompanyOwner,
-  onCall: (options, handler) => onCall({ ...options, secrets: QBO_SECRETS }, handler),
-  onRequest: (options, handler) => onRequest({ ...options, secrets: QBO_SECRETS }, handler),
-  onSchedule: (options, handler) => onSchedule({ ...options, secrets: QBO_SECRETS }, handler),
+  onCall: (options, handler) => onCall(accountingSecrets(options), handler),
+  onRequest: (options, handler) => onRequest(accountingSecrets(options), handler),
+  onSchedule: (options, handler) => onSchedule(accountingSecrets(options), handler),
   qboClientId: () => NIVADESK_QBO_CLIENT_ID.value(),
   qboClientSecret: () => NIVADESK_QBO_CLIENT_SECRET.value(),
   qboWebhookVerifier: () => NIVADESK_QBO_WEBHOOK_VERIFIER.value(),
   qboTokenKey: () => NIVADESK_QBO_TOKEN_KEY.value(),
+  xeroClientId: () => NIVADESK_XERO_CLIENT_ID.value(),
+  xeroClientSecret: () => NIVADESK_XERO_CLIENT_SECRET.value(),
+  xeroWebhookKey: () => NIVADESK_XERO_WEBHOOK_KEY.value(),
   encryptToken: etsyModule.encryptToken,
   decryptToken: etsyModule.decryptToken,
   appReturnUrl: () => "https://nivadesk.app/settings",
@@ -6078,13 +6092,22 @@ const accountingExports = createAccountingFunctions({
     return snap.docs.map((doc) => { const d = doc.data() || {}; return { id: doc.id, name: String(d.customerName || d.name || d.displayName || ""), email: String(d.emailAddress || d.email || "").toLowerCase() }; });
   },
   createClient: (options) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskQboFakeClient ? global.__nivadeskQboFakeClient(options) : require("./accounting/quickbooks/client").createQuickBooksClient(options)),
-  oauth: new Proxy(require("./accounting/quickbooks/oauth"), { get: (target, key) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskQboFakeOAuth && global.__nivadeskQboFakeOAuth[key]) || target[key] })
+  oauth: new Proxy(require("./accounting/quickbooks/oauth"), { get: (target, key) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskQboFakeOAuth && global.__nivadeskQboFakeOAuth[key]) || target[key] }),
+  xeroCreateClient: (options) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskXeroFakeClient ? global.__nivadeskXeroFakeClient(options) : require("./accounting/xero/client").createXeroClient(options)),
+  xeroOAuth: new Proxy(require("./accounting/xero/oauth"), { get: (target, key) => (process.env.NIVADESK_E2E === "1" && global.__nivadeskXeroFakeOAuth && global.__nivadeskXeroFakeOAuth[key]) || target[key] })
 });
 exports.quickbooksConnectStart = accountingExports.quickbooksConnectStart;
 exports.quickbooksOAuthCallback = accountingExports.quickbooksOAuthCallback;
 exports.quickbooksSyncNow = accountingExports.quickbooksSyncNow;
 exports.quickbooksWebhook = accountingExports.quickbooksWebhook;
 exports.quickbooksDisconnect = accountingExports.quickbooksDisconnect;
+exports.xeroConnectStart = accountingExports.xeroConnectStart;
+exports.xeroOAuthCallback = accountingExports.xeroOAuthCallback;
+exports.xeroListTenants = accountingExports.xeroListTenants;
+exports.xeroSelectTenant = accountingExports.xeroSelectTenant;
+exports.xeroSyncNow = accountingExports.xeroSyncNow;
+exports.xeroWebhook = accountingExports.xeroWebhook;
+exports.xeroDisconnect = accountingExports.xeroDisconnect;
 exports.scheduledAccountingReconcile = accountingExports.scheduledAccountingReconcile;
 exports.accountingSetMode = accountingExports.accountingSetMode;
 exports.accountingPlanMigration = accountingExports.accountingPlanMigration;

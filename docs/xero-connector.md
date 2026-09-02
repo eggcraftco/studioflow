@@ -89,3 +89,45 @@ refresh with rotation → disconnect). Rollback: Xero is additive; disabling = n
 Tokens boxed with the token key, server-only `accountingTokens`; refresh serialised with the existing per-connection
 lock (`refreshTokenWithLock`); tenant id is never taken from client input — the connection doc names it; no Xero data
 leaves the server to any model; webhook signature checked on the raw body before any read of the payload.
+
+## 7. Built — phases 1 and 2 in code (3 Sep 2026, night)
+
+**Phase 1 (registry).** `functions/accountingFunctions.js` now keeps a `PROVIDER_MODULES` registry
+(`quickbooks_online`, `xero`): normalize module, CDC/incremental entity list, subscribed webhook entities, look-back
+window, inline webhook limit, token scope (`connection` for QuickBooks, `grant` for Xero), conflict field
+(`syncToken` vs `updatedAt`) and attention kinds (`changed_in_xero` / `deleted_in_xero`). Every shared path reads
+`connection.provider`; `providerOf(connectionId)` derives it from the `provider__` prefix. Contact matching moved to
+`accounting/core/matching.js` (re-exported from the QuickBooks normalize). `core/adapter.js`: `PROVIDERS.xero`,
+`defaultCapabilities("xero")`, `BANK_MATCH_STATUSES += awaiting_reconciliation_in_provider`. Each function names the
+secret set it needs (`secretsFor: quickbooks | xero | core | all`); index.js maps that to `defineSecret` arrays, so the
+QuickBooks and core functions deploy while the Xero secrets do not exist yet. **The 6-hourly sweep binds both sets and
+therefore deploys only after the three Xero secrets are created.** QuickBooks behaviour unchanged: QA 15/15, QuickBooks
+e2e 9/9.
+
+**Phase 2 (Xero read-only).** `functions/accounting/xero/{oauth,client,webhook,normalize,adapter}.js`. Functions:
+`xeroConnectStart` (read scope set), `xeroOAuthCallback` (exchange → JWT `authentication_event_id` → `/connections?authEventId=`
+→ one organisation links at once; several park the tokens under `accountingTokens/xero_grant__<authEventId>` and the
+names in the state doc for 15 minutes), `xeroListTenants` + `xeroSelectTenant` (owner picks; tokens never reach the
+browser), `xeroSyncNow` (organisation + currencies, accounts, tax rates, one Contacts read split into customers and
+suppliers, items; then If-Modified-Since over Contact/Item/Account/Invoice/CreditNote/Payment/BankTransaction/BankTransfer/
+Overpayment/Prepayment), `xeroWebhook` (`x-xero-signature` base64 HMAC on the raw body; ITR: 200 for a correctly signed
+empty payload, 401 otherwise; at most 5 events fetched inline, the rest wait for the sweep), `xeroDisconnect`
+(`DELETE /connections/{id}` for this organisation; the consent's refresh token is revoked and forgotten only when no
+other linked organisation shares it). Realm map `accountingRealms/xero__<tenantId>`. Xero e2e
+`test/e2e/accounting-xero-emulator.test.js`: 9/9 (fake Xero, network blocked).
+
+**Web.** `app/settings/QuickBooksIntegrationSection.tsx` is now the generic `AccountingProviderSection` with
+`QuickBooksIntegrationSection` / `XeroIntegrationSection` wrappers; copy uses `{provider}`, `{providerName}`, `{vendor}`,
+`{company}` placeholders (60 template keys, 11 languages). Xero has no environment picker, shows the read-only scope
+note, and renders the organisation chooser when the callback answers `?section=xero&xero=choose&state=…`.
+`lib/studioflow/quickbooks.ts` carries the Xero callables; `integrations.ts` lists Xero as a native card with live
+status; `app/xero/callback/page.tsx` forwards to the function. Not deployed to the web until "canlıya at".
+
+**What the owner still does (in this order).** Create the Xero app (redirect URIs
+`https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroOAuthCallback` and `https://nivadesk.app/xero/callback`;
+webhook URL `https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroWebhook`, Contacts + Invoices + Credit notes)
+→ `firebase functions:secrets:set NIVADESK_XERO_CLIENT_ID`, `NIVADESK_XERO_CLIENT_SECRET`, `NIVADESK_XERO_WEBHOOK_KEY`
+(Xero tokens are boxed with `NIVADESK_QBO_TOKEN_KEY`) → deploy by name `xeroConnectStart, xeroOAuthCallback,
+xeroListTenants, xeroSelectTenant, xeroSyncNow, xeroWebhook, xeroDisconnect, scheduledAccountingReconcile` → save the
+webhook in the portal (intent-to-receive runs against the live endpoint) → connect the Demo Company from Settings →
+Integrations → Xero. Not built: native panels (web-first, as QuickBooks), phases 3+.
