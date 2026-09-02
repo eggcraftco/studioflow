@@ -53,4 +53,11 @@ function pass(name) { console.log("PASS ", name); }
   pass("reconciliation is the live path re-run, and it writes its audit down");
 }
 
+{
+  const at = source.indexOf("async function fetchShopifyOrderById(");
+  const body = source.slice(at, source.indexOf("\n}\n", at));
+  assert(body.includes("SHOPIFY_ORDER_RECONCILE_FIELDS") && !body.includes("SHOPIFY_ORDER_IMPORT_FIELDS"), "a fetched order carries the reconcile fields (updatedAt, cancelledAt, fulfilments)");
+  pass("fetch-latest asks for the same fields as reconciliation, so a retry sees the cancellation and the tracking");
+}
+
 console.log("\n✅ SHOPIFY RECONCILE WIRING GEÇTİ");

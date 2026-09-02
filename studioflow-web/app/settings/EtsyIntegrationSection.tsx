@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
   beginEtsyConnect,
   disconnectEtsyShop,
@@ -374,6 +375,8 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
       {error ? <p className="layout-error">{error}</p> : null}
 
       {shopPicker}
+
+      <CommerceSyncHealthCard workspace={workspace} language={language} provider="etsy" />
 
       {/* ── Screen 3 · Connected shop header ─────────────────────────────── */}
       <section className="card app-card quick-reply-settings-card">

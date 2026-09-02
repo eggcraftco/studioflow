@@ -30585,10 +30585,13 @@ function shopifyGraphQLAddressToRest(addr) {
 // and the same conversion the backfill uses, so a retried order and an
 // imported one are the same order (MERGE-006). null means Shopify no longer
 // has it.
+// Faz 3: a fetched order carries updatedAt, cancelledAt and its fulfilments
+// (the reconcile field set), so a retry or a queued event can be applied with
+// the same stale check and the same tracking as a reconciliation pass.
 async function fetchShopifyOrderById(shop, store, shopifyOrderId) {
   const id = String(shopifyOrderId || "").replace(/\D/g, "");
   if (!id) return null;
-  const query = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { ${SHOPIFY_ORDER_IMPORT_FIELDS} } } }`;
+  const query = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { ${SHOPIFY_ORDER_RECONCILE_FIELDS} } } }`;
   const result = await shopifyAdminGraphQL(shop, store, query, { ids: [`gid://shopify/Order/${id}`] });
   const node = (result.nodes || []).find(Boolean);
   return node ? shopifyGraphQLOrderToRest(node) : null;

@@ -32,6 +32,7 @@ import {
 import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
+import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
@@ -5375,6 +5376,7 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
     <div className="settings-card-stack">
       <ShopifyConnectedStoresCard workspace={workspace} language={language} />
       <IntegrationCustomerSyncCard workspace={workspace} language={language} />
+      <CommerceSyncHealthCard workspace={workspace} language={language} provider="shopify" />
     </div>
   );
 }
