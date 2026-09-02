@@ -7,7 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useRouter } from "next/navigation";
 import { signOut, sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
-import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
+import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { SettingsDialog } from "./SettingsDialog";
@@ -5194,6 +5194,16 @@ function IntegrationsSection({
     [signals],
   );
 
+  // The parent hands down a fresh callback on every render; going through a
+  // ref keeps the header registration from re-running (and re-rendering the
+  // page) in a loop.
+  const openSupportRef = useRef(onOpenSupport);
+  openSupportRef.current = onOpenSupport;
+  useSettingsHeaderActions(
+    <button type="button" className="button secondary" onClick={() => openSupportRef.current()}>{t("Request an integration")}</button>,
+    [language]
+  );
+
   if (managing) {
     return (
       <div className="settings-card-stack">
@@ -5229,17 +5239,22 @@ function IntegrationsSection({
   const shopFirst = intent === "connect-shop";
   const highlighted = new Set(shopFirst ? ["shopify", "woocommerce"] : []);
 
-  return (
-    <div className="settings-card-stack">
-      <section className="card app-card integrations-head">
-        <div>
-          <CardTitle icon="orders" eyebrow={t("Integrations")} title={t("Connect the tools you use to run your business.")} />
-        </div>
-        <button type="button" className="secondary-button" onClick={onOpenSupport}>
-          {t("Request an integration")}
-        </button>
-      </section>
+  // Grouped by what the owner can do with each one, not by which shelf the
+  // provider sits on: connected first, then what is ready to connect, and the
+  // ones that do not exist yet as a compact row.
+  const inCategory = (row: (typeof resolved)[number]) => !category || shopFirst || row.provider.category === category;
+  const groups = [
+    { id: "connected", title: "Connected", rows: shown.filter(row => inCategory(row) && (row.live.state === "connected" || row.live.state === "attention")) },
+    { id: "available", title: "Ready to connect", rows: shown.filter(row => inCategory(row) && (row.live.state === "available" || row.live.state === "webhook")) }
+  ];
+  const planned = shown.filter(row => inCategory(row) && row.live.state === "planned");
+  const categoryTitle = (id: string) => INTEGRATION_CATEGORIES.find(group => group.id === id)?.title ?? "";
+  const orderRows = (rows: typeof resolved) => shopFirst
+    ? [...rows].sort((a, b) => Number(highlighted.has(b.provider.id)) - Number(highlighted.has(a.provider.id)))
+    : rows;
 
+  return (
+    <div className="settings-card-stack settings-integrations-page">
       {shopFirst ? (
         <Link className="integrations-intent" href="/home">
           <span className="integrations-intent-mark" aria-hidden="true">
@@ -5254,57 +5269,61 @@ function IntegrationsSection({
         </Link>
       ) : null}
 
-      <section className="card app-card integrations-filters">
-        <label className="integrations-search">
+      <div className="settings-integrations-toolbar">
+        <label className="settings-search settings-integrations-search">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5" /><path d="m13.5 13.5 3 3" /></svg>
           <span className="sr-only">{t("Search integrations...")}</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)}
-                 placeholder={t("Search integrations...")} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search integrations...")} />
         </label>
-        <div className="integrations-chips" role="group">
+        <div className="settings-segmented is-compact" role="group" aria-label={t("Integrations")}>
           {([["all", "All"], ["connected", "Connected"], ["available", "Available"], ["planned", "Coming soon"]] as const)
             .map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={filter === id}
-                      className={filter === id ? "is-active" : ""}
-                      onClick={() => setFilter(id)}>{t(label)}</button>
+              <button key={id} type="button" aria-pressed={filter === id} className={filter === id ? "active" : ""} onClick={() => setFilter(id)}>{t(label)}</button>
             ))}
         </div>
-        <p className="integrations-count">
+        <p className="settings-integrations-count">
           {/* Only once the reads have landed: "0 connected" while they are in
               flight is a statement about the network, not the workspace. */}
           {loaded ? (
             <>
-              <em>{t("{count} connected").replace("{count}", String(connected))}</em>
-              {attention > 0 ? <b>{t("{count} needs attention").replace("{count}", String(attention))}</b> : null}
+              <span className="settings-dot-status">{t("{count} connected").replace("{count}", String(connected))}</span>
+              {attention > 0 ? <span className="settings-dot-status is-offline">{t("{count} needs attention").replace("{count}", String(attention))}</span> : null}
             </>
-          ) : <span className="muted-copy">{t("Loading...")}</span>}
+          ) : <span className="settings-field-hint">{t("Loading...")}</span>}
         </p>
-      </section>
+      </div>
 
-      {INTEGRATION_CATEGORIES
-        .filter((group) => !category || category === group.id || shopFirst)
-        .map((group) => {
-          const rows = shown.filter((row) => row.provider.category === group.id);
-          if (rows.length === 0) return null;
-          const ordered = shopFirst
-            ? [...rows].sort((a, b) => Number(highlighted.has(b.provider.id)) - Number(highlighted.has(a.provider.id)))
-            : rows;
-          return (
-            <section key={group.id} className="card app-card">
-              <h3 className="integrations-group">{t(group.title)}</h3>
-              <div className="integrations-grid">
-                {ordered.map(({ provider, live }) => (
-                  <IntegrationCard key={provider.id} provider={provider} live={live} t={t}
-                                   highlighted={highlighted.has(provider.id)}
-                                   onManage={() => setManaging(provider.manage)} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+      {groups.map(group => group.rows.length === 0 ? null : (
+        <section key={group.id} className="card app-card">
+          <SettingsCardHead title={t(group.title)} aside={<span className="settings-tag is-muted">{group.rows.length}</span>} />
+          <div className="integrations-grid settings-integrations-grid">
+            {orderRows(group.rows).map(({ provider, live }) => (
+              <IntegrationCard key={provider.id} provider={provider} live={live} t={t}
+                               highlighted={highlighted.has(provider.id)}
+                               categoryLabel={t(categoryTitle(provider.category))}
+                               onManage={() => setManaging(provider.manage)} />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {planned.length > 0 ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Coming soon")} subtitle={t("Not connectable yet. Ask for one and we will tell you when it lands.")} />
+          <div className="settings-chip-row">
+            {planned.map(({ provider }) => (
+              <span className="settings-chip settings-integration-chip" key={provider.id}>
+                {provider.logo ? <img src={provider.logo} alt="" width={16} height={16} /> : null}
+                {provider.name}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {shown.length === 0 ? (
         <section className="card app-card">
-          <p className="muted-copy">{t("Nothing here yet.")}</p>
+          <p className="settings-empty-line">{t("Nothing here yet.")}</p>
         </section>
       ) : null}
     </div>
@@ -5312,13 +5331,14 @@ function IntegrationsSection({
 }
 
 function IntegrationCard({
-  provider, live, t, highlighted, onManage,
+  provider, live, t, highlighted, onManage, categoryLabel,
 }: {
   provider: IntegrationProvider;
   live: IntegrationLiveState;
   t: (text: string) => string;
   highlighted: boolean;
   onManage: () => void;
+  categoryLabel?: string;
 }) {
   const label = INTEGRATION_STATE_LABELS[live.state];
   return (
@@ -5335,6 +5355,7 @@ function IntegrationCard({
           <strong>{provider.name}</strong>
           <span className={`integration-state is-${live.state}`}>{t(label)}</span>
         </div>
+        {categoryLabel ? <span className="settings-tag is-muted integration-category">{categoryLabel}</span> : null}
       </div>
       {/* A card for something that does not exist yet is the name and the word
           "Coming soon", once. A blurb and a second "Coming soon" under it were
@@ -5349,11 +5370,11 @@ function IntegrationCard({
             </ul>
           ) : null}
           {provider.manage ? (
-            <button type="button" className="secondary-button" onClick={onManage}>
+            <button type="button" className="button secondary" onClick={onManage}>
               {t(live.state === "connected" || live.state === "attention" ? "Manage" : "Set up")}
             </button>
           ) : provider.id === "openbanking" ? (
-            <Link className="secondary-button" href="/bank">
+            <Link className="button secondary" href="/bank">
               {t(live.state === "connected" ? "Manage" : "Set up")}
             </Link>
           ) : null}
@@ -6221,137 +6242,183 @@ function DataManagementSection({
           ) : null}
         </SettingsDialog>
       ) : null}
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="export" eyebrow={t("Data Management")} title={t("Export and backup")} />
-        <p className="muted-copy">{t("Create a backup before importing or deleting data.")}</p>
-        <div className="settings-mini-grid">
-          <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
-          <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile
-            label={t("Last backup")}
-            value={lastBackupAtMs > 0 ? new Date(lastBackupAtMs).toLocaleDateString(studioLocaleTag(language)) : t("Never")}
-          />
+      <div className="settings-fact-cards">
+        <div className="settings-fact-card">
+          <span className="settings-fact-card-copy">
+            <small>{t("Orders")}</small>
+            <strong>{counts?.orderCount ?? 0}</strong>
+          </span>
         </div>
-
-        <div className="data-management-actions">
-          <button className="button" type="button" title={t("Restores into NivaDesk on any device.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
-            {exporting === "backup" ? t("Exporting...") : t("Download backup")}
-          </button>
-          <button className="button secondary" type="button" title={t("A raw copy for support and safe keeping. Not for re-import.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("webBackup")}>
-            {exporting === "webBackup" ? t("Exporting...") : t("Full web archive")}
-          </button>
-          <button className="button secondary" type="button" title={t("For spreadsheets. Cannot be imported back.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("orders")}>
-            {exporting === "orders" ? t("Exporting...") : t("Orders CSV")}
-          </button>
-          <button className="button secondary" type="button" title={t("For spreadsheets. Cannot be imported back.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("customers")}>
-            {exporting === "customers" ? t("Exporting...") : t("Customers CSV")}
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".json,application/json"
-            hidden
-            onChange={event => void handleImportFile(event.target.files?.[0])}
-          />
-          <button className="button" type="button" disabled={!canImport || importing} onClick={() => importInputRef.current?.click()}>
-            {importing ? t("Importing...") : t("Import Backup")}
-          </button>
+        <div className="settings-fact-card">
+          <span className="settings-fact-card-copy">
+            <small>{t("Customers")}</small>
+            <strong>{counts?.customerCount ?? 0}</strong>
+          </span>
         </div>
+        <div className={lastBackupAtMs > 0 ? "settings-fact-card" : "settings-fact-card is-caution"}>
+          <span className="settings-fact-card-copy">
+            <small>{t("Last backup")}</small>
+            <strong>{lastBackupAtMs > 0 ? new Date(lastBackupAtMs).toLocaleDateString(studioLocaleTag(language)) : t("Never")}</strong>
+            {lastBackupAtMs > 0 ? null : <em>{t("Create your first backup")}</em>}
+          </span>
+        </div>
+      </div>
 
-        <p className="muted-copy">{t("Workspace data backup restores your settings, orders and customers into NivaDesk on any device — it does not include uploaded files. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
-        {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
-        {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {lastImportRunId ? (
-          <div className="settings-action-row">
-            <button className="button secondary" type="button" disabled={undoingImport} onClick={() => { void handleUndoImport(); }}>
-              {undoingImport ? t("Undoing...") : t("Undo this import")}
+      {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
+      {error ? <p className="layout-error">{t(error)}</p> : null}
+      {lastImportRunId ? (
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={undoingImport} onClick={() => { void handleUndoImport(); }}>
+            {undoingImport ? t("Undoing...") : t("Undo this import")}
+          </button>
+          <span className="settings-field-hint">{t("Removes exactly the records this import created. Settings changes are not undone.")}</span>
+        </div>
+      ) : null}
+
+      <div className="settings-two-col">
+        <section className="card app-card">
+          <SettingsCardHead
+            title={t("Workspace backup")}
+            subtitle={t("Create a portable backup of your settings, orders and customers.")}
+            aside={<span className="settings-tag">{t("Restorable")}</span>}
+          />
+          <div className="settings-button-row">
+            <button className="button" type="button" title={t("Restores into NivaDesk on any device.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
+              {exporting === "backup" ? t("Exporting...") : t("Download backup")}
             </button>
-            <span className="muted-copy">{t("Removes exactly the records this import created. Settings changes are not undone.")}</span>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={event => void handleImportFile(event.target.files?.[0])}
+            />
+            <button className="button secondary" type="button" disabled={!canImport || importing} onClick={() => importInputRef.current?.click()}>
+              {importing ? t("Importing...") : t("Import Backup")}
+            </button>
           </div>
-        ) : null}
-        {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
+          <ul className="settings-check-list">
+            <li>{t("Works across NivaDesk devices")}</li>
+            <li>{t("Import is append-only")}</li>
+            <li>{t("Uploaded Client Files are not included")}</li>
+          </ul>
+          <p className="settings-field-hint">{t("You can import app backups and web JSON backups.")}</p>
+          {!exportAllowed ? <p className="settings-field-hint is-caution">{t("Export is not available for this workspace.")}</p> : null}
+          {!canImport ? <p className="settings-field-hint">{t("Your current workspace role cannot import backup files.")}</p> : null}
+        </section>
 
-      {isWorkspaceOwner ? (
-        <section className="card app-card quick-reply-settings-card">
-          <CardTitle icon="docText" eyebrow={t("Data Management")} title={t("Change history")} />
-          <p className="muted-copy">{t("Who changed what, and when — workspace settings changes from the last 90 days, recorded from every device.")}</p>
-          {auditEntries === null ? (
-            <div className="settings-action-row">
-              <button className="button secondary" type="button" disabled={auditLoading} onClick={() => { void loadAuditLog(); }}>
-                {auditLoading ? t("Loading...") : t("Load history")}
-              </button>
-            </div>
-          ) : !auditEnabled ? (
-            <p className="muted-copy">{t("Change history is part of the Pro and Team plans. Changes are already being recorded — upgrade to read them.")}</p>
-          ) : auditEntries.length === 0 ? (
-            <p className="muted-copy">{t("No settings changes recorded yet. New saves appear here within a few seconds.")}</p>
-          ) : (
-            <>
-              <div className="settings-audit-list">
-                {auditEntries.map(entry => (
-                  <div className="settings-audit-entry" key={entry.id}>
-                    <div className="settings-audit-head">
-                      <strong>{entry.byName || t("Workspace member")}</strong>
-                      <span>{entry.areas.map(area => t(area)).join(" · ")}</span>
-                      <time>{new Date(entry.atMs).toLocaleString(studioLocaleTag(language))}</time>
-                    </div>
-                    <p className="muted-copy settings-audit-keys">
-                      {entry.changedKeys.slice(0, 6).map(humanizeSettingsKey).join(", ")}
-                      {entry.changedCount > 6 ? ` +${entry.changedCount - 6}` : ""}
-                    </p>
-                    {entry.values.slice(0, 4).map(value => (
-                      <p className="settings-audit-value" key={value.key}>
-                        {humanizeSettingsKey(value.key)}: {value.from} → {value.to}
-                      </p>
-                    ))}
-                  </div>
-                ))}
-              </div>
-              <div className="settings-action-row">
-                <button className="button secondary" type="button" disabled={auditLoading} onClick={() => { void loadAuditLog(); }}>
-                  {auditLoading ? t("Loading...") : t("Refresh")}
+        <section className="card app-card">
+          <SettingsCardHead title={t("Other export formats")} />
+          <div className="settings-export-rows">
+            {[
+              { kind: "webBackup" as const, title: "Full web archive", tag: "Support", detail: t("A raw copy for support and safe keeping. Not for re-import.") },
+              { kind: "orders" as const, title: "Orders CSV", tag: "Spreadsheet", detail: `${counts?.orderCount ?? 0} ${t("order records")}. ${t("Cannot be imported back.")}` },
+              { kind: "customers" as const, title: "Customers CSV", tag: "Spreadsheet", detail: `${counts?.customerCount ?? 0} ${t("customer records")}. ${t("Cannot be imported back.")}` }
+            ].map(row => (
+              <div className="settings-export-row" key={row.kind}>
+                <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="export" /></span>
+                <span className="settings-export-row-copy">
+                  <strong>{t(row.title)} <span className="settings-tag is-muted">{t(row.tag)}</span></strong>
+                  <small>{row.detail}</small>
+                </span>
+                <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport(row.kind)}>
+                  {exporting === row.kind ? t("Exporting...") : t("Download")}
                 </button>
               </div>
-            </>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {isWorkspaceOwner ? (
+        <section className="card app-card">
+          <div className="settings-status-band is-info settings-history-band">
+            <span className="settings-status-band-icon" aria-hidden="true"><CardIconGlyph icon="historyClock" /></span>
+            <div className="settings-status-band-copy">
+              <strong>{t("Change history")} <span className="settings-tag">{t("Last 90 days")}</span></strong>
+              <p>{t("Who changed what, and when — workspace settings changes from the last 90 days, recorded from every device.")}</p>
+            </div>
+            <span className="settings-status-band-side">
+              <button className="button secondary" type="button" disabled={auditLoading} onClick={() => { void loadAuditLog(); }}>
+                {auditLoading ? t("Loading...") : auditEntries === null ? t("Load history") : t("Refresh")}
+              </button>
+            </span>
+          </div>
+          {auditEntries === null ? null : !auditEnabled ? (
+            <p className="settings-field-hint">{t("Change history is part of the Pro and Team plans. Changes are already being recorded — upgrade to read them.")}</p>
+          ) : auditEntries.length === 0 ? (
+            <p className="settings-field-hint">{t("No settings changes recorded yet. New saves appear here within a few seconds.")}</p>
+          ) : (
+            <div className="settings-audit-list">
+              {auditEntries.map(entry => (
+                <div className="settings-audit-entry" key={entry.id}>
+                  <div className="settings-audit-head">
+                    <strong>{entry.byName || t("Workspace member")}</strong>
+                    <span>{entry.areas.map(area => t(area)).join(" · ")}</span>
+                    <time>{new Date(entry.atMs).toLocaleString(studioLocaleTag(language))}</time>
+                  </div>
+                  <p className="muted-copy settings-audit-keys">
+                    {entry.changedKeys.slice(0, 6).map(humanizeSettingsKey).join(", ")}
+                    {entry.changedCount > 6 ? ` +${entry.changedCount - 6}` : ""}
+                  </p>
+                  {entry.values.slice(0, 4).map(value => (
+                    <p className="settings-audit-value" key={value.key}>
+                      {humanizeSettingsKey(value.key)}: {value.from} → {value.to}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
           )}
           {auditError ? <p className="layout-error">{t(auditError)}</p> : null}
         </section>
       ) : null}
 
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="lock" eyebrow={t("Protected Actions")} title={t("Import and delete")} />
-        <div className="settings-rule-list">
-          <InfoTile label={t("Import Backup")} value={t("Available")} />
-          <InfoTile label={t("Delete Data")} value={canDelete ? t("Owner/Admin only") : t("Locked")} />
-        </div>
-        <p className="muted-copy">{t("Web import is append-only and app-compatible. It imports app backups, web JSON backups, orders, customers and supported settings, but does not import Client Files storage objects. Delete Data mirrors the app: it removes orders and customers only, not workspace settings, members, logos or Storage files.")}</p>
-        <div className="data-management-actions">
-          <Link className="button secondary" href="/export">{t("Open full Export page")}</Link>
-        </div>
-        <div className="settings-danger-box">
-          <strong>{t("Delete orders and customers")}</strong>
-          <p>{t("Export a backup first.")} {t("Then type")} <code>DELETE DATA</code> {t("to unlock the delete action.")}</p>
-          <input
-            className="input"
-            value={deleteConfirmation}
-            disabled={!canDelete || deleting}
-            placeholder="DELETE DATA"
-            onChange={event => {
-              setDeleteConfirmation(event.target.value);
-              setStatus("");
-              setError("");
-            }}
-          />
-          <button
-            className="button danger-button"
-            type="button"
-            disabled={!canDelete || deleting || deleteConfirmation.trim() !== "DELETE DATA"}
-            onClick={handleDeleteData}
-          >
-            {deleting ? t("Deleting...") : t("Delete Data")}
-          </button>
-          {!canDelete ? <p className="muted-copy">{t("Only workspace Owner or Admin can delete workspace data.")}</p> : null}
+      <section className="card app-card settings-danger-card">
+        <SettingsCardHead
+          title={t("Delete orders and customers")}
+          subtitle={t("This removes orders and customers only.")}
+          aside={<span className="settings-tag">{canDelete ? t("Owner/Admin only") : t("Locked")}</span>}
+        />
+        <div className="settings-two-col">
+          <div className="settings-field-stack">
+            <div className="settings-delete-lists">
+              <div>
+                <span className="settings-field-label is-danger">{t("Will be deleted")}</span>
+                <ul><li>{t("Orders")}</li><li>{t("Customers")}</li></ul>
+              </div>
+              <div>
+                <span className="settings-field-label">{t("Will stay")}</span>
+                <ul><li>{t("Workspace settings")}</li><li>{t("Members")}</li><li>{t("Logos")}</li><li>{t("Client Files")}</li></ul>
+              </div>
+            </div>
+            <p className="settings-field-hint">{t("Web import is append-only and app-compatible. It imports app backups, web JSON backups, orders, customers and supported settings, but does not import Client Files storage objects. Delete Data mirrors the app: it removes orders and customers only, not workspace settings, members, logos or Storage files.")}</p>
+          </div>
+          <div className="settings-field-stack">
+            <p className="settings-field-hint">{t("Export a backup first.")} {t("Then type")} <code>DELETE DATA</code> {t("to unlock the delete action.")}</p>
+            <input
+              className="input"
+              value={deleteConfirmation}
+              disabled={!canDelete || deleting}
+              placeholder="DELETE DATA"
+              aria-label="DELETE DATA"
+              onChange={event => {
+                setDeleteConfirmation(event.target.value);
+                setStatus("");
+                setError("");
+              }}
+            />
+            <button
+              className="button danger"
+              type="button"
+              disabled={!canDelete || deleting || deleteConfirmation.trim() !== "DELETE DATA"}
+              onClick={handleDeleteData}
+            >
+              {deleting ? t("Deleting...") : t("Delete Data")}
+            </button>
+            {!canDelete ? <p className="settings-field-hint">{t("Only workspace Owner or Admin can delete workspace data.")}</p> : null}
+            <Link className="settings-inline-link" href="/export">{t("Open full Export page")} ↗</Link>
+          </div>
         </div>
       </section>
     </div>
@@ -6375,6 +6442,12 @@ function PlanAccessSection({
   const effectiveStorageLabel = workspace.billingStorageLimitMB >= 1024
     ? `${Math.round((workspace.billingStorageLimitMB / 1024) * 10) / 10} GB`
     : `${workspace.billingStorageLimitMB} MB`;
+  useSettingsHeaderActions(
+    <span className="settings-field-hint settings-header-note">
+      <CardIconGlyph icon="lock" /> {t("Plan changes are managed securely.")}
+    </span>,
+    [language]
+  );
   const isActiveWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const featurePills = [
     { title: planOrderLimitText(currentPlan), enabled: true },
@@ -6391,129 +6464,167 @@ function PlanAccessSection({
     { title: t("Storage Add-ons"), enabled: currentPlan.features.storage_addons }
   ];
 
+  type PlanRow = (typeof PLAN_ENTITLEMENTS)[keyof typeof PLAN_ENTITLEMENTS];
+  const plans = Object.values(PLAN_ENTITLEMENTS) as PlanRow[];
+  const included = (enabled: boolean) => (
+    <span className={enabled ? "settings-plan-cell is-yes" : "settings-plan-cell is-no"}>{enabled ? `✓ ${t("Included")}` : t("Locked")}</span>
+  );
+  const limitCell = (limit: number | null) => limit === null ? <span className="settings-plan-cell is-yes">✓ {t("Unlimited")}</span> : <span className="settings-plan-cell">{limit}</span>;
+  const compareRows: { label: string; icon: CardIcon; render: (plan: PlanRow) => React.ReactNode }[] = [
+    { label: "Orders", icon: "orders", render: plan => limitCell(plan.orderLimit) },
+    { label: "Customers", icon: "customers", render: plan => limitCell(plan.customerLimit) },
+    { label: "Storage", icon: "storage", render: plan => <span className="settings-plan-cell">{formatStorageFromMB(plan.storageLimitMB)}</span> },
+    { label: "Client Files", icon: "files", render: plan => included(plan.features.client_files) },
+    { label: "Team Access", icon: "team", render: plan => included(plan.features.team_access) },
+    { label: "Advanced Finance", icon: "finance", render: plan => included(plan.features.financial_advanced) },
+    { label: "Card Customise", icon: "paintbrush", render: plan => included(plan.features.card_customization) },
+    { label: "Workspace Logo", icon: "photo", render: plan => included(plan.features.workspace_logo_upload) },
+    { label: "Storage Add-ons", icon: "storage", render: plan => included(plan.features.storage_addons) }
+  ];
+  const usedMB = counts?.estimatedFileUsageMB ?? 0;
+  const seatsIncluded = currentPlan.includedTeamSeats ?? workspace.billingTeamMemberLimit;
+  const billingActive = workspace.billingStatus === "active" || workspace.billingStatus === "trialing";
+
   return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="plan" eyebrow={t("Plan & Access")} title={workspace.billingPlanName} />
-        <div className="plan-access-hero">
-          <div className="plan-access-hero-icon" aria-hidden="true">◆</div>
-          <div>
-            <div className="plan-access-hero-title">
-              <strong>{currentPlan.title}</strong>
-              <span>{currentPlan.purchaseModel}</span>
+    <div className="settings-card-stack settings-plan-page">
+      <div className="settings-plan-columns">
+        <section className="card app-card settings-plan-hero">
+          <span className="settings-tag">{t("Current plan")}</span>
+          <div className="settings-plan-hero-head">
+            <div className="settings-plan-hero-title">
+              <strong>{workspace.billingPlanName}</strong>
+              <span className={billingActive ? "settings-status-pill is-saved" : "settings-status-pill is-dirty"}>
+                <span className="settings-status-pill-mark" aria-hidden="true">{billingActive ? "✓" : "●"}</span>
+                {t(planBillingStateLabel(workspace.billingStatus))}
+              </span>
             </div>
-            <p>{planSummaryText(currentPlan.plan)}</p>
-            <div className="plan-access-compact-metrics">
-              <span>{planOrderLimitText(currentPlan)}</span>
-              <span>{`Storage: ${effectiveStorageLabel}`}</span>
-              <span>{planTeamLimitText(currentPlan)}</span>
+            {isActiveWorkspaceOwner ? (
+              <Link className="button" href="/plan">{t("Open Plan & Billing")} ↗</Link>
+            ) : null}
+          </div>
+          <p className="settings-plan-hero-model">{currentPlan.purchaseModel}</p>
+          <p className="settings-field-hint">{planSummaryText(currentPlan.plan)}</p>
+          {!isActiveWorkspaceOwner ? <p className="settings-field-hint">{t("This workspace plan is managed by its owner.")}</p> : null}
+          <div className="settings-metric-grid">
+            <div className="settings-metric">
+              <small>{t("Orders")}</small>
+              <strong>{counts?.orderCount ?? 0}</strong>
+              <em>{currentPlan.orderLimit === null ? t("Unlimited") : `${t("of")} ${currentPlan.orderLimit}`}</em>
+            </div>
+            <div className="settings-metric">
+              <small>{t("Customers")}</small>
+              <strong>{counts?.customerCount ?? 0}</strong>
+              <em>{currentPlan.customerLimit === null ? t("Unlimited") : `${t("of")} ${currentPlan.customerLimit}`}</em>
+            </div>
+            <div className="settings-metric">
+              <small>{workspace.billingTeamMemberLimit > 1 ? t("Seats") : t("Users")}</small>
+              <strong>{workspace.billingTeamMemberLimit > 1 ? `${seatsIncluded} ${t("included")}` : "1"}</strong>
+              <em>{workspace.billingTeamMemberLimit > 1 ? `${workspace.billingTeamMemberLimit} ${t("in total")}` : t("single-user plan")}</em>
+            </div>
+            <div className="settings-metric">
+              <small>{t("Storage")}</small>
+              <strong>{usedMB} MB {t("used")}</strong>
+              <em>
+                {formatStorageFromMB(workspace.billingStorageLimitMB)} {t("total")}
+                {/* A 210 GB total against a 50 GB plan matrix read as a
+                    contradiction; the sum spells itself out now. */}
+                {workspace.storageAddonMB > 0 ? ` (${formatStorageFromMB(workspace.billingStorageLimitMB - workspace.storageAddonMB)} + ${formatStorageFromMB(workspace.storageAddonMB)} ${t("add-on")})` : ""}
+              </em>
             </div>
           </div>
-        </div>
-        <div className="settings-mini-grid">
-          <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
-          <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile
-            label={workspace.billingTeamMemberLimit > 1 ? t("Seats") : t("Users")}
-            value={workspace.billingTeamMemberLimit > 1
-              ? `${workspace.billingTeamMemberLimit}`
-              : `1 (${t("single-user plan")})`}
-          />
-          <InfoTile
-            label={t("Storage (total)")}
-            value={workspace.storageAddonMB > 0
-              // A 210 GB total against a 50 GB plan matrix read as a
-              // contradiction; the sum spells itself out now.
-              ? `${formatStorageFromMB(workspace.billingStorageLimitMB)} (${formatStorageFromMB(workspace.billingStorageLimitMB - workspace.storageAddonMB)} + ${formatStorageFromMB(workspace.storageAddonMB)} ${t("add-on")})`
-              : formatStorageFromMB(workspace.billingStorageLimitMB)}
-          />
-          {/* Renewal date and billing state were on the company document all
-              along; Settings just never showed either. */}
-          {workspace.billingCurrentPeriodEndMs > 0 ? (
-            <InfoTile
-              label={workspace.billingStatus === "cancelled" || workspace.billingStatus === "canceled" ? t("Access until") : t("Renews on")}
-              value={new Date(workspace.billingCurrentPeriodEndMs).toLocaleDateString(studioLocaleTag(language))}
-            />
-          ) : null}
-          <InfoTile label={t("Billing state")} value={t(planBillingStateLabel(workspace.billingStatus))} />
-          {/* Price is shown only for Stripe: Apple and Google set their own
-              per-territory prices in the store consoles, and those amounts
-              exist nowhere in this codebase — printing the £ list price for a
-              store-billed workspace could simply be wrong. Even for Stripe this
-              is the list price, not any particular invoice. */}
-          {workspace.billingEffectiveProvider === "stripe" && STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey] ? (
-            <InfoTile
-              label={t("List price")}
-              value={STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey]}
-              hint={t("The advertised price for this plan. Your invoice can differ if a discount applies.")}
-            />
-          ) : null}
-          {workspace.billingEffectiveProvider === "apple" || workspace.billingEffectiveProvider === "google" ? (
-            <InfoTile
-              label={t("Billed through")}
-              value={workspace.billingEffectiveProvider === "apple" ? t("App Store") : t("Google Play")}
-              hint={t("The price is set in the store and shown in your store subscription settings.")}
-            />
-          ) : null}
-        </div>
-        {/* "Current seat allowance: 1" read as if it were seats used, and the
-            total storage read as if it contradicted the plan matrix. Both
-            numbers were right; neither said which quantity it was. */}
-        {workspace.storageAddonMB > 0 ? (
-          <p className="muted-copy">
-            {formatStorageFromMB(workspace.billingStorageLimitMB - workspace.storageAddonMB)} {t("plan")}
-            {" + "}
-            {formatStorageFromMB(workspace.storageAddonMB)} {t("add-on")}
-          </p>
-        ) : null}
-        <div className="progress-track settings-progress">
-          <div className="progress-fill" style={{ width: `${storagePercent}%` }} />
-        </div>
-        <p className="muted-copy">{counts?.estimatedFileUsageMB ?? 0} {t("MB used of")} {formatStorageFromMB(workspace.billingStorageLimitMB)}.</p>
-        {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>{t("Open full Plan & Billing page")}</Link>
-        ) : (
-          <p className="muted-copy">{t("This workspace plan is managed by its owner.")}</p>
-        )}
-      </section>
+          <div className="settings-progress">
+            <div className="settings-progress-track"><div className="settings-progress-fill" style={{ width: `${Math.min(100, Math.max(0, storagePercent))}%` }} /></div>
+            <div className="settings-progress-labels">
+              <span>{usedMB} {t("MB used of")} {formatStorageFromMB(workspace.billingStorageLimitMB)}</span>
+              <span>{Math.round(storagePercent)}%</span>
+            </div>
+          </div>
+          <dl className="settings-facts">
+            {/* Renewal date and billing state were on the company document all
+                along; Settings just never showed either. */}
+            {workspace.billingCurrentPeriodEndMs > 0 ? (
+              <div>
+                <dt>{workspace.billingStatus === "cancelled" || workspace.billingStatus === "canceled" ? t("Access until") : t("Renews on")}</dt>
+                <dd>{new Date(workspace.billingCurrentPeriodEndMs).toLocaleDateString(studioLocaleTag(language))}</dd>
+              </div>
+            ) : null}
+            <div><dt>{t("Billing state")}</dt><dd>{t(planBillingStateLabel(workspace.billingStatus))}</dd></div>
+            {/* Price is shown only for Stripe: Apple and Google set their own
+                per-territory prices in the store consoles, and those amounts
+                exist nowhere in this codebase — printing the £ list price for a
+                store-billed workspace could simply be wrong. Even for Stripe this
+                is the list price, not any particular invoice. */}
+            {workspace.billingEffectiveProvider === "stripe" && STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey] ? (
+              <div title={t("The advertised price for this plan. Your invoice can differ if a discount applies.")}>
+                <dt>{t("List price")}</dt>
+                <dd>{STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey]}</dd>
+              </div>
+            ) : null}
+            {workspace.billingEffectiveProvider === "apple" || workspace.billingEffectiveProvider === "google" ? (
+              <div title={t("The price is set in the store and shown in your store subscription settings.")}>
+                <dt>{t("Billed through")}</dt>
+                <dd>{workspace.billingEffectiveProvider === "apple" ? t("App Store") : t("Google Play")}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+
+        <section className="card app-card">
+          <SettingsCardHead title={t("Included with your plan")} />
+          <div className="settings-feature-grid">
+            {featurePills.map(feature => (
+              <span className={feature.enabled ? "settings-feature is-on" : "settings-feature"} key={feature.title}>
+                <b aria-hidden="true">{feature.enabled ? "✓" : "–"}</b>
+                {feature.title}
+              </span>
+            ))}
+          </div>
+        </section>
+      </div>
 
       <section className="card app-card">
-        <CardTitle icon="check" eyebrow={t("Available now")} title={t("Current plan access")} />
-        <div className="plan-feature-pill-grid">
-          {featurePills.map(feature => (
-            <span className={feature.enabled ? "plan-feature-pill enabled" : "plan-feature-pill"} key={feature.title}>
-              <b>{feature.enabled ? "✓" : "–"}</b>
-              {feature.title}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <section className="card app-card">
-        <CardTitle icon="check" eyebrow={t("Plan Matrix")} title={t("Shared app and web plan keys")} />
-        <div className="plan-compare-grid">
-          {Object.values(PLAN_ENTITLEMENTS).map(plan => (
-            <PlanComparisonCard
-              key={plan.plan}
-              plan={plan}
-              currentPlanKey={workspace.billingPlan}
-              footer={plan.plan === workspace.billingPlan ? <span>{t("Your workspace is using this plan.")}</span> : null}
-            />
-          ))}
+        <SettingsCardHead title={t("Compare plan access")} subtitle={t("Shared app and web plan keys")} />
+        <div className="settings-table-scroll">
+          <table className="settings-plan-table">
+            <thead>
+              <tr>
+                <th>{t("Feature")}</th>
+                {plans.map(plan => (
+                  <th key={plan.plan} className={plan.plan === workspace.billingPlan ? "is-current" : ""}>
+                    {plan.title}
+                    {plan.plan === workspace.billingPlan ? <span className="settings-tag">{t("Current")}</span> : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {compareRows.map(row => (
+                <tr key={row.label}>
+                  <th scope="row"><span className="settings-plan-row-label"><CardIconGlyph icon={row.icon} />{t(row.label)}</span></th>
+                  {plans.map(plan => (
+                    <td key={plan.plan} className={plan.plan === workspace.billingPlan ? "is-current" : ""}>{row.render(plan)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <section className="card app-card">
-        <CardTitle icon="lock" eyebrow={t("Billing security")} title={t("Plan changes are protected")} />
-        <p className="muted-copy">
-          {t("Subscription access is managed through secure billing and updates automatically when a payment status changes.")}
-        </p>
-        {isActiveWorkspaceOwner ? (
-          <Link className="button secondary" href="/plan" style={{ display: "inline-block", marginTop: 12 }}>{t("Open Plan & Billing")}</Link>
-        ) : (
-          <p className="muted-copy">{t("Only the workspace owner can change or manage this plan.")}</p>
-        )}
-      </section>
+      <div className="settings-status-band is-info">
+        <span className="settings-status-band-icon" aria-hidden="true"><CardIconGlyph icon="lock" /></span>
+        <div className="settings-status-band-copy">
+          <strong>{t("Plan changes are protected")}</strong>
+          <p>{t("Subscription access is managed through secure billing and updates automatically when a payment status changes.")}</p>
+        </div>
+        <span className="settings-status-band-side">
+          {isActiveWorkspaceOwner ? (
+            <Link className="button secondary" href="/plan">{t("Open Plan & Billing")} ↗</Link>
+          ) : (
+            <span className="settings-field-hint">{t("Only the workspace owner can change or manage this plan.")}</span>
+          )}
+        </span>
+      </div>
     </div>
   );
 }
@@ -6678,6 +6789,19 @@ function TeamAccessSection({
     return columns;
   }, [customRoles, members]);
 
+  const seatLimit = workspace.billingTeamMemberLimit;
+  const seatsUnlimited = seatLimit > 9999;
+  const seatPercent = seatsUnlimited ? 0 : Math.min(100, Math.round((members.length / Math.max(1, seatLimit)) * 100));
+  useSettingsHeaderActions(
+    canViewTeamManagement ? (
+      <span className="settings-header-chip">
+        <CardIconGlyph icon="team" />
+        {seatsUnlimited ? `${members.length} ${t("members")}` : `${members.length} ${t("of")} ${seatLimit} ${t("seats used")}`}
+      </span>
+    ) : null,
+    [canViewTeamManagement, members.length, seatLimit, language]
+  );
+
   async function copyText(value: string, label: string) {
     if (!value) return;
     try {
@@ -6754,32 +6878,43 @@ function TeamAccessSection({
 
   if (!canViewTeamManagement) {
     return (
-      <div className="settings-stack team-access-shell">
-        <section className="card app-card team-access-hero-card">
-          <CardTitle icon="team" title={t("Join an existing Team workspace")}>
-            <p className="team-access-hero-subtitle">
-              {t("Request access using the Company ID or owner email shared by a Team workspace owner.")}
-            </p>
-          </CardTitle>
-          <p className="muted-copy">
-            {t("Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.")}
-          </p>
-          {status ? <p className="layout-status">{t(status)}</p> : null}
+      <div className="settings-card-stack settings-team-page">
+        <section className="card app-card">
+          <SettingsCardHead title={t("Join an existing Team workspace")} subtitle={t("Request access using the Company ID or owner email shared by a Team workspace owner.")} />
+          <p className="settings-field-hint">{t("Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.")}</p>
+          {status ? <p className="success-copy">{t(status)}</p> : null}
           {error ? <p className="layout-error">{t(error)}</p> : null}
         </section>
-
-        {workspaceSwitchPanel}
-
-        <form className="card app-card team-access-panel-card" onSubmit={event => {
+        <section className="card app-card">
+          <SettingsCardHead title={t("Workspaces")} subtitle={t("Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.")} aside={<span className="settings-tag is-muted">{joinedWorkspaces.length}</span>} />
+          <div className="settings-member-list">
+            {joinedWorkspaces.map(option => (
+              <div className="settings-member-row" key={option.id}>
+                <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
+                <div className="settings-member-copy">
+                  <strong>{option.name}</strong>
+                  <small>{option.roleLabel}</small>
+                </div>
+                <div className="settings-member-actions">
+                  {option.isCurrent ? (
+                    <span className="settings-status-pill is-saved"><span className="settings-status-pill-mark" aria-hidden="true">✓</span>{t("Current")}</span>
+                  ) : (
+                    <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
+                      {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <form className="card app-card" onSubmit={event => {
           event.preventDefault();
           void submitAccessRequest();
         }}>
-          <div className="team-access-panel-heading">
-            <strong>{t("Request Access")}</strong>
-            <span>{t("Every plan")}</span>
-          </div>
-          <p className="muted-copy">{t("Enter the Team workspace owner’s email address or Company ID.")}</p>
-          <div className="team-access-request-row">
+          <SettingsCardHead title={t("Request Access")} aside={<span className="settings-tag">{t("Every plan")}</span>} />
+          <p className="settings-field-hint">{t("Enter the Team workspace owner’s email address or Company ID.")}</p>
+          <div className="settings-inline-row">
             <input
               className="input"
               value={requestOwnerIdentifier}
@@ -6787,8 +6922,8 @@ function TeamAccessSection({
               placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
             />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
-              {actioning === "request-access" ? "..." : "➤"}
+            <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
+              {actioning === "request-access" ? t("Sending...") : t("Send request")}
             </button>
           </div>
         </form>
@@ -6798,37 +6933,48 @@ function TeamAccessSection({
 
   if (!isOwner) {
     return (
-      <div className="settings-stack team-access-shell">
-        <section className="card app-card team-access-hero-card">
-          <CardTitle icon="team" title={t("Team workspace membership")}>
-            <p className="team-access-hero-subtitle">
-              {t("You have joined this workspace as")} {workspace.roleLabel}.
-            </p>
-          </CardTitle>
-          <div className="team-access-hero-meta">
-            <span>{workspace.billingPlanName}</span>
-            <span>{workspace.roleLabel}</span>
-            <span>{t("Shared with you")}</span>
+      <div className="settings-card-stack settings-team-page">
+        <section className="card app-card">
+          <SettingsCardHead title={t("Team workspace membership")} subtitle={`${t("You have joined this workspace as")} ${workspace.roleLabel}.`} />
+          <div className="settings-chip-row">
+            <span className="settings-chip">{workspace.billingPlanName}</span>
+            <span className="settings-chip">{workspace.roleLabel}</span>
+            <span className="settings-chip">{t("Shared with you")}</span>
           </div>
-          <p className="muted-copy">
-            {t("You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.")}
-          </p>
-          {status ? <p className="layout-status">{t(status)}</p> : null}
+          <p className="settings-field-hint">{t("You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.")}</p>
+          {status ? <p className="success-copy">{t(status)}</p> : null}
           {error ? <p className="layout-error">{t(error)}</p> : null}
         </section>
-
-        {workspaceSwitchPanel}
-
-        <form className="card app-card team-access-panel-card" onSubmit={event => {
+        <section className="card app-card">
+          <SettingsCardHead title={t("Workspaces")} subtitle={t("Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.")} aside={<span className="settings-tag is-muted">{joinedWorkspaces.length}</span>} />
+          <div className="settings-member-list">
+            {joinedWorkspaces.map(option => (
+              <div className="settings-member-row" key={option.id}>
+                <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
+                <div className="settings-member-copy">
+                  <strong>{option.name}</strong>
+                  <small>{option.roleLabel}</small>
+                </div>
+                <div className="settings-member-actions">
+                  {option.isCurrent ? (
+                    <span className="settings-status-pill is-saved"><span className="settings-status-pill-mark" aria-hidden="true">✓</span>{t("Current")}</span>
+                  ) : (
+                    <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
+                      {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <form className="card app-card" onSubmit={event => {
           event.preventDefault();
           void submitAccessRequest();
         }}>
-          <div className="team-access-panel-heading">
-            <strong>{t("Request Access")}</strong>
-            <span>{t("Every plan")}</span>
-          </div>
-          <p className="muted-copy">{t("Enter another Team workspace owner’s email address or Company ID.")}</p>
-          <div className="team-access-request-row">
+          <SettingsCardHead title={t("Request Access")} aside={<span className="settings-tag">{t("Every plan")}</span>} />
+          <p className="settings-field-hint">{t("Enter another Team workspace owner’s email address or Company ID.")}</p>
+          <div className="settings-inline-row">
             <input
               className="input"
               value={requestOwnerIdentifier}
@@ -6836,8 +6982,8 @@ function TeamAccessSection({
               placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
             />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
-              {actioning === "request-access" ? "..." : "➤"}
+            <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
+              {actioning === "request-access" ? t("Sending...") : t("Send request")}
             </button>
           </div>
         </form>
@@ -6845,149 +6991,136 @@ function TeamAccessSection({
     );
   }
 
-  return (
-    <div className="settings-stack team-access-shell">
-      <section className="card app-card team-access-hero-card">
-        <CardTitle icon="team" title={t("Team Access")}>
-          <p className="team-access-hero-subtitle">{t("Manage workspace members, roles and join requests.")}</p>
-        </CardTitle>
-        <div className="team-access-hero-meta">
-          <span>{hasTeamPlan ? t("Team plan available") : t("Team plan locked")}</span>
-          <span>{teamLimit} {t("members")}</span>
-          <span>{joinRequests.length} {t("join requests")}</span>
-          <span>{workspace.roleLabel}</span>
-        </div>
-        {!hasTeamPlan ? (
-          <p className="muted-copy">{t("Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.")}</p>
-        ) : (
-          <p className="muted-copy">{t("Team includes 5 seats. Additional seats will be available for £5/month or £50/year each, up to 10 users. For larger teams, contact contact@nivadesk.co.uk.")}</p>
-        )}
-        {!isOwner ? (
-          <p className="muted-copy">{t("Only workspace owners can approve join requests, change roles or remove members.")}</p>
-        ) : null}
-        {status ? <p className="layout-status">{t(status)}</p> : null}
-        {error ? <p className="layout-error">{t(error)}</p> : null}
-        {copied ? <span className="studio-pill">{copied}</span> : null}
-      </section>
+  const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-      <div className="team-access-top-grid">
-        <section className="card app-card team-access-panel-card">
-          <div className="team-access-panel-heading">
-            <strong>{t("Current Workspace")}</strong>
-          </div>
-          <div className="team-access-workspace-row">
-            <span className="team-access-icon team-access-icon-owner" aria-hidden="true">♛</span>
+  return (
+    <div className="settings-card-stack settings-team-page">
+      {status ? <p className="success-copy">{t(status)}</p> : null}
+      {error ? <p className="layout-error">{t(error)}</p> : null}
+      {copied ? <p className="success-copy">{copied}</p> : null}
+      {!hasTeamPlan ? (
+        <p className="settings-notice is-caution">{t("Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.")}</p>
+      ) : null}
+
+      <nav className="settings-anchor-tabs" aria-label={t("Team Access")}>
+        {[
+          ["team-overview", t("Overview"), ""],
+          ["team-members", t("Members"), String(members.length)],
+          ["team-requests", t("Requests"), String(joinRequests.length)],
+          ["team-roles", t("Roles"), String(matrixColumns.length)],
+          ["team-permissions", t("Permissions"), ""]
+        ].map(([id, label, count]) => (
+          <button key={id} type="button" onClick={() => jumpTo(id)}>{label}{count ? <span className="settings-tag is-muted">{count}</span> : null}</button>
+        ))}
+      </nav>
+
+      <div className="settings-two-col" id="team-overview">
+        <section className="card app-card">
+          <SettingsCardHead title={t("Current Workspace")} />
+          <div className="settings-team-workspace">
+            <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="team" /></span>
             <div>
               <strong>{workspace.name || "NivaDesk"}</strong>
-              <div className="team-access-inline-meta">
-                <span className="studio-pill team-access-owner-pill">{workspace.roleLabel}</span>
-                <small>{isOwner ? t("You own this workspace") : t("Shared with you")}</small>
-              </div>
+              <span className="settings-chip-row">
+                <span className="settings-tag">{workspace.roleLabel}</span>
+                <span className="settings-tag is-muted">{t("Current")}</span>
+              </span>
             </div>
           </div>
-          <label className="team-access-copy-field">
-            <span>{t("Company ID")}</span>
-            <div>
-              <code>{workspace.id}</code>
-              <button className="team-access-copy-icon-button" type="button" aria-label={t("Copy Company ID")} onClick={() => copyText(workspace.id, t("Company ID copied"))}>⧉</button>
+          <p className="settings-field-hint">{t("You own this workspace")}</p>
+          <div className="settings-field">
+            <span className="settings-field-label">{t("Company ID")}</span>
+            <div className="settings-link-row">
+              <code className="settings-link-box">{workspace.id}</code>
+              <button className="button secondary" type="button" onClick={() => copyText(workspace.id, t("Company ID copied"))}>{t("Copy")}</button>
             </div>
-          </label>
+          </div>
+          <Link className="settings-inline-link" href="/team">{t("Advanced: connect with Company ID")} ›</Link>
         </section>
 
-        <section className="card app-card team-access-panel-card">
-          <div className="team-access-panel-heading">
-            <strong>{t("Workspaces")}</strong>
-            <button className="team-access-icon-button" type="button" onClick={() => void onRefreshTeamAccess()} aria-label={t("Refresh workspaces")}>↻</button>
+        <section className="card app-card">
+          <SettingsCardHead title={t("Team plan")} aside={<span className="settings-tag">{hasTeamPlan ? t("Team plan available") : t("Team plan locked")}</span>} />
+          <div className="settings-metric settings-metric-wide">
+            <small>{t("Team seats")}</small>
+            <strong>{seatsUnlimited ? t("Unlimited") : <>{members.length} <span className="settings-metric-of">/ {seatLimit}</span></>}</strong>
+            {!seatsUnlimited ? <div className="settings-progress-track"><div className="settings-progress-fill" style={{ width: `${seatPercent}%` }} /></div> : null}
+            {!seatsUnlimited ? <em>{Math.max(0, seatLimit - members.length)} {t("seats available")}</em> : null}
           </div>
-          {joinedWorkspaces.map(option => (
-            <div className="team-access-workspace-option" key={option.id}>
-              <span className="team-access-icon team-access-icon-owner" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
-              <div>
-                <strong>{option.name}</strong>
-                <small>{option.roleLabel}</small>
-              </div>
-              {option.isCurrent ? (
-                <>
-                  <span className="studio-pill success">{t("Current")}</span>
-                  <span className="studio-pill team-access-connected-pill">{t("Connected")}</span>
-                </>
-              ) : (
-                <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
-                  {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
-                </button>
-              )}
-            </div>
-          ))}
-          <Link className="team-access-advanced-link" href="/team">{t("Advanced: connect with Company ID")}</Link>
-        </section>
-
-        <form className="card app-card team-access-panel-card" onSubmit={event => {
-          event.preventDefault();
-          void submitAccessRequest();
-        }}>
-          <div className="team-access-panel-heading">
-            <strong>{t("Request Access")}</strong>
-          </div>
-          <p className="muted-copy">{t("Enter the owner’s email address or Company ID and send a request.")}</p>
-          <div className="team-access-request-row">
-            <input
-              className="input"
-              value={requestOwnerIdentifier}
-              onChange={event => setRequestOwnerIdentifier(event.target.value)}
-              placeholder={t("Owner email or Company ID")}
-              disabled={Boolean(actioning)}
-            />
-            <button className="team-access-send-button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)} aria-label={t("Send access request")}>
-              {actioning === "request-access" ? "..." : "➤"}
-            </button>
-          </div>
-        </form>
-
-        <section className="card app-card team-access-panel-card">
-          {/* Nothing here sends an invitation: the other person has to ask to
-              join and the owner approves. Calling it "Invite People" made people
-              wait for an email that was never going to arrive. */}
-          <div className="team-access-panel-heading">
-            <strong>{t("How members join")}</strong>
-          </div>
-          <p className="muted-copy">{t("NivaDesk does not send invitation emails. Share your Company ID with the person; they sign up, send a join request, and you approve it here.")}</p>
-          {isOwner && hasTeamPlan ? (
-            <div className="team-access-id-box">
-              <code>{workspace.id}</code>
-              <button className="button secondary team-access-copy-button" type="button" onClick={() => copyText(workspace.id, t("Company ID copied"))}>⧉ {t("Copy")}</button>
-            </div>
-          ) : (
-            <p className="muted-copy">{isOwner ? t("Upgrade to NivaDesk Team to approve new members.") : t("Only the workspace owner can invite and approve new members.")}</p>
-          )}
+          <p className="settings-field-hint">
+            {hasTeamPlan
+              ? t("Team includes 5 seats. Additional seats will be available for £5/month or £50/year each, up to 10 users. For larger teams, contact contact@nivadesk.co.uk.")
+              : t("Team management is locked on this plan. Current membership is visible, but approving requests and changing roles requires NivaDesk Team.")}
+          </p>
         </section>
       </div>
 
-      <section className="card app-card team-access-panel-card team-access-join-card">
-        <div className="team-access-panel-heading">
-          <span className="team-access-join-icon" aria-hidden="true"><CardIconGlyph icon="team" /></span>
-          <div>
-            <strong>{t("Join Requests")}</strong>
-            <p className="muted-copy">{!isOwner ? t("Only workspace owners can see and review join requests.") : joinRequests.length === 0 ? t("No pending requests.") : `${joinRequests.length} ${t("pending requests.")}`}</p>
+      <section className="card app-card">
+        <SettingsCardHead title={t("Add people or join another workspace")} />
+        <div className="settings-two-col settings-team-join">
+          {/* Nothing here sends an invitation: the other person has to ask to
+              join and the owner approves. Calling it "Invite People" made people
+              wait for an email that was never going to arrive. */}
+          <div className="settings-field-stack">
+            <strong className="settings-subheading-inline">{t("Let people join this workspace")}</strong>
+            <p className="settings-field-hint">{t("NivaDesk does not send invitation emails. Share your Company ID with the person; they sign up, send a join request, and you approve it here.")}</p>
+            {isOwner && hasTeamPlan ? (
+              <div className="settings-link-row">
+                <code className="settings-link-box">{workspace.id}</code>
+                <button className="button secondary" type="button" onClick={() => copyText(workspace.id, t("Company ID copied"))}>{t("Copy invite code")}</button>
+              </div>
+            ) : (
+              <p className="settings-field-hint">{isOwner ? t("Upgrade to NivaDesk Team to approve new members.") : t("Only the workspace owner can invite and approve new members.")}</p>
+            )}
           </div>
-          <span className="team-access-chevron" aria-hidden="true">›</span>
+          <form className="settings-field-stack" onSubmit={event => {
+            event.preventDefault();
+            void submitAccessRequest();
+          }}>
+            <strong className="settings-subheading-inline">{t("Request Access")}</strong>
+            <p className="settings-field-hint">{t("Enter the owner’s email address or Company ID and send a request.")}</p>
+            <div className="settings-inline-row">
+              <input
+                className="input"
+                value={requestOwnerIdentifier}
+                onChange={event => setRequestOwnerIdentifier(event.target.value)}
+                placeholder={t("Owner email or Company ID")}
+                disabled={Boolean(actioning)}
+              />
+              <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
+                {actioning === "request-access" ? t("Sending...") : t("Send request")}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section className="card app-card" id="team-requests">
+        <div className="settings-status-band is-info settings-history-band">
+          <span className="settings-status-band-icon" aria-hidden="true"><CardIconGlyph icon="team" /></span>
+          <div className="settings-status-band-copy">
+            <strong>{t("Join Requests")}</strong>
+            <p>{!isOwner ? t("Only workspace owners can see and review join requests.") : joinRequests.length === 0 ? t("No pending requests.") : `${joinRequests.length} ${t("pending requests.")}`}</p>
+          </div>
+          <span className="settings-status-band-side">
+            <button className="button secondary" type="button" onClick={() => void onRefreshTeamAccess()}>{t("Refresh")}</button>
+          </span>
         </div>
         {isOwner && joinRequests.length > 0 ? (
-          <div className="settings-team-list">
+          <div className="settings-member-list">
             {joinRequests.map(request => {
               const selectedRole = requestRoles[request.id] ?? "member";
               const approveKey = `approve-${request.id}`;
               const declineKey = `decline-${request.id}`;
               return (
-                <article key={request.id} className="settings-team-row">
-                  <div className="settings-team-person">
-                    <span>{requestLabel(request).slice(0, 1).toUpperCase()}</span>
-                    <div>
-                      <strong>{requestLabel(request)}</strong>
-                      <small>{t("Requested")} {formatTeamDate(request.createdAt)}</small>
-                    </div>
+                <article key={request.id} className="settings-member-row">
+                  <span className="settings-member-avatar" aria-hidden="true">{requestLabel(request).slice(0, 1).toUpperCase()}</span>
+                  <div className="settings-member-copy">
+                    <strong>{requestLabel(request)}</strong>
+                    <small>{t("Requested")} {formatTeamDate(request.createdAt)}</small>
+                    {!hasTeamPlan ? <small>{t("Approving new team members requires NivaDesk Team. Decline remains available for cleanup.")}</small> : null}
                   </div>
-                  <div className="settings-team-actions">
-                    <span className="studio-pill">{request.status}</span>
+                  <div className="settings-member-actions">
+                    <span className="settings-tag is-muted">{request.status}</span>
                     <select
                       className="input"
                       value={selectedRole}
@@ -7017,7 +7150,6 @@ function TeamAccessSection({
                       {actioning === declineKey ? t("Declining...") : t("Decline")}
                     </button>
                   </div>
-                  {!hasTeamPlan ? <p className="muted-copy">{t("Approving new team members requires NivaDesk Team. Decline remains available for cleanup.")}</p> : null}
                 </article>
               );
             })}
@@ -7025,13 +7157,71 @@ function TeamAccessSection({
         ) : null}
       </section>
 
-      <section className="card app-card team-access-panel-card">
-        <div className="team-access-panel-heading">
-          <div>
-            <strong>{t("Role Profiles")}</strong>
-            <p className="muted-copy">{t("Create custom access roles, then assign one to any workspace member.")}</p>
-          </div>
+      <section className="card app-card" id="team-members">
+        <SettingsCardHead title={t("Team Members")} aside={<span className="settings-tag is-muted">{members.length}</span>} />
+        <div className="settings-member-list">
+          {members.map(member => {
+            const changingKey = `role-${member.id}`;
+            const removeKey = `remove-${member.id}`;
+            const canChangeRole = canManageTeam && !member.isOwner;
+            return (
+              <article key={member.id} className="settings-member-row">
+                <span className="settings-member-avatar" aria-hidden="true">
+                  {member.photoURL ? <img src={member.photoURL} alt="" /> : memberLabel(member).slice(0, 1).toUpperCase()}
+                </span>
+                <div className="settings-member-copy">
+                  <strong>{memberLabel(member)}</strong>
+                  <small>{member.email || member.id}</small>
+                </div>
+                <span className="settings-chip-row settings-member-tags">
+                  {member.isOwner ? <span className="settings-tag">{t("Owner")}</span> : <span className="settings-tag is-muted">{member.roleLabel}</span>}
+                  {user && member.id === user.uid ? <span className="settings-tag is-muted">{t("You")}</span> : null}
+                  {actioning === changingKey ? <span className="settings-tag is-muted">{t("Updating...")}</span> : null}
+                </span>
+                <div className="settings-member-actions">
+                  {canChangeRole ? (
+                    <select
+                      className="input"
+                      aria-label={t("Role")}
+                      value={roleOptions.some(option => option.value === member.role) ? member.role : "member"}
+                      disabled={Boolean(actioning)}
+                      onChange={event => {
+                        const nextRole = event.target.value;
+                        if (nextRole === member.role) return;
+                        void runTeamAction(
+                          changingKey,
+                          () => updateTeamMemberRole(workspace, member, nextRole),
+                          `${t("Role updated to")} ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
+                        );
+                      }}
+                    >
+                      {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  ) : null}
+                  <button className="button secondary" type="button" onClick={() => copyText(member.id, t("User ID copied"))}>{t("Copy ID")}</button>
+                  {canChangeRole ? (
+                    <button
+                      className="button danger secondary"
+                      type="button"
+                      disabled={Boolean(actioning)}
+                      onClick={() => {
+                        if (!window.confirm(`${t("Remove")} ${memberLabel(member)} ${t("from this workspace?")}`)) return;
+                        void runTeamAction(removeKey, () => removeTeamMember(workspace, member), t("Team member removed."));
+                      }}
+                    >
+                      {actioning === removeKey ? t("Removing...") : t("Remove")}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+          {members.length === 0 ? <p className="settings-empty-line">{t("No members found.")}</p> : null}
         </div>
+      </section>
+
+      <section className="card app-card" id="team-roles">
+        <SettingsCardHead title={t("Role Profiles")} subtitle={t("Create custom access roles, then assign one to any workspace member.")} />
         {canManageTeam ? (
           <CustomRoleManager
             roles={customRoles}
@@ -7050,17 +7240,12 @@ function TeamAccessSection({
             )}
           />
         ) : (
-          <p className="muted-copy">{t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}</p>
+          <p className="settings-field-hint">{t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}</p>
         )}
       </section>
 
-      <section className="card app-card team-access-panel-card">
-        <div className="team-access-panel-heading">
-          <div>
-            <strong>{t("Permission matrix")}</strong>
-            <p className="muted-copy">{t("What each role can see and do at a glance.")} {t("Owner always has full access")}.</p>
-          </div>
-        </div>
+      <section className="card app-card" id="team-permissions">
+        <SettingsCardHead title={t("Permission matrix")} subtitle={`${t("What each role can see and do at a glance.")} ${t("Owner always has full access")}.`} />
         <div className="permission-matrix-scroll">
           <table className="permission-matrix-table">
             <thead>
@@ -7095,15 +7280,15 @@ function TeamAccessSection({
             </tbody>
           </table>
         </div>
-        <p className="muted-copy permission-matrix-legend">
+        <p className="settings-field-hint">
           ✓ {t("Allowed")} · — {t("Hidden / locked")} · {t("Numbers show how many settings menus the role can open.")}
         </p>
         {customRoles.length > 0 ? (
-          <div className="permission-matrix-footnotes">
+          <div className="settings-field-stack">
             {customRoles.map(role => {
               const affected = members.filter(member => member.role === role.id).length;
               return (
-                <p className="muted-copy" key={role.id}>
+                <p className="settings-field-hint" key={role.id}>
                   <strong>{role.name}</strong>: {t("Editing this role affects")} {affected} {affected === 1 ? t("member") : t("members")}.
                 </p>
               );
@@ -7112,79 +7297,36 @@ function TeamAccessSection({
         ) : null}
       </section>
 
-      <section className="card app-card team-access-panel-card">
-        <div className="team-access-panel-heading">
-          <strong>{t("Team Members")}</strong>
-        </div>
-        <div className="settings-team-list team-access-member-list">
-          {members.map(member => {
-            const changingKey = `role-${member.id}`;
-            const removeKey = `remove-${member.id}`;
-            const canChangeRole = canManageTeam && !member.isOwner;
-            return (
-              <article key={member.id} className="settings-team-row">
-                <div className="settings-team-person">
-                  {member.photoURL ? <img src={member.photoURL} alt="" /> : <span>{memberLabel(member).slice(0, 1).toUpperCase()}</span>}
-                  <div>
-                    <strong>{memberLabel(member)}</strong>
-                    <small>{member.email || member.id}</small>
-                  </div>
+        <section className="card app-card">
+          <SettingsCardHead title={t("Workspaces")} subtitle={t("Switch to a workspace you own or have joined. Your assigned role controls what you can see after switching.")} aside={<button className="button secondary" type="button" onClick={() => void onRefreshTeamAccess()}>{t("Refresh")}</button>} />
+          <div className="settings-member-list">
+            {joinedWorkspaces.map(option => (
+              <div className="settings-member-row" key={option.id}>
+                <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
+                <div className="settings-member-copy">
+                  <strong>{option.name}</strong>
+                  <small>{option.roleLabel}</small>
                 </div>
-                <div className="settings-team-actions">
-                  {member.isOwner ? <span className="studio-pill">{t("Owner")}</span> : null}
-                  <span className="studio-pill">{member.roleLabel}</span>
-                  <button className="button secondary" type="button" onClick={() => copyText(member.id, t("User ID copied"))}>{t("Copy ID")}</button>
-                  {canChangeRole ? (
-                    <>
-                      <select
-                        className="input"
-                        value={roleOptions.some(option => option.value === member.role) ? member.role : "member"}
-                        disabled={Boolean(actioning)}
-                        onChange={event => {
-                          const nextRole = event.target.value;
-                          if (nextRole === member.role) return;
-                          void runTeamAction(
-                            changingKey,
-                            () => updateTeamMemberRole(workspace, member, nextRole),
-                            `${t("Role updated to")} ${roleOptions.find(option => option.value === nextRole)?.label ?? roleOptionLabel(nextRole)}.`
-                          );
-                        }}
-                      >
-                        {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={Boolean(actioning)}
-                        onClick={() => {
-                          if (!window.confirm(`${t("Remove")} ${memberLabel(member)} ${t("from this workspace?")}`)) return;
-                          void runTeamAction(removeKey, () => removeTeamMember(workspace, member), t("Team member removed."));
-                        }}
-                      >
-                        {actioning === removeKey ? t("Removing...") : t("Remove")}
-                      </button>
-                    </>
-                  ) : null}
-                  {actioning === changingKey ? <span className="studio-pill">{t("Updating...")}</span> : null}
+                <div className="settings-member-actions">
+                  {option.isCurrent ? (
+                    <span className="settings-status-pill is-saved"><span className="settings-status-pill-mark" aria-hidden="true">✓</span>{t("Current")}</span>
+                  ) : (
+                    <button className="button secondary" type="button" onClick={() => void switchWorkspace(option)} disabled={Boolean(switchingWorkspaceId)}>
+                      {switchingWorkspaceId === option.id ? t("Switching...") : t("Switch")}
+                    </button>
+                  )}
                 </div>
-              </article>
-            );
-          })}
-          {members.length === 0 ? <p className="muted-copy">{t("No members found.")}</p> : null}
-        </div>
-      </section>
-
-      <section className="card app-card team-access-panel-card">
-        <div className="team-access-panel-heading">
-          <div>
-            <strong>{t("Current role mix")}</strong>
-            <p className="muted-copy">{t("Role counts")}</p>
+              </div>
+            ))}
           </div>
-        </div>
-        <div className="settings-mini-grid team-access-role-mix-grid">
-          {Object.entries(roleCounts).map(([role, count]) => <InfoTile key={role} label={role} value={`${count}`} />)}
-          {Object.keys(roleCounts).length === 0 ? <InfoTile label={t("Members")} value="0" /> : null}
-        </div>
+        </section>
+
+      <section className="card app-card">
+        <SettingsCardHead title={t("Current role mix")} subtitle={t("Role counts")} />
+        <dl className="settings-facts">
+          {Object.entries(roleCounts).map(([role, count]) => <div key={role}><dt>{role}</dt><dd>{count}</dd></div>)}
+          {Object.keys(roleCounts).length === 0 ? <div><dt>{t("Members")}</dt><dd>0</dd></div> : null}
+        </dl>
       </section>
     </div>
   );
@@ -7242,6 +7384,8 @@ function SupportTicketsSection({
     : tickets.filter(ticket => (String(ticket.ticketType || "") === "website") === isWebsiteMode);
   const categories = isWorkspaceMode ? WORKSPACE_SUPPORT_CATEGORY_OPTIONS : APP_SUPPORT_CATEGORY_OPTIONS;
   const currentUserUid = auth.currentUser?.uid ?? "";
+  const [ticketQuery, setTicketQuery] = useState("");
+  const [ticketFilter, setTicketFilter] = useState<"all" | "unread" | "open" | "waiting" | "resolved">("all");
 
   async function refreshSupportUnreadSummary() {
     try {
@@ -7485,307 +7629,282 @@ function SupportTicketsSection({
     }
   }
 
-  return (
-    <div className="settings-card-stack">
-      <section className="card app-card">
-        <CardTitle icon="notes" eyebrow={t("Support / Tickets")} title={t("How can we help?")} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-          <button
-            className={isWorkspaceMode ? "settings-section-button active" : "settings-section-button"}
-            type="button"
-            onClick={() => setTicketMode("workspace")}
-            style={{ textAlign: "left" }}
-          >
-            {/* Named one role, so on an owner account it read as writing to
-                yourself. The sender is always excluded server-side, so this
-                wording is true for every role — including the owner, whose
-                ticket goes to their admins and support managers. */}
-            <span>
-              <strong>{t("Internal Workspace Ticket")}</strong>
-              <small>{t("Goes to your workspace owner, admins and support managers. For internal project, task, customer or approval questions.")}</small>
-            </span>
-          </button>
-          {/* Not !isWorkspaceMode: that is also true for Website Chats, so
-              picking that tab lit this one up as well. */}
-          <button
-            className={ticketMode === "appSupport" ? "settings-section-button active" : "settings-section-button"}
-            type="button"
-            onClick={() => setTicketMode("appSupport")}
-            style={{ textAlign: "left" }}
-          >
-            <span>
-              <strong>{t("Contact NivaDesk Support")}</strong>
-              <small>{t("For app bugs, sync issues, billing, account or feature requests.")}</small>
-            </span>
-          </button>
-          {isSupportAdmin ? (
-            <button
-              className={isWebsiteMode ? "settings-section-button active" : "settings-section-button"}
-              type="button"
-              onClick={() => setTicketMode("website")}
-              style={{ textAlign: "left" }}
-            >
-              <span>
-                <strong>{t("Website Chats")}</strong>
-                <small>{t("Questions people send from the nivadesk.app chat widget.")}</small>
-              </span>
-            </button>
-          ) : null}
-        </div>
-      </section>
+  const ticketBucket = (ticket: StudioSupportTicket): "open" | "waiting" | "resolved" => {
+    const value = String(ticket.status || "open").toLowerCase();
+    if (value.includes("wait")) return "waiting";
+    if (value.includes("resolved") || value.includes("closed") || value.includes("done")) return "resolved";
+    return "open";
+  };
+  const needle = ticketQuery.trim().toLowerCase();
+  const filteredTickets = visibleTickets.filter(ticket => {
+    const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);
+    if (ticketFilter === "unread" && !isUnread) return false;
+    if ((ticketFilter === "open" || ticketFilter === "waiting" || ticketFilter === "resolved") && ticketBucket(ticket) !== ticketFilter) return false;
+    if (needle) {
+      const haystack = `${ticket.title || ""} ${ticket.message || ""} ${ticket.createdByName || ""} ${ticket.createdByEmail || ""}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+  const modeOptions: { mode: StudioSupportTicketType; title: string; detail: string }[] = [
+    // Named one role, so on an owner account it read as writing to yourself. The
+    // sender is always excluded server-side, so this wording is true for every
+    // role — including the owner, whose ticket goes to their admins and support
+    // managers.
+    { mode: "workspace", title: "Internal Workspace Ticket", detail: "Goes to your workspace owner, admins and support managers. For internal project, task, customer or approval questions." },
+    { mode: "appSupport", title: "Contact NivaDesk Support", detail: "For app bugs, sync issues, billing, account or feature requests." },
+    ...(isSupportAdmin ? [{ mode: "website" as StudioSupportTicketType, title: "Website Chats", detail: "Questions people send from the nivadesk.app chat widget." }] : [])
+  ];
+  const inboxTitle = isWorkspaceMode
+    ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
+    : (isWebsiteMode ? t("Questions from the website") : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets")));
 
-      {isWebsiteMode ? null : (
-      <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="notes" eyebrow={isWorkspaceMode ? t("Workspace Ticket") : t("NivaDesk Support")} title={t("New Ticket")} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          <label className="quick-reply-settings-label">
-            <span>{t("Category")}</span>
-            <select className="input" value={category} disabled={sendingTicket} onChange={event => setCategory(event.target.value)}>
-              {categories.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
-            </select>
-          </label>
-          <label className="quick-reply-settings-label">
-            <span>{t("Priority")}</span>
-            <select className="input" value={priority} disabled={sendingTicket} onChange={event => setPriority(event.target.value)}>
-              {SUPPORT_PRIORITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
-            </select>
-          </label>
-        </div>
-        <label className="quick-reply-settings-label">
-          <span>{t("Subject")}</span>
-          <input className="input" value={title} disabled={sendingTicket} maxLength={160} onChange={event => setTitle(event.target.value)} placeholder={t("Briefly describe the issue")} />
-        </label>
-        <label className="quick-reply-settings-label">
-          <span>{t("Message")}</span>
-          <textarea className="input" value={message} disabled={sendingTicket} rows={6} maxLength={5000} onChange={event => setMessage(event.target.value)} placeholder={t("Add details, steps, screenshots context or what you expected to happen.")} />
-        </label>
-        <div className="settings-action-row">
-          {pendingTicketFiles.length > 0 ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, flexBasis: "100%" }}>
-              {pendingTicketFiles.map((file, index) => (
-                <span key={`${file.name}-${index}`} className="studio-pill">
-                  {file.name}
-                  <button
-                    type="button"
-                    className="icon-action"
-                    style={{ marginLeft: 6 }}
-                    aria-label={t("Remove")}
-                    onClick={() => setPendingTicketFiles(previous => previous.filter((_, i) => i !== index))}
-                  >
-                    ×
-                  </button>
-                </span>
+  return (
+    <div className="settings-card-stack settings-support-page">
+      <div className="settings-support-toolbar">
+        {supportUnreadCount > 0 ? <span className="settings-status-pill is-dirty"><span className="settings-status-pill-mark" aria-hidden="true">●</span>{supportUnreadCount} {t("unread ticket update")}</span> : null}
+        <button className="button secondary" type="button" disabled={loadingTickets} onClick={() => void loadTickets()}>
+          {loadingTickets ? t("Refreshing...") : t("Refresh Tickets")}
+        </button>
+      </div>
+
+      <div className="settings-choice-grid" role="radiogroup" aria-label={t("Support / Tickets")}>
+        {modeOptions.map(option => {
+          const selected = ticketMode === option.mode;
+          return (
+            <button key={option.mode} type="button" role="radio" aria-checked={selected} className={selected ? "settings-choice-card is-selected" : "settings-choice-card"} onClick={() => setTicketMode(option.mode)}>
+              <span className="settings-choice-card-head"><strong>{t(option.title)}</strong></span>
+              <span className="settings-choice-card-detail">{t(option.detail)}</span>
+              <span className="settings-choice-card-radio" aria-hidden="true">{selected ? "✓" : ""}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {status ? <p className="success-copy">{t(status)}</p> : null}
+      {error ? <p className="layout-error">{t(error)}</p> : null}
+
+      <div className={isWebsiteMode ? "settings-support-columns is-single" : "settings-support-columns"}>
+        {isWebsiteMode ? null : (
+          <section className="card app-card settings-support-form">
+            <SettingsCardHead title={t("New Ticket")} aside={<span className="settings-tag">{isWorkspaceMode ? t("Workspace Ticket") : t("NivaDesk Support")}</span>} />
+            <div className="settings-field-stack">
+              <div className="settings-select-grid">
+                <label className="settings-field">
+                  <span className="settings-field-label">{t("Category")}</span>
+                  <select className="input" value={category} disabled={sendingTicket} onChange={event => setCategory(event.target.value)}>
+                    {categories.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span className="settings-field-label">{t("Priority")}</span>
+                  <select className="input" value={priority} disabled={sendingTicket} onChange={event => setPriority(event.target.value)}>
+                    {SUPPORT_PRIORITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="settings-field">
+                <span className="settings-field-label">{t("Subject")}</span>
+                <input className="input" value={title} disabled={sendingTicket} maxLength={160} onChange={event => setTitle(event.target.value)} placeholder={t("Briefly describe the issue")} />
+              </label>
+              <label className="settings-field">
+                <span className="settings-field-label">{t("Message")}</span>
+                <textarea className="input" value={message} disabled={sendingTicket} rows={6} maxLength={5000} onChange={event => setMessage(event.target.value)} placeholder={t("Add details, steps, screenshots context or what you expected to happen.")} />
+              </label>
+              {pendingTicketFiles.length > 0 ? (
+                <div className="settings-chip-row">
+                  {pendingTicketFiles.map((file, index) => (
+                    <span key={`${file.name}-${index}`} className="settings-chip">
+                      {file.name}
+                      <button type="button" className="settings-chip-remove" aria-label={t("Remove")} onClick={() => setPendingTicketFiles(previous => previous.filter((_, i) => i !== index))}>×</button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="settings-action-row settings-action-row-split">
+                <label className="button secondary settings-file-button">
+                  {t("Attach file")}
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    disabled={sendingTicket}
+                    onChange={event => {
+                      const picked = Array.from(event.target.files || []);
+                      if (picked.length === 0) return;
+                      setPendingTicketFiles(previous => [...previous, ...picked].slice(0, 6));
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                <button className="button" type="button" disabled={sendingTicket || !title.trim() || !message.trim()} onClick={submitTicket}>
+                  {sendingTicket ? t("Sending...") : t("Send Ticket")}
+                </button>
+              </div>
+              <p className="settings-field-hint">{t("Subject and message are required.")}</p>
+            </div>
+          </section>
+        )}
+
+        <section className="card app-card settings-support-inbox">
+          <SettingsCardHead title={inboxTitle} subtitle={supportUnreadCount > 0 ? `${supportUnreadCount} ${t("unread ticket update")}` : undefined} />
+          <div className="settings-integrations-toolbar">
+            <label className="settings-search settings-integrations-search">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5" /><path d="m13.5 13.5 3 3" /></svg>
+              <span className="sr-only">{t("Search tickets...")}</span>
+              <input value={ticketQuery} onChange={event => setTicketQuery(event.target.value)} placeholder={t("Search tickets...")} />
+            </label>
+            <div className="settings-segmented is-compact" role="group" aria-label={t("Filter")}>
+              {([["all", "All"], ["unread", "Unread"], ["open", "Open"], ["waiting", "Waiting"], ["resolved", "Resolved"]] as const).map(([id, label]) => (
+                <button key={id} type="button" className={ticketFilter === id ? "active" : ""} aria-pressed={ticketFilter === id} onClick={() => setTicketFilter(id)}>{t(label)}</button>
               ))}
             </div>
-          ) : null}
-          <label className="button secondary" style={{ cursor: "pointer" }}>
-            {t("Attach file")}
-            <input
-              type="file"
-              multiple
-              style={{ display: "none" }}
-              disabled={sendingTicket}
-              onChange={event => {
-                const picked = Array.from(event.target.files || []);
-                if (picked.length === 0) return;
-                setPendingTicketFiles(previous => [...previous, ...picked].slice(0, 6));
-                event.target.value = "";
-              }}
-            />
-          </label>
-          <button className="button" type="button" disabled={sendingTicket || !title.trim() || !message.trim()} onClick={submitTicket}>
-            {sendingTicket ? t("Sending...") : t("Send Ticket")}
-          </button>
-          <button className="button secondary" type="button" disabled={loadingTickets} onClick={() => void loadTickets()}>
-            {loadingTickets ? t("Refreshing...") : t("Refresh Tickets")}
-          </button>
-        </div>
-        {status ? <p className="success-copy">{t(status)}</p> : null}
-        {error ? <p className="layout-error">{t(error)}</p> : null}
-      </section>
-      )}
-
-      <section className="card app-card">
-        <CardTitle
-          icon="notes"
-          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : (isWebsiteMode ? t("Website Chats") : t("NivaDesk Support Inbox"))}
-          title={isWorkspaceMode
-            ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
-            : (isWebsiteMode
-              ? t("Questions from the website")
-              : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets")))}
-        />
-        {supportUnreadCount > 0 ? <p className="muted-copy" style={{ marginTop: -4 }}>{supportUnreadCount} {t("unread ticket update")}</p> : null}
-        {loadingTickets ? <p className="muted-copy">{t("Loading tickets...")}</p> : null}
-        {!loadingTickets && visibleTickets.length === 0 ? <p className="muted-copy">{isWebsiteMode ? t("No website questions yet.") : t("No tickets yet.")}</p> : null}
-        <div style={{ display: "grid", gap: 12 }}>
-          {visibleTickets.map(ticket => {
-            const isSelected = selectedTicketId === ticket.id;
-            const ticketMessages = messagesByTicketId[ticket.id] ?? [];
-            const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);
-            const lastMessageTime = ticket.lastMessageAtMillis || ticket.updatedAtMillis || ticket.createdAtMillis;
-            return (
-              <article key={ticket.id} className="mini-panel" style={supportTicketCardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 240, flex: "1 1 360px", display: "grid", gap: 5 }}>
-                    <strong style={{ fontSize: 17, lineHeight: 1.25, color: "var(--text)" }}>{ticket.title || t("Untitled ticket")}</strong>
-                    <p className="muted-copy" style={{ margin: 0, lineHeight: 1.45 }}>{ticket.message}</p>
-                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.createdByName || ticket.createdByEmail || ticket.createdByUid} · {t("Created")} {formatSupportDate(ticket.createdAtMillis)}</small>
-                    <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last message")} · {formatSupportDate(lastMessageTime)}</small>
-                    {ticket.lastMessagePreview ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last reply")} · {ticket.lastMessagePreview}</small> : null}
-                    {!isWorkspaceMode && isSupportAdmin ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.companyName || ticket.companyId} · {ticket.platform} {ticket.appVersion}</small> : null}
-                    {isWebsiteMode && isSupportAdmin ? (
-                      // The spec's context card: WHO is asking, from WHERE, on
-                      // WHICH plan — before the first reply is typed.
-                      <div className="mini-panel" style={{ marginTop: 4, padding: "8px 12px", display: "grid", gap: 2, background: "rgba(16, 122, 87, 0.06)", border: "1px solid rgba(16, 122, 87, 0.22)" }}>
-                        <small style={{ fontWeight: 800, color: "var(--text)" }}>
-                          {ticket.accountUid
-                            ? `${ticket.accountName || ticket.accountEmail}${ticket.accountCompanyName ? ` · ${ticket.accountCompanyName}` : ""}`
-                            : `${ticket.createdByName || t("Website visitor")}${ticket.visitorEmail ? ` · ${ticket.visitorEmail}` : ` · ${t("no email left")}`}`}
-                        </small>
-                        {ticket.accountUid ? (
-                          <small className="muted-copy">
-                            {ticket.accountPlan ? `${t("Plan")}: ${ticket.accountPlan}` : t("Signed-in user")}
-                            {typeof ticket.accountOrderCount === "number" && ticket.accountOrderCount > 0
-                              ? ` · ${t("Orders")}: ${ticket.accountOrderCount}` : ""}
-                            {ticket.accountEmail ? ` · ${ticket.accountEmail}` : ""}
-                          </small>
-                        ) : null}
-                        {ticket.visitorPage ? <small className="muted-copy">{t("Current page")}: {ticket.visitorPage}</small> : null}
-                        {ticket.needsHuman ? <small style={{ color: "#b45309", fontWeight: 800 }}>👥 {t("Asked for a person")}</small> : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 1 auto" }}>
-                    {isUnread ? <span style={supportNewBadgeStyle}>{t("New")}</span> : null}
-                    <span style={supportStatusPillStyle(ticket.status)}>{t(supportStatusLabel(ticket.status))}</span>
-                    <span style={supportPriorityPillStyle(ticket.priority)}>{t(supportPriorityLabel(ticket.priority))}</span>
-                    {canUpdateStatus ? (
-                      <select
-                        className="input"
-                        value={ticket.status || "open"}
-                        disabled={Boolean(statusUpdating[ticket.id])}
-                        onChange={event => void updateTicketStatus(ticket, event.target.value as StudioSupportTicketStatus)}
-                        style={{
-                          width: 170,
-                          minHeight: 34,
-                          borderRadius: 10,
-                          background: "rgba(241, 245, 249, 0.92)",
-                          border: "1px solid rgba(100, 116, 139, 0.34)",
-                          color: "#0f172a",
-                          fontWeight: 800
-                        }}
-                      >
-                        {SUPPORT_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
-                      </select>
-                    ) : null}
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => void loadMessages(ticket)}
-                      style={{
-                        padding: "6px 12px",
-                        minHeight: 30,
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        letterSpacing: "0.01em",
-                        background: isSelected ? "rgba(226, 232, 240, 0.92)" : "rgba(219, 234, 254, 0.98)",
-                        border: isSelected ? "1px solid rgba(100, 116, 139, 0.24)" : "1px solid rgba(59, 130, 246, 0.18)",
-                        color: isSelected ? "#334155" : "#0284c7",
-                        boxShadow: "none"
-                      }}
-                    >
-                      {isSelected ? t("Hide Conversation") : t("Open Conversation")}
-                    </button>
-                  </div>
-                </div>
-                {isSelected ? (
-                  <div style={{ borderTop: "1px solid rgba(148, 163, 184, 0.25)", paddingTop: 10, display: "grid", gap: 10 }}>
-                    {loadingMessages[ticket.id] ? <p className="muted-copy">{t("Loading conversation...")}</p> : null}
-                    {!loadingMessages[ticket.id] && ticketMessages.length === 0 ? <p className="muted-copy">{t("No replies yet.")}</p> : null}
-                    {ticketMessages.map(item => (
-                      <div key={item.id} className="mini-panel" style={{
-                        background: item.authorRole === "user" ? "rgba(148, 163, 184, 0.08)" : "rgba(59, 130, 246, 0.12)",
-                        border: item.authorRole === "user" ? "1px solid rgba(148, 163, 184, 0.22)" : "1px solid rgba(96, 165, 250, 0.30)",
-                        padding: 14
-                      }}>
-                        <strong style={{ color: "var(--text)" }}>{item.authorName || item.authorEmail || t("Unknown user")}</strong>
-                        <small className="muted-copy"> · {t(supportAuthorRoleLabel(item.authorRole))} · {formatSupportDate(item.createdAtMillis)}</small>
-                        <p className="muted-copy" style={{ marginTop: 6, marginBottom: 0, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{item.message}</p>
-                        {(item.attachments || []).length > 0 ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-                            {(item.attachments || []).map(attachment => (
-                              <a key={attachment.id} className="studio-pill" href={attachment.fileURL} target="_blank" rel="noopener noreferrer">
-                                {attachment.fileName}
-                              </a>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                    <label className="quick-reply-settings-label">
-                      <span>{t("Reply")}</span>
-                      <textarea
-                        className="input"
-                        rows={4}
-                        value={replyByTicketId[ticket.id] ?? ""}
-                        disabled={Boolean(sendingReply[ticket.id])}
-                        onChange={event => setReplyByTicketId(previous => ({ ...previous, [ticket.id]: event.target.value }))}
-                        placeholder={t("Write a reply...")}
-                      />
-                    </label>
-                    {(replyFilesByTicketId[ticket.id] || []).length > 0 ? (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {(replyFilesByTicketId[ticket.id] || []).map((file, index) => (
-                          <span key={`${file.name}-${index}`} className="studio-pill">
-                            {file.name}
-                            <button
-                              type="button"
-                              className="icon-action"
-                              style={{ marginLeft: 6 }}
-                              aria-label={t("Remove")}
-                              onClick={() => setReplyFilesByTicketId(previous => ({
-                                ...previous,
-                                [ticket.id]: (previous[ticket.id] || []).filter((_, i) => i !== index)
-                              }))}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="settings-action-row">
-                      <label className="button secondary" style={{ cursor: "pointer" }}>
-                        {t("Attach file")}
-                        <input
-                          type="file"
-                          multiple
-                          style={{ display: "none" }}
-                          disabled={Boolean(sendingReply[ticket.id])}
-                          onChange={event => {
-                            const picked = Array.from(event.target.files || []);
-                            if (picked.length === 0) return;
-                            setReplyFilesByTicketId(previous => ({
-                              ...previous,
-                              [ticket.id]: [...(previous[ticket.id] || []), ...picked].slice(0, 6)
-                            }));
-                            event.target.value = "";
-                          }}
-                        />
-                      </label>
-                      <button className="button" type="button" disabled={Boolean(sendingReply[ticket.id]) || (!(replyByTicketId[ticket.id] || "").trim() && (replyFilesByTicketId[ticket.id] || []).length === 0)} onClick={() => void sendReply(ticket)}>
-                        {sendingReply[ticket.id] ? t("Sending...") : t("Send Reply")}
+          </div>
+          {loadingTickets ? <p className="settings-field-hint">{t("Loading tickets...")}</p> : null}
+          {!loadingTickets && filteredTickets.length === 0 ? <p className="settings-empty-line">{isWebsiteMode ? t("No website questions yet.") : t("No tickets yet.")}</p> : null}
+          <div className="settings-ticket-list">
+            {filteredTickets.map(ticket => {
+              const isSelected = selectedTicketId === ticket.id;
+              const ticketMessages = messagesByTicketId[ticket.id] ?? [];
+              const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);
+              const lastMessageTime = ticket.lastMessageAtMillis || ticket.updatedAtMillis || ticket.createdAtMillis;
+              const bucket = ticketBucket(ticket);
+              return (
+                <article key={ticket.id} className={isSelected ? "settings-ticket is-open" : "settings-ticket"}>
+                  <div className="settings-ticket-row">
+                    <span className={isUnread ? "settings-ticket-dot is-unread" : "settings-ticket-dot"} aria-hidden="true" />
+                    <div className="settings-ticket-copy">
+                      <strong>{ticket.title || t("Untitled ticket")}</strong>
+                      <p>{ticket.lastMessagePreview || ticket.message}</p>
+                      <small>
+                        {ticket.createdByName || ticket.createdByEmail || ticket.createdByUid} · {formatSupportDate(lastMessageTime)}
+                        {!isWorkspaceMode && isSupportAdmin ? ` · ${ticket.companyName || ticket.companyId} · ${ticket.platform} ${ticket.appVersion}` : ""}
+                      </small>
+                      {isWebsiteMode && isSupportAdmin ? (
+                        // The spec's context card: WHO is asking, from WHERE, on
+                        // WHICH plan — before the first reply is typed.
+                        <div className="settings-notice">
+                          <strong>
+                            {ticket.accountUid
+                              ? `${ticket.accountName || ticket.accountEmail}${ticket.accountCompanyName ? ` · ${ticket.accountCompanyName}` : ""}`
+                              : `${ticket.createdByName || t("Website visitor")}${ticket.visitorEmail ? ` · ${ticket.visitorEmail}` : ` · ${t("no email left")}`}`}
+                          </strong>
+                          {ticket.accountUid ? (
+                            <span>
+                              {" "}{ticket.accountPlan ? `${t("Plan")}: ${ticket.accountPlan}` : t("Signed-in user")}
+                              {typeof ticket.accountOrderCount === "number" && ticket.accountOrderCount > 0 ? ` · ${t("Orders")}: ${ticket.accountOrderCount}` : ""}
+                              {ticket.accountEmail ? ` · ${ticket.accountEmail}` : ""}
+                            </span>
+                          ) : null}
+                          {ticket.visitorPage ? <span> · {t("Current page")}: {ticket.visitorPage}</span> : null}
+                          {ticket.needsHuman ? <span className="settings-field-hint is-caution"> · 👥 {t("Asked for a person")}</span> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="settings-ticket-side">
+                      {isUnread ? <span className="settings-tag settings-tag-danger">{t("New")}</span> : null}
+                      <span className={bucket === "resolved" ? "settings-tag is-muted" : bucket === "waiting" ? "settings-tag settings-tag-caution" : "settings-tag"}>{t(supportStatusLabel(ticket.status))}</span>
+                      <span className="settings-tag is-muted">{t(supportPriorityLabel(ticket.priority))}</span>
+                      {canUpdateStatus ? (
+                        <select
+                          className="input settings-ticket-status"
+                          aria-label={t("Status")}
+                          value={ticket.status || "open"}
+                          disabled={Boolean(statusUpdating[ticket.id])}
+                          onChange={event => void updateTicketStatus(ticket, event.target.value as StudioSupportTicketStatus)}
+                        >
+                          {SUPPORT_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+                        </select>
+                      ) : null}
+                      <button className="settings-link-button" type="button" onClick={() => void loadMessages(ticket)}>
+                        {isSelected ? t("Hide Conversation") : t("Open Conversation")}
                       </button>
                     </div>
                   </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
+                  {isSelected ? (
+                    <div className="settings-ticket-thread">
+                      {loadingMessages[ticket.id] ? <p className="settings-field-hint">{t("Loading conversation...")}</p> : null}
+                      {!loadingMessages[ticket.id] && ticketMessages.length === 0 ? <p className="settings-field-hint">{t("No replies yet.")}</p> : null}
+                      {ticketMessages.map(item => (
+                        <div key={item.id} className={item.authorRole === "user" ? "settings-ticket-message" : "settings-ticket-message is-staff"}>
+                          <div className="settings-ticket-message-head">
+                            <strong>{item.authorName || item.authorEmail || t("Unknown user")}</strong>
+                            <small>{t(supportAuthorRoleLabel(item.authorRole))} · {formatSupportDate(item.createdAtMillis)}</small>
+                          </div>
+                          <p>{item.message}</p>
+                          {(item.attachments || []).length > 0 ? (
+                            <div className="settings-chip-row">
+                              {(item.attachments || []).map(attachment => (
+                                <a key={attachment.id} className="settings-chip" href={attachment.fileURL} target="_blank" rel="noopener noreferrer">
+                                  {attachment.fileName}
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                      <label className="settings-field">
+                        <span className="settings-field-label">{t("Reply")}</span>
+                        <textarea
+                          className="input"
+                          rows={4}
+                          value={replyByTicketId[ticket.id] ?? ""}
+                          disabled={Boolean(sendingReply[ticket.id])}
+                          onChange={event => setReplyByTicketId(previous => ({ ...previous, [ticket.id]: event.target.value }))}
+                          placeholder={t("Write a reply...")}
+                        />
+                      </label>
+                      {(replyFilesByTicketId[ticket.id] || []).length > 0 ? (
+                        <div className="settings-chip-row">
+                          {(replyFilesByTicketId[ticket.id] || []).map((file, index) => (
+                            <span key={`${file.name}-${index}`} className="settings-chip">
+                              {file.name}
+                              <button
+                                type="button"
+                                className="settings-chip-remove"
+                                aria-label={t("Remove")}
+                                onClick={() => setReplyFilesByTicketId(previous => ({
+                                  ...previous,
+                                  [ticket.id]: (previous[ticket.id] || []).filter((_, i) => i !== index)
+                                }))}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="settings-action-row settings-action-row-split">
+                        <label className="button secondary settings-file-button">
+                          {t("Attach file")}
+                          <input
+                            type="file"
+                            multiple
+                            hidden
+                            disabled={Boolean(sendingReply[ticket.id])}
+                            onChange={event => {
+                              const picked = Array.from(event.target.files || []);
+                              if (picked.length === 0) return;
+                              setReplyFilesByTicketId(previous => ({
+                                ...previous,
+                                [ticket.id]: [...(previous[ticket.id] || []), ...picked].slice(0, 6)
+                              }));
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <button className="button" type="button" disabled={Boolean(sendingReply[ticket.id]) || (!(replyByTicketId[ticket.id] || "").trim() && (replyFilesByTicketId[ticket.id] || []).length === 0)} onClick={() => void sendReply(ticket)}>
+                          {sendingReply[ticket.id] ? t("Sending...") : t("Send Reply")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
