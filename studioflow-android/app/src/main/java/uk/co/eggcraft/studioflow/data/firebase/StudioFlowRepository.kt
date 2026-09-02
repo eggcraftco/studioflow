@@ -958,6 +958,56 @@ class StudioFlowRepository(
         return WooImportCounters(n("created"), n("updated"), n("skipped"), n("merged"), n("held"))
     }
 
+    // Square — a merchant as one connection on the common engine (OAuth completes server-side).
+    data class SquareLocationRow(val id: String, val name: String, val status: String, val selected: Boolean)
+    data class SquareConnectionRow(
+        val id: String, val merchantId: String, val merchantName: String, val environment: String, val status: String,
+        val locations: List<SquareLocationRow>, val importPolicy: String, val importSources: List<String>, val autoSync: Boolean,
+        val lastSuccessAtMs: Long, val lastErrorCode: String, val eventsRecovery: Boolean, val apiVersion: String, val unmatchedPayments: Int,
+    )
+    data class SquareImportSummary(val total: Int, val wouldCreate: Int, val financeOnly: Int, val cancelled: Int, val alreadyHere: Int)
+    data class SquareUnmatchedRow(val kind: String, val externalId: String, val status: String, val amount: String, val currency: String)
+
+    suspend fun squareConnections(workspaceId: String): List<SquareConnectionRow> {
+        val raw = etsyCall("getSquareConnections", workspaceId)
+        return (raw["connections"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            val settings = row["settings"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            SquareConnectionRow(
+                id = row["id"]?.toString().orEmpty(), merchantId = row["merchantId"]?.toString().orEmpty(), merchantName = row["merchantName"]?.toString().orEmpty(),
+                environment = row["environment"]?.toString().orEmpty(), status = row["status"]?.toString().orEmpty(),
+                locations = (row["locations"] as? List<*>).orEmpty().mapNotNull { l -> (l as? Map<*, *>)?.let { SquareLocationRow(it["id"]?.toString().orEmpty(), it["name"]?.toString().orEmpty(), it["status"]?.toString().orEmpty(), it["selected"] as? Boolean ?: false) } },
+                importPolicy = settings["importPolicy"]?.toString() ?: "fulfillment_only",
+                importSources = (settings["importSources"] as? List<*>).orEmpty().map { it.toString() },
+                autoSync = settings["autoSync"] as? Boolean ?: true,
+                lastSuccessAtMs = longFromAny(row["lastSuccessAtMs"], 0L), lastErrorCode = row["lastErrorCode"]?.toString().orEmpty(),
+                eventsRecovery = row["eventsRecovery"] as? Boolean ?: false, apiVersion = row["apiVersion"]?.toString().orEmpty(),
+                unmatchedPayments = longFromAny(row["unmatchedPayments"], 0L).toInt(),
+            )
+        }
+    }
+    /** Returns Square's authorize URL; the callback completes the connection server-side. Owner only. */
+    suspend fun squareBeginConnect(workspaceId: String): String = etsyCall("beginSquareConnect", workspaceId)["authorizeUrl"]?.toString().orEmpty()
+    suspend fun squareUpdateSettings(workspaceId: String, connectionId: String, patch: Map<String, Any>) { etsyCall("updateSquareConnectionSettings", workspaceId, mapOf("connectionId" to connectionId) + patch) }
+    suspend fun squareDisconnect(workspaceId: String, connectionId: String) { etsyCall("disconnectSquare", workspaceId, mapOf("connectionId" to connectionId)) }
+    suspend fun squareSyncNow(workspaceId: String, connectionId: String) { etsyCall("syncSquareNow", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300) }
+    suspend fun squarePreviewImport(workspaceId: String, connectionId: String, days: Int): SquareImportSummary {
+        val raw = etsyCall("previewSquareImport", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 120)
+        val s = raw["summary"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val n = { k: String -> longFromAny(s[k], 0L).toInt() }
+        return SquareImportSummary(n("total"), n("wouldCreate"), n("financeOnly"), n("cancelled"), n("alreadyHere"))
+    }
+    suspend fun squareRunImport(workspaceId: String, connectionId: String, days: Int): WooImportCounters {
+        val raw = etsyCall("runSquareImport", workspaceId, mapOf("connectionId" to connectionId, "days" to days), timeoutSeconds = 540)
+        val n = { k: String -> longFromAny(raw[k], 0L).toInt() }
+        return WooImportCounters(n("created"), n("updated"), n("skipped"), 0, n("held"))
+    }
+    suspend fun squareUnmatched(workspaceId: String): List<SquareUnmatchedRow> {
+        val raw = etsyCall("listSquareUnmatched", workspaceId)
+        fun rows(key: String, kind: String) = (raw[key] as? List<*>).orEmpty().mapNotNull { e -> (e as? Map<*, *>)?.let { SquareUnmatchedRow(kind, it["externalId"]?.toString().orEmpty(), it["status"]?.toString().orEmpty(), (it["total"] ?: it["amount"])?.toString().orEmpty(), it["currency"]?.toString().orEmpty()) } }
+        return rows("payments", "payment") + rows("refunds", "refund")
+    }
+
     // Faz 2 — the common engine's health and event records (Sync Health card).
     data class CommerceHealthEntity(val state: String, val lastSuccessAtMs: Long?, val lastAttemptAtMs: Long?, val lastWebhookAtMs: Long?, val pendingRetries: Int, val deadLetters: Int)
     data class CommerceHealthConnection(val provider: String, val connectionId: String, val health: Map<String, CommerceHealthEntity>)

@@ -39,7 +39,7 @@ async function processCommerceEvent(db, task, deps) {
     await ref.set({
       status, attempt, finished_at: new Date(finished).toISOString(), external_id: String(task.externalId || envelope?.identity?.external_id || ""),
       result: outcome.result, order_id: outcome.orderId || null, error_class: outcome.result === "invalid" ? "validation" : null,
-      safe_message: outcome.result === "invalid" ? `Envelope rejected: ${(outcome.problems || []).join(", ")}`.slice(0, 300) : null, next_retry_at: null
+      safe_message: outcome.result === "invalid" ? `Envelope rejected: ${(outcome.problems || []).join(", ")}`.slice(0, 300) : (outcome.reason ? String(outcome.reason).slice(0, 300) : null), next_retry_at: null
     }, { merge: true });
     return { status, outcome, envelope };
   } catch (error) {

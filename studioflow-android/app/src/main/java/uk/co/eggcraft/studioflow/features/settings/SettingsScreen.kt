@@ -99,6 +99,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -115,6 +116,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -448,7 +450,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "financial" -> plan.hasAdvancedFinance && access?.settingsFinancial != false
                 "safety" -> access?.settingsSafetyUploads != false
                 "data" -> access?.settingsData != false
-                "integrations", "woo", "shopify", "inbound" -> access?.settingsWorkflow != false
+                "integrations", "woo", "square", "shopify", "inbound" -> access?.settingsWorkflow != false
                 "plan" -> access?.settingsPlanAccess != false
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
@@ -621,6 +623,7 @@ private fun SettingsDetailScreen(
                 "integrations" -> IntegrationsHubDetail(state)
                 "shopify" -> ShopifyDetail(state)
                 "woo" -> WooCommerceDetail(state)
+                "square" -> SquareDetail(state)
                 "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
                 "data" -> DataManagementDetail(state, onImportBackup, onConfirmImportBackup, onCancelImportBackup, onDeleteWorkspaceData)
@@ -3065,7 +3068,10 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
         val etsy = runCatching { repository.etsyConnections(ws.id) }.getOrDefault(emptyList<Any>() to true)
         @Suppress("UNCHECKED_CAST")
         val etsyRows = etsy.first as List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyConnectionRow>
+        val squareRows = runCatching { repository.squareConnections(ws.id) }.getOrDefault(emptyList()).filter { it.status != "disconnected" }
         signals = IntegrationSignals(
+            squareConnections = squareRows.size,
+            squareConnectionsNeedingAttention = squareRows.count { it.status == "reconnect_required" || it.lastErrorCode.isNotEmpty() },
             shopifyStores = stores.associate { it.shop to it.status },
             etsyShops = etsyRows.size,
             etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
@@ -3086,6 +3092,7 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             when (managing) {
                 "shopify" -> ShopifyDetail(state)
                 "woo" -> WooCommerceDetail(state)
+                "square" -> SquareDetail(state)
                 "etsy" -> EtsyDetail(state)
                 else -> InboundDetail(state)
             }
@@ -3370,6 +3377,178 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
                             OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
                         } else {
                             OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect WooCommerce")) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SquareDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    var loading by remember { mutableStateOf(true) }
+    var connections by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.SquareConnectionRow>>(emptyList()) }
+    var busy by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    var awaitingReturn by remember { mutableStateOf(false) }
+    var confirmDisconnect by remember { mutableStateOf(false) }
+    var days by remember { mutableStateOf("90") }
+    var previewText by remember { mutableStateOf("") }
+    var unmatchedText by remember { mutableStateOf("") }
+    val connection = connections.firstOrNull { it.status == "connected" } ?: connections.firstOrNull { it.status != "disconnected" }
+    val sources = listOf("SQUARE_POS" to "Square Point of Sale", "SQUARE_ONLINE" to "Square Online", "INVOICE" to "Square Invoices", "APPOINTMENTS" to "Square Appointments", "VIRTUAL_TERMINAL" to "Virtual Terminal", "API" to "API", "OTHER" to "Other")
+    val policies = listOf(Triple("fulfillment_only", "Sales with a shipment, pickup or delivery", "Recommended. Quick counter sales stay in finance only."), Triple("all", "Every sale", "Every Square sale becomes a NivaDesk order."), Triple("none", "None", "Record sales for finance only; create no orders."))
+    suspend fun reload() {
+        val ws = workspace ?: return
+        runCatching { repository.squareConnections(ws.id) }.onSuccess { connections = it }.onFailure { errorText = it.message ?: t("Could not load.") }
+        loading = false
+    }
+    fun run(key: String, block: suspend () -> Unit) {
+        scope.launch { busy = key; errorText = ""; notice = ""; runCatching { block() }.onFailure { errorText = it.message ?: t("Could not load.") }; busy = "" }
+    }
+    LaunchedEffect(workspace?.id) { reload() }
+    // Coming back from the browser: the OAuth callback finished the connection server-side; just look again.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, awaitingReturn) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && awaitingReturn) { awaitingReturn = false; scope.launch { reload() } }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    DetailColumn {
+        if (notice.isNotEmpty()) Text(notice, color = MaterialTheme.colorScheme.primary)
+        if (errorText.isNotEmpty()) Text(errorText, color = MaterialTheme.colorScheme.error)
+        when {
+            loading -> Text(t("Loading..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            connection == null -> DetailCard(title = t("Connect your Square account"), icon = Icons.Filled.ShoppingBag) {
+                Text(t("Sign in to Square once and approve read-only access. Sales from Square Point of Sale, Square Online and Square Invoices, with their payments and refunds, then arrive on their own, and NivaDesk checks Square every fifteen minutes for anything a webhook missed."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(enabled = isOwner && busy != "connect", onClick = {
+                    run("connect") {
+                        val ws = workspace ?: return@run
+                        val url = repository.squareBeginConnect(ws.id)
+                        if (url.isEmpty()) throw IllegalStateException(t("The Square connection could not be completed. Try connecting again."))
+                        awaitingReturn = true
+                        uriHandler.openUri(url)
+                    }
+                }) { Text(if (busy == "connect") t("Opening Square…") else t("Connect Square")) }
+                if (awaitingReturn) {
+                    Text(t("Approve NivaDesk at Square in the browser, then come back here; the connection completes on its own."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { awaitingReturn = false; scope.launch { reload() } }) { Text(t("Finish connection")) }
+                }
+                if (!isOwner) Text(t("Only the workspace owner can connect a Square account."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> {
+                val live = connection
+                val healthy = live.status == "connected" && live.lastErrorCode.isEmpty()
+                fun save(patch: Map<String, Any>) = run("settings") { val ws = workspace ?: return@run; repository.squareUpdateSettings(ws.id, live.id, patch); notice = t("Settings saved."); reload() }
+                DetailCard(title = live.merchantName.ifEmpty { live.merchantId }, icon = Icons.Filled.ShoppingBag) {
+                    Text("${t("Square merchant")} · ${if (live.environment == "sandbox") t("Sandbox") else t("Production")} · ${t("Read only")} · Square-Version ${live.apiVersion}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${t("Connection")}: ${if (live.status == "reconnect_required") t("Reconnect required") else if (healthy) t("Healthy") else t("Needs attention")} · ${t("Missed-event recovery")}: ${if (live.eventsRecovery) t("On (Events API, 28 days)") else t("Off")}")
+                    Text("${t("Locations")}: ${live.locations.filter { it.selected }.joinToString(", ") { it.name.ifEmpty { it.id } }}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${t("Last successful sync")}: ${if (live.lastSuccessAtMs > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(live.lastSuccessAtMs)) else "—"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (live.unmatchedPayments > 0) Text("${t("Issues")}: ${live.unmatchedPayments} ${t("unmatched payments")}", color = MaterialTheme.colorScheme.tertiary)
+                    if (live.status == "reconnect_required") Text(t("Square has withdrawn NivaDesk's access. Connect again to resume sync."), color = MaterialTheme.colorScheme.error)
+                    if (live.lastErrorCode == "location_inactive") Text(t("A selected location is no longer active at Square. Past orders are kept; review the locations below."), color = MaterialTheme.colorScheme.error)
+                    if (live.status == "reconnect_required" && isOwner) Button(enabled = busy != "connect", onClick = {
+                        run("connect") { val ws = workspace ?: return@run; val url = repository.squareBeginConnect(ws.id); awaitingReturn = true; uriHandler.openUri(url) }
+                    }) { Text(t("Reconnect Square")) }
+                    OutlinedButton(enabled = busy != "sync" && live.status == "connected", onClick = {
+                        run("sync") { val ws = workspace ?: return@run; repository.squareSyncNow(ws.id, live.id); notice = t("Sync finished."); reload() }
+                    }) { Text(if (busy == "sync") t("Syncing…") else t("Sync now")) }
+                    Text(t("Sync now checks the last 24 hours."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                CommerceSyncHealthCard(state, provider = "square")
+                if (isOwner) {
+                    DetailCard(title = t("What comes in"), icon = Icons.Filled.CheckCircle) {
+                        Text(t("Choose the locations to import and which sales become NivaDesk orders. Every sale is recorded for finance either way."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Locations"), style = MaterialTheme.typography.labelLarge)
+                        live.locations.forEach { loc ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = loc.selected, enabled = busy != "settings", onCheckedChange = { on ->
+                                    val next = live.locations.filter { it.selected }.map { it.id }.toMutableSet()
+                                    if (on) next.add(loc.id) else next.remove(loc.id)
+                                    if (next.isEmpty()) errorText = t("Select at least one location.") else save(mapOf("selectedLocationIds" to next.toList()))
+                                })
+                                Text(loc.name.ifEmpty { loc.id } + if (loc.status != "ACTIVE") " · ${t("Inactive")}" else "")
+                            }
+                        }
+                        Text(t("Which sales become orders"), style = MaterialTheme.typography.labelLarge)
+                        policies.forEach { (id, label, hint) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = live.importPolicy == id, enabled = busy != "settings", onClick = { save(mapOf("importPolicy" to id)) })
+                                Column { Text(t(label)); Text(t(hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                            }
+                        }
+                        Text(t("Square sources"), style = MaterialTheme.typography.labelLarge)
+                        sources.forEach { (id, label) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = live.importSources.contains(id), enabled = busy != "settings", onCheckedChange = { on ->
+                                    val next = live.importSources.toMutableSet()
+                                    if (on) next.add(id) else next.remove(id)
+                                    if (next.isEmpty()) errorText = t("Select at least one Square source.") else save(mapOf("importSources" to next.toList()))
+                                })
+                                Text(t(label))
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(checked = live.autoSync, enabled = busy != "settings", onCheckedChange = { save(mapOf("autoSync" to it)) })
+                            Text(t("Create orders from new sales automatically"))
+                        }
+                        Text(t("Two-way inventory and taking payments through Square are not on yet; this connection reads only."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DetailCard(title = t("Import preview"), icon = Icons.Filled.CheckCircle) {
+                        Text(t("Preview shows what an import would bring in; nothing is written.") + " " + t("Import brings in sales from the chosen days under the policy above."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(value = days, onValueChange = { days = it.filter { c -> c.isDigit() }.take(3) }, label = { Text(t("Days")) }, singleLine = true)
+                        val dayCount = (days.toIntOrNull() ?: 90).coerceIn(1, 365)
+                        OutlinedButton(enabled = busy != "preview" && live.status == "connected", onClick = {
+                            run("preview") {
+                                val ws = workspace ?: return@run
+                                val s = repository.squarePreviewImport(ws.id, live.id, dayCount)
+                                previewText = "${t("Sales found")}: ${s.total} · ${t("Would become orders")}: ${s.wouldCreate} · ${t("Finance only")}: ${s.financeOnly} · ${t("Cancelled")}: ${s.cancelled} · ${t("Already in NivaDesk")}: ${s.alreadyHere}"
+                            }
+                        }) { Text(t("Preview")) }
+                        Button(enabled = busy != "import" && live.status == "connected", onClick = {
+                            run("import") {
+                                val ws = workspace ?: return@run
+                                val c = repository.squareRunImport(ws.id, live.id, dayCount)
+                                notice = "${t("Imported")}: ${c.created} · ${t("Updated")}: ${c.updated} · ${t("Skipped")}: ${c.skipped}"
+                                previewText = ""; reload()
+                            }
+                        }) { Text(if (busy == "import") t("Importing…") else t("Import")) }
+                        if (previewText.isNotEmpty()) Text(previewText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                DetailCard(title = t("Unmatched Square payments"), icon = Icons.Filled.CheckCircle) {
+                    Text(t("Payments and refunds Square reported for sales NivaDesk holds no order for. They are kept for finance and never turned into orders on their own."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(enabled = busy != "unmatched", onClick = {
+                        run("unmatched") {
+                            val ws = workspace ?: return@run
+                            val rows = repository.squareUnmatched(ws.id)
+                            unmatchedText = if (rows.isEmpty()) t("Nothing to review.") else rows.joinToString("\n") { "${if (it.kind == "refund") t("Refund") else t("Payment")} ${it.externalId} · ${it.status} · ${it.amount} ${it.currency}" }
+                        }
+                    }) { Text(t("Load")) }
+                    if (unmatchedText.isNotEmpty()) Text(unmatchedText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (isOwner) {
+                    DetailCard(title = t("Disconnect Square"), icon = Icons.Filled.CheckCircle) {
+                        if (confirmDisconnect) {
+                            Text(t("Disconnect this Square account? NivaDesk's access is revoked at Square and new sales stop arriving. Orders and payments already imported stay in this workspace."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Button(enabled = busy != "disconnect", onClick = {
+                                run("disconnect") { val ws = workspace ?: return@run; repository.squareDisconnect(ws.id, live.id); confirmDisconnect = false; notice = t("Square account disconnected."); reload() }
+                            }) { Text(t("Disconnect")) }
+                            OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
+                        } else {
+                            OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect Square")) }
                         }
                     }
                 }

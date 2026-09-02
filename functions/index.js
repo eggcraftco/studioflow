@@ -102,6 +102,20 @@ const SHOPIFY_BRIDGE_SECRET = defineSecret("SHOPIFY_BRIDGE_SECRET");
 const SHOPIFY_TOKEN_KEY = defineSecret("SHOPIFY_TOKEN_KEY");
 // WOO-002: the WooCommerce consumer pair and webhook secret are boxed under their own key.
 const WOO_TOKEN_KEY = defineSecret("WOO_TOKEN_KEY");
+// Square (SQ-SEC-001/002): the application id and secret, the webhook
+// subscription's signature key, the key the merchant tokens are boxed under,
+// and the application's personal access token (Events API only — a different
+// secret class from any merchant token). SQUARE_ENVIRONMENT is "production" or
+// "sandbox" and threads through every URL, so the two are never mixed
+// (SQ-AUTH-009). SQUARE_APP_ACCESS_TOKEN may be set to "-" to leave the
+// Events API recovery pass off.
+const SQUARE_APPLICATION_ID = defineSecret("SQUARE_APPLICATION_ID");
+const SQUARE_APPLICATION_SECRET = defineSecret("SQUARE_APPLICATION_SECRET");
+const SQUARE_WEBHOOK_SIGNATURE_KEY = defineSecret("SQUARE_WEBHOOK_SIGNATURE_KEY");
+const SQUARE_TOKEN_KEY = defineSecret("SQUARE_TOKEN_KEY");
+const SQUARE_APP_ACCESS_TOKEN = defineSecret("SQUARE_APP_ACCESS_TOKEN");
+const SQUARE_ENVIRONMENT = defineSecret("SQUARE_ENVIRONMENT");
+const SQUARE_SECRETS = [SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_TOKEN_KEY, SQUARE_APP_ACCESS_TOKEN, SQUARE_ENVIRONMENT];
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -5847,6 +5861,51 @@ exports.recreateWooWebhooks = wooExports.recreateWooWebhooks;
 exports.previewWooImport = wooExports.previewWooImport;
 exports.runWooImport = wooExports.runWooImport;
 
+// Square (Square spec Faz 1–2) — a merchant as one connection on the common engine.
+const { createSquareConnectorFunctions } = require("./squareConnector");
+const squareExports = createSquareConnectorFunctions({
+  admin, HttpsError,
+  onCall: (options, handler) => onCall({ ...options, secrets: SQUARE_SECRETS }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: SQUARE_SECRETS }, handler),
+  onSchedule: (options, handler) => onSchedule({ ...options, secrets: SQUARE_SECRETS }, handler),
+  applicationId: () => SQUARE_APPLICATION_ID.value(),
+  applicationSecret: () => SQUARE_APPLICATION_SECRET.value(),
+  webhookSignatureKey: () => SQUARE_WEBHOOK_SIGNATURE_KEY.value(),
+  appAccessToken: () => SQUARE_APP_ACCESS_TOKEN.value(),
+  tokenKey: () => SQUARE_TOKEN_KEY.value(),
+  environment: () => SQUARE_ENVIRONMENT.value(),
+  encryptToken: etsyModule.encryptToken,
+  decryptToken: etsyModule.decryptToken,
+  requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  appReturnUrl: () => "https://nivadesk.app/settings",
+  functionsBaseUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net",
+  // The authorize URL carries no redirect_uri (the console's registered one is
+  // used), so the exchange must not name one either.
+  redirectUri: () => "",
+  orderDocRef, integrationOrderCapacity, holdIntegrationOrder, upsertIntegrationCustomer, sendPushNotificationToCompany,
+  reconcileLineItems, resolveDefaultDeliveryTime, companySettingsDocRef,
+  // SQ-WEB-008: the gateway records and queues; the worker fetches and applies.
+  enqueue: (task, delaySeconds) => enqueueCommerceEvent(task, delaySeconds),
+  ...(process.env.NIVADESK_E2E === "1" ? {
+    createClient: (options) => (global.__nivadeskSquareFakeClient ? global.__nivadeskSquareFakeClient(options) : require("./commerce/square/client").createSquareClient(options)),
+    createEventsClient: (options) => (global.__nivadeskSquareFakeEventsClient ? global.__nivadeskSquareFakeEventsClient(options) : require("./commerce/square/client").createSquareEventsClient(options)),
+    oauth: new Proxy(require("./commerce/square/oauth"), { get: (target, key) => (global.__nivadeskSquareFakeOAuth && global.__nivadeskSquareFakeOAuth[key]) || target[key] }),
+    enqueue: (task, delaySeconds) => (global.__nivadeskSquareFakeEnqueue ? global.__nivadeskSquareFakeEnqueue(task, delaySeconds) : enqueueCommerceEvent(task, delaySeconds))
+  } : {})
+});
+exports.beginSquareConnect = squareExports.beginSquareConnect;
+exports.squareOAuthCallback = squareExports.squareOAuthCallback;
+exports.getSquareConnections = squareExports.getSquareConnections;
+exports.updateSquareConnectionSettings = squareExports.updateSquareConnectionSettings;
+exports.disconnectSquare = squareExports.disconnectSquare;
+exports.squareWebhook = squareExports.squareWebhook;
+exports.reconcileSquareConnections = squareExports.reconcileSquareConnections;
+exports.syncSquareNow = squareExports.syncSquareNow;
+exports.previewSquareImport = squareExports.previewSquareImport;
+exports.runSquareImport = squareExports.runSquareImport;
+exports.listSquareUnmatched = squareExports.listSquareUnmatched;
+
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
   admin,
@@ -10780,7 +10839,7 @@ async function purgeProviderDataForWorkspace(companyId) {
   const db = admin.firestore();
   const report = {
     etsyConnections: 0, etsyOAuthStates: 0, etsyExternalOrders: 0, etsyCustomerLinks: 0,
-    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, wooConnections: 0, wooConnectStates: 0, errors: []
+    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, wooConnections: 0, wooConnectStates: 0, squareConnections: 0, squareConnectStates: 0, errors: []
   };
   if (!companyId) return report;
 
@@ -10827,6 +10886,13 @@ async function purgeProviderDataForWorkspace(companyId) {
     return snap.size;
   });
   await step("wooConnectStates", () => deleteMatching(db.collection("wooConnectStates").where("companyId", "==", companyId)));
+  // SQ-SEC-009: the merchant's boxed tokens go with the workspace.
+  await step("squareConnections", async () => {
+    const snap = await db.collection("squareConnections").where("companyId", "==", companyId).get();
+    for (const doc of snap.docs) await db.recursiveDelete(doc.ref);
+    return snap.size;
+  });
+  await step("squareConnectStates", () => deleteMatching(db.collection("squareConnectStates").where("companyId", "==", companyId)));
   await step("etsyWebhookEvents", async () => {
     let removed = 0;
     for (const shopId of shopIds) {
@@ -31054,6 +31120,7 @@ async function enqueueCommerceEvent(task, delaySeconds = 0) {
 async function processCommerceTaskByProvider(task) {
   if (task.provider === "shopify") return processShopifyCommerceTask(task);
   if (task.provider === "woocommerce") return wooExports._internal.processWooCommerceTask(task);
+  if (task.provider === "square") return squareExports._internal.processSquareCommerceTask(task);
   const error = new Error(`unknown_provider_${String(task.provider || "").replace(/[^a-z]/gi, "")}`);
   error.errorClass = "validation";
   throw error;
@@ -31088,15 +31155,15 @@ exports.commerceEventWorker = onTaskDispatched({
   region: "europe-west2",
   retryConfig: { maxAttempts: 1 },          // retries are the policy's, with its delays — not Cloud Tasks' blind ones
   rateLimits: { maxConcurrentDispatches: 5 },
-  secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY]
+  secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY, ...SQUARE_SECRETS]
 }, async (request) => {
   const task = request.data || {};
   const result = await processCommerceTaskByProvider(task);
   try {
     const kind = result.status === "applied" ? "success" : (result.status === "retrying" ? "retry_scheduled" : (result.status === "dead" ? "dead" : "attempt"));
-    await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId: task.companyId, kind, FieldValue: admin.firestore.FieldValue });
+    await commerce.health.touchHealth(admin.firestore(), { provider: String(task.provider || "shopify"), connectionId: task.connectionId, companyId: task.companyId, kind, FieldValue: admin.firestore.FieldValue });
     if (Number(task.attempt || 1) > 1 && result.status !== "retrying") {
-      await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId: task.companyId, kind: "retry_cleared", FieldValue: admin.firestore.FieldValue });
+      await commerce.health.touchHealth(admin.firestore(), { provider: String(task.provider || "shopify"), connectionId: task.connectionId, companyId: task.companyId, kind: "retry_cleared", FieldValue: admin.firestore.FieldValue });
     }
   } catch (error) { console.warn("commerce health (worker) failed:", error?.message || error); }
   if (result.status === "retrying" && result.nextRetryInMs) {
@@ -31108,7 +31175,7 @@ exports.commerceEventWorker = onTaskDispatched({
 // idempotency key (RETRY-005): the engine's duplicate/noop verdicts make a
 // second application harmless. Orders are the user-safe class; nothing else
 // is queued yet.
-exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
+exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY, ...SQUARE_SECRETS], timeoutSeconds: 120 }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, true);
   const eventKey = String(request.data?.eventKey || "").trim();
   if (!eventKey) throw new HttpsError("invalid-argument", "eventKey is required.");
@@ -31126,7 +31193,7 @@ exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_
   const result = await processCommerceTaskByProvider(task);
   try {
     const kind = result.status === "applied" ? "success" : (result.status === "dead" ? "dead" : "attempt");
-    await commerce.health.touchHealth(admin.firestore(), { provider: "shopify", connectionId: task.connectionId, companyId, kind, FieldValue: admin.firestore.FieldValue });
+    await commerce.health.touchHealth(admin.firestore(), { provider: String(task.provider || "shopify"), connectionId: task.connectionId, companyId, kind, FieldValue: admin.firestore.FieldValue });
   } catch { /* best-effort */ }
   return { ok: true, status: result.status, result: result.outcome?.result || null, orderId: result.outcome?.orderId || null, errorClass: result.errorClass || null, message: result.safeMessage || null };
 });
@@ -31244,6 +31311,8 @@ if (process.env.NIVADESK_E2E === "1") {
     shopifyGraphQLOrderToRest,
     // Faz 4: the WooCommerce connector's internals for the suite.
     woo: wooExports._internal,
+    // Square: the connector's internals for the suite.
+    square: squareExports._internal,
     // Faz 2: the shadow hook and the queue worker's brain, for the suite.
     shadowCompareShopifyOrder,
     processShopifyCommerceTask,

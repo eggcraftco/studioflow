@@ -6149,6 +6149,7 @@ struct AyarlarView: View {
                     if integrationsManaging == "shopify" { shopifyIntegrationAyari }
                     else if integrationsManaging == "etsy" { etsyIntegrationAyari }
                     else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
+                    else if integrationsManaging == "square" { squareIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
             } else {
@@ -6273,6 +6274,17 @@ struct AyarlarView: View {
                 integrationSignalsLoaded = true
             }
         }
+        // Square's card state comes from the connection itself (member-readable).
+        functions.httpsCallable("getSquareConnections").call(["companyId": companyId]) { result, _ in
+            DispatchQueue.main.async {
+                let rows = ((result?.data as? [String: Any])?["connections"] as? [[String: Any]] ?? []).filter { String(describing: $0["status"] ?? "") != "disconnected" }
+                integrationSignals.squareConnections = rows.count
+                integrationSignals.squareConnectionsNeedingAttention = rows.filter {
+                    String(describing: $0["status"] ?? "") == "reconnect_required" || !(($0["lastErrorCode"] as? String) ?? "").isEmpty
+                }.count
+                integrationSignalsLoaded = true
+            }
+        }
         for (name, channel) in [("getInboundWebhookToken", "inbound")] {
             functions.httpsCallable(name).call(["companyId": companyId]) { result, _ in
                 DispatchQueue.main.async {
@@ -6304,6 +6316,14 @@ struct AyarlarView: View {
 
     private var wooCommerceIntegrationAyari: some View {
         WooCommerceIntegrationView(
+            language: seciliDil,
+            isOwner: firebaseManager.currentWorkspaceRole
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+        )
+    }
+
+    private var squareIntegrationAyari: some View {
+        SquareIntegrationView(
             language: seciliDil,
             isOwner: firebaseManager.currentWorkspaceRole
                 .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"

@@ -9,7 +9,7 @@ const crypto = require("crypto");
 const { toDecimalString, normalizeCurrency } = require("./money");
 
 const SCHEMA_VERSION = 1;
-const PROVIDERS = new Set(["shopify", "etsy", "woocommerce", "inbound"]);
+const PROVIDERS = new Set(["shopify", "etsy", "woocommerce", "inbound", "square"]);
 const ENTITY_TYPES = new Set(["order"]);
 const EVENT_ORIGINS = new Set(["provider", "import", "reconcile", "retry", "manual"]);
 const PAYMENT_STATUSES = new Set(["unpaid", "pending", "authorized", "paid", "partially_paid", "partially_refunded", "refunded", "voided", "unknown"]);

@@ -970,6 +970,13 @@ service cloud.firestore {
     match /wooConnectStates/{document=**} {
       allow read, write: if false;
     }
+    // Square connector: OAuth tokens and connect states are server-only.
+    match /squareConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /squareConnectStates/{document=**} {
+      allow read, write: if false;
+    }
     match /etsyExternalOrders/{document=**} {
       allow read, write: if false;
     }

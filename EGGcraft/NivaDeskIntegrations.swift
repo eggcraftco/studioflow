@@ -47,6 +47,9 @@ struct NivaDeskIntegrationSignals {
     /// from getEtsyConnections, never from a flag we set ourselves.
     var etsyShops = 0
     var etsyShopsNeedingAttention = 0
+    /// Live Square merchants, from getSquareConnections.
+    var squareConnections = 0
+    var squareConnectionsNeedingAttention = 0
 }
 
 struct NivaDeskIntegration: Identifiable {
@@ -78,6 +81,9 @@ struct NivaDeskIntegration: Identifiable {
         .init(id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "native",
               blurb: "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.",
               capabilities: ["Orders", "Customers"], manage: "woocommerce", asset: "IntegrationWooCommerce", mark: "W"),
+        .init(id: "square", name: "Square", category: "commerce", kind: "native",
+              blurb: "Connect your Square account once; POS, Online and Invoice sales, payments and refunds arrive on their own.",
+              capabilities: ["Orders", "Payments", "Customers"], manage: "square", asset: "", mark: "S"),
         .init(id: "etsy", name: "Etsy", category: "commerce", kind: "native",
               blurb: "Import orders and customers automatically.",
               capabilities: ["Orders", "Customers"], manage: "etsy", asset: "", mark: "E"),
@@ -122,6 +128,10 @@ struct NivaDeskIntegration: Identifiable {
             if signals.etsyShops == 0 { return "" }
             return signals.etsyShops == 1 ? "1 shop" : "\(signals.etsyShops) shops"
         }
+        if id == "square" {
+            if signals.squareConnections == 0 { return "" }
+            return signals.squareConnections == 1 ? "1 account" : "\(signals.squareConnections) accounts"
+        }
         guard id == "shopify" else { return "" }
         let live = signals.shopifyStores.filter { $0.1 != "unlinked" }
         if live.count == 1 { return live[0].0 }
@@ -142,6 +152,10 @@ struct NivaDeskIntegration: Identifiable {
         if id == "etsy" {
             if signals.etsyShops == 0 { return .available }
             return signals.etsyShopsNeedingAttention > 0 ? .attention : .connected
+        }
+        if id == "square" {
+            if signals.squareConnections == 0 { return .available }
+            return signals.squareConnectionsNeedingAttention == signals.squareConnections ? .attention : .connected
         }
 
         // Everything else arrives over a webhook channel. A test delivery proves

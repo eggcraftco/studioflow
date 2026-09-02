@@ -197,7 +197,7 @@ check("a log line never carries a token or an address, and the idempotency key i
 });
 
 check("capabilities are declared per provider, and WooCommerce now declares the connector it has become", () => {
-  assert.deepStrictEqual(listProviders(), ["shopify", "etsy", "woocommerce", "inbound"]);
+  assert.deepStrictEqual(listProviders(), ["shopify", "etsy", "woocommerce", "square", "inbound"]);
   const shopify = getCapabilities("shopify");
   assert.strictEqual(shopify.orders.reconcile, true); assert.strictEqual(shopify.webhooks.coverage, "full");
   assert.strictEqual(getCapabilities("etsy").webhooks.coverage, "partial");

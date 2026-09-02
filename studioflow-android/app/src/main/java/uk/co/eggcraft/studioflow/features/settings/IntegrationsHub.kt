@@ -64,6 +64,9 @@ data class IntegrationSignals(
      *  getEtsyConnections, never from a flag we set ourselves. */
     val etsyShops: Int = 0,
     val etsyShopsNeedingAttention: Int = 0,
+    /** Live Square merchants, from getSquareConnections. */
+    val squareConnections: Int = 0,
+    val squareConnectionsNeedingAttention: Int = 0,
 )
 
 data class IntegrationProvider(
@@ -84,6 +87,10 @@ data class IntegrationProvider(
         if (id == "etsy") {
             if (signals.etsyShops == 0) return ""
             return if (signals.etsyShops == 1) "1 shop" else "${signals.etsyShops} shops"
+        }
+        if (id == "square") {
+            if (signals.squareConnections == 0) return ""
+            return if (signals.squareConnections == 1) "1 account" else "${signals.squareConnections} accounts"
         }
         if (id != "shopify") return ""
         val live = signals.shopifyStores.filterValues { it != "unlinked" }
@@ -109,6 +116,10 @@ data class IntegrationProvider(
             if (signals.etsyShops == 0) return IntegrationState.Available
             return if (signals.etsyShopsNeedingAttention > 0) IntegrationState.Attention else IntegrationState.Connected
         }
+        if (id == "square") {
+            if (signals.squareConnections == 0) return IntegrationState.Available
+            return if (signals.squareConnectionsNeedingAttention == signals.squareConnections) IntegrationState.Attention else IntegrationState.Connected
+        }
         // Everything else arrives over a webhook channel. A test delivery proves
         // the wiring, not the connection — it does not turn the card green.
         val channel = signals.channels[if (manage == "woo") "woocommerce" else "inbound"]
@@ -131,6 +142,8 @@ val INTEGRATION_PROVIDERS = listOf(
         listOf("Orders", "Customers"), "shopify", "S"),
     IntegrationProvider("woocommerce", "WooCommerce", "commerce", "native",
         "Approve NivaDesk at your store once; orders, customers and status changes sync on their own.", listOf("Orders", "Customers"), "woo", "W"),
+    IntegrationProvider("square", "Square", "commerce", "native",
+        "Connect your Square account once; POS, Online and Invoice sales, payments and refunds arrive on their own.", listOf("Orders", "Payments", "Customers"), "square", "S"),
     IntegrationProvider("etsy", "Etsy", "commerce", "native",
         "Import orders and customers automatically.", listOf("Orders", "Customers"), "etsy", "E"),
     IntegrationProvider("wix", "Wix", "commerce", "webhook",

@@ -42,6 +42,22 @@ const REGISTRY = Object.freeze({
     financial_ledger: { read: false },
     webhooks: { supported: true, coverage: "full", signature: "hmac_sha256_raw_body" }
   },
+  square: {
+    display_name: "Square",
+    connection_model: "oauth",
+    orders: { read: true, write: false, reconcile: true },
+    products: { read: true, write: false },
+    inventory: { read: true, write: false },
+    customers: { read: true, write: false },
+    payments: { read: true },
+    refunds: { read: true, write: false },
+    shipments: { read: true, write: false },
+    financial_ledger: { read: true },
+    payouts: { read: true, reconcile: true },
+    locations: { read: true },
+    webhooks: { supported: true, coverage: "full", signature: "hmac_sha256_url_and_raw_body" },
+    events_api_recovery: { supported: true, window_days: 28 }
+  },
   inbound: {
     display_name: "Website",
     connection_model: "token",
