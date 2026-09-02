@@ -31200,3 +31200,11 @@ body[data-studio-theme="dark"] .settings-member-row,
 body[data-studio-theme="dark"] .settings-ticket-row,
 body[data-studio-theme="dark"] .settings-ticket-message { background: var(--panel); }
 body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--settings-canvas); }
+
+/* Fit fixes: plan table heads wrap, tight segmented filters for narrow columns. */
+.settings-plan-table thead th { white-space: normal; line-height: 1.25; }
+.settings-plan-table thead th .settings-tag { display: inline-flex; margin: 4px 0 0 0; }
+.settings-support-inbox .settings-integrations-toolbar { align-items: stretch; }
+.settings-support-inbox .settings-segmented.is-compact { display: flex; flex-wrap: wrap; width: auto; }
+.settings-support-inbox .settings-segmented.is-compact button { min-width: 0; flex: 1 1 auto; padding: 0 10px; min-height: 36px; font-size: 13px; }
+.settings-support-inbox .settings-integrations-search { flex: 1 1 100%; }

@@ -1824,3 +1824,15 @@ KARIŞMASIN.
   position:absolute'unu SONRAKİ bir kural eziyordu; SVG bir ızgara
   sütunu işgal edip kartları alt satıra atıyordu — kural :not() ile
   daraltıldı, üretimde ölçülerek doğrulandı).
+
+## Settings yeniden tasarımı — `NivaDesk-Settings-AI-Design-Handoff.pdf` (2 Eyl 2026 gece)
+
+**Durum:** 17 ekranın tamamı web'de handoff'un onaylı yönüne göre yeniden kuruldu; kodda, commit'li (`d10f266`, `ed7be73`, `c84e301` + devamı). **Canlıya alınmadı** — kullanıcı "canlıya at" deyince Round olarak gider.
+
+**Faz A (kabuk):** `.settings-workspace` içine scoped token'lar (canvas #F3F5F9, surface #FFF, text #141827, muted #667085, accent #5865E8, success #2F9A55, caution #D97706, danger #D64545); 275px kenar çubuğu, katlanabilir gruplar (localStorage `nivadesk-settings-collapsed-groups`), 44px satır + 20px çizgi ikon, periwinkle aktif satır; tek sayfa başlığı `app/settings/pageHeader.tsx` (`SettingsPageHeader`, `SettingsStatusPill`, `SettingsCardHead`, `useSettingsHeaderActions` — bölüm kendi düğmelerini context ile başlığa yerleştirir; Financial/PDF/AI Reply/Integrations/Plan/Team bunu kullanır). Kartlar radius 12, gölgesiz; `.button.danger`, `.settings-switch`, `.settings-segmented`, `.settings-status-band`, `.settings-notice`, `.settings-facts` ortak parçalar. Koyu tema aynı token setiyle.
+
+**Faz B (ekranlar):** Profile & Security (tek profil kartı + kimlik şeridi + Danger zone), Preferences (tema önizleme kartları + tek Save), About, Branding (canlı header önizlemesi), Customer Portal Domain (portal adresi/özel alan adı/link önizleme/görünüm), PDF Export (sol ayarlar + sağ **canlı iframe önizleme** — `invoicePreviewHtml` ResizeObserver ile ölçeklenir; varsayılan şirket numarası satırları artık sabit id'li → yanlış "Unsaved" yok), Workflow Steps (şablon önizleme + satır taşıma ↑↓ + iki sütun), AI Reply (motor seçim kartları), Customer SMS (durum bandı + anahtar satırları), Financial (anchor sekmeler + hesaplama önizlemesi + amber araç paneli), Team Access (koltuk çipi + sekmeler + üye listesi), Message Settings (izinler + genel bakış), Safety & Uploads (özet kartları + akordeon), Data Management (yedek/dışa aktarma satırları + silme kartı), Plan & Access (plan kahramanı + karşılaştırma tablosu), Integrations (duruma göre gruplama), Support (seçim kartları + form/inbox iki sütun + arama/filtre).
+
+**Tuzaklar:** (1) Chrome, dev sunucusunun `page.js` chunk'ını önbellekten sunar — HMR sonrası eski görünüm; `fetch(url,{cache:"reload"})` ile temizleyip yeniden yükle. (2) `useSettingsHeaderActions` deps'ine ebeveynden gelen callback koyma (her render yeni fonksiyon → "Maximum update depth"); ref üzerinden çağır. (3) Doğrulama ortamı: `firebase emulators:start --only auth,firestore,functions` (JAVA_HOME önce export) + `node test/qa/seed-qa.js` + `review@nivadesk.app` şifresi admin SDK ile + `preview_start web-emulator`.
+
+**Kalan:** kullanıcı dönünce "canlıya at" ile Round; mobil/koyu tema ince ayar; native (Mac/iPhone/Android) bu handoff'un kapsamı dışında.
