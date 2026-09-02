@@ -130,7 +130,10 @@ const QBO_SECRETS = [NIVADESK_QBO_CLIENT_ID, NIVADESK_QBO_CLIENT_SECRET, NIVADES
 //   NIVADESK_XERO_SECRETS_READY=1 npx firebase deploy --only functions:xeroConnectStart,…
 // once the owner has created the three secrets. At runtime the values arrive
 // as plain environment variables either way.
-const XERO_SECRETS_READY = process.env.NIVADESK_XERO_SECRETS_READY === "1";
+// The CLI's discovery step neither inherits the shell environment nor loads
+// functions/.env, so the readiness flag is a marker file next to this one:
+// functions/.xero-secrets-ready (kept in git now that the secrets exist).
+const XERO_SECRETS_READY = process.env.NIVADESK_XERO_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".xero-secrets-ready"));
 const XERO_SECRET_PARAMS = XERO_SECRETS_READY ? [defineSecret("NIVADESK_XERO_CLIENT_ID"), defineSecret("NIVADESK_XERO_CLIENT_SECRET"), defineSecret("NIVADESK_XERO_WEBHOOK_KEY")] : [];
 const XERO_SECRETS = [...XERO_SECRET_PARAMS, NIVADESK_QBO_TOKEN_KEY];
 const ACCOUNTING_SECRET_SETS = { quickbooks: QBO_SECRETS, xero: XERO_SECRETS, core: [NIVADESK_QBO_TOKEN_KEY], all: [...QBO_SECRETS, ...XERO_SECRET_PARAMS] };

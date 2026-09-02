@@ -127,8 +127,19 @@ status; `app/xero/callback/page.tsx` forwards to the function. Not deployed to t
 `https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroOAuthCallback` and `https://nivadesk.app/xero/callback`;
 webhook URL `https://europe-west2-eggcraft-studio.cloudfunctions.net/xeroWebhook`, Contacts + Invoices + Credit notes)
 → `firebase functions:secrets:set NIVADESK_XERO_CLIENT_ID`, `NIVADESK_XERO_CLIENT_SECRET`, `NIVADESK_XERO_WEBHOOK_KEY`
-(Xero tokens are boxed with `NIVADESK_QBO_TOKEN_KEY`) → deploy by name with the flag that lets index.js declare the secrets, `NIVADESK_XERO_SECRETS_READY=1 npx firebase deploy --only
-functions:xeroConnectStart,functions:xeroOAuthCallback,functions:xeroListTenants,functions:xeroSelectTenant,functions:xeroSyncNow,functions:xeroWebhook,functions:xeroDisconnect,functions:scheduledAccountingReconcile`
-(without the flag the CLI refuses every deploy: "no value for the secret") → save the
+(Xero tokens are boxed with `NIVADESK_QBO_TOKEN_KEY`) → deploy by name (`functions/.xero-secrets-ready` is the marker that lets index.js declare the secrets; the CLI's
+discovery step runs with a minimal environment and loads neither the shell nor `functions/.env`, so an env flag never
+reached it — two deploys bound only the QuickBooks token key before the marker file fixed it) → save the
 webhook in the portal (intent-to-receive runs against the live endpoint) → connect the Demo Company from Settings →
 Integrations → Xero. Not built: native panels (web-first, as QuickBooks), phases 3+.
+
+## 8. Live (3 Sep 2026, 22:27 UTC)
+
+Xero app "NivaDesk" (app id `14bf723b-503e-4f20-a3bd-a49c96ea2de5`, web app, uncertified: 5 connections) created under the
+owner's new Xero login; redirect URIs `…/xeroOAuthCallback` and `https://nivadesk.app/xero/callback`; webhook
+`…/xeroWebhook` for Contacts, Invoices, Credit notes, Prepayments, Overpayments. The three secrets exist
+(`NIVADESK_XERO_CLIENT_SECRET` is at version 2). All seven `xero*` functions and `scheduledAccountingReconcile` are
+deployed with the Xero secrets bound (verified through the Cloud Functions v2 API). Intent-to-receive: **OK** at
+22:26:54 UTC (the first attempt failed with three 401s because the secrets were not bound — see §7). Remaining: deploy
+the web ("canlıya at") so the Xero card and section are on nivadesk.app, activate the Demo Company under the Xero login
+(my.xero.com → Try Demo Company), then connect it from Settings → Integrations → Xero.
