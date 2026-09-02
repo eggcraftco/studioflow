@@ -18,7 +18,7 @@ process.env.NIVADESK_TL_CLIENT_SECRET = "tl-test-secret";
 process.env.NIVADESK_PAYPAL_TOKEN_KEY = crypto.randomBytes(32).toString("hex");
 
 // ---- the fake PayPal --------------------------------------------------------
-const paypal = { transactions: [], clients: [], goodSecret: "secret-1" };
+const paypal = { transactions: [], clients: [], goodSecret: "secret-1", searchBroken: false };
 const iso = (daysAgo, hour = "10:15:00") => `${new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10)}T${hour}+0000`;
 const tx = (id, code, value, daysAgo, over = {}) => ({
   transaction_info: { transaction_id: id, transaction_event_code: code, transaction_status: "S", transaction_initiation_date: iso(daysAgo), transaction_amount: { currency_code: "GBP", value: String(value) }, fee_amount: { currency_code: "GBP", value: over.fee ?? "-0.54" }, transaction_subject: over.subject ?? "Signet ring" },
@@ -32,6 +32,7 @@ global.__nivadeskPayPalFakeClient = (options) => {
     async probe() { if (!ok) fail(); return { ok: true, accountNumber: "ACC-42", lastRefreshed: new Date().toISOString() }; },
     async *transactionsBetween({ startMs, endMs }) {
       if (!ok) fail();
+      if (paypal.searchBroken) { const e = new Error("paypal_http_400: INVALID_REQUEST"); e.status = 400; e.stage = "data"; throw e; }
       const inWindow = paypal.transactions.filter((t) => { const ms = Date.parse(t.transaction_info.transaction_initiation_date); return ms >= startMs && ms <= endMs; });
       yield { transactions: inWindow, page: 1, totalPages: 1, totalItems: inWindow.length, accountNumber: "ACC-42" };
     }
@@ -131,6 +132,23 @@ const rows = () => company().collection("bankTransactions");
     const conn = (await company().collection("bankConnections").doc(connectionId).get()).data();
     assert.strictEqual(conn.syncState, "ok"); assert.strictEqual(conn.status, "linked");
     assert.strictEqual((await company().collection("bankConnections").get()).size, 1, "still one PayPal connection");
+  });
+
+  await check("a connect whose first import fails still links, and the next sync takes the six months it owes", async () => {
+    // Disconnect and purge the current one so the scenario starts clean, then connect while the search API is broken.
+    await index.bankDeleteConnection.run({ auth, data: { companyId: COMPANY, requisitionId: connectionId, mode: "purge" }, rawRequest: {} });
+    paypal.searchBroken = true;
+    const out = await index.paypalConnect.run({ auth, data: { companyId: COMPANY, clientId: "client-abc", clientSecret: paypal.goodSecret, environment: "live" }, rawRequest: {} });
+    assert.strictEqual(out.status, "linked"); assert.strictEqual(out.imported, 0);
+    const linked = (await company().collection("bankConnections").doc(out.connectionId).get()).data();
+    assert.strictEqual(linked.historyImportedAt, undefined, "the history is still owed");
+    paypal.searchBroken = false;
+    paypal.transactions.push(tx("OLD2", "T0006", "7.00", 120));   // four months back: only a full-history pass reaches it
+    const swept = await index.bankSyncTransactions.run({ auth, data: { companyId: COMPANY, force: false }, rawRequest: {} });
+    assert.strictEqual(swept.skipped, 0, "an owed history is not throttled by the interval");
+    assert.ok((await rows().doc(`${out.accountId}_OLD2`).get()).exists, "the six-month import ran on the first good sync");
+    assert.ok((await company().collection("bankConnections").doc(out.connectionId).get()).data().historyImportedAt, "and is marked as taken");
+    connectionId = out.connectionId; accountId = out.accountId;
   });
 
   await check("purge takes the rows and the payout records with the connection", async () => {

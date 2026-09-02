@@ -625,7 +625,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     for (const doc of snap.docs) {
       const data = doc.data() || {};
       const last = data.lastSyncedAt?.toMillis ? data.lastSyncedAt.toMillis() : 0;
-      if (!force && now - last < MIN_SYNC_INTERVAL_MS) {
+      // A PayPal connection whose first, six-month import never completed (the connect step failed after linking) is owed that history: no interval applies, and the next pass takes it in full.
+      const owesHistory = data.provider === "paypal" && !data.historyImportedAt;
+      if (!force && !owesHistory && now - last < MIN_SYNC_INTERVAL_MS) {
         skipped += 1;
         continue;
       }
@@ -634,8 +636,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       let importedForConnection = 0;
       try {
         if (data.provider === "paypal") {
-          const out = await syncPayPalConnection(companyId, doc.id, data, rules, { fullHistory: false });
+          const out = await syncPayPalConnection(companyId, doc.id, data, rules, { fullHistory: owesHistory });
           imported += out.rows; importedForConnection += out.rows; ok = true;
+          if (owesHistory) await doc.ref.set({ historyImportedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
           throw Object.assign(new Error("__paypal_done__"), { paypalDone: true });
         }
         const accessToken = await accessTokenForConnection(companyId, doc.id);
@@ -1761,10 +1764,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }, { merge: true });
     await db().collection("companies").doc(companyId).set({ bankFeedEnabled: true }, { merge: true });
     const rules = await loadRules(companyId);
-    let imported = { rows: 0, payouts: 0, seen: 0 };
-    try { imported = await syncPayPalConnection(companyId, connectionId, { environment, provider: "paypal" }, rules, { fullHistory: true, client: api }); }
+    let imported = { rows: 0, payouts: 0, seen: 0 }; let historyTaken = false;
+    try { imported = await syncPayPalConnection(companyId, connectionId, { environment, provider: "paypal" }, rules, { fullHistory: true, client: api }); historyTaken = true; }
     catch (error) { console.warn("paypalConnect initial sync failed:", connectionId, error?.message || error); }
-    await connectionsRef(companyId).doc(connectionId).set({ lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    // Only a completed six-month import counts; otherwise the next sync owes it and takes it in full.
+    await connectionsRef(companyId).doc(connectionId).set({ lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(), ...(historyTaken ? { historyImportedAt: admin.firestore.FieldValue.serverTimestamp() } : { historyImportedAt: admin.firestore.FieldValue.delete() }) }, { merge: true });
     await logBankAudit(companyId, { kind: "connected", ok: true, connectionId, bank: "PayPal", imported: imported.rows, reconnected: !existing.empty });
     if (imported.rows > 0 && settlements && typeof settlements.matchAll === "function") { try { await settlements.matchAll(companyId); } catch (error) { console.warn("settlement match after PayPal connect failed:", error?.message || error); } }
     return { status: "linked", connectionId, accountId, imported: imported.rows, payouts: imported.payouts, reconnected: !existing.empty };
