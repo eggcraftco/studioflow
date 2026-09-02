@@ -32,6 +32,7 @@ import {
 import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
+import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
@@ -511,6 +512,7 @@ export default function SettingsPage() {
     setIntegrationCategory(params.get("category") ?? "");
     if (
       rawRequested === "shopify" ||
+      rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy"
     ) {
@@ -5023,6 +5025,7 @@ function IntegrationsSection({
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
     );
