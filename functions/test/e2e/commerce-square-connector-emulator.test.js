@@ -434,6 +434,7 @@ const orderCount = async () => (await db.collection("siparisler").where("company
     assert.ok(report.atSquare >= 4, JSON.stringify(report));
     assert.ok(report.asOrders >= 2); assert.ok(report.missingIds.includes("ORD_GHOST"), "an order Square has and NivaDesk never saw is missing");
     assert.ok(!report.missingIds.includes("ORD_A") && !report.missingIds.includes("ORD_LATE"));
+    assert.ok(!report.missingIds.includes("RET_A"), "a return order is never a missing sale"); assert.ok(report.returns >= 1);
     assert.strictEqual(report.truncated, false);
     square.orders.delete("ORD_GHOST");
   });

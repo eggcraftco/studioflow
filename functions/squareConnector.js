@@ -880,10 +880,11 @@ function createSquareConnectorFunctions(deps) {
     const days = Math.min(Math.max(Number(request.data?.days) || 30, 1), 365);
     const client = await clientFor(ref, data);
     const settings = settingsOf(data);
-    const report = { days, atSquare: 0, asOrders: 0, financeOnly: 0, missing: 0, notSelected: 0, truncated: false, missingIds: [], financeOnlyIds: [] };
+    const report = { days, atSquare: 0, asOrders: 0, financeOnly: 0, missing: 0, notSelected: 0, returns: 0, truncated: false, missingIds: [], financeOnlyIds: [] };
     for await (const { order, truncated } of importOrders(client, data, days, IMPORT_MAX_PAGES)) {
       if (truncated) { report.truncated = true; continue; }
       if (String(order?.state || "").toUpperCase() === "DRAFT") continue;
+      if (isSquareReturnOrder(order)) { report.returns += 1; continue; }   // a refund's return order is not a missing sale (SQ-REF-002)
       report.atSquare += 1;
       const externalId = String(order?.id || "");
       const orderDoc = await orderDocRef(squareOrderDocId(companyId, externalId)).get();
