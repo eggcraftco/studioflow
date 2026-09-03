@@ -76,11 +76,35 @@ function providerCustomFields(envelope) {
  * is the live path's line-total reconciler, passed in so parity does not depend
  * on this module importing the monolith.
  */
+function round2(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round(number * 100) / 100;
+}
+
+/** Everything refunded on this order, from the envelope's own refund list. */
+function refundedTotal(envelope) {
+  const refunds = Array.isArray(envelope.refunds) ? envelope.refunds : [];
+  let sum = 0;
+  for (const refund of refunds) {
+    const amount = Math.abs(Number(refund && refund.amount));
+    if (Number.isFinite(amount)) sum += amount;
+  }
+  return round2(sum);
+}
+
 function shopOwnedFields(envelope, ctx = {}) {
   const meta = envelope.source.provider_metadata || {};
   const display = envelope.source.provider_display_name || envelope.identity.provider;
   const total = toLegacyNumber(envelope.order.grand_total);
   const paid = PAID_STATUSES.has(envelope.order.payment_status) ? total : 0;
+  // Money that went back to the customer. The envelope has carried this all
+  // along; nothing read it, so a fully refunded sale kept its whole revenue AND
+  // its whole profit. The bank side has always done this arithmetic — see
+  // bankLinkRefundToOrder — and this is the same shape: the refund comes off
+  // what was paid and is recorded on its own, which is what the finance engine
+  // subtracts from net profit.
+  const refunded = refundedTotal(envelope);
   const shipping = envelope.customer.shipping_address || envelope.customer.billing_address || {};
   const billing = envelope.customer.billing_address || {};
   const shippingHasAddress = Boolean(shipping.street || shipping.city || shipping.postalCode);
@@ -93,8 +117,13 @@ function shopOwnedFields(envelope, ctx = {}) {
     paymentMethod: String(meta.payment_method || ""),
     customerName: envelope.customer.name || `${display} Customer`,
     paymentDate: envelope.order.placed_at ? new Date(envelope.order.placed_at) : (ctx.now ? new Date(ctx.now) : new Date()),
-    paidAmount: paid ?? 0,
-    remainingAmount: total === null || paid === null ? 0 : Math.max(0, Math.round((total - paid) * 100) / 100),
+    paidAmount: Math.max(0, round2((paid ?? 0) - refunded)),
+    // Deliberately measured against what was PAID, not against what is left
+    // after the refund: a refunded sale is settled, not outstanding. Reading it
+    // the other way round would put the refunded amount back on the customer's
+    // balance as money they still owe.
+    remainingAmount: total === null || paid === null ? 0 : Math.max(0, round2(total - paid)),
+    refundedAmount: refunded,
     orderValue: total ?? 0,
     watchRef: String(lineItems[0]?.sku || ""),
     designName: String(meta.design_name || "") || lineSummary(envelope) || lineItems[0]?.name || `${display} ${meta.order_number || envelope.identity.external_id}`,

@@ -635,6 +635,19 @@ function normalizeEtsyReceipt(receipt, {
   const status = etsyText(receipt?.status, 40).toLowerCase();
   const isCancelled = status === "canceled" || status === "cancelled";
   const isRefunded = status.includes("refund") || (Array.isArray(receipt?.refunds) && receipt.refunds.length > 0);
+  // How much went back, not just whether something did. The boolean above was
+  // the only thing read for years, so a refunded Etsy sale kept its whole
+  // revenue and its whole profit. Etsy's amounts come as {amount, divisor}
+  // like every other money field on a receipt.
+  const refundedValue = (() => {
+    const refunds = Array.isArray(receipt?.refunds) ? receipt.refunds : [];
+    let sum = 0;
+    for (const refund of refunds) {
+      const money = etsyMoney(refund?.amount ?? refund);
+      if (money && Number.isFinite(money.value)) sum += Math.abs(money.value);
+    }
+    return Math.round(sum * 100) / 100;
+  })();
 
   // Personalization and buyer notes are the production brief. Losing them is
   // the failure this whole integration exists to avoid, so they are gathered
@@ -719,8 +732,13 @@ function normalizeEtsyReceipt(receipt, {
     // channels.
     paymentDate: createdAt,
     orderValue: grand.value,
-    paidAmount: isPaid ? grand.value : 0,
+    // The refund comes off what was paid and is recorded on its own, the same
+    // shape the bank path has always used (bankLinkRefundToOrder). What is
+    // "remaining" is still measured against what was paid, because a refunded
+    // sale is settled rather than outstanding.
+    paidAmount: isPaid ? Math.max(0, Math.round((grand.value - refundedValue) * 100) / 100) : 0,
     remainingAmount: isPaid ? 0 : grand.value,
+    refundedAmount: refundedValue,
     watchPurchasePrice: 0,
     watchRef: lineItems[0]?.sku || "",
     deliveryTime,

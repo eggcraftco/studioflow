@@ -23,6 +23,12 @@ const INTEGRATION_SHOP_OWNED_FIELDS = new Set([
   "notes",
   "paidAmount",
   "remainingAmount",
+  // The shop owns this the same way it owns paidAmount: a refund happened at
+  // the shop, not in the studio. Without it here the number is computed and
+  // then stripped from every resync patch, which is worse than not computing
+  // it — the first delivery would carry the refund and the second would take
+  // it away again.
+  "refundedAmount",
   "orderValue",
   "lineItems",
   "payments",

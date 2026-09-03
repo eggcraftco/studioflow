@@ -19120,13 +19120,22 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true, defaultDel
     communicationAddress: formatAddressParts(billingParts)
   };
 
+  // WooCommerce's `total` is gross of refunds and the order carries them
+  // separately, with negative totals. Read, not ignored: a refunded sale kept
+  // its whole revenue and its whole profit.
+  const wooRefunded = Math.round(
+    (Array.isArray(order?.refunds) ? order.refunds : [])
+      .reduce((sum, refund) => sum + Math.abs(wooNumber(refund?.total, 0)), 0) * 100
+  ) / 100;
+
   const mapped = {
     companyId,
     paymentMethod,
     customerName: wooBillingFullName(order),
     paymentDate: createdAt,
-    paidAmount: total,
+    paidAmount: Math.max(0, Math.round((total - wooRefunded) * 100) / 100),
     remainingAmount: 0,
+    refundedAmount: wooRefunded,
     watchPurchasePrice: 0,
     watchRef,
     deliveryTime,
@@ -20120,13 +20129,26 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true, defaultDeliver
     communicationAddress: formatAddressParts(billingParts)
   };
 
+  // A Shopify order can arrive already refunded — an import of history, or a
+  // refund that happened before the first sync. The refund webhook only covers
+  // refunds that happen while we are watching.
+  const refundedTotal = (Array.isArray(order?.refunds) ? order.refunds : []).reduce((sum, refund) => {
+    const fromTransactions = (Array.isArray(refund?.transactions) ? refund.transactions : [])
+      .reduce((inner, t) => inner + wooNumber(t?.amount, 0), 0);
+    const fromLines = (Array.isArray(refund?.refund_line_items) ? refund.refund_line_items : [])
+      .reduce((inner, li) => inner + wooNumber(li?.subtotal, 0), 0);
+    return sum + Math.abs(fromTransactions || fromLines);
+  }, 0);
+  const refundedAmount = Math.round(refundedTotal * 100) / 100;
+
   const mapped = {
     companyId,
     paymentMethod,
     customerName: shopifyCustomerName(order),
     paymentDate: createdAt,
-    paidAmount: total,
+    paidAmount: Math.max(0, Math.round((total - refundedAmount) * 100) / 100),
     remainingAmount: 0,
+    refundedAmount,
     watchPurchasePrice: 0,
     watchRef,
     // MERGE-004: Shopify does not say how long the piece takes, so this is the
@@ -20543,13 +20565,20 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     communicationAddress: formatAddressParts(billingParts)
   };
 
+  // The generic channel has no schema of its own, so this reads the names
+  // senders actually use. Absent means zero, which is what it meant before.
+  const inboundRefunded = Math.abs(
+    wooNumber(inboundValue(payload, ["refundedAmount", "refunded_amount", "refund_total", "refunded", "amount_refunded"]), 0)
+  );
+
   const mapped = {
     companyId,
     paymentMethod,
     customerName,
     paymentDate: createdAt,
-    paidAmount: total,
+    paidAmount: Math.max(0, Math.round((total - inboundRefunded) * 100) / 100),
     remainingAmount: 0,
+    refundedAmount: Math.round(inboundRefunded * 100) / 100,
     watchPurchasePrice: 0,
     watchRef: cleanWooText(inboundValue(payload, ["sku", "ref", "watchRef"])),
     // DATA-007: the source is its own field, not a custom-field string. Faz 2's
@@ -31495,8 +31524,21 @@ async function applyShopifyRefundEvent(shop, store, refund) {
     .reduce((sum, li) => sum + wooNumber(li?.subtotal, 0), 0);
   const amount = transactionTotal || lineTotal;
 
+  // The amount was computed here for years and then thrown away into a history
+  // line, so a refunded Shopify sale kept its whole revenue and its whole
+  // profit. Recorded now the same way the bank path records one: off what was
+  // paid, and on its own field, which is what the finance engine subtracts.
+  //
+  // Accumulated rather than assigned, because Shopify sends one event per
+  // refund and a part-refunded order can receive several.
+  const priorRefunded = Number(current.refundedAmount) || 0;
+  const nextRefunded = Math.round((priorRefunded + Math.abs(amount)) * 100) / 100;
   await ref.set({
     customFields: { "Shopify Status": "refunded" },
+    ...(amount ? {
+      refundedAmount: nextRefunded,
+      paidAmount: Math.max(0, Math.round(((Number(current.paidAmount) || 0) - Math.abs(amount)) * 100) / 100)
+    } : {}),
     historyLog: historyLogWithEntry(current, "Refund (Shopify)", "-", amount ? amountHistoryValue(amount) : "Refund created")
   }, { merge: true });
   return { status: "ok", created: false, nivadeskOrderId: docId, ...base };
