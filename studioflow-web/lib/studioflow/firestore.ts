@@ -207,6 +207,13 @@ export type WorkspaceSettingsOverview = {
   defaultTaxRate: number;
   defaultDeliveryTime: number;
   taxCalculationType: string;
+  /** Whether the workspace charges VAT at all, whether its prices are quoted
+   *  inclusive of it, and which of the three methods it uses. Absent on a
+   *  workspace that has not saved Financial Settings since these arrived, so
+   *  the reader supplies today's behaviour. */
+  vatRegistered: boolean;
+  pricesIncludeVat: boolean;
+  vatMethod: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
   companyNumbers: CompanyNumberSetting[];
@@ -1261,6 +1268,12 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     defaultTaxRate: numberValue(data.defaultTaxRate, 20),
     defaultDeliveryTime: numberValue(data.defaultDeliveryTime, 30),
     taxCalculationType: stringValue(data.taxCalculationType, "Revenue"),
+    // Absent until the workspace saves Financial Settings once, so each falls
+    // back to what it already does: registered, inclusive prices, and whichever
+    // method taxCalculationType named.
+    vatRegistered: booleanValue(data.vatRegistered, true),
+    pricesIncludeVat: booleanValue(data.pricesIncludeVat, true),
+    vatMethod: stringValue(data.vatMethod, "") || (stringValue(data.taxCalculationType, "Revenue") === "Profit" ? "margin" : "standard"),
     taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
     taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),
     companyNumbers: decodeCompanyNumbers(data.companyNumbersJSON),

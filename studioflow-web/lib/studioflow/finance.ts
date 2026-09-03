@@ -27,6 +27,9 @@ function engineSettings(settings: WorkspaceSettingsOverview | null | undefined) 
     feePercentage: settings.feePercentage,
     defaultTaxRate: settings.defaultTaxRate,
     taxCalculationType: settings.taxCalculationType,
+    vatRegistered: settings.vatRegistered,
+    pricesIncludeVat: settings.pricesIncludeVat,
+    vatMethod: settings.vatMethod,
     taxMilestoneEnabled: settings.taxMilestoneEnabled,
     taxMilestoneDate: settings.taxMilestoneDate
   };
