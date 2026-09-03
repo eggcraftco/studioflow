@@ -67,28 +67,33 @@ enum OrderProfit {
         }
     }
 
+    /// Every stored expense line, not only the ones a heading list still names.
+    ///
+    /// This used to sum by the resolved heading list, so an amount whose
+    /// heading had been renamed or removed vanished from the total while its
+    /// row still showed on the card. The engine counts what is stored and
+    /// reports the unlabelled ones separately.
     static func customExpenseTotal(for siparis: Siparis, expenseItemsJSON: String, currency: String) -> Double {
-        customFinancialAmount(
-            for: siparis,
-            prefix: "financialExpense::",
-            items: orderFinancialItems(for: siparis, key: "orderExpenseItemsJSON",
-                                       workspace: decodeFinancialItems(from: expenseItemsJSON)),
-            currency: currency
-        )
+        siparis.finance().otherExpenses
     }
 
+    /// The purchase price, whatever the card settings say.
+    ///
+    /// `showBaseCost` used to make this return zero, so hiding a figure on the
+    /// card quietly raised the profit the Dashboard reported. The product
+    /// decision is explicit: what a screen shows and what the accounts say are
+    /// separate. The parameter stays so the call sites need not change.
     static func baseCostTotal(for siparis: Siparis, showBaseCost: Bool) -> Double {
-        showBaseCost ? siparis.watchPurchasePrice : 0
+        siparis.finance().directCost
     }
 
-    /// The number the Dashboard calls Net Profit.
+    /// Net Profit — now the same number on every screen and every platform.
+    ///
+    /// The engine takes off the VAT, the purchase price, the platform fee, the
+    /// shipping, the other expenses and the refunds, which is what the product
+    /// decision names. The refund was the one nothing deducted.
     static func adjustedNetProfit(for siparis: Siparis, showBaseCost: Bool,
                                   expenseItemsJSON: String, currency: String) -> Double {
-        siparis.salesTotal
-            - baseCostTotal(for: siparis, showBaseCost: showBaseCost)
-            - customExpenseTotal(for: siparis, expenseItemsJSON: expenseItemsJSON, currency: currency)
-            - siparis.paymentFee
-            - siparis.deliveryCost
-            - siparis.taxAmount
+        siparis.finance().netProfit
     }
 }

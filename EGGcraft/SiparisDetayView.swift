@@ -10953,13 +10953,16 @@ struct SiparisDetayView: View {
         }
     }
 
-    private var customExpenseTotal: Double {
-        customFinancialTotal(prefix: "financialExpense::", items: orderExpenseItems)
+    /// This screen's figures, from the one definition there is. The rows below
+    /// read this rather than each working the arithmetic out again, which is
+    /// how the card came to disagree with the Dashboard and with the web.
+    private var financeBlock: NDFinanceEngine.Block {
+        siparis.finance()
     }
 
-    private var customRemainingTotal: Double {
-        customFinancialTotal(prefix: "financialRemaining::", items: orderRemainingItems)
-    }
+    private var customExpenseTotal: Double { financeBlock.otherExpenses }
+
+    private var customRemainingTotal: Double { financeBlock.receivablesTotal }
 
     private var outstandingPaymentTotal: Double {
         max(0, siparis.remainingAmount) + max(0, customRemainingTotal)
@@ -11346,14 +11349,11 @@ struct SiparisDetayView: View {
         .frame(minWidth: 340)
     }
 
-    private var baseCostTotal: Double {
-        financialShowBaseCost ? siparis.watchPurchasePrice : 0
-    }
+    /// The purchase price, whether or not the card shows it. Hiding the figure
+    /// used to take it out of the profit as well.
+    private var baseCostTotal: Double { financeBlock.directCost }
 
-    private var financialFinalProfit: Double {
-        let salesTotal = siparis.salesTotal
-        return salesTotal - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee - siparis.taxAmount
-    }
+    private var financialFinalProfit: Double { financeBlock.netProfit }
 
     // Estimated Corporation Tax on the profit that remains after VAT and all costs.
     // Rounded to 2 dp at calculation time so every platform shows the same pennies
@@ -12842,18 +12842,15 @@ struct SiparisDetayView: View {
             }
         }
 
-        let toplamSatis = siparis.salesTotal
-
-        if toplamSatis >= 0 {
-            siparis.paymentFee = nvRoundMoney((toplamSatis * feePercentage) / 100.0)
-        }
-
-        if siparis.taxType == "Revenue" {
-            siparis.taxAmount = nvRoundMoney(kdvBrutten(siparis.taxRate, toplamSatis))
-        } else {
-            let brutKar = toplamSatis - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee
-            siparis.taxAmount = brutKar > 0 ? nvRoundMoney(kdvBrutten(siparis.taxRate, brutKar)) : 0
-        }
+        // The stored fee and VAT come from the engine, so the two figures the
+        // PDF renderers and the reports still read agree with the block the
+        // server stamps. The margin base changed here: it is the selling price
+        // less the purchase price alone, where this used to take the fee, the
+        // shipping and the expenses off it too and so charged less VAT than the
+        // scheme allows.
+        let block = siparis.finance()
+        siparis.paymentFee = block.platformFee
+        siparis.taxAmount = block.vatDue
     }
     private func kargoSayfasiniAc(firma: String, kod: String) { let tKod = kod.trimmingCharacters(in: .whitespacesAndNewlines); var url = ""; switch firma { case "DHL": url = "https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=\(tKod)"; case "Royal Mail": url = "https://www.royalmail.com/track-your-item#/tracking-results/\(tKod)"; case "FedEx": url = "https://www.fedex.com/fedextrack/?trknbr=\(tKod)"; case "UPS": url = "https://www.ups.com/track?tracknum=\(tKod)"; default: url = "https://www.17track.net/en/track-details?nums=\(tKod)" }; if let u = URL(string: url) { openURL(u) } }
     private func kalanGunSayisi(siparis: Siparis) -> Int { let cal = Calendar.current; guard let t = cal.date(byAdding: .day, value: siparis.deliveryTime, to: siparis.paymentDate) else { return 0 }; return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: t)).day ?? 0 }

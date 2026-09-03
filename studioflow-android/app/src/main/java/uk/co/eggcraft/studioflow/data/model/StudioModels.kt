@@ -9,6 +9,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.ceil
 import uk.co.eggcraft.studioflow.util.parseStoredAmount
+import uk.co.eggcraft.studioflow.finance.FinanceEngine
 
 enum class StudioBillingPlan(
     val raw: String,
@@ -1357,20 +1358,45 @@ data class StudioOrder(
     // financialRemaining::<title>). Counts toward the sales total exactly like
     // remainingAmount, on every platform.
     val customRemainingTotal: Double
-        get() = customFields.entries.sumOf { (key, raw) ->
-            if (key.startsWith("financialRemaining::")) parseStoredAmount(raw) ?: 0.0 else 0.0
-        }
+        get() = FinanceEngine.customLineTotal(
+            customFields,
+            FinanceEngine.REMAINING_PREFIX,
+            "orderRemainingItemsJSON"
+        ).first
 
     val orderValue: Double get() = paidAmount + remainingAmount + customRemainingTotal
 
     val hasLineItems: Boolean get() = lineItems.isNotEmpty()
     val lineItemsTotal: Double get() = lineItems.sumOf { it.lineTotal }
 
-    val netProfit: Double get() = orderValue - watchPurchasePrice - paymentFee - deliveryCost - taxAmount
+    // What this order earned, by the one definition there is. This never
+    // counted the custom expense lines at all, so the figure on Home was bigger
+    // than the one on the Dashboard for the same order, and both disagreed with
+    // the Mac and the web. It reads the engine now, which also takes off the
+    // refund that nothing used to deduct.
+    val netProfit: Double get() = finance().netProfit
 
-    // The toolbar strip shows margin, not net: VAT and extra spending stay in.
-    // Web and Mac compute it the same way, so all three toolbars agree.
-    val grossMargin: Double get() = orderValue - watchPurchasePrice - paymentFee - deliveryCost
+    // Revenue less the purchase price. The platform fee and the shipping are
+    // not part of a gross margin, whatever the old toolbar figure did.
+    val grossMargin: Double get() = finance().grossMargin
+
+    // Every money figure for this order, by the one definition there is.
+    fun finance(settings: FinanceEngine.Settings = FinanceEngine.Settings()): FinanceEngine.Block =
+        FinanceEngine.compute(
+            FinanceEngine.Input(
+                paidAmount = paidAmount,
+                remainingAmount = remainingAmount,
+                watchPurchasePrice = watchPurchasePrice,
+                deliveryCost = deliveryCost,
+                refundedAmount = refundedAmount,
+                taxRate = taxRate,
+                taxType = taxType,
+                lineItemTotals = lineItems.map { it.lineTotal },
+                customFields = customFields
+            ),
+            settings,
+            paymentDate.time
+        )
 
     val remainingDays: Int
         get() {

@@ -363,19 +363,28 @@ struct Siparis: Identifiable, Codable {
     // financialRemaining::<title>). Counts toward the sales total exactly like
     // remainingAmount, on every platform.
     var customRemainingTotal: Double {
-        (customFields ?? [:]).reduce(0.0) { acc, entry in
-            guard entry.key.hasPrefix("financialRemaining::") else { return acc }
-            return acc + (nvParseStoredAmount(entry.value) ?? 0)
-        }
+        NDFinanceEngine.customLineTotal(
+            customFields ?? [:],
+            prefix: NDFinanceEngine.remainingPrefix,
+            headingKey: "orderRemainingItemsJSON"
+        ).total
     }
 
     // Order value: classic paid+remaining plus custom receivables.
     var salesTotal: Double { paidAmount + remainingAmount + customRemainingTotal }
 
     // Computed net profit
-    var netKar: Double {
-        return salesTotal - watchPurchasePrice - paymentFee - deliveryCost
-    }
+    /// What this order earned, by the one definition there is.
+    ///
+    /// This used to stop after the fee and the shipping — it knew nothing about
+    /// the extra spending or the VAT — while the Dashboard took both off. So
+    /// anything reporting `netKar` as profit reported a bigger number than the
+    /// Dashboard did for the same orders, and both disagreed with the web.
+    var netKar: Double { finance().netProfit }
+
+    /// Revenue less the purchase price. The platform fee and the shipping are
+    /// not part of a gross margin, whatever the old toolbar figure did.
+    var brutMarj: Double { finance().grossMargin }
 
     // Itemized billing helpers. When the order has line items their gross sum is the order
     // total (the user chose "items drive the total"); otherwise the classic paid+remaining total.
