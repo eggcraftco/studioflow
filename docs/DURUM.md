@@ -2103,3 +2103,56 @@ kapısını açtı, kabul üyeliği yazdı ve kişi çalışma alanının içind
 
 **KALAN:** native (Mac/iPhone/Android) davet arayüzü; sunucu + kurallar + web deploy'u kullanıcının
 sözünü bekliyor.
+
+---
+
+## Entegrasyon denetimi — 32 iddianın 17'si kapandı (3-4 Eylül 2026)
+
+**Önce doğrulama.** Rapor kendi içinde bir alt-denetiminin yanlış çıktığını söylüyordu, o yüzden
+düzeltmeye geçmeden önce 32 başlığın her biri kaynaktan doğrulatıldı: madde başına bir doğrulayıcı,
+ayakta kalanlara iki ayrı açıdan (doğruluk / gerçek etki) birer şüpheci. **31'i ayakta, 1'i düştü**
+(#26 Cloudflare sertifikası — koddaki "placeholder" kontrolü 27 Ağustos'tan kalma bir kalıntıymış).
+
+**Kapanan 17:** #1 OAuth yönlendirme · #2 MCP jeton iptali · #3 MCP izinleri · #5 kimliksiz istek ·
+#8 mağaza iadeleri · #9 Etsy iptali · #10 komisyonlar · #11 PayPal çifte sayım · #12 Pandle/PayPal ·
+#13 asistan banka rakamı · #14 pano kanalları · #17 anahtar rotasyonu · #22 iletişim tercihi ·
+#23 kargo gaspı · #24 kargo süpürmesi · #25 paylaşım bağlantıları · #27 Apple sıralama · #32 park
+edilmiş veri.
+
+**En önemli üçü:**
+
+*#1* — `chatgptOAuthRegister` Firestore'a hiçbir şey yazmıyordu, yani karşılaştırılacak liste yoktu;
+`approve` hedefi POST gövdesinden alıp kodu oraya yolluyordu; token adımı da saldırganın kendi
+yazdığı kopyayla karşılaştırdığı için hep geçiyordu. Emülatörde kapıyı kaldırıp koştuğumda kurban
+gerçek nivadesk.app onay sayfasına `redirect_uri=https://evil.example/steal` ile gidiyordu. Artık
+kayıt gerçekten yazılıyor, eşleşme kanonik biçimde **tam**, ve düz `http` yalnız loopback'te.
+
+*#8* — beş kanalda iade kaydı hiç tutulmuyordu. Banka tarafı aynı aritmetiği aylardır doğru
+yapıyordu; şekil oradan alındı. "Kalan" hâlâ **ödenene** göre ölçülüyor, yoksa kapanmış bir iade
+müşteriye tekrar borç yazardı.
+
+*#10* — **motordan başlandı.** İki ajan bunu bağlayıcıdan başlayarak denedi, ikisi de geri alındı:
+motor `paymentFee` alanını hiç okumuyordu, yani yazılan gerçek komisyon hiçbir kârı değiştirmiyor,
+sadece aynı maliyetin ikinci ve çelişen tanımını üretiyordu. `platformFeeKnown` bayrağı gerçek sıfırı
+boş alandan ayırıyor; motor sürümü **3**, süpürme tüm siparişleri yeniden damgalıyor; dört ayna 23
+vektörde hemfikir; ücreti ezen dört yazıcı susturuldu; hiç bilmediği bir sayıyı yazan beş bağlayıcı
+`paymentFee: 0` yazmayı bıraktı.
+
+**Ajan işinin üç grubu geri alındı** — hepsi incelemeyle: komisyonlar (Square ücreti izin listesinde
+olmadığı için hiç yazılmıyordu, banka kopar-bağla eklenmemiş ücreti düşüyordu, PayPal testleri kodu
+kapattığımda bile geçiyordu), Etsy ücret+iptal (her `unsupported` sebebini serbest bırakıyor, ödenmiş
+siparişi ödenmemiş yazıyordu), bağlayıcı sahipliği (reddin sebebi hiçbir ekrana ulaşmıyor, zaten
+çift-bağlı workspace'in iki tarafı birden reddediliyordu).
+
+**İki test dersi:** kaynak-şekli testleri `if (false)` sarmalamasına karşı zayıf — kargo testlerim üç
+bozmadan ikisini kaçırdı, kararları saf işlevlere çıkarıp gerçek davranışı test ettim. Ve fikstür
+zorlamıyorsa test yeşil kalır — Etsy iptal testim "iptal ama hâlâ ödenmiş" fikstürüyle parayı hiç
+oynatmıyordu.
+
+**Canlıda:** kurallar + 58 fonksiyon (finans motoru, OAuth/MCP, kargo, entegrasyon webhook'ları,
+sipariş para yazıcıları, muhasebe, Pandle, Apple) + web Round 159.
+
+**KALAN:** #4 düz metin anahtarlar · #6 OAuth testleri (üçü yazıldı, kısmen) · #15 Etsy kotası ·
+#16 aynı mağaza iki workspace · #18 QBO webhook rozeti · #19 banka bağlantısı sessizliği ·
+#20 410 uçları · #21 muhasebe defter yazımı · #28 bağlayıcı denetim kaydı · #29 Woo adres kontrolü ·
+#30 genel webhook motoru · #31 kaldırılmış Shopify rozeti · #7 banka planı sunucu kapısı.
