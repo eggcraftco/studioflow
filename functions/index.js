@@ -266,6 +266,88 @@ function orderDocRef(orderId) {
   return admin.firestore().collection("siparisler").doc(orderId);
 }
 
+/**
+ * Claims the global row a courier webhook uses to find its way back to an order.
+ *
+ * The table is keyed by the tracking number alone, with no workspace in the key,
+ * and the write was unconditional: whoever registered a number LAST owned the
+ * routing. So another workspace that knew a number — read off a parcel, guessed
+ * from a sequence — could point it at themselves, and from then on the real
+ * owner's order stopped updating while the shipment's progress appeared in
+ * somebody else's workspace.
+ *
+ * A number can still move, because it legitimately does: an order is deleted and
+ * re-entered, a business moves workspace, a courier reuses a number a year
+ * later. What it cannot do is move while the current holder is still using it.
+ * The transaction is what makes that safe — two registrations racing would
+ * otherwise both read "free" and both write.
+ */
+function trackingClaimDecision({ held, companyId, trackingNumber, previousOrder }) {
+  const heldCompany = String((held && held.companyId) || "").trim();
+  if (!held || !heldCompany || heldCompany === String(companyId || "").trim()) {
+    return { claim: true, reason: heldCompany ? "own" : "free" };
+  }
+  // Somebody else holds it. Only take it if they have stopped using it: an
+  // order that no longer exists, is in the bin, or has had a different number
+  // put on it has let this one go.
+  const order = previousOrder || null;
+  if (!order || !order.exists) return { claim: true, reason: "holder_order_gone" };
+  const data = order.data() || {};
+  if (data.isDeleted === true) return { claim: true, reason: "holder_order_binned" };
+  if (cleanTrackingNumber(data.trackingNumber) !== cleanTrackingNumber(trackingNumber)) {
+    return { claim: true, reason: "holder_moved_on" };
+  }
+  return { claim: false, reason: "in_use", heldBy: heldCompany };
+}
+
+async function claimTrackingLookup({ trackingNumber, companyId, orderId }) {
+  const ref = lookupDocRef(trackingNumber);
+  const database = admin.firestore();
+  return database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const held = snapshot.exists ? snapshot.data() || {} : null;
+    const heldCompany = String(held?.companyId || "").trim();
+    const heldOrder = String(held?.orderId || "").trim();
+
+    // Firestore refuses a transaction that reads after it has written, so the
+    // holder's order is fetched before anything is decided.
+    const previousOrder = held && heldCompany && heldCompany !== companyId && heldOrder
+      ? await transaction.get(orderDocRef(heldOrder))
+      : null;
+
+    const decision = trackingClaimDecision({ held, companyId, trackingNumber, previousOrder });
+    if (!decision.claim) {
+      console.warn("trackingLookup claim refused: number already routed elsewhere", {
+        trackingNumber, companyId, heldCompany
+      });
+      return { claimed: false, heldBy: heldCompany };
+    }
+
+    transaction.set(ref, {
+      companyId,
+      orderId,
+      trackingNumber,
+      claimedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { claimed: true, heldBy: companyId, reason: decision.reason };
+  });
+}
+
+/**
+ * Where the next sweep run starts.
+ *
+ * A short page means the end of the collection was reached, so the next run
+ * begins again rather than sitting past the end forever. A full page hands back
+ * the last id it read — including when every row on it was skipped as already
+ * delivered, or a page of delivered parcels would pin the cursor in place and
+ * reproduce the original bug in a new costume.
+ */
+function nextSweepCursor(docIds, pageSize) {
+  const ids = Array.isArray(docIds) ? docIds : [];
+  if (ids.length < Number(pageSize)) return "";
+  return String(ids[ids.length - 1] || "");
+}
+
 function lookupDocRef(trackingNumber) {
   return admin.firestore().collection("trackingLookup").doc(cleanTrackingNumber(trackingNumber));
 }
@@ -18556,7 +18638,7 @@ exports.registerTracking = onCall({ secrets: [TRACK17_TOKEN, ROYALMAIL_CLIENT_ID
     }
 
     if (trackingNumber) {
-      await lookupDocRef(trackingNumber).set({ companyId, orderId, trackingNumber }, { merge: true });
+      await claimTrackingLookup({ trackingNumber, companyId, orderId });
     }
 
     const result = await refreshTrackingCore({ companyId, orderId, trackingNumber, courier, language });
@@ -18632,11 +18714,39 @@ exports.scheduledTrackingRefresh = onSchedule({
   region: "europe-west2",
   secrets: [TRACK17_TOKEN, ROYALMAIL_CLIENT_ID, ROYALMAIL_CLIENT_SECRET]
 }, async () => {
-  const snap = await admin.firestore()
+  // Eighty a run, but a DIFFERENT eighty each time.
+  //
+  // The query had no ordering and no cursor, so every hourly run read the same
+  // first page: once the platform held more than eighty 17TRACK rows the rest
+  // were never refreshed again, and the ones that were already delivered sat at
+  // the front of the page eating slots forever. Nobody would see that — the job
+  // reports success either way.
+  //
+  // Paged by document id, which needs no new index (the automatic index on
+  // `provider` already carries __name__ as its tiebreaker), with the cursor in
+  // one small document. The same shape as the finance sweep, for the same
+  // reason. Running off the end wraps to the start, so the whole set is walked.
+  const cursorRef = admin.firestore().collection("trackingRefreshSweeps").doc("state");
+  const cursorSnap = await cursorRef.get();
+  const startAfterId = String(cursorSnap.exists ? cursorSnap.data()?.cursorDocId || "" : "");
+
+  let query = admin.firestore()
     .collectionGroup("trackingResults")
     .where("provider", "==", "17TRACK")
-    .limit(80)
-    .get();
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(80);
+  if (startAfterId) query = query.startAfter(startAfterId);
+
+  let snap = await query.get();
+  if (snap.empty && startAfterId) {
+    // Past the end: start again from the beginning rather than idling forever.
+    snap = await admin.firestore()
+      .collectionGroup("trackingResults")
+      .where("provider", "==", "17TRACK")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(80)
+      .get();
+  }
 
   let checked = 0;
   let updated = 0;
@@ -18697,7 +18807,15 @@ exports.scheduledTrackingRefresh = onSchedule({
     }
   }
 
-  console.log("scheduledTrackingRefresh complete", { checked, updated, delivered });
+  // Where the next run picks up. Written even when nothing needed refreshing,
+  // or the cursor would never move past a page of delivered parcels.
+  const lastId = snap.docs.length ? snap.docs[snap.docs.length - 1].id : "";
+  await cursorRef.set({
+    cursorDocId: nextSweepCursor(snap.docs.map((doc) => doc.id), 80),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  console.log("scheduledTrackingRefresh complete", { checked, updated, delivered, read: snap.size, cursorDocId: lastId });
 });
 
 function parseSwiftDate(value) {
@@ -19752,6 +19870,10 @@ exports._billingPlanFromCompanyData = billingPlanFromCompanyData;
 // is written. See test/qa/no-mail-from-tests.mjs.
 exports._nvMailTransport = nvMailTransport;
 exports._nvMessagingProvider = activeMessagingProvider;
+// Exported for functions/test/qa/tracking-ownership.test.js: who owns a tracking
+// number, and where the hourly sweep resumes.
+exports._trackingClaimDecision = trackingClaimDecision;
+exports._nextSweepCursor = nextSweepCursor;
 // Exported for functions/test/qa/mcp-permissions.test.js. What the assistant is
 // allowed to see and call is worth testing directly rather than by reading the
 // source and hoping.
