@@ -1963,3 +1963,53 @@ sessizce atlıyordu, artık süslü parantez eşleyerek okuyor.
 (`financeSweep finished { engineVersion: 2 }`).
 
 **Canlıda:** web Round 157. **KALAN:** native mağaza sürümleri.
+
+---
+
+## Quick Create — dört platformda, inceleme sonrası (3 Eylül 2026)
+
+**Karar §3 uygulandı.** "+ Add Project" artık önce küçük bir form açıyor; **Create'e basılana
+kadar hiçbir şey yazılmıyor**. Müşteri ana alan ama zorunlu değil (kullanıcı kararı: müşterisiz de
+açılabilsin). Proje adı boş bırakılırsa sunucu `John Smith · Project #1042` — müşteri yoksa
+`Project #1042` — üretiyor. Oluşturduktan sonra "Project created · Undo": beş dakika içinde,
+yalnızca oluşturan kişi, yalnızca dokunulmamış siparişi geri alabiliyor.
+
+**Proje numarası (kullanıcı kararı).** Her projeye oluşturulduğu anda benzersiz ve değişmeyen bir
+numara veriliyor, ayrı alan olarak saklanıyor (`projectNumber`), sayaç workspace'te
+(`projectCounter`). Bu turda sadece otomatik proje adında kullanılıyor; arama/filtre/faturaya basma
+sonraki faz. **Numara geri verilmiyor** — geri alma bile sayacı düşürmüyor, çünkü sayaç sipariş
+sayısını değil verilmiş numaraları sayıyor. Sayaç ilk kullanımda mevcut sipariş sayısından
+tohumlanıyor, sonra tohum yok sayılıyor.
+
+**İnceleme on bulgu buldu, hepsi kapandı.**
+
+*Sunucu:* Firestore iptal edilen bir işlemin **aynı closure'ını yeniden çağırıyor**. İlk sürüm adı
+`if (!projectName)` ile koruyordu, yani ikinci deneme birinci denemenin numarasını adın içinde
+taşıyıp yanına yenisini basıyordu — kendine #302 diyen bir #303 siparişi, hem de faturaların ve
+muhasebe bağlantılarının okuduğu metinde. Artık her değer her denemede sıfırdan türetiliyor ve
+dışarıya ancak yazımdan sonra yayınlanıyor. Ayrıca işlem içindeki **her okuma her yazımdan önce**
+olmak zorunda; bu sıra `index.js` kaynağını okuyan bir testle çivilendi.
+
+*Mac/iPhone:* Çevrimdışı oluşturulan proje yalnızca kuyrukta bir işken cihazdaki başka yazma
+yolları o dokümana doğrudan uzanabiliyordu — Firestore SDK'sı dokümanı kendi kuyruğundan yaratıyor,
+sonra tekrar oynatılan create `already-exists` ile ölüyordu; hem de numarası hiç verilmemiş bir
+doküman üzerinde. Artık **doküman başına tek ray**: create kuyruktayken düzenlemeler o işin içine
+katlanıyor, `already-exists` cevabı işi save'e çeviriyor (kuyruk başını sonsuza kadar tıkamak
+yerine), ve bozuk bir iş diğerlerini durdurmuyor. Geri alma işi gerçekten kuyruktan çıkarıyor;
+havadaysa sunucu onaylar onaylamaz çöp kutusuna gidiyor. **Silme de aynı sebeple düzeltildi:** yumuşak
+silme yaması var olmayan dokümana yapılıyordu, düşüyordu ve proje bağlantı gelince geri geliyordu.
+
+*Android:* Reddedilen bir create diyaloğu kapatıp yazılan her şeyi götürüyordu. Form artık cevabı
+bekliyor ve reddi sunucunun kendi cümlesiyle, alanlar yerinde dururken gösteriyor.
+
+*Web:* Yüklü sayfanın dışındaki bir projeye derin bağlantı artık çözülüyor; Add'e ikinci kez basmak
+açık formu silmiyor; takvimden oluşturulan proje orada seçiliyor, kişi sipariş listesine atılmıyor.
+
+**Teslim tarihi tabanı.** Sipariş kendi teslim tarihini taşımıyor: ödeme tarihinden sonraki gün
+sayısını taşıyor ve **sıfır zaten "teslim tarihi yok" demek**. Yani şemanın ifade edebildiği en
+erken tarih yarın, ve bugün seçilince sessizce yarına kayıyordu. Üç seçici de artık bugünü
+sunmuyor — görünen bir taban, kaydettikten sonra kayan bir tarihten iyidir. Bugüne ev bulmak
+siparişe gerçek bir teslim tarihi alanı eklemek demek; o ayrı bir iş.
+
+**Canlıda:** `createWebOrder`, `createSwiftOrder`, `saveSwiftOrder`, `undoOrderCreate` (yeni),
+`purgeWebOrders`. **KALAN:** web Round'u (kullanıcının sözünü bekliyor) ve native mağaza sürümleri.
