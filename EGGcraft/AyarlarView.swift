@@ -5943,84 +5943,127 @@ struct AyarlarView: View {
         }
     }
 
+    /// Financial Settings — currency and defaults side by side, the tax basis as
+    /// two choice cards next to a live calculation preview, dates and corporation
+    /// tax beside the workspace summary, and the existing-order tools set apart.
     private var finansalAyar: some View {
-        SettingsCard(title: t("Financial Settings", lang: seciliDil), iconName: "percent") {
-            VStack(alignment: .leading, spacing: 18) {
-                financialSettingsSectionTitle(t("General", lang: seciliDil))
+        VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
+            ndTwoColumns(financialCurrencyCard, financialDefaultsCard)
+            financialTaxCard
+            ndTwoColumns(financialDatesCard, financialSummaryCard)
+            financialToolsCard
+            Text(t("Your workspace is shared with other team members.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .padding(.horizontal, 4)
+        }
+    }
 
-                if isPhoneLayout {
-                    HStack(spacing: 12) {
-                        Text(t("Currency Symbol", lang: seciliDil))
-                            .font(.system(size: 13))
-                            .foregroundColor(.primary.opacity(0.82))
-                        Spacer(minLength: 8)
-                        Picker("", selection: $seciliParaBirimi) {
-                            ForEach(siraliParaBirimleri, id: \.self) { sembol in
-                                Text(sembol).tag(sembol)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .tint(.blue)
-                    }
-                } else {
-                    financialSettingsRow(t("Currency Symbol", lang: seciliDil)) {
-                        Picker("", selection: $seciliParaBirimi) {
-                            ForEach(siraliParaBirimleri, id: \.self) { sembol in
-                                Text(sembol).tag(sembol)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .frame(width: 180)
-                        .financialSettingsControlStyle()
+    /// Two cards side by side on Mac, stacked on the phone.
+    @ViewBuilder
+    private func ndTwoColumns<A: View, B: View>(_ first: A, _ second: B) -> some View {
+        if isPhoneLayout {
+            first
+            second
+        } else {
+            HStack(alignment: .top, spacing: NDSettings.sectionGap) {
+                first.frame(maxWidth: .infinity)
+                second.frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// A persistent label above its control.
+    private func ndField<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(NDSettings.text(colorScheme))
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var financialCurrencyCard: some View {
+        NDSettingsSurface(spacing: 14) {
+            NDSettingsCardHead(icon: "sterlingsign.circle.fill", title: t("Currency & formatting", lang: seciliDil))
+            ndField(t("Currency", lang: seciliDil)) {
+                Picker("", selection: $seciliParaBirimi) {
+                    ForEach(siraliParaBirimleri, id: \.self) { sembol in
+                        Text(paraBirimleri[sembol] ?? sembol).tag(sembol)
                     }
                 }
-
-                financialSettingsRow(t("Decimal Separator", lang: seciliDil)) {
-                    Picker("", selection: $seciliOndalik) {
-                        Text(t("Dot (.)", lang: seciliDil)).tag(".")
-                        Text(t("Comma (,)", lang: seciliDil)).tag(",")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: isPhoneLayout ? .infinity : 180)
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: isPhoneLayout ? .infinity : 220, alignment: .leading)
+            }
+            ndField(t("Decimal Separator", lang: seciliDil)) {
+                Picker("", selection: $seciliOndalik) {
+                    Text(t("Dot (.)", lang: seciliDil)).tag(".")
+                    Text(t("Comma (,)", lang: seciliDil)).tag(",")
                 }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: isPhoneLayout ? .infinity : 220)
+            }
+            Text(t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.", lang: seciliDil))
+                .font(.system(size: 11.5))
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
-                Text(t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.", lang: seciliDil))
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                financialSettingsRow(t("Avg. Platform Fee (%)", lang: seciliDil)) {
-                    HStack(spacing: 8) {
-                        TextField("3.0", value: $feePercentage, format: .number)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.primary)
-                        Text("%")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.secondary)
-                    }
-                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 180)
+    private var financialDefaultsCard: some View {
+        NDSettingsSurface(spacing: 14) {
+            NDSettingsCardHead(icon: "doc.badge.plus", title: t("Defaults for new orders", lang: seciliDil))
+            ndField(t("Avg. Platform Fee (%)", lang: seciliDil)) {
+                HStack(spacing: 8) {
+                    TextField("3.0", value: $feePercentage, format: .number)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.primary)
+                    Text("%")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.secondary)
                 }
+                .financialSettingsControlStyle()
+            }
+            ndField(t("Default delivery time for new orders (days)", lang: seciliDil)) {
+                HStack(spacing: 8) {
+                    TextField("30", value: $defaultDeliveryTime, format: .number)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.primary)
+                    Text(t("days", lang: seciliDil))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .financialSettingsControlStyle()
+            }
+            Text(t("Applied only to new orders after saving.", lang: seciliDil))
+                .font(.system(size: 11.5))
+                .foregroundColor(NDSettings.muted(colorScheme))
+        }
+    }
 
-                financialSettingsSectionTitle(t("Tax / VAT Settings", lang: seciliDil))
-
-                financialSettingsRow(t("Rule 1 (Revenue)", lang: seciliDil)) {
+    private var financialTaxCard: some View {
+        NDSettingsSurface(spacing: 16) {
+            NDSettingsCardHead(icon: "percent", title: t("Tax calculation", lang: seciliDil))
+            let choices = VStack(alignment: .leading, spacing: 10) {
+                NDChoiceCard(title: taxRuleNameRevenue.isEmpty ? t("Revenue", lang: seciliDil) : taxRuleNameRevenue, description: t("Prices include VAT. VAT is taken out of the customer price, not added on top.", lang: seciliDil), selected: taxCalculationType != "Profit") { taxCalculationType = "Revenue" }
+                NDChoiceCard(title: taxRuleNameProfit.isEmpty ? t("Profit", lang: seciliDil) : taxRuleNameProfit, description: t("VAT is due on the eligible margin, which already contains VAT.", lang: seciliDil), selected: taxCalculationType == "Profit") { taxCalculationType = "Profit" }
+                ndField(t("Rule 1 (Revenue)", lang: seciliDil)) {
                     TextField("", text: $taxRuleNameRevenue)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
-                        .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420)
+                        .financialSettingsControlStyle()
                 }
-
-                financialSettingsRow(t("Rule 2 (Profit)", lang: seciliDil)) {
+                ndField(t("Rule 2 (Profit)", lang: seciliDil)) {
                     TextField("", text: $taxRuleNameProfit)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
-                        .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420)
+                        .financialSettingsControlStyle()
                 }
-
-                financialSettingsRow(t("Default VAT Rate (%)", lang: seciliDil)) {
+                ndField(t("Default VAT Rate (%)", lang: seciliDil)) {
                     HStack(spacing: 8) {
                         TextField("20.0", value: $defaultTaxRate, format: .number)
                             .textFieldStyle(.plain)
@@ -6030,112 +6073,156 @@ struct AyarlarView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.secondary)
                     }
-                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420, accent: studioWarningOrange)
+                    .financialSettingsControlStyle()
                 }
+            }
+            if isPhoneLayout {
+                choices
+                financialCalculationPreview
+            } else {
+                HStack(alignment: .top, spacing: 16) {
+                    choices.frame(maxWidth: .infinity)
+                    financialCalculationPreview.frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
 
-                financialSettingsRow(t("Default delivery time for new orders (days)", lang: seciliDil)) {
+    /// What the current rule does to a £1,000 customer price — display only.
+    private var financialCalculationPreview: some View {
+        let price = 1000.0
+        let rate = max(0, min(100, defaultTaxRate))
+        let vat = price - price / (1 + rate / 100)
+        let basis = taxCalculationType == "Profit" ? (taxRuleNameProfit.isEmpty ? t("Profit", lang: seciliDil) : taxRuleNameProfit) : (taxRuleNameRevenue.isEmpty ? t("Revenue", lang: seciliDil) : taxRuleNameRevenue)
+        let line: (String, String) -> AnyView = { label, value in
+            AnyView(HStack(alignment: .firstTextBaseline) {
+                Text(label).font(.system(size: 12.5)).foregroundColor(NDSettings.muted(colorScheme))
+                Spacer(minLength: 8)
+                Text(value).font(.system(size: 12.5, weight: .semibold)).foregroundColor(NDSettings.text(colorScheme)).multilineTextAlignment(.trailing)
+            })
+        }
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(t("Calculation preview", lang: seciliDil).uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .tracking(0.6)
+                .foregroundColor(NDSettings.muted(colorScheme))
+            Text("\(ndMoney(price, symbol: seciliParaBirimi)) \(t("customer price", lang: seciliDil))")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(NDSettings.text(colorScheme))
+            line(t("Tax basis", lang: seciliDil), basis)
+            line(t("VAT rate", lang: seciliDil), String(format: "%g%%", rate))
+            line(t("VAT included", lang: seciliDil), ndMoney(vat, symbol: seciliParaBirimi))
+            line(t("Net revenue", lang: seciliDil), ndMoney(price - vat, symbol: seciliParaBirimi))
+            Text(t("NivaDesk does not add VAT on top at invoice time.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(NDSettings.panel(colorScheme)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+    }
+
+    private var financialDatesCard: some View {
+        NDSettingsSurface(spacing: 14) {
+            NDSettingsCardHead(icon: "calendar.badge.clock", title: t("Effective dates & corporation tax", lang: seciliDil))
+            Toggle(isOn: $taxMilestoneEnabled) {
+                Text(t("Use Tax Transition Date", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(NDSettings.text(colorScheme))
+            }
+            .tint(NDSettings.accent)
+            if taxMilestoneEnabled {
+                ndField(t("VAT Registration Date", lang: seciliDil)) {
+                    DatePicker("", selection: Binding(get: { Date(timeIntervalSince1970: taxMilestoneDate) }, set: { taxMilestoneDate = $0.timeIntervalSince1970 }), displayedComponents: .date)
+                        .labelsHidden()
+                }
+            }
+            Divider().overlay(NDSettings.border(colorScheme))
+            Toggle(isOn: $corporationTaxEnabled) {
+                Text(t("Enable Corporation Tax", lang: seciliDil))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(NDSettings.text(colorScheme))
+            }
+            .tint(NDSettings.accent)
+            if corporationTaxEnabled {
+                ndField(t("Corporation Tax Rate (%)", lang: seciliDil)) {
                     HStack(spacing: 8) {
-                        TextField("30", value: $defaultDeliveryTime, format: .number)
+                        TextField("19.0", value: $corporationTaxRate, format: .number)
                             .textFieldStyle(.plain)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.primary)
-                        Text(t("days", lang: seciliDil))
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.secondary)
-                    }
-                    .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420, accent: studioWarningOrange)
-                }
-
-                financialSettingsRow(t("Calculate Tax On", lang: seciliDil)) {
-                    Picker("", selection: $taxCalculationType) {
-                        Text(taxRuleNameRevenue).tag("Revenue")
-                        Text(taxRuleNameProfit).tag("Profit")
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .frame(maxWidth: isPhoneLayout ? .infinity : 420)
-                    .financialSettingsControlStyle()
-                }
-
-                financialSettingsRow(t("Use Tax Transition Date", lang: seciliDil)) {
-                    Toggle(t("Use Tax Transition Date", lang: seciliDil), isOn: $taxMilestoneEnabled)
-                        .labelsHidden()
-                        .tint(.blue)
-                }
-
-                if taxMilestoneEnabled {
-                    financialSettingsRow(t("VAT Registration Date", lang: seciliDil)) {
-                        DatePicker("", selection: Binding(get: { Date(timeIntervalSince1970: taxMilestoneDate) }, set: { taxMilestoneDate = $0.timeIntervalSince1970 }), displayedComponents: .date)
-                            .labelsHidden()
-                    }
-                }
-
-                Divider().background(Color.primary.opacity(0.1))
-
-                financialSettingsSectionTitle(t("Corporation Tax", lang: seciliDil))
-
-                financialSettingsRow(t("Enable Corporation Tax", lang: seciliDil)) {
-                    Toggle(t("Enable Corporation Tax", lang: seciliDil), isOn: $corporationTaxEnabled)
-                        .labelsHidden()
-                        .tint(.blue)
-                }
-
-                if corporationTaxEnabled {
-                    financialSettingsRow(t("Corporation Tax Rate (%)", lang: seciliDil)) {
-                        TextField("19.0", value: $corporationTaxRate, format: .number)
-                            .frame(maxWidth: isPhoneLayout ? .infinity : 420)
-                            .financialSettingsControlStyle()
                             .onChange(of: corporationTaxRate) { _, newValue in
                                 corporationTaxRate = min(max(newValue, 0), 100)
                             }
+                        Text("%")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.secondary)
                     }
-                    Text(t("Estimated tax on profit after VAT and all costs. Shown per order and on the dashboard.", lang: seciliDil))
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    .financialSettingsControlStyle()
                 }
+                Text(t("Estimated planning figure — not your filed liability.", lang: seciliDil))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(NDSettings.caution)
+                Text(t("Estimated tax on profit after VAT and all costs. Shown per order and on the dashboard.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(NDSettings.muted(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
 
-                Divider().background(Color.primary.opacity(0.1))
+    private var financialSummaryCard: some View {
+        NDSettingsSurface(spacing: 10) {
+            NDSettingsCardHead(icon: "building.2.fill", title: t("Current workspace calculation", lang: seciliDil))
+            NDFactRow(label: t("Currency", lang: seciliDil), value: paraBirimleri[seciliParaBirimi] ?? seciliParaBirimi)
+            NDFactRow(label: t("VAT rate", lang: seciliDil), value: String(format: "%g%%", max(0, min(100, defaultTaxRate))))
+            NDFactRow(label: t("Tax basis", lang: seciliDil), value: taxCalculationType == "Profit" ? (taxRuleNameProfit.isEmpty ? t("Profit", lang: seciliDil) : taxRuleNameProfit) : (taxRuleNameRevenue.isEmpty ? t("Revenue", lang: seciliDil) : taxRuleNameRevenue))
+            NDFactRow(label: t("Applies to", lang: seciliDil), value: t("New orders", lang: seciliDil))
+        }
+    }
 
+    private var financialToolsCard: some View {
+        NDSettingsSurface(spacing: 12, borderColor: NDSettings.caution.opacity(0.5)) {
+            Text(t("Existing order tools", lang: seciliDil))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(NDSettings.caution)
+            Text(t("Changing defaults affects new orders only. Use these tools when existing orders should adopt the current settings.", lang: seciliDil))
+                .font(.system(size: 12.5))
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+            NDToolRow(icon: "arrow.triangle.2.circlepath", title: t("Recalculate Taxes for Past Orders", lang: seciliDil), description: t("Apply the current VAT rule, rate and platform fee.", lang: seciliDil)) {
                 Button(action: tumVergileriYenidenHesapla) {
-                    HStack(spacing: 10) {
-                        if isRecalculating {
-                            ProgressView().controlSize(.small).tint(.white)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        Text(t("Recalculate Taxes for Past Orders", lang: seciliDil))
+                    HStack(spacing: 6) {
+                        if isRecalculating { ProgressView().controlSize(.small) }
+                        Text(t("Recalculate", lang: seciliDil)).font(.system(size: 13, weight: .semibold))
                     }
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(maxWidth: 420)
-                    .padding(.vertical, 12)
-                    .background(studioWarningOrange)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .foregroundColor(NDSettings.caution)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.surface(colorScheme)))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.caution.opacity(0.6), lineWidth: 1))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(isRecalculating)
                 .alert(recalcHataMesaji.isEmpty ? t("Done", lang: seciliDil) : t("Existing projects could not be recalculated.", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(recalcHataMesaji.isEmpty ? t("VAT recalculation completed!", lang: seciliDil) : recalcHataMesaji) }
-
+            }
+            NDToolRow(icon: "xmark.circle", title: t("Remove VAT from all orders", lang: seciliDil), description: t("Use when VAT does not apply.", lang: seciliDil), tint: NDSettings.danger) {
                 Button(action: { showClearTaxConfirm = true }) {
-                    HStack(spacing: 10) {
-                        if isClearingTax {
-                            ProgressView().controlSize(.small).tint(.white)
-                        } else {
-                            Image(systemName: "xmark.circle")
-                        }
-                        Text(t("Remove VAT from all orders", lang: seciliDil))
+                    HStack(spacing: 6) {
+                        if isClearingTax { ProgressView().controlSize(.small) }
+                        Text(t("Remove VAT", lang: seciliDil)).font(.system(size: 13, weight: .semibold))
                     }
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(maxWidth: 420)
-                    .padding(.vertical, 12)
-                    .background(Color.red.opacity(0.85))
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .foregroundColor(NDSettings.danger)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.surface(colorScheme)))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.danger.opacity(0.6), lineWidth: 1))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(isClearingTax)
                 .alert(t("Remove VAT?", lang: seciliDil), isPresented: $showClearTaxConfirm) {
                     Button(t("Remove", lang: seciliDil), role: .destructive) { tumVatleriSil() }

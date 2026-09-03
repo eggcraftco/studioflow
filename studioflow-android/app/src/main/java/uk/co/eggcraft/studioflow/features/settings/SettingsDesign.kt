@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -375,5 +378,101 @@ fun NDSecondaryButton(title: String, icon: ImageVector? = null, onClick: () -> U
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = NDSettings.text(), modifier = Modifier.size(14.dp))
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+    }
+}
+
+/** A radio-style choice card: title, one-line consequence, the selected one framed in accent. */
+@Composable
+fun NDChoiceCard(title: String, description: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(if (selected) NDSettings.rowActive().copy(alpha = 0.6f) else NDSettings.surface(), RoundedCornerShape(10.dp))
+            .border(if (selected) 2.dp else 1.dp, if (selected) NDSettings.accent else NDSettings.border(), RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        RadioButton(selected = selected, onClick = onClick, colors = RadioButtonDefaults.colors(selectedColor = NDSettings.accent, unselectedColor = NDSettings.muted()), modifier = Modifier.size(20.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
+            if (description.isNotBlank()) Text(description, fontSize = 12.sp, color = NDSettings.muted(), lineHeight = 16.sp)
+        }
+    }
+}
+
+/** A tool row inside a caution/danger card: icon, title, consequence, one action. */
+@Composable
+fun NDToolRow(icon: ImageVector, title: String, description: String, tint: Color = NDSettings.caution, action: @Composable () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier.size(28.dp).background(tint.copy(alpha = 0.12f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+            Text(description, fontSize = 12.sp, color = NDSettings.muted(), lineHeight = 16.sp)
+        }
+        action()
+    }
+}
+
+/** An outlined action in a colour: used for the caution and danger tools. */
+@Composable
+fun NDOutlinedAction(title: String, tint: Color, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(36.dp)
+            .background(NDSettings.surface(), RoundedCornerShape(9.dp))
+            .border(1.dp, tint.copy(alpha = if (enabled) 0.6f else 0.25f), RoundedCornerShape(9.dp))
+            .clickable(enabled = enabled && !busy, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (busy) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tint.copy(alpha = if (enabled) 1f else 0.5f))
+    }
+}
+
+/** The one primary save action, with its saving state, always in the same place. */
+@Composable
+fun NDSaveRow(saving: Boolean, saveText: String, savingText: String, enabled: Boolean = true, onSave: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (saving) NDStatusPill(NDSettingsStatus.Saving, savingText)
+        Spacer(modifier = Modifier.weight(1f))
+        Button(
+            onClick = onSave,
+            enabled = enabled && !saving,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = NDSettings.accent, contentColor = Color.White)
+        ) {
+            Text(saveText, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** A persistent label above its control. */
+@Composable
+fun NDField(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+        content()
+    }
+}
+
+/** Two cards side by side when there is room, stacked otherwise. */
+@Composable
+fun NDTwoColumns(wide: Boolean, first: @Composable () -> Unit, second: @Composable () -> Unit) {
+    if (wide) {
+        Row(horizontalArrangement = Arrangement.spacedBy(NDSettings.sectionGap), verticalAlignment = Alignment.Top) {
+            Box(modifier = Modifier.weight(1f)) { first() }
+            Box(modifier = Modifier.weight(1f)) { second() }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            first()
+            second()
+        }
     }
 }

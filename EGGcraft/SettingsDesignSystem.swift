@@ -626,3 +626,86 @@ extension View {
         modifier(NDSettingsCardModifier(padding: padding, borderColor: borderColor))
     }
 }
+
+/// A radio-style choice card: title, one-line consequence, the selected one framed in accent.
+struct NDChoiceCard: View {
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    let description: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 14))
+                    .foregroundColor(selected ? NDSettings.accent : NDSettings.muted(scheme))
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundColor(NDSettings.text(scheme))
+                    if !description.isEmpty {
+                        Text(description)
+                            .font(.system(size: 12))
+                            .foregroundColor(NDSettings.muted(scheme))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? NDSettings.rowActive(scheme).opacity(0.6) : NDSettings.surface(scheme)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(selected ? NDSettings.accent : NDSettings.border(scheme), lineWidth: selected ? 2 : 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+/// A tool row inside a caution/danger card: icon, title, consequence, one action.
+struct NDToolRow<Action: View>: View {
+    @Environment(\.colorScheme) private var scheme
+    let icon: String
+    let title: String
+    let description: String
+    var tint: Color = NDSettings.caution
+    @ViewBuilder let action: Action
+
+    init(icon: String, title: String, description: String, tint: Color = NDSettings.caution, @ViewBuilder action: () -> Action) {
+        self.icon = icon
+        self.title = title
+        self.description = description
+        self.tint = tint
+        self.action = action()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(tint)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13.5, weight: .semibold)).foregroundColor(NDSettings.text(scheme))
+                Text(description).font(.system(size: 12)).foregroundColor(NDSettings.muted(scheme)).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            action
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+/// A small money string in the workspace currency, grouped and to two places.
+func ndMoney(_ value: Double, symbol: String) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 2
+    formatter.maximumFractionDigits = 2
+    return symbol + (formatter.string(from: NSNumber(value: value)) ?? String(format: "%.2f", value))
+}

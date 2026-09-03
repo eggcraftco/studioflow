@@ -38,6 +38,11 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
@@ -1568,150 +1573,126 @@ private fun FinancialSettingsDetail(
         )
     }
 
-    DetailColumn {
-        DetailCard(title = t("Financial Settings"), icon = Icons.Filled.Percent) {
-            SettingsSectionTitle(t("General"))
-            MenuField(
-                label = t("Currency Symbol"),
-                value = selectedCurrency.ifBlank { "£" },
-                options = listOf("£", "$", "€", "₺", "AED", "CAD", "AUD", "CHF", "¥"),
-                onSelect = { selectedCurrency = it }
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(t("Decimal Separator"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                SegmentedRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    options = listOf("Dot (.)", "Comma (,)"),
-                    selected = if (selectedDecimalSeparator == ",") "Comma (,)" else "Dot (.)",
-                    onSelect = { selectedDecimalSeparator = if (it.startsWith(t("Comma"))) "," else "." }
+    BoxWithConstraints {
+        val wide = maxWidth >= 640.dp
+        val currencyCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Payments, title = t("Currency & formatting"))
+                MenuField(
+                    label = t("Currency"),
+                    value = selectedCurrency.ifBlank { "£" },
+                    options = listOf("£", "$", "€", "₺", "AED", "CAD", "AUD", "CHF", "¥"),
+                    onSelect = { selectedCurrency = it }
                 )
+                NDField(t("Decimal Separator")) {
+                    SegmentedRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        options = listOf("Dot (.)", "Comma (,)"),
+                        selected = if (selectedDecimalSeparator == ",") "Comma (,)" else "Dot (.)",
+                        onSelect = { selectedDecimalSeparator = if (it.startsWith(t("Comma"))) "," else "." }
+                    )
+                }
                 Text(
                     t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column."),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
+                    fontSize = 11.5.sp, color = NDSettings.muted(), lineHeight = 16.sp
                 )
             }
-            PercentTextField(
-                label = "Avg. Platform Fee (%)",
-                value = feePercentage,
-                enabled = !state.settingsSaving,
-                onValueChange = { feePercentage = cleanSettingsNumberInput(it) }
-            )
-
-            HorizontalDivider()
-            SettingsSectionTitle("Tax / VAT Settings")
-            OutlinedTextField(
-                value = taxRuleNameRevenue,
-                onValueChange = { taxRuleNameRevenue = it },
-                label = { Text(t("Rule 1 (Revenue)")) },
-                enabled = !state.settingsSaving,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = taxRuleNameProfit,
-                onValueChange = { taxRuleNameProfit = it },
-                label = { Text(t("Rule 2 (Profit)")) },
-                enabled = !state.settingsSaving,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            PercentTextField(
-                label = t("Default VAT Rate (%)"),
-                value = defaultTaxRate,
-                enabled = !state.settingsSaving,
-                onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) }
-            )
-            PercentTextField(
-                label = t("Default delivery time for new orders (days)"),
-                value = defaultDeliveryTime,
-                enabled = !state.settingsSaving,
-                suffix = t("days"),
-                onValueChange = { defaultDeliveryTime = cleanSettingsNumberInput(it) }
-            )
-            MenuField(
-                label = t("Calculate Tax On"),
-                value = if (taxCalculationType == "Profit") taxRuleNameProfit.ifBlank { "Profit" } else taxRuleNameRevenue.ifBlank { "Revenue" },
-                options = listOf(taxRuleNameRevenue.ifBlank { "Revenue" }, taxRuleNameProfit.ifBlank { "Profit" }),
-                onSelect = { selected ->
-                    taxCalculationType = if (selected == taxRuleNameProfit.ifBlank { "Profit" }) "Profit" else "Revenue"
+        }
+        val defaultsCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.CreditCard, title = t("Defaults for new orders"))
+                PercentTextField(label = t("Avg. Platform Fee (%)"), value = feePercentage, enabled = !state.settingsSaving, onValueChange = { feePercentage = cleanSettingsNumberInput(it) })
+                PercentTextField(label = t("Default delivery time for new orders (days)"), value = defaultDeliveryTime, enabled = !state.settingsSaving, suffix = t("days"), onValueChange = { defaultDeliveryTime = cleanSettingsNumberInput(it) })
+                Text(t("Applied only to new orders after saving."), fontSize = 11.5.sp, color = NDSettings.muted())
+            }
+        }
+        val price = 1000.0
+        val rate = parseSettingsNumber(defaultTaxRate, settings.defaultTaxRate).coerceIn(0.0, 100.0)
+        val vat = price - price / (1 + rate / 100)
+        val symbol = selectedCurrency.ifBlank { "£" }
+        fun money(value: Double): String = symbol + String.format(Locale.UK, "%,.2f", value)
+        val basisName = if (taxCalculationType == "Profit") taxRuleNameProfit.ifBlank { t("Profit") } else taxRuleNameRevenue.ifBlank { t("Revenue") }
+        val taxChoices: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NDChoiceCard(title = taxRuleNameRevenue.ifBlank { t("Revenue") }, description = t("Prices include VAT. VAT is taken out of the customer price, not added on top."), selected = taxCalculationType != "Profit") { taxCalculationType = "Revenue" }
+                NDChoiceCard(title = taxRuleNameProfit.ifBlank { t("Profit") }, description = t("VAT is due on the eligible margin, which already contains VAT."), selected = taxCalculationType == "Profit") { taxCalculationType = "Profit" }
+                OutlinedTextField(value = taxRuleNameRevenue, onValueChange = { taxRuleNameRevenue = it }, label = { Text(t("Rule 1 (Revenue)")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = taxRuleNameProfit, onValueChange = { taxRuleNameProfit = it }, label = { Text(t("Rule 2 (Profit)")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                PercentTextField(label = t("Default VAT Rate (%)"), value = defaultTaxRate, enabled = !state.settingsSaving, onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) })
+            }
+        }
+        val taxPreview: @Composable () -> Unit = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NDSettings.panel(), RoundedCornerShape(10.dp))
+                    .border(1.dp, NDSettings.border(), RoundedCornerShape(10.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(t("Calculation preview").uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NDSettings.muted())
+                Text("${money(price)} ${t("customer price")}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
+                listOf(t("Tax basis") to basisName, t("VAT rate") to "${settingsNumberText(rate)}%", t("VAT included") to money(vat), t("Net revenue") to money(price - vat)).forEach { (label, value) ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(label, fontSize = 12.5.sp, color = NDSettings.muted(), modifier = Modifier.weight(1f))
+                        Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+                    }
                 }
-            )
-            SettingSwitch(t("Use Tax Transition Date"), taxMilestoneEnabled) { taxMilestoneEnabled = it }
-            if (taxMilestoneEnabled) {
-                OutlinedTextField(
-                    value = taxMilestoneDate,
-                    onValueChange = { taxMilestoneDate = it.take(10) },
-                    label = { Text(t("VAT Registration Date")) },
-                    placeholder = { Text("YYYY-MM-DD") },
-                    enabled = !state.settingsSaving,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                Text(t("NivaDesk does not add VAT on top at invoice time."), fontSize = 11.sp, color = NDSettings.muted())
             }
-            HorizontalDivider()
-            SettingsSectionTitle(t("Corporation Tax"))
-            SettingSwitch(t("Enable Corporation Tax"), corporationTaxEnabled) { corporationTaxEnabled = it }
-            if (corporationTaxEnabled) {
-                PercentTextField(
-                    label = t("Corporation Tax Rate (%)"),
-                    value = corporationTaxRate,
-                    enabled = !state.settingsSaving,
-                    onValueChange = { corporationTaxRate = cleanSettingsNumberInput(it) }
-                )
-                OutlinedTextField(
-                    value = invoiceFooterNote,
-                    onValueChange = { invoiceFooterNote = it },
-                    label = { Text(t("Invoice Footer / Payment Terms")) },
-                    enabled = !state.settingsSaving,
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
-                )
-            }
-            HorizontalDivider()
-            SettingsSectionTitle("Order Detail Finance Card")
-            SettingSwitch("Show Base Cost", financialShowBaseCost) { financialShowBaseCost = it }
-            OutlinedTextField(
-                value = financialBaseCostLabel,
-                onValueChange = { financialBaseCostLabel = it },
-                label = { Text(t("Base Cost Label")) },
-                enabled = !state.settingsSaving,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            EditableHeadingItemList(
-                title = t("Extra Remaining / Pending Rows"),
-                addLabel = "Add Pending",
-                values = financialRemainingItems,
-                normalizeValues = ::normalizeHeadingItems,
-                itemLabel = "Pending row",
-                onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, t("Pending")) } }
-            )
-            EditableHeadingItemList(
-                title = t("Extra Cost Rows"),
-                addLabel = "Add Cost",
-                values = financialExpenseItems,
-                normalizeValues = ::normalizeHeadingItems,
-                itemLabel = "Cost row",
-                onChange = { financialExpenseItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, "Cost") } }
-            )
-            HorizontalDivider()
-            Text(
-                "Changing the default calculation model sets the tax rule for new projects. Use recalculation when existing projects should adopt the current VAT rule, default VAT rate and platform fee.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { onSave(payload(), "Financial settings saved.") },
-                    enabled = !state.settingsSaving,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (state.settingsSaving) "Saving..." else "Save Financial Settings", fontWeight = FontWeight.ExtraBold)
+        }
+        val datesCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.DateRange, title = t("Effective dates & corporation tax"))
+                SettingSwitch(t("Use Tax Transition Date"), taxMilestoneEnabled) { taxMilestoneEnabled = it }
+                if (taxMilestoneEnabled) {
+                    OutlinedTextField(value = taxMilestoneDate, onValueChange = { taxMilestoneDate = it.take(10) }, label = { Text(t("VAT Registration Date")) }, placeholder = { Text("YYYY-MM-DD") }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 }
-                Button(
-                    onClick = {
+                HorizontalDivider(color = NDSettings.border())
+                SettingSwitch(t("Enable Corporation Tax"), corporationTaxEnabled) { corporationTaxEnabled = it }
+                if (corporationTaxEnabled) {
+                    PercentTextField(label = t("Corporation Tax Rate (%)"), value = corporationTaxRate, enabled = !state.settingsSaving, onValueChange = { corporationTaxRate = cleanSettingsNumberInput(it) })
+                    Text(t("Estimated planning figure — not your filed liability."), fontSize = 11.5.sp, color = NDSettings.caution)
+                }
+            }
+        }
+        val footerCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Description, title = t("Invoice footer"))
+                OutlinedTextField(value = invoiceFooterNote, onValueChange = { invoiceFooterNote = it }, label = { Text(t("Invoice Footer / Payment Terms")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 5)
+            }
+        }
+        val financeCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Percent, title = t("Order detail finance card"))
+                SettingSwitch(t("Show Base Cost"), financialShowBaseCost) { financialShowBaseCost = it }
+                OutlinedTextField(value = financialBaseCostLabel, onValueChange = { financialBaseCostLabel = it }, label = { Text(t("Base Cost Label")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                EditableHeadingItemList(title = t("Extra Remaining / Pending Rows"), addLabel = "Add Pending", values = financialRemainingItems, normalizeValues = ::normalizeHeadingItems, itemLabel = "Pending row", onChange = { financialRemainingItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, t("Pending")) } })
+                EditableHeadingItemList(title = t("Extra Cost Rows"), addLabel = "Add Cost", values = financialExpenseItems, normalizeValues = ::normalizeHeadingItems, itemLabel = "Cost row", onChange = { financialExpenseItems = normalizeHeadingItems(it).filter { item -> isUsableFinancialTitle(item.title, "Cost") } })
+            }
+        }
+        val summaryCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 10.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Business, title = t("Current workspace calculation"))
+                NDFactRow(label = t("Currency"), value = symbol)
+                NDFactRow(label = t("VAT rate"), value = "${settingsNumberText(rate)}%")
+                NDFactRow(label = t("Tax basis"), value = basisName)
+                NDFactRow(label = t("Applies to"), value = t("New orders"))
+            }
+        }
+        DetailColumn {
+            NDTwoColumns(wide, currencyCard, defaultsCard)
+            NDSettingsSurface(spacing = 14.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Percent, title = t("Tax calculation"))
+                NDTwoColumns(wide, taxChoices, taxPreview)
+            }
+            NDTwoColumns(wide, datesCard, footerCard)
+            NDTwoColumns(wide, financeCard, summaryCard)
+            NDSettingsSurface(spacing = 10.dp, borderColor = NDSettings.caution.copy(alpha = 0.5f)) {
+                Text(t("Existing order tools"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NDSettings.caution)
+                Text(t("Changing defaults affects new orders only. Use these tools when existing orders should adopt the current settings."), fontSize = 12.5.sp, color = NDSettings.muted(), lineHeight = 17.sp)
+                NDToolRow(icon = Icons.Filled.Refresh, title = t("Recalculate Taxes"), description = t("Apply the current VAT rule, rate and platform fee.")) {
+                    NDOutlinedAction(title = t("Recalculate"), tint = NDSettings.caution, enabled = !state.settingsSaving && financeCompanyId.isNotEmpty(), busy = loadingRecalcPreview) {
                         loadingRecalcPreview = true
                         scope.launch {
                             try {
@@ -1726,24 +1707,14 @@ private fun FinancialSettingsDetail(
                             }
                             loadingRecalcPreview = false
                         }
-                    },
-                    enabled = !state.settingsSaving && !loadingRecalcPreview && financeCompanyId.isNotEmpty(),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = StudioOrange),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(t("Recalculate Taxes"), fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                NDToolRow(icon = Icons.Filled.Cancel, title = t("Remove VAT from all orders"), description = t("Use when VAT does not apply."), tint = NDSettings.danger) {
+                    NDOutlinedAction(title = if (clearingTax) t("Removing VAT...") else t("Remove VAT"), tint = NDSettings.danger, enabled = financeCompanyId.isNotEmpty(), busy = clearingTax) { showClearTaxConfirm = true }
                 }
             }
-            Button(
-                onClick = { showClearTaxConfirm = true },
-                enabled = !clearingTax && financeCompanyId.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(if (clearingTax) t("Removing VAT...") else t("Remove VAT from all orders"), fontWeight = FontWeight.ExtraBold)
-            }
+            NDSaveRow(saving = state.settingsSaving, saveText = t("Save changes"), savingText = t("Saving…"), enabled = true) { onSave(payload(), "Financial settings saved.") }
+            Text(t("Your workspace is shared with other team members."), fontSize = 12.sp, color = NDSettings.muted(), modifier = Modifier.padding(horizontal = 4.dp))
         }
     }
 
