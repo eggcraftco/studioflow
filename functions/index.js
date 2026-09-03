@@ -14587,6 +14587,17 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   let resolvedCustomerName = customerName;
   let projectName = designName;
   await db.runTransaction(async (transaction) => {
+    // EVERY value this callback settles is derived fresh on each attempt and
+    // only then published outwards. Firestore re-invokes this same closure when
+    // the transaction is aborted — and it will be, because this one both reads
+    // and writes the company document that every create also touches on its way
+    // out. A value carried over from a previous attempt is a value that no
+    // longer matches the numbers this attempt read: the first version of this
+    // guarded the generated name with `if (!projectName)`, so a retry kept
+    // attempt one's number inside the name while minting a new one beside it,
+    // and the order went to disk calling itself #302 while being #303.
+    let attemptCustomerName = customerName;
+
     // A picked customer wins over the typed text: the control sends the record
     // it matched, and the name stored on that record is the one every screen
     // joins on, so "ayşe" typed against a stored "Ayşe" must not create a second
@@ -14596,26 +14607,32 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
       const picked = await transaction.get(pickedRef);
       const pickedData = picked.exists ? picked.data() || {} : {};
       if (picked.exists && String(pickedData.companyId || "") === companyId) {
-        resolvedCustomerName = cleanOrderText(pickedData.name, resolvedCustomerName, 180);
+        attemptCustomerName = cleanOrderText(pickedData.name, attemptCustomerName, 180);
       }
     }
 
     // Every read first. Firestore refuses a transaction that reads after it has
     // written, and the customer upsert below reads before it writes — so the
     // counter is READ here and only written once that upsert is done.
-    projectNumber = await readNextProjectNumber(transaction, companyRef, usage.orderCount);
-    if (!projectName) projectName = generatedProjectName(resolvedCustomerName, projectNumber);
+    const attemptNumber = await readNextProjectNumber(transaction, companyRef, usage.orderCount);
+    const attemptName = designName || generatedProjectName(attemptCustomerName, attemptNumber);
 
-    customerResult = await upsertCustomerForWebOrder(transaction, companyId, resolvedCustomerName, paymentDate, uid, email);
-    commitProjectNumber(transaction, companyRef, projectNumber);
+    const attemptCustomer = await upsertCustomerForWebOrder(transaction, companyId, attemptCustomerName, paymentDate, uid, email);
+    commitProjectNumber(transaction, companyRef, attemptNumber);
     transaction.set(orderRef, {
       ...orderPayload,
-      customerName: resolvedCustomerName,
-      designName: projectName,
+      customerName: attemptCustomerName,
+      designName: attemptName,
       // Given once and never given again, so it survives every rename of the
       // project it belongs to.
-      projectNumber
+      projectNumber: attemptNumber
     });
+
+    // Published only now, so what the caller is told is what was written.
+    resolvedCustomerName = attemptCustomerName;
+    projectNumber = attemptNumber;
+    projectName = attemptName;
+    customerResult = attemptCustomer;
   });
 
   try {

@@ -163,6 +163,48 @@ check("the order create does every read before it writes anything", () => {
   );
 });
 
+// ---- what a retry must not carry over --------------------------------------
+//
+// Firestore re-invokes the SAME closure when a transaction is aborted, and this
+// one is aborted often: it both reads and writes the company document that
+// every create also touches on its way out. The first version guarded the
+// generated name with `if (!projectName)`, so a second attempt kept attempt
+// one's number inside the name while minting a fresh one beside it — an order
+// that called itself #302 while being #303, in a string that invoices, exports
+// and the accounting connectors read off the document.
+check("a retried create names itself with the number it actually minted", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const start = source.indexOf("exports.createWebOrder = onCall(");
+  const open = source.indexOf("await db.runTransaction(", start);
+  // Comments are stripped: a prose explanation of the bug is not the bug, and
+  // the first version of this test tripped on its own description of it.
+  const body = source
+    .slice(open, source.indexOf("\n  });", open))
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+
+  assert.ok(
+    !/if \(!projectName\)/.test(body),
+    "the name must not be guarded on a value a previous attempt left behind"
+  );
+  assert.ok(
+    /const attemptNumber = await readNextProjectNumber\(/.test(body),
+    "the number is derived fresh each attempt"
+  );
+  assert.ok(
+    /const attemptName = designName \|\| generatedProjectName\(attemptCustomerName, attemptNumber\)/.test(body),
+    "the name is derived from THIS attempt's number, unconditionally"
+  );
+  // Whatever the callback publishes outward must be the same values it wrote.
+  const wrote = body.indexOf("transaction.set(orderRef");
+  const published = body.indexOf("projectNumber = attemptNumber");
+  assert.ok(published > wrote, "the outer variables are assigned after the write, from the attempt's own values");
+  assert.ok(/projectName = attemptName/.test(body), "the caller is told the name that was written");
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try {
