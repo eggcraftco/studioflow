@@ -143,3 +143,11 @@ deployed with the Xero secrets bound (verified through the Cloud Functions v2 AP
 22:26:54 UTC (the first attempt failed with three 401s because the secrets were not bound — see §7). Remaining: deploy
 the web ("canlıya at") so the Xero card and section are on nivadesk.app, activate the Demo Company under the Xero login
 (my.xero.com → Try Demo Company), then connect it from Settings → Integrations → Xero.
+
+**Demo Company on a brand-new Xero login (3 Sep 2026).** A login created through the developer sign-up has no
+organisation; my.xero.com and the "organisation settings" link both land on the "Add your business" trial wall, which
+no longer shows "Try the Demo Company", and the consent screen says "You have no organisation setup". The old direct
+route still works and creates the demo organisation immediately:
+`https://my.xero.com/!xkcD/Dashboard/DemoOrganisation/CreateDemoAndLogin?versioncode=VERSION%2FUK` (other regions:
+`VERSION%2FAU`, `%2FNZ`, `%2FUS`, `%2FGLOBAL`). The demo company resets every 28 days; the connection must be made again
+after a reset.
