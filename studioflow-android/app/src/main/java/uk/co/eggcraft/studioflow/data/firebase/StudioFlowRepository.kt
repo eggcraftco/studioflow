@@ -203,17 +203,30 @@ class StudioFlowRepository(
                 .build()
             user.sendEmailVerification(settings).await()
         }
-        // Seed the new workspace with the chosen studio name and owner details.
-        runCatching {
-            db.collection("companies").document(user.uid).set(
-                mapOf(
-                    "name" to studioName.trim(),
-                    "companyName" to studioName.trim(),
-                    "ownerDisplayName" to fullName.trim(),
-                    "ownerEmail" to email.trim()
-                ),
-                com.google.firebase.firestore.SetOptions.merge()
-            ).await()
+        // The workspace is created by the callable, not here. Writing the name
+        // straight to companies/{uid} produced a workspace with no billing state
+        // at all, so someone who signed up from Google Play landed on Free and
+        // never got the fourteen-day trial the website promises — the callable
+        // is the one place that grants it, and the web has always used it.
+        val createdByServer = runCatching {
+            functions.getHttpsCallable("initializeFreeDemoWorkspace")
+                .call(mapOf("fullName" to fullName.trim(), "workspaceName" to studioName.trim()))
+                .await()
+        }.isSuccess
+        // Fallback for a signup finished with no network: at least record the
+        // name, so the workspace is not a bare "My Studio".
+        if (!createdByServer) {
+            runCatching {
+                db.collection("companies").document(user.uid).set(
+                    mapOf(
+                        "name" to studioName.trim(),
+                        "companyName" to studioName.trim(),
+                        "ownerDisplayName" to fullName.trim(),
+                        "ownerEmail" to email.trim()
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge()
+                ).await()
+            }
         }
         recordSignupPlatformIfNewAccount()
     }

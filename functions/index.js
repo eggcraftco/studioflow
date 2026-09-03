@@ -379,7 +379,7 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     return { sent: 0, failed: 0, reason: "missing_company" };
   }
 
-  const tokenSnap = await deviceTokenCollectionRef(companyId).limit(100).get();
+  const tokenSnap = await deviceTokenCollectionRef(companyId).limit(500).get();
   const tokenDocs = tokenSnap.docs.filter((doc) => doc.data()?.enabled !== false);
   const tokens = tokenDocs.map((doc) => doc.data()?.token || doc.id).filter(Boolean);
 
@@ -441,11 +441,9 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     if (item.success) return;
     const code = item.error?.code || "";
     if (isInvalidFcmTokenError(code)) {
-      cleanupBatch.set(tokenDocs[index].ref, {
-        enabled: false,
-        invalidAt: admin.firestore.FieldValue.serverTimestamp(),
-        invalidReason: code
-      }, { merge: true });
+      // A token FCM no longer knows is gone for good; parking it as
+      // enabled:false kept filling the query window with dead rows.
+      cleanupBatch.delete(tokenDocs[index].ref);
     }
   });
 
@@ -531,7 +529,7 @@ async function sendPushNotificationToRecipients(companyId, notification = {}, re
     return { sent: 0, failed: 0, reason: "missing_recipients" };
   }
 
-  const tokenSnap = await deviceTokenCollectionRef(companyId).limit(200).get();
+  const tokenSnap = await deviceTokenCollectionRef(companyId).limit(500).get();
   const tokenDocs = tokenSnap.docs.filter((doc) => {
     const data = doc.data() || {};
     if (data.enabled === false) return false;
@@ -2188,7 +2186,7 @@ function workspaceHasUsedTrial(companyData = {}) {
 async function workspaceHasOnlyThisOrder(companyId, orderId) {
   try {
     const snapshot = await db()
-      .collection("orders")
+      .collection("siparisler")
       .where("companyId", "==", String(companyId))
       .limit(2)
       .get();
@@ -3003,7 +3001,7 @@ exports.validateWorkspacePlanAction = onCall({ region: "europe-west2" }, async (
   };
 });
 
-exports.recalculateWorkspacePlanUsage = onCall({ region: "europe-west2" }, async (request) => {
+exports.recalculateWorkspacePlanUsage = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
   const entitlements = billingEntitlementsForCompany(companyData);
   const limits = planLimitsFromEntitlements(entitlements, companyData);
@@ -3048,7 +3046,11 @@ function supportUserEmail(request = {}) {
 }
 
 function isSupportAdminRequest(request = {}) {
-  const email = supportUserEmail(request);
+  // Only a verified token email opens the support/admin surface. The request
+  // body's userEmail (still used for ticket display) must never do it.
+  const token = request.auth?.token || {};
+  if (token.email_verified !== true) return false;
+  const email = cleanSupportText(token.email || "", 240).toLowerCase();
   return Boolean(email && SUPPORT_ADMIN_EMAILS.has(email));
 }
 
@@ -4555,7 +4557,7 @@ exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_
           // the same thing are not the same conversation. count() reads the
           // aggregate, not the orders, so this stays cheap on a big workspace.
           accountOrderCount: accountCompanyId
-            ? (await admin.firestore().collection("orders")
+            ? (await admin.firestore().collection("siparisler")
                 .where("companyId", "==", String(accountCompanyId))
                 .count().get()).data().count
             : 0
@@ -8644,7 +8646,9 @@ exports.saveThemeBrandingSettings = onCall({ region: "europe-west2" }, async (re
   };
   // appSubtitle remains a shared workspace branding field.
   if (Object.prototype.hasOwnProperty.call(incoming, "appSubtitle")) {
-    updates.appSubtitle = cleanQuickReplyText(incoming.appSubtitle || "Bespoke Hand-Painted Dials", 120);
+    // An empty subtitle stays empty; customer-facing surfaces fall back to the
+    // workspace name (businessNameFor), never to a stock slogan.
+    updates.appSubtitle = cleanQuickReplyText(incoming.appSubtitle || "", 120);
   }
   // Theme is STRICTLY per-user — if an appTheme arrives here it's persisted to the
   // caller's personal interface settings, NEVER to the shared companySettings doc,
@@ -9149,6 +9153,11 @@ exports.mergeOrderIntoOrder = onCall({ region: "europe-west2" }, async (request)
 // Every platform (Mac/iPhone, Android, Web) calls this so the result is identical.
 exports.mergeOrders = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyData } = await requireNotificationWorkspaceAccess(request);
+  // Merging sends orders to the Trash and moves money: the same role gate as
+  // creating or editing an order (a View Only member could previously merge).
+  if (!uidCanEditWorkspaceOrders(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot merge orders.");
+  }
   const access = workspaceMemberAccess(companyData, uid);
   if (access.orders === false) {
     throw new HttpsError("permission-denied", "Your workspace role cannot edit orders.");
@@ -9320,7 +9329,7 @@ function exportFilenameSlug(name) {
   return slug || "nivadesk";
 }
 
-exports.exportOrders = onCall({ region: "europe-west2" }, async (request) => {
+exports.exportOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyData } = await requireNotificationWorkspaceAccess(request);
   requireWorkspaceAreaAccess(companyData, uid, "exportData", "Data export is not enabled for your workspace account.");
 
@@ -9732,7 +9741,12 @@ exports.changeAccountEmail = onCall({ region: "europe-west2" }, async (request) 
     };
   }
 
-  if (nextAllowedMs && nowMs < nextAllowedMs) {
+  // A typo in the new address leaves the account unable to receive the
+  // verification mail; returning to the previous (verified) address must not
+  // wait out the cooldown.
+  const previousAddress = String(userData.accountEmailPrevious || existingMember.accountEmailPrevious || "").trim().toLowerCase();
+  const revertingToPrevious = Boolean(previousAddress) && email === previousAddress;
+  if (nextAllowedMs && nowMs < nextAllowedMs && !revertingToPrevious) {
     throw accountEmailCooldownError(nextAllowedMs);
   }
 
@@ -9980,7 +9994,7 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
   }, { merge: true });
 
   await batch.commit();
-  return { ok: true, companyId: uid, plan: "demo", message: "Free workspace created." };
+  return { ok: true, companyId: uid, plan: "demo", message: "Workspace created. Your 14-day Pro trial has started." };
 });
 
 exports.saveAccountProfile = onCall({ region: "europe-west2" }, async (request) => {
@@ -10661,8 +10675,9 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   const entitlements = billingEntitlementsForCompany(companyData);
   const limits = planLimitsFromEntitlements(entitlements, companyData);
   const usage = await workspaceBillingUsage(companyId, companyData);
-  if (limits.orderLimit !== null && limits.orderLimit !== undefined && usage.orderCount + orderItems.length > limits.orderLimit) {
-    throw new HttpsError("failed-precondition", "Import would exceed this workspace order limit.");
+  const importOrderUsage = Number.isFinite(Number(usage.activeOrderCount)) ? Number(usage.activeOrderCount) : usage.orderCount;
+  if (limits.orderLimit !== null && limits.orderLimit !== undefined && importOrderUsage + orderItems.length > limits.orderLimit) {
+    throw new HttpsError("failed-precondition", "Import would exceed this workspace order limit. Delivered orders do not count; mark finished orders as delivered to free slots.");
   }
   if (limits.customerLimit !== null && limits.customerLimit !== undefined && usage.customerCount + customerItems.length > limits.customerLimit) {
     throw new HttpsError("failed-precondition", "Import would exceed this workspace customer limit.");
@@ -11015,11 +11030,12 @@ async function purgeProviderDataForWorkspace(companyId) {
   return report;
 }
 
-exports.deleteWorkspaceData = onCall({ region: "europe-west2" }, async (request) => {
+exports.deleteWorkspaceData = onCall({ region: "europe-west2", timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
-  if (role !== "owner" && role !== "admin") {
-    throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot delete workspace data.`);
+  // Irreversible and without a Trash: the owner's decision alone.
+  if (role !== "owner") {
+    throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot delete workspace data. Only the workspace owner can.`);
   }
 
   const confirmation = String(request.data?.confirmation || "").trim();
@@ -11045,7 +11061,7 @@ exports.deleteWorkspaceData = onCall({ region: "europe-west2" }, async (request)
     companyId,
     deletedOrders,
     deletedCustomers,
-    message: `Delete finished. Orders: ${deletedOrders}. Customers: ${deletedCustomers}.`
+    message: `Delete finished. Orders: ${deletedOrders}. Customers: ${deletedCustomers}. Notes, inventory, files and bank data were not touched.`
   };
 });
 
@@ -11146,7 +11162,9 @@ async function writeWorkflowSafeOrderView(orderId = "", data = {}) {
   const assignedToUid = String(data.assignedToUid || "").trim();
   if (!companyId || !orderId) return;
   const viewRef = workflowOrderViewRef(companyId, orderId);
-  if (!assignedToUid) {
+  // A soft-deleted order has no view: the trigger re-ran after approveOrderDeletion
+  // removed it and, because assignedToUid was still set, wrote it straight back.
+  if (!assignedToUid || data.isDeleted === true) {
     await viewRef.delete().catch(() => undefined);
     return;
   }
@@ -11355,15 +11373,20 @@ async function evaluateStaleUnverifiedUser(userRecord, accessIndex) {
   // Every reachable workspace is owned by this user. They must all be empty
   // (no orders, no customers, no other members) for deletion to be safe.
   for (const entry of access) {
-    const [orderCount, customerCount] = await Promise.all([
+    const [orderCount, customerCount, noteCount, inventoryCount, bankCount, fileCount] = await Promise.all([
       countCompanyCollection("siparisler", entry.companyId),
-      countCompanyCollection("musteriler", entry.companyId)
+      countCompanyCollection("musteriler", entry.companyId),
+      countCompanyCollection("notes", entry.companyId),
+      countCompanySubcollection(entry.companyId, "inventoryItems"),
+      countCompanySubcollection(entry.companyId, "bankConnections"),
+      countCompanySubcollection(entry.companyId, "fileRecords")
     ]);
     const memberCount = teamMemberCountFromCompanyData(entry.data);
-    if (orderCount > 0 || customerCount > 0 || memberCount > 1) {
+    const paidPlan = String(entry.data?.billingStatus || "") === "active";
+    if (orderCount > 0 || customerCount > 0 || memberCount > 1 || noteCount > 0 || inventoryCount > 0 || bankCount > 0 || fileCount > 0 || paidPlan) {
       return {
         deletable: false,
-        reason: `has data (company=${entry.companyId} orders=${orderCount}, customers=${customerCount}, members=${memberCount})`,
+        reason: `has data (company=${entry.companyId} orders=${orderCount}, customers=${customerCount}, members=${memberCount}, notes=${noteCount}, inventory=${inventoryCount}, bank=${bankCount}, files=${fileCount}, paid=${paidPlan})`,
         companyId: entry.companyId, orderCount, customerCount, memberCount
       };
     }
@@ -11381,12 +11404,28 @@ async function evaluateStaleUnverifiedUser(userRecord, accessIndex) {
 
 // Permanently remove an empty, unverified account: its owned (empty) workspace
 // docs, its user profile doc, then the Auth record itself.
+async function countCompanySubcollection(companyId, name) {
+  const query = admin.firestore().collection("companies").doc(String(companyId)).collection(name);
+  try {
+    const aggregate = await query.count().get();
+    return aggregate.data().count || 0;
+  } catch (error) {
+    const snap = await query.select().limit(50).get().catch(() => ({ size: 0 }));
+    return snap.size;
+  }
+}
+
 async function deleteStaleUnverifiedUser(uid, ownedCompanyIds = []) {
   const db = admin.firestore();
+  // The whole tree, not just the company document: a plain delete() left
+  // every subcollection (settings, tokens, personal notes) orphaned.
   for (const companyId of ownedCompanyIds) {
-    if (companyId) await db.collection("companies").doc(companyId).delete().catch(() => undefined);
+    if (!companyId) continue;
+    await db.recursiveDelete(db.collection("companies").doc(companyId)).catch(() => undefined);
+    await db.collection("companySettings").doc(companyId).delete().catch(() => undefined);
+    await db.collection("quickReplySecrets").doc(companyId).delete().catch(() => undefined);
   }
-  await db.collection("users").doc(uid).delete().catch(() => undefined);
+  await db.recursiveDelete(db.collection("users").doc(uid)).catch(() => undefined);
   await admin.auth().deleteUser(uid);
 }
 
@@ -13645,6 +13684,42 @@ function addCommunicationChannel(channels = [], channel = "") {
   return output.slice(0, 12);
 }
 
+// A WriteBatch that commits itself every 400 operations. The customer
+// rename/delete/anonymise sweeps touch every order of a customer, and a
+// customer with more than 500 orders blew the single batch ("maximum 500
+// writes") after the customer document itself had already changed.
+class ChunkedBatch {
+  constructor(db, chunkSize = 400) {
+    this.db = db;
+    this.chunkSize = chunkSize;
+    this.batch = db.batch();
+    this.pending = 0;
+    this.committed = 0;
+    this.flushes = [];
+  }
+  _count() {
+    this.pending += 1;
+    if (this.pending >= this.chunkSize) this.flushes.push(this._flush());
+  }
+  _flush() {
+    const batch = this.batch;
+    const count = this.pending;
+    this.batch = this.db.batch();
+    this.pending = 0;
+    this.committed += count;
+    return count > 0 ? batch.commit() : Promise.resolve();
+  }
+  set(ref, data, options) { options ? this.batch.set(ref, data, options) : this.batch.set(ref, data); this._count(); return this; }
+  update(ref, data) { this.batch.update(ref, data); this._count(); return this; }
+  delete(ref) { this.batch.delete(ref); this._count(); return this; }
+  async commit() {
+    this.flushes.push(this._flush());
+    await Promise.all(this.flushes);
+    this.flushes = [];
+    return this.committed;
+  }
+}
+
 async function syncCustomerContactToOrders(companyId, previousName, customerPayload, uid = "", email = "") {
   const previousKey = normalizedCustomerKey(previousName);
   const nextKey = normalizedCustomerKey(customerPayload.name);
@@ -13655,7 +13730,7 @@ async function syncCustomerContactToOrders(companyId, previousName, customerPayl
     .where("companyId", "==", companyId)
     .get();
 
-  const batch = admin.firestore().batch();
+  const batch = new ChunkedBatch(admin.firestore());
   let changedCount = 0;
 
   snapshot.docs.forEach((orderDoc) => {
@@ -13737,7 +13812,7 @@ async function clearDeletedCustomerFromOrders(companyId, deletedCustomerName, ui
     .where("companyId", "==", companyId)
     .get();
 
-  const batch = admin.firestore().batch();
+  const batch = new ChunkedBatch(admin.firestore());
   let changedCount = 0;
 
   snapshot.docs.forEach((orderDoc) => {
@@ -13893,7 +13968,7 @@ exports.updateWebCustomer = onCall({ region: "europe-west2" }, async (request) =
   };
 });
 
-exports.deleteWebCustomer = onCall({ region: "europe-west2" }, async (request) => {
+exports.deleteWebCustomer = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceCustomers(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot delete customers.");
@@ -13941,7 +14016,7 @@ exports.deleteWebCustomer = onCall({ region: "europe-west2" }, async (request) =
 // GDPR: strip a customer's personal data from their profile and every one of
 // their orders while the financial records survive untouched. Owner-only and
 // deliberately irreversible — export first if the data is still needed.
-exports.anonymizeWebCustomer = onCall({ region: "europe-west2" }, async (request) => {
+exports.anonymizeWebCustomer = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidIsCompanyOwner(companyData, uid)) {
     throw new HttpsError("permission-denied", "Only the workspace owner can anonymize a customer.");
@@ -13991,7 +14066,7 @@ exports.anonymizeWebCustomer = onCall({ region: "europe-west2" }, async (request
 
   const previousKey = normalizedCustomerKey(previousName);
   const ordersSnap = await db.collection("siparisler").where("companyId", "==", companyId).get();
-  const batch = db.batch();
+  const batch = new ChunkedBatch(db);
   let anonymizedOrderCount = 0;
   ordersSnap.docs.forEach((orderDoc) => {
     const orderData = orderDoc.data() || {};
@@ -14071,7 +14146,7 @@ exports.resyncIntegrationCustomer = onCall({ region: "europe-west2" }, async (re
   return { ok: true, applied };
 });
 
-exports.mergeWebCustomers = onCall({ region: "europe-west2" }, async (request) => {
+exports.mergeWebCustomers = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceCustomers(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot merge customers.");
@@ -14369,7 +14444,7 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("create_order", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
-    throw new HttpsError("failed-precondition", "Your current plan has reached its order limit. Upgrade the workspace plan to add more orders.", validation);
+    throw new HttpsError("failed-precondition", "Your current plan has reached its order limit. Mark finished orders as delivered to free a slot, or upgrade the workspace plan.", validation);
   }
 
   const requestData = request.data || {};
@@ -14918,7 +14993,10 @@ const SWIFT_ORDER_FIELDS = [
   "repairIntake"
 ];
 
-const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount", "payments"]);
+// Fee, shipping and tax are the plan-gated figures. The payment ledger is not
+// one of them — every plan can record who paid what, and dropping it silently
+// left paidAmount and the ledger disagreeing on Free and Starter.
+const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount"]);
 
 function preserveBasicPlanCustomFinancialFields(incoming = {}, existing = {}) {
   const next = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? { ...incoming } : {};
@@ -15058,7 +15136,7 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
   const usage = await workspaceBillingUsage(companyId, companyData);
   const validation = validateBillingAction("create_order", entitlements, usage, limits, request.data || {});
   if (!validation.allowed) {
-    throw new HttpsError("failed-precondition", "Your current plan has reached its order limit. Upgrade the workspace plan to add more orders.", validation);
+    throw new HttpsError("failed-precondition", "Your current plan has reached its order limit. Mark finished orders as delivered to free a slot, or upgrade the workspace plan.", validation);
   }
 
   const requestedOrderId = String(request.data?.orderId || "").trim();
@@ -15345,8 +15423,11 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
       }
 
       const previousOrderValue = cleanOrderNumber(orderData.paidAmount) + cleanOrderNumber(orderData.remainingAmount);
-      const nextOrderValue = cleanOrderNumber(requestData.orderValue);
-      const nextPaidAmount = Math.min(cleanOrderNumber(requestData.paidAmount), nextOrderValue);
+      // Key-present semantics: a full edit that does not carry a money field
+      // keeps the stored value (a lone customerName patch used to zero both).
+      const nextOrderValue = hasOwnField(requestData, "orderValue") ? cleanOrderNumber(requestData.orderValue) : previousOrderValue;
+      const requestedPaidAmount = hasOwnField(requestData, "paidAmount") ? cleanOrderNumber(requestData.paidAmount) : cleanOrderNumber(orderData.paidAmount);
+      const nextPaidAmount = Math.min(requestedPaidAmount, nextOrderValue);
       const nextRemainingAmount = Math.max(nextOrderValue - nextPaidAmount, 0);
       if (nextOrderValue !== previousOrderValue) {
         pushHistoryChange(historyEntries, "Order value changed", amountHistoryValue(previousOrderValue), amountHistoryValue(nextOrderValue), uid, email);
@@ -16087,6 +16168,11 @@ async function reconcileAcceptedJoinRequestsForWorkspace(companyId, ownerUid, co
   };
   const repairedUids = [];
   const batch = db.batch();
+  // Same seat limit as addWorkspaceTeamMember: a repair must not re-admit
+  // more people than the plan pays for.
+  const seatLimits = planLimitsFromEntitlements(billingEntitlementsForCompany(companyData), companyData);
+  const seatLimit = Number.isFinite(Number(seatLimits.teamMemberLimit)) ? Number(seatLimits.teamMemberLimit) : null;
+  let seatsUsed = teamMemberCountFromCompanyData(companyData);
 
   joinSnap.forEach((docSnap) => {
     const requestData = docSnap.data() || {};
@@ -16095,6 +16181,8 @@ async function reconcileAcceptedJoinRequestsForWorkspace(companyId, ownerUid, co
 
     const requesterUid = String(requestData.requesterUid || "").trim();
     if (!requesterUid || currentMembers[requesterUid] || removedMemberUids.has(requesterUid)) return;
+    if (seatLimit !== null && seatsUsed >= seatLimit) return;
+    seatsUsed += 1;
 
     const role = normalizeTeamRoleForWrite(requestData.role || "member", companyData);
     const access = accessForRoleValue(companyData, role, {});
@@ -16699,6 +16787,22 @@ exports.removeWorkspaceTeamMember = onCall({ region: "europe-west2" }, async (re
   }
 
   await batch.commit();
+
+  // Approval switched the member's active workspace to this one; removal must
+  // switch it back, or every callable answers "You do not have access to this
+  // workspace" until they find the switcher.
+  try {
+    const memberUserRef = db.collection("users").doc(memberUid);
+    const memberUserSnap = await memberUserRef.get();
+    if (memberUserSnap.exists && String(memberUserSnap.data()?.activeCompanyId || "").trim() === companyId) {
+      await memberUserRef.set({
+        activeCompanyId: memberUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+  } catch (error) {
+    console.warn("removeWorkspaceTeamMember activeCompanyId reset failed:", memberUid, error?.message || error);
+  }
 
   const updatedCompanySnap = await companyRef.get();
   const updatedCompanyData = updatedCompanySnap.data() || companyData;
@@ -17821,10 +17925,13 @@ exports.scheduledReminderCheck = onSchedule({
   region: "europe-west2"
 }, async () => {
   const now = new Date();
+  // Every workspace, not the development one: this query used to pin
+  // companyId == "test_studio_123", so no real workspace ever received a
+  // schedule reminder. Only orders that carry alert items are read.
   const snap = await admin.firestore()
     .collection("siparisler")
-    .where("companyId", "==", "test_studio_123")
-    .limit(200)
+    .where("customFields.__scheduleAlertItemsV1", "!=", null)
+    .limit(500)
     .get();
 
   let dueCount = 0;
@@ -17833,6 +17940,7 @@ exports.scheduledReminderCheck = onSchedule({
 
   for (const doc of snap.docs) {
     const order = doc.data() || {};
+    if (order.isDeleted === true) continue;
     const rawJSON = order.customFields?.__scheduleAlertItemsV1;
     if (!rawJSON) continue;
 
@@ -17856,7 +17964,8 @@ exports.scheduledReminderCheck = onSchedule({
       const alreadySent = item.notificationSent === true;
 
       if (isPending && shouldNotify && !alreadySent && dueAt <= now) {
-        const companyId = order.companyId || "test_studio_123";
+        const companyId = String(order.companyId || "").trim();
+        if (!companyId) continue;
         const notificationId = `schedule_${doc.id}_${item.id}`;
         const notificationRef = notificationCollectionRef(companyId).doc(notificationId);
         const fallbackTitle = pushText("reminderTitle", language);
@@ -17867,6 +17976,7 @@ exports.scheduledReminderCheck = onSchedule({
           companyId,
           orderId: doc.id,
           type: "schedule",
+          route: "orders",
           title,
           message,
           note: item.note || "",
@@ -25602,9 +25712,31 @@ function cleanPortalAutoUpdates(value) {
   };
 }
 
+// The name a customer sees on the portal, the estimate page and status
+// e-mails: the workspace's subtitle if one was set, else the name the business
+// signed up under, never a stock slogan.
+function businessNameFor(settings = {}, companyData = null) {
+  const subtitle = String(settings.appSubtitle || "").trim();
+  if (subtitle) return subtitle.slice(0, 120);
+  const fromCompany = companyData ? String(companyData.name || companyData.companyName || "").trim() : "";
+  if (fromCompany) return fromCompany.slice(0, 120);
+  const mirrored = String(settings.__workspaceName || "").trim();
+  return mirrored ? mirrored.slice(0, 120) : "NivaDesk";
+}
+
+async function workspaceSettingsWithName(companyId) {
+  const [snap, companySnap] = await Promise.all([
+    companySettingsDocRef(String(companyId)).get(),
+    admin.firestore().collection("companies").doc(String(companyId)).get().catch(() => null)
+  ]);
+  const settings = snap.exists ? snap.data() || {} : {};
+  const companyData = companySnap && companySnap.exists ? companySnap.data() || {} : {};
+  settings.__workspaceName = String(companyData.name || companyData.companyName || "").trim();
+  return settings;
+}
+
 async function portalWorkspaceSettings(companyId) {
-  const snap = await companySettingsDocRef(String(companyId)).get();
-  return snap.exists ? snap.data() || {} : {};
+  return workspaceSettingsWithName(companyId);
 }
 
 // The stages shown to the customer are the workspace's own order statuses, not a
@@ -25672,7 +25804,7 @@ function portalPublicView(orderData = {}, settings = {}, link = {}) {
     reference: cleanOrderText(orderData.invoiceNumber, "", 60) || cleanOrderText(link.orderId, "", 60),
     itemName: cleanOrderText(orderData.designName, "", 160) || cleanOrderText(orderData.watchRef, "", 160),
     customerFirstName: (cleanOrderText(orderData.customerName, "", 160).split(" ")[0] || ""),
-    businessName: String(settings.appSubtitle || "NivaDesk"),
+    businessName: businessNameFor(settings),
     logoUrl: String(settings.appLogoUrl || ""),
     footerNote: String(settings.invoiceFooterNote || ""),
     accentColor: /^#[0-9a-f]{6}$/i.test(String(settings.portalAccentColor || "")) ? String(settings.portalAccentColor).toLowerCase() : "",
@@ -25953,6 +26085,13 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     if ((!auto.email || !toEmail.includes("@")) && (!auto.sms || !toPhone)) return;
     // A repeated status (a correction, a sync echo) must not re-send.
     if (cleanOrderText(after.portalLastNotifiedStatus, "", 60).toLowerCase() === status.toLowerCase()) return;
+    // Nor a status this order has already announced once: A → B → A used to
+    // send the A message a second time, because only the LAST status was
+    // remembered. Every message costs a segment and reads to the customer as
+    // fresh news about their order.
+    const alreadyAnnounced = (Array.isArray(after.portalNotifiedStatuses) ? after.portalNotifiedStatuses : [])
+      .map((item) => cleanOrderText(item, "", 60).toLowerCase());
+    if (alreadyAnnounced.includes(status.toLowerCase())) return;
 
     const orderId = String(event.params.orderId || "");
     const companyId = orderCompanyId(after);
@@ -26024,7 +26163,7 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     try {
       await sendPortalStatusEmail({
         toEmail,
-        businessName: String(settings.appSubtitle || "NivaDesk"),
+        businessName: businessNameFor(settings, companyData),
         // Replies reach the business, not us. Falls back to no reply-to rather
         // than pointing a customer at the NivaDesk support inbox.
         replyTo: cleanOrderText(settings.invoiceReplyToEmail, "", 240),
@@ -26040,6 +26179,9 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const history = Array.isArray(after.historyLog) ? after.historyLog : [];
     await orderDocRef(orderId).update({
       portalLastNotifiedStatus: status,
+      // The roll of everything this order has already told its customer, so a
+      // status the job returns to is not announced a second time.
+      portalNotifiedStatuses: [...alreadyAnnounced, status.toLowerCase()].slice(-40),
       historyLog: [
         webHistoryEntry("Customer notified", "-", status, "", "automatic"),
         ...history
@@ -26209,7 +26351,7 @@ function estimatePublicView(record, settings, link) {
     notes: record.notes || "",
     validUntilMs: record.validUntilMs || 0,
     createdAtMs: record.createdAtMs || 0,
-    businessName: String(settings.appSubtitle || "NivaDesk"),
+    businessName: businessNameFor(settings),
     logoUrl: String(settings.appLogoUrl || ""),
     footerNote: String(settings.invoiceFooterNote || ""),
     accentColor: /^#[0-9a-f]{6}$/i.test(String(settings.portalAccentColor || "")) ? String(settings.portalAccentColor).toLowerCase() : "",
@@ -26257,7 +26399,7 @@ async function estimateLinkForVisitor(token) {
   if (!linkSnap.exists) throw new HttpsError("not-found", "This link is no longer available.");
   const link = linkSnap.data() || {};
   const now = Date.now();
-  if (Number(link.revokedAtMs) > 0) throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
+  if (Number(link.revokedAtMs) > 0) throw new HttpsError("failed-precondition", "This estimate link was withdrawn by the business. Please ask them for a new one.");
   if (Number(link.expiresAtMs) > 0 && Number(link.expiresAtMs) <= now) {
     throw new HttpsError("failed-precondition", "This link has expired. Please ask for a new one.");
   }
@@ -26311,9 +26453,8 @@ async function notifyEstimateDecision(companyId, payload = {}) {
 
 async function estimateWorkspaceSettings(companyId) {
   // The customer-facing page is branded from companySettings — the same doc the
-  // invoice renderers read. The company doc carries none of these fields.
-  const snap = await companySettingsDocRef(String(companyId)).get();
-  return snap.exists ? snap.data() || {} : {};
+  // invoice renderers read; the workspace name rides along for businessNameFor.
+  return workspaceSettingsWithName(companyId);
 }
 
 
@@ -26709,7 +26850,7 @@ exports.postEstimateDecision = onCall({ region: "europe-west2" }, async (request
     if (recordNow.approval) return { raced: true, approval: recordNow.approval };
     if (Number(linkNow.consumedAtMs) > 0) return { raced: true, approval: recordNow.approval || approval };
     if (Number(linkNow.revokedAtMs) > 0) {
-      throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
+      throw new HttpsError("failed-precondition", "This estimate link was withdrawn by the business. Please ask them for a new one.");
     }
 
     const orderData = orderSnap.exists ? orderSnap.data() || {} : {};
@@ -26773,6 +26914,30 @@ exports.purgeExpiredEstimateLinks = onSchedule(
     const batch = admin.firestore().batch();
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
+
+    // The order card carries a linkState per estimate; without this the card
+    // kept saying "active" for a link the customer could no longer open.
+    for (const doc of snap.docs) {
+      const link = doc.data() || {};
+      const orderId = String(link.orderId || "").trim();
+      const estimateId = String(link.estimateId || "").trim();
+      if (!orderId || !estimateId) continue;
+      try {
+        const orderRef = orderDocRef(orderId);
+        const orderSnap = await orderRef.get();
+        if (!orderSnap.exists) continue;
+        const rows = Array.isArray(orderSnap.data()?.estimates) ? orderSnap.data().estimates : [];
+        let changed = false;
+        const next = rows.map((row) => {
+          if (!row || row.id !== estimateId || row.linkState !== "active") return row;
+          changed = true;
+          return { ...row, linkState: "expired" };
+        });
+        if (changed) await orderRef.update({ estimates: next });
+      } catch (error) {
+        console.warn("purgeExpiredEstimateLinks linkState update failed:", orderId, estimateId, error?.message || error);
+      }
+    }
     console.log("purgeExpiredEstimateLinks", { deleted: snap.size });
   }
 );
@@ -27076,7 +27241,7 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
 // + device/source breakdowns. The dashboard derives CTR + conversion rates.
 exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Landing-page statistics are restricted to NivaDesk admins.");
   }
 
@@ -27233,7 +27398,7 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
 // onward — used to drop earlier test traffic. No email/identity is stored.
 exports.resetCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Landing-page statistics are restricted to NivaDesk admins.");
   }
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -27254,7 +27419,7 @@ exports.resetCustomOrderLandingStats = onCall({ region: "europe-west2" }, async 
 
 exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
   }
 
@@ -27321,7 +27486,7 @@ exports.getSiteStats = onCall({ region: "europe-west2" }, async (request) => {
 
 exports.getSitePresence = onCall({ region: "europe-west2" }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Site statistics are restricted to NivaDesk admins.");
   }
 
@@ -27439,7 +27604,7 @@ function nvPickSearchConsoleProperty(siteEntries = []) {
 
 exports.getSearchConsoleStats = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Search statistics are restricted to NivaDesk admins.");
   }
 
@@ -27696,7 +27861,7 @@ const ADMIN_PLAN_MONTHLY_GBP = { lifetime_lite: 9, pro_monthly: 19, team_monthly
 
 exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -27941,7 +28106,7 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
 
 exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28156,7 +28321,7 @@ exports.getAdminUsersWorkspacesDetail = onCall({ region: "europe-west2", timeout
 
 exports.getAdminSubscriptionsDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28237,7 +28402,7 @@ function adminStorageAddonMonthlyGbp(companyData = {}) {
 
 exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28340,7 +28505,7 @@ exports.getAdminRevenueDetail = onCall({ region: "europe-west2", timeoutSeconds:
 
 exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28441,7 +28606,7 @@ exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 6
  */
 exports.getAdminOnboardingDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28519,7 +28684,7 @@ exports.getAdminOnboardingDetail = onCall({ region: "europe-west2", timeoutSecon
 
 exports.getAdminFeatureUsageDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28693,7 +28858,7 @@ function adminPlanStorageLimitMB(plan, companyData = {}) {
 
 exports.getAdminStorageDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -28823,7 +28988,7 @@ exports.getAdminStorageDetail = onCall({ region: "europe-west2", timeoutSeconds:
 
 exports.getAdminLookup = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   const email = String(request.auth?.token?.email || "").trim().toLowerCase();
-  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
     throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
   }
 
@@ -29055,6 +29220,9 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
         memberUids: admin.firestore.FieldValue.arrayRemove(uid),
         [`memberRoles.${uid}`]: admin.firestore.FieldValue.delete(),
         [`members.${uid}`]: admin.firestore.FieldValue.delete(),
+        [`memberCustomRoles.${uid}`]: admin.firestore.FieldValue.delete(),
+        [`memberAccess.${uid}`]: admin.firestore.FieldValue.delete(),
+        removedMemberUids: admin.firestore.FieldValue.arrayUnion(uid),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } catch (error) {
@@ -29062,12 +29230,59 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
     }
   }
 
+  // 1b) People who were members of THIS workspace: their access mirror and,
+  // if this was their active workspace, their pointer back to their own —
+  // otherwise they land in a "Workspace not found" loop after the deletion.
+  let ownCompanyData = {};
+  try {
+    const ownCompanySnap = await db.collection("companies").doc(uid).get();
+    ownCompanyData = ownCompanySnap.exists ? ownCompanySnap.data() || {} : {};
+  } catch (error) {
+    console.warn("deleteMyAccount own company read failed:", error?.message || error);
+  }
+  const formerMembers = new Set([
+    ...Object.keys(companyMembersMap(ownCompanyData)),
+    ...Object.keys(companyMemberRolesMap(ownCompanyData)),
+    ...(Array.isArray(ownCompanyData.memberUids) ? ownCompanyData.memberUids : [])
+  ].map((id) => String(id || "").trim()).filter((id) => id && id !== uid));
+  for (const memberUid of formerMembers) {
+    try {
+      const memberRef = db.collection("users").doc(memberUid);
+      await memberRef.collection("workspaceAccess").doc(uid).delete().catch(() => undefined);
+      const memberSnap = await memberRef.get();
+      if (memberSnap.exists && String(memberSnap.data()?.activeCompanyId || "").trim() === uid) {
+        await memberRef.set({ activeCompanyId: memberUid, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      }
+    } catch (error) {
+      console.warn("deleteMyAccount former member cleanup failed:", memberUid, error?.message || error);
+    }
+  }
+
   // 2) Own workspace top-level documents (collections keyed by companyId).
-  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets", "supportTickets"]) {
+  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets", "supportTickets", "portalLinks", "estimateLinks", "fileShares"]) {
     try {
       await deleteWorkspaceCollectionDocuments(collection, uid);
     } catch (error) {
       console.warn(`deleteMyAccount ${collection} cleanup failed:`, error?.message || error);
+    }
+  }
+  // Join requests point at the workspace by targetCompanyId, and the
+  // workspace-keyed singletons (settings, the OpenAI key) sit at the root.
+  try {
+    const joinSnap = await db.collection("workspaceJoinRequests").where("targetCompanyId", "==", uid).get();
+    const joinBatch = new ChunkedBatch(db);
+    joinSnap.docs.forEach((docSnap) => joinBatch.delete(docSnap.ref));
+    const mineSnap = await db.collection("workspaceJoinRequests").where("requesterUid", "==", uid).get();
+    mineSnap.docs.forEach((docSnap) => joinBatch.delete(docSnap.ref));
+    await joinBatch.commit();
+  } catch (error) {
+    console.warn("deleteMyAccount join request cleanup failed:", error?.message || error);
+  }
+  for (const rootDoc of ["companySettings", "quickReplySecrets"]) {
+    try {
+      await db.collection(rootDoc).doc(uid).delete();
+    } catch (error) {
+      console.warn(`deleteMyAccount ${rootDoc} cleanup failed:`, error?.message || error);
     }
   }
 

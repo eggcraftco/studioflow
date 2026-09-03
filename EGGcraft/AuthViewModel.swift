@@ -1163,12 +1163,12 @@ class AuthViewModel: ObservableObject {
                 // Seed the new workspace with the chosen studio name and owner
                 // details so it never shows up as a bare "My Studio".
                 self?.recordSignupPlatformIfNewAccount()
-                Firestore.firestore().collection("companies").document(user.uid).setData([
-                    "name": cleanStudioName,
-                    "companyName": cleanStudioName,
-                    "ownerDisplayName": cleanFullName,
-                    "ownerEmail": cleanEmail
-                ], merge: true) { _ in
+                self?.createWorkspaceForNewAccount(
+                    uid: user.uid,
+                    studioName: cleanStudioName,
+                    fullName: cleanFullName,
+                    email: cleanEmail
+                ) {
                     Task { @MainActor in
                         self?.isLoading = false
                         onSuccess?()
@@ -1176,6 +1176,48 @@ class AuthViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Creates the workspace for an account that has just signed up on a Mac or
+    /// an iPhone.
+    ///
+    /// This used to write the studio name straight to `companies/{uid}`, which
+    /// produced a workspace with no billing state at all — so someone who
+    /// signed up from the App Store landed on Free and never received the
+    /// fourteen-day trial the website promises. `initializeFreeDemoWorkspace` is
+    /// the one place that grants it, and the web has always gone through it.
+    /// The direct write stays as the fallback for a signup completed with no
+    /// network: the name is still recorded, and the trial can be granted later.
+    private func createWorkspaceForNewAccount(
+        uid: String,
+        studioName: String,
+        fullName: String,
+        email: String,
+        completion: @escaping () -> Void
+    ) {
+        let writeNameDirectly: () -> Void = {
+            Firestore.firestore().collection("companies").document(uid).setData([
+                "name": studioName,
+                "companyName": studioName,
+                "ownerDisplayName": fullName,
+                "ownerEmail": email
+            ], merge: true) { _ in completion() }
+        }
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("initializeFreeDemoWorkspace")
+            .call(["fullName": fullName, "workspaceName": studioName]) { _, error in
+                if let error {
+                    print("initializeFreeDemoWorkspace failed, writing the workspace name directly: \(error.localizedDescription)")
+                    writeNameDirectly()
+                    return
+                }
+                completion()
+            }
+        #else
+        writeNameDirectly()
+        #endif
     }
 
     func signInWithGoogle() {
