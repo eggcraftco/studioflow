@@ -47,6 +47,22 @@ func nvParseAmount(_ raw: String) -> Double? {
     return Double(text)
 }
 
+/// Reads an amount that was WRITTEN BY THE APP rather than typed by a person.
+///
+/// `customFields["financialExpense::…"]` is stored as `String(someDouble)` — a
+/// dot decimal, never grouped — so "12.345" means twelve point three four five.
+/// Reading it with the human parser, which treats three trailing digits as a
+/// thousands group, turned that row into 12,345.00 on the next redraw. A value
+/// in the unambiguous machine shape is taken at face value; anything else came
+/// from another platform or an older build and still gets the tolerant reader.
+func nvParseStoredAmount(_ raw: String) -> Double? {
+    let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if text.range(of: "^-?[0-9]+(\\.[0-9]+)?$", options: .regularExpression) != nil {
+        return Double(text)
+    }
+    return nvParseAmount(text)
+}
+
 /// Rounds money to the pence the server stores, so a Mac-written fee or tax
 /// figure matches what `roundMoneyValue` on the server would have produced and
 /// "Recalculate" stops reporting every Mac order as changed.

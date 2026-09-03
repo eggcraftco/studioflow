@@ -10928,7 +10928,7 @@ struct SiparisDetayView: View {
     private func customCurrencyValue(prefix: String, title: String) -> Double {
         let key = financialCustomKey(prefix: prefix, title: title)
         let raw = siparis.customFields?[key] ?? ""
-        return nvParseAmount(raw.replacingOccurrences(of: seciliParaBirimi, with: "")) ?? 0
+        return nvParseStoredAmount(raw.replacingOccurrences(of: seciliParaBirimi, with: "")) ?? 0
     }
 
     private func customCurrencyBinding(prefix: String, title: String) -> Binding<Double> {
