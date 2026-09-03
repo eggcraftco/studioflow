@@ -5805,32 +5805,48 @@ const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 const { createBankFeedFunctions } = require("./bankFeed");
 // Faz 5 finance: processor payouts (Square first) matched to the bank rows they settled into — shared by the bank feed and the connectors.
 const { createSettlementMatcher } = require("./commerce/settlementMatch");
-const settlementMatcher = createSettlementMatcher({ admin, db: () => admin.firestore() });
+/**
+ * One workspace notification, plus the push that goes with it.
+ *
+ * Lifted out of the bank feed's own inline lambda so the settlement matcher can
+ * use it too: the matcher was built with no notification channel at all, so a
+ * payout it could not place was recorded in a counter the caller threw away.
+ */
+async function notifyWorkspaceFromServer(companyId, payload = {}) {
+  const notificationId = String(payload.id || `bank_${Date.now()}`);
+  const ref = notificationCollectionRef(companyId).doc(notificationId);
+  const data = {
+    companyId,
+    type: payload.type || "bank_receipt_matched",
+    title: payload.title || "NivaDesk",
+    message: payload.message || "",
+    route: payload.route || "bank",
+    transactionId: payload.transactionId || "",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false,
+    source: payload.source || "bankFeed"
+  };
+  await ref.set(data, { merge: true });
+  const pushResult = await sendPushNotificationToCompany(companyId, { ...data, notificationId, createdAt: new Date().toISOString() });
+  await ref.set({ pushSent: pushResult.sent > 0, pushResult, pushSentAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+}
+
+const settlementMatcher = createSettlementMatcher({
+  admin,
+  db: () => admin.firestore(),
+  // Without this the matcher had no way to tell anybody a payout could not be
+  // placed — and an unplaced payout is money counted twice in the turnover.
+  notifyCompany: notifyWorkspaceFromServer
+});
 const paypalFeedModules = { createClient: require("./commerce/paypal/client").createPayPalClient, normalize: require("./commerce/paypal/normalize").normalizePayPalTransaction, payoutOf: require("./commerce/paypal/normalize").payoutOfPayPalTransaction, encryptToken: require("./etsy").encryptToken, decryptToken: require("./etsy").decryptToken };
 const bankFeedExports = createBankFeedFunctions({
   admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, settlements: settlementMatcher,
   // PayPal money feed (first-party credentials, encrypted with NIVADESK_PAYPAL_TOKEN_KEY); tests may swap the client for a fake.
   paypal: process.env.NIVADESK_E2E === "1" ? { ...paypalFeedModules, createClient: (options) => (global.__nivadeskPayPalFakeClient ? global.__nivadeskPayPalFakeClient(options) : paypalFeedModules.createClient(options)) } : paypalFeedModules,
   // Workspace notification + push when a waiting receipt finds its transaction.
-  notifyCompany: async (companyId, payload) => {
-    const notificationId = String(payload.id || `bank_${Date.now()}`);
-    const ref = notificationCollectionRef(companyId).doc(notificationId);
-    const data = {
-      companyId,
-      type: payload.type || "bank_receipt_matched",
-      title: payload.title || "NivaDesk",
-      message: payload.message || "",
-      route: payload.route || "bank",
-      transactionId: payload.transactionId || "",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      read: false,
-      actioned: false,
-      source: payload.source || "bankFeed"
-    };
-    await ref.set(data, { merge: true });
-    const pushResult = await sendPushNotificationToCompany(companyId, { ...data, notificationId, createdAt: new Date().toISOString() });
-    await ref.set({ pushSent: pushResult.sent > 0, pushResult, pushSentAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-  },
+  // The same function the settlement matcher uses, so the two cannot drift.
+  notifyCompany: notifyWorkspaceFromServer,
   // A "reconnect your bank" alert that is no longer true is worse than no alert:
   // it sends people back through the consent flow they did not need. When a
   // connection recovers, its alert goes with it.

@@ -11,7 +11,7 @@ const MATCHABLE_STATUSES = new Set(["PAID", "SENT"]);
 /** How far back an automatic pass looks for still-unmatched payouts. */
 const AUTO_LOOKBACK_MS = 120 * 24 * 60 * 60 * 1000;
 
-function createSettlementMatcher({ admin, db, now = () => Date.now() }) {
+function createSettlementMatcher({ admin, db, now = () => Date.now(), notifyCompany = null }) {
   const FieldValue = admin.firestore.FieldValue;
   const company = (companyId) => db().collection("companies").doc(String(companyId));
   const payoutsRef = (companyId, provider) => company(companyId).collection(PROVIDERS[provider].collection);
@@ -39,12 +39,12 @@ function createSettlementMatcher({ admin, db, now = () => Date.now() }) {
   }
 
   /** Tie a payout and a bank row together, both sides in one batch. */
-  async function writeMatch(companyId, provider, payoutDoc, tx, { score = null, reasons = [], method = "auto" }) {
+  async function writeMatch(companyId, provider, payoutDoc, tx, { score = null, reasons = [], method = "auto", amountDelta = 0 }) {
     const payout = payoutDoc.data() || {};
     const totals = payout.totals || {};
     const batch = db().batch();
-    batch.set(payoutDoc.ref, { bankMatch: { transactionId: tx.id, accountId: tx.accountId || null, bookingDate: tx.bookingDate || null, amount: tx.amount ?? null, currency: tx.currency || null, confidence: method === "manual" ? "confirmed" : (Number(score) >= 100 ? "high" : "medium"), score: score ?? null, reasons, method, matchedAtMs: now() }, updatedAtMs: now() }, { merge: true });
-    batch.set(txRef(companyId).doc(tx.id), { incomingKind: "payout", settlement: { provider, providerLabel: PROVIDERS[provider].label, payoutId: payoutDoc.id, payoutExternalId: payout.externalId || payoutDoc.id, connectionId: payout.connectionId || null, arrivalDate: payout.arrivalDate || null, gross: totals.gross ?? null, fee: totals.fee ?? null, refunds: totals.refunds ?? null, net: payout.amount ?? totals.net ?? null, currency: payout.currency || null, entryCount: Number(payout.entryCount) || 0, method, matchedAtMs: now() } }, { merge: true });
+    batch.set(payoutDoc.ref, { bankMatch: { transactionId: tx.id, accountId: tx.accountId || null, bookingDate: tx.bookingDate || null, amount: tx.amount ?? null, currency: tx.currency || null, confidence: method === "manual" ? "confirmed" : (Number(score) >= 100 ? "high" : "medium"), score: score ?? null, reasons, method, amountDelta: Number(amountDelta) || 0, matchedAtMs: now() }, updatedAtMs: now() }, { merge: true });
+    batch.set(txRef(companyId).doc(tx.id), { incomingKind: "payout", settlement: { provider, providerLabel: PROVIDERS[provider].label, payoutId: payoutDoc.id, payoutExternalId: payout.externalId || payoutDoc.id, connectionId: payout.connectionId || null, arrivalDate: payout.arrivalDate || null, gross: totals.gross ?? null, fee: totals.fee ?? null, refunds: totals.refunds ?? null, net: payout.amount ?? totals.net ?? null, currency: payout.currency || null, entryCount: Number(payout.entryCount) || 0, method, amountDelta: Number(amountDelta) || 0, matchedAtMs: now() } }, { merge: true });
     await batch.commit();
   }
 
@@ -79,6 +79,37 @@ function createSettlementMatcher({ admin, db, now = () => Date.now() }) {
       else if (picked.reason === "ambiguous") audit.ambiguous += 1;
       else audit.unmatched += 1;
     }
+
+    // Say so when a payout could not be placed.
+    //
+    // This silence is what makes the double-count possible. A PayPal sale is a
+    // positive row, and the withdrawal that moves that money to the real bank
+    // arrives a second time through the bank feed; the ONLY thing that stops
+    // the second arrival being counted as income again is this match. When it
+    // fails — a fee or an exchange rate moved the amount, the transfer landed
+    // outside the three-day window, two rows looked equally likely — the row
+    // stays ordinary income and the workshop's turnover quietly includes the
+    // same money twice.
+    //
+    // The counters were being incremented and then thrown away by the caller,
+    // the matcher had no notification channel at all, and even the console line
+    // was skipped when nothing matched. An owner had no way to find out.
+    const unplaced = audit.ambiguous + audit.unmatched;
+    if (unplaced > 0 && typeof notifyCompany === "function") {
+      try {
+        await notifyCompany(companyId, {
+          id: `settlement_unmatched_${provider}`,
+          type: "settlement_unmatched",
+          title: `${PROVIDERS[provider].label} payouts need a look`,
+          message: unplaced === 1
+            ? `One ${PROVIDERS[provider].label} payout could not be matched to a bank deposit. Until it is, that money may be counted twice in your income.`
+            : `${unplaced} ${PROVIDERS[provider].label} payouts could not be matched to bank deposits. Until they are, that money may be counted twice in your income.`,
+          route: "bank"
+        });
+      } catch (error) {
+        console.warn("settlement unmatched notice failed:", companyId, provider, error?.message || error);
+      }
+    }
     return audit;
   }
 
@@ -107,7 +138,20 @@ function createSettlementMatcher({ admin, db, now = () => Date.now() }) {
     return { payout: { id: doc.id, externalId: payout.externalId || doc.id, amount: payout.amount ?? null, currency: payout.currency || null, arrivalDate: payout.arrivalDate || null, status: payout.status || null, bankMatch: payout.bankMatch || null }, window: settlementWindow(payout), candidates: exact.map(candidateView), near: near.map(candidateView) };
   }
 
-  /** The owner's word: this row is that payout. Amount and currency still have to agree; the date may not. */
+  /**
+   * The owner's word: this row is that payout.
+   *
+   * The amount no longer has to agree exactly. It used to, which made the
+   * "near" candidates the server itself computes — and the Mac, iPhone and
+   * Android screens already show a Match button for — impossible to confirm:
+   * the one case a person is needed for is a fee or an FX leg, and that is
+   * precisely the case that was refused. The difference is recorded on the
+   * settlement block rather than swallowed, so a total that does not add up can
+   * be explained afterwards.
+   *
+   * The currency still has to agree, and the row still has to be money in and
+   * unclaimed. Those are not judgement calls.
+   */
   async function confirmMatch(companyId, providerValue, payoutId, transactionId) {
     const provider = providerOf(providerValue);
     const doc = await payoutsRef(companyId, provider).doc(String(payoutId)).get();
@@ -116,13 +160,26 @@ function createSettlementMatcher({ admin, db, now = () => Date.now() }) {
     if (!txDoc.exists) { const err = new Error("transaction_not_found"); err.code = "not-found"; throw err; }
     const payout = doc.data() || {}; const tx = { id: txDoc.id, ...(txDoc.data() || {}) };
     if (!(Number(tx.amount) > 0)) { const err = new Error("money_out"); err.code = "failed-precondition"; throw err; }
-    if (Math.abs(Number(tx.amount) - Number(payout.amount)) > 0.005) { const err = new Error("amount_differs"); err.code = "failed-precondition"; throw err; }
+    // A difference is allowed but not unlimited: beyond a fifth of the payout it
+    // is far more likely to be the wrong row than a fee.
+    const delta = Math.round((Number(tx.amount) - Number(payout.amount)) * 100) / 100;
+    const tolerance = Math.max(1, Math.abs(Number(payout.amount) || 0) * 0.2);
+    if (!Number.isFinite(delta) || Math.abs(delta) > tolerance) {
+      const err = new Error("amount_differs"); err.code = "failed-precondition"; throw err;
+    }
     if (tx.currency && payout.currency && String(tx.currency).toUpperCase() !== String(payout.currency).toUpperCase()) { const err = new Error("currency_differs"); err.code = "failed-precondition"; throw err; }
     if (!rowIsFree(tx, doc.id)) { const err = new Error("row_taken"); err.code = "failed-precondition"; throw err; }
     if (payout.bankMatch && payout.bankMatch.transactionId && payout.bankMatch.transactionId !== tx.id) await clearMatch(companyId, provider, null, payout.bankMatch.transactionId);
     const scored = scoreSettlementCandidate(payout, tx, { provider });
-    await writeMatch(companyId, provider, doc, tx, { score: scored.ok ? scored.score : null, reasons: scored.ok ? scored.reasons : ["owner_confirmed"], method: "manual" });
-    return { ok: true, transactionId: tx.id };
+    await writeMatch(companyId, provider, doc, tx, {
+      score: scored.ok ? scored.score : null,
+      reasons: scored.ok ? scored.reasons : ["owner_confirmed"],
+      method: "manual",
+      // What the fee or the exchange rate took, kept so the difference can be
+      // explained rather than merely tolerated.
+      amountDelta: Math.abs(delta) > 0.005 ? delta : 0
+    });
+    return { ok: true, transactionId: tx.id, amountDelta: Math.abs(delta) > 0.005 ? delta : 0 };
   }
 
   async function unmatchPayout(companyId, providerValue, payoutId) {
