@@ -80,7 +80,7 @@ const INCOMING_KINDS = [
   "payout"
 ];
 
-function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification, settlements = null, paypal = null }) {
+function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, bankFeedEnabledForCompany, notifyCompany, clearNotification, settlements = null, paypal = null }) {
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankReceiptInbox");
@@ -126,7 +126,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     ) || null;
   }
 
-  async function requireOwner(request) {
+  async function requireOwner(request, { requirePlan = true } = {}) {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
     const companyId = String(request.data?.companyId || "").trim();
@@ -136,6 +136,21 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const companyData = snap.data() || {};
     if (!uidIsCompanyOwner(companyData, uid)) {
       throw new HttpsError("permission-denied", "Bank connections are managed by the workspace owner.");
+    }
+    // The plan, on the server.
+    //
+    // Banking is a Pro-and-above feature and all three clients enforce that —
+    // the web page, the Mac and iPhone tab, the Android menu. All three are
+    // clients. Nothing on the server checked, so a Free or Starter owner could
+    // call bankCreateRequisition from a browser console, link a real bank, and
+    // be polled every eight hours from then on, at NivaDesk's cost with the
+    // provider. Every callable in this module comes through here, which is why
+    // the check belongs here and not in twenty-nine places.
+    if (requirePlan && bankFeedEnabledForCompany(companyData) !== true) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Bank and payment feeds are part of NivaDesk Pro. Choose a plan to connect an account."
+      );
     }
     return { uid, companyId, companyData };
   }
@@ -557,7 +572,20 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       state: nextState,
       error: failure.message.slice(0, 300)
     });
-    if (nextState !== "ok" && data.syncState !== nextState && typeof notifyCompany === "function") {
+    // Say it again if it is still true.
+    //
+    // The condition used to be "the state CHANGED", so a feed stuck in the same
+    // error for weeks mentioned it once and then went quiet — and a silent bank
+    // feed looks exactly like a quiet month: the money stops arriving and the
+    // books look thinner rather than broken. It is now repeated, but not on
+    // every eight-hourly run: a fortnight apart, which is often enough that a
+    // real break cannot be forgotten and rare enough that it does not become
+    // noise somebody learns to dismiss.
+    const REMIND_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+    const lastAlertMs = Number(data.lastSyncAlertAtMs || 0);
+    const stateChanged = data.syncState !== nextState;
+    const dueAgain = lastAlertMs > 0 && Date.now() - lastAlertMs >= REMIND_AFTER_MS;
+    if (nextState !== "ok" && (stateChanged || dueAgain || !lastAlertMs) && typeof notifyCompany === "function") {
       const bank = cleanText(data.providerName, 80) || "Bank";
       await notifyCompany(companyId, {
         id: `bankSync_${doc.id}`,
@@ -568,7 +596,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
           : `${bank}: the last ${failures} syncs failed (${failure.message.slice(0, 120)}).`,
         route: "bank",
         source: "bankSync"
-      }).catch((error) => console.warn("bank sync notification failed:", error?.message || error));
+      })
+        // Stamped only when the notice actually went out. Stamping first would
+        // start the fortnight's silence on a notification that never arrived —
+        // the workspace would be told nothing, twice.
+        .then(() => doc.ref.set({ lastSyncAlertAtMs: Date.now() }, { merge: true }))
+        .catch((error) => console.warn("bank sync notification failed:", error?.message || error));
     }
   }
 
@@ -677,7 +710,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
           syncState: "ok",
           syncFailures: 0,
           lastSyncError: admin.firestore.FieldValue.delete(),
-          lastSyncErrorAt: admin.firestore.FieldValue.delete()
+          lastSyncErrorAt: admin.firestore.FieldValue.delete(),
+          // Cleared with the error, so a connection that breaks again next
+          // month is told about straight away rather than waiting out the
+          // fortnight left over from the last time.
+          lastSyncAlertAtMs: admin.firestore.FieldValue.delete()
         }, { merge: true });
         await logBankAudit(companyId, {
           kind: "sync",
@@ -727,6 +764,25 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const companies = await db().collection("companies").where("bankFeedEnabled", "==", true).limit(300).get();
     for (const companyDoc of companies.docs) {
       try {
+        // `bankFeedEnabled` on the company document means "this workspace has
+        // linked a bank", not "this workspace pays for one". A workspace that
+        // downgrades keeps the flag and was polled every eight hours for ever
+        // after, at our cost with the provider. The plan is checked here, once
+        // per company per run, and the reason is written down so the screen can
+        // say why the feed stopped rather than showing a date that never moves.
+        if (bankFeedEnabledForCompany(companyDoc.data() || {}) !== true) {
+          await companyDoc.ref.set({
+            bankFeedPausedReason: "plan",
+            bankFeedPausedAtMs: Date.now()
+          }, { merge: true });
+          continue;
+        }
+        if (String((companyDoc.data() || {}).bankFeedPausedReason || "") === "plan") {
+          await companyDoc.ref.set({
+            bankFeedPausedReason: admin.firestore.FieldValue.delete(),
+            bankFeedPausedAtMs: admin.firestore.FieldValue.delete()
+          }, { merge: true });
+        }
         const result = await syncCompanyConnections(companyDoc.id);
         if (result.synced > 0 || result.imported > 0) {
           console.log("scheduledBankSync", companyDoc.id, JSON.stringify(result));
@@ -741,8 +797,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   // "disconnect" only revokes the consent — the transaction history stays,
   // nothing already imported is touched. "purge" is the destructive path that
   // also removes every imported transaction of this connection.
+  // No plan gate: disconnecting must never need the plan that connected — otherwise a downgrade traps the workspace with a live feed it cannot remove.
   const bankDeleteConnection = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 180 }, async (request) => {
-    const { companyId } = await requireOwner(request);
+    const { companyId } = await requireOwner(request, { requirePlan: false });
     const connectionId = cleanText(request.data?.requisitionId, 120);
     if (!connectionId) throw new HttpsError("invalid-argument", "requisitionId is required.");
     const connectionDoc = await connectionsRef(companyId).doc(connectionId).get();
@@ -794,8 +851,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
 
   // Reads the trail the hooks above leave. Owner-only like the rest of the
   // connection surface; served by a callable so no client rule is needed.
+  // No plan gate: reading back what already happened is not new work.
   const bankListAuditLog = onCall({ region: REGION }, async (request) => {
-    const { companyId } = await requireOwner(request);
+    const { companyId } = await requireOwner(request, { requirePlan: false });
     const limit = Math.min(Math.max(Number(request.data?.limit) || 20, 1), 50);
     const snap = await db().collection("companies").doc(String(companyId))
       .collection("bankAuditLog").orderBy("atMs", "desc").limit(limit).get();
@@ -1783,8 +1841,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   });
 
   /** Faz 5: a provider's payouts with their bank side — for cards that are not Square's. */
+  // No plan gate: the same: a list of what is already there.
   const bankListPayouts = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
-    const { companyId } = await requireOwner(request);
+    const { companyId } = await requireOwner(request, { requirePlan: false });
     const provider = cleanText(request.data?.provider, 20).toLowerCase();
     if (!settlements || !settlements.PROVIDERS || !settlements.PROVIDERS[provider]) throw new HttpsError("invalid-argument", "Unknown payout provider.");
     const limit = Math.min(200, Math.max(1, Number(request.data?.limit) || 50));

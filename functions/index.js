@@ -2069,6 +2069,7 @@ const PLAN_ENTITLEMENTS = {
     smsNotificationsEnabled: false,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: false,
+    bankFeedEnabled: false,
     auditLogEnabled: false,
     multiDeviceCloudSyncEnabled: false,
     advancedDashboardEnabled: false,
@@ -2099,6 +2100,7 @@ const PLAN_ENTITLEMENTS = {
     smsNotificationsEnabled: false,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: false,
+    bankFeedEnabled: false,
     auditLogEnabled: false,
     multiDeviceCloudSyncEnabled: false,
     advancedDashboardEnabled: false,
@@ -2131,6 +2133,7 @@ const PLAN_ENTITLEMENTS = {
     smsNotificationsEnabled: true,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: true,
+    bankFeedEnabled: true,
     auditLogEnabled: true,
     multiDeviceCloudSyncEnabled: true,
     advancedDashboardEnabled: true,
@@ -2167,6 +2170,7 @@ const PLAN_ENTITLEMENTS = {
     smsNotificationsEnabled: true,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: true,
+    bankFeedEnabled: true,
     auditLogEnabled: true,
     multiDeviceCloudSyncEnabled: true,
     advancedDashboardEnabled: true,
@@ -5842,6 +5846,8 @@ const settlementMatcher = createSettlementMatcher({
 const paypalFeedModules = { createClient: require("./commerce/paypal/client").createPayPalClient, normalize: require("./commerce/paypal/normalize").normalizePayPalTransaction, payoutOf: require("./commerce/paypal/normalize").payoutOfPayPalTransaction, encryptToken: require("./etsy").encryptToken, decryptToken: require("./etsy").decryptToken };
 const bankFeedExports = createBankFeedFunctions({
   admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, settlements: settlementMatcher,
+  // The plan gate the three clients already enforce, on the server this time.
+  bankFeedEnabledForCompany: (companyData) => billingEntitlementsForCompany(companyData || {}).bankFeedEnabled === true,
   // PayPal money feed (first-party credentials, encrypted with NIVADESK_PAYPAL_TOKEN_KEY); tests may swap the client for a fake.
   paypal: process.env.NIVADESK_E2E === "1" ? { ...paypalFeedModules, createClient: (options) => (global.__nivadeskPayPalFakeClient ? global.__nivadeskPayPalFakeClient(options) : paypalFeedModules.createClient(options)) } : paypalFeedModules,
   // Workspace notification + push when a waiting receipt finds its transaction.
