@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.ui.draw.clip
 
 // Settings design system (design handoff, Sept 2026) — the tokens and shell
 // pieces every Settings screen shares on Android, mirroring the web's
@@ -276,5 +283,97 @@ fun NDSettingsSearchField(value: String, placeholder: String, onValueChange: (St
         if (value.isNotEmpty()) {
             Icon(Icons.Filled.Close, contentDescription = null, tint = NDSettings.muted(), modifier = Modifier.size(16.dp).clickable { onValueChange("") })
         }
+    }
+}
+
+/** A theme choice drawn as the window it would produce; System is split down the middle. */
+@Composable
+fun NDThemePreviewTile(title: String, mode: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    @Composable
+    fun mock(dark: Boolean, modifier: Modifier) {
+        val ground = if (dark) Color(0xFF1C1C1C) else Color(0xFFF3F5F9)
+        val panel = if (dark) Color(0xFF2E2E2E) else Color.White
+        val line = if (dark) Color(0x38FFFFFF) else Color(0x1A000000)
+        Row(modifier = modifier.background(ground).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.width(22.dp).fillMaxHeight().background(panel, RoundedCornerShape(3.dp)).padding(4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(4) { Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(line, RoundedCornerShape(1.dp))) }
+            }
+            Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.fillMaxWidth().height(14.dp).background(panel, RoundedCornerShape(3.dp)))
+                Column(modifier = Modifier.fillMaxWidth().weight(1f).background(panel, RoundedCornerShape(3.dp)).padding(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Box(modifier = Modifier.width(40.dp).height(3.dp).background(line, RoundedCornerShape(1.dp)))
+                    Box(modifier = Modifier.width(40.dp).height(3.dp).background(line, RoundedCornerShape(1.dp)))
+                    Box(modifier = Modifier.width(26.dp).height(3.dp).background(line, RoundedCornerShape(1.dp)))
+                }
+            }
+        }
+    }
+    val frame = if (selected) NDSettings.accent else NDSettings.border()
+    Box(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (selected) NDSettings.rowActive().copy(alpha = 0.6f) else NDSettings.surface(), RoundedCornerShape(10.dp))
+                .border(if (selected) 2.dp else 1.dp, frame, RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().height(78.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, NDSettings.border(), RoundedCornerShape(8.dp))) {
+                if (mode == "System") {
+                    mock(dark = false, modifier = Modifier.weight(1f).fillMaxHeight())
+                    mock(dark = true, modifier = Modifier.weight(1f).fillMaxHeight())
+                } else {
+                    mock(dark = mode == "Dark", modifier = Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                RadioButton(selected = selected, onClick = onClick, colors = RadioButtonDefaults.colors(selectedColor = NDSettings.accent, unselectedColor = NDSettings.muted()), modifier = Modifier.size(20.dp))
+                Text(title, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold, color = NDSettings.text())
+            }
+        }
+        if (selected) {
+            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = NDSettings.accent, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(18.dp).background(NDSettings.surface(), CircleShape))
+        }
+    }
+}
+
+/** A read-only fact in a card: small label, value, optional action on the right. */
+@Composable
+fun NDFactRow(label: String, value: String, icon: ImageVector? = null, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .background(NDSettings.panel(), RoundedCornerShape(9.dp))
+            .border(1.dp, NDSettings.border(), RoundedCornerShape(9.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (icon != null) Icon(icon, contentDescription = null, tint = NDSettings.muted(), modifier = Modifier.size(18.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(label.uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NDSettings.muted())
+            Text(value, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        trailing?.invoke()
+    }
+}
+
+/** An outlined secondary button in the handoff's proportions. */
+@Composable
+fun NDSecondaryButton(title: String, icon: ImageVector? = null, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(36.dp)
+            .background(NDSettings.surface(), RoundedCornerShape(9.dp))
+            .border(1.dp, NDSettings.border(), RoundedCornerShape(9.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (icon != null) Icon(icon, contentDescription = null, tint = NDSettings.text(), modifier = Modifier.size(14.dp))
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
     }
 }

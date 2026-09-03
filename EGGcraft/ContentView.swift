@@ -13717,9 +13717,7 @@ struct AccountProfileView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerCard
-
+            VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
                 switch sectionMode {
                 case .account:
                     profileCard
@@ -13756,8 +13754,7 @@ struct AccountProfileView: View {
                     teamAccessCard
                 }
             }
-            .padding(accountOuterPadding)
-            .frame(maxWidth: isPhoneLayout ? .infinity : 820, alignment: .topLeading)
+            .frame(maxWidth: isPhoneLayout ? .infinity : NDSettings.contentMaxWidth, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .onAppear {
@@ -13918,11 +13915,7 @@ struct AccountProfileView: View {
                 }
             }
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
-        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(colorScheme == .dark ? 0 : 0.06), radius: 16, y: 8)
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     private var profileCard: some View {
@@ -13990,10 +13983,7 @@ struct AccountProfileView: View {
 
             statusMessages
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     // Workspace identity (company name) — shown under Workspace > Branding so the
@@ -14023,10 +14013,7 @@ struct AccountProfileView: View {
 
             statusMessages
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     private var avatarEditor: some View {
@@ -14195,10 +14182,7 @@ struct AccountProfileView: View {
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
 
@@ -14990,10 +14974,7 @@ struct AccountProfileView: View {
 
             SettingsLogoURLField(label: t("Workspace Logo", lang: seciliDil), text: $appLogoUrl)
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     private var accountEmailTextField: some View {
@@ -15062,7 +15043,10 @@ struct AccountProfileView: View {
 
     private var deleteAccountCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(t("Delete account", lang: seciliDil), icon: "trash.fill")
+            Text(t("Danger zone", lang: seciliDil))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(NDSettings.danger)
+            NDSettingsCardHead(icon: "trash.fill", title: t("Delete account", lang: seciliDil), tint: NDSettings.danger)
             // Two different losses, two separate lines — "your workspace dies"
             // and "you leave other people's workspaces" were one gray sentence.
             Text(t("This deletes your account permanently. It cannot be undone.", lang: seciliDil))
@@ -15111,10 +15095,7 @@ struct AccountProfileView: View {
             .buttonStyle(.plain)
             .disabled(deletingAccount || deleteAccountConfirmText.trimmingCharacters(in: .whitespaces).uppercased() != "DELETE")
         }
-        .padding(18)
-        .background(Color.red.opacity(0.05))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.35), lineWidth: 1))
-        .cornerRadius(12)
+        .ndSettingsCard(padding: accountCardPadding, borderColor: NDSettings.danger.opacity(0.45))
     }
 
     private var securityCard: some View {
@@ -15185,10 +15166,7 @@ struct AccountProfileView: View {
                 }
             }
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     private var passwordResetButton: some View {
@@ -15281,10 +15259,7 @@ struct AccountProfileView: View {
                 )
             }
         }
-        .padding(accountCardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: accountCornerRadius, style: .continuous))
+        .ndSettingsCard(padding: accountCardPadding)
     }
 
     @State private var joinCompanyId: String = ""
@@ -16120,13 +16095,7 @@ struct AccountProfileView: View {
     }
 
     private func sectionTitle(_ title: String, icon: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundColor(.blue)
-            Text(title)
-                .font(.system(size: isPhoneLayout ? 16 : 18, weight: .bold))
-            Spacer()
-        }
+        NDSettingsCardHead(icon: icon, title: title)
     }
 
     private var readOnlyWorkspaceNotice: some View {

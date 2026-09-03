@@ -716,10 +716,7 @@ struct AyarlarView: View {
             if !settingsSections.contains(where: { $0.key == seciliAyarSekmesi }) {
                 restrictedSettingsSection
             } else if seciliAyarSekmesi == "Profile & Security" { AccountProfileView(sectionMode: .account, hideWorkspaceIdentity: true) }
-            else if seciliAyarSekmesi == "Preferences" {
-                temaAyari
-                dilAyari
-            }
+            else if seciliAyarSekmesi == "Preferences" { preferencesAyari }
             else if seciliAyarSekmesi == "About" { aboutAyari }
             else if seciliAyarSekmesi == "Branding" {
                 if canEditWorkspace {
@@ -3710,24 +3707,57 @@ struct AyarlarView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
     }
 
-    private var temaAyari: some View {
-        SettingsCard(title: t("Theme", lang: seciliDil), iconName: "moon.circle.fill") {
-            HStack {
-                Text(t("Theme", lang: seciliDil))
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-                    .frame(width: 150, alignment: .leading)
-                Spacer()
-                Picker("", selection: themeSelectionBinding) {
-                    Text(t("System", lang: seciliDil)).tag("System")
-                    Text(t("Light", lang: seciliDil)).tag("Light")
-                    Text(t("Dark", lang: seciliDil)).tag("Dark")
+    /// Preferences — the theme as three live previews, then the language.
+    private var preferencesAyari: some View {
+        VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
+            NDSettingsSurface(spacing: 16) {
+                NDSettingsCardHead(icon: "paintbrush.pointed.fill", title: t("Appearance", lang: seciliDil), subtitle: t("Choose a theme for your account across every device.", lang: seciliDil))
+                themePreviewGrid
+                Text(t("Synced across your devices.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(NDSettings.muted(colorScheme))
+            }
+            NDSettingsSurface(spacing: 14) {
+                NDSettingsCardHead(icon: "globe", title: t("Language & region", lang: seciliDil), subtitle: t("Choose the language used across NivaDesk.", lang: seciliDil))
+                HStack(spacing: 12) {
+                    Text(t("Language", lang: seciliDil))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(NDSettings.text(colorScheme))
+                        .frame(width: isPhoneLayout ? 90 : 150, alignment: .leading)
+                    Picker("", selection: languageSelectionBinding) {
+                        ForEach(desteklenenDiller, id: \.self) {
+                            Text($0).tag($0)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(maxWidth: 280, alignment: .leading)
+                    Spacer(minLength: 0)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .foregroundColor(.primary)
+                Text(t("Changes apply immediately after saving.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(NDSettings.muted(colorScheme))
             }
         }
+    }
+
+    private var themePreviewGrid: some View {
+        let options: [(key: String, title: String)] = [
+            ("System", t("System", lang: seciliDil)),
+            ("Light", t("Light", lang: seciliDil)),
+            ("Dark", t("Dark", lang: seciliDil))
+        ]
+        return HStack(alignment: .top, spacing: 12) {
+            ForEach(options, id: \.key) { option in
+                NDThemePreviewTile(title: option.title, mode: option.key, selected: appTheme == option.key) {
+                    themeSelectionBinding.wrappedValue = option.key
+                }
+            }
+        }
+    }
+
+    private var temaAyari: some View {
+        preferencesAyari
     }
 
     private var markaAyari: some View {
@@ -3758,41 +3788,82 @@ struct AyarlarView: View {
         }
     }
 
+    @State private var aboutCopiedCompanyId: Bool = false
+
+    /// About — the product card with its version and links, then the workspace facts.
     private var aboutAyari: some View {
-        SettingsCard(title: t("About", lang: seciliDil), iconName: "info.circle.fill") {
-            VStack(alignment: .leading, spacing: 10) {
-                Image("NivaDeskLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 58, alignment: .leading)
-                    .padding(.bottom, 5)
-                    .accessibilityLabel("NivaDesk")
-                Text(t("Version", lang: seciliDil) + " " + NivaDeskAppVersion.display)
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-                Text(t("An EGGcraft brand for studio workspace management.", lang: seciliDil))
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray)
-                HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
+            NDSettingsSurface(spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    Image("NivaDeskLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 150, maxHeight: 40, alignment: .leading)
+                        .accessibilityLabel("NivaDesk")
+                    Spacer(minLength: 8)
+                    NDStatusPill(status: .saved, text: t("Up to date", lang: seciliDil))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("An EGGcraft brand for studio workspace management.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("\(t("Version", lang: seciliDil)) \(NivaDeskAppVersion.display) · \(ndPlatformName)")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(NDSettings.text(colorScheme))
+                }
+                HStack(spacing: 10) {
                     if let guideURL = URL(string: "https://nivadesk.app/guide") {
-                        Link(t("User guide", lang: seciliDil), destination: guideURL)
-                            .font(.system(size: 13, weight: .semibold))
+                        NDSecondaryButton(title: t("User guide", lang: seciliDil), icon: "book") { openExternalURL(guideURL) }
                     }
                     if let changelogURL = URL(string: "https://nivadesk.app/changelog") {
-                        Link(t("What's new", lang: seciliDil), destination: changelogURL)
-                            .font(.system(size: 13, weight: .semibold))
+                        NDSecondaryButton(title: t("What's new", lang: seciliDil), icon: "sparkles") { openExternalURL(changelogURL) }
                     }
                 }
-                Divider().padding(.vertical, 10)
-                Text(t("© 2026 All rights reserved.", lang: seciliDil))
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.primary)
-                Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", lang: seciliDil))
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-                    .lineSpacing(4)
             }
+
+            NDSettingsSurface(spacing: 14) {
+                NDSettingsCardHead(icon: "building.2.fill", title: t("Current workspace", lang: seciliDil), subtitle: t("Technical details for this signed-in workspace.", lang: seciliDil))
+                let facts = Group {
+                    NDFactRow(label: t("Workspace", lang: seciliDil), value: authVM.companyName.isEmpty ? "—" : authVM.companyName, icon: "person.2")
+                    NDFactRow(label: t("Company ID", lang: seciliDil), value: firebaseManager.currentCompanyId.isEmpty ? "—" : firebaseManager.currentCompanyId, icon: "number") {
+                        NDSecondaryButton(title: aboutCopiedCompanyId ? t("Copied", lang: seciliDil) : t("Copy", lang: seciliDil), icon: "doc.on.doc") {
+                            ndCopyToPasteboard(firebaseManager.currentCompanyId)
+                            aboutCopiedCompanyId = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { aboutCopiedCompanyId = false }
+                        }
+                    }
+                    NDFactRow(label: t("Platform", lang: seciliDil), value: "Swift + Firebase", icon: "cpu")
+                    NDFactRow(label: t("Sync", lang: seciliDil), value: "Web, Mac, iPhone, Android", icon: "arrow.triangle.2.circlepath") {
+                        NDStatusPill(status: .saved, text: t("Connected", lang: seciliDil))
+                    }
+                }
+                if isPhoneLayout {
+                    VStack(spacing: 10) { facts }
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) { facts }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("© 2026 All rights reserved.", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(NDSettings.text(colorScheme))
+                Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(NDSettings.muted(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 4)
         }
+    }
+
+    private func openExternalURL(_ url: URL) {
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        UIApplication.shared.open(url)
+        #endif
     }
     
     private func loadPersonalInterfaceSettings() {

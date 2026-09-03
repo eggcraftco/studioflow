@@ -1,4 +1,10 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // Settings design system (design handoff, Sept 2026) — the tokens and the shell
 // pieces every Settings screen shares on Mac and iPhone, mirroring the web's
@@ -427,5 +433,196 @@ struct NDSettingsListRow: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Puts text on the clipboard on either platform.
+func ndCopyToPasteboard(_ text: String) {
+    #if os(macOS)
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    #else
+    UIPasteboard.general.string = text
+    #endif
+}
+
+/// "Mac", "iPad" or "iPhone" for the About screen.
+var ndPlatformName: String {
+    #if os(macOS)
+    return "Mac"
+    #else
+    return UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+    #endif
+}
+
+/// A theme choice drawn as the window it would produce: sidebar strip, a few
+/// content lines, System split down the middle. Selected = accent frame + check.
+struct NDThemePreviewTile: View {
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    let mode: String
+    let selected: Bool
+    let action: () -> Void
+
+    private func ground(_ dark: Bool) -> Color { dark ? Color(white: 0.11) : Color(red: 0xF3 / 255, green: 0xF5 / 255, blue: 0xF9 / 255) }
+    private func panel(_ dark: Bool) -> Color { dark ? Color(white: 0.18) : .white }
+    private func line(_ dark: Bool) -> Color { dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10) }
+
+    private func mock(dark: Bool) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 3).fill(panel(dark)).frame(width: 22)
+                .overlay(VStack(spacing: 3) { ForEach(0..<4, id: \.self) { _ in RoundedRectangle(cornerRadius: 1).fill(line(dark)).frame(height: 3) } }.padding(4), alignment: .top)
+            VStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 3).fill(panel(dark)).frame(height: 14)
+                RoundedRectangle(cornerRadius: 3).fill(panel(dark))
+                    .overlay(VStack(alignment: .leading, spacing: 3) { ForEach(0..<3, id: \.self) { i in RoundedRectangle(cornerRadius: 1).fill(line(dark)).frame(width: i == 2 ? 26 : 40, height: 3) } }.padding(5), alignment: .topLeading)
+            }
+        }
+        .padding(6)
+        .background(ground(dark))
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                ZStack {
+                    if mode == "System" {
+                        HStack(spacing: 0) {
+                            mock(dark: false).clipped()
+                            mock(dark: true).clipped()
+                        }
+                    } else {
+                        mock(dark: mode == "Dark")
+                    }
+                }
+                .frame(height: 78)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(NDSettings.border(scheme), lineWidth: 1))
+                HStack(spacing: 8) {
+                    Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                        .font(.system(size: 14))
+                        .foregroundColor(selected ? NDSettings.accent : NDSettings.muted(scheme))
+                    Text(title)
+                        .font(.system(size: 13, weight: selected ? .bold : .semibold))
+                        .foregroundColor(NDSettings.text(scheme))
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? NDSettings.rowActive(scheme).opacity(0.6) : NDSettings.surface(scheme)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(selected ? NDSettings.accent : NDSettings.border(scheme), lineWidth: selected ? 2 : 1))
+            .overlay(alignment: .topTrailing) {
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(NDSettings.accent)
+                        .background(Circle().fill(NDSettings.surface(scheme)))
+                        .offset(x: 6, y: -6)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+/// A read-only fact in a card: small label, value, optional action on the right.
+struct NDFactRow<Trailing: View>: View {
+    @Environment(\.colorScheme) private var scheme
+    let label: String
+    let value: String
+    var icon: String? = nil
+    @ViewBuilder let trailing: Trailing
+
+    init(label: String, value: String, icon: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.label = label
+        self.value = value
+        self.icon = icon
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(NDSettings.muted(scheme))
+                    .frame(width: 18)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label.uppercased())
+                    .font(.system(size: 10.5, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundColor(NDSettings.muted(scheme))
+                Text(value)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(NDSettings.text(scheme))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 52)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.panel(scheme)))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.border(scheme), lineWidth: 1))
+    }
+}
+
+extension NDFactRow where Trailing == EmptyView {
+    init(label: String, value: String, icon: String? = nil) {
+        self.init(label: label, value: value, icon: icon) { EmptyView() }
+    }
+}
+
+/// An outlined secondary button in the handoff's proportions.
+struct NDSecondaryButton: View {
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    var icon: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .semibold)) }
+                Text(title).font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(NDSettings.text(scheme))
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.surface(scheme)))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.border(scheme), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The handoff card as a modifier for views that build their own body:
+/// surface fill, 12pt radius, 1px border, no shadow.
+struct NDSettingsCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    var padding: CGFloat = NDSettings.cardPadding
+    var borderColor: Color? = nil
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).fill(NDSettings.surface(scheme)))
+            .overlay(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).stroke(borderColor ?? NDSettings.border(scheme), lineWidth: 1))
+    }
+}
+
+extension View {
+    func ndSettingsCard(padding: CGFloat = NDSettings.cardPadding, borderColor: Color? = nil) -> some View {
+        modifier(NDSettingsCardModifier(padding: padding, borderColor: borderColor))
     }
 }

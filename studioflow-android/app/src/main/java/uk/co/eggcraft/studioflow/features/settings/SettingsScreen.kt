@@ -640,7 +640,7 @@ private fun SettingsDetailScreen(
                     ThemeBrandingDetail(state, onUpdateWorkspaceSettings, showTheme = true, showBranding = false)
                     LanguageLabelsDetail(state, onUpdateWorkspaceSettings, personalOnly = true)
                 }
-                "about" -> AboutDetail()
+                "about" -> AboutDetail(state)
                 "branding" -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     ThemeBrandingDetail(state, onUpdateWorkspaceSettings, showTheme = false, showBranding = true)
                     AccountDetail(
@@ -770,23 +770,18 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
         else -> t("System")
     }
     DetailColumn {
-        if (showTheme) DetailCard(title = t("Theme"), icon = Icons.Filled.Palette) {
-            MenuField(
-                label = t("Theme"),
-                value = displayedTheme,
-                options = listOf(t("System"), t("Light"), t("Dark")),
-                onSelect = { selected ->
-                    val canonicalTheme = when (selected) {
-                        t("Light") -> "Light"
-                        t("Dark") -> "Dark"
-                        else -> "System"
+        if (showTheme) DetailCard(title = t("Appearance"), icon = Icons.Filled.Palette, subtitle = t("Choose a theme for your account across every device.")) {
+            val current = when (settings.appTheme.trim()) { "Light" -> "Light"; "Dark" -> "Dark"; else -> "System" }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("System", "Light", "Dark").forEach { mode ->
+                    NDThemePreviewTile(title = t(mode), mode = mode, selected = current == mode, modifier = Modifier.weight(1f)) {
+                        // Theme is ALWAYS personal — every user picks their own theme
+                        // across their devices, even workspace owners.
+                        if (current != mode) onSave(mapOf("personalAppTheme" to mode), t("Theme saved."))
                     }
-                    // Theme is ALWAYS personal — every user picks their own theme
-                    // across their devices, even workspace owners. Workspace-wide
-                    // theme is no longer used.
-                    onSave(mapOf("personalAppTheme" to canonicalTheme), t("Theme saved."))
                 }
-            )
+            }
+            Text(t("Synced across your devices."), fontSize = 12.sp, color = NDSettings.muted())
         }
         if (showBranding) DetailCard(title = t("Theme & Branding"), icon = Icons.Filled.Palette) {
             OutlinedTextField(
@@ -808,7 +803,7 @@ private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, 
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     DetailColumn {
-        DetailCard(title = t("Language & Labels"), icon = Icons.Filled.Language) {
+        DetailCard(title = t("Language & region"), icon = Icons.Filled.Language, subtitle = t("Choose the language used across NivaDesk.")) {
             MenuField(
                 label = t("Select Language"),
                 value = state.workspaceSettings.selectedLanguage,
@@ -899,7 +894,7 @@ private fun GeneralSettingsDetail(
                 includeSecurity = true,
                 includeWorkspaceIdentity = canManageWorkspaceIdentity
             )
-            "about" -> AboutDetail()
+            "about" -> AboutDetail(state)
             else -> {
                 DetailCard(title = t("General"), icon = Icons.Filled.Settings) {
                     GeneralMenuRow(
@@ -6270,36 +6265,46 @@ private fun supportDateText(value: Date?): String {
 
 
 @Composable
-private fun AboutDetail() {
+private fun AboutDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val uriHandler = LocalUriHandler.current
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(2000); copied = false } }
+    val workspace = state.workspace
     DetailColumn {
-        DetailCard(title = t("About"), icon = Icons.Filled.Info) {
-            NivaDeskLogoLockup(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp)
-            )
-            Text(t("Version") + " " + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                t("User guide"),
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/guide") }
-            )
-            Text(
-                t("What's new"),
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable { uriHandler.openUri("https://nivadesk.app/changelog") }
-            )
-            HorizontalDivider()
-            Text(t("(c) 2026 All rights reserved."), fontWeight = FontWeight.ExtraBold)
-            Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        NDSettingsSurface(spacing = 14.dp) {
+            Row(verticalAlignment = Alignment.Top) {
+                NivaDeskLogoLockup(modifier = Modifier.weight(1f).height(40.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                NDStatusPill(NDSettingsStatus.Saved, t("Up to date"))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(t("An EGGcraft brand for studio workspace management."), fontSize = 13.sp, color = NDSettings.muted(), lineHeight = 18.sp)
+                Text(t("Version") + " " + BuildConfig.VERSION_NAME + " · Android", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                NDSecondaryButton(title = t("User guide"), icon = Icons.Filled.Description) { uriHandler.openUri("https://nivadesk.app/guide") }
+                NDSecondaryButton(title = t("What's new"), icon = Icons.Outlined.AutoAwesome) { uriHandler.openUri("https://nivadesk.app/changelog") }
+            }
+        }
+        NDSettingsSurface(spacing = 12.dp) {
+            NDSettingsCardHead(icon = Icons.Filled.Business, title = t("Current workspace"), subtitle = t("Technical details for this signed-in workspace."))
+            NDFactRow(label = t("Workspace"), value = workspace?.name?.takeIf { it.isNotBlank() } ?: "—", icon = Icons.Filled.People)
+            NDFactRow(label = t("Company ID"), value = workspace?.id?.takeIf { it.isNotBlank() } ?: "—", icon = Icons.Filled.Badge) {
+                NDSecondaryButton(title = if (copied) t("Copied") else t("Copy"), icon = Icons.Filled.ContentCopy) {
+                    workspace?.id?.let { clipboard.setText(AnnotatedString(it)); copied = true }
+                }
+            }
+            NDFactRow(label = t("Platform"), value = "Kotlin + Firebase", icon = Icons.Filled.Hub)
+            NDFactRow(label = t("Sync"), value = "Web, Mac, iPhone, Android", icon = Icons.Filled.Backup) {
+                NDStatusPill(NDSettingsStatus.Saved, t("Connected"))
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(t("(c) 2026 All rights reserved."), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
+            Text(t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer."), fontSize = 12.sp, color = NDSettings.muted(), lineHeight = 17.sp)
         }
     }
 }
@@ -6397,11 +6402,11 @@ private fun DetailColumn(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun DetailCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
+private fun DetailCard(title: String, icon: ImageVector, subtitle: String = "", content: @Composable ColumnScope.() -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     NDSettingsSurface(spacing = 14.dp) {
-        NDSettingsCardHead(icon = icon, title = title)
+        NDSettingsCardHead(icon = icon, title = title, subtitle = subtitle)
         content()
     }
 }
@@ -9234,14 +9239,10 @@ private fun DeleteAccountCard(onSignOut: () -> Unit) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val canDelete = confirmText.trim().uppercase() == "DELETE"
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(t("Delete account"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+    NDSettingsSurface(spacing = 10.dp, borderColor = NDSettings.danger.copy(alpha = 0.45f)) {
+        Text(t("Danger zone"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NDSettings.danger)
+        NDSettingsCardHead(icon = Icons.Filled.DeleteForever, title = t("Delete account"), tint = NDSettings.danger)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Two different losses, two separate lines — "your workspace dies"
             // and "you leave other people's workspaces" were one gray sentence.
             Text(
