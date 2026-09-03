@@ -122,6 +122,47 @@ check("a placeholder name from a client that has no form yet is not a customer",
   assert.strictEqual(generatedProjectName("  New Project  ", 1), "Project #1");
 });
 
+// ---- the rule that is not visible in any one file --------------------------
+//
+// Firestore refuses a transaction that reads after it has written. The order
+// create reads a picked customer, reads the counter, then the customer upsert
+// reads before IT writes — so minting the number in one read-and-write step put
+// a write in the middle of those reads and made every single create throw.
+// Nothing in the module can see that; the ordering lives in index.js, so this
+// reads it there.
+check("the order create does every read before it writes anything", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+
+  const start = source.indexOf("exports.createWebOrder = onCall(");
+  assert.ok(start > 0, "createWebOrder is where it was");
+  const open = source.indexOf("await db.runTransaction(", start);
+  assert.ok(open > 0, "the create still runs a transaction");
+  const body = source.slice(open, source.indexOf("\n  });", open));
+
+  const readCounter = body.indexOf("readNextProjectNumber(");
+  const upsert = body.indexOf("upsertCustomerForWebOrder(");
+  const writeCounter = body.indexOf("commitProjectNumber(");
+  const writeOrder = body.indexOf("transaction.set(orderRef");
+
+  assert.ok(readCounter > 0, "the counter is read inside the transaction");
+  assert.ok(upsert > 0 && writeCounter > 0 && writeOrder > 0, "the three steps are all there");
+  assert.ok(
+    readCounter < upsert,
+    "the counter must be READ before the customer upsert, which reads too"
+  );
+  assert.ok(
+    writeCounter > upsert,
+    "the counter must be WRITTEN after the upsert's read, or Firestore refuses the whole create"
+  );
+  assert.ok(writeOrder > writeCounter, "the order is written last");
+  assert.ok(
+    !/nextProjectNumber\(transaction/.test(body),
+    "the create must use the split read/write halves, not the one-step minter"
+  );
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try {

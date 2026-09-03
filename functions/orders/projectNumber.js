@@ -24,15 +24,33 @@
  * orders are deleted.
  */
 async function nextProjectNumber(transaction, companyRef, seedFloor = 0) {
+  const next = await readNextProjectNumber(transaction, companyRef, seedFloor);
+  commitProjectNumber(transaction, companyRef, next);
+  return next;
+}
+
+/**
+ * The read half, on its own.
+ *
+ * Firestore refuses a transaction that reads after it has written, and the
+ * order create also reads a customer and then writes one. Minting in one step
+ * put a write between those two reads and would have made every create throw,
+ * so a caller with other reads to do takes the halves apart and keeps all of
+ * its reads together.
+ */
+async function readNextProjectNumber(transaction, companyRef, seedFloor = 0) {
   const snapshot = await transaction.get(companyRef);
   const data = snapshot.exists ? snapshot.data() || {} : {};
   const stored = Number(data.projectCounter);
   const base = Number.isFinite(stored) && stored > 0
     ? stored
     : Math.max(Number(seedFloor) || 0, 0);
-  const next = base + 1;
+  return base + 1;
+}
+
+/** The write half. Must not run until every read in the transaction is done. */
+function commitProjectNumber(transaction, companyRef, next) {
   transaction.set(companyRef, { projectCounter: next }, { merge: true });
-  return next;
 }
 
 // The placeholder names an older client still sends are not customers. A web
@@ -63,4 +81,10 @@ function generatedProjectName(customerName, projectNumber, cleanText) {
   return name ? `${name} · ${tail}` : tail;
 }
 
-module.exports = { nextProjectNumber, generatedProjectName, PLACEHOLDER_CUSTOMER_NAMES };
+module.exports = {
+  nextProjectNumber,
+  readNextProjectNumber,
+  commitProjectNumber,
+  generatedProjectName,
+  PLACEHOLDER_CUSTOMER_NAMES
+};

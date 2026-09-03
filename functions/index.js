@@ -5769,7 +5769,12 @@ const financeEngine = require("./finance/engine");
 // The project number and the name built from it — their own module so the two
 // rules that matter can be tested: the counter only counts up, and nothing
 // hands a number back. See functions/orders/projectNumber.js.
-const { nextProjectNumber, generatedProjectName: buildProjectName } = require("./orders/projectNumber");
+const {
+  nextProjectNumber,
+  readNextProjectNumber,
+  commitProjectNumber,
+  generatedProjectName: buildProjectName
+} = require("./orders/projectNumber");
 const generatedProjectName = (customerName, projectNumber) =>
   buildProjectName(customerName, projectNumber, (value) => cleanOrderText(value, "", 180));
 const { createFinanceStamp } = require("./finance/stamp");
@@ -14595,10 +14600,14 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
       }
     }
 
-    projectNumber = await nextProjectNumber(transaction, companyRef, usage.orderCount);
+    // Every read first. Firestore refuses a transaction that reads after it has
+    // written, and the customer upsert below reads before it writes — so the
+    // counter is READ here and only written once that upsert is done.
+    projectNumber = await readNextProjectNumber(transaction, companyRef, usage.orderCount);
     if (!projectName) projectName = generatedProjectName(resolvedCustomerName, projectNumber);
 
     customerResult = await upsertCustomerForWebOrder(transaction, companyId, resolvedCustomerName, paymentDate, uid, email);
+    commitProjectNumber(transaction, companyRef, projectNumber);
     transaction.set(orderRef, {
       ...orderPayload,
       customerName: resolvedCustomerName,
