@@ -32,6 +32,12 @@ import {
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
 import { studioT } from "@/lib/studioflow/language";
+import {
+  inviteWorkspaceMember,
+  listWorkspaceInvitations,
+  revokeWorkspaceInvitation,
+  type PendingInvitation
+} from "@/lib/studioflow/invitations";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -63,6 +69,10 @@ export default function TeamPage() {
   const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [members, setMembers] = useState<TeamMemberDetail[]>([]);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteLink, setInviteLink] = useState("");
   const [joinRequests, setJoinRequests] = useState<JoinRequestDetail[]>([]);
   const [customRoles, setCustomRoles] = useState<WorkspaceCustomRole[]>([]);
   const [requestRoles, setRequestRoles] = useState<Record<string, string>>({});
@@ -98,12 +108,20 @@ export default function TeamPage() {
         setMembers([]);
         setJoinRequests([]);
         setCustomRoles([]);
+        setInvitations([]);
         return;
       }
 
       const teamData = await loadTeamAccessData(workspaceContext);
       setWorkspace(workspaceContext);
       setMembers(teamData.members);
+      // Invitations are read through a callable, and only a manager may.
+      // A refusal here must not take the whole screen down with it.
+      try {
+        setInvitations(await listWorkspaceInvitations(workspaceContext));
+      } catch {
+        setInvitations([]);
+      }
       setJoinRequests(teamData.joinRequests);
       setCustomRoles(teamData.customRoles);
       setRequestRoles(previous => {
@@ -397,25 +415,68 @@ export default function TeamPage() {
         <div className="pill">{t("Access")}</div>
         <h2 style={{ margin: "12px 0 12px" }}>{t("Invite and request access")}</h2>
         <div className="team-access-entry-grid">
-          <div className="team-access-entry-panel">
+          <form className="team-access-entry-panel" onSubmit={event => {
+            event.preventDefault();
+            if (!workspace || !inviteEmail.trim()) return;
+            setInviteLink("");
+            void runTeamAction("invite", async () => {
+              const result = await inviteWorkspaceMember(workspace, { email: inviteEmail, role: inviteRole });
+              setInviteEmail("");
+              // Shown only when the email did not go out, so the owner can send
+              // the link themselves instead of wondering why nothing arrived.
+              if (!result.emailSent) setInviteLink(result.acceptUrl);
+            }, t("Invitation sent."));
+          }}>
             <div className="team-access-entry-heading">
-              <strong>{t("Invite People")}</strong>
-              <span>{isOwner ? hasTeamPlan ? t("Share email or Company ID") : t("Team plan required") : t("Owner only")}</span>
+              <strong>{t("Invite Member")}</strong>
+              <span>{canManageTeam ? t("By email") : hasTeamPlan ? t("Owner or admin only") : t("Team plan required")}</span>
             </div>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              {t("Share your account email or Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.")}
+              {t("They get an email with a link. Nothing happens until they accept it.")}
             </p>
-            {isOwner && hasTeamPlan ? (
+            <input
+              className="input"
+              type="email"
+              placeholder="employee@example.com"
+              value={inviteEmail}
+              onChange={event => setInviteEmail(event.target.value)}
+              disabled={!canManageTeam || Boolean(actioning)}
+            />
+            <select
+              className="input"
+              value={inviteRole}
+              onChange={event => setInviteRole(event.target.value)}
+              disabled={!canManageTeam || Boolean(actioning)}
+            >
+              {roleOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button className="button" type="submit" disabled={!canManageTeam || !inviteEmail.trim() || Boolean(actioning)}>
+              {actioning === "invite" ? t("Sending...") : t("Send Invitation")}
+            </button>
+            {inviteLink ? (
               <div className="team-access-id-box">
-                <code>{workspace?.id ?? ""}</code>
-                <button className="button secondary" type="button" onClick={() => copyText(workspace?.id ?? "", t("Company ID copied"))} disabled={!workspace?.id}>{t("Copy")}</button>
+                <code>{inviteLink}</code>
+                <button className="button secondary" type="button" onClick={() => copyText(inviteLink, t("Link copied"))}>{t("Copy")}</button>
               </div>
+            ) : null}
+            {canManageTeam && hasTeamPlan ? (
+              <>
+                <p style={{ color: "var(--muted)", margin: 0, fontSize: 13 }}>
+                  {t("Or share your Company ID and approve the request they send.")}
+                </p>
+                <div className="team-access-id-box">
+                  <code>{workspace?.id ?? ""}</code>
+                  <button className="button secondary" type="button" onClick={() => copyText(workspace?.id ?? "", t("Company ID copied"))} disabled={!workspace?.id}>{t("Copy")}</button>
+                </div>
+              </>
             ) : (
               <p style={{ color: "var(--muted)", margin: 0 }}>
-                {isOwner ? t("Upgrade to NivaDesk Team to approve new members.") : t("Only the workspace owner can invite and approve new members.")}
+                {isOwner ? t("Upgrade to NivaDesk Team to invite people.") : t("Only the workspace owner can invite and approve new members.")}
               </p>
             )}
-          </div>
+          </form>
 
           <form className="team-access-entry-panel" onSubmit={event => {
             event.preventDefault();
@@ -511,6 +572,59 @@ export default function TeamPage() {
       </section>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", alignItems: "start" }}>
+        {invitations.some(invitation => invitation.status === "pending") ? (
+          <section className="card" style={{ padding: 22 }}>
+            <div className="pill">{t("Invitations")}</div>
+            <h2 style={{ margin: "12px 0 6px" }}>{t("Waiting to be accepted")}</h2>
+            <p style={{ color: "var(--muted)", marginTop: 0 }}>
+              {t("These people have a link. They are not members until they use it.")}
+            </p>
+            <div className="grid" style={{ gap: 10 }}>
+              {invitations.filter(invitation => invitation.status === "pending").map(invitation => (
+                <article
+                  key={invitation.id}
+                  className="card"
+                  style={{ padding: 14, background: "rgba(255,255,255,0.58)", boxShadow: "none" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <strong>{invitation.email}</strong>
+                      <p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 13 }}>
+                        {invitation.emailSent
+                          ? t("Email sent.")
+                          : t("The email could not be sent — send them the link yourself.")}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span className="pill">{roleOptionLabel(invitation.role)}</span>
+                    </div>
+                  </div>
+                  {canManageTeam ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={Boolean(actioning)}
+                        onClick={() => {
+                          if (!workspace) return;
+                          void runTeamAction(
+                            `revoke-${invitation.id}`,
+                            () => revokeWorkspaceInvitation(workspace, invitation.id),
+                            t("Invitation withdrawn.")
+                          );
+                        }}
+                      >
+                        {t("Withdraw")}
+                      </button>
+                      {actioning === `revoke-${invitation.id}` ? <span className="pill">{t("Updating...")}</span> : null}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="card" style={{ padding: 22 }}>
           <div className="pill">{t("Members")}</div>
           <h2 style={{ margin: "12px 0 14px" }}>{t("Workspace members")}</h2>
