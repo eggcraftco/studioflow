@@ -35,6 +35,14 @@ async function nextProjectNumber(transaction, companyRef, seedFloor = 0) {
   return next;
 }
 
+// The placeholder names an older client still sends are not customers. A web
+// client that has not shipped the form yet sends no customerName at all and the
+// server falls back to "New Project" for it; reading that as a person would
+// produce "New Project · Project #1", which reads like a bug because it is one.
+const PLACEHOLDER_CUSTOMER_NAMES = new Set([
+  "New Order", "New Project", "Yeni Sipariş", "Yeni Proje"
+]);
+
 /**
  * The name an order carries when the person did not type one.
  *
@@ -48,10 +56,11 @@ function generatedProjectName(customerName, projectNumber, cleanText) {
   const clean = typeof cleanText === "function"
     ? cleanText
     : (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, 180);
-  const name = clean(customerName);
+  const cleaned = clean(customerName);
+  const name = PLACEHOLDER_CUSTOMER_NAMES.has(String(cleaned).trim()) ? "" : cleaned;
   const number = Number(projectNumber) || 0;
   const tail = number > 0 ? `Project #${number}` : "Project";
   return name ? `${name} · ${tail}` : tail;
 }
 
-module.exports = { nextProjectNumber, generatedProjectName };
+module.exports = { nextProjectNumber, generatedProjectName, PLACEHOLDER_CUSTOMER_NAMES };

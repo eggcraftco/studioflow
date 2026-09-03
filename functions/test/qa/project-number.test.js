@@ -6,7 +6,7 @@
 // count moves around under the counter. Both of those are tested here, and both
 // would be invisible in review.
 const assert = require("assert");
-const { nextProjectNumber, generatedProjectName } = require("../../orders/projectNumber");
+const { nextProjectNumber, generatedProjectName, PLACEHOLDER_CUSTOMER_NAMES } = require("../../orders/projectNumber");
 
 let failures = 0;
 const checks = [];
@@ -106,6 +106,20 @@ check("the caller's own text cleaner is used, so the 180 cap is the server's", (
   const long = "x".repeat(400);
   const cleaned = generatedProjectName(long, 5, (value) => String(value).slice(0, 10));
   assert.strictEqual(cleaned, "xxxxxxxxxx · Project #5");
+});
+
+check("a placeholder name from a client that has no form yet is not a customer", () => {
+  // A web client that has not shipped the form sends no customerName, and the
+  // server falls back to "New Project" for it. Reading that as a person would
+  // produce "New Project · Project #1", which reads like a bug because it is
+  // one. The rule is the module's, not this test's — passing the placeholder
+  // straight in is the point.
+  for (const placeholder of PLACEHOLDER_CUSTOMER_NAMES) {
+    assert.strictEqual(generatedProjectName(placeholder, 1), "Project #1", placeholder);
+  }
+  // A real business whose name merely begins the same way keeps it.
+  assert.strictEqual(generatedProjectName("New Projects Ltd", 1), "New Projects Ltd · Project #1");
+  assert.strictEqual(generatedProjectName("  New Project  ", 1), "Project #1");
 });
 
 (async () => {
