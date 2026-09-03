@@ -21183,8 +21183,59 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
+
+    // The same delivery arriving twice must not rewrite the money or ring the
+    // phone again.
+    //
+    // Zapier, Make and most site plugins retry on any non-2xx, and a shop can
+    // resend by hand. The document id is deterministic, so a replay never
+    // created a second order — but it DID rewrite paidAmount and every other
+    // shop-owned field, and fired a second "New website order" push. The three
+    // native connectors get this from the shared commerce engine
+    // (functions/commerce/engine.js, SYNC-014 and SYNC-016); this channel has
+    // never been routed through it.
+    //
+    // Deliberately narrow: a hash of what we are about to write against what we
+    // wrote last time, and the delivery's own idempotency key when the sender
+    // gave one. Not a second copy of the engine's stale/duplicate/hold
+    // decisions — the real fix is an inbound adapter and the engine, which is
+    // its own piece of work because this channel's document shape is live.
+    const existingData = existing.data() || {};
+    const deliveryKey = (
+      cleanWooText(inboundValue(payload, ["idempotencyKey", "idempotency_key", "eventId", "event_id", "deliveryId"]))
+      || String(req.get("idempotency-key") || req.get("x-idempotency-key") || "")
+    ).trim().slice(0, 200);
+    const contentFingerprint = crypto.createHash("sha256")
+      .update(JSON.stringify(integrationOrderUpdate(mappedOrder, false, {}, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound)))
+      .digest("hex");
+    const stamp = (existingData && existingData.commerce) || {};
+
+    if (existing.exists && deliveryKey && String(stamp.lastEventKey || "") === deliveryKey) {
+      await recordIntegrationDelivery(companyId, "inbound", { ok: true, orderId: docId, source: integrationRequestSource(req) });
+      res.status(200).json({ ok: true, orderId: docId, duplicate: true });
+      return;
+    }
+    if (existing.exists && String(stamp.contentHash || "") === contentFingerprint) {
+      await ref.set({ commerce: { ...stamp, lastEventKey: deliveryKey || stamp.lastEventKey || null, lastAppliedAtMs: Date.now() } }, { merge: true });
+      await recordIntegrationDelivery(companyId, "inbound", { ok: true, orderId: docId, source: integrationRequestSource(req) });
+      res.status(200).json({ ok: true, orderId: docId, unchanged: true });
+      return;
+    }
+
     await ref.set(
-      integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound),
+      {
+        ...integrationOrderUpdate(mappedOrder, !existing.exists, existingData, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound),
+        // Written in the shape the commerce engine already uses, so routing this
+        // channel through it later reads the same stamp rather than starting over.
+        commerce: {
+          ...stamp,
+          provider: "inbound",
+          externalId,
+          contentHash: contentFingerprint,
+          lastEventKey: deliveryKey || null,
+          lastAppliedAtMs: Date.now()
+        }
+      },
       { merge: true }
     );
 
@@ -21220,7 +21271,11 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       console.warn("Inbound customer upsert failed:", error?.message || error);
     }
 
-    await sendPushNotificationToCompany(companyId, {
+    // Only for an order that is actually new. An updated delivery — a status
+    // change, a corrected address — used to ring the phone saying "New website
+    // order" again, which is what the native connectors gate on
+    // `result === "created"` to avoid.
+    if (!existing.exists) await sendPushNotificationToCompany(companyId, {
       title: "New website order",
       body: `${mappedOrder.customerName}: ${mappedOrder.designName}`,
       orderId: docId,
