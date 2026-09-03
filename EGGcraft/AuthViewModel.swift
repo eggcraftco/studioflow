@@ -172,6 +172,15 @@ struct StudioTeamMember: Identifiable, Equatable {
     var roleDisplayName: String = ""
     var access: [String: Bool] = studioDefaultMemberAccess()
     var addedAt: Date?
+    /// True when a smaller plan took this person's seat, or the owner took it.
+    /// The record is untouched — the name on old orders, the role, the
+    /// assignments and the history all stay — but they hold no access at all
+    /// until the owner restores them. Read from `suspendedMembers` on the
+    /// workspace, not from the member record: the rules can only keep a
+    /// top-level field server-only. See functions/team/seats.js.
+    var isSuspended: Bool = false
+    /// "plan_downgrade" when the plan took the seat, "manual" when the owner did.
+    var suspendedReason: String = ""
 
     var normalizedRole: String {
         studioNormalizedTeamRole(effectiveRole.isEmpty ? role : effectiveRole)
@@ -866,6 +875,11 @@ class AuthViewModel: ObservableObject {
     @Published var isProfileLoading: Bool = false
 
     @Published var teamMembers: [StudioTeamMember] = []
+
+    /// Seats in use. A suspended colleague is still in `teamMembers` — nobody
+    /// is deleted — but holds no seat, so counting the list would refuse an
+    /// owner the seat their plan just freed.
+    var activeTeamMemberCount: Int { teamMembers.filter { !$0.isSuspended }.count }
     @Published var customTeamRoles: [StudioCustomTeamRole] = []
     @Published var availableWorkspaces: [StudioWorkspaceOption] = []
     @Published var joinRequests: [StudioJoinRequest] = []
@@ -1692,7 +1706,7 @@ class AuthViewModel: ObservableObject {
             return
         }
 
-        guard currentPlanEntitlements.canAddTeamMember(currentMemberCount: teamMembers.count) else {
+        guard currentPlanEntitlements.canAddTeamMember(currentMemberCount: activeTeamMemberCount) else {
             profileErrorMessage = "This plan allows \(currentPlanEntitlements.teamLimitText). Upgrade the workspace plan to add more people."
             return
         }
@@ -2141,6 +2155,52 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /// Take a colleague's access away, or give it back.
+    ///
+    /// Not a removal: the member record, the role, the assignments and every
+    /// history entry they wrote stay exactly where they are. Restoring can be
+    /// refused when the plan has no free seat, and the server says so in a
+    /// sentence rather than quietly doing nothing.
+    func setTeamMemberSuspended(uid: String, suspended: Bool) {
+        guard isCompanyOwner,
+              let companyId = currentCompanyId,
+              !companyId.isEmpty else {
+            profileErrorMessage = "Only the workspace owner can change team access."
+            return
+        }
+
+        let cleanUid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUid.isEmpty, cleanUid != currentUserId else { return }
+
+        isProfileLoading = true
+        profileMessage = ""
+        profileErrorMessage = ""
+
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("updateWorkspaceMemberSuspension")
+            .call(["companyId": companyId, "memberUid": cleanUid, "suspended": suspended]) { [weak self] _, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.isProfileLoading = false
+                    if let error = error {
+                        self.profileErrorMessage = error.localizedDescription
+                        return
+                    }
+                    // Move the row now; the workspace listener confirms it.
+                    if let index = self.teamMembers.firstIndex(where: { $0.id == cleanUid }) {
+                        self.teamMembers[index].isSuspended = suspended
+                        self.teamMembers[index].suspendedReason = suspended ? "manual" : ""
+                    }
+                    self.profileMessage = suspended ? "Access removed." : "Access restored."
+                }
+            }
+        #else
+        isProfileLoading = false
+        profileErrorMessage = "This build cannot change team access."
+        #endif
+    }
+
     func removeTeamMember(uid: String) {
         guard isCompanyOwner,
               let companyId = currentCompanyId,
@@ -2305,7 +2365,7 @@ class AuthViewModel: ObservableObject {
             return
         }
 
-        guard currentPlanEntitlements.canAddTeamMember(currentMemberCount: teamMembers.count) else {
+        guard currentPlanEntitlements.canAddTeamMember(currentMemberCount: activeTeamMemberCount) else {
             profileErrorMessage = "This plan allows \(currentPlanEntitlements.teamLimitText). Upgrade the workspace plan before approving more people."
             return
         }
@@ -3271,6 +3331,7 @@ class AuthViewModel: ObservableObject {
         let memberCustomRoles = data["memberCustomRoles"] as? [String: Any] ?? [:]
         let memberAccess = data["memberAccess"] as? [String: Any] ?? [:]
         let customRoles = customTeamRoleMap(from: data)
+        let suspendedMembers = data["suspendedMembers"] as? [String: Any] ?? [:]
 
         if let members = data["members"] as? [String: Any] {
             for (uid, rawValue) in members {
@@ -3295,7 +3356,9 @@ class AuthViewModel: ObservableObject {
                     effectiveRole: effectiveRole,
                     roleDisplayName: customRoles[rawRole]?.roleLabel ?? "",
                     access: access,
-                    addedAt: timestamp?.dateValue()
+                    addedAt: timestamp?.dateValue(),
+                    isSuspended: suspendedMembers[uid] != nil,
+                    suspendedReason: ((suspendedMembers[uid] as? [String: Any])?["reason"] as? String) ?? ""
                 ))
             }
         }
@@ -3305,6 +3368,10 @@ class AuthViewModel: ObservableObject {
         }
 
         return result.sorted { lhs, rhs in
+            // Suspended colleagues sit below the working team. They are still
+            // listed — nobody is ever deleted — but this screen is read to see
+            // who is on the job.
+            if lhs.isSuspended != rhs.isSuspended { return !lhs.isSuspended }
             let order = ["owner": 0, "admin": 1, "member": 2, "viewer": 3, "workflow": 4]
             let lhsRank = order[lhs.normalizedRole] ?? 9
             let rhsRank = order[rhs.normalizedRole] ?? 9

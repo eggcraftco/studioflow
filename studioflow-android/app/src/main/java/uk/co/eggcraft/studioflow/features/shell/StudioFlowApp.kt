@@ -485,6 +485,7 @@ private fun StudioFlowAppContent(
             onUpdateTeamMemberRole = viewModel::updateTeamMemberRole,
             onUpdateTeamMemberAccess = viewModel::updateTeamMemberAccess,
             onRemoveTeamMember = viewModel::removeTeamMember,
+            onSetTeamMemberSuspended = viewModel::setTeamMemberSuspended,
             onSaveCustomRole = viewModel::saveCustomRole,
             onDeleteCustomRole = viewModel::deleteCustomRole,
             onImportBackup = viewModel::importBackup,

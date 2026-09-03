@@ -1311,6 +1311,18 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Take a colleague's access away, or give it back. Not a removal: the
+     * record, the assignments and the history all stay, and one press restores
+     * them. Restoring is refused when the plan has no free seat.
+     */
+    fun setTeamMemberSuspended(member: StudioTeamMember, suspended: Boolean) {
+        val workspace = mutableState.value.workspace ?: return
+        runTeamAction("Could not change team access.") {
+            repository.setTeamMemberSuspended(workspace, member, suspended)
+        }
+    }
+
     fun removeTeamMember(member: StudioTeamMember) {
         val workspace = mutableState.value.workspace ?: return
         runTeamAction("Could not remove team member.") {

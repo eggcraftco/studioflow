@@ -755,7 +755,18 @@ data class StudioTeamMember(
     val role: String,
     val roleLabel: String = role,
     val access: WorkspaceMemberAccess = WorkspaceMemberAccess(),
-    val isOwner: Boolean = role == "owner"
+    val isOwner: Boolean = role == "owner",
+    /**
+     * True when a smaller plan took this person's seat, or the owner took it.
+     * Nothing about them is deleted — the name on old orders, the role, the
+     * assignments and the history all stay — but they hold no access until the
+     * owner restores them. Read from `suspendedMembers` on the workspace and
+     * not from the member record: the rules can only keep a top-level field
+     * server-only. See functions/team/seats.js.
+     */
+    val isSuspended: Boolean = false,
+    /** "plan_downgrade" when the plan took the seat, "manual" when the owner did. */
+    val suspendedReason: String = ""
 ) {
     val label: String
         get() = displayName.trim().ifEmpty { emailName(email).ifEmpty { id } }

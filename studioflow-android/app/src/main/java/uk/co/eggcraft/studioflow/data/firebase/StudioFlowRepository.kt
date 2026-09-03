@@ -817,6 +817,7 @@ class StudioFlowRepository(
                 val memberRoles = data["memberRoles"] as? Map<*, *> ?: emptyMap<Any, Any>()
                 val memberCustomRoles = data["memberCustomRoles"] as? Map<*, *> ?: emptyMap<Any, Any>()
                 val memberAccess = data["memberAccess"] as? Map<*, *> ?: emptyMap<Any, Any>()
+                val suspendedMembers = data["suspendedMembers"] as? Map<*, *> ?: emptyMap<Any, Any>()
                 val output = members.mapNotNull { (uid, value) ->
                     val uidText = uid.toString()
                     val raw = value as? Map<*, *> ?: return@mapNotNull null
@@ -836,9 +837,19 @@ class StudioFlowRepository(
                         role = role,
                         roleLabel = customRoles.firstOrNull { it.id == role }?.name ?: roleLabel(effectiveRole),
                         access = accessFromMap(accessRaw, forceFullAccess = uidText == ownerUid || effectiveRole == "owner"),
-                        isOwner = uidText == ownerUid || effectiveRole == "owner"
+                        isOwner = uidText == ownerUid || effectiveRole == "owner",
+                        isSuspended = suspendedMembers.containsKey(uidText),
+                        suspendedReason = stringValue((suspendedMembers[uidText] as? Map<*, *>)?.get("reason"), "")
                     )
-                }.sortedWith(compareByDescending<StudioTeamMember> { it.isOwner }.thenBy { it.roleLabel }.thenBy { it.label })
+                    // Suspended colleagues sit below the working team. They stay
+                    // listed — nobody is deleted — but this screen is read to
+                    // see who is on the job.
+                }.sortedWith(
+                    compareBy<StudioTeamMember> { it.isSuspended }
+                        .thenByDescending { it.isOwner }
+                        .thenBy { it.roleLabel }
+                        .thenBy { it.label }
+                )
                 trySend(StudioTeamAccessSnapshot(members = output, customRoles = customRoles.sortedBy { it.name.lowercase() }))
             }
         awaitClose { registration.remove() }
@@ -1917,6 +1928,20 @@ class StudioFlowRepository(
             .await()
         val data = result.data as? Map<*, *>
         return data?.get("message") as? String ?: "Team member access updated."
+    }
+
+    /**
+     * Take a colleague's access away, or give it back.
+     *
+     * Not a removal: the member record, the role, the assignments and every
+     * history entry they wrote stay where they are. Restoring is refused when
+     * the plan has no free seat, and the server says so in a sentence.
+     */
+    suspend fun setTeamMemberSuspended(workspace: StudioWorkspace, member: StudioTeamMember, suspended: Boolean): String {
+        functions.getHttpsCallable("updateWorkspaceMemberSuspension")
+            .call(mapOf("companyId" to workspace.id, "memberUid" to member.id, "suspended" to suspended))
+            .await()
+        return if (suspended) "Access removed." else "Access restored."
     }
 
     suspend fun removeTeamMember(workspace: StudioWorkspace, member: StudioTeamMember): String {

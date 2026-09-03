@@ -220,6 +220,7 @@ fun SettingsScreen(
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
     onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
     onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSetTeamMemberSuspended: (StudioTeamMember, Boolean) -> Unit,
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
@@ -344,6 +345,7 @@ fun SettingsScreen(
                         onUpdateTeamMemberRole = onUpdateTeamMemberRole,
                         onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
                         onRemoveTeamMember = onRemoveTeamMember,
+                    onSetTeamMemberSuspended = onSetTeamMemberSuspended,
                         onSaveCustomRole = onSaveCustomRole,
                         onDeleteCustomRole = onDeleteCustomRole,
                         onImportBackup = onImportBackup,
@@ -392,6 +394,7 @@ fun SettingsScreen(
                 onUpdateTeamMemberRole = onUpdateTeamMemberRole,
                 onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
                 onRemoveTeamMember = onRemoveTeamMember,
+                    onSetTeamMemberSuspended = onSetTeamMemberSuspended,
                 onSaveCustomRole = onSaveCustomRole,
                 onDeleteCustomRole = onDeleteCustomRole,
                 onImportBackup = onImportBackup,
@@ -602,6 +605,7 @@ private fun SettingsDetailScreen(
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
     onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
     onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSetTeamMemberSuspended: (StudioTeamMember, Boolean) -> Unit,
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
@@ -728,6 +732,7 @@ private fun SettingsDetailScreen(
                     onUpdateTeamMemberRole = onUpdateTeamMemberRole,
                     onUpdateTeamMemberAccess = onUpdateTeamMemberAccess,
                     onRemoveTeamMember = onRemoveTeamMember,
+                    onSetTeamMemberSuspended = onSetTeamMemberSuspended,
                     onSaveCustomRole = onSaveCustomRole,
                     onDeleteCustomRole = onDeleteCustomRole
                 )
@@ -5046,6 +5051,7 @@ private fun TeamAccessDetail(
     onUpdateTeamMemberRole: (StudioTeamMember, String) -> Unit,
     onUpdateTeamMemberAccess: (StudioTeamMember, WorkspaceMemberAccess) -> Unit,
     onRemoveTeamMember: (StudioTeamMember) -> Unit,
+    onSetTeamMemberSuspended: (StudioTeamMember, Boolean) -> Unit,
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit
 ) {
@@ -5063,6 +5069,7 @@ private fun TeamAccessDetail(
     val ownerCanManage = workspace?.isOwner == true && canViewTeamManagement
     // Removing someone is instant and cannot be undone from here, so it is asked first.
     var pendingRemoveMember by remember { mutableStateOf<StudioTeamMember?>(null) }
+    var pendingSuspendMember by remember { mutableStateOf<StudioTeamMember?>(null) }
     val roleOptions = remember(state.customRoles) { teamRoleOptions(state.customRoles) }
     DetailColumn {
         // The page header above already names the section; no second banner here.
@@ -5319,7 +5326,18 @@ private fun TeamAccessDetail(
                                     Text(member.label, fontWeight = FontWeight.ExtraBold)
                                     Text(member.email.ifBlank { member.id }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                                if (member.isSuspended) Pill(t("No access"), StudioOrange)
                                 Pill(if (member.isOwner) t("Owner") else member.roleLabel, if (member.isOwner) StudioOrange else StudioBlue)
+                            }
+                            if (member.isSuspended) {
+                                Text(
+                                    if (member.suspendedReason == "plan_downgrade")
+                                        t("Their seat was taken when the plan changed. Everything they did is still here.")
+                                    else
+                                        t("You removed their access. Everything they did is still here."),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                             if (ownerCanManage && !member.isOwner) {
                                 RoleDropdown(
@@ -5341,6 +5359,21 @@ private fun TeamAccessDetail(
                                     ) {
                                         Text(t("Remove"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
                                     }
+                                }
+                                // Taking access away is not removing somebody:
+                                // the record, the assignments and the history
+                                // all stay, and one press puts them back.
+                                TextButton(
+                                    onClick = {
+                                        if (member.isSuspended) onSetTeamMemberSuspended(member, false)
+                                        else pendingSuspendMember = member
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        if (member.isSuspended) t("Restore Access") else t("Remove Access"),
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
                                 }
                                 if (editingMemberId == member.id) {
                                     MemberAccessPanel(member = member, onSave = { access -> onUpdateTeamMemberAccess(member, access) })
@@ -5367,6 +5400,25 @@ private fun TeamAccessDetail(
                 )
             }
         }
+    }
+
+    pendingSuspendMember?.let { member ->
+        AlertDialog(
+            onDismissRequest = { pendingSuspendMember = null },
+            title = { Text(t("Remove Access"), fontWeight = FontWeight.Bold) },
+            text = { Text(t("Nothing they did is deleted, and you can give it back.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSuspendMember = null
+                    onSetTeamMemberSuspended(member, true)
+                }) {
+                    Text(t("Remove Access"), fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSuspendMember = null }) { Text(t("Cancel")) }
+            }
+        )
     }
 
     pendingRemoveMember?.let { member ->

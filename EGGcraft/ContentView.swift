@@ -15959,6 +15959,15 @@ struct AccountProfileView: View {
                             .lineLimit(1)
 
                         HStack(spacing: 6) {
+                            if member.isSuspended {
+                                Text(t("No access", lang: seciliDil))
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.14))
+                                    .clipShape(Capsule())
+                            }
                             Text(t(member.roleLabel, lang: seciliDil))
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(roleColor(member.role))
@@ -15971,6 +15980,15 @@ struct AccountProfileView: View {
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                                 .textSelection(.enabled)
+                        }
+
+                        if member.isSuspended {
+                            Text(member.suspendedReason == "plan_downgrade"
+                                 ? t("Their seat was taken when the plan changed. Everything they did is still here.", lang: seciliDil)
+                                 : t("You removed their access. Everything they did is still here.", lang: seciliDil))
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
@@ -16026,6 +16044,19 @@ struct AccountProfileView: View {
                                 }
                             }
                             Divider()
+                            // Taking access away is not removing somebody: the
+                            // record, the assignments and the history all stay,
+                            // and one press puts them back.
+                            Button {
+                                authVM.setTeamMemberSuspended(uid: member.id, suspended: !member.isSuspended)
+                            } label: {
+                                Label(
+                                    member.isSuspended
+                                        ? t("Restore Access", lang: seciliDil)
+                                        : t("Remove Access", lang: seciliDil),
+                                    systemImage: member.isSuspended ? "person.badge.plus" : "person.badge.minus"
+                                )
+                            }
                             Button(role: .destructive) {
                                 authVM.removeTeamMember(uid: member.id)
                             } label: {
@@ -16039,6 +16070,7 @@ struct AccountProfileView: View {
                 .padding(10)
                 .background(fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .opacity(member.isSuspended ? 0.62 : 1)
             }
 
             if authVM.teamMembers.isEmpty {
