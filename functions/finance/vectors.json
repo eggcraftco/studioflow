@@ -1,0 +1,192 @@
+{
+  "engineVersion": 1,
+  "note": "Golden vectors for the Finance Engine. The server test runs these against functions/finance/engine.js; every platform's mirror must run the same file and produce the same numbers. Adding a case here is how a rule becomes real. Spec: docs/finance-engine.md.",
+  "cases": [
+    {
+      "name": "decision example: standard VAT is extracted from the price the customer pays",
+      "why": "NivaDesk_Urun_Kararlari_20260903.md §2 — £120 at 20% is £20 of VAT, not £24.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": { "paidAmount": 120, "remainingAmount": 0, "taxRate": 20 },
+      "expect": { "revenue": 120, "vatBase": 120, "vatDue": 20, "customerTotal": 120, "method": "standard" }
+    },
+    {
+      "name": "decision example: the margin scheme deducts the purchase price and nothing else",
+      "why": "Purchase 1500, sale 2000, margin 500, VAT 500 x 1/6 = 83.33. The old Profit type also deducted the fee, the shipping and every expense, which declared less VAT than the scheme allows.",
+      "settings": { "feePercentage": 3, "taxCalculationType": "Profit" },
+      "order": { "paidAmount": 2000, "remainingAmount": 0, "watchPurchasePrice": 1500, "deliveryCost": 20, "taxRate": 20 },
+      "expect": { "revenue": 2000, "directCost": 1500, "grossMargin": 500, "vatBase": 500, "vatDue": 83.33, "platformFee": 60, "method": "margin" }
+    },
+    {
+      "name": "decision example: gross margin is revenue less direct cost",
+      "why": "Revenue 2000, product cost 1200, gross margin 800. Fees and shipping are not part of it.",
+      "settings": { "feePercentage": 3, "taxCalculationType": "Revenue" },
+      "order": { "paidAmount": 2000, "remainingAmount": 0, "watchPurchasePrice": 1200, "deliveryCost": 20, "taxRate": 0 },
+      "expect": { "revenue": 2000, "directCost": 1200, "grossMargin": 800, "vatDue": 0 }
+    },
+    {
+      "name": "the composite order the survey used against all five old implementations",
+      "why": "Paid 1500 + remaining 500 + a listed receivable 200 + an orphan receivable 100; purchase 1200; fee 3%; shipping 20; expenses 150 and -50; margin scheme at 20%. Every old layer produced a different number for this order.",
+      "settings": { "feePercentage": 3, "taxCalculationType": "Profit", "financialShowBaseCost": false },
+      "order": {
+        "paidAmount": 1500,
+        "remainingAmount": 500,
+        "watchPurchasePrice": 1200,
+        "deliveryCost": 20,
+        "taxRate": 20,
+        "customFields": {
+          "orderRemainingItemsJSON": "[{\"id\":\"r1\",\"title\":\"Balance\"}]",
+          "financialRemaining::Balance": "200",
+          "financialRemaining::Deposit": "100",
+          "financialExpense::Stones": "150",
+          "financialExpense::Credit": "-50"
+        }
+      },
+      "expect": {
+        "revenue": 2300,
+        "directCost": 1200,
+        "grossMargin": 1100,
+        "otherExpenses": 100,
+        "platformFee": 69,
+        "vatBase": 1100,
+        "vatDue": 183.33,
+        "netProfit": 727.67,
+        "method": "margin",
+        "orphanKeys": ["financialRemaining::Deposit"]
+      }
+    },
+    {
+      "name": "hiding the base cost in the card settings does not change a single figure",
+      "why": "The product decision is explicit: UI visibility is separate from accounting. The web and Swift both removed the base cost from profit when it was hidden.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue", "financialShowBaseCost": false },
+      "order": { "paidAmount": 1000, "remainingAmount": 0, "watchPurchasePrice": 400, "taxRate": 0 },
+      "expect": { "directCost": 400, "grossMargin": 600, "netProfit": 600 }
+    },
+    {
+      "name": "a refund reduces the profit",
+      "why": "The decision lists refunds and adjustments as a deduction. No platform deducted refundedAmount.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": { "paidAmount": 1000, "remainingAmount": 0, "refundedAmount": 200, "taxRate": 0 },
+      "expect": { "revenue": 1000, "refunded": 200, "netProfit": 800 }
+    },
+    {
+      "name": "a negative expense is a credit and raises the profit",
+      "why": "The server turned every amount at or below zero into zero; the clients kept the sign. Clamping silently changed money.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": {
+        "paidAmount": 100,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "customFields": { "financialExpense::Credit": "-50" }
+      },
+      "expect": { "otherExpenses": -50, "netProfit": 150 }
+    },
+    {
+      "name": "an amount with no heading still counts, and is reported",
+      "why": "Swift and one of the two web rules dropped it, so a total came out smaller than the rows it was built from.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": {
+        "paidAmount": 0,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "customFields": {
+          "orderRemainingItemsJSON": "[{\"id\":\"r1\",\"title\":\"Balance\"}]",
+          "financialRemaining::Balance": "300",
+          "financialRemaining::Gone": "75"
+        }
+      },
+      "expect": { "revenue": 375, "orphanKeys": ["financialRemaining::Gone"] }
+    },
+    {
+      "name": "no VAT method owes nothing",
+      "settings": { "feePercentage": 0, "vatMethod": "none" },
+      "order": { "paidAmount": 500, "remainingAmount": 0, "taxRate": 20 },
+      "expect": { "vatBase": 0, "vatDue": 0, "netProfit": 500, "method": "none" }
+    },
+    {
+      "name": "a workspace that is not VAT registered owes nothing whatever the rate says",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue", "vatRegistered": false },
+      "order": { "paidAmount": 500, "remainingAmount": 0, "taxRate": 20 },
+      "expect": { "vatDue": 0, "netProfit": 500, "vatRegistered": false }
+    },
+    {
+      "name": "prices quoted without VAT add it on top",
+      "why": "Every workspace today is inclusive, which is why the default stays inclusive. This is the new setting.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue", "pricesIncludeVat": false },
+      "order": { "paidAmount": 100, "remainingAmount": 0, "taxRate": 20 },
+      "expect": { "revenue": 100, "vatDue": 20, "customerTotal": 120 }
+    },
+    {
+      "name": "invoice lines decide what the order is worth",
+      "why": "The line-items-only rule the invoice renderers already follow.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": {
+        "paidAmount": 9999,
+        "remainingAmount": 9999,
+        "taxRate": 0,
+        "lineItems": [{ "lineTotal": 250 }, { "lineTotal": 125.5 }]
+      },
+      "expect": { "revenue": 375.5, "fromLineItems": true }
+    },
+    {
+      "name": "selling at a loss under the margin scheme owes no VAT",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Profit" },
+      "order": { "paidAmount": 1000, "remainingAmount": 0, "watchPurchasePrice": 1500, "taxRate": 20 },
+      "expect": { "grossMargin": -500, "vatBase": 0, "vatDue": 0, "netProfit": -500 }
+    },
+    {
+      "name": "the order's own method overrides the workspace default",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": { "paidAmount": 2000, "remainingAmount": 0, "watchPurchasePrice": 1500, "taxRate": 20, "taxType": "Profit" },
+      "expect": { "method": "margin", "vatBase": 500, "vatDue": 83.33 }
+    },
+    {
+      "name": "before the tax milestone the margin scheme applies",
+      "why": "financialTaxTypeForPaymentDate has always switched method on this date; the engine keeps it.",
+      "settings": { "feePercentage": 0, "taxMilestoneEnabled": true, "taxMilestoneDate": 1750000000 },
+      "order": { "paidAmount": 2000, "remainingAmount": 0, "watchPurchasePrice": 1500, "taxRate": 20 },
+      "options": { "paymentDateMs": 1740000000000 },
+      "expect": { "method": "margin", "vatDue": 83.33 }
+    },
+    {
+      "name": "on and after the tax milestone the standard scheme applies",
+      "settings": { "feePercentage": 0, "taxMilestoneEnabled": true, "taxMilestoneDate": 1750000000 },
+      "order": { "paidAmount": 2000, "remainingAmount": 0, "watchPurchasePrice": 1500, "taxRate": 20 },
+      "options": { "paymentDateMs": 1760000000000 },
+      "expect": { "method": "standard", "vatBase": 2000, "vatDue": 333.33 }
+    },
+    {
+      "name": "an amount stored in another platform's format is read as the person meant it",
+      "why": "Values reached customFields from text fields on four platforms over two years.",
+      "settings": { "feePercentage": 0, "taxCalculationType": "Revenue" },
+      "order": {
+        "paidAmount": 0,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "customFields": {
+          "financialRemaining::A": "1.234,56",
+          "financialRemaining::B": "1,234.56",
+          "financialRemaining::C": "0.750",
+          "financialRemaining::D": "12,50"
+        }
+      },
+      "expect": { "revenue": 2482.37 }
+    },
+    {
+      "name": "the platform fee follows the revenue, including the custom receivables",
+      "settings": { "feePercentage": 2.5, "taxCalculationType": "Revenue" },
+      "order": {
+        "paidAmount": 800,
+        "remainingAmount": 200,
+        "taxRate": 0,
+        "customFields": { "financialRemaining::Extra": "1000" }
+      },
+      "expect": { "revenue": 2000, "platformFee": 50 }
+    },
+    {
+      "name": "an empty order is all zeros rather than NaN",
+      "settings": {},
+      "order": {},
+      "expect": { "revenue": 0, "grossMargin": 0, "platformFee": 0, "vatDue": 0, "netProfit": 0 }
+    }
+  ]
+}
