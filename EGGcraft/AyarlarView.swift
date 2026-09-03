@@ -247,6 +247,22 @@ struct AyarlarView: View {
         firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
     }
 
+    /// Changing the currency, the platform fee or the tax basis is an owner or
+    /// admin action — `saveFinancialSettings` on the server has always said so.
+    /// This screen writes companySettings directly in one merge of about sixty
+    /// keys, so a member saving, say, a PDF option used to carry the financial
+    /// values along with it. The security rules now refuse that write, which
+    /// would make the member's unrelated save fail silently, so those keys are
+    /// left out of the payload for anyone who may not set them.
+    private var canWriteFinancialSettings: Bool {
+        let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return authVM.isCompanyOwner || role == "owner" || role == "admin"
+    }
+
     private var isWorkflowOnlySettingsRole: Bool {
         let role = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -3615,10 +3631,10 @@ struct AyarlarView: View {
                     ]
                 ]) { _, _ in }
             }
-            Firestore.firestore()
-                .collection("companySettings")
-                .document(firebaseManager.currentCompanyId)
-                .setData([
+                let settingsRef = Firestore.firestore()
+                    .collection("companySettings")
+                    .document(firebaseManager.currentCompanyId)
+                var workspaceSettingsPayload: [String: Any] = [
                     // seciliDil / appTheme intentionally NOT written to the shared
                     // companySettings doc — they're personal per-user and synced via
                     // savePersonalInterfaceSettings instead so each member keeps
@@ -3700,7 +3716,14 @@ struct AyarlarView: View {
                     "workflowSettingsUpdatedAt": FieldValue.serverTimestamp(),
                     "pdfExportSettingsUpdatedAt": FieldValue.serverTimestamp(),
                     "uploadSafetySettingsUpdatedAt": FieldValue.serverTimestamp()
-                ], merge: true)
+                ]
+                // Owner/admin only — see canWriteFinancialSettings.
+                if !canWriteFinancialSettings {
+                    for key in ["seciliParaBirimi", "seciliOndalik", "feePercentage", "defaultTaxRate", "taxCalculationType", "taxMilestoneEnabled", "taxMilestoneDate", "taxRuleNameRevenue", "taxRuleNameProfit", "corporationTaxEnabled", "corporationTaxRate"] {
+                        workspaceSettingsPayload.removeValue(forKey: key)
+                    }
+                }
+                settingsRef.setData(workspaceSettingsPayload, merge: true)
         }
 
         knowledgeBaseSaveWorkItem = workItem
