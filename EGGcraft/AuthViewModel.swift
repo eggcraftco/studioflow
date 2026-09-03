@@ -2530,8 +2530,13 @@ class AuthViewModel: ObservableObject {
     private func finishLogout() {
         // Blank the home-screen Notes widget so notes don't outlive the session.
         WidgetNotesBridge.clear()
-        // And the remembered sign-in password, for the same reason.
+        // And the remembered sign-in password, and the offline copy of the
+        // workspace. Both belong to the account that is leaving; clearing them
+        // here rather than in FirebaseManager's reset matters, because that
+        // reset also runs on a cold launch and on auto-lock, where throwing away
+        // unsynced offline edits would be data loss.
         LoginCredentialStore.removeAll()
+        FirebaseManager.clearOfflineCacheFromDisk()
         do {
             stopRealtimeWorkspaceListeners()
             try Auth.auth().signOut()

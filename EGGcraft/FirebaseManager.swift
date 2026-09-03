@@ -1346,12 +1346,10 @@ class FirebaseManager: ObservableObject {
 
     func resetForLogout() {
         stopListening()
-        // The cached orders, customers and queued writes are one account's data
-        // sitting in this app's container. They used to stay there after a sign
-        // out, so the next account to open the app saw the previous one's list
-        // for the first seconds and its queued writes were replayed under the
-        // new session.
-        clearOfflineCacheFromDisk()
+        // NOT the disk cache: this runs on every cold launch before auth
+        // resolves and every time the app auto-locks, so clearing it here threw
+        // away offline edits that had not synced yet. AuthViewModel's real
+        // sign-out calls clearOfflineCacheFromDisk() instead.
         currentCompanyId = ""
         currentWorkspaceRole = "owner"
         siparisler = []
@@ -1520,6 +1518,12 @@ class FirebaseManager: ObservableObject {
                 }
                 let downloaded = querySnapshot?.documents.compactMap { self.decodeSiparisDocument($0) } ?? []
                 DispatchQueue.main.async {
+                    // What the document says, kept apart from `siparisler` — the
+                    // order detail screen edits that array in place through its
+                    // binding, so the array cannot answer "what is on the server".
+                    for order in downloaded {
+                        if let id = order.id { self.serverOrderSnapshots[id] = order }
+                    }
                     let now = Date()
                     let merged = downloaded.map { incoming -> Siparis in
                         guard let id = incoming.id,
@@ -2322,9 +2326,48 @@ class FirebaseManager: ObservableObject {
         return data
     }
 
+    /// The last value each order was seen to hold on the server. Written only by
+    /// the snapshot listener, never by a local edit.
+    private var serverOrderSnapshots: [String: Siparis] = [:]
+
     private func writeSiparisMerging(_ siparis: Siparis, id: String) throws {
-        let payload = try mergePayload(siparis, clearable: Self.siparisClearableFields)
-        db.collection("siparisler").document(id).setData(payload, merge: true)
+        var payload = try mergePayload(siparis, clearable: Self.siparisClearableFields)
+        // A merging write DEEP-merges nested maps, which is what keeps the bank
+        // module's financialExpense:: entries and the web's layout JSON safe from
+        // a device holding a stale copy. The cost is that a key the user removed
+        // from one of the app's own maps would simply stay, so those removals are
+        // sent as explicit deletes.
+        let server = serverOrderSnapshots[id]
+        let removedCustomFields = Set((server?.customFields ?? [:]).keys)
+            .subtracting((siparis.customFields ?? [:]).keys)
+        let removedIntakeFields = Set((server?.repairIntake?.fields ?? [:]).keys)
+            .subtracting((siparis.repairIntake?.fields ?? [:]).keys)
+
+        if removedCustomFields.isEmpty && removedIntakeFields.isEmpty {
+            db.collection("siparisler").document(id).setData(payload, merge: true)
+            return
+        }
+        // FieldValue.delete() cannot travel inside a nested map literal, so the
+        // removals go as their own field-path update after the merge lands.
+        var deletions: [AnyHashable: Any] = [:]
+        for key in removedCustomFields { deletions[FieldPath(["customFields", key])] = FieldValue.delete() }
+        for key in removedIntakeFields { deletions[FieldPath(["repairIntake", "fields", key])] = FieldValue.delete() }
+        payload.removeValue(forKey: "customFields")
+        let document = db.collection("siparisler").document(id)
+        document.setData(payload, merge: true) { [weak self] error in
+            if let error {
+                print("writeSiparisMerging failed: \(error.localizedDescription)")
+                return
+            }
+            var withFields = deletions
+            for (key, value) in (siparis.customFields ?? [:]) {
+                withFields[FieldPath(["customFields", key])] = value
+            }
+            document.updateData(withFields) { updateError in
+                if let updateError { print("writeSiparisMerging field update failed: \(updateError.localizedDescription)") }
+                _ = self
+            }
+        }
     }
 
     private func writeMusteriMerging(_ musteri: Musteri, id: String) throws {
@@ -2338,11 +2381,28 @@ class FirebaseManager: ObservableObject {
         var guncelSiparis = siparis
         guncelSiparis.companyId = currentCompanyId
         let oncekiSiparis = previousSiparis ?? siparisler.first(where: { $0.id == id })
-        // Closing an order detail view calls this unconditionally. Without this
-        // guard, merely opening and closing an order wrote the document again —
-        // moving updatedAt/updatedBy and overwriting whatever the web had just
-        // saved in the meantime.
-        if previousSiparis == nil, let onceki = oncekiSiparis, onceki == guncelSiparis {
+        // Closing an order detail view calls this unconditionally, so a save that
+        // changes nothing is worth skipping — but the comparison has to be made
+        // against the SERVER's copy. `siparisler` is what the detail screen's
+        // binding writes into as the user types, so comparing against it made
+        // "nothing changed" and "everything changed" look identical and silently
+        // dropped every edit. Equatable also stops short of the money and
+        // sub-record fields, so only a document this device has actually seen
+        // from the server, and that is equal on every stored field, is skipped.
+        if previousSiparis == nil,
+           let server = serverOrderSnapshots[id],
+           server == guncelSiparis,
+           (try? mergePayload(server, clearable: Self.siparisClearableFields).count)
+             == (try? mergePayload(guncelSiparis, clearable: Self.siparisClearableFields).count),
+           server.payments?.count == guncelSiparis.payments?.count,
+           server.lineItems?.count == guncelSiparis.lineItems?.count,
+           server.clientFiles?.count == guncelSiparis.clientFiles?.count,
+           server.customFields == guncelSiparis.customFields,
+           server.invoiceNumber == guncelSiparis.invoiceNumber,
+           server.orderType == guncelSiparis.orderType,
+           server.estimateStatus == guncelSiparis.estimateStatus,
+           server.portalToken == guncelSiparis.portalToken,
+           server.isDeleted == guncelSiparis.isDeleted {
             return
         }
         if let onceki = oncekiSiparis, onceki != guncelSiparis {
@@ -2929,9 +2989,12 @@ class FirebaseManager: ObservableObject {
         for (key, value) in customFields {
             updates[FieldPath(["customFields", key])] = value
         }
-        // Keys the caller dropped are deleted explicitly. Keys this device never
-        // had — the bank module's, the web's — are in neither map, so they stay.
-        let previous = siparisler.first(where: { $0.id == siparisID })?.customFields ?? [:]
+        // Keys the caller dropped are deleted explicitly. Compared against the
+        // SERVER's copy, because `siparisler` is edited in place by the detail
+        // screen's binding and would already contain the caller's new map — the
+        // deletion set would always come out empty. Keys this device never had —
+        // the bank module's, the web's — are in neither map, so they stay.
+        let previous = serverOrderSnapshots[siparisID]?.customFields ?? [:]
         for key in previous.keys where customFields[key] == nil {
             updates[FieldPath(["customFields", key])] = FieldValue.delete()
         }
@@ -3113,8 +3176,12 @@ class FirebaseManager: ObservableObject {
     }
 
     /// Removes every on-disk trace of the signed-out account's workspaces.
-    private func clearOfflineCacheFromDisk() {
-        guard let directory = offlineCacheDirectory else { return }
+    /// Called only from a real sign-out — never from the reset that runs on a
+    /// cold launch or an auto-lock, which would discard unsynced work.
+    static func clearOfflineCacheFromDisk() {
+        guard let directory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("StudioFlowOfflineCache", isDirectory: true) else { return }
         try? FileManager.default.removeItem(at: directory)
     }
 
