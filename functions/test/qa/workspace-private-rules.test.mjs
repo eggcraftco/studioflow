@@ -129,6 +129,24 @@ await check("and still writable by a member",
 await check("but not by an outsider",
   assertFails(getDoc(doc(outside, "companies", CO, "orderDrafts", "d-1"))));
 
+// ---- workspaceInvitations: the token collection ---------------------------
+//
+// The document id is the SHA-256 of the link that was emailed, so no client can
+// forge one. But a client that could READ this collection would see every
+// pending invitation's address, role and workspace, and one that could WRITE it
+// could re-point an invitation at a different workspace or un-revoke a
+// withdrawn one. Everything goes through the callables.
+await check("a member cannot read a pending invitation",
+  assertFails(getDoc(doc(member, "workspaceInvitations", "some-hash"))));
+await check("the owner cannot read one either — not even their own workspace's",
+  assertFails(getDoc(doc(owner, "workspaceInvitations", "some-hash"))));
+await check("nobody can forge an invitation",
+  assertFails(setDoc(doc(member, "workspaceInvitations", "forged-hash"), { companyId: CO, email: "me@example.com", role: "admin", status: "pending" })));
+await check("nobody can un-revoke one",
+  assertFails(updateDoc(doc(owner, "workspaceInvitations", "some-hash"), { status: "pending" })));
+await check("an outsider cannot read them",
+  assertFails(getDoc(doc(outside, "workspaceInvitations", "some-hash"))));
+
 await env.cleanup();
 console.log(failures ? `\n${failures} FAILED` : "\nPASS");
 process.exit(failures ? 1 : 0);

@@ -1170,6 +1170,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Invitations are the token and nothing else. The document id IS the hash
+    // of the link that was emailed, so a client that could list or read this
+    // collection could not forge a token — but it could read every pending
+    // invitation's address, role and workspace, and revoke or re-point one by
+    // writing. The catch-all below already denies it; this says so on purpose,
+    // so a future rule written for some other reason cannot widen it by
+    // accident. Every read and write goes through the callables.
+    match /workspaceInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

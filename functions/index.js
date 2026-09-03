@@ -5786,6 +5786,10 @@ const {
   generatedProjectName: buildProjectName
 } = require("./orders/projectNumber");
 const { isSuspendedUid, seatsToSuspend, canRestoreMember, activeSeatCount } = require("./team/seats");
+const {
+  mintInvitationToken, invitationIdForToken, normalizeInviteEmail, isPlausibleEmail,
+  invitationExpiresAtMs, invitationAcceptability, invitationPreview, INVITATION_REFUSALS
+} = require("./team/invitations");
 const generatedProjectName = (customerName, projectNumber) =>
   buildProjectName(customerName, projectNumber, (value) => cleanOrderText(value, "", 180));
 const { createFinanceStamp } = require("./finance/stamp");
@@ -16717,6 +16721,371 @@ exports.deleteWorkspaceCustomRole = onCall({ region: "europe-west2" }, async (re
     companyId,
     roleId,
     message: "Custom role deleted."
+  };
+});
+
+// ---- Inviting somebody by email ------------------------------------------
+//
+// Product decision §5. The Company ID and join-request flow stays, as the way
+// in for somebody who already knows the number, but this is the front door: the
+// owner types an address and picks what that person may see.
+
+const WORKSPACE_INVITES = "workspaceInvitations";
+
+/** Owner, or an admin the owner gave Team Access to. The other team callables
+ *  are owner-only; the decision names admins here on purpose. */
+function requireTeamManager(companyData, uid) {
+  if (uidIsCompanyOwner(companyData, uid)) return "owner";
+  const role = workspaceMemberRole(companyData, uid, "member");
+  const access = workspaceMemberAccess(companyData, uid);
+  if (role === "admin" && access.teamAccess !== false) return "admin";
+  throw new HttpsError("permission-denied", "Only the workspace owner or an admin with Team Access can invite people.");
+}
+
+function inviteAcceptUrl(token) {
+  const base = String(process.env.NIVADESK_APP_ORIGIN || "https://nivadesk.app").replace(/\/+$/, "");
+  return `${base}/invite/${encodeURIComponent(token)}`;
+}
+
+/**
+ * Sends the invitation. Best-effort by design: the caller decides what a
+ * failure means, because an invitation that exists but was not delivered is
+ * worth telling the owner about, while one that was never created is an error.
+ */
+async function emailWorkspaceInvitation({ to, companyName, invitedByName, roleLabelText, token }) {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  if (!password) {
+    console.warn("emailWorkspaceInvitation: NIVADESK_SMTP_PASSWORD is not set; skipping email.");
+    return { sent: false, reason: "smtp_not_configured" };
+  }
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+  const url = inviteAcceptUrl(token);
+
+  const who = invitedByName ? `${invitedByName} invited you` : "You have been invited";
+  const subject = `${who} to join ${companyName} on NivaDesk`;
+  const text = [
+    `${who} to join ${companyName} on NivaDesk as ${roleLabelText}.`,
+    "",
+    "Accept the invitation:",
+    url,
+    "",
+    "The link works for two weeks and only for this email address.",
+    "If you were not expecting this, you can ignore it — nothing happens until you accept."
+  ].join("\n");
+
+  const html = [
+    '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1c1c1e">',
+    `<p>${escapeSupportEmailHtml(who)} to join <strong>${escapeSupportEmailHtml(companyName)}</strong> on NivaDesk as ${escapeSupportEmailHtml(roleLabelText)}.</p>`,
+    `<p><a href="${escapeSupportEmailHtml(url)}" style="display:inline-block;padding:11px 20px;background:#0a84ff;color:#fff;border-radius:9px;text-decoration:none;font-weight:600">Accept Invitation</a></p>`,
+    `<p style="color:#6b6b70;font-size:13px">The link works for two weeks and only for this email address. If you were not expecting this, you can ignore it — nothing happens until you accept.</p>`,
+    "</div>"
+  ].join("");
+
+  const transporter = nvMailTransport({ host, port, secure: port === 465, auth: { user, pass: password } });
+  await transporter.sendMail({ from: `NivaDesk <${user}>`, to, subject, text, html });
+  return { sent: true };
+}
+
+exports.inviteWorkspaceMember = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
+  const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
+  requireTeamManager(companyData, uid);
+
+  const email = normalizeInviteEmail(request.data?.email);
+  if (!isPlausibleEmail(email)) {
+    throw new HttpsError("invalid-argument", "That does not look like an email address.");
+  }
+
+  const entitlements = billingEntitlementsForCompany(companyData);
+  if (entitlements.teamAccessEnabled !== true) {
+    throw new HttpsError("failed-precondition", "Inviting people requires NivaDesk Team.");
+  }
+
+  const role = normalizeTeamRoleForWrite(request.data?.role, companyData);
+  const access = accessForRoleValue(companyData, role, request.data?.access || {});
+
+  // The seat is checked now so the owner is not told to expect somebody who
+  // cannot get in, and checked AGAIN on accept, which is the one that binds:
+  // the plan can shrink in the two weeks the link is alive.
+  const limits = planLimitsFromEntitlements(entitlements, companyData);
+  const usage = await workspaceBillingUsage(companyId, companyData);
+  const validation = validateBillingAction("add_team_member", entitlements, usage, limits, request.data || {});
+  if (!validation.allowed) {
+    throw new HttpsError("failed-precondition", teamSeatLimitMessage(limits), validation);
+  }
+
+  const db = admin.firestore();
+  const members = companyMembersMap(companyData);
+  const alreadyIn = Object.entries(members).some(([memberUid, member]) =>
+    normalizeInviteEmail(member?.email) === email && !isSuspendedUid(companyData, memberUid));
+  if (alreadyIn) {
+    throw new HttpsError("already-exists", "That person is already in this workspace.");
+  }
+
+  // One live invitation per address: sending a second replaces the first, so an
+  // owner who re-sends does not leave two working keys in two inboxes.
+  const existing = await db.collection(WORKSPACE_INVITES)
+    .where("companyId", "==", companyId)
+    .where("email", "==", email)
+    .get();
+  const replace = db.batch();
+  existing.forEach((docSnap) => {
+    if (String(docSnap.data()?.status || "") !== "pending") return;
+    replace.set(docSnap.ref, {
+      status: "revoked",
+      revokedBy: uid,
+      revokedReason: "replaced",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+  await replace.commit();
+
+  const { token, id } = mintInvitationToken();
+  const companyName = String(companyData.name || companyData.companyName || "My Studio");
+  const invitedByName = cleanQuickReplyText(
+    request.auth?.token?.name || companyData.ownerDisplayName || request.auth?.token?.email || "", 120
+  );
+
+  await db.collection(WORKSPACE_INVITES).doc(id).set({
+    companyId,
+    companyName,
+    email,
+    role,
+    access,
+    status: "pending",
+    invitedBy: uid,
+    invitedByName,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: admin.firestore.Timestamp.fromMillis(invitationExpiresAtMs()),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  let delivery = { sent: false, reason: "unknown" };
+  try {
+    delivery = await emailWorkspaceInvitation({
+      to: email,
+      companyName,
+      invitedByName,
+      roleLabelText: customRoleData(companyData, role)?.name || workspaceRoleLabel(role),
+      token
+    });
+  } catch (error) {
+    console.error("inviteWorkspaceMember: sending failed", companyId, error.message);
+    delivery = { sent: false, reason: "send_failed" };
+  }
+
+  await db.collection(WORKSPACE_INVITES).doc(id).set({
+    emailSent: delivery.sent === true,
+    emailError: delivery.sent === true ? "" : String(delivery.reason || "send_failed")
+  }, { merge: true });
+
+  // The invitation exists either way; saying so lets the owner copy the link by
+  // hand rather than wondering why nothing arrived.
+  return {
+    ok: true,
+    invitationId: id,
+    email,
+    role,
+    emailSent: delivery.sent === true,
+    message: delivery.sent === true
+      ? "Invitation sent."
+      : "Invitation created, but the email could not be sent. Copy the link and send it yourself.",
+    // Returned only to the person who just created it, and only here.
+    acceptUrl: inviteAcceptUrl(token)
+  };
+});
+
+exports.listWorkspaceInvitations = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireTeamManager(companyData, uid);
+
+  const snapshot = await admin.firestore().collection(WORKSPACE_INVITES)
+    .where("companyId", "==", companyId)
+    .get();
+
+  const nowMs = Date.now();
+  const invitations = snapshot.docs.map((docSnap) => {
+    const data = docSnap.data() || {};
+    const expiresAtMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : 0;
+    const stored = String(data.status || "pending").toLowerCase();
+    return {
+      id: docSnap.id,
+      email: String(data.email || ""),
+      role: String(data.role || "member"),
+      // Ageing out is a fact about the clock, not a state anybody wrote, so it
+      // is worked out on read rather than swept for.
+      status: stored === "pending" && expiresAtMs && nowMs > expiresAtMs ? "expired" : stored,
+      invitedByName: String(data.invitedByName || ""),
+      emailSent: data.emailSent === true,
+      createdAtMs: data.createdAt?.toMillis ? data.createdAt.toMillis() : 0,
+      expiresAtMs
+    };
+  }).sort((lhs, rhs) => rhs.createdAtMs - lhs.createdAtMs);
+
+  return { ok: true, companyId, invitations };
+});
+
+exports.revokeWorkspaceInvitation = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireTeamManager(companyData, uid);
+
+  const invitationId = String(request.data?.invitationId || "").trim();
+  if (!invitationId) throw new HttpsError("invalid-argument", "invitationId is required.");
+
+  const ref = admin.firestore().collection(WORKSPACE_INVITES).doc(invitationId);
+  const snap = await ref.get();
+  if (!snap.exists || String(snap.data()?.companyId || "") !== companyId) {
+    throw new HttpsError("not-found", "That invitation does not belong to this workspace.");
+  }
+  if (String(snap.data()?.status || "") === "accepted") {
+    throw new HttpsError("failed-precondition", "That invitation has already been used. Remove the member instead.");
+  }
+
+  await ref.set({
+    status: "revoked",
+    revokedBy: uid,
+    revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { ok: true, invitationId, message: "Invitation withdrawn." };
+});
+
+// What the accept page shows before anybody signs in.
+//
+// Unauthenticated on purpose — the person may not have an account yet — so it
+// answers only with what the invitation preview allows: the workspace name, who
+// sent it, the role, and the address it was sent to. The workspace id stays
+// behind, because in the older flow that id IS the way in.
+exports.previewWorkspaceInvitation = onCall({ region: "europe-west2" }, async (request) => {
+  const token = String(request.data?.token || "").trim();
+  const id = invitationIdForToken(token);
+  if (!id) return { ok: false, reason: "not_found", message: INVITATION_REFUSALS.not_found };
+
+  const snap = await admin.firestore().collection(WORKSPACE_INVITES).doc(id).get();
+  if (!snap.exists) return { ok: false, reason: "not_found", message: INVITATION_REFUSALS.not_found };
+
+  const data = snap.data() || {};
+  const preview = invitationPreview(data);
+  const nowMs = Date.now();
+  const expired = preview.expiresAtMs && nowMs > preview.expiresAtMs;
+  const usable = preview.status === "pending" && !expired;
+  const reason = preview.status === "accepted" ? "already_accepted"
+    : preview.status === "revoked" ? "revoked"
+    : expired ? "expired" : "";
+
+  return {
+    ok: usable,
+    reason,
+    message: reason ? INVITATION_REFUSALS[reason] : "",
+    invitation: preview
+  };
+});
+
+exports.acceptWorkspaceInvitation = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in to accept this invitation.");
+
+  const token = String(request.data?.token || "").trim();
+  const id = invitationIdForToken(token);
+  if (!id) throw new HttpsError("not-found", INVITATION_REFUSALS.not_found);
+
+  const db = admin.firestore();
+  const inviteRef = db.collection(WORKSPACE_INVITES).doc(id);
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists) throw new HttpsError("not-found", INVITATION_REFUSALS.not_found);
+
+  const invitation = inviteSnap.data() || {};
+  const signedInEmail = String(request.auth?.token?.email || "");
+  const verdict = invitationAcceptability(invitation, signedInEmail);
+  if (!verdict.ok) {
+    throw new HttpsError(
+      verdict.reason === "wrong_account" ? "permission-denied" : "failed-precondition",
+      INVITATION_REFUSALS[verdict.reason] || INVITATION_REFUSALS.not_found,
+      { reason: verdict.reason }
+    );
+  }
+
+  const companyId = String(invitation.companyId || "").trim();
+  const companyRef = db.collection("companies").doc(companyId);
+  const companySnap = await companyRef.get();
+  if (!companySnap.exists) throw new HttpsError("not-found", "That workspace no longer exists.");
+  const companyData = companySnap.data() || {};
+  companyData.__workspaceId = companyId;
+
+  if (uid === String(companyData.ownerUid || "") || uid === companyId) {
+    await inviteRef.set({ status: "accepted", acceptedByUid: uid, acceptedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { ok: true, companyId, alreadyMember: true, message: "You already own this workspace." };
+  }
+
+  const members = companyMembersMap(companyData);
+  const alreadyMember = Boolean(members[uid]) && !isSuspendedUid(companyData, uid);
+
+  // The binding seat check. The link lives for two weeks and a plan can shrink
+  // inside that; letting an invitation from a bigger plan seat somebody now
+  // would put the workspace over a limit it is paying below.
+  if (!alreadyMember) {
+    const entitlements = billingEntitlementsForCompany(companyData);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
+    const usage = await workspaceBillingUsage(companyId, companyData);
+    const validation = validateBillingAction("add_team_member", entitlements, usage, limits, {});
+    if (!validation.allowed) {
+      throw new HttpsError("failed-precondition", teamSeatLimitMessage(limits), validation);
+    }
+  }
+
+  const role = normalizeTeamRoleForWrite(invitation.role, companyData);
+  const access = accessForRoleValue(companyData, role, invitation.access || {});
+  const displayName = cleanQuickReplyText(request.auth?.token?.name || "", 120);
+  const photoURL = cleanQuickReplyText(request.auth?.token?.picture || "", 2000);
+  const inputs = { email: signedInEmail, displayName, photoURL, role };
+
+  const memberPayload = teamMemberPayloadFromManualInput(companyData, inputs, uid, role, access, String(invitation.invitedBy || uid), members[uid]);
+  const accessPayload = workspaceAccessPayloadFromManualInput(companyId, companyData, inputs, role, access, String(invitation.invitedBy || uid), members[uid]);
+  const storedRole = storedBaseRoleForRoleValue(companyData, role);
+  const assignedCustomRoleId = customRoleId(role);
+
+  const batch = db.batch();
+  batch.update(companyRef, {
+    [`members.${uid}`]: memberPayload,
+    [`memberRoles.${uid}`]: storedRole,
+    [`memberCustomRoles.${uid}`]: assignedCustomRoleId || admin.firestore.FieldValue.delete(),
+    [`memberAccess.${uid}`]: access,
+    memberUids: admin.firestore.FieldValue.arrayUnion(uid),
+    removedMemberUids: admin.firestore.FieldValue.arrayRemove(uid),
+    // Accepting an invitation is the owner letting somebody in, so it also
+    // clears a suspension: otherwise the seat is granted and the door stays
+    // shut, which reads as a broken invitation.
+    [`suspendedMembers.${uid}`]: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  batch.set(db.collection("users").doc(uid).collection("workspaceAccess").doc(companyId), accessPayload, { merge: true });
+  batch.set(db.collection("users").doc(uid), {
+    activeCompanyId: companyId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  batch.set(inviteRef, {
+    status: "accepted",
+    acceptedByUid: uid,
+    acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  await batch.commit();
+
+  const updatedSnap = await companyRef.get();
+  const updatedData = updatedSnap.data() || companyData;
+  const updatedEntitlements = billingEntitlementsForCompany(updatedData);
+  const updatedLimits = planLimitsFromEntitlements(updatedEntitlements, updatedData);
+  const updatedUsage = await workspaceBillingUsage(companyId, updatedData);
+  await saveWorkspaceBillingUsage(companyRef, updatedUsage, updatedEntitlements, updatedLimits, "team_member_invited");
+
+  return {
+    ok: true,
+    companyId,
+    companyName: String(companyData.name || companyData.companyName || "My Studio"),
+    role,
+    message: "You have joined the workspace."
   };
 });
 
