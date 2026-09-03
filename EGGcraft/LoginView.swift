@@ -3,7 +3,7 @@ import FirebaseAuth
 import Combine
 import Security
 
-private enum LoginCredentialStore {
+enum LoginCredentialStore {
     private static let service = "uk.co.eggcraft.studioflow.login"
 
     private static func cleanEmail(_ email: String) -> String {
@@ -31,6 +31,16 @@ private enum LoginCredentialStore {
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             SecItemAdd(addQuery as CFDictionary, nil)
         }
+    }
+
+    /// Signing out removes every password this device remembered. Without this
+    /// the store outlived the session, so on a shared Mac the next person could
+    /// type the previous owner's email and have their password filled in.
+    static func removeAll() {
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ] as CFDictionary)
     }
 
     static func password(for email: String) -> String? {

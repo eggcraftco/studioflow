@@ -1276,6 +1276,12 @@ class FirebaseManager: ObservableObject {
 
     func resetForLogout() {
         stopListening()
+        // The cached orders, customers and queued writes are one account's data
+        // sitting in this app's container. They used to stay there after a sign
+        // out, so the next account to open the app saw the previous one's list
+        // for the first seconds and its queued writes were replayed under the
+        // new session.
+        clearOfflineCacheFromDisk()
         currentCompanyId = ""
         currentWorkspaceRole = "owner"
         siparisler = []
@@ -3038,6 +3044,12 @@ class FirebaseManager: ObservableObject {
         } else {
             offlineStatusMessage = "Online"
         }
+    }
+
+    /// Removes every on-disk trace of the signed-out account's workspaces.
+    private func clearOfflineCacheFromDisk() {
+        guard let directory = offlineCacheDirectory else { return }
+        try? FileManager.default.removeItem(at: directory)
     }
 
     private var offlineCacheDirectory: URL? {

@@ -2530,6 +2530,8 @@ class AuthViewModel: ObservableObject {
     private func finishLogout() {
         // Blank the home-screen Notes widget so notes don't outlive the session.
         WidgetNotesBridge.clear()
+        // And the remembered sign-in password, for the same reason.
+        LoginCredentialStore.removeAll()
         do {
             stopRealtimeWorkspaceListeners()
             try Auth.auth().signOut()
