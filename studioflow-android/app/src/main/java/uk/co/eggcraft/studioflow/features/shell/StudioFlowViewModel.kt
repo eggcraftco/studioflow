@@ -82,12 +82,32 @@ data class PendingOrderUndo(
     val busy: Boolean = false
 )
 
+/**
+ * How the last create attempt ended, for the form that started it.
+ *
+ * The count is what the form watches, not the `creatingOrder` flag. A refusal
+ * that comes back inside one frame — a plan ceiling answers fast — would raise
+ * and drop that flag between two recompositions, and a form waiting for the
+ * flag to fall would wait forever. A number that only ever goes up cannot be
+ * missed: the form notes it when Create is pressed and knows the answer has
+ * arrived the moment it changes.
+ *
+ * [errorMessage] is blank when the create went through, and otherwise carries
+ * the sentence the person has to read — the server's own words for a plan
+ * ceiling, which FriendlyErrors passes through untouched.
+ */
+data class OrderCreateOutcome(
+    val finished: Int = 0,
+    val errorMessage: String = ""
+)
+
 data class StudioFlowUiState(
     val loading: Boolean = true,
     val signingIn: Boolean = false,
     // One-time post-signup "verify your email" confirmation.
     val showPostSignupVerifyNotice: Boolean = false,
     val creatingOrder: Boolean = false,
+    val orderCreateOutcome: OrderCreateOutcome = OrderCreateOutcome(),
     val pendingUndo: PendingOrderUndo? = null,
     val settingsSaving: Boolean = false,
     val user: FirebaseUser? = null,
@@ -818,7 +838,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
      * server until this is called — the form itself creates nothing.
      */
     fun createOrder(draft: NewProjectDraft) {
-        val workspace = mutableState.value.workspace ?: return
+        val workspace = mutableState.value.workspace ?: run {
+            // The form is waiting on an answer either way, so even this one is
+            // published rather than dropped — a silent return leaves it stuck
+            // on "Creating..." with no way back.
+            finishOrderCreate(t("Could not create project."))
+            return
+        }
         viewModelScope.launch {
             mutableState.update { it.copy(creatingOrder = true, errorMessage = "", pendingUndo = null) }
             runCatching { repository.createOrderWithMilestone(workspace, draft, ::t) }
@@ -829,6 +855,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                         it.copy(
                             creatingOrder = false,
                             errorMessage = "",
+                            orderCreateOutcome = OrderCreateOutcome(it.orderCreateOutcome.finished + 1, ""),
                             settingsMessage = milestone.message ?: it.settingsMessage,
                             pendingUndo = if (milestone.orderId.isBlank()) null else PendingOrderUndo(
                                 orderId = milestone.orderId,
@@ -839,10 +866,30 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
                 .onFailure { error ->
+                    // The sentence goes to the form that is still on screen as
+                    // well as to the header, because a plan ceiling or a role
+                    // refusal is something the person has to read and act on,
+                    // not a colour on an icon.
+                    val sentence = friendlyErrorMessage(error, "Could not create project.", ::t)
                     mutableState.update {
-                        it.copy(creatingOrder = false, errorMessage = friendlyErrorMessage(error, "Could not create project.", ::t))
+                        it.copy(
+                            creatingOrder = false,
+                            errorMessage = sentence,
+                            orderCreateOutcome = OrderCreateOutcome(it.orderCreateOutcome.finished + 1, sentence)
+                        )
                     }
                 }
+        }
+    }
+
+    /** Publishes an attempt that never reached the server. */
+    private fun finishOrderCreate(sentence: String) {
+        mutableState.update {
+            it.copy(
+                creatingOrder = false,
+                errorMessage = sentence,
+                orderCreateOutcome = OrderCreateOutcome(it.orderCreateOutcome.finished + 1, sentence)
+            )
         }
     }
 

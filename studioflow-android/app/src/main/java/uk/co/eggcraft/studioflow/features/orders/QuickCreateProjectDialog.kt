@@ -25,8 +25,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,16 +42,9 @@ import androidx.compose.ui.unit.sp
 import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.customerNameKey
+import uk.co.eggcraft.studioflow.features.shell.OrderCreateOutcome
 import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
 import uk.co.eggcraft.studioflow.language.studioT
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-
-private val ISO_DATE: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
-
-private fun parseIsoDate(text: String): LocalDate? =
-    runCatching { LocalDate.parse(text.trim(), ISO_DATE) }.getOrNull()
 
 /**
  * The form that stands between "+ Add Project" and an actual project. Nothing
@@ -60,12 +55,23 @@ private fun parseIsoDate(text: String): LocalDate? =
  * opened for stock or for the window with nobody attached; the dialog therefore
  * never invents one, and an empty customer travels to the server as an empty
  * value rather than as a missing key.
+ *
+ * The form also stays up until the server has answered. It used to close on the
+ * press, which meant a workspace at its plan's order limit watched the form
+ * vanish and took the refusal as a success — the customer, the name and the due
+ * date all gone, and the sentence explaining why hidden behind the header's
+ * cloud icon. Now Create submits, the form waits, and a refusal is printed here
+ * with every typed value still in place, so the person can free a slot or
+ * upgrade and press Create again without filling the form in a second time.
+ * [outcome] is how the wait ends: [onDismiss] is called only when the create
+ * actually went through.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickCreateProjectDialog(
     customers: List<StudioCustomer>,
     creating: Boolean,
+    outcome: OrderCreateOutcome,
     onDismiss: () -> Unit,
     onCreate: (NewProjectDraft) -> Unit
 ) {
@@ -76,6 +82,20 @@ fun QuickCreateProjectDialog(
     var projectName by rememberSaveable { mutableStateOf("") }
     var dueDate by rememberSaveable { mutableStateOf("") }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+
+    // The attempt count as it stood when Create was pressed; -1 while nothing is
+    // in flight. Watching the count rather than `creating` survives a refusal
+    // that arrives inside a single frame, and survives a rotation mid-create.
+    var submittedAt by rememberSaveable { mutableStateOf(-1) }
+    var refusal by rememberSaveable { mutableStateOf("") }
+    val submitting = submittedAt >= 0
+
+    LaunchedEffect(outcome.finished) {
+        if (submittedAt >= 0 && outcome.finished > submittedAt) {
+            submittedAt = -1
+            if (outcome.errorMessage.isBlank()) onDismiss() else refusal = outcome.errorMessage
+        }
+    }
 
     // Same rule the directory and the orders list use, so a customer typed in
     // lowercase is the customer that already exists rather than a second one.
@@ -89,11 +109,12 @@ fun QuickCreateProjectDialog(
         listed.sortedBy { customerNameKey(it.name) }.take(6)
     }
 
-    val dueDateInvalid = dueDate.isNotBlank() && parseIsoDate(dueDate) == null
-    val canSave = !creating && !dueDateInvalid
+    val dueDateInvalid = dueDate.isNotBlank() && QuickCreateDates.parse(dueDate) == null
+    val busy = creating || submitting
+    val canSave = !busy && !dueDateInvalid
 
     AlertDialog(
-        onDismissRequest = { if (!creating) onDismiss() },
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(t("New Project"), fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(
@@ -185,12 +206,42 @@ fun QuickCreateProjectDialog(
                         fontSize = 12.sp
                     )
                 }
+                // The server's own sentence — a plan ceiling, a role refusal or a
+                // network failure — said where the person is looking.
+                if (refusal.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                refusal,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                t("Nothing was created — everything you typed is still here."),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(
                 enabled = canSave,
                 onClick = {
+                    // Noted before the call goes out, so the answer cannot arrive
+                    // before the form is watching for it.
+                    submittedAt = outcome.finished
+                    refusal = ""
                     onCreate(
                         NewProjectDraft(
                             // The id wins on the server, so a match sends it and a
@@ -202,17 +253,29 @@ fun QuickCreateProjectDialog(
                         )
                     )
                 }
-            ) { Text(if (creating) t("Creating...") else t("Create"), fontWeight = FontWeight.ExtraBold) }
+            ) { Text(if (busy) t("Creating...") else t("Create"), fontWeight = FontWeight.ExtraBold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !creating) { Text(t("Cancel")) }
+            TextButton(onClick = onDismiss, enabled = !busy) { Text(t("Cancel")) }
         }
     )
 
     if (showDatePicker) {
+        // An order stores a due date as a count of days after the payment date,
+        // and zero already means "no due date" everywhere it is read — so the
+        // earliest date the schema can express is tomorrow. The picker greys out
+        // today rather than letting the server quietly move a chosen date.
+        val earliest = QuickCreateDates.today().plusDays(1)
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = (parseIsoDate(dueDate) ?: LocalDate.now())
-                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            initialSelectedDateMillis = QuickCreateDates.pickerMillis(
+                QuickCreateDates.parse(dueDate) ?: earliest
+            ),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis >= QuickCreateDates.pickerMillis(earliest)
+
+                override fun isSelectableYear(year: Int): Boolean = year >= earliest.year
+            }
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -220,10 +283,7 @@ fun QuickCreateProjectDialog(
                 TextButton(onClick = {
                     val picked = pickerState.selectedDateMillis
                     showDatePicker = false
-                    if (picked != null) {
-                        dueDate = java.time.Instant.ofEpochMilli(picked)
-                            .atZone(ZoneOffset.UTC).toLocalDate().format(ISO_DATE)
-                    }
+                    if (picked != null) dueDate = QuickCreateDates.isoFromPickerMillis(picked)
                 }) { Text(t("Done"), fontWeight = FontWeight.Bold) }
             },
             dismissButton = {

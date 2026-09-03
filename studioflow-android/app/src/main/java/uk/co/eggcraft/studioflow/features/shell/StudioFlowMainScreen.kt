@@ -569,6 +569,7 @@ fun StudioFlowMainScreen(
                     canCreateOrder = canCreateOrders,
                     customers = state.customers,
                     creatingOrder = state.creatingOrder,
+                    orderCreateOutcome = state.orderCreateOutcome,
                     sections = availableSections,
                     selectedSection = activeSection,
                     onSelectSection = {
@@ -723,6 +724,7 @@ fun StudioFlowMainScreen(
                     canCreateOrder = canCreateOrders,
                     customers = state.customers,
                     creatingOrder = state.creatingOrder,
+                    orderCreateOutcome = state.orderCreateOutcome,
                     onToggleSensitiveNumbers = toggleSensitiveNumbers,
                     onCreateOrder = onCreateOrder,
                     onSignOut = onSignOut,
@@ -1715,6 +1717,7 @@ private fun StudioLargeTopBar(
     canCreateOrder: Boolean,
     customers: List<StudioCustomer>,
     creatingOrder: Boolean,
+    orderCreateOutcome: OrderCreateOutcome,
     sections: List<StudioSection>,
     selectedSection: StudioSection?,
     onSelectSection: (StudioSection) -> Unit,
@@ -1799,6 +1802,7 @@ private fun StudioLargeTopBar(
                 canCreateOrder = canCreateOrder,
                 customers = customers,
                 creatingOrder = creatingOrder,
+                orderCreateOutcome = orderCreateOutcome,
                 onCreateOrder = onCreateOrder,
                 compact = compact
             )
@@ -2114,6 +2118,7 @@ private fun StudioLargeSidebar(
     canCreateOrder: Boolean,
     customers: List<StudioCustomer>,
     creatingOrder: Boolean,
+    orderCreateOutcome: OrderCreateOutcome,
     sections: List<StudioSection>,
     selectedSection: StudioSection?,
     onSelectSection: (StudioSection) -> Unit,
@@ -2165,6 +2170,7 @@ private fun StudioLargeSidebar(
                 canCreateOrder = canCreateOrder,
                 customers = customers,
                 creatingOrder = creatingOrder,
+                orderCreateOutcome = orderCreateOutcome,
                 onCreateOrder = onCreateOrder,
                 compact = false,
                 modifier = Modifier.fillMaxWidth()
@@ -2265,6 +2271,7 @@ private fun StudioMobileHeader(
     canCreateOrder: Boolean,
     customers: List<StudioCustomer>,
     creatingOrder: Boolean,
+    orderCreateOutcome: OrderCreateOutcome,
     onToggleSensitiveNumbers: () -> Unit,
     onCreateOrder: (NewProjectDraft) -> Unit,
     onSignOut: () -> Unit,
@@ -2318,6 +2325,7 @@ private fun StudioMobileHeader(
                 canCreateOrder = canCreateOrder,
                 customers = customers,
                 creatingOrder = creatingOrder,
+                orderCreateOutcome = orderCreateOutcome,
                 onCreateOrder = onCreateOrder,
                 compact = true
             )
@@ -2608,6 +2616,7 @@ private fun HeaderAddProjectButton(
     canCreateOrder: Boolean,
     customers: List<StudioCustomer>,
     creatingOrder: Boolean,
+    orderCreateOutcome: OrderCreateOutcome,
     onCreateOrder: (NewProjectDraft) -> Unit,
     compact: Boolean,
     modifier: Modifier = Modifier
@@ -2620,11 +2629,11 @@ private fun HeaderAddProjectButton(
         uk.co.eggcraft.studioflow.features.orders.QuickCreateProjectDialog(
             customers = customers,
             creating = creatingOrder,
+            outcome = orderCreateOutcome,
+            // Reached on Cancel and on a create that actually went through; a
+            // refusal keeps the form and everything typed into it.
             onDismiss = { quickCreateOpen = false },
-            onCreate = { draft ->
-                quickCreateOpen = false
-                onCreateOrder(draft)
-            }
+            onCreate = { draft -> onCreateOrder(draft) }
         )
     }
     Button(

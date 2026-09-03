@@ -1785,6 +1785,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // in. Past them, this only OPENS the mini form; the create itself lives in
   // handleQuickCreateSubmit and nothing is written until it runs.
   function handleAddOrder(payload: QuickActionPayload = {}) {
+    // The button that fires this paints ABOVE the dimmed backdrop — the
+    // first-project guide ring puts it there on purpose, and so does the sticky
+    // phone toolbar — so a second press while the sheet is open is easy to make
+    // by accident. Reopening would reset customer, name and due date in place,
+    // silently emptying everything already typed. The sheet is already on
+    // screen, so the honest answer to this press is to do nothing at all.
+    if (quickCreateOpen) return;
+
     setOrderCreateError("");
 
     if (!workspace) {
@@ -1828,6 +1836,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     createdIn: WorkspaceContext,
     orderId: string,
     customerCreated: boolean,
+    options: { navigate?: boolean } = {},
   ) {
     if (!orderId) return;
     try {
@@ -1836,7 +1845,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       window.dispatchEvent(
         new CustomEvent("studioflow-order-removed", { detail: { orderId } }),
       );
-      router.push("/orders");
+      // Undo has to land where the create did. A project raised from the
+      // Schedule board deliberately keeps the person on the week they were
+      // planning, and the board reloads itself from the event above — so
+      // pushing them to Orders here would inflict exactly the disruption the
+      // create path exists to avoid, and lose the week they were looking at.
+      if (options.navigate !== false) {
+        router.push("/orders");
+      }
     } catch (undoError) {
       // The server refuses with a sentence saying which guard stopped it —
       // creator only, within five minutes, nothing touched. Show that.
@@ -1854,6 +1870,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   async function handleQuickCreateSubmit() {
     if (!workspace || creatingOrder) return;
     const currentWorkspace = workspace;
+    // Read once, here: the toast's Undo runs minutes later, and the origin is
+    // what tells both the create and the undo whether to navigate.
+    const origin = quickCreateOrigin;
     setQuickCreateError("");
     setCreatingOrder(true);
     try {
@@ -1883,11 +1902,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         message: t("Project created"),
         actionLabel: t("Undo"),
         onAction: () => {
-          void handleUndoOrderCreate(currentWorkspace, orderId, customerCreated);
+          void handleUndoOrderCreate(currentWorkspace, orderId, customerCreated, {
+            navigate: origin !== "schedule",
+          });
         },
         durationMs: 8000,
       });
-      handleOrderCreated(orderId, { navigate: quickCreateOrigin !== "schedule" });
+      handleOrderCreated(orderId, { navigate: origin !== "schedule" });
     } catch (createError) {
       setQuickCreateError(
         createError instanceof Error

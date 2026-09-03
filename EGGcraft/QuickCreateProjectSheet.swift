@@ -188,10 +188,24 @@ private struct QuickCreateDueDateRows: View {
     @Binding var dueDate: Date
     let lang: String
 
+    /// An order stores a due date as a count of days after the payment date, and
+    /// zero already means "no due date" everywhere it is read — so the earliest
+    /// date the schema can express is tomorrow. The picker refuses today rather
+    /// than letting the server quietly move a date the person chose.
+    private var earliest: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date()))
+            ?? Date()
+    }
+
     var body: some View {
         Toggle(t("Set a due date", lang: lang), isOn: $hasDueDate)
         if hasDueDate {
-            DatePicker(t("Due Date", lang: lang), selection: $dueDate, displayedComponents: .date)
+            DatePicker(
+                t("Due Date", lang: lang),
+                selection: $dueDate,
+                in: earliest...,
+                displayedComponents: .date
+            )
         }
     }
 }

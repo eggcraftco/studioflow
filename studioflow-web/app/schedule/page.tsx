@@ -462,19 +462,38 @@ export default function SchedulePage() {
     if (!workspace || !user) return;
     const uid = user.uid;
     const currentWorkspace = workspace;
-    async function pickUpNewProject() {
+    async function pickUpNewProject(createdOrderId: string) {
       try {
-        setOrders(await loadScheduleOrders(currentWorkspace.id, currentWorkspace, uid));
+        const loadedOrders = await loadScheduleOrders(currentWorkspace.id, currentWorkspace, uid);
+        setOrders(loadedOrders);
+        // Reloading is not enough to make the project findable. Its bar starts
+        // today, and the person may well have panned months ahead to plan — so
+        // without moving the anchor the timeline shows nothing, the detail
+        // panel still shows the previous project, and the create looks like it
+        // did nothing. Select it and bring the window to it, exactly as
+        // clicking a bar does.
+        const createdOrder = createdOrderId
+          ? loadedOrders.find(order => order.id === createdOrderId)
+          : undefined;
+        if (createdOrder) {
+          setSelectedOrderId(createdOrder.id);
+          setAnchorDate(orderStartDate(createdOrder));
+        }
       } catch (refreshError) {
         console.warn("schedule refresh after create failed:", refreshError);
       }
     }
-    const handler = () => { void pickUpNewProject(); };
-    window.addEventListener("studioflow-order-created", handler);
-    window.addEventListener("studioflow-order-removed", handler);
+    const handleCreated = (event: Event) => {
+      const createdOrderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId ?? "";
+      void pickUpNewProject(createdOrderId);
+    };
+    // Undo only has to put the board back; there is nothing left to select.
+    const handleRemoved = () => { void pickUpNewProject(""); };
+    window.addEventListener("studioflow-order-created", handleCreated);
+    window.addEventListener("studioflow-order-removed", handleRemoved);
     return () => {
-      window.removeEventListener("studioflow-order-created", handler);
-      window.removeEventListener("studioflow-order-removed", handler);
+      window.removeEventListener("studioflow-order-created", handleCreated);
+      window.removeEventListener("studioflow-order-removed", handleRemoved);
     };
   }, [workspace, user]);
 

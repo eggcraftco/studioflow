@@ -1103,6 +1103,23 @@ class FirebaseManager: ObservableObject {
     private var pendingSyncOperations: [StudioPendingSyncOperation] = []
     private var pendingClientFileUploads: [StudioPendingClientFileUpload] = []
     private var isProcessingPendingCallableOrderWrites: Bool = false
+    /// The queued job currently in the air, and whether an edit was folded into
+    /// it while it flew. A create answered mid-edit must not take that edit to
+    /// the grave with it when the job is removed.
+    private var inFlightPendingSyncOperationId: UUID?
+    private var inFlightPendingSyncOperationWasEdited: Bool = false
+    /// Jobs the server refused this session. They are STEPPED OVER when the
+    /// queue is walked, so one job that cannot succeed no longer holds every
+    /// write queued behind it shut; a fresh connection clears the list and
+    /// every one of them is tried again.
+    private var failedPendingSyncOperationIds: Set<UUID> = []
+    /// Offline creates undone while the job was already in the air. The job
+    /// cannot be recalled, so the document goes to the Trash the moment the
+    /// server confirms it exists — which is what the undo promised.
+    private var createsToTrashOnceLanded: Set<String> = []
+    /// Queued creates that undo took off the queue, kept so redo can put them
+    /// back on it rather than writing a document the server never numbered.
+    private var cancelledPendingCreateOperations: [String: StudioPendingSyncOperation] = [:]
     private var activeClientFileUploadTasks: [String: StorageUploadTask] = [:]
     private var locallyReadMessageThreadReadTimes: [String: Date] = [:]
     
@@ -1358,6 +1375,9 @@ class FirebaseManager: ObservableObject {
         redoStack.removeAll()
         pendingSyncOperations = []
         pendingClientFileUploads = []
+        failedPendingSyncOperationIds.removeAll()
+        createsToTrashOnceLanded.removeAll()
+        cancelledPendingCreateOperations.removeAll()
         pendingOfflineChanges = 0
         pendingClientFileUploadsCount = 0
         offlineStatusMessage = "Online"
@@ -2601,6 +2621,20 @@ class FirebaseManager: ObservableObject {
     private var serverOrderSnapshots: [String: Siparis] = [:]
 
     private func writeSiparisMerging(_ siparis: Siparis, id: String) throws {
+        // The same rail rule as updateSiparis, at the one place every direct
+        // order write passes through: while the create is still queued this
+        // must not touch Firestore, or the document is made behind the server's
+        // back and the queued create is refused when it replays.
+        if hasPendingCallableCreate(documentId: id) {
+            queuePendingCallableOrderWrite(
+                siparis,
+                documentId: id,
+                action: "update",
+                callableFunction: "saveSwiftOrder"
+            )
+            return
+        }
+
         var payload = try mergePayload(siparis, clearable: Self.siparisClearableFields)
         // A merging write DEEP-merges nested maps, which is what keeps the bank
         // module's financialExpense:: entries and the web's layout JSON safe from
@@ -2677,6 +2711,25 @@ class FirebaseManager: ObservableObject {
         }
         if let onceki = oncekiSiparis, onceki != guncelSiparis {
             registerSiparisChange(before: onceki, after: guncelSiparis)
+        }
+
+        // A project quick-created with no signal is still only a job in the
+        // offline queue. On an advanced-finance plan the branch below writes
+        // Firestore directly, and a merging write CREATES the document when the
+        // SDK flushes its own mutation queue — closing the order's card is
+        // enough to produce one. The queued create would then be refused as
+        // already-exists over a document with no project number on it. So an
+        // edit made before the create has landed is folded into that same job:
+        // one document, one rail, one arrival.
+        if hasPendingCallableCreate(documentId: id) {
+            queuePendingCallableOrderWrite(
+                guncelSiparis,
+                documentId: id,
+                action: "update",
+                callableFunction: "saveSwiftOrder"
+            )
+            upsertLocalSiparis(guncelSiparis)
+            return
         }
 
         if shouldSaveOrdersThroughCallable {
@@ -2906,23 +2959,17 @@ class FirebaseManager: ObservableObject {
         guard let id = siparis.id else { return }
         registerAction(.deletedSiparis(siparis))
         removeLocalSiparis(id: id)
+        guard !trashPendingCallableCreate(documentId: id) else { return }
         registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: siparis.customerName)
-        db.collection("siparisler").document(id).updateData([
-            "isDeleted": true,
-            "deletedAt": FieldValue.serverTimestamp(),
-            "deletedBy": Auth.auth().currentUser?.uid ?? ""
-        ])
+        softDeleteSiparisDocument(id: id)
     }
 
     func deleteSiparis(id: String) {
         if let siparis = siparisler.first(where: { $0.id == id }) {
             deleteSiparis(siparis)
         } else {
-            db.collection("siparisler").document(id).updateData([
-                "isDeleted": true,
-                "deletedAt": FieldValue.serverTimestamp(),
-                "deletedBy": Auth.auth().currentUser?.uid ?? ""
-            ])
+            guard !trashPendingCallableCreate(documentId: id) else { return }
+            softDeleteSiparisDocument(id: id)
         }
     }
 
@@ -3326,7 +3373,17 @@ class FirebaseManager: ObservableObject {
         switch action {
         case .addedSiparis(let siparis):
             // Undo of "add" goes to Trash (30-day grace), never a hard delete.
-            if let id = siparis.id { removeLocalSiparis(id: id); softDeleteSiparisDocument(id: id) }
+            if let id = siparis.id {
+                removeLocalSiparis(id: id)
+                // Unless there is no document yet. A create made with no signal
+                // lives only in the offline queue, and the Trash patch below is
+                // dropped against a document that was never written — the row
+                // vanished, the create replayed, and the project came back on
+                // reconnect. Undo takes the queued create away instead.
+                if !cancelPendingCallableCreate(documentId: id) {
+                    softDeleteSiparisDocument(id: id)
+                }
+            }
         case .deletedSiparis(let siparis):
             restoreSiparis(siparis)
         case .updatedSiparis(let before, _):
@@ -3345,7 +3402,14 @@ class FirebaseManager: ObservableObject {
     private func applyRedo(_ action: StudioHistoryAction) {
         switch action {
         case .addedSiparis(let siparis):
-            restoreSiparis(siparis)
+            // The mirror of the undo above: a create the undo lifted off the
+            // offline queue goes back on it, because restoring it by writing
+            // the document here would make one the server never numbered.
+            if let id = siparis.id, restoreCancelledPendingCallableCreate(documentId: id) {
+                upsertLocalSiparis(siparis)
+            } else {
+                restoreSiparis(siparis)
+            }
         case .deletedSiparis(let siparis):
             if let id = siparis.id { removeLocalSiparis(id: id); softDeleteSiparisDocument(id: id) }
         case .updatedSiparis(_, let after):
@@ -3417,6 +3481,9 @@ class FirebaseManager: ObservableObject {
                 self.isOnline = path.status == .satisfied
                 self.refreshOfflineStatusMessage()
                 if self.isOnline {
+                    // A new connection is a new chance for every job, including
+                    // the ones this session has already seen refused.
+                    self.failedPendingSyncOperationIds.removeAll()
                     self.processPendingCallableOrderWritesIfPossible()
                     self.processPendingClientFileUploadsIfPossible()
                 }
@@ -3579,6 +3646,13 @@ class FirebaseManager: ObservableObject {
             pendingSyncOperations[existingIndex].callableFunction = existingWasCreate
                 ? "createSwiftOrder"
                 : callableFunction
+            // The job now carries something the server has not seen, so a
+            // refusal it collected earlier no longer applies, and a job in the
+            // air must not be dropped on success as if it were sent whole.
+            failedPendingSyncOperationIds.remove(pendingSyncOperations[existingIndex].id)
+            if pendingSyncOperations[existingIndex].id == inFlightPendingSyncOperationId {
+                inFlightPendingSyncOperationWasEdited = true
+            }
         } else {
             pendingSyncOperations.append(
                 StudioPendingSyncOperation(
@@ -3596,6 +3670,89 @@ class FirebaseManager: ObservableObject {
         savePendingSyncOperations()
     }
 
+    /// The queued create for this document, while the server has yet to make it.
+    private func pendingCallableCreateOperation(documentId: String) -> StudioPendingSyncOperation? {
+        pendingSyncOperations.first {
+            $0.companyId == currentCompanyId
+                && $0.collection == "siparisler"
+                && $0.documentId == documentId
+                && $0.callableFunction == "createSwiftOrder"
+        }
+    }
+
+    /// True while a project exists only as a job in the offline queue. Nothing
+    /// on this device may write that document directly until the server has
+    /// made it: a merging write CREATES it out of the Firestore SDK's own
+    /// mutation queue, and the replayed create then dies with already-exists
+    /// over a document that never got a project number.
+    private func hasPendingCallableCreate(documentId: String) -> Bool {
+        pendingCallableCreateOperation(documentId: documentId) != nil
+    }
+
+    /// Delete of a project whose create is still only a job in the queue.
+    ///
+    /// The soft-delete patch would be made against a document that does not
+    /// exist yet, and Firestore drops such a patch — the project comes back the
+    /// moment the create lands. Marking it sends it to the Trash as soon as it
+    /// does exist, so Delete keeps its promise on both sides of a reconnect:
+    /// gone from the list now, restorable for thirty days after.
+    ///
+    /// Unlike undo the job itself stays: the person deleted a project, they did
+    /// not un-create it, and only the server can mint the number the Trash entry
+    /// carries.
+    @discardableResult
+    private func trashPendingCallableCreate(documentId: String) -> Bool {
+        guard hasPendingCallableCreate(documentId: documentId) else { return false }
+        createsToTrashOnceLanded.insert(documentId)
+        return true
+    }
+
+    /// Undo of a create that has not reached the server. Returns true when the
+    /// undo was really honoured — either the job left the queue, or it was
+    /// already in the air and the document will be sent to the Trash as soon as
+    /// it exists. False means there is a real document to soft-delete instead.
+    @discardableResult
+    private func cancelPendingCallableCreate(documentId: String) -> Bool {
+        guard let operation = pendingCallableCreateOperation(documentId: documentId) else { return false }
+        guard operation.id != inFlightPendingSyncOperationId else {
+            createsToTrashOnceLanded.insert(documentId)
+            return true
+        }
+        cancelledPendingCreateOperations[documentId] = operation
+        pendingSyncOperations.removeAll { $0.id == operation.id }
+        failedPendingSyncOperationIds.remove(operation.id)
+        savePendingSyncOperations()
+        return true
+    }
+
+    /// Redo of such an undo: the create goes back on the queue exactly as it
+    /// was, because writing the document from here would make it without the
+    /// project number only the server can mint.
+    @discardableResult
+    private func restoreCancelledPendingCallableCreate(documentId: String) -> Bool {
+        if createsToTrashOnceLanded.remove(documentId) != nil {
+            // It was in the air when it was undone and has not been trashed
+            // yet, so redo is simply letting it land.
+            return true
+        }
+        guard let operation = cancelledPendingCreateOperations.removeValue(forKey: documentId) else { return false }
+        pendingSyncOperations.append(operation)
+        savePendingSyncOperations()
+        processPendingCallableOrderWritesIfPossible()
+        return true
+    }
+
+    private func callableErrorIsAlreadyExists(_ error: Error) -> Bool {
+        #if canImport(FirebaseFunctions)
+        let nsError = error as NSError
+        if nsError.domain == FunctionsErrorDomain,
+           nsError.code == FunctionsErrorCode.alreadyExists.rawValue {
+            return true
+        }
+        #endif
+        return error.localizedDescription.lowercased().contains("already exists")
+    }
+
     private func processPendingCallableOrderWritesIfPossible() {
         #if canImport(FirebaseFunctions)
         guard isOnline, !currentCompanyId.isEmpty, !isProcessingPendingCallableOrderWrites else { return }
@@ -3604,6 +3761,7 @@ class FirebaseManager: ObservableObject {
                 && $0.collection == "siparisler"
                 && $0.callableFunction != nil
                 && $0.callableOrder != nil
+                && !failedPendingSyncOperationIds.contains($0.id)
         }),
         let callableFunction = pending.callableFunction,
         let cachedOrder = pending.callableOrder else {
@@ -3613,11 +3771,17 @@ class FirebaseManager: ObservableObject {
 
         let order = cachedOrder.restoredOrder
         guard let orderPayload = callableOrderPayload(for: order) else {
+            // A job that cannot be encoded now will not encode later either:
+            // step over it rather than let it hold the queue shut.
             print("Pending protected order encode failed.")
+            failedPendingSyncOperationIds.insert(pending.id)
+            processPendingCallableOrderWritesIfPossible()
             return
         }
 
         isProcessingPendingCallableOrderWrites = true
+        inFlightPendingSyncOperationId = pending.id
+        inFlightPendingSyncOperationWasEdited = false
         let payload: [String: Any] = [
             "companyId": currentCompanyId,
             "orderId": pending.documentId,
@@ -3630,15 +3794,52 @@ class FirebaseManager: ObservableObject {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.isProcessingPendingCallableOrderWrites = false
+                    let wasEditedInFlight = self.inFlightPendingSyncOperationWasEdited
+                    self.inFlightPendingSyncOperationId = nil
+                    self.inFlightPendingSyncOperationWasEdited = false
 
                     if let error {
                         print("Pending protected order sync failed: \(error.localizedDescription)")
-                        self.refreshOfflineStatusMessage()
+
+                        if callableFunction == "createSwiftOrder", self.callableErrorIsAlreadyExists(error) {
+                            // The document is already there — an older build's
+                            // direct write, or a reply this device never heard.
+                            // The create HAS arrived, so what is left is the
+                            // content: the job becomes a save, which both
+                            // delivers it and clears a head that would
+                            // otherwise fail on every network change forever.
+                            if self.settleCancelledCreate(documentId: pending.documentId) {
+                                self.pendingSyncOperations.removeAll { $0.id == pending.id }
+                                self.savePendingSyncOperations()
+                            } else {
+                                self.convertPendingOperationToSave(id: pending.id)
+                            }
+                        } else {
+                            self.failedPendingSyncOperationIds.insert(pending.id)
+                            self.refreshOfflineStatusMessage()
+                        }
+
+                        self.processPendingCallableOrderWritesIfPossible()
                         return
                     }
 
-                    self.pendingSyncOperations.removeAll { $0.id == pending.id }
-                    self.savePendingSyncOperations()
+                    if self.settleCancelledCreate(documentId: pending.documentId) {
+                        // Undone or deleted before the server had it: the
+                        // document exists now, so the Trash write that could not
+                        // be made against a document that did not exist yet is
+                        // made here.
+                        self.pendingSyncOperations.removeAll { $0.id == pending.id }
+                        self.savePendingSyncOperations()
+                    } else if wasEditedInFlight {
+                        // An edit was folded into this job while it was in the
+                        // air. Removing it would drop that edit, so it stays —
+                        // as a save, since the document now exists — and the
+                        // next pass sends it.
+                        self.convertPendingOperationToSave(id: pending.id)
+                    } else {
+                        self.pendingSyncOperations.removeAll { $0.id == pending.id }
+                        self.savePendingSyncOperations()
+                    }
 
                     if let data = result?.data as? [String: Any],
                        let message = data["message"] as? String {
@@ -3649,6 +3850,27 @@ class FirebaseManager: ObservableObject {
                 }
             }
         #endif
+    }
+
+    /// The document exists on the server from here on, so the job that still
+    /// describes it must stop asking for a create.
+    private func convertPendingOperationToSave(id: UUID) {
+        guard let index = pendingSyncOperations.firstIndex(where: { $0.id == id }) else { return }
+        guard pendingSyncOperations[index].callableFunction == "createSwiftOrder" else { return }
+        pendingSyncOperations[index].callableFunction = "saveSwiftOrder"
+        pendingSyncOperations[index].action = "update"
+        savePendingSyncOperations()
+    }
+
+    /// Honours an undo or a delete that landed on a project the server had not
+    /// made yet, now that the document is known to exist. Returns true when it
+    /// did so.
+    @discardableResult
+    private func settleCancelledCreate(documentId: String) -> Bool {
+        guard createsToTrashOnceLanded.remove(documentId) != nil else { return false }
+        removeLocalSiparis(id: documentId)
+        softDeleteSiparisDocument(id: documentId)
+        return true
     }
 
     private func registerOfflineWriteIfNeeded(collection: String, documentId: String, action: String, title: String) {

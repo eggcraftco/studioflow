@@ -135,11 +135,11 @@ fun HomeScreen(
         uk.co.eggcraft.studioflow.features.orders.QuickCreateProjectDialog(
             customers = state.customers,
             creating = state.creatingOrder,
+            outcome = state.orderCreateOutcome,
+            // Reached on Cancel and on a create that actually went through; a
+            // refusal keeps the form and everything typed into it.
             onDismiss = { quickCreateOpen = false },
-            onCreate = { draft ->
-                quickCreateOpen = false
-                onNewOrder(draft)
-            }
+            onCreate = { draft -> onNewOrder(draft) }
         )
     }
 

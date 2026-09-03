@@ -52,6 +52,18 @@ export function quickCreateCustomerName(form: QuickCreateProjectForm): string {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Tomorrow, in the person's own timezone. An order's due date is stored as a
+ * count of days after the payment date and zero already means "no due date", so
+ * the schema's earliest expressible date is tomorrow. The picker says so rather
+ * than letting the server move a date the person chose. */
+function earliestDueDate(): string {
+  const day = new Date();
+  day.setDate(day.getDate() + 1);
+  const month = String(day.getMonth() + 1).padStart(2, "0");
+  const date = String(day.getDate()).padStart(2, "0");
+  return `${day.getFullYear()}-${month}-${date}`;
+}
+
 export function QuickCreateProjectDialog({
   form,
   options,
@@ -319,6 +331,7 @@ export function QuickCreateProjectDialog({
               className="input"
               type="date"
               value={form.dueDate}
+              min={earliestDueDate()}
               disabled={saving}
               onChange={event => update({ dueDate: event.target.value })}
             />

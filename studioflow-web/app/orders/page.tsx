@@ -143,6 +143,10 @@ export default function OrdersPage() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [requestedOrderId, setRequestedOrderId] = useState("");
+  // True only while a requested order that is missing from the loaded list is
+  // being fetched. It holds the "selection must exist in the list" guard off;
+  // it is NOT `loadingOrders`, so the full-screen loading card stays down.
+  const [resolvingRequestedOrder, setResolvingRequestedOrder] = useState(false);
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderQuickFilterId>("all");
@@ -242,13 +246,57 @@ export default function OrdersPage() {
     };
   }, [user]);
 
+  // Read by the effect below without being one of its dependencies, so that
+  // fetching a missing order cannot re-trigger the effect that fetched it.
+  // Declared before that effect on purpose: effects run in definition order, so
+  // this one has already copied the current list by the time it is read.
+  const ordersRef = useRef<OrderListItem[]>([]);
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
   // The other half of that split: a link or a create that names an order only
   // moves the selection. The detail subscription below loads it, and that is
   // the only loading state a person should see.
+  //
+  // But the selection has to survive: the guard further down drops any
+  // selection that is not in the list, so an order the list has never seen —
+  // a teammate's brand new one, a webhook's, or one just assigned to a
+  // restricted member — would be bounced to the top of the list on the very
+  // next commit. So when the requested id is absent, refresh the list once,
+  // quietly. `resolvingRequestedOrder` (not `loadingOrders`) holds the guard
+  // off meanwhile, which is why the full-screen card is still raised only once.
   useEffect(() => {
     if (!requestedOrderId) return;
     setSelectedOrderId(current => (current === requestedOrderId ? current : requestedOrderId));
-  }, [requestedOrderId]);
+    if (!workspace || loadingOrders) return;
+    if (ordersRef.current.some(order => order.id === requestedOrderId)) return;
+
+    const currentWorkspace = workspace;
+    const uid = user?.uid ?? "";
+    let cancelled = false;
+    setResolvingRequestedOrder(true);
+
+    async function resolveRequestedOrder() {
+      try {
+        const loadedOrders = await loadRecentOrders(currentWorkspace.id, currentWorkspace, uid);
+        if (!cancelled) setOrders(loadedOrders);
+      } catch {
+        /* the detail pane subscribes to the order itself and reports its own error */
+      } finally {
+        if (!cancelled) setResolvingRequestedOrder(false);
+      }
+    }
+
+    void resolveRequestedOrder();
+    return () => {
+      // Abandoning the fetch must also release the guard, or a re-run that
+      // takes an early path above would leave it held down for good. The next
+      // run re-raises it in the same commit, so the guard never sees a gap.
+      cancelled = true;
+      setResolvingRequestedOrder(false);
+    };
+  }, [loadingOrders, requestedOrderId, user, workspace]);
 
   useEffect(() => {
     if (!workspace || !selectedOrderId) {
@@ -318,9 +366,12 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (loadingOrders) return;
+    // A requested order still being fetched is not "missing" — bouncing the
+    // selection here is what used to open an unrelated project on a deep link.
+    if (resolvingRequestedOrder) return;
     if (selectedOrderId && filteredOrders.some(order => order.id === selectedOrderId)) return;
     setSelectedOrderId(filteredOrders[0]?.id || "");
-  }, [filteredOrders, loadingOrders, selectedOrderId]);
+  }, [filteredOrders, loadingOrders, resolvingRequestedOrder, selectedOrderId]);
 
   useEffect(() => {
     if (!workspace || !user) return;

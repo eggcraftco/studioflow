@@ -11805,6 +11805,13 @@ function dateFromISODate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+// An order carries no due date of its own: it carries `deliveryTime`, a number
+// of days after the payment date, and a deliveryTime of zero already means "no
+// due date" everywhere it is read. So the earliest due date the schema can
+// express is tomorrow, and today collapses onto it. The clients do not offer
+// today in their pickers for exactly this reason — a floor that is visible is
+// better than a date that moves after it is saved. Giving today a home means
+// giving an order a real due-date field, which is its own piece of work.
 function deliveryTimeFromDueDate(paymentDate, dueDate) {
   if (!(paymentDate instanceof Date) || !(dueDate instanceof Date)) return 45;
   const paymentDay = Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate());
