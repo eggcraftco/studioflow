@@ -26414,6 +26414,10 @@ function nvParseFirebaseStorageUrl(rawUrl) {
   return { bucket, storagePath, token };
 }
 
+// How long a shared file link lives. Long enough to be useful in a message
+// thread, short enough that a link forwarded once does not stay open for ever.
+const NV_FILE_SHARE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
 exports.nvCreateFileLink = onCall({ region: "europe-west2" }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
@@ -26421,6 +26425,25 @@ exports.nvCreateFileLink = onCall({ region: "europe-west2" }, async (request) =>
   let info;
   try { info = nvParseFirebaseStorageUrl(rawUrl); } catch (_) { info = null; }
   if (!info) throw new HttpsError("invalid-argument", "Unsupported file URL.");
+
+  // Whose file is this?
+  //
+  // The only check used to be "are you signed in", so any signed-in person who
+  // knew — or guessed — a storage path could mint a PUBLIC link to another
+  // workspace's file. The path names the workspace, and the caller has to be in
+  // it. The files library already does exactly this check on every write
+  // (assertCompanyPath); the share link was the one door without it.
+  const pathMatch = /^companies\/([^/]+)\//.exec(info.storagePath);
+  const ownerCompanyId = pathMatch ? pathMatch[1] : "";
+  if (!ownerCompanyId) {
+    throw new HttpsError("invalid-argument", "That file does not belong to a workspace.");
+  }
+  const ownerSnap = await admin.firestore().collection("companies").doc(ownerCompanyId).get();
+  const ownerData = ownerSnap.exists ? { ...(ownerSnap.data() || {}), __workspaceId: ownerCompanyId } : null;
+  if (!ownerData || !uidHasCompanyAccess(ownerData, uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to that file.");
+  }
+
   const fileName = info.storagePath.split("/").pop() || "file";
   const ext = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
   const shortId = crypto.createHash("sha256").update(info.storagePath).digest("base64url").slice(0, 12);
@@ -26430,10 +26453,49 @@ exports.nvCreateFileLink = onCall({ region: "europe-west2" }, async (request) =>
     token: info.token,
     fileName,
     ext,
+    companyId: ownerCompanyId,
     createdByUid: uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    // A link with no end and no off switch is not a share, it is a publication.
+    // The viewer reads both; revoking is what makes "stop sharing" true.
+    expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + NV_FILE_SHARE_TTL_MS),
+    revokedAtMs: 0,
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
   return { id: shortId, ext };
+});
+
+exports.nvRevokeFileLink = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
+  const id = String((request.data && request.data.id) || "").trim();
+  if (!/^[A-Za-z0-9_-]{6,40}$/.test(id)) {
+    throw new HttpsError("invalid-argument", "That is not a file link.");
+  }
+  const ref = admin.firestore().collection("fileShares").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: true, alreadyGone: true };
+
+  const data = snap.data() || {};
+  // Links minted before companyId was recorded fall back to the path, which is
+  // where the workspace was named all along.
+  const stored = String(data.companyId || "").trim()
+    || (/^companies\/([^/]+)\//.exec(String(data.path || "")) || [])[1]
+    || "";
+  const companySnap = stored ? await admin.firestore().collection("companies").doc(stored).get() : null;
+  const companyData = companySnap && companySnap.exists
+    ? { ...(companySnap.data() || {}), __workspaceId: stored }
+    : null;
+  if (!companyData || !uidHasCompanyAccess(companyData, uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to that file.");
+  }
+
+  await ref.set({
+    revokedAtMs: Date.now(),
+    revokedBy: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return { ok: true, id };
 });
 
 exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res) => {
@@ -26453,6 +26515,15 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
     }
     const data = doc.data() || {};
     if (!data.bucket || !data.path || !data.token) {
+      res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
+      return;
+    }
+    // Withdrawn or aged out. Both are checked here because this handler is the
+    // only thing standing between a short id and the file: it is public, it
+    // takes no auth, and before this there was no state it could refuse on.
+    const revokedAtMs = Number(data.revokedAtMs || 0);
+    const expireAtMs = data.expireAt && typeof data.expireAt.toMillis === "function" ? data.expireAt.toMillis() : 0;
+    if (revokedAtMs > 0 || (expireAtMs > 0 && Date.now() > expireAtMs)) {
       res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
       return;
     }
@@ -27354,18 +27425,103 @@ exports.revokeOrderPortalLink = onCall({ region: "europe-west2" }, async (reques
   if (tokenId) {
     await portalLinksCollection().doc(tokenId).set({ revokedAtMs: now }, { merge: true });
   }
+
+  // The photos and files the portal handed out are Firebase Storage URLs with
+  // the download token in them. Killing the /track/ page does nothing to those:
+  // a customer who copied one keeps it, and the screen said "the customer's
+  // link no longer opens", which was not true.
+  //
+  // Rotating the object's download token is the only thing that actually closes
+  // it — every URL ever minted for that file stops working the moment the token
+  // changes. Best-effort per file: one that cannot be rotated must not stop the
+  // portal being revoked, which is the part the person asked for.
+  const rotated = await rotatePortalFileTokens(orderData, companyId, orderId);
   const history = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
   await orderRef.update({
     portalTokenId: "",
     portalToken: "",
     portalRevokedAtMs: now,
+    portalRotatedFileCount: rotated.rotated,
     historyLog: [
       webHistoryEntry("Customer portal link revoked", "active", "off", uid, email),
       ...history
     ].slice(0, 120)
   });
-  return { ok: true };
+  return { ok: true, rotatedFiles: rotated.rotated, unrotatedFiles: rotated.failed };
 });
+
+/**
+ * Rotates the Storage download token on every file this order's portal exposed.
+ *
+ * A Firebase download URL carries its own token, so the URL IS the credential —
+ * revoking the portal page leaves every photo and attachment the customer
+ * already copied working for ever. Changing the token invalidates all of them at
+ * once, which is what "the customer's link no longer opens" has to mean.
+ *
+ * The cost is that any other copy of that URL dies too, which is correct: they
+ * are the same credential.
+ */
+async function rotatePortalFileTokens(orderData = {}, companyId = "", orderId = "") {
+  const bucket = admin.storage().bucket();
+  let rotated = 0;
+  let failed = 0;
+
+  const rotate = async (path) => {
+    if (!path) { failed += 1; return false; }
+    try {
+      await bucket.file(path).setMetadata({ metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() } });
+      rotated += 1;
+      return true;
+    } catch (error) {
+      failed += 1;
+      console.warn("portal token rotation failed", path, error?.message || error);
+      return false;
+    }
+  };
+
+  // The order's own attachments and photos.
+  const files = Array.isArray(orderData.clientFiles) ? orderData.clientFiles : [];
+  for (const file of files.slice(0, 200)) {
+    await rotate(
+      String((file && (file.storagePath || file.path)) || "").trim()
+        || nvStoragePathFromDownloadUrl(String((file && file.downloadURL) || ""))
+    );
+  }
+
+  // Library files shared to this order's portal. They are a second source of
+  // portal URLs and would otherwise keep working after the revoke — the cached
+  // `portalUrl` is cleared in the same pass, or the file would be dead the next
+  // time the portal is switched back on.
+  if (companyId && orderId) {
+    try {
+      const snap = await admin.firestore()
+        .collection("companies").doc(companyId).collection("fileRecords")
+        .where("linkKeys", "array-contains", `order:${orderId}`)
+        .limit(200)
+        .get();
+      for (const doc of snap.docs) {
+        const data = doc.data() || {};
+        if (data.clientPortalVisible !== true) continue;
+        if (await rotate(String(data.storagePath || "").trim())) {
+          await doc.ref.set({ portalUrl: "" }, { merge: true }).catch(() => undefined);
+        }
+      }
+    } catch (error) {
+      console.warn("portal library rotation failed", companyId, orderId, error?.message || error);
+    }
+  }
+
+  return { rotated, failed };
+}
+
+/** The object path inside a Firebase download URL, or "" if it is not one. */
+function nvStoragePathFromDownloadUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  const match = /\/v0\/b\/[^/]+\/o\/([^?]+)/.exec(raw);
+  if (!match) return "";
+  try { return decodeURIComponent(match[1]); } catch { return ""; }
+}
 
 exports.saveOrderPortalSettings = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId } = await requirePortalStaff(request);

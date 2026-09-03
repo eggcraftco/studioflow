@@ -5548,7 +5548,10 @@ export function OrderDetailContent({
     setPortalNotice("");
     try {
       await revokeOrderPortalLink(workspace, order.id);
-      setPortalNotice("Portal turned off. The customer's link no longer opens.");
+      // True now, which it was not before: revoking also rotates the download
+      // token on every photo and file the portal handed out, so a URL the
+      // customer copied stops working too.
+      setPortalNotice("Portal turned off. The link no longer opens, and the photos and files it shared are closed too.");
       await onReloadOrder().catch(() => undefined);
     } catch (failure) {
       setPortalNotice(failure instanceof Error ? failure.message : "The portal link could not be turned off.");
