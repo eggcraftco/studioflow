@@ -5765,6 +5765,7 @@ Object.assign(exports, inventoryCallables);
 // The Finance Engine's answer, stamped onto every order by a trigger rather
 // than by each of the many writers. See functions/finance/stamp.js for why a
 // trigger, and docs/finance-engine.md for what it computes.
+const financeEngine = require("./finance/engine");
 const { createFinanceStamp } = require("./finance/stamp");
 const { _internal: financeStampInternal, ...financeStampExports } = createFinanceStamp({
   admin,
@@ -8468,6 +8469,14 @@ function financialSettingsFromData(data = {}) {
     defaultTaxRate: cleanPercentageNumber(data.defaultTaxRate, 20),
     defaultDeliveryTime: resolveDefaultDeliveryTime(data),
     taxCalculationType: cleanTaxCalculationType(data.taxCalculationType, "Revenue"),
+    // Absent on every workspace until this screen is saved, so each falls back
+    // to what the workspace already does — see the engine's own defaults.
+    vatRegistered: typeof data.vatRegistered === "boolean" ? data.vatRegistered : true,
+    pricesIncludeVat: typeof data.pricesIncludeVat === "boolean" ? data.pricesIncludeVat : true,
+    vatMethod: financeEngine.normalizeVatMethod(
+      data.vatMethod || data.taxCalculationType,
+      financeEngine.METHOD_STANDARD
+    ),
     taxMilestoneEnabled: typeof data.taxMilestoneEnabled === "boolean" ? data.taxMilestoneEnabled : false,
     taxMilestoneDate: cleanTaxMilestoneDate(data.taxMilestoneDate, Date.now() / 1000),
     corporationTaxEnabled: typeof data.corporationTaxEnabled === "boolean" ? data.corporationTaxEnabled : false,
@@ -8608,6 +8617,16 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     defaultTaxRate: cleanPercentageNumber(incoming.defaultTaxRate, 20),
     defaultDeliveryTime: resolveDefaultDeliveryTime(incoming),
     taxCalculationType: cleanTaxCalculationType(incoming.taxCalculationType, "Revenue"),
+    // The three the product decision adds. Each defaults to what the workspace
+    // does today, so saving this screen without touching them changes nothing:
+    // registered, prices quoted inclusive of VAT, and whichever method
+    // taxCalculationType already said.
+    vatRegistered: typeof incoming.vatRegistered === "boolean" ? incoming.vatRegistered : true,
+    pricesIncludeVat: typeof incoming.pricesIncludeVat === "boolean" ? incoming.pricesIncludeVat : true,
+    vatMethod: financeEngine.normalizeVatMethod(
+      incoming.vatMethod || incoming.taxCalculationType,
+      financeEngine.METHOD_STANDARD
+    ),
     taxMilestoneEnabled: typeof incoming.taxMilestoneEnabled === "boolean" ? incoming.taxMilestoneEnabled : false,
     taxMilestoneDate: cleanTaxMilestoneDate(incoming.taxMilestoneDate, Date.now() / 1000),
     corporationTaxEnabled: typeof incoming.corporationTaxEnabled === "boolean" ? incoming.corporationTaxEnabled : false,

@@ -75,7 +75,7 @@ function createFinanceStamp({
   // write on every pass, for ever.
   const COMPARED = [
     "engineVersion", "method", "taxRate", "pricesIncludeVat", "vatRegistered",
-    "revenue", "directCost", "grossMargin", "platformFee", "deliveryCost",
+    "revenue", "receivablesTotal", "directCost", "grossMargin", "platformFee", "deliveryCost",
     "otherExpenses", "refunded", "vatBase", "vatDue", "netProfit",
     "customerTotal", "fromLineItems"
   ];

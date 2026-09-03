@@ -43,6 +43,7 @@
       },
       "expect": {
         "revenue": 2300,
+        "receivablesTotal": 300,
         "directCost": 1200,
         "grossMargin": 1100,
         "otherExpenses": 100,
@@ -94,7 +95,7 @@
           "financialRemaining::Gone": "75"
         }
       },
-      "expect": { "revenue": 375, "orphanKeys": ["financialRemaining::Gone"] }
+      "expect": { "revenue": 375, "receivablesTotal": 375, "orphanKeys": ["financialRemaining::Gone"] }
     },
     {
       "name": "no VAT method owes nothing",

@@ -111,6 +111,18 @@ await check("a member without the Financial Settings permission cannot change th
 // financialInfo, so the rule must not be stricter than the callable.
 await check("a member the owner granted Financial Settings CAN change the tax rate",
   assertSucceeds(updateDoc(doc(as(FINANCE_MEMBER), "companySettings", CID), { defaultTaxRate: 5 })));
+// The Finance Engine's own three decide what every order owes, so they are
+// gated exactly like the tax rate rather than left in the open.
+await check("a plain member cannot say the workspace is no longer VAT registered",
+  assertFails(updateDoc(doc(as(MEMBER), "companySettings", CID), { vatRegistered: false })));
+await check("a plain member cannot switch the VAT method",
+  assertFails(updateDoc(doc(as(MEMBER), "companySettings", CID), { vatMethod: "none" })));
+await check("a plain member cannot say the prices exclude VAT",
+  assertFails(updateDoc(doc(as(MEMBER), "companySettings", CID), { pricesIncludeVat: false })));
+await check("the member granted Financial Settings can set all three",
+  assertSucceeds(updateDoc(doc(as(FINANCE_MEMBER), "companySettings", CID), {
+    vatRegistered: true, pricesIncludeVat: true, vatMethod: "margin"
+  })));
 await check("an admin may change the platform fee (Mac/Android save Financial Settings directly)",
   assertSucceeds(updateDoc(doc(as(ADMIN), "companySettings", CID), { feePercentage: 2.5 })));
 await check("a member still saves workflow settings",

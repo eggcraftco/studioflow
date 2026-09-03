@@ -1030,7 +1030,11 @@ service cloud.firestore {
       function financeSettingsKeys() {
         return ['seciliParaBirimi', 'seciliOndalik', 'feePercentage', 'defaultTaxRate',
           'taxRuleNameRevenue', 'taxRuleNameProfit', 'taxCalculationType', 'taxMilestoneEnabled',
-          'taxMilestoneDate', 'corporationTaxEnabled', 'corporationTaxRate'];
+          'taxMilestoneDate', 'corporationTaxEnabled', 'corporationTaxRate',
+          // The Finance Engine's own three: whether the workspace is VAT
+          // registered, whether its prices are quoted inclusive of VAT, and
+          // which VAT method it uses. They decide what every order owes.
+          'vatRegistered', 'pricesIncludeVat', 'vatMethod'];
       }
 
       // saveFinancialSettings asks for uidCanEditWorkspaceSettings plus the

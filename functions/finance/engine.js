@@ -301,6 +301,10 @@ function computeOrderFinance(order = {}, rawSettings = {}, options = {}) {
     vatRegistered: settings.vatRegistered,
 
     revenue: round2(revenue),
+    // The receivables on their own, because a screen shows them as their own
+    // row and would otherwise have to re-derive them from customFields — which
+    // is how four different totalling rules grew in the first place.
+    receivablesTotal: round2(receivables.total),
     directCost: round2(directCost),
     grossMargin: round2(grossMargin),
     platformFee,
