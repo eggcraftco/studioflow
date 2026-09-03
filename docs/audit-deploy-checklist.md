@@ -21,15 +21,17 @@ npx firebase deploy --project eggcraft-studio --only \
   functions:getSearchConsoleStats,functions:getSiteStats,functions:importOpeningStock,functions:importWorkspaceBackup,functions:initializeFreeDemoWorkspace,functions:mergeOrders,functions:mergeWebCustomers,functions:notifyCustomerOnStatusChange,functions:postEstimateDecision,functions:purgeExpiredEstimateLinks,functions:recalculateWorkspacePlanUsage,functions:removeWorkspaceTeamMember,functions:resetCustomOrderLandingStats,functions:resyncStripeWorkspaceEntitlements,functions:revokeOrderEstimateLink,functions:saveInventoryItem,functions:saveSwiftOrder,functions:saveThemeBrandingSettings,functions:scheduledBillingEntitlementReconcile,functions:scheduledReminderCheck,functions:sendOrderEstimate,functions:stripeWebhook,functions:syncWorkflowSafeOrderView,functions:updateWebOrder
 ```
 
-## 2) Sonra, acelesi yok
+## 2) Yapıldı — 3 Eyl 2026
 
-Bunların tek değişikliği `sendPushNotificationToCompany`'nin ölü cihaz token'larını artık silmesi.
-Deploy edilmezlerse yalnızca eski davranış sürer, bir şey bozulmaz.
+Yukarıdaki 48 fonksiyon canlıya alındı (üç parti, hepsi "Successful update operation").
+Kurallar da düzeltilmiş haliyle canlıda.
 
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:etsyWebhook,functions:holdIntegrationOrder,functions:markActivityNotificationRead,functions:scheduledTrackingRefresh,functions:shopifyOrderWebhook,functions:squareWebhook,functions:wooCommerceSiparis
-```
+Not: bu bölümde daha önce `holdIntegrationOrder`, `wooCommerceSiparis`, `shopifyOrderWebhook`,
+`etsyWebhook`, `squareWebhook`, `markActivityNotificationRead`, `scheduledTrackingRefresh` diye
+bir "sonra" listesi vardı. Bunlar hafızadan yazılmıştı ve **hiçbiri gerçek bir fonksiyon adı
+değil** — `firebase functions:list` 221 fonksiyon döndürüyor, bu adlar aralarında yok. Tek
+kayıpları `sendPushNotificationToCompany`'nin ölü token temizliğiydi; o da bu fonksiyonlar
+ilerideki turlarda yeniden deploy edildikçe kendiliğinden gidecek.
 
 ## Deploy sonrası hızlı kontrol
 
