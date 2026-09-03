@@ -197,6 +197,59 @@ check("the URI cleaner used everywhere else goes through the same rule", () => {
   assert.ok(!/\"http:\"/.test(cleaner), "the old protocol allowlist is gone");
 });
 
+// ---- a grant that can be seen and ended ------------------------------------
+//
+// A token was minted with revokedAtMs: 0 and nothing anywhere ever raised it —
+// no callable, no screen, no sweep. Thirty days of access to a workspace, held
+// by a third party, invisible to the people who granted it and impossible to
+// withdraw. The bearer check had always honoured the flag; what was missing was
+// anything that could set it.
+check("the bearer check refuses a revoked token, and always did", () => {
+  const resolver = SOURCE.slice(
+    SOURCE.indexOf("async function nvResolveChatGPTOAuthBearer("),
+    SOURCE.indexOf("async function nvResolveChatGPTOAuthBearer(") + 1400
+  );
+  assert.ok(/if \(Number\(tokenData\.revokedAtMs \|\| 0\) > 0\) return null;/.test(resolver));
+});
+
+check("something can now raise the flag, and it is owner-gated", () => {
+  assert.ok(/async function nvRevokeChatGPTTokens\(/.test(SOURCE), "there is a revoke path");
+  const callable = SOURCE.slice(
+    SOURCE.indexOf("exports.revokeChatGPTConnection = onCall("),
+    SOURCE.indexOf("exports.revokeChatGPTConnection = onCall(") + 1200
+  );
+  assert.ok(callable.length > 100, "the callable exists");
+  assert.ok(/uidIsCompanyOwner\(companyData, uid\)/.test(callable), "only the owner may disconnect");
+  assert.ok(/nvRevokeChatGPTTokens\(/.test(callable));
+});
+
+check("connecting again supersedes the last grant rather than stacking one on it", () => {
+  // Each token lives thirty days. Re-consenting monthly used to leave a pile of
+  // live keys nobody could see, and disconnecting "the" connection would have
+  // left the older ones working.
+  const minter = SOURCE.slice(
+    SOURCE.indexOf("async function nvOAuthCreateAccessToken("),
+    SOURCE.indexOf("async function nvOAuthCreateAccessToken(") + 1400
+  );
+  const revoke = minter.indexOf("await nvRevokeChatGPTTokens(");
+  const write = minter.indexOf("nvChatGPTOAuthTokensRef().doc(tokenHash).set(");
+  assert.ok(revoke > 0, "the previous grants are withdrawn");
+  assert.ok(write > 0 && revoke < write, "the old grants go before the new one is written");
+});
+
+check("the listing hands out the hash, never the token", () => {
+  // Bounded by the next function, not by a character count: the first version
+  // ran past the end and read `rawToken` out of the bearer resolver below.
+  const at = SOURCE.indexOf("async function nvListChatGPTTokens(");
+  const listing = SOURCE.slice(at, SOURCE.indexOf("\nasync function ", at + 1));
+  assert.ok(/tokenHash: token\.id/.test(listing), "a grant is identified by its hash");
+  // The raw token is never stored, so it cannot be listed — but a future edit
+  // could start storing it, and this is where that would show up.
+  assert.ok(!/accessToken|rawToken/.test(listing));
+  assert.ok(/revokedAtMs \|\| 0\) === 0/.test(listing), "a withdrawn grant is not listed as live");
+  assert.ok(/expiresAtMs \|\| 0\) > nowMs/.test(listing), "an expired grant is not listed as live");
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }

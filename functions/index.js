@@ -16798,6 +16798,44 @@ async function emailWorkspaceInvitation({ to, companyName, invitedByName, roleLa
   return { sent: true };
 }
 
+// ---- ChatGPT connections the workspace can actually see ------------------
+//
+// The tokens live in a top-level collection no client may read, which is right,
+// but it left the workspace with no way to know a connection existed — the
+// Integrations hub did not list ChatGPT and the onboarding wizard hardcoded it
+// as absent, both with comments admitting why. So these two callables are the
+// screen's only window onto it.
+
+exports.listChatGPTConnections = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  // Owner-only, like the other billing-adjacent reads: a grant carries the
+  // email of whoever made it, which is not every member's business.
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can see ChatGPT connections.");
+  }
+  const connections = await nvListChatGPTTokens(companyId);
+  return { ok: true, companyId, connections, connected: connections.length > 0 };
+});
+
+exports.revokeChatGPTConnection = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can disconnect ChatGPT.");
+  }
+  // No tokenHash means all of them, which is what "Disconnect" means on a
+  // screen that shows one connection.
+  const tokenHash = String(request.data?.tokenHash || "").trim();
+  const result = await nvRevokeChatGPTTokens({ companyId, tokenHash, reason: "owner", byUid: uid });
+  return {
+    ok: true,
+    companyId,
+    revoked: result.revoked,
+    message: result.revoked
+      ? "ChatGPT access has been withdrawn."
+      : "There was nothing left to disconnect."
+  };
+});
+
 exports.inviteWorkspaceMember = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   requireTeamManager(companyData, uid);
@@ -24446,6 +24484,18 @@ async function nvOAuthCreateAccessToken(data = {}) {
   const rawToken = nvRandomToken(48);
   const tokenHash = nvSha256(rawToken);
   const nowMs = Date.now();
+
+  // Connecting again supersedes the last grant rather than adding to it. Each
+  // token lives thirty days, so re-consenting monthly used to leave a growing
+  // pile of live keys nobody could see or count, and revoking "the" connection
+  // would have left the older ones working.
+  await nvRevokeChatGPTTokens({
+    companyId: String(data.companyId || ""),
+    uid: String(data.uid || ""),
+    reason: "superseded",
+    nowMs
+  });
+
   await nvChatGPTOAuthTokensRef().doc(tokenHash).set({
     clientId: String(data.clientId || ""),
     scope: String(data.scope || ""),
@@ -24463,6 +24513,66 @@ async function nvOAuthCreateAccessToken(data = {}) {
     accessToken: rawToken,
     expiresIn: Math.floor(NV_CHATGPT_OAUTH_ACCESS_TOKEN_TTL_MS / 1000)
   };
+}
+
+/**
+ * Ends ChatGPT's access to a workspace.
+ *
+ * A token was minted with revokedAtMs: 0 and nothing anywhere ever raised it —
+ * no callable, no screen, no expiry sweep. Thirty days of access, invisible to
+ * the workspace that granted it and impossible to withdraw. The bearer check
+ * has always honoured the flag, so raising it is the whole of the fix; what was
+ * missing was anything that could.
+ *
+ * Scoped by workspace, optionally narrowed to one person or one grant, so an
+ * owner can cut off a single member's connection without ending their own.
+ */
+async function nvRevokeChatGPTTokens({ companyId, uid = "", tokenHash = "", reason = "revoked", nowMs = Date.now(), byUid = "" } = {}) {
+  const cleanCompany = String(companyId || "").trim();
+  if (!cleanCompany) return { revoked: 0 };
+
+  let query = nvChatGPTOAuthTokensRef().where("companyId", "==", cleanCompany);
+  if (uid) query = query.where("uid", "==", String(uid).trim());
+  const snap = await query.get();
+
+  const wanted = String(tokenHash || "").trim();
+  const batch = admin.firestore().batch();
+  let revoked = 0;
+  snap.forEach((doc) => {
+    if (wanted && doc.id !== wanted) return;
+    if (Number(doc.get("revokedAtMs") || 0) > 0) return;
+    batch.set(doc.ref, {
+      revokedAtMs: nowMs,
+      revokedReason: String(reason || "revoked").slice(0, 40),
+      revokedBy: String(byUid || "").slice(0, 128)
+    }, { merge: true });
+    revoked += 1;
+  });
+  if (revoked) await batch.commit();
+  return { revoked };
+}
+
+/** The live grants, for the one screen that is allowed to see them. */
+async function nvListChatGPTTokens(companyId) {
+  const cleanCompany = String(companyId || "").trim();
+  if (!cleanCompany) return [];
+  const snap = await nvChatGPTOAuthTokensRef().where("companyId", "==", cleanCompany).get();
+  const nowMs = Date.now();
+  return snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+    .filter((token) => Number(token.revokedAtMs || 0) === 0 && Number(token.expiresAtMs || 0) > nowMs)
+    .map((token) => ({
+      // The hash, never the token: this identifies a grant for revoking it and
+      // is useless as a credential.
+      tokenHash: token.id,
+      clientId: String(token.clientId || ""),
+      scope: String(token.scope || ""),
+      grantedByEmail: String(token.email || ""),
+      grantedByUid: String(token.uid || ""),
+      createdAtMs: Number(token.createdAtMs || 0),
+      expiresAtMs: Number(token.expiresAtMs || 0)
+    }))
+    .sort((lhs, rhs) => rhs.createdAtMs - lhs.createdAtMs);
 }
 
 async function nvResolveChatGPTOAuthBearer(req) {

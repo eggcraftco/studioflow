@@ -2004,9 +2004,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       && !onboardingSignals.channels.woocommerce?.lastDeliveryWasTest,
     etsy: onboardingSignals.etsyShops.some((shop) => shop.status !== "disconnected"),
     bank: onboardingSignals.bankConnections > 0,
-    // No client-readable signal: the ChatGPT app's token lives in a top-level
-    // collection, and a tile that guessed would be worse than one that is quiet.
-    chatgpt: false,
+    // There is a signal now: the token still lives in a top-level collection no
+    // client may read, but an owner-only callable answers for it. Before that
+    // this tile said "not connected" to a workspace that WAS connected, and
+    // there was no way to disconnect either.
+    chatgpt: onboardingSignals.chatgptConnections.length > 0,
   }), [onboardingSignals]);
 
   useEffect(() => {
