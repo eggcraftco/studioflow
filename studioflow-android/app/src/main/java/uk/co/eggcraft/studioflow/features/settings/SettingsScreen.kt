@@ -783,7 +783,7 @@ private fun ThemeBrandingDetail(state: StudioFlowUiState, onSave: (Map<String, A
             }
             Text(t("Synced across your devices."), fontSize = 12.sp, color = NDSettings.muted())
         }
-        if (showBranding) DetailCard(title = t("Theme & Branding"), icon = Icons.Filled.Palette) {
+        if (showBranding) DetailCard(title = t("Workspace identity"), icon = Icons.Filled.Palette, subtitle = t("Shared with everyone in this workspace.")) {
             OutlinedTextField(
                 value = subtitle,
                 onValueChange = {

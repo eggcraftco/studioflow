@@ -3765,7 +3765,7 @@ struct AyarlarView: View {
         NDSettingsSurface(spacing: 16) {
             NDSettingsCardHead(icon: "paintpalette.fill", title: t("Workspace identity", lang: seciliDil), subtitle: t("Shared with everyone in this workspace.", lang: seciliDil))
             let field = VStack(alignment: .leading, spacing: 6) {
-                Text(t("Brand subtitle", lang: seciliDil))
+                Text(t("Brand Subtitle", lang: seciliDil))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(NDSettings.text(colorScheme))
                 TextField("", text: $appSubtitle)
