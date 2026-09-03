@@ -5787,6 +5787,11 @@ const {
 } = require("./orders/projectNumber");
 const { isSuspendedUid, seatsToSuspend, canRestoreMember, activeSeatCount } = require("./team/seats");
 const {
+  normalizeRedirectUri: nvNormalizeRedirectUri,
+  isRegisteredRedirectUri: nvIsRegisteredRedirectUri,
+  clientRecord: nvOAuthClientRecord
+} = require("./oauth/redirects");
+const {
   mintInvitationToken, invitationIdForToken, normalizeInviteEmail, isPlausibleEmail,
   invitationExpiresAtMs, invitationAcceptability, invitationPreview, INVITATION_REFUSALS
 } = require("./team/invitations");
@@ -24098,16 +24103,48 @@ function nvChatGPTOAuthTokensRef() {
   return admin.firestore().collection("chatgptOAuthTokens");
 }
 
-function nvSafeOAuthUri(value = "") {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
+// Registered OAuth clients. This collection is the whole point of the redirect
+// check: without a record written at registration time there is nothing to
+// compare a destination against, and "compare it to the copy we stored from the
+// same request" is self-consistent by construction. See functions/oauth/redirects.js.
+function nvChatGPTOAuthClientsRef() {
+  return admin.firestore().collection("chatgptOAuthClients");
+}
+
+/** The destinations this client registered, or [] if it never registered. */
+async function nvOAuthRegisteredRedirects(clientId) {
+  const id = String(clientId || "").trim();
+  if (!id) return [];
   try {
-    const url = new URL(raw);
-    if (!["https:", "http:"].includes(url.protocol)) return "";
-    return url.toString();
-  } catch (_) {
-    return "";
+    const snap = await nvChatGPTOAuthClientsRef().doc(id).get();
+    if (!snap.exists) return [];
+    const stored = snap.data() || {};
+    return Array.isArray(stored.redirectUris) ? stored.redirectUris : [];
+  } catch (error) {
+    console.error("nvOAuthRegisteredRedirects failed:", error?.message || error);
+    return [];
   }
+}
+
+/**
+ * Refuses a destination the client did not register.
+ *
+ * Called at both places that can lead to a code: the authorize redirect, so a
+ * bad link fails before the person signs in, and approve, which is the step
+ * that actually mints one and is therefore the load-bearing check.
+ */
+async function nvOAuthRedirectAllowed(clientId, redirectUri) {
+  const registered = await nvOAuthRegisteredRedirects(clientId);
+  if (!registered.length) return { ok: false, reason: "unregistered_client" };
+  if (!nvIsRegisteredRedirectUri(registered, redirectUri)) return { ok: false, reason: "unregistered_redirect_uri" };
+  return { ok: true, reason: "" };
+}
+
+// Plain http is refused off the loopback host: an authorization code sent over
+// it is readable in transit. Loopback stays, because that is where a desktop
+// client's callback lives and a code sent there never left the machine.
+function nvSafeOAuthUri(value = "") {
+  return nvNormalizeRedirectUri(value);
 }
 
 function nvOAuthBaseUrl(_req) {
@@ -24379,11 +24416,47 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
   const redirectUris = Array.isArray(body.redirect_uris)
     ? body.redirect_uris.map((u) => nvSafeOAuthUri(u)).filter(Boolean).slice(0, 20)
     : [];
+  // RFC 7591: a client that registers no usable destination cannot ever be
+  // authorized, so say so here rather than at the consent screen.
+  if (!redirectUris.length) {
+    nvOAuthJson(res, 400, {
+      error: "invalid_redirect_uri",
+      message: "At least one https redirect_uri is required (http is allowed only on localhost)."
+    });
+    return;
+  }
+
   const clientId = `chatgpt_${nvRandomToken(18)}`;
+  const record = nvOAuthClientRecord({
+    clientId,
+    redirectUris,
+    clientName: nvCleanString(body.client_name || "ChatGPT", 200),
+    scope: nvCleanString(body.scope || "", 500),
+    tokenEndpointAuthMethod: nvCleanString(body.token_endpoint_auth_method || "none", 60),
+    grantTypes: Array.isArray(body.grant_types) ? body.grant_types : null,
+    responseTypes: Array.isArray(body.response_types) ? body.response_types : null
+  });
+
+  // Written BEFORE the response, and awaited: the client may authorize the
+  // instant it has the id, and a registration that only exists in the reply is
+  // exactly the hole this closes.
+  try {
+    await nvChatGPTOAuthClientsRef().doc(clientId).set({
+      ...record,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAtMs: Date.now(),
+      userAgent: nvCleanString(req.get("user-agent") || "", 300)
+    });
+  } catch (error) {
+    console.error("chatgptOAuthRegister: could not store the client:", error?.message || error);
+    nvOAuthJson(res, 500, { error: "internal", message: "Registration could not be stored." });
+    return;
+  }
+
   nvOAuthJson(res, 201, {
     client_id: clientId,
     client_id_issued_at: Math.floor(Date.now() / 1000),
-    redirect_uris: redirectUris,
+    redirect_uris: record.redirectUris,
     token_endpoint_auth_method: nvCleanString(body.token_endpoint_auth_method || "none", 60) || "none",
     grant_types: Array.isArray(body.grant_types) && body.grant_types.length ? body.grant_types : ["authorization_code"],
     response_types: Array.isArray(body.response_types) && body.response_types.length ? body.response_types : ["code"],
@@ -24398,6 +24471,22 @@ exports.chatgptOAuthAuthorize = onRequest({ region: "europe-west2", cors: true }
   const params = nvOAuthValidateAuthorizeParams(req);
   if (!params.ok) {
     nvOAuthJson(res, 400, params);
+    return;
+  }
+
+  // Refuse an unregistered destination here too, so a crafted link dies before
+  // the person is asked to sign in. Approve is the check that actually binds —
+  // this one only spares somebody a pointless login.
+  const allowed = await nvOAuthRedirectAllowed(params.clientId, params.redirectUri);
+  if (!allowed.ok) {
+    console.warn("chatgptOAuthAuthorize refused a redirect_uri:", allowed.reason, params.clientId, params.redirectUri);
+    nvOAuthJson(res, 400, {
+      ok: false,
+      error: "invalid_request",
+      message: allowed.reason === "unregistered_client"
+        ? "This client is not registered. Start the connection again from ChatGPT."
+        : "redirect_uri does not match this client's registered redirect URIs."
+    });
     return;
   }
 
@@ -24556,6 +24645,21 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
       nvOAuthJson(res, 400, {
         error: "invalid_request",
         message: "companyId is required."
+      });
+      return;
+    }
+
+    // The check that matters. Approve is what mints the authorization code, so
+    // this is the last place the destination can be refused — and the only one
+    // an attacker cannot route around by crafting their own link.
+    const allowed = await nvOAuthRedirectAllowed(clientId, redirectUri);
+    if (!allowed.ok) {
+      console.warn("chatgptOAuthApprove refused a redirect_uri:", allowed.reason, clientId, redirectUri);
+      nvOAuthJson(res, 400, {
+        error: "invalid_request",
+        message: allowed.reason === "unregistered_client"
+          ? "This client is not registered. Start the connection again from ChatGPT."
+          : "redirect_uri does not match this client's registered redirect URIs."
       });
       return;
     }

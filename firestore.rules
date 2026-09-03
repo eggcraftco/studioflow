@@ -1181,6 +1181,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Registered OAuth clients, and the codes and tokens minted for them. The
+    // client record is what decides where an authorization code may be sent, so
+    // a client that could write it could point its own code anywhere. Nothing
+    // outside the OAuth endpoints ever touches these.
+    match /chatgptOAuthClients/{clientId} {
+      allow read, write: if false;
+    }
+
+    match /chatgptOAuthCodes/{codeId} {
+      allow read, write: if false;
+    }
+
+    match /chatgptOAuthTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -132,6 +132,16 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Parsed rather than printed raw: a URL is long, and the host is the part
+  // that decides where the code lands.
+  const redirectHost = (() => {
+    try {
+      return oauthParams.redirect_uri ? new URL(oauthParams.redirect_uri).host : "";
+    } catch {
+      return "";
+    }
+  })();
+
   const validRequest = isValidOAuthRequest(oauthParams);
 
   useEffect(() => {
@@ -270,6 +280,19 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
         <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: 0 }}>
           Connect ChatGPT to the selected NivaDesk workspace. ChatGPT will only work inside the workspace you choose and access is still limited by your NivaDesk plan, role and permissions.
         </p>
+
+        {/* Where the authorization actually goes. This screen sits on the real
+            nivadesk.app domain and looks the same whoever sent the link, so the
+            destination is the one thing a person can use to tell a genuine
+            connection from a crafted one. The server refuses an unregistered
+            destination outright; this is so the person can see it too. */}
+        {redirectHost ? (
+          <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: -6, fontSize: 14 }}>
+            After you allow it, NivaDesk will send the authorization to{" "}
+            <strong style={{ color: "#1d1d1f" }}>{redirectHost}</strong>. If you were not expecting
+            that address, close this page.
+          </p>
+        ) : null}
 
         {!validRequest ? (
           <div style={{ background: "#fff2f2", color: "#a11", borderRadius: 16, padding: 16, fontWeight: 700 }}>
