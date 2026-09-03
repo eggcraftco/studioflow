@@ -3760,10 +3760,66 @@ struct AyarlarView: View {
         preferencesAyari
     }
 
+    /// Branding — the subtitle next to a live mock of the app header it appears in.
     private var markaAyari: some View {
-        SettingsCard(title: t("Theme & Branding", lang: seciliDil), iconName: "paintpalette.fill") {
-            VStack(alignment: .leading, spacing: 15) {
-                SettingsTextField(label: t("Brand Subtitle", lang: seciliDil), text: $appSubtitle)
+        NDSettingsSurface(spacing: 16) {
+            NDSettingsCardHead(icon: "paintpalette.fill", title: t("Workspace identity", lang: seciliDil), subtitle: t("Shared with everyone in this workspace.", lang: seciliDil))
+            let field = VStack(alignment: .leading, spacing: 6) {
+                Text(t("Brand subtitle", lang: seciliDil))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(NDSettings.text(colorScheme))
+                TextField("", text: $appSubtitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.5))
+                    .padding(.horizontal, 12)
+                    .frame(height: NDSettings.controlHeight)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.panel(colorScheme)))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+            }
+            let preview = VStack(alignment: .leading, spacing: 6) {
+                Text(t("Header preview", lang: seciliDil).uppercased())
+                    .font(.system(size: 10.5, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundColor(NDSettings.muted(colorScheme))
+                HStack(spacing: 10) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                    if let url = URL(string: appLogoUrl), !appLogoUrl.isEmpty {
+                        AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { Color.clear }
+                            .frame(height: 22)
+                            .frame(maxWidth: 110, alignment: .leading)
+                    } else {
+                        Text(authVM.companyName.isEmpty ? "NivaDesk" : authVM.companyName)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(NDSettings.text(colorScheme))
+                    }
+                    Text(appSubtitle)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundColor(NDSettings.muted(colorScheme))
+                    Image(systemName: "bell").font(.system(size: 11)).foregroundColor(NDSettings.muted(colorScheme))
+                    Circle().fill(NDSettings.accent.opacity(0.18)).frame(width: 20, height: 20)
+                        .overlay(Text(String(authVM.companyName.prefix(2)).uppercased()).font(.system(size: 8, weight: .bold)).foregroundColor(NDSettings.accent))
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 44)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.surface(colorScheme)))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(NDSettings.panel(colorScheme)))
+            if isPhoneLayout {
+                field
+                preview
+            } else {
+                HStack(alignment: .top, spacing: 16) {
+                    field.frame(maxWidth: .infinity)
+                    preview.frame(maxWidth: .infinity)
+                }
             }
         }
     }
