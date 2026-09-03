@@ -23,15 +23,40 @@ export const QUICK_ACTION_EVENT = "nivadesk:quick-action";
 
 export type QuickActionEvent = "order";
 
-export function dispatchQuickAction(action: QuickActionEvent) {
+/**
+ * What the raiser wants the opened form to start with. The Schedule board asks
+ * for a project due in a fortnight, so its button carries that date rather
+ * than keeping its own copy of the create call.
+ */
+export type QuickActionPayload = {
+  /** yyyy-MM-dd, prefilled into the Quick Create due date. */
+  deliveryDueDate?: string;
+  /** Which surface asked. The Schedule board stays where it is after a create;
+   *  everywhere else follows the new project to Orders. */
+  origin?: "toolbar" | "home" | "orders" | "schedule";
+};
+
+export function dispatchQuickAction(action: QuickActionEvent, payload: QuickActionPayload = {}) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(QUICK_ACTION_EVENT, { detail: action }));
+  window.dispatchEvent(new CustomEvent(QUICK_ACTION_EVENT, { detail: { action, payload } }));
 }
 
-export function useQuickActionEvent(action: QuickActionEvent, handler: () => void) {
+export function useQuickActionEvent(
+  action: QuickActionEvent,
+  handler: (payload: QuickActionPayload) => void
+) {
   useEffect(() => {
     function onAction(event: Event) {
-      if ((event as CustomEvent).detail === action) handler();
+      const detail = (event as CustomEvent<unknown>).detail;
+      // A bare string is the older shape; both are read so a raiser that has
+      // not been updated still opens the same form.
+      if (typeof detail === "string") {
+        if (detail === action) handler({});
+        return;
+      }
+      const parsed = detail as { action?: string; payload?: QuickActionPayload } | null;
+      if (parsed?.action !== action) return;
+      handler(parsed.payload ?? {});
     }
     window.addEventListener(QUICK_ACTION_EVENT, onAction);
     return () => window.removeEventListener(QUICK_ACTION_EVENT, onAction);

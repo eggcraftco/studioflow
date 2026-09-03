@@ -35,7 +35,8 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
-import { canCreateOrdersForRole, canEditOrderStatusForRole, createOrderFromWeb, updateOrderFromWeb } from "@/lib/studioflow/orders";
+import { canCreateOrdersForRole, canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
+import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 
 type ScheduleSpan = "weekly" | "monthly" | "threeMonths" | "sixMonths" | "yearly";
@@ -432,7 +433,6 @@ export default function SchedulePage() {
   const [scheduleStatus, setScheduleStatus] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const [savingScheduleOrderId, setSavingScheduleOrderId] = useState("");
-  const [creatingScheduleOrder, setCreatingScheduleOrder] = useState(false);
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const scheduleTimelinePanRef = useRef<{
     pointerId: number;
@@ -454,6 +454,48 @@ export default function SchedulePage() {
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
+
+  // A project started from this board stays on this board — the form does not
+  // navigate away when the Schedule opened it, so the board has to pick the new
+  // project up itself rather than waiting for a page it will never load.
+  useEffect(() => {
+    if (!workspace || !user) return;
+    const uid = user.uid;
+    const currentWorkspace = workspace;
+    async function pickUpNewProject(createdOrderId: string) {
+      try {
+        const loadedOrders = await loadScheduleOrders(currentWorkspace.id, currentWorkspace, uid);
+        setOrders(loadedOrders);
+        // Reloading is not enough to make the project findable. Its bar starts
+        // today, and the person may well have panned months ahead to plan — so
+        // without moving the anchor the timeline shows nothing, the detail
+        // panel still shows the previous project, and the create looks like it
+        // did nothing. Select it and bring the window to it, exactly as
+        // clicking a bar does.
+        const createdOrder = createdOrderId
+          ? loadedOrders.find(order => order.id === createdOrderId)
+          : undefined;
+        if (createdOrder) {
+          setSelectedOrderId(createdOrder.id);
+          setAnchorDate(orderStartDate(createdOrder));
+        }
+      } catch (refreshError) {
+        console.warn("schedule refresh after create failed:", refreshError);
+      }
+    }
+    const handleCreated = (event: Event) => {
+      const createdOrderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId ?? "";
+      void pickUpNewProject(createdOrderId);
+    };
+    // Undo only has to put the board back; there is nothing left to select.
+    const handleRemoved = () => { void pickUpNewProject(""); };
+    window.addEventListener("studioflow-order-created", handleCreated);
+    window.addEventListener("studioflow-order-removed", handleRemoved);
+    return () => {
+      window.removeEventListener("studioflow-order-created", handleCreated);
+      window.removeEventListener("studioflow-order-removed", handleRemoved);
+    };
+  }, [workspace, user]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SCHEDULE_ZOOM_STORAGE_KEY);
@@ -800,45 +842,19 @@ export default function SchedulePage() {
     void saveScheduleOrderRange(order, orderStartDate(order), Math.min(730, Math.max(1, Math.max(order.deliveryTime, 1) + deltaDays)));
   }
 
-  async function addScheduleOrder() {
-    if (!workspace || !user || creatingScheduleOrder) return;
-    const uid = user.uid;
-
+  // This button used to hold its own copy of the create call — gates, callable
+  // and all — which is how the board kept writing empty projects after the
+  // toolbar stopped. It now raises the same quick action every other create
+  // surface does, carrying the fortnight-out due date the board wants
+  // prefilled. AppShell runs the gates and opens the Quick Create form; nothing
+  // is written until the person presses Create Project.
+  function addScheduleOrder() {
     setScheduleStatus("");
     setScheduleError("");
-
-    if (!canCreateOrdersForRole(workspace.role)) {
-      setScheduleError(t("Your workspace role cannot create projects."));
-      return;
-    }
-
-    if (!workspace.entitlements.features.orders_create) {
-      setScheduleError(t("Creating projects is not available on this workspace plan."));
-      return;
-    }
-
-    setCreatingScheduleOrder(true);
-    try {
-      const today = startOfDay(new Date());
-      const result = await createOrderFromWeb(workspace, {
-        deliveryDueDate: isoDateValue(addDays(today, 14))
-      });
-      const refreshedOrders = await loadScheduleOrders(workspace.id, workspace, uid);
-      setOrders(refreshedOrders);
-      const createdOrder = refreshedOrders.find(order => order.id === result.orderId) ?? null;
-      if (createdOrder) {
-        selectScheduleOrder(createdOrder);
-      } else if (result.orderId) {
-        setSelectedOrderId(result.orderId);
-        setAnchorDate(today);
-      }
-      window.dispatchEvent(new CustomEvent("studioflow-order-created", { detail: { orderId: result.orderId || "" } }));
-      setScheduleStatus(t("New project added to schedule."));
-    } catch (createError) {
-      setScheduleError(createError instanceof Error ? createError.message : t("Could not create a new project."));
-    } finally {
-      setCreatingScheduleOrder(false);
-    }
+    dispatchQuickAction("order", {
+      origin: "schedule",
+      deliveryDueDate: isoDateValue(addDays(startOfDay(new Date()), 14))
+    });
   }
 
   function downloadSelectedCalendarFile() {
@@ -1074,11 +1090,11 @@ export default function SchedulePage() {
               <button
                 className="button schedule-header-button"
                 type="button"
-                disabled={!canCreateScheduleOrder || creatingScheduleOrder}
+                disabled={!canCreateScheduleOrder}
                 onClick={addScheduleOrder}
                 title={canCreateScheduleOrder ? t("Create a new scheduled project") : t("Your plan or role cannot create projects")}
               >
-                {creatingScheduleOrder ? t("Adding...") : `+ ${t("New Project")}`}
+                {`+ ${t("New Project")}`}
               </button>
             </div>
           </div>

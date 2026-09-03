@@ -4,6 +4,20 @@ import { auth, functions, storage } from "@/lib/firebase/client";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 
+/**
+ * The one rule for "does this customer match what was typed".
+ *
+ * It lived inline in the Customers page and the Quick Create picker was about
+ * to copy it, which is how two searches drift apart. Both call this instead:
+ * an empty term matches everything, and otherwise any one of the supplied
+ * values containing the term (case-insensitively) is a match.
+ */
+export function customerSearchMatches(term: string, values: Array<string | null | undefined>): boolean {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return true;
+  return values.some(value => (value ?? "").toLowerCase().includes(needle));
+}
+
 const CUSTOMER_PHOTO_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 export const CUSTOMER_PHOTO_ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,.webp";
 

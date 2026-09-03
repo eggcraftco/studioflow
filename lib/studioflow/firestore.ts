@@ -24,6 +24,10 @@ export type JoinedWorkspaceOption = {
   role: string;
   roleLabel: string;
   isCurrent: boolean;
+  /** True when this workspace's plan (or its owner) took this person's seat.
+   *  Still listed, because it is still theirs to be let back into — but it
+   *  cannot be opened, and saying so is kinder than making it disappear. */
+  suspended: boolean;
 };
 
 export type WorkspaceContext = {
@@ -1084,9 +1088,11 @@ export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: 
     const companySnapshot = await readWorkspaceDocument(companyId);
     if (!companySnapshot) return null;
 
+    let suspended = false;
     if (companyId !== uid) {
       const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", companyId));
       if (!accessSnapshot.exists()) return null;
+      suspended = accessSnapshot.data()?.suspended === true;
     }
 
     const companyData = companySnapshot.data();
@@ -1099,8 +1105,9 @@ export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: 
       id: companyId,
       name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
       role,
-      roleLabel: roleLabel(role),
-      isCurrent: companyId === currentCompanyId
+      roleLabel: suspended ? "No access" : roleLabel(role),
+      isCurrent: companyId === currentCompanyId,
+      suspended
     } satisfies JoinedWorkspaceOption;
   }));
 
@@ -1122,6 +1129,12 @@ export async function switchActiveWorkspace(uid: string, companyId: string) {
     const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", cleanCompanyId));
     if (!accessSnapshot.exists()) {
       throw new Error("Your access to this workspace is no longer available.");
+    }
+    // Say what happened. Without this the workspace simply refuses to open and
+    // the person is left guessing whether it is a bug, their connection, or
+    // something they did.
+    if (accessSnapshot.data()?.suspended === true) {
+      throw new Error("Your access to this workspace has been paused. Ask the owner to restore it.");
     }
   }
 
@@ -1649,6 +1662,29 @@ function parseCustomerOrderActivity(raw: unknown): CustomerOrderActivity[] {
     })
     .filter((item): item is CustomerOrderActivity => item !== null)
     .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
+}
+
+export type CustomerPickerOption = {
+  id: string;
+  name: string;
+};
+
+/**
+ * The names only, for the Quick Create picker.
+ *
+ * Deliberately NOT loadWorkspaceCustomers: that one also reads every order in
+ * the workspace and computes per-customer totals, which is far too heavy to
+ * hang off a toolbar button. Opening the mini form must cost one small read.
+ */
+export async function loadCustomerPickerOptions(companyId: string): Promise<CustomerPickerOption[]> {
+  const snapshot = await getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId)));
+  return snapshot.docs
+    .map(customerDocument => ({
+      id: customerDocument.id,
+      name: stringValue(customerDocument.data().name, "").trim()
+    }))
+    .filter(option => option.name.length > 0)
+    .sort((lhs, rhs) => lhs.name.localeCompare(rhs.name));
 }
 
 export async function loadWorkspaceCustomers(companyId: string): Promise<CustomerDirectoryItem[]> {
@@ -2277,6 +2313,12 @@ export type TeamMemberDetail = {
   access: WorkspaceMemberAccess;
   addedAt: Date | null;
   isOwner: boolean;
+  /** True when a smaller plan took this person's seat. Their record is intact;
+   *  they simply have no access until the owner restores them. */
+  suspended: boolean;
+  /** "plan_downgrade" when the plan took the seat, "manual" when the owner did. */
+  suspendedReason: string;
+  suspendedAt: Date | null;
 };
 
 export type JoinRequestDetail = {
@@ -2297,6 +2339,16 @@ export type TeamAccessData = {
 
 function mapCompanyMembers(companyData: Record<string, unknown>, companyId: string): TeamMemberDetail[] {
   const ownerUid = stringValue(companyData.ownerUid, companyId);
+  // Suspension is kept beside the members map, not inside it, so that the rules
+  // can hold it server-only. See functions/team/seats.js.
+  const suspended = companyData.suspendedMembers && typeof companyData.suspendedMembers === "object"
+    && !Array.isArray(companyData.suspendedMembers)
+    ? companyData.suspendedMembers as Record<string, unknown>
+    : {};
+  const suspensionOf = (uid: string) => {
+    const raw = suspended[uid];
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+  };
   const customRoles = customRolesMap(companyData);
   const members = companyData.members && typeof companyData.members === "object"
     ? companyData.members as Record<string, unknown>
@@ -2316,7 +2368,10 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       roleLabel: customRoles[role]?.name ?? roleLabel(effectiveRole),
       access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"),
       addedAt: dateValue(memberData.addedAt) ?? dateValue(memberData.updatedAt),
-      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"
+      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner",
+      suspended: Object.prototype.hasOwnProperty.call(suspended, uid),
+      suspendedReason: stringValue(suspensionOf(uid)?.reason, ""),
+      suspendedAt: dateValue(suspensionOf(uid)?.at)
     };
   });
 
@@ -2331,13 +2386,20 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       roleLabel: "Owner",
       access: normalizeWorkspaceMemberAccess(null, true),
       addedAt: dateValue(companyData.createdAt),
-      isOwner: true
+      isOwner: true,
+      suspended: false,
+      suspendedReason: "",
+      suspendedAt: null
     });
   }
 
   return output.sort((lhs, rhs) => {
     if (lhs.isOwner && !rhs.isOwner) return -1;
     if (!lhs.isOwner && rhs.isOwner) return 1;
+    // Suspended colleagues sit below the working team. They are still listed —
+    // the decision is that they are never deleted — but the owner reads this
+    // screen to see who is on the job.
+    if (lhs.suspended !== rhs.suspended) return lhs.suspended ? 1 : -1;
     const roleRank: Record<string, number> = { owner: 0, admin: 1, member: 2, viewer: 3, workflow: 4 };
     const lhsRank = roleRank[normalizeWorkspaceRole(lhs.effectiveRole)] ?? 9;
     const rhsRank = roleRank[normalizeWorkspaceRole(rhs.effectiveRole)] ?? 9;

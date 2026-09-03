@@ -15,20 +15,22 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { useQuickActionEvent } from "@/lib/studioflow/quickActions";
+import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
-import { StudioToastHost } from "@/components/StudioToastHost";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { auth, db } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
+  loadCustomerPickerOptions,
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
+  type CustomerPickerOption,
   type DashboardFinanceOrder,
   type WorkspaceMemberAccessKey,
   type WorkspaceContext,
@@ -54,7 +56,15 @@ import {
 import {
   canCreateOrdersForRole,
   createOrderFromWeb,
+  undoOrderCreateFromWeb,
+  type CreateOrderInput,
 } from "@/lib/studioflow/orders";
+import {
+  EMPTY_QUICK_CREATE_PROJECT_FORM,
+  QuickCreateProjectDialog,
+  quickCreateCustomerName,
+  type QuickCreateProjectForm,
+} from "@/components/QuickCreateProjectDialog";
 import {
   WEB_SYNC_STATUS_EVENT,
   type WebSyncState,
@@ -1101,6 +1111,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [notesReminderCount, setNotesReminderCount] = useState(0);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderCreateError, setOrderCreateError] = useState("");
+  // Quick Create: "+ Add Project" opens this form and writes nothing until
+  // "Create Project" is pressed. Every create surface in the app raises the
+  // same dialog, so there is one create call left in the web app.
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateForm, setQuickCreateForm] = useState<QuickCreateProjectForm>(
+    EMPTY_QUICK_CREATE_PROJECT_FORM,
+  );
+  const [quickCreateError, setQuickCreateError] = useState("");
+  // Which surface opened the form, so the ending can differ where it should.
+  const [quickCreateOrigin, setQuickCreateOrigin] = useState<QuickActionPayload["origin"]>("toolbar");
+  const [customerOptions, setCustomerOptions] = useState<CustomerPickerOption[]>([]);
+  const [customerOptionsLoading, setCustomerOptionsLoading] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
@@ -1614,7 +1636,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     : "NivaDesk";
   // Home's "New order" quick action lands here rather than navigating: this is
   // the same button the toolbar shows, so the action opens where the user is.
-  useQuickActionEvent("order", handleAddOrder);
+  useQuickActionEvent("order", (payload) => handleAddOrder(payload));
 
   const canCreateToolbarOrder = Boolean(
     workspace &&
@@ -1727,7 +1749,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     };
   }, [showAddProjectGuide]);
 
-  function handleOrderCreated(orderId: string) {
+  function handleOrderCreated(orderId: string, options: { navigate?: boolean } = {}) {
     const currentGuide =
       firstProjectGuide ?? getFirstProjectGuideState() ?? {
         step: 1,
@@ -1749,10 +1771,28 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     window.dispatchEvent(
       new CustomEvent("studioflow-order-created", { detail: { orderId } }),
     );
-    router.push(`/orders?selectedOrderId=${encodeURIComponent(orderId)}`);
+    // A create made from the Schedule board stays on the board. Every page that
+    // can start a project listens for the event above and picks the new one up
+    // in place; throwing the person to Orders would take them away from the
+    // week they were planning, which is the opposite of what they asked for.
+    if (options.navigate !== false) {
+      router.push(`/orders?selectedOrderId=${encodeURIComponent(orderId)}`);
+    }
   }
 
-  async function handleAddOrder() {
+  // The three gates still run before anything opens — a role or plan that
+  // cannot create should hear so from the toolbar, not from a form it filled
+  // in. Past them, this only OPENS the mini form; the create itself lives in
+  // handleQuickCreateSubmit and nothing is written until it runs.
+  function handleAddOrder(payload: QuickActionPayload = {}) {
+    // The button that fires this paints ABOVE the dimmed backdrop — the
+    // first-project guide ring puts it there on purpose, and so does the sticky
+    // phone toolbar — so a second press while the sheet is open is easy to make
+    // by accident. Reopening would reset customer, name and due date in place,
+    // silently emptying everything already typed. The sheet is already on
+    // screen, so the honest answer to this press is to do nothing at all.
+    if (quickCreateOpen) return;
+
     setOrderCreateError("");
 
     if (!workspace) {
@@ -1774,15 +1814,106 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       return;
     }
 
+    setQuickCreateForm({
+      ...EMPTY_QUICK_CREATE_PROJECT_FORM,
+      dueDate: payload.deliveryDueDate ?? "",
+    });
+    setQuickCreateOrigin(payload.origin ?? "toolbar");
+    setQuickCreateError("");
+    setQuickCreateOpen(true);
+
+    // The directory arrives behind the form: the picker is optional, so it
+    // must never hold the sheet shut. One small read of names only.
+    const companyId = workspace.id;
+    setCustomerOptionsLoading(true);
+    void loadCustomerPickerOptions(companyId)
+      .then((options) => setCustomerOptions(options))
+      .catch(() => setCustomerOptions([]))
+      .finally(() => setCustomerOptionsLoading(false));
+  }
+
+  async function handleUndoOrderCreate(
+    createdIn: WorkspaceContext,
+    orderId: string,
+    customerCreated: boolean,
+    options: { navigate?: boolean } = {},
+  ) {
+    if (!orderId) return;
+    try {
+      await undoOrderCreateFromWeb(createdIn, orderId, customerCreated);
+      dispatchStudioToast({ message: t("Project removed."), durationMs: 5000 });
+      window.dispatchEvent(
+        new CustomEvent("studioflow-order-removed", { detail: { orderId } }),
+      );
+      // Undo has to land where the create did. A project raised from the
+      // Schedule board deliberately keeps the person on the week they were
+      // planning, and the board reloads itself from the event above — so
+      // pushing them to Orders here would inflict exactly the disruption the
+      // create path exists to avoid, and lose the week they were looking at.
+      if (options.navigate !== false) {
+        router.push("/orders");
+      }
+    } catch (undoError) {
+      // The server refuses with a sentence saying which guard stopped it —
+      // creator only, within five minutes, nothing touched. Show that.
+      dispatchStudioToast({
+        message: t(
+          undoError instanceof Error
+            ? undoError.message
+            : "Could not undo the new project.",
+        ),
+        durationMs: 8000,
+      });
+    }
+  }
+
+  async function handleQuickCreateSubmit() {
+    if (!workspace || creatingOrder) return;
+    const currentWorkspace = workspace;
+    // Read once, here: the toast's Undo runs minutes later, and the origin is
+    // what tells both the create and the undo whether to navigate.
+    const origin = quickCreateOrigin;
+    setQuickCreateError("");
     setCreatingOrder(true);
     try {
-      const result = await createOrderFromWeb(workspace);
-      handleOrderCreated(result.orderId || "");
+      const input: Partial<CreateOrderInput> = {
+        // ALWAYS sent, even empty. An absent key is how the server recognises
+        // an old client and falls back to "New Project"; the owner decided a
+        // project may genuinely have no customer, so the key must be present
+        // for that emptiness to survive.
+        customerName: quickCreateCustomerName(quickCreateForm),
+        designName: quickCreateForm.projectName.trim(),
+      };
+      // Sent only when a directory record was picked: the id wins on the
+      // server, which writes that record's stored spelling onto the order.
+      if (quickCreateForm.customerId && !quickCreateForm.newCustomerOpen) {
+        input.customerId = quickCreateForm.customerId;
+      }
+      if (quickCreateForm.dueDate) input.deliveryDueDate = quickCreateForm.dueDate;
+
+      const result = await createOrderFromWeb(currentWorkspace, input);
+      const orderId = result.orderId || "";
+      const customerCreated = result.customerCreated === true;
+      setQuickCreateOpen(false);
+      setQuickCreateForm(EMPTY_QUICK_CREATE_PROJECT_FORM);
+      // Toast first, then navigate. The host lives in the root layout now, so
+      // it outlives the push that follows.
+      dispatchStudioToast({
+        message: t("Project created"),
+        actionLabel: t("Undo"),
+        onAction: () => {
+          void handleUndoOrderCreate(currentWorkspace, orderId, customerCreated, {
+            navigate: origin !== "schedule",
+          });
+        },
+        durationMs: 8000,
+      });
+      handleOrderCreated(orderId, { navigate: origin !== "schedule" });
     } catch (createError) {
-      setOrderCreateError(
+      setQuickCreateError(
         createError instanceof Error
           ? createError.message
-          : t("Could not create the project. Please try again."),
+          : "Could not create the project. Please try again.",
       );
     } finally {
       setCreatingOrder(false);
@@ -2273,7 +2404,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   type="button"
                   disabled={creatingOrder}
                   title={t("Add Project")}
-                  onClick={handleAddOrder}
+                  onClick={() => handleAddOrder()}
                 >
                   <span className="native-add-order-plus" aria-hidden="true">+</span>
                   <span className="native-add-order-label">
@@ -2458,7 +2589,25 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
-      <StudioToastHost />
+      {quickCreateOpen && workspace ? (
+        <QuickCreateProjectDialog
+          form={quickCreateForm}
+          options={customerOptions}
+          optionsLoading={customerOptionsLoading}
+          saving={creatingOrder}
+          error={quickCreateError}
+          t={t}
+          onChange={setQuickCreateForm}
+          onCancel={() => {
+            if (creatingOrder) return;
+            setQuickCreateOpen(false);
+            setQuickCreateError("");
+          }}
+          onSubmit={() => {
+            void handleQuickCreateSubmit();
+          }}
+        />
+      ) : null}
       <AppHelpAssistant workspace={workspace} language={language} t={t} />
       <NotificationsDrawer
         open={notifDrawerOpen}
