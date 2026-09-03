@@ -2061,3 +2061,45 @@ birden kilitlerdi.
 
 **KALAN:** sunucu + kurallar **deploy edilmedi**, web Round'u da bekliyor — ikisi de kullanıcının
 sözünü bekliyor. Native'ler bütünün sonundaki mağaza sürümüyle.
+
+---
+
+## E-posta ile ekip daveti (3 Eylül 2026)
+
+**Karar §5 uygulandı.** Eski akış tersten işliyordu: sahip Şirket Kimliğini okuyor, karşı taraf
+yazıyor, katılma isteği gönderiyor, sahip onaylıyor — üç adım ve kimsenin akılda tutamayacağı bir
+numara, yanlış sırayla ve yanlış kişi tarafından. Artık sahip (veya Ekip Erişimi olan bir yönetici)
+bir adres yazıyor, rolü seçiyor ve gönderiyor. **Şirket Kimliği / katılma isteği ikincil yol olarak
+duruyor** — kararın istediği de buydu.
+
+**Tehlikeli fikir tek:** e-postadaki bağlantı bir kimlik bilgisidir. Her şey bunu dar tutmak için:
+- Jeton 32 rastgele bayt; Firestore'da **jetonun kendisi değil SHA-256'sı** duruyor ve o aynı
+  zamanda doküman kimliği. Yani bir yedekten, bir konsol oturumundan ya da bir veri dökümünden
+  çalışan davet çıkarılamaz; arama da sorgu değil doğrudan okuma.
+- Koleksiyon istemcilere **kapalı** — hem yakalayıcı kural hem de açıkça yazılmış bir kural ile.
+- Davet **yalnızca gönderildiği adresi** oturtur. İnsanlar e-postayı yönlendirir; bu kontrol
+  olmasa yönlendirilen davet, sahibin hiç yazmadığı bir isimle yanlış kişiyi koltuğa oturturdu.
+- İki hafta yaşıyor. Aynı adrese ikinci davet birincisini geri çekiyor, iki posta kutusunda iki
+  çalışan anahtar kalmasın diye.
+- **Koltuk iki kez kontrol ediliyor ve bağlayıcı olan kabul anındaki.** Plan o iki hafta içinde
+  küçülebilir. Bir test, kontrolün üyelik yazımından ÖNCE olduğunu kaynaktan doğruluyor.
+
+**Yazarken bulunan iki kusur** (sonradan değil): e-posta alanı olmayan bir kayıt bağlantıyı açan
+herkesi içeri alıyordu — karşılaştırılacak adres boş olunca kontrol atlanıyordu — ve bir dizi
+"bu bir davet mi" kapısından geçiyordu. İkisi de kapandı, ikisinin de testi var.
+
+**Web:** ekip ekranında davet formu + bekleyen davetler kartı (Withdraw ile), ve `/invite/<token>`
+oturumsuz sayfası. Sayfa üç kapılı: giriş yap, hesap aç, ya da "bu adres senin değil". Hesap açan
+yola kişinin kendi çalışma alanı da kuruluyor, her hesap aynı şekilde olsun diye.
+
+**Tarayıcıda bulunan bir kusur daha:** sayfa, az önce başarıyla katılan kişiye "bu davet zaten
+kullanılmış" diyordu — önizleme etkisi çevirmene bağlıydı, çalışma alanının dili gelince çevirmen
+değişiyor ve etki ikinci kez koşup kendi sebep olduğu "accepted" durumunu okuyordu. Artık yalnızca
+jetona bağlı, bir kez koşuyor; katılmak da geri dönülemez bir durum.
+
+**Emülatörle uçtan uca doğrulandı:** kayıt oluştu (içinde jeton yok), e-posta dışarı-çıkış kapısıyla
+bastırıldı ve konusu kararın yazdığı gibiydi, yanlış-hesap kapısı çıktı, doğru adresle giriş kabul
+kapısını açtı, kabul üyeliği yazdı ve kişi çalışma alanının içinde `/orders`'a düştü.
+
+**KALAN:** native (Mac/iPhone/Android) davet arayüzü; sunucu + kurallar + web deploy'u kullanıcının
+sözünü bekliyor.
