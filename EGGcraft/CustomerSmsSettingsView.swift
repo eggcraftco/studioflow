@@ -116,25 +116,17 @@ struct CustomerSmsSettingsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.blue)
-
-                Text(tr("Customer SMS"))
-                    .font(.system(size: 20, weight: .bold))
-
-                Spacer()
-
-                if loading || saving { ProgressView().scaleEffect(0.8) }
-            }
-
+        // The Settings page header names the section; this row only carries the
+        // one-line purpose and the loading state.
+        HStack(alignment: .top, spacing: 10) {
             Text(tr("A short text at the moments a customer is actually waiting for news — the estimate, the bench, the collection."))
-                .font(.system(size: 12))
+                .font(.system(size: 12.5))
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if loading || saving { ProgressView().scaleEffect(0.8) }
         }
+        .padding(.horizontal, 4)
     }
 
     private var saveRow: some View {
@@ -272,26 +264,40 @@ private struct SmsStatusCard: View {
         return tr("Nothing is broken and nothing is missing from your side. The NivaDesk sender ID is registered with the UK mobile networks and is waiting for their approval, and no text can be sent from a name they have not approved yet. Everything set here is saved and starts working the day it is approved.")
     }
 
+    @Environment(\.colorScheme) private var scheme
+
+    /// The calm status band the handoff asks for: colour plus words, never colour alone.
     var body: some View {
-        SettingsCard(title: tr("Customer SMS"), iconName: "message.fill") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(headline)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(info.sendingLive ? .green : .primary)
-
-                Text(explanation)
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                SmsStatRow(name: tr("Plan"), value: info.available ? tr("Included") : tr("Pro and Team"))
-                SmsStatRow(name: tr("Text service"), value: info.providerConfigured ? tr("Connected") : tr("Not set up"))
-                SmsStatRow(
-                    name: tr("Sending"),
-                    value: info.sendingLive ? tr("Live") : tr("Waiting for network approval")
-                )
+        let tint: Color = info.sendingLive ? NDSettings.success : (info.available && info.providerConfigured ? NDSettings.caution : NDSettings.caution)
+        let badge = info.sendingLive ? tr("Live") : (!info.available ? tr("Pro and Team") : (!info.providerConfigured ? tr("Not set up") : tr("Waiting for network approval")))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: info.sendingLive ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(tint)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(headline)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(NDSettings.text(scheme))
+                    Text(explanation)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(NDSettings.muted(scheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                NDStatusPill(status: info.sendingLive ? .saved : .dirty, text: badge)
+            }
+            HStack(spacing: 10) {
+                NDFactRow(label: tr("Plan"), value: info.available ? tr("Included") : tr("Pro and Team"))
+                NDFactRow(label: tr("Text service"), value: info.providerConfigured ? tr("Connected") : tr("Not set up"))
+                NDFactRow(label: tr("Sending"), value: info.sendingLive ? tr("Live") : tr("Waiting for network approval"))
             }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).fill(tint.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).stroke(tint.opacity(0.45), lineWidth: 1))
     }
 }
 

@@ -2902,8 +2902,26 @@ private fun CustomerSmsDetail(state: StudioFlowUiState) {
             return@DetailColumn
         }
 
-        // ---- Is it live? ----------------------------------------------------
-        DetailCard(title = t("Text messages"), icon = Icons.Filled.Sms) {
+        // ---- Is it live? — the calm status band the handoff asks for ----------
+        val smsTint = if (current.sendingLive) NDSettings.success else NDSettings.caution
+        val smsBadge = when {
+            !current.available -> t("Pro and Team")
+            !current.providerConfigured -> t("Not set up")
+            current.sendingLive -> t("Live")
+            else -> t("Waiting for network approval")
+        }
+        val smsHeadline = when {
+            !current.available -> t("Not included on this plan")
+            !current.providerConfigured -> t("Not switched on for this server")
+            current.sendingLive -> t("Sending")
+            else -> t("Set it up now, sending starts on approval")
+        }
+        NDSettingsSurface(spacing = 10.dp, padding = PaddingValues(16.dp), borderColor = smsTint.copy(alpha = 0.45f), modifier = Modifier.background(smsTint.copy(alpha = 0.08f), RoundedCornerShape(NDSettings.cardRadius))) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(if (current.sendingLive) Icons.Filled.CheckCircle else Icons.Filled.Warning, contentDescription = null, tint = smsTint, modifier = Modifier.size(18.dp))
+                Text(smsHeadline, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NDSettings.text(), modifier = Modifier.weight(1f))
+                NDStatusPill(if (current.sendingLive) NDSettingsStatus.Saved else NDSettingsStatus.Dirty, smsBadge)
+            }
             when {
                 !current.available -> {
                     Text(
