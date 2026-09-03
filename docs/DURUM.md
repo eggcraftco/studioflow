@@ -1939,3 +1939,27 @@ var. Üçü de bugünkü davranışa eşit varsayılanla geliyor.
 **Canlıda:** `firestore.rules`, 12 fonksiyon, web Round 156 (`afd09c6`, chunk'ta teyit edildi).
 
 **KALAN:** Mac ve Android Settings'te üç VAT ayarının arayüzü; native mağaza sürümleri.
+
+## Finance Engine: VAT ayarları dört platformda TAMAM (3 Eyl 2026, gece)
+
+Motor + damga + süpürme zaten canlıydı; bu tur eksik olan arayüz tamamlandı.
+
+**Üç ayar artık her yerde:** `vatRegistered`, `pricesIncludeVat`, `vatMethod` (standard/margin/none).
+Web (Round 156), Mac, iPhone ve Android'de kart var. Üç yöntem kartı artık **tek değer** yazıyor —
+motor `vatMethod` okuyor, kartlar `taxCalculationType` vurguluyordu; biri seçilip sonra öbürü
+seçilince ikisi çelişiyordu ve motor kimsenin göremediği alanı takip ediyordu.
+
+**Cihaza yansıma:** `FirebaseManager` ayar dinleyicisi üçünü de UserDefaults'a aynalıyor, Android
+`workspaceSettings` modeli ve repository okuyor. Bu olmadan web'den yapılan bir değişiklik cihaza
+hiç ulaşmıyordu ve uygulamanın kendi önizlemesi eski varsayılanla cevap veriyordu.
+
+**Üye kapısı:** Mac'in toplu ayar yazımında üç anahtar da owner/admin listesinde; kurallarda da
+vergi oranıyla aynı kapıda (86 kural testi).
+
+**Çeviri:** 12 metin 11 dilde. `sync-translations.py` düzeltildi — çok satırlı web girdilerini
+sessizce atlıyordu, artık süslü parantez eşleyerek okuyor.
+
+**Süpürme canlıda doğrulandı:** 444 sipariş sürüm ikiye taşındı, iş sonra boşa geçti
+(`financeSweep finished { engineVersion: 2 }`).
+
+**Canlıda:** web Round 157. **KALAN:** native mağaza sürümleri.
