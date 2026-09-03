@@ -284,9 +284,18 @@ export function resolveIntegrationState(
   if (provider.id === "shopify") {
     const live = signals.shopifyStores.filter((store) => store.status !== "unlinked");
     if (live.length === 0) return { state: "available" };
+    // An uninstalled store keeps its companyId — deliberately, so a re-install
+    // resumes — so the server still hands it to us here, and the reconcile
+    // skips it while its token is blank. Its orders have stopped arriving. Only
+    // "paused" counted as broken, so the card stayed green over a dead store
+    // for as long as the doc lived: a silent outage behind a badge whose whole
+    // job is to say whether orders are coming in. Pausing is somebody's own
+    // decision, so it lowers the card only when every store is paused; an
+    // uninstall is a break, and one of them is enough.
+    const uninstalled = live.filter((store) => store.status === "uninstalled").length;
     const paused = live.filter((store) => store.status === "paused").length;
     return {
-      state: paused === live.length ? "attention" : "connected",
+      state: uninstalled > 0 || paused === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} stores`,
     };
   }

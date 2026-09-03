@@ -55,6 +55,48 @@ const ETSY_REQUESTS_PER_DAY = 5000;
 const ETSY_MIN_CALL_GAP_MS = 220;
 const ETSY_MAX_ATTEMPTS = 4;
 
+// One workspace could spend the day for all of them.
+//
+// The 5,000 belong to the application, so until now a single seller holding
+// down Sync now — or a script doing it — could push the shared counter past the
+// sweep's stand-down and switch off the reconciliation safety net for every
+// other Etsy shop on NivaDesk, then past 5,000 and make Etsy itself 429 them.
+// Nothing per workspace existed to stop it: the counter had no workspace in it
+// and the hand-triggered paths never read it.
+//
+// So the day is sliced. A tenth each: a shop's own 15-minute sweep costs about
+// 96 calls a day, a Sync now costs one and the largest preview costs five, so
+// 500 is far above any honest day's work and still leaves nine tenths of the
+// platform's day standing after the noisiest tenant has spent everything it
+// can. The global ceiling above it is the backstop for the case the shares
+// cannot cover — many workspaces each behaving — and it sits above the sweep's
+// 0.75 because a person waiting on an answer outranks a sweep that retries in
+// fifteen minutes. That priority is the same rule SWEEP_QUOTA_CEILING encodes;
+// this is the other half of it.
+const ETSY_COMPANY_DAILY_SHARE = 0.10;   // 500 calls a day for one workspace
+const ETSY_HARD_QUOTA_CEILING = 0.95;    // 4,750 — below this, people still get served
+
+/**
+ * May this workspace make another Etsy call today?
+ *
+ * Pure on purpose: the numbers are the whole decision, and a guard that can
+ * only be tested by reading the source is a guard somebody can wrap in
+ * `if (false)` without a test noticing.
+ *
+ * The workspace's own share is checked first so the answer names the real
+ * cause. Telling a seller "NivaDesk is busy" when it is their own workspace
+ * that spent the allowance sends them to support instead of to the reason.
+ */
+function etsyQuotaVerdict({ total = 0, company = 0, perDay = ETSY_REQUESTS_PER_DAY } = {}) {
+  const share = Math.floor(perDay * ETSY_COMPANY_DAILY_SHARE);
+  const ceiling = Math.floor(perDay * ETSY_HARD_QUOTA_CEILING);
+  const spentByCompany = Number(company) || 0;
+  const spentInTotal = Number(total) || 0;
+  if (spentByCompany >= share) return { allowed: false, reason: "workspace_share_spent", share, ceiling };
+  if (spentInTotal >= ceiling) return { allowed: false, reason: "app_budget_spent", share, ceiling };
+  return { allowed: true, reason: "", share, ceiling };
+}
+
 // Standard Webhooks: reject anything whose timestamp is outside this window so
 // a captured request cannot be replayed later.
 const WEBHOOK_TOLERANCE_SECONDS = 300;
@@ -503,6 +545,9 @@ module.exports = {
   ETSY_MAX_ATTEMPTS,
   ETSY_REQUESTS_PER_SECOND,
   ETSY_REQUESTS_PER_DAY,
+  ETSY_COMPANY_DAILY_SHARE,
+  ETSY_HARD_QUOTA_CEILING,
+  etsyQuotaVerdict,
   WEBHOOK_TOLERANCE_SECONDS,
   OAUTH_STATE_TTL_MS,
   CONNECTION_COLLECTION,

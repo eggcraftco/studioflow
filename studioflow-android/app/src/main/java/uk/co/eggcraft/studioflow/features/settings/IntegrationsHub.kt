@@ -111,6 +111,15 @@ data class IntegrationProvider(
         if (id == "shopify") {
             val live = signals.shopifyStores.filterValues { it != "unlinked" }
             if (live.isEmpty()) return IntegrationState.Available
+            // An uninstalled store keeps its companyId — deliberately, so a
+            // re-install resumes — so the server still hands it to us here, and
+            // the reconcile skips it while its token is blank. Its orders have
+            // stopped arriving. Only "paused" counted as broken, so the card
+            // stayed green over a dead store: a silent outage behind a badge
+            // whose whole job is to say whether orders are coming in. Pausing is
+            // somebody's own decision, so it lowers the card only when every
+            // store is paused; an uninstall is a break, and one is enough.
+            if (live.values.any { it == "uninstalled" }) return IntegrationState.Attention
             return if (live.values.all { it == "paused" }) IntegrationState.Attention
             else IntegrationState.Connected
         }

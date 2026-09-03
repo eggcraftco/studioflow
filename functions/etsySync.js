@@ -93,6 +93,13 @@ function createEtsySyncFunctions(deps) {
    * One counter document per day. The sweep is the only thing that gives way:
    * it can catch up on the next run, while a webhook or a seller pressing Sync
    * now is happening in front of someone.
+   *
+   * The day is also split per workspace — `byCompany` — because one counter for
+   * everybody is one counter anybody can empty. The hand-triggered paths never
+   * read it at all, so a single seller repeating Sync now could push the shared
+   * number past the sweep's stand-down and silently switch off reconciliation
+   * for every other Etsy shop on NivaDesk. Nobody's own use may cost the rest
+   * of the platform its day; etsyQuotaVerdict decides where that line is.
    */
   const QUOTA_COLLECTION = "etsyQuota";
   const SWEEP_QUOTA_CEILING = 0.75;   // the sweep stops here; the rest is for people
@@ -101,11 +108,28 @@ function createEtsySyncFunctions(deps) {
     return new Date(atMs).toISOString().slice(0, 10);   // YYYY-MM-DD, UTC
   }
 
-  async function recordEtsyCalls(count) {
+  /**
+   * @param chargeShare  Whether these calls come out of the workspace's own
+   *   daily share. False for the fifteen-minute sweep: that share exists to stop
+   *   one tenant monopolising the platform by pressing Sync now, and a workspace
+   *   with several shops would otherwise spend it on background work it never
+   *   asked for and then be locked out of the button. The sweep is bounded by
+   *   its own ceiling and by MAX_CONNECTIONS_PER_SWEEP instead. Counted either
+   *   way, because Etsy counts it either way.
+   */
+  async function recordEtsyCalls(count, companyId = "", { chargeShare = true } = {}) {
     if (!count) return;
+    const key = String(companyId || "");
     try {
       await db().collection(QUOTA_COLLECTION).doc(quotaDocId(now())).set({
         calls: admin.firestore.FieldValue.increment(count),
+        // A nested map, never a dotted "byCompany.<id>" key: set(merge) writes a
+        // dotted name as one literal field, which is how the readBy flags were
+        // broken for months while looking right in the console.
+        ...(key && chargeShare ? { byCompany: { [key]: admin.firestore.FieldValue.increment(count) } } : {}),
+        // Kept apart so the day can still be explained per workspace without
+        // the sweep's cost landing on the person pressing a button.
+        ...(key && !chargeShare ? { byCompanyBackground: { [key]: admin.firestore.FieldValue.increment(count) } } : {}),
         day: quotaDocId(now()),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
@@ -115,16 +139,59 @@ function createEtsySyncFunctions(deps) {
     }
   }
 
-  async function etsyCallsToday() {
+  async function etsyQuotaSpend(companyId = "") {
     try {
       const snap = await db().collection(QUOTA_COLLECTION).doc(quotaDocId(now())).get();
-      return Number((snap.data() || {}).calls || 0);
+      const row = snap.data() || {};
+      const byCompany = row.byCompany && typeof row.byCompany === "object" ? row.byCompany : {};
+      return {
+        total: Number(row.calls || 0),
+        company: Number(byCompany[String(companyId || "")] || 0)
+      };
     } catch (error) {
-      return 0;   // unknown is not the same as exhausted
+      return { total: 0, company: 0 };   // unknown is not the same as exhausted
     }
   }
 
+  async function etsyCallsToday() {
+    return (await etsyQuotaSpend()).total;
+  }
+
+  /**
+   * The gate in front of the three paths a person can trigger.
+   *
+   * Refusing out loud is the point. A workspace that has spent its share is
+   * told which of the two lines it hit and when it clears, because the silent
+   * alternative — returning nothing found — reads as "Etsy has no orders for
+   * you", which is the one answer a seller cannot act on.
+   *
+   * The 15-minute sweep deliberately does not pass through here. It is this
+   * workspace's safety net, it costs one call, and it already stands down for
+   * everyone at SWEEP_QUOTA_CEILING; stopping it as well would turn "you have
+   * used your share of Sync now" into "your orders stop arriving until
+   * midnight", which is a worse outcome than the one being prevented.
+   */
+  async function requireEtsyQuota(companyId) {
+    const verdict = etsy.etsyQuotaVerdict(await etsyQuotaSpend(companyId));
+    if (verdict.allowed) return;
+    const message = verdict.reason === "workspace_share_spent"
+      ? `This workspace has used its share of today's Etsy allowance (${verdict.share} requests). ` +
+        "Orders keep arriving on their own in the background, and syncing by hand works again after midnight UTC."
+      // Deliberately does NOT promise background delivery. This branch only
+      // fires above the app-wide ceiling, which is higher than the one the
+      // fifteen-minute sweep stands down at — so by the time a seller sees
+      // this, the background sync has stopped too, and saying otherwise sends
+      // them away expecting orders that are not coming until tomorrow.
+      : "NivaDesk's Etsy allowance for today is used up. Syncing works again after midnight UTC; " +
+        "orders placed in the meantime are picked up then.";
+    throw new HttpsError("resource-exhausted", message, { code: verdict.reason, share: verdict.share });
+  }
+
   async function fetchReceipts(connectionRef, shopId, {
+    // Whose day this fetch is spending. Without it the meter can say how much
+    // of the platform's allowance is gone but not who spent it, which is the
+    // one thing needed to stop one shop from spending everybody's.
+    companyId = "",
     minCreated = 0,
     minLastModified = 0,
     max = MAX_PREVIEW_RECEIPTS,
@@ -136,7 +203,8 @@ function createEtsySyncFunctions(deps) {
     // has not reached yet, and the watermark can move to the newest it did
     // reach without stepping over anything.
     sortOn = "created",
-    sortOrder = "down"
+    sortOrder = "down",
+    chargeShare = true
   } = {}) {
     const collected = [];
     let offset = 0;
@@ -145,6 +213,11 @@ function createEtsySyncFunctions(deps) {
 
     while (collected.length < max) {
       const limit = Math.min(RECEIPT_PAGE_SIZE, max - collected.length);
+      // Charged BEFORE the request, not after it. Etsy counts a request it
+      // refused or timed out on; recording only on the way back meant a fetch
+      // that threw — a rate limit, an expired token — cost the meter nothing,
+      // so the guard failed OPEN at precisely the moment it was needed.
+      await recordEtsyCalls(1, companyId, { chargeShare });
       const page = await connect.callEtsy(connectionRef, `/shops/${encodeURIComponent(shopId)}/receipts`, {
         query: {
           limit,
@@ -171,7 +244,6 @@ function createEtsySyncFunctions(deps) {
       // Stay inside 5 requests/second with room to spare.
       await new Promise((resolve) => setTimeout(resolve, etsy.ETSY_MIN_CALL_GAP_MS));
     }
-    await recordEtsyCalls(pages);
     return { receipts: collected, truncated };
   }
 
@@ -252,6 +324,9 @@ function createEtsySyncFunctions(deps) {
   const previewEtsyImport = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
     const { companyId } = await requireWorkspaceMember(request);
     const { ref, data } = await connect.loadConnection(request.data?.connectionId, companyId);
+    // After the connection is resolved, so someone reaching for a workspace
+    // that is not theirs is told that, not told the day is busy.
+    await requireEtsyQuota(companyId);
     const rules = normaliseRules(request.data?.rules);
     const shopId = String(data.externalShopId || "");
     const settings = await companySettingsDocRef(companyId).get().catch(() => null);
@@ -259,6 +334,7 @@ function createEtsySyncFunctions(deps) {
 
     const since = now() - rules.sinceDays * 86400000;
     const { receipts, truncated } = await fetchReceipts(ref, shopId, {
+      companyId,
       minCreated: since,
       max: MAX_PREVIEW_RECEIPTS,
       wasCanceled: rules.includeCancelled ? null : false
@@ -642,6 +718,7 @@ function createEtsySyncFunctions(deps) {
   const runEtsyImport = onCall({ region: "europe-west2", timeoutSeconds: 540 }, async (request) => {
     const { companyId } = await requireWorkspaceOwner(request);
     const { ref, data } = await connect.loadConnection(request.data?.connectionId, companyId);
+    await requireEtsyQuota(companyId);
     const rules = normaliseRules(request.data?.rules);
     const selection = Array.isArray(request.data?.receiptIds) ? request.data.receiptIds.map(String) : null;
     const choices = request.data?.customerChoices && typeof request.data.customerChoices === "object"
@@ -653,6 +730,7 @@ function createEtsySyncFunctions(deps) {
     const shopId = String(data.externalShopId || "");
 
     const { receipts, truncated } = await fetchReceipts(ref, shopId, {
+      companyId,
       minCreated: now() - rules.sinceDays * 86400000,
       max: MAX_PREVIEW_RECEIPTS,
       wasCanceled: rules.includeCancelled ? null : false
@@ -742,13 +820,18 @@ function createEtsySyncFunctions(deps) {
    * here, and because it queries min_last_modified it costs one call rather
    * than a walk through the shop's history.
    */
-  async function reconcileConnection(connectionRef, connectionData, { companyId }) {
+  // `chargeShare` is the caller's to decide, not this function's: the same body
+  // serves the Sync now button and the fifteen-minute sweep, and only one of
+  // them is a person spending their allowance.
+  async function reconcileConnection(connectionRef, connectionData, { companyId, chargeShare = true }) {
     const shopId = String(connectionData.externalShopId || "");
     const watermark = Number(connectionData.reconcileWatermarkMs || 0) || (now() - 7 * 86400000);
     const settings = await companySettingsDocRef(companyId).get().catch(() => null);
     const defaultDeliveryTime = resolveDefaultDeliveryTime(settings?.data() || {});
 
     const { receipts, truncated } = await fetchReceipts(connectionRef, shopId, {
+      companyId,
+      chargeShare,
       minLastModified: Math.max(0, watermark - RECONCILE_OVERLAP_MS),
       max: RECEIPT_PAGE_SIZE,
       sortOn: "updated",
@@ -805,6 +888,9 @@ function createEtsySyncFunctions(deps) {
   const syncEtsyNow = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
     const { companyId } = await requireWorkspaceMember(request);
     const { ref, data } = await connect.loadConnection(request.data?.connectionId, companyId);
+    // reconcileConnection is shared with the sweep, so the gate sits here
+    // rather than inside it: this is the copy a person triggered.
+    await requireEtsyQuota(companyId);
     const outcome = await reconcileConnection(ref, data, { companyId });
     return { ok: true, outcome };
   });
@@ -873,7 +959,9 @@ function createEtsySyncFunctions(deps) {
           let swept = 0; let failed = 0;
           for (const row of due) {
             try {
-              await reconcileConnection(row.ref, row.data, { companyId: String(row.data.companyId) });
+              // Background work. See recordEtsyCalls: a multi-shop workspace must
+              // not spend its Sync now allowance on a sweep it never pressed.
+              await reconcileConnection(row.ref, row.data, { companyId: String(row.data.companyId), chargeShare: false });
               swept += 1;
             } catch (error) {
               failed += 1;
@@ -894,7 +982,7 @@ function createEtsySyncFunctions(deps) {
     syncEtsyNow,
     resolveEtsyCustomerMatch,
     reconcileEtsyConnections,
-    _internal: { fetchReceipts, applyReceipt, reconcileConnection, classify, normaliseRules, loadCustomerCandidates, recordEtsyCalls, etsyCallsToday, SWEEP_QUOTA_CEILING }
+    _internal: { fetchReceipts, applyReceipt, reconcileConnection, classify, normaliseRules, loadCustomerCandidates, recordEtsyCalls, etsyCallsToday, etsyQuotaSpend, requireEtsyQuota, SWEEP_QUOTA_CEILING }
   };
 }
 

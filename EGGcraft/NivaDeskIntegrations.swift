@@ -150,7 +150,19 @@ struct NivaDeskIntegration: Identifiable {
         if id == "shopify" {
             let live = signals.shopifyStores.filter { $0.1 != "unlinked" }
             if live.isEmpty { return .available }
-            return live.allSatisfy { $0.1 == "paused" } ? .attention : .connected
+            // An uninstalled store keeps its companyId — deliberately, so a
+            // re-install resumes — so the server still hands it to us here, and
+            // its orders have stopped arriving. Only "paused" counted as broken,
+            // so the card stayed green over a dead store: a silent outage behind
+            // a badge whose whole job is to say whether orders are coming in.
+            //
+            // Pausing is somebody's own decision, so it lowers the card only
+            // when every store is paused; an uninstall is a break, and one is
+            // enough. Same rule as the web and Android hubs — keep the three in
+            // step.
+            let uninstalled = live.filter { $0.1 == "uninstalled" }.count
+            let paused = live.filter { $0.1 == "paused" }.count
+            return (uninstalled > 0 || paused == live.count) ? .attention : .connected
         }
         if id == "openbanking" {
             return signals.bankConnections > 0 ? .connected : .available
