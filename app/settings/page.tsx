@@ -35,7 +35,7 @@ import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
-import { QuickBooksIntegrationSection } from "./QuickBooksIntegrationSection";
+import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
@@ -164,6 +164,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   inbound: "integrations",
   etsy: "integrations",
   quickbooks: "integrations",
+  xero: "integrations",
   sms: "sms-notifications",
   general: "profile-security",
   account: "profile-security",
@@ -539,7 +540,7 @@ export default function SettingsPage() {
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
-      rawRequested === "square" || rawRequested === "paypal" || rawRequested === "quickbooks"
+      rawRequested === "square" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5218,6 +5219,7 @@ function IntegrationsSection({
         {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
     );

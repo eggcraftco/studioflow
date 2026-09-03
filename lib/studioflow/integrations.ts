@@ -36,7 +36,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks" | "xero";
 
 export type IntegrationProvider = {
   id: string;
@@ -106,8 +106,9 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Chart of accounts", "VAT codes", "Customers & suppliers", "Change tracking"], manage: "quickbooks",
   },
   {
-    id: "xero", name: "Xero", category: "banking", kind: "planned", mark: "X",
-    blurb: "", capabilities: [], manage: "",
+    id: "xero", name: "Xero", category: "banking", kind: "native", mark: "X",
+    blurb: "Official accounting connection: reads your organisation, chart of accounts, VAT rates, contacts and items, and keeps one set of books.",
+    capabilities: ["Chart of accounts", "VAT rates", "Contacts", "Change tracking"], manage: "xero",
   },
   {
     id: "zapier", name: "Zapier", category: "automation", kind: "webhook", mark: "Z",
@@ -207,7 +208,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     squareConnections: square.status === "fulfilled"
       ? square.value.map((row) => ({ merchant: row.merchantName || row.merchantId, status: row.status, needsAttention: row.status === "reconnect_required" || Boolean(row.lastErrorCode) }))
       : [],
-    // Accounting providers (QuickBooks Online today): the owner-readable connection projection.
+    // Accounting providers (QuickBooks Online, Xero): the owner-readable connection projection.
     accountingConnections: accounting.status === "fulfilled"
       ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production") }; })
       : [],
@@ -232,7 +233,7 @@ export type IntegrationSignals = {
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
-  /** Accounting providers (QuickBooks Online), with the mode the owner chose. */
+  /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
   accountingConnections: { provider: string; status: string; mode: string; companyName: string; syncState: string; environment: string }[];
 };
 
@@ -289,13 +290,15 @@ export function resolveIntegrationState(
     return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].merchant : `${live.length} accounts` };
   }
 
-  if (provider.id === "quickbooks") {
-    const rows = (signals.accountingConnections || []).filter((row) => row.provider === "quickbooks_online" && row.status !== "disconnected" && row.status !== "none");
+  if (provider.id === "quickbooks" || provider.id === "xero") {
+    const providerKey = provider.id === "xero" ? "xero" : "quickbooks_online";
+    const rows = (signals.accountingConnections || []).filter((row) => row.provider === providerKey && row.status !== "disconnected" && row.status !== "none");
     if (rows.length === 0) return { state: "available" };
     const broken = rows.filter((row) => row.status === "reconnect_required" || (row.syncState && row.syncState !== "ok")).length;
     const first = rows[0];
     const mode = first.mode === "primary_write" ? "Primary" : first.mode === "migration_read" ? "Migration" : "Read-only";
-    return { state: broken === rows.length ? "attention" : "connected", detail: `${first.companyName || "QuickBooks"} · ${mode}${first.environment === "sandbox" ? " · Sandbox" : ""}` };
+    const environment = first.environment === "sandbox" ? " · Sandbox" : first.environment === "demo" ? " · Demo company" : "";
+    return { state: broken === rows.length ? "attention" : "connected", detail: `${first.companyName || provider.name} · ${mode}${environment}` };
   }
 
   if (provider.id === "openbanking") {

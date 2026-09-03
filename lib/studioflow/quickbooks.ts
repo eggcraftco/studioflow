@@ -1,4 +1,4 @@
-// The accounting connector as the web sees it — QuickBooks Online first.
+// The accounting connector as the web sees it — QuickBooks Online and Xero.
 // Everything goes through the owner-only callables; the two Firestore reads
 // (connections, catalogue) are the owner-readable projections the rules allow.
 import { httpsCallable } from "firebase/functions";
@@ -6,7 +6,10 @@ import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { db, functions } from "@/lib/firebase/client";
 
 export type AccountingMode = "primary_write" | "shadow_read" | "migration_read" | "disabled";
+export type AccountingProvider = "quickbooks_online" | "xero";
 export type QuickBooksEnvironment = "production" | "sandbox";
+export type XeroScopeLevel = "read" | "write";
+export type XeroTenant = { tenantId: string; tenantName: string; tenantType: string };
 
 export type AccountingCompanyProfile = {
   externalCompanyId: string;
@@ -23,8 +26,13 @@ export type AccountingCompanyProfile = {
 
 export type AccountingConnection = {
   connectionId: string;
-  provider: "quickbooks_online" | "pandle" | string;
+  provider: AccountingProvider | "pandle" | string;
   implicit?: boolean;
+  /** Xero: the consent (grant) document the tokens live under; several organisations may share it. */
+  tokenDocId?: string;
+  tenantName?: string;
+  scopeLevel?: XeroScopeLevel | string;
+  scopes?: string[];
   externalCompanyId: string;
   companyName: string;
   environment?: QuickBooksEnvironment | string;
@@ -103,6 +111,7 @@ export type AccountingOverview = {
 export type MappingSuggestion = { externalId: string; name: string; reason: string; confidence: number; accountType?: string; rate?: number };
 export type MappingSuggestions = {
   ok: boolean;
+  provider?: string;
   accounts: Record<string, MappingSuggestion>;
   taxes: Record<string, MappingSuggestion>;
   duplicates: { localId: string; localName: string; localEmail: string; candidates: { externalId: string; displayName: string; reason: string; score: number }[] }[];
@@ -163,7 +172,7 @@ export async function accountingPlanMigration(companyId: string, connectionId: s
 export type MappingsPatch = {
   accounts?: Record<string, string>;
   taxes?: Record<string, string>;
-  policies?: { sources?: Record<string, string>; bespoke?: string; inventory?: string; estimatesToQuickBooks?: boolean; effectiveFrom?: string };
+  policies?: { sources?: Record<string, string>; bespoke?: string; inventory?: string; estimatesToQuickBooks?: boolean; estimatesToProvider?: boolean; effectiveFrom?: string };
   checklist?: Record<string, boolean>;
 };
 
@@ -183,11 +192,40 @@ export async function accountingAttentionResolve(companyId: string, id: string, 
   return (await call<{ companyId: string; id: string; action: string; reason: string }, { ok: boolean }>("accountingAttentionResolve")({ companyId, id, action, reason })).data;
 }
 
-export async function accountingSyncActivity(companyId: string, limit = 60) {
-  return (await call<{ companyId: string; limit: number }, SyncActivity>("accountingSyncActivity")({ companyId, limit })).data;
+export async function accountingSyncActivity(companyId: string, limit = 60, connectionId = "") {
+  return (await call<{ companyId: string; limit: number; connectionId: string }, SyncActivity>("accountingSyncActivity")({ companyId, limit, connectionId })).data;
 }
 
-/** The NivaDesk events an accountant maps to QuickBooks accounts (mirror of functions/accounting/core/adapter.js). */
+// ---- Xero -------------------------------------------------------------------
+export async function getAccountingConnections(companyId: string, provider: AccountingProvider): Promise<AccountingConnection[]> {
+  const snap = await getDocs(collection(db, "companies", companyId, "accountingConnections"));
+  return snap.docs
+    .map((row) => ({ connectionId: row.id, ...(row.data() as Omit<AccountingConnection, "connectionId">) }))
+    .filter((row) => row.provider === provider);
+}
+
+export async function xeroConnectStart(companyId: string, scopeLevel: XeroScopeLevel = "read") {
+  return (await call<{ companyId: string; scopeLevel: XeroScopeLevel }, { ok: boolean; state: string; scopeLevel: string; scopes: string[]; authorizeUrl: string }>("xeroConnectStart")({ companyId, scopeLevel })).data;
+}
+
+/** After a consent that covered several organisations: the names to choose from (tokens stay on the server). */
+export async function xeroListTenants(companyId: string, state: string) {
+  return (await call<{ companyId: string; state: string }, { ok: boolean; tenants: XeroTenant[]; expiresAtMs: number }>("xeroListTenants")({ companyId, state })).data;
+}
+
+export async function xeroSelectTenant(companyId: string, state: string, tenantId: string) {
+  return (await call<{ companyId: string; state: string; tenantId: string }, { ok: boolean; connectionId: string }>("xeroSelectTenant")({ companyId, state, tenantId })).data;
+}
+
+export async function xeroSyncNow(companyId: string, connectionId: string) {
+  return (await call<{ companyId: string; connectionId: string }, { ok: boolean; counts: Record<string, number>; reconcile: Record<string, number | string> }>("xeroSyncNow")({ companyId, connectionId })).data;
+}
+
+export async function xeroDisconnect(companyId: string, connectionId: string, purge = false) {
+  return (await call<{ companyId: string; connectionId: string; purge: boolean }, { ok: boolean; revoked: boolean; removed: boolean }>("xeroDisconnect")({ companyId, connectionId, purge })).data;
+}
+
+/** The NivaDesk events an accountant maps to provider accounts (mirror of functions/accounting/core/adapter.js). */
 export const ACCOUNT_MAPPING_KEYS: { key: string; label: string; kind: string }[] = [
   { key: "product_sales", label: "Product sales", kind: "income" },
   { key: "bespoke_service", label: "Bespoke service", kind: "income" },
