@@ -12090,20 +12090,14 @@ private fun decimalText(value: Double): String {
 
 // A money field keeps whichever decimal mark the person typed: a Turkish or
 // German keyboard sends "12,50" and that has to read back as 12.5, never 1250.
-private fun cleanDecimalInput(value: String): String {
-    val filtered = cleanAmountInput(value).filter { it.isDigit() || it == '.' || it == ',' }
-    val firstSeparator = filtered.indexOfFirst { it == '.' || it == ',' }
-    return if (firstSeparator < 0) {
-        val digits = filtered.take(9)
-        digits.trimStart('0').ifBlank { if (digits.isNotEmpty()) "0" else "" }
-    } else {
-        val separator = filtered[firstSeparator]
-        val whole = filtered.take(firstSeparator).take(9)
-        val cleanWhole = whole.trimStart('0').ifBlank { "0" }
-        val fraction = filtered.drop(firstSeparator + 1).filter { it != '.' && it != ',' }.take(2)
-        "$cleanWhole$separator$fraction"
-    }
-}
+// The field only filters characters — it keeps BOTH marks of a pasted
+// "1,234.56" and leaves the decision of which one is the decimal point to
+// parseLocalizedAmount, the single place that knows the rule. Deciding it here
+// as well (first separator wins, two digits after it) cut that paste to 1.23.
+// The minus sign is dropped: every field routed through here is a non-negative
+// amount and parseDecimal floors at zero anyway.
+private fun cleanDecimalInput(value: String): String =
+    cleanAmountInput(value).filter { it.isDigit() || it == '.' || it == ',' }.take(15)
 
 private fun parseDecimal(value: String, fallback: Double): Double {
     val clean = value.trim()

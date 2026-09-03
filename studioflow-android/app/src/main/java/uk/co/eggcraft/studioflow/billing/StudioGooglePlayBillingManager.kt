@@ -289,11 +289,20 @@ class StudioGooglePlayBillingManager(
                     .setObfuscatedAccountId(obfuscatedAccountId)
                     .apply {
                         if (existing != null) {
+                            // WITH_TIME_PRORATION, not CHARGE_PRORATED_PRICE: Play only
+                            // accepts the prorated charge for an upgrade that keeps the
+                            // billing period, and refuses it for the two changes this
+                            // app's Settings screen actually offers — monthly → annual
+                            // and any downgrade. A Purchase carries no base plan id, so
+                            // the old period cannot be read back here to pick a mode per
+                            // case; WITH_TIME_PRORATION is accepted for upgrades,
+                            // downgrades and period changes alike, switching the plan
+                            // immediately and paying for it in adjusted time.
                             setSubscriptionUpdateParams(
                                 BillingFlowParams.SubscriptionUpdateParams.newBuilder()
                                     .setOldPurchaseToken(existing.purchaseToken)
                                     .setSubscriptionReplacementMode(
-                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.CHARGE_PRORATED_PRICE
+                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITH_TIME_PRORATION
                                     )
                                     .build()
                             )

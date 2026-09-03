@@ -63,6 +63,9 @@ internal const val RequireLocalUnlockKey = "studioflow_require_local_unlock"
 // Per-device auto-lock interval in minutes (0 == Immediately). How long NivaDesk may
 // stay in the background before it asks to unlock again on return.
 internal const val AutoLockMinutesKey = "studioflow_auto_lock_minutes"
+// Shown once per install: this device has no PIN/pattern/password, so App Lock
+// has nothing to ask for and opens straight through.
+internal const val NoDeviceLockNoticeKey = "studioflow_no_device_lock_notice_shown"
 
 // Set by MainActivity.onUserLeaveHint() when the user genuinely leaves the app
 // (home / recents / call). It is NOT set when we launch an in-app activity such as
@@ -118,6 +121,9 @@ private fun StudioFlowAppContent(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
+    val t: (String) -> String = {
+        uk.co.eggcraft.studioflow.language.studioT(it, state.workspaceSettings.selectedLanguage)
+    }
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val securityPrefs = remember(context) {
         context.getSharedPreferences(LocalSecurityPrefs, Context.MODE_PRIVATE)
@@ -137,19 +143,41 @@ private fun StudioFlowAppContent(
         }
     }
 
+    val keyguardManager = remember(context) { context.getSystemService(KeyguardManager::class.java) }
+    // No PIN, pattern, password or fingerprint on the device: there is nothing to
+    // authenticate against, so App Lock must not hold the door — otherwise the only
+    // way in is to sign out and re-type the password on every launch.
+    fun deviceHasSecureLock(): Boolean = keyguardManager?.isDeviceSecure == true
+    fun noteDeviceHasNoLockOnce() {
+        if (securityPrefs.getBoolean(NoDeviceLockNoticeKey, false)) return
+        securityPrefs.edit().putBoolean(NoDeviceLockNoticeKey, true).apply()
+        android.widget.Toast.makeText(
+            context,
+            t("No screen lock is set on this device, so NivaDesk cannot lock itself."),
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+    }
+
     fun requestLocalUnlock() {
-        val activity = context.findActivity() as? androidx.fragment.app.FragmentActivity
-        if (activity == null) {
-            // Fallback to legacy keyguard if not a FragmentActivity (shouldn't happen — MainActivity should be one).
-            val keyguardManager = context.getSystemService(KeyguardManager::class.java)
-            if (keyguardManager?.isDeviceSecure == true) {
-                val intent = keyguardManager.createConfirmDeviceCredentialIntent("Unlock NivaDesk", "Use device screen lock to continue.")
-                if (intent != null) {
-                    unlockLauncher.launch(intent)
-                    return
-                }
-            }
+        if (!deviceHasSecureLock()) {
             localUnlockSatisfied = true
+            localUnlockMessage = ""
+            noteDeviceHasNoLockOnce()
+            return
+        }
+        val activity = context.findActivity() as? androidx.fragment.app.FragmentActivity
+        // Below Android 9 androidx.biometric draws its own FingerprintDialogFragment,
+        // an AppCompat AlertDialog that throws on this app's Material theme — and it is
+        // posted after authenticate() returns, so no runCatching here can catch it.
+        // Those releases get the system keyguard screen instead, which is what they used
+        // before BiometricPrompt was wired up at all.
+        if (activity == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) {
+            val intent = keyguardManager?.createConfirmDeviceCredentialIntent("Unlock NivaDesk", "Use device screen lock to continue.")
+            if (intent != null) {
+                unlockLauncher.launch(intent)
+            } else {
+                localUnlockSatisfied = true
+            }
             return
         }
 
@@ -272,6 +300,30 @@ private fun StudioFlowAppContent(
         viewModel.refreshPersonalInterfaceSettings()
     }
 
+    // Android 13+ silently drops every push until the app asks for
+    // POST_NOTIFICATIONS. The ask happens here — signed in, workspace loaded and
+    // past the lock screen — rather than on a cold start where the dialog arrives
+    // before there is anything to be notified about, and at most once per install
+    // so a refusal is never nagged. Turning it on later stays where it was: the
+    // Notifications tab banner with its "Open Settings" button.
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* Either answer is final: the Notifications tab banner is the way back. */ }
+
+    LaunchedEffect(state.user?.uid, state.workspace?.id, localUnlockSatisfied) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        if (state.user == null || state.workspace == null || !localUnlockSatisfied) return@LaunchedEffect
+        val prefs = context.getSharedPreferences("studioflow_notification_prompt", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("asked", false)) return@LaunchedEffect
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return@LaunchedEffect
+        prefs.edit().putBoolean("asked", true).apply()
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     LaunchedEffect(state.user?.uid, requireDeviceUnlock) {
     when {
             state.user == null -> {
@@ -287,6 +339,13 @@ private fun StudioFlowAppContent(
                 localUnlockSatisfied = true
                 localUnlockMessage = ""
                 signInWasInteractive = false
+            }
+            // A device with no screen lock has no credential to prove anything
+            // with, so it is never gated — it is told once instead.
+            !deviceHasSecureLock() -> {
+                localUnlockSatisfied = true
+                localUnlockMessage = ""
+                noteDeviceHasNoLockOnce()
             }
             else -> {
                 localUnlockSatisfied = false
@@ -307,7 +366,7 @@ private fun StudioFlowAppContent(
                 val since = AppLockGuard.backgroundedAt
                 if (since != 0L) {
                     val elapsed = android.os.SystemClock.elapsedRealtime() - since
-                    if (elapsed >= AppLockGuard.autoLockMinutes.toLong() * 60_000L) {
+                    if (elapsed >= AppLockGuard.autoLockMinutes.toLong() * 60_000L && deviceHasSecureLock()) {
                         localUnlockSatisfied = false
                         localUnlockMessage = ""
                     }

@@ -417,9 +417,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
             "studioflow_header",
             "trial_banner",
             "demo_plan_banner",
-            "email_verify_banner",
-            "studioflow_android_local_security"
+            "email_verify_banner"
         )
+        // NOT "studioflow_android_local_security": it holds App Lock and the
+        // auto-lock delay, which are settings for this DEVICE rather than data
+        // belonging to the account. Clearing it turned App Lock back on for
+        // anyone who had deliberately switched it off, every time they signed
+        // out — the same reason the language and device-token files are kept.
         for (name in names) {
             app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().apply()
         }

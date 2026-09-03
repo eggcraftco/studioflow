@@ -8,10 +8,11 @@ import java.util.Locale
  *
  * Whitespace, currency symbols and letters are ignored. When both ',' and '.'
  * occur, the LAST separator is the decimal point and the other is a grouping
- * mark. With a single kind of separator: once, followed by one or two digits
- * → decimal; once, followed by exactly three digits → grouping if that is the
- * locale's grouping separator, otherwise decimal; more than once → grouping.
- * Returns null when there is nothing numeric to parse.
+ * mark. With a single kind of separator it is grouping only when it repeats,
+ * or when it is the locale's grouping character AND is followed by exactly
+ * three digits AND the digits before it are one to three digits that do not
+ * start with a zero — so "0.750" is three quarters, not seven hundred and
+ * fifty, even where '.' groups. Returns null when there is nothing numeric.
  */
 fun parseLocalizedAmount(raw: String, locale: Locale): Double? {
     val kept = raw.filter { it.isDigit() || it == '-' || it == ',' || it == '.' }
@@ -32,11 +33,14 @@ fun parseLocalizedAmount(raw: String, locale: Locale): Double? {
             val separator = if (hasComma) ',' else '.'
             val occurrences = body.count { it == separator }
             val tail = body.substringAfterLast(separator)
+            val head = body.substringBeforeLast(separator)
             val grouping = when {
                 occurrences > 1 -> true
-                tail.length in 1..2 -> false
-                tail.length == 3 -> DecimalFormatSymbols.getInstance(locale).groupingSeparator == separator
-                else -> false
+                tail.length != 3 -> false
+                DecimalFormatSymbols.getInstance(locale).groupingSeparator != separator -> false
+                // A group has one to three digits and never a leading zero, so
+                // "0.750" stays three quarters even in a locale where '.' groups.
+                else -> head.length in 1..3 && !head.startsWith("0")
             }
             if (grouping) body.replace(separator.toString(), "") else body.replace(separator, '.')
         }
