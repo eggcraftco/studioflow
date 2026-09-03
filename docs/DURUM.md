@@ -1889,3 +1889,22 @@ Kaynak: `NivaDesk_Dis_Goz_Denetim_Raporu_20260902.md` (43+80+54+62+52+53 madde).
 **Android.** Ondalık virgül, dinleyici dayanıklılığı + geri çekilme, bozuk dokümanda çökmeme, rememberSaveable taslaklar, geri tuşu, çıkışta yerel veri temizliği, yıkıcı işlem onayları, giriş ekranında şifre sıfırlama, 66 ham hata mesajı → anlaşılır metin, `users/{uid}` ezme durdu, Play abonelik yönetimi bağlantısı, ham durum değerleri + 22'lik havuz, `activeStatuses` varsayılanı 5, `upload_preview_image` doğrulaması kaldırıldı, `deliveryTime` varsayılanı 45, FragmentActivity + biyometrik, bildirim kanalları + ikon, Play faturalama (proration/pending/acknowledge/restore), kayıtta deneme (S#10).
 
 **SIRADAKİ / KARAR BEKLEYEN:** functions deploy (isimle) yapılmadı — sabah. Ürün kararı gereken 5 madde sabahki özette.
+
+## Deploy günü: canlıya alındı + deploy öncesi inceleme (3 Eyl 2026, öğleden sonra)
+
+**Deploy öncesi adversarial inceleme.** 3300 satırlık denetim diff'inin yarısını alt ajanlar yazmıştı ve okunmamıştı; canlıya basmadan önce diff 18 dilime bölünüp paralel incelendi, her bulgu üç bağımsız çürütücüden geçirildi (120 ajan, 12,6M token). **23 bulgu doğrulandı, 4'ü blocker.** İnceleme kendi düzeltmelerimizin dördünü kurtardı:
+
+- **Canlı kurallarda 3 regresyon** (gece deploy edilmişti, ÜRETİM BOZUKTU): `users/{uid}/workspaceAccess` write:false → Mac/iPhone Team Access rol değişimini komple kilitliyordu (batch geri dönüyor); `support_files/{userId}` aslında `{ticketId}` → her destek eki yüklemesi reddediliyordu; finans anahtarı kapısı callable'dan katıydı → izinli üye Financial Settings kaydedemiyordu. Üçü de düzeltilip yeniden deploy edildi, regresyon testleri 82 PASS.
+- **Swift'te 2 blocker:** `updateSiparis` atlama koruması, sipariş ekranının binding'i `siparisler` dizisini yerinde değiştirdiği için HER düzenlemeyi sessizce yutuyordu (base cost, ödeme, durum — hiçbiri sunucuya gitmiyordu). Artık sunucudan görülen son kopyayla karşılaştırıyor. `clearOfflineCacheFromDisk()` her soğuk açılışta ve her otomatik kilitte çalışıp kuyruktaki çevrimdışı yazımları siliyordu; yalnızca gerçek çıkışta çalışıyor.
+- **Web'de para:** `parseAmountInput` baştaki sıfırı binlik ayracı sanıyordu ("0.750" → 750, tr/de/pt) ve ayraçları 1234.5'ten türetiyordu — es/it bu sayıyı gruplamadığı için virgül ondalıkları ters dönüyordu. İkisi de düzeltildi, 17 vaka elle doğrulandı.
+- **/bank kapısı** sayfanın tamamını kapatıyordu: denemede banka bağlamış sonra Free'ye düşmüş bir alan verisine de bağlantıyı kesme düğmesine de ulaşamıyordu. Kapı sayfadan bağlanma eylemine taşındı.
+- Ayrıca: zamanlı not hatırlatıcısı gün sonuna kayıyordu; Empty Trash not başına ayrı onay soruyordu; sipariş bildirimi Orders'tayken siparişi açmıyordu; Stripe sıra koruması `canceled_at` bir kez yazıldıktan sonra sonraki tüm yazımları KALICI olarak düşürüyordu (artık webhook olayının kendi zamanına bakıyor); durum duyurusu bir daha asla gönderilemiyordu (artık 24 saatlik pencere).
+
+**Canlıya alınanlar:**
+- `firestore.rules` + `storage.rules` — düzeltilmiş haliyle CANLI.
+- **48 Cloud Function** isimle deploy edildi (3 parti, hepsi başarılı). Kör deploy yapılmadı, prune olmadı.
+- **Web Round 155** (`03e246d`) yayın deposuna gönderildi.
+
+**1. ürün kararı uygulandı:** müşteri profili silinince siparişlerdeki ad ve geçmiş KORUNUYOR; "New Project"e döndürme kaldırıldı (sunucu + Mac). Kişisel veriyi silmek ayrı işlem olarak Anonymise'da kalıyor.
+
+**Sıradaki (kullanıcı kararları, `NivaDesk_Urun_Kararlari_20260903.md`):** Archive/Delete Profile/Erase Personal Data ayrımı; merkezi server-side Finance Engine (Gross Margin / Net Profit / VAT Due, Standard + Margin Scheme, UI görünürlüğü hesabı değiştirmez); "+ Add Project" Quick Create mini formu; plan düşüşünde fazla üyelerin Suspended/No Access olması + Restore; e-posta ile ekip daveti. Bunlar dört platforma dokunan ayrı iş programları.
