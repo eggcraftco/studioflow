@@ -29,6 +29,16 @@ const INTEGRATION_SHOP_OWNED_FIELDS = new Set([
   // it — the first delivery would carry the refund and the second would take
   // it away again.
   "refundedAmount",
+  // The commission the platform actually took, and the flag that says the
+  // number is theirs rather than the workspace's percentage estimate. They
+  // travel together and must both survive a resync, or the finance engine goes
+  // back to guessing on the second delivery.
+  //
+  // A connector that does not know the figure must write NEITHER: writing
+  // paymentFee: 0 with no flag is the old behaviour, and writing it WITH the
+  // flag would tell the engine a shop charged nothing when nobody asked.
+  "paymentFee",
+  "platformFeeKnown",
   "orderValue",
   "lineItems",
   "payments",

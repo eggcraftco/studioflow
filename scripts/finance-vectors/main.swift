@@ -37,6 +37,8 @@ func inputFrom(_ order: [String: Any]) -> NDFinanceEngine.Input {
     input.watchPurchasePrice = (order["watchPurchasePrice"] as? NSNumber)?.doubleValue ?? 0
     input.deliveryCost = (order["deliveryCost"] as? NSNumber)?.doubleValue ?? 0
     input.refundedAmount = (order["refundedAmount"] as? NSNumber)?.doubleValue ?? 0
+    input.paymentFee = (order["paymentFee"] as? NSNumber)?.doubleValue ?? 0
+    input.platformFeeKnown = (order["platformFeeKnown"] as? NSNumber)?.boolValue ?? false
     input.taxRate = order.keys.contains("taxRate") ? (order["taxRate"] as? NSNumber)?.doubleValue : nil
     input.taxType = order["taxType"] as? String ?? ""
     input.customFields = stringMap(order["customFields"])
@@ -78,6 +80,7 @@ func figure(_ block: NDFinanceEngine.Block, _ field: String) -> Any? {
     case "vatRegistered": return block.vatRegistered
     case "pricesIncludeVat": return block.pricesIncludeVat
     case "fromLineItems": return block.fromLineItems
+    case "platformFeeKnown": return block.platformFeeKnown
     case "orphanKeys": return block.orphanKeys
     default: return nil
     }

@@ -18,7 +18,7 @@ package uk.co.eggcraft.studioflow.finance
  */
 object FinanceEngine {
 
-    const val VERSION = 2
+    const val VERSION = 3
 
     const val REMAINING_PREFIX = "financialRemaining::"
     const val EXPENSE_PREFIX = "financialExpense::"
@@ -40,6 +40,7 @@ object FinanceEngine {
         val directCost: Double,
         val grossMargin: Double,
         val platformFee: Double,
+        val platformFeeKnown: Boolean,
         val deliveryCost: Double,
         val otherExpenses: Double,
         val refunded: Double,
@@ -60,6 +61,9 @@ object FinanceEngine {
         val watchPurchasePrice: Double = 0.0,
         val deliveryCost: Double = 0.0,
         val refundedAmount: Double = 0.0,
+        val paymentFee: Double = 0.0,
+        /** Set only by a connector that was told the platform's real commission. */
+        val platformFeeKnown: Boolean = false,
         val taxRate: Double? = null,
         val taxType: String = "",
         val lineItemTotals: List<Double> = emptyList(),
@@ -254,7 +258,18 @@ object FinanceEngine {
 
         val directCost = order.watchPurchasePrice
         val grossMargin = revenue - directCost
-        val platformFee = round2(revenue * resolved.feePercentage / 100.0)
+        // What the sale actually cost to take, when the shop told us. The
+        // percentage is a stand-in for a number only the platform knows; where a
+        // connector has the real figure, using the estimate is a second,
+        // disagreeing definition of the same cost. `platformFeeKnown` is what
+        // tells a real fee of zero apart from a field nobody filled in — every
+        // existing writer of `paymentFee` puts the estimate there, so a number
+        // alone proves nothing.
+        val platformFee = if (order.platformFeeKnown) {
+            Math.abs(round2(order.paymentFee))
+        } else {
+            round2(revenue * resolved.feePercentage / 100.0)
+        }
 
         val own = normalizeVatMethod(order.taxType, "")
         val method = when {
@@ -292,6 +307,7 @@ object FinanceEngine {
             directCost = round2(directCost),
             grossMargin = round2(grossMargin),
             platformFee = platformFee,
+            platformFeeKnown = order.platformFeeKnown,
             deliveryCost = round2(order.deliveryCost),
             otherExpenses = round2(expensesTotal),
             refunded = round2(order.refundedAmount),

@@ -19,7 +19,7 @@
 
 // 2: the block gained `receivablesTotal`, so every order stamped under 1 is
 // re-stamped by the sweep rather than left with a field the clients now read.
-const ENGINE_VERSION = 2;
+const ENGINE_VERSION = 3;
 
 const REMAINING_PREFIX = "financialRemaining::";
 const EXPENSE_PREFIX = "financialExpense::";
@@ -269,7 +269,22 @@ function computeOrderFinance(order = {}, rawSettings = {}, options = {}) {
   const refunded = readAmount(order.refundedAmount);
 
   const grossMargin = revenue - directCost;
-  const platformFee = round2((revenue * settings.feePercentage) / 100);
+
+  // What the sale actually cost to take, when the shop told us.
+  //
+  // The percentage below is an estimate the workspace types in — a stand-in for
+  // a number only the platform knows. Where a connector has been told the real
+  // figure, the estimate is worse than useless: it is a second, disagreeing
+  // definition of the same cost, and the profit lines quietly follow whichever
+  // one their rail happens to read.
+  //
+  // `platformFeeKnown` is what separates the two. Without it there is no way to
+  // tell a real fee of zero from a field nobody has filled in — and every
+  // existing writer of `paymentFee` writes the percentage estimate into it, so
+  // the presence of a number proves nothing.
+  const platformFee = order.platformFeeKnown === true
+    ? Math.abs(readAmount(order.paymentFee))
+    : round2((revenue * settings.feePercentage) / 100);
 
   const method = resolveVatMethod(order, settings, paymentDateMs);
   const rate = Object.prototype.hasOwnProperty.call(order, "taxRate") && order.taxRate !== null && order.taxRate !== ""
@@ -298,6 +313,9 @@ function computeOrderFinance(order = {}, rawSettings = {}, options = {}) {
   return {
     engineVersion: ENGINE_VERSION,
     method,
+    // Whether the fee above is the platform's own figure or the workspace's
+    // percentage. A screen that shows "Platform fee" needs to be able to say.
+    platformFeeKnown: order.platformFeeKnown === true,
     taxRate: rate,
     pricesIncludeVat: settings.pricesIncludeVat,
     vatRegistered: settings.vatRegistered,

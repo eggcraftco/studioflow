@@ -160,7 +160,12 @@ function newOrderDefaults(ctx = {}) {
     trackingNumber: "",
     courier: "Auto Detect",
     isDelivered: false,
-    paymentFee: 0,
+    // No paymentFee here on purpose. This channel is not told what the sale
+    // cost to take, and writing a zero says it cost nothing — which the finance
+    // engine used to believe, and which now, with paymentFee shop-owned, would
+    // also wipe a fee the studio typed in by hand on every resync. A connector
+    // writes the fee only when the platform actually told it one, together with
+    // platformFeeKnown. See functions/finance/engine.js.
     taxType: "",
     extraStatuses: {},
     taxRate: 0,

@@ -17,7 +17,7 @@ import Foundation
 /// vector, then port it across. Specification: `docs/finance-engine.md`.
 enum NDFinanceEngine {
 
-    static let version = 2
+    static let version = 3
 
     static let remainingPrefix = "financialRemaining::"
     static let expensePrefix = "financialExpense::"
@@ -42,6 +42,7 @@ enum NDFinanceEngine {
         let directCost: Double
         let grossMargin: Double
         let platformFee: Double
+        let platformFeeKnown: Bool
         let deliveryCost: Double
         let otherExpenses: Double
         let refunded: Double
@@ -62,6 +63,9 @@ enum NDFinanceEngine {
         var watchPurchasePrice: Double = 0
         var deliveryCost: Double = 0
         var refundedAmount: Double = 0
+        var paymentFee: Double = 0
+        /// Set only by a connector that was told the platform's real commission.
+        var platformFeeKnown: Bool = false
         /// `nil` means "the order does not say", and the workspace rate applies.
         var taxRate: Double? = nil
         var taxType: String = ""
@@ -246,7 +250,16 @@ enum NDFinanceEngine {
 
         let directCost = order.watchPurchasePrice
         let grossMargin = revenue - directCost
-        let platformFee = round2(revenue * resolved.feePercentage / 100)
+        // What the sale actually cost to take, when the shop told us. The
+        // percentage is a stand-in for a number only the platform knows; where
+        // a connector has the real figure, using the estimate is a second,
+        // disagreeing definition of the same cost. `platformFeeKnown` is what
+        // tells a real fee of zero apart from a field nobody filled in — every
+        // existing writer of `paymentFee` puts the estimate there, so a number
+        // alone proves nothing.
+        let platformFee = order.platformFeeKnown
+            ? abs(round2(order.paymentFee))
+            : round2(revenue * resolved.feePercentage / 100)
 
         let own = normalizeVatMethod(order.taxType, fallback: "")
         let method: String
@@ -286,6 +299,7 @@ enum NDFinanceEngine {
             directCost: round2(directCost),
             grossMargin: round2(grossMargin),
             platformFee: platformFee,
+            platformFeeKnown: order.platformFeeKnown,
             deliveryCost: round2(order.deliveryCost),
             otherExpenses: round2(expenses.total),
             refunded: round2(order.refundedAmount),

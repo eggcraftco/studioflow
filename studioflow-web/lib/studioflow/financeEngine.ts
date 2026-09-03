@@ -13,7 +13,7 @@
 // Do not "improve" a formula here. Change functions/finance/engine.js, add a
 // vector, then port it across. Spec: docs/finance-engine.md.
 
-export const FINANCE_ENGINE_VERSION = 2;
+export const FINANCE_ENGINE_VERSION = 3;
 
 export const REMAINING_PREFIX = "financialRemaining::";
 export const EXPENSE_PREFIX = "financialExpense::";
@@ -31,6 +31,8 @@ export type FinanceBlock = {
   directCost: number;
   grossMargin: number;
   platformFee: number;
+  /** Whether platformFee is the shop's own figure or the workspace's percentage. */
+  platformFeeKnown: boolean;
   deliveryCost: number;
   otherExpenses: number;
   refunded: number;
@@ -57,6 +59,9 @@ export type FinanceEngineOrder = {
   watchPurchasePrice?: unknown;
   deliveryCost?: unknown;
   refundedAmount?: unknown;
+  paymentFee?: unknown;
+  /** Set only by a connector that was told the platform's real commission. */
+  platformFeeKnown?: unknown;
   taxRate?: unknown;
   taxType?: unknown;
   lineItems?: Array<{ lineTotal?: unknown } | null | undefined> | null;
@@ -268,7 +273,15 @@ export function computeOrderFinance(
   const refunded = readAmount(source.refundedAmount);
 
   const grossMargin = revenue - directCost;
-  const platformFee = round2((revenue * settings.feePercentage) / 100);
+  // What the sale actually cost to take, when the shop told us. The percentage
+  // is a stand-in for a number only the platform knows; where a connector has
+  // the real figure, using the estimate is a second, disagreeing definition of
+  // the same cost. `platformFeeKnown` is what tells a real fee of zero apart
+  // from a field nobody filled in — every existing writer of `paymentFee` puts
+  // the estimate there, so a number alone proves nothing.
+  const platformFee = source.platformFeeKnown === true
+    ? Math.abs(readAmount(source.paymentFee))
+    : round2((revenue * settings.feePercentage) / 100);
 
   const method = resolveVatMethod(source, settings, paymentDateMs);
   const rate = Object.prototype.hasOwnProperty.call(source, "taxRate") && source.taxRate !== null && source.taxRate !== ""
@@ -300,6 +313,7 @@ export function computeOrderFinance(
     directCost: round2(directCost),
     grossMargin: round2(grossMargin),
     platformFee,
+    platformFeeKnown: source.platformFeeKnown === true,
     deliveryCost: round2(deliveryCost),
     otherExpenses: round2(otherExpenses),
     refunded: round2(refunded),

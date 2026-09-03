@@ -124,6 +124,8 @@ class FinanceEngineVectorsTest {
             watchPurchasePrice = double(order["watchPurchasePrice"]) ?: 0.0,
             deliveryCost = double(order["deliveryCost"]) ?: 0.0,
             refundedAmount = double(order["refundedAmount"]) ?: 0.0,
+            paymentFee = double(order["paymentFee"]) ?: 0.0,
+            platformFeeKnown = order["platformFeeKnown"] == true,
             taxRate = if (order.containsKey("taxRate")) double(order["taxRate"]) else null,
             taxType = order["taxType"] as? String ?: "",
             lineItemTotals = lineItems,
@@ -160,6 +162,7 @@ class FinanceEngineVectorsTest {
         "vatRegistered" -> block.vatRegistered
         "pricesIncludeVat" -> block.pricesIncludeVat
         "fromLineItems" -> block.fromLineItems
+        "platformFeeKnown" -> block.platformFeeKnown
         "orphanKeys" -> block.orphanKeys
         else -> throw IllegalArgumentException("the vectors expect a figure the mirror does not expose: $field")
     }

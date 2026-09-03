@@ -8859,7 +8859,15 @@ function financialRecalculationPlanForOrder(orderData, financialSettings) {
   const customRemainingTotal = orderCustomRemainingTotal(orderData.customFields);
   const customExpenseTotal = orderCustomExpenseTotal(orderData.customFields);
   const orderValue = paidAmount + remainingAmount + customRemainingTotal;
-  const paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
+  // A shop that told us what it charged is believed over the workspace's
+  // percentage — and the percentage must not creep back in. The same shape as
+  // the tax guard below: an order that came from an integration carries the
+  // platform's own figures, and a bulk recalculation is about the workspace's
+  // settings, not about second-guessing what Etsy or Square actually took.
+  const platformFeeKnown = orderData.platformFeeKnown === true;
+  const paymentFee = platformFeeKnown
+    ? Math.abs(roundMoneyValue(orderData.paymentFee))
+    : roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
   const taxType = financialTaxTypeForPaymentDate(financialSettings, paymentDate);
 
   // An order imported from a shop carries that shop's own tax figure. Keying
@@ -12327,7 +12335,11 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   // On fullPaymentReceived the custom receivables were already rolled into
   // paidAmount above, so they must not be added to the fee/VAT base again.
   const saleCustomRemaining = hasOwnField(patch, "fullPaymentReceived") && Boolean(patch.fullPaymentReceived) ? 0 : currentCustomRemainingTotal;
-  if (entitlements?.advancedFinanceEnabled === true && !hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived", "financialRemainingValues"].some((field) => hasOwnField(patch, field))) {
+  // Same guard as the bulk recalculation: an edit to the money on an order whose
+  // fee came from the shop must not quietly swap the real figure for the
+  // workspace's percentage. A person who types a fee by hand still wins — that
+  // is the hasOwnField check above.
+  if (entitlements?.advancedFinanceEnabled === true && orderData.platformFeeKnown !== true && !hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived", "financialRemainingValues"].some((field) => hasOwnField(patch, field))) {
     paymentFee = roundMoneyValue(((orderValue + saleCustomRemaining) * cleanPercentageNumber(financialSettings?.feePercentage, 3)) / 100);
   }
 
@@ -19361,7 +19373,12 @@ function mapWooCommerceOrderToSiparis(order, companyId, isNew = true, defaultDel
     trackingNumber: "",
     courier: "Auto Detect",
     isDelivered: false,
-    paymentFee: 0,
+    // No paymentFee here on purpose. This channel is not told what the sale
+    // cost to take, and writing a zero says it cost nothing — which the finance
+    // engine used to believe, and which now, with paymentFee shop-owned, would
+    // also wipe a fee the studio typed in by hand on every resync. A connector
+    // writes the fee only when the platform actually told it one, together with
+    // platformFeeKnown. See functions/finance/engine.js.
     deliveryCost: wooNumber(order?.shipping_total, 0),
     taxType: "",
     extraStatuses: {},
@@ -20445,7 +20462,12 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true, defaultDeliver
     trackingNumber: "",
     courier: "Auto Detect",
     isDelivered: false,
-    paymentFee: 0,
+    // No paymentFee here on purpose. This channel is not told what the sale
+    // cost to take, and writing a zero says it cost nothing — which the finance
+    // engine used to believe, and which now, with paymentFee shop-owned, would
+    // also wipe a fee the studio typed in by hand on every resync. A connector
+    // writes the fee only when the platform actually told it one, together with
+    // platformFeeKnown. See functions/finance/engine.js.
     deliveryCost: shopifyShippingCost(order),
     taxType: "",
     extraStatuses: {},
@@ -20877,7 +20899,12 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     trackingNumber: "",
     courier: "Auto Detect",
     isDelivered: false,
-    paymentFee: 0,
+    // No paymentFee here on purpose. This channel is not told what the sale
+    // cost to take, and writing a zero says it cost nothing — which the finance
+    // engine used to believe, and which now, with paymentFee shop-owned, would
+    // also wipe a fee the studio typed in by hand on every resync. A connector
+    // writes the fee only when the platform actually told it one, together with
+    // platformFeeKnown. See functions/finance/engine.js.
     // "shipping" is also the shipping ADDRESS key, and it came first: a sender
     // that posts an address lost its shipping cost to Number({}) = NaN.
     deliveryCost: inboundMoneyNumber(inboundValue(payload, ["shippingCost", "shipping_total", "deliveryCost", "shipping"])) ?? 0,
