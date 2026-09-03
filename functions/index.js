@@ -7945,6 +7945,81 @@ async function secureQuickReplyOpenAIKey(companyId, settingsData = {}) {
   return key;
 }
 
+/**
+ * Moves every workspace's OpenAI key out of the settings document.
+ *
+ * The key used to live on `companySettings`, which every role in the workspace
+ * can read — a member, a viewer, a Workflow Only bench hand. It was moved to a
+ * server-only collection, but the move is LAZY: it happens the first time
+ * something asks for the key. A workspace that has never opened Quick Reply
+ * since, or has stopped using it, still carries the plaintext key in a document
+ * its whole team can read, and nothing was ever going to notice.
+ *
+ * So this walks the collection once and finishes the migration. It is paged by
+ * document id, which needs no index, and records where it stopped; after the
+ * last page it idles, costing one small read a day.
+ */
+exports.scheduledQuickReplyKeySweep = onSchedule({
+  schedule: "every 24 hours",
+  timeZone: "Europe/London",
+  region: "europe-west2"
+}, async () => {
+  const PAGE = 200;
+  const stateRef = admin.firestore().collection("quickReplyKeySweeps").doc("state");
+  const stateSnap = await stateRef.get();
+  const startAfterId = String(stateSnap.exists ? stateSnap.data()?.cursorDocId || "" : "");
+
+  let query = admin.firestore().collection("companySettings")
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(PAGE);
+  if (startAfterId) query = query.startAfter(startAfterId);
+  const page = await query.get();
+
+  let moved = 0;
+  let cleared = 0;
+  for (const doc of page.docs) {
+    const data = doc.data() || {};
+    const legacyKey = String(data.openAIKey || "").trim();
+    if (!legacyKey) continue;
+    const companyId = doc.id;
+    try {
+      const secretRef = quickReplySecretDocRef(companyId);
+      const existing = String((await secretRef.get()).data()?.openAIKey || "").trim();
+      if (!existing) {
+        await secretRef.set({
+          openAIKey: legacyKey,
+          companyId,
+          migratedFromLegacySettingsAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        moved += 1;
+      }
+      // Deleted whether or not it was moved: if the secret document already
+      // holds a key, the copy on the settings document is a duplicate that
+      // every member can read, which is the whole problem.
+      await doc.ref.set({
+        openAIKey: admin.firestore.FieldValue.delete(),
+        hasOpenAIKey: true,
+        quickReplySecretMigratedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      cleared += 1;
+    } catch (error) {
+      console.warn("quick reply key sweep failed for", companyId, error?.message || error);
+    }
+  }
+
+  const lastId = page.docs.length ? page.docs[page.docs.length - 1].id : "";
+  await stateRef.set({
+    // A short page is the end of the collection: start again next time so a
+    // workspace created later is reached too.
+    cursorDocId: page.docs.length < PAGE ? "" : lastId,
+    lastRunAtMs: Date.now(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  if (cleared) console.log("quickReplyKeySweep", { read: page.size, moved, cleared, cursorDocId: lastId });
+});
+
 async function quickReplyKnowledgeWithContributions(companyId, mainKnowledge) {
   const snapshot = await quickReplyContributionCollectionRef(companyId).limit(100).get();
   const additions = snapshot.docs.map((document) => {

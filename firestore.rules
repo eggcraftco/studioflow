@@ -1181,6 +1181,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The workspace's OpenAI key, and the file-share rows behind every public
+    // /f/ link. Both were reachable only through the catch-all before; saying
+    // so here means a rule written later for some other reason cannot widen
+    // them by accident. Server-only, both.
+    match /quickReplySecrets/{companyId} {
+      allow read, write: if false;
+    }
+
+    match /fileShares/{shareId} {
+      allow read, write: if false;
+    }
+
     // Registered OAuth clients, and the codes and tokens minted for them. The
     // client record is what decides where an authorization code may be sent, so
     // a client that could write it could point its own code anywhere. Nothing
