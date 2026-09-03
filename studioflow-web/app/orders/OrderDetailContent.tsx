@@ -32,7 +32,7 @@ import {
   type PortalVisibility
 } from "@/lib/studioflow/customerPortal";
 import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
   CLIENT_FILE_ACCEPT,
@@ -103,7 +103,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
-import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { formatStudioMoney, moneySymbol, parseAmountInput, type StudioMoneySettings } from "@/lib/studioflow/money";
 import {
   DEFAULT_PRODUCTION_STAGES,
   productionStagesFromSettings,
@@ -1926,6 +1926,10 @@ function useDetailT() {
   return (text: string) => studioT(text, language);
 }
 
+function useDetailLocale() {
+  return studioLocaleTag(useContext(DetailLanguageContext));
+}
+
 export function OrderDetailContent({
   order,
   workspace,
@@ -3664,7 +3668,9 @@ export function OrderDetailContent({
       return;
     }
 
-    const confirmed = window.confirm(`Delete "${file.fileName}" from this order? This cannot be undone.`);
+    const confirmed = window.confirm(
+      t("Delete \"{name}\" from this order? This cannot be undone.").replace("{name}", file.fileName)
+    );
     if (!confirmed) return;
 
     setActioningFileId(file.id);
@@ -4049,6 +4055,9 @@ export function OrderDetailContent({
   }
 
   async function deletePaymentEntry(paymentId: string) {
+    // A ledger row is money history: removing it changes the balance owed and
+    // there is no undo, so it gets the same guard as deleting a file.
+    if (!window.confirm(t("Delete this payment? This cannot be undone."))) return;
     await saveFinancePatch({ deletePaymentId: paymentId }, "Payment");
   }
 
@@ -7316,7 +7325,7 @@ export function OrderDetailContent({
                               <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 24 }, "Reminder")}>
                                 <span>◷</span> Snooze 1 day
                               </button>
-                              <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>
+                              <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => { if (!window.confirm(t("Delete this reminder? This cannot be undone."))) return; void saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder"); }}>
                                 <span>⌫</span> Delete
                               </button>
                             </div>
@@ -7779,7 +7788,7 @@ export function OrderDetailContent({
                                       <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("priority")}>
                                         <span>⚑</span>Priority
                                       </button>
-                                      <button className="is-danger" type="button" onClick={() => saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted")}>
+                                      <button className="is-danger" type="button" onClick={() => { if (!window.confirm(t("Delete this task? This cannot be undone."))) return; void saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted"); }}>
                                         <span>⌫</span>Delete
                                       </button>
                                     </>
@@ -10597,6 +10606,7 @@ function FinanceInlineRow({
   onRemove?: () => void;
 }) {
   const t = useDetailT();
+  const locale = useDetailLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
   const cancellingRef = useRef(false);
@@ -10607,13 +10617,28 @@ function FinanceInlineRow({
 
   async function submit() {
     if (disabled || saving) return;
-    const nextValue = mode === "number" ? parseFinanceNumber(draft) : draft;
-    if (mode === "number" && nextValue === null) {
+    if (mode === "number") {
+      // "1.250,50" and "1,250.50" both mean the same money; which one a person
+      // types depends on their language, not on the browser's number input.
+      const typed = draft.trim();
+      const parsed = typed ? parseAmountInput(typed, locale) : 0;
+      if (parsed === null) {
+        setEditing(false);
+        return;
+      }
+      if (parsed < 0) {
+        // Silently storing 0 made a mistyped "-50" look like it saved.
+        dispatchStudioToast({ message: t("Amounts can't be negative.") });
+        setDraft(String(value ?? ""));
+        setEditing(false);
+        return;
+      }
       setEditing(false);
+      await onSave(parsed);
       return;
     }
     setEditing(false);
-    if (nextValue !== null) await onSave(nextValue);
+    await onSave(draft);
   }
 
   function cancelEdit() {
@@ -10666,12 +10691,12 @@ function FinanceInlineRow({
       >
         <input
           className={["finance-inline-input", toneClass(tone)].filter(Boolean).join(" ")}
-          type="number"
-          min="0"
-          step="0.01"
+          type="text"
+          inputMode="decimal"
           autoFocus
           value={draft}
           disabled={saving}
+          onFocus={event => event.currentTarget.select()}
           onBlur={saveOnBlur}
           onChange={event => setDraft(event.target.value)}
           onKeyDown={event => {

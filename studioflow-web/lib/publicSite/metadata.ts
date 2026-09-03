@@ -51,7 +51,7 @@ const publicMetadata: Record<
     path: "/features"
   },
   pricing: {
-    title: "NivaDesk Pricing | Free, Lite, Pro & Team Plans",
+    title: "NivaDesk Pricing | Free, Starter, Pro & Team Plans",
     description:
       "Compare NivaDesk plans: start free, then Lite, Pro or Team as your studio grows. See order limits, client file storage, finance tools and team seats to find the right fit.",
     path: "/pricing"

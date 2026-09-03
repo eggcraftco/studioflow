@@ -9,6 +9,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   addMembersToMessageThread,
@@ -313,7 +314,7 @@ export default function MessagesPage() {
         }
       } catch {}
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not send message.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not send message."));
     } finally {
       setSending(false);
     }
@@ -324,7 +325,7 @@ export default function MessagesPage() {
     try {
       await editThreadMessage(workspace, selectedThread.id, messageId, newText);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not edit message.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not edit message."));
     }
   };
 
@@ -333,16 +334,17 @@ export default function MessagesPage() {
     try {
       await deleteMessageForMe(workspace, selectedThread.id, messageId);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not delete message.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not delete message."));
     }
   };
 
   const handleDeleteForEveryone = async (messageId: string) => {
     if (!workspace || !selectedThread) return;
+    if (!window.confirm(t("Delete this message for everyone? It disappears from everyone's conversation."))) return;
     try {
       await deleteMessageForEveryone(workspace, selectedThread.id, messageId);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not delete message.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not delete message."));
     }
   };
 
@@ -351,7 +353,7 @@ export default function MessagesPage() {
     try {
       await toggleMessageReaction(workspace, selectedThread.id, messageId, emoji, user.displayName ?? "");
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not react.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not react."));
     }
   };
 
@@ -361,7 +363,7 @@ export default function MessagesPage() {
       if (currentlyPinned) await unpinMessageInThread(workspace, selectedThread.id, messageId);
       else await pinMessageInThread(workspace, selectedThread.id, messageId);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not pin message.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not pin message."));
     }
   };
 
@@ -388,7 +390,7 @@ export default function MessagesPage() {
         }
       } catch {}
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not upload attachment.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not upload attachment."));
     } finally {
       setSending(false);
     }
@@ -471,7 +473,7 @@ export default function MessagesPage() {
 
   const handleDeleteConversationForMe = (threadId: string) => {
     if (!workspace || !user || threadId === "team") return;
-    if (!window.confirm("Delete this conversation from your list? It will reappear on all your devices if a new message is sent.")) return;
+    if (!window.confirm(t("Delete this conversation from your list? It will reappear on all your devices if a new message is sent."))) return;
     const nextDeleted = { ...deletedThreadMap, [threadId]: Date.now() };
     const nextArchive = { ...archiveMap };
     delete nextArchive[threadId];
@@ -511,7 +513,7 @@ export default function MessagesPage() {
       });
       setForwardMessage(null);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not forward.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not forward."));
     }
   };
 
@@ -526,7 +528,7 @@ export default function MessagesPage() {
       }
       setNewConvOpen(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not create conversation.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not create conversation."));
     }
   };
   const handleCreateGroup = async (memberUids: string[], title: string) => {
@@ -539,7 +541,7 @@ export default function MessagesPage() {
       }
       setNewConvOpen(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not create group.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not create group."));
     }
   };
   const handleRenameThread = async (newTitle: string) => {
@@ -548,7 +550,7 @@ export default function MessagesPage() {
       await renameMessageThread(workspace, selectedThread.id, newTitle);
       setRenameOpen(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not rename.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not rename."));
     }
   };
   const handleAddMembers = async (uids: string[]) => {
@@ -557,7 +559,7 @@ export default function MessagesPage() {
       await addMembersToMessageThread(workspace, selectedThread.id, uids);
       setAddMembersOpen(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not add members.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not add members."));
     }
   };
   const handleRemoveMember = async (memberUid: string) => {
@@ -566,7 +568,7 @@ export default function MessagesPage() {
     try {
       await removeMemberFromMessageThread(workspace, selectedThread.id, memberUid);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not remove member.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not remove member."));
     }
   };
 
@@ -577,7 +579,7 @@ export default function MessagesPage() {
       setInfoOpen(false);
       setSelectedThreadId("");
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not leave.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not leave."));
     }
   };
   const handleSetMute = async (mode: MessageMuteMode) => {
@@ -586,7 +588,7 @@ export default function MessagesPage() {
       await setMessageThreadMute(workspace, selectedThread.id, mode);
       setMuteMenuOpen(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Could not mute.");
+      setErrorMessage(friendlyErrorMessage(err, t) || t("Could not mute."));
     }
   };
 
@@ -743,7 +745,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
               </header>
-              {errorMessage && <div className="conversation-error">{errorMessage}</div>}
+              {errorMessage && <div className="conversation-error">{t(errorMessage)}</div>}
               {searchVisible && (
                 <div className="search-bar">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -918,7 +920,7 @@ export default function MessagesPage() {
               await setMessageWorkspaceSettings(workspace, s);
               setSettingsDialogOpen(false);
             } catch (err) {
-              setErrorMessage(err instanceof Error ? err.message : "Could not save settings.");
+              setErrorMessage(friendlyErrorMessage(err, t) || t("Could not save settings."));
             }
           }}
         />
@@ -1266,7 +1268,7 @@ function LinkPreviewCard({ url }: { url: string }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={favicon} alt="" width={28} height={28} style={{ borderRadius: 6, background: "white", padding: 2, border: "1px solid #e5e7eb" }} />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#1f2937", lineHeight: 1.2 }}>{host}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>{host}</span>
         <span style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{url}</span>
       </div>
     </a>
@@ -2118,15 +2120,15 @@ function relativeTime(ms: number): string {
 function MessagesStyles() {
   return (
     <style jsx global>{`
-      .messages-shell { display: flex; height: calc(100vh - 64px); background: #f6f7f9; }
-      .thread-panel { width: 320px; flex-shrink: 0; background: #fff; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
-      .thread-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e5e7eb; }
-      .thread-panel__header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+      .messages-shell { display: flex; height: calc(100vh - 64px); background: var(--background); color: var(--text); }
+      .thread-panel { width: 320px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+      .thread-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); }
+      .thread-panel__header h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--text); }
       .badge-pill { background: #ef4444; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
       .thread-panel__empty { padding: 32px 16px; color: #6b7280; font-size: 13px; text-align: center; }
       .thread-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
-      .thread-row { width: 100%; text-align: left; background: transparent; border: none; padding: 12px 14px; display: flex; gap: 10px; align-items: center; cursor: pointer; border-bottom: 1px solid #f3f4f6; }
-      .thread-row:hover { background: #f9fafb; }
+      .thread-row { width: 100%; text-align: left; background: transparent; border: none; padding: 12px 14px; display: flex; gap: 10px; align-items: center; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text); }
+      .thread-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
       .thread-row--selected { background: rgba(37,99,235,0.08); }
       .thread-row__body { flex: 1; min-width: 0; }
       .thread-row__line { display: flex; align-items: center; gap: 6px; }
@@ -2134,19 +2136,19 @@ function MessagesStyles() {
       .thread-row__title.unread { font-weight: 800; }
       .thread-row__time { font-size: 11px; color: #6b7280; }
       .thread-row__preview { flex: 1; font-size: 13px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .thread-row__preview.unread { color: #111827; font-weight: 600; }
+      .thread-row__preview.unread { color: var(--text); font-weight: 600; }
       .thread-row__dot { width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
       .avatar-circle { width: 40px; height: 40px; border-radius: 50%; background: rgba(37,99,235,0.15); color: #2563eb; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-      .conversation-panel { flex: 1; display: flex; flex-direction: column; background: #fff; }
-      .conversation-panel__header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
-      .conversation-panel__header h2 { margin: 0; font-size: 18px; font-weight: 800; }
+      .conversation-panel { flex: 1; display: flex; flex-direction: column; background: var(--surface); color: var(--text); }
+      .conversation-panel__header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+      .conversation-panel__header h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text); }
       .conversation-panel__header p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
       .conversation-panel__empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #6b7280; }
       .conversation-panel__body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
       .conversation-error { background: #fee2e2; color: #991b1b; padding: 8px 16px; font-size: 12px; }
-      .conversation-panel__footer { padding: 12px 20px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px; }
+      .conversation-panel__footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
       .composer { display: flex; gap: 8px; align-items: flex-end; }
-      .composer textarea { flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; min-height: 40px; max-height: 140px; }
+      .composer textarea { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; min-height: 40px; max-height: 140px; background: var(--panel); color: var(--text); }
       .composer__send { background: #2563eb; color: white; border: none; border-radius: 10px; padding: 0 18px; height: 40px; font-weight: 700; cursor: pointer; }
       .composer__send:disabled { opacity: 0.45; cursor: not-allowed; }
       .reply-chip { display: flex; gap: 8px; align-items: center; background: rgba(37,99,235,0.08); padding: 6px 10px; border-radius: 8px; }
@@ -2167,18 +2169,18 @@ function MessagesStyles() {
       .bubble__meta { font-size: 10px; color: #6b7280; }
       .bubble__kebab { position: absolute; top: 4px; right: 4px; opacity: 0; background: rgba(255,255,255,0.85); border: none; border-radius: 4px; padding: 0 6px; cursor: pointer; color: #6b7280; line-height: 1.4; font-size: 16px; }
       .bubble:hover .bubble__kebab { opacity: 1; }
-      .bubble-menu { position: absolute; top: 28px; right: 4px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 160px; z-index: 10; }
+      .bubble-menu { position: absolute; top: 28px; right: 4px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 160px; z-index: 10; }
       .bubble-menu button { background: transparent; border: none; text-align: left; padding: 8px 12px; font-size: 13px; cursor: pointer; }
       .bubble-menu button:hover { background: #f3f4f6; }
       .reply-quote { background: rgba(0,0,0,0.04); border-left: 3px solid #2563eb; border-radius: 6px; padding: 4px 8px; }
       .reply-quote__sender { font-size: 11px; font-weight: 700; color: #2563eb; }
       .reply-quote__preview { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-      .dialog-card { background: white; border-radius: 14px; padding: 20px; min-width: 320px; max-width: 480px; }
+      .dialog-card { background: var(--surface); color: var(--text); border-radius: 14px; padding: 20px; min-width: 320px; max-width: 480px; }
       .dialog-card h3 { margin: 0 0 12px; font-size: 16px; font-weight: 800; }
-      .dialog-card textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
+      .dialog-card textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; background: var(--panel); color: var(--text); }
       .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-      .dialog-actions button { padding: 8px 16px; border-radius: 8px; border: 1px solid #d1d5db; background: white; cursor: pointer; font-weight: 600; }
+      .dialog-actions button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 600; }
       .dialog-actions button.primary { background: #2563eb; color: white; border-color: #2563eb; }
       .dialog-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
       .pinned-bar { padding: 8px 16px; background: rgba(37,99,235,0.06); border-bottom: 1px solid #e5e7eb; display: flex; gap: 12px; align-items: center; overflow-x: auto; }
@@ -2201,7 +2203,7 @@ function MessagesStyles() {
       .bubble__pin { margin-right: 4px; }
       .composer__attach { background: transparent; border: 1px solid #d1d5db; border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; }
       .composer__attach:disabled { opacity: 0.45; cursor: not-allowed; }
-      .mention-picker { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+      .mention-picker { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
       .mention-picker button { display: flex; align-items: center; gap: 8px; background: transparent; border: none; padding: 6px 10px; cursor: pointer; text-align: left; border-radius: 6px; }
       .mention-picker button:hover { background: #f3f4f6; }
       .mention-picker__avatar { width: 24px; height: 24px; border-radius: 50%; background: rgba(37,99,235,0.15); color: #2563eb; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; }
@@ -2209,14 +2211,14 @@ function MessagesStyles() {
       .mention-picker__email { font-size: 11px; color: #6b7280; }
       .new-conv-btn { width: 28px; height: 28px; border-radius: 50%; border: none; background: #2563eb; color: white; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
       .header-actions { display: flex; gap: 4px; align-items: center; }
-      .header-icon-btn { background: transparent; border: 1px solid transparent; border-radius: 8px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #374151; }
+      .header-icon-btn { background: transparent; border: 1px solid transparent; border-radius: 8px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); }
       .header-icon-btn:hover { background: #f3f4f6; }
       .header-icon-btn.active { background: rgba(37,99,235,0.12); border-color: rgba(37,99,235,0.3); color: #2563eb; }
-      .header-menu { position: absolute; top: 36px; right: 0; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 200px; z-index: 20; }
+      .header-menu { position: absolute; top: 36px; right: 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 200px; z-index: 20; }
       .header-menu button { background: transparent; border: none; text-align: left; padding: 8px 14px; font-size: 13px; cursor: pointer; }
       .header-menu button:hover { background: #f3f4f6; }
-      .search-bar { padding: 10px 16px; border-bottom: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px; }
-      .search-bar input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+      .search-bar { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+      .search-bar input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--panel); color: var(--text); }
       .filter-chips { display: flex; gap: 6px; }
       .filter-chip { background: #f3f4f6; border: 1px solid transparent; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
       .filter-chip.active { background: rgba(37,99,235,0.12); border-color: #2563eb; color: #2563eb; font-weight: 600; }
@@ -2224,7 +2226,7 @@ function MessagesStyles() {
       .archived-header { padding: 0; }
       .archived-header button { width: 100%; background: transparent; border: none; padding: 8px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; cursor: pointer; }
       .archived-header button:hover { background: #f9fafb; }
-      .thread-row__menu { position: absolute; top: 36px; right: 12px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 10; }
+      .thread-row__menu { position: absolute; top: 36px; right: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 10; }
       .thread-row__menu button { background: transparent; border: none; padding: 8px 14px; cursor: pointer; font-size: 13px; }
       .thread-row__menu button:hover { background: #f3f4f6; }
       .dialog-card--wide { min-width: 420px; max-width: 540px; }
@@ -2242,7 +2244,7 @@ function MessagesStyles() {
       .setting-row input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; cursor: pointer; }
       @media (max-width: 768px) {
         .messages-shell { flex-direction: column; }
-        .thread-panel { width: 100%; border-right: none; border-bottom: 1px solid #e5e7eb; flex: 1; }
+        .thread-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex: 1; }
         .messages-shell.phone-show-list .conversation-panel { display: none; }
         .messages-shell.phone-show-conv .thread-panel { display: none; }
         .messages-shell.phone-show-conv .conversation-panel { flex: 1; }

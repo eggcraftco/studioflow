@@ -10,6 +10,31 @@ const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
 // reload (module state does not survive navigation).
 const LAST_TOKEN_KEY = "pushDeviceTokenLastSavedV1";
 const LAST_COMPANY_KEY = "pushDeviceTokenCompanyLastSavedV1";
+// Whether this browser has ever been shown the notification prompt. Asking on
+// every page load is how a browser decides to block the site for good.
+const PROMPTED_KEY = "nivadesk.pushPrompted";
+
+function alreadyPrompted(): boolean {
+  try {
+    return window.localStorage.getItem(PROMPTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberPrompted(): void {
+  try {
+    window.localStorage.setItem(PROMPTED_KEY, "1");
+  } catch {
+    /* private mode — the prompt guard simply falls back to per-page */
+  }
+}
+
+/** True when the drawer should offer its own "Enable notifications" button. */
+export function webPushPermissionState(): NotificationPermission | "unsupported" {
+  if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  return Notification.permission;
+}
 
 export type WebPushStatus =
   | "ok"
@@ -42,6 +67,7 @@ function sanitizeTokenForDocId(token: string): string {
 export async function registerWebPush(
   workspace: WorkspaceContext,
   user: { uid: string; email?: string | null },
+  options: { requestPermission?: boolean } = {},
 ): Promise<WebPushStatus> {
   try {
     if (!workspace.id || !user.uid) return "error";
@@ -60,8 +86,26 @@ export async function registerWebPush(
     const registrationKey = `${workspace.id}|${user.uid}`;
     if (registeredFor === registrationKey) return "ok";
 
-    // Ask permission if needed.
+    // Switching workspace leaves this browser's token enabled under the old one,
+    // so it keeps receiving that workspace's pushes. Remove it first — while the
+    // reader is still a member there, which is what the rule requires.
+    try {
+      const previousCompanyId = window.localStorage.getItem(LAST_COMPANY_KEY) ?? "";
+      const previousToken = window.localStorage.getItem(LAST_TOKEN_KEY) ?? "";
+      if (previousToken && previousCompanyId && previousCompanyId !== workspace.id) {
+        await deleteDoc(doc(db, "companies", previousCompanyId, "deviceTokens", sanitizeTokenForDocId(previousToken)));
+        window.localStorage.removeItem(LAST_TOKEN_KEY);
+        window.localStorage.removeItem(LAST_COMPANY_KEY);
+      }
+    } catch (cleanupError) {
+      console.warn("[push] could not remove the previous workspace token:", cleanupError);
+    }
+
+    // Ask permission at most once per browser. After that the only thing that
+    // may ask again is the reader pressing "Enable notifications" themselves.
     if (Notification.permission === "default") {
+      if (!options.requestPermission && alreadyPrompted()) return "permission_denied";
+      rememberPrompted();
       const result = await Notification.requestPermission();
       if (result !== "granted") return "permission_denied";
     }

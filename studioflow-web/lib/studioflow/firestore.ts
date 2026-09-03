@@ -919,9 +919,37 @@ export function roleLabel(role: string) {
   }
 }
 
+/** True for the one failure that means "you may not read this", not "it broke". */
+function isPermissionError(error: unknown): boolean {
+  const code = String((error as { code?: unknown } | null)?.code ?? "").toLowerCase();
+  if (code.includes("permission-denied")) return true;
+  const message = String((error as { message?: unknown } | null)?.message ?? "").toLowerCase();
+  return message.includes("missing or insufficient permissions") || message.includes("permission-denied");
+}
+
 async function readWorkspaceDocument(companyId: string) {
-  const snapshot = await getDoc(doc(db, "companies", companyId));
-  return snapshot.exists() ? snapshot : null;
+  // A member of someone else's workspace has no company document of their own,
+  // and the rules answer that read with a refusal rather than an empty result.
+  // Letting it throw took the whole page down ("Could not load orders") for a
+  // person who was allowed to see every order in it.
+  try {
+    const snapshot = await getDoc(doc(db, "companies", companyId));
+    return snapshot.exists() ? snapshot : null;
+  } catch (error) {
+    if (isPermissionError(error)) return null;
+    throw error;
+  }
+}
+
+/** The reader's own user document, or an empty record when it cannot be read. */
+async function readOwnUserDocument(uid: string) {
+  try {
+    const snapshot = await getDoc(doc(db, "users", uid));
+    return snapshot.exists() ? snapshot.data() : {};
+  } catch (error) {
+    if (isPermissionError(error)) return {};
+    throw error;
+  }
 }
 
 export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContext> {
@@ -929,11 +957,10 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
   // parallel. Most accounts have activeCompanyId === uid, so this saves a full
   // network round trip; members of someone else's workspace fall back to one
   // extra read below.
-  const [userSnapshot, ownWorkspaceSnapshot] = await Promise.all([
-    getDoc(doc(db, "users", uid)),
+  const [userData, ownWorkspaceSnapshot] = await Promise.all([
+    readOwnUserDocument(uid),
     readWorkspaceDocument(uid)
   ]);
-  const userData = userSnapshot.exists() ? userSnapshot.data() : {};
   let companyId = stringValue(userData.activeCompanyId, uid);
 
   let companySnapshot = companyId === uid ? ownWorkspaceSnapshot : await readWorkspaceDocument(companyId);

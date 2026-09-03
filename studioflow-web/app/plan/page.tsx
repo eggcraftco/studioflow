@@ -290,10 +290,10 @@ export default function PlanPage() {
               <div className="pill">Current plan</div>
               <h2 style={{ margin: "12px 0 6px", fontSize: 30 }}>{workspace.billingPlanName}</h2>
               <p style={{ color: "var(--muted)", marginTop: 0 }}>
-                Workspace: <strong>{workspace.name}</strong> · Role: <strong>{workspace.roleLabel}</strong> · Source: <strong>{workspace.billingPlanSource}</strong>
+                Workspace: <strong>{workspace.name}</strong> · Role: <strong>{workspace.roleLabel}</strong> · Source: <strong>{planSourceLabel(workspace.billingPlanSource)}</strong>
               </p>
               <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginTop: 18 }}>
-                <MiniMetric title="Status" value={workspace.billingStatus} note={workspace.billingProviderRawStatus || "Workspace billing state"} />
+                <MiniMetric title="Status" value={billingStatusLabel(workspace.billingStatus)} note="Workspace billing state" />
                 <MiniMetric title="Orders" value={String(counts.orderCount)} note="Existing data" />
                 <MiniMetric
                   title={workspace.entitlements.features.team_access ? "Current seat allowance" : "Users"}
@@ -347,7 +347,7 @@ export default function PlanPage() {
                   <div className="progress-fill" style={{ width: storagePercent + "%" }} />
                 </div>
                 <p style={{ color: "var(--muted)", marginBottom: 0, fontSize: 13 }}>
-                  This estimate uses file metadata from loaded orders. Server-side recalculation can be connected later.
+                  This estimate uses file metadata from loaded orders.
                 </p>
               </article>
             ) : (
@@ -368,7 +368,7 @@ export default function PlanPage() {
                 <div className="pill">Important rule</div>
                 <h2 style={{ margin: "12px 0 6px" }}>Expired subscriptions fall back to Free/Demo</h2>
                 <p style={{ color: "var(--muted)", margin: 0, maxWidth: 760 }}>
-                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free access. Existing orders, customers and permitted basic data remain viewable and exportable.
+                  If a Starter, Pro or Team subscription expires, the workspace falls back to Free access. Existing orders, customers and permitted basic data remain viewable and exportable.
                 </p>
                 <p style={{ color: "var(--muted)", margin: "10px 0 0", maxWidth: 760, fontSize: 13 }}>
                   Client Files and message attachment files require an active eligible paid plan. When paid access ends, opening, previewing, downloading, uploading and deleting those cloud files stops at the end of the billing period. Download files you need before your subscription ends. Stored files may be retained for up to 90 days to restore access if you resubscribe.
@@ -449,9 +449,6 @@ export default function PlanPage() {
           <section className="card" style={{ padding: 22, marginBottom: 18 }}>
             <div className="pill">Feature matrix</div>
             <h2 style={{ margin: "12px 0 6px" }}>What each plan unlocks</h2>
-            <p style={{ color: "var(--muted)", marginTop: 0 }}>
-              These keys should stay shared between the app, web portal and Firebase plan guards.
-            </p>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -600,6 +597,34 @@ export default function PlanPage() {
       ) : null}
     </AppShell>
   );
+}
+
+/** "legacy_default", "shopify_subscription" — machine words, not a sentence. */
+function planSourceLabel(source: string) {
+  const normalized = String(source || "").trim().toLowerCase();
+  if (!normalized) return "Included with plan";
+  if (normalized.includes("legacy") || normalized.includes("default")) return "Included with plan";
+  if (normalized.includes("trial")) return "Trial";
+  if (normalized.includes("shopify")) return "Shopify";
+  if (normalized.includes("apple")) return "App Store";
+  if (normalized.includes("google")) return "Google Play";
+  if (normalized.includes("stripe") || normalized.includes("subscription")) return "Subscription";
+  return normalized.replace(/[_-]+/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+/** "trialing", "past_due" — the billing provider's vocabulary, not the reader's. */
+function billingStatusLabel(status: string) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized) return "Not active";
+  if (normalized === "trialing" || normalized === "trial") return "Trial";
+  if (normalized === "active") return "Active";
+  if (normalized === "past_due") return "Payment overdue";
+  if (normalized === "canceled" || normalized === "cancelled") return "Cancelled";
+  if (normalized === "incomplete" || normalized === "incomplete_expired") return "Not completed";
+  if (normalized === "unpaid") return "Unpaid";
+  if (normalized === "paused") return "Paused";
+  if (normalized === "none" || normalized === "free") return "Free";
+  return normalized.replace(/[_-]+/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 function MiniMetric({ title, value, note }: { title: string; value: string; note: string }) {

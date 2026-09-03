@@ -217,7 +217,7 @@ export default function QuickReplyPage() {
     setCopied(false);
 
     if (replyMode === "Apple") {
-      setGeneratedText("Apple On-Device AI is only available inside the Swift app on Apple Intelligence-capable devices.\n\nYou can switch to OpenAI Online or Offline Template in Settings > Quick Reply Settings to generate replies on web.");
+      setGeneratedText(t("Apple On-Device AI is only available in the NivaDesk Mac and iPhone apps on Apple Intelligence-capable devices.\n\nYou can switch to OpenAI Online or Offline Template in Settings > Quick Reply Settings to generate replies on web."));
       return;
     }
 
@@ -293,7 +293,7 @@ export default function QuickReplyPage() {
                 </div>
               </div>
             </div>
-            <p className="muted-copy">{canSaveReplyStyle ? t("These controls sync with Quick Reply Settings across web, Mac, iPad and iPhone.") : t("These controls change this draft only for your current workspace role.")}</p>
+            <p className="muted-copy">{canSaveReplyStyle ? t("These controls sync with Quick Reply Settings across web, Mac, iPad, iPhone and Android.") : t("These controls change this draft only for your current workspace role.")}</p>
             {styleStatus ? <p className="success-copy">{t(styleStatus)}</p> : null}
             {styleError ? <p className="layout-error">{t(styleError)}</p> : null}
           </section>

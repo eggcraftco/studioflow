@@ -57,15 +57,10 @@ export function ItemPhotosModal({
   }, [paths]);
 
   async function persist(next: string[]) {
-    // Only the photos move; every other field rides through untouched because
-    // the server keeps what the form does not send.
-    await saveInventoryItem(workspace, {
-      name: item.name,
-      category: item.category,
-      trackingType: item.trackingType,
-      ownership: item.ownership,
-      photos: next
-    } as never, item.id);
+    // The server rebuilds the item from what it is sent, so a partial payload
+    // silently wipes cost, supplier, serial and the rest. Send the whole item
+    // back with only the photo list changed.
+    await saveInventoryItem(workspace, { ...item, photos: next } as never, item.id);
   }
 
   async function add(files: FileList | null) {

@@ -221,7 +221,10 @@ export function ClientDomainSection({
                       }, "Checked.")}>
                         {isVerifying ? t("Verifying...") : t("Check again")}
                       </button>
-                      <button className="button danger secondary" type="button" disabled={busy} onClick={() => void run(() => removeClientDomain(workspace, domain.host), "Domain removed.")}>
+                      <button className="button danger secondary" type="button" disabled={busy} onClick={() => {
+                        if (!window.confirm(t("Remove {host}? Links already sent on that address stop working.").replace("{host}", domain.host))) return;
+                        void run(() => removeClientDomain(workspace, domain.host), "Domain removed.");
+                      }}>
                         {t("Remove")}
                       </button>
                     </span>

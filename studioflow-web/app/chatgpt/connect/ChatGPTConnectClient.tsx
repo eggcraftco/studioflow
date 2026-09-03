@@ -6,6 +6,7 @@ import { doc, getDoc, getDocs, limit, query, where, collection } from "firebase/
 import { auth, db, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 
 type WorkspaceOption = {
   id: string;
@@ -171,7 +172,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Could not sign in.");
+      setError(friendlyErrorMessage(loginError, t) || t("Could not sign in."));
     } finally {
       setSubmitting(false);
     }
@@ -183,7 +184,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Could not sign in with Google.");
+      setError(friendlyErrorMessage(loginError, t) || t("Could not sign in with Google."));
     } finally {
       setSubmitting(false);
     }

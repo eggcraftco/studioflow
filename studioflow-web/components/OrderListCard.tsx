@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { CardIconGlyph } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import type { BlockHeadingSettings, HeadingItem } from "@/lib/studioflow/blockHeadings";
+import { studioT } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 
 export type OrderListCardItem = {
@@ -168,13 +169,19 @@ function statusTone(value: string) {
   return "warning";
 }
 
-function shortStepTitle(stepName: string) {
-  const normalized = stepName.trim().toLowerCase();
-  if (normalized === "design" || normalized === "desi" || normalized === "tasarım") return "DESI";
-  if (normalized === "painting" || normalized === "paint" || normalized === "boya" || normalized === "boyama") return "BOYA";
-  const cleaned = stepName.replaceAll("/", " ").replaceAll("&", " ").trim();
-  const firstWord = cleaned.split(/\s+/)[0] || "ST";
-  return firstWord.slice(0, 4).toUpperCase();
+/**
+ * The chip over a step's status. It used to map a couple of English names onto
+ * Turkish abbreviations ("BOYA", "DESI"), which read as noise in every other
+ * language — including English. It now shortens whatever the step is actually
+ * called in the reader's language: the first three letters of a single word,
+ * or the initials of a multi-word title.
+ */
+function shortStepTitle(stepTitle: string) {
+  const cleaned = stepTitle.replaceAll("/", " ").replaceAll("&", " ").trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "ST";
+  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+  return words.slice(0, 3).map(word => word.slice(0, 1)).join("").toUpperCase();
 }
 
 function localizedCardStatus(value: string, language: string | null | undefined) {
@@ -481,10 +488,11 @@ export function OrderListCard({
 function OrderStatusBadge({ stepName, value, language }: { stepName: string; value: string; language?: string }) {
   const displayValue = value.trim() || "Not Yet";
   const tone = statusTone(displayValue);
+  const stepTitle = studioT(stepName, language);
   return (
-    // "DESI"/"BOYA" mean nothing to a new user — hovering spells the step out.
-    <span className="order-status-badge-row" title={`${stepName}: ${localizedCardStatus(displayValue, language)}`}>
-      <span className="order-status-abbrev">{shortStepTitle(stepName)}</span>
+    // The chip is only three letters, so hovering still spells the step out.
+    <span className="order-status-badge-row" title={`${stepTitle}: ${localizedCardStatus(displayValue, language)}`}>
+      <span className="order-status-abbrev">{shortStepTitle(stepTitle)}</span>
       <span className={`order-status-value ${tone}`}>{localizedCardStatus(displayValue, language)}</span>
     </span>
   );

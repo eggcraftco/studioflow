@@ -23,7 +23,8 @@ import {
   type PurchaseInput
 } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { parseAmountInput } from "@/lib/studioflow/money";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
 type DraftLine = {
@@ -66,10 +67,9 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const num = (value: string) => {
-  const parsed = Number(String(value).replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+// A price typed as "1.250,50" (or "12,5") is the same money as "1250.50";
+// stripping the comma out turned it into 125050.
+const num = (value: string, locale = "en-GB") => parseAmountInput(String(value ?? ""), locale) ?? 0;
 
 export function PurchasesPanel({
   workspace,
@@ -137,8 +137,10 @@ export function PurchasesPanel({
   async function removePurchase(purchase: Purchase) {
     const count = purchase.itemIds?.length || 0;
     const warning = count > 0
-      ? `Delete ${purchase.number}? The ${count} incoming item${count === 1 ? "" : "s"} it created will go with it.`
-      : `Delete ${purchase.number}?`;
+      ? t("Delete {number}? The {count} incoming items it created will go with it.")
+          .replace("{number}", purchase.number)
+          .replace("{count}", String(count))
+      : t("Delete {number}?").replace("{number}", purchase.number);
     if (!window.confirm(warning)) return;
     setBusyId(purchase.id);
     try {
@@ -355,6 +357,7 @@ function NewPurchaseModal({
   const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  const locale = studioLocaleTag(language);
   const [supplierName, setSupplierName] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(today());
   const [reference, setReference] = useState("");
@@ -366,10 +369,10 @@ function NewPurchaseModal({
   const [error, setError] = useState("");
 
   const goods = useMemo(
-    () => lines.reduce((sum, line) => sum + num(line.unitPrice) * num(line.quantity), 0),
-    [lines]
+    () => lines.reduce((sum, line) => sum + num(line.unitPrice, locale) * num(line.quantity, locale), 0),
+    [lines, locale]
   );
-  const extras = num(shipping) + num(otherCosts);
+  const extras = num(shipping, locale) + num(otherCosts, locale);
   const total = goods + extras;
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
@@ -384,7 +387,7 @@ function NewPurchaseModal({
   }
 
   async function submit() {
-    const usable = lines.filter(line => line.name.trim() && num(line.quantity) > 0);
+    const usable = lines.filter(line => line.name.trim() && num(line.quantity, locale) > 0);
     if (usable.length === 0) {
       setError(t("Add at least one line with a name and a quantity."));
       return;
@@ -396,15 +399,15 @@ function NewPurchaseModal({
       purchaseDate,
       reference: reference.trim(),
       notes: notes.trim(),
-      shipping: num(shipping),
-      otherCosts: num(otherCosts),
+      shipping: num(shipping, locale),
+      otherCosts: num(otherCosts, locale),
       lines: usable.map(line => ({
         name: line.name.trim(),
         category: line.category,
         trackingType: line.trackingType,
-        quantity: num(line.quantity),
+        quantity: num(line.quantity, locale),
         unit: line.unit.trim(),
-        unitPrice: num(line.unitPrice),
+        unitPrice: num(line.unitPrice, locale),
         reference: line.reference.trim(),
         serialNumber: line.serialNumber.trim(),
         location: line.location.trim()
@@ -608,6 +611,7 @@ function ReceiveLinesModal({
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  const locale = studioLocaleTag(language);
   const [amounts, setAmounts] = useState<Record<number, string>>({});
   const [checked, setChecked] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -627,7 +631,7 @@ function ReceiveLinesModal({
         if (checked[row.index]) payload.push({ index: row.index });
         continue;
       }
-      const wanted = num(amounts[row.index] ?? "");
+      const wanted = num(amounts[row.index] ?? "", locale);
       if (wanted <= 0) continue;
       if (wanted > row.remaining) {
         setError(`"${row.line.name}" — ${t("that is more than is still outstanding.")}`);

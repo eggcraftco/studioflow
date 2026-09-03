@@ -29,6 +29,7 @@ import {
 } from "@/components/home/HomeCardBodies";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
@@ -109,6 +110,9 @@ export default function HomePage() {
    *  browser's own auto-placement gets it right in the meantime. */
   const [columnCount, setColumnCount] = useState<number | null>(null);
   const [saveError, setSaveError] = useState("");
+  // A failed workspace read used to leave Home spinning for ever.
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [workspaceAttempt, setWorkspaceAttempt] = useState(0);
   // The layout as the server last accepted it, so a failed save can be undone.
   const lastSaved = useRef<HomeLayout | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -143,15 +147,22 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    setWorkspaceError("");
     (async () => {
-      const context = await loadWorkspaceContext(user.uid);
-      if (cancelled) return;
-      setWorkspace(context);
-      const overview = await loadWorkspaceSettingsOverview(context.id).catch(() => null);
-      if (!cancelled && overview) setSettings(overview);
+      try {
+        const context = await loadWorkspaceContext(user.uid);
+        if (cancelled) return;
+        setWorkspace(context);
+        const overview = await loadWorkspaceSettingsOverview(context.id).catch(() => null);
+        if (!cancelled && overview) setSettings(overview);
+      } catch (loadError) {
+        // Translated at render — `t` changes identity every render and cannot
+        // sit in this effect's dependency list.
+        if (!cancelled) setWorkspaceError(loadError instanceof Error ? loadError.message : "Your workspace could not be loaded.");
+      }
     })();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, workspaceAttempt]);
 
   useEffect(() => {
     if (!workspace?.id) return;
@@ -277,6 +288,20 @@ export default function HomePage() {
     [router],
   );
 
+  if (!authLoading && user && !workspace && workspaceError) {
+    return (
+      <AppShell>
+        <section className="card app-card" style={{ maxWidth: 520, margin: "40px auto", textAlign: "center" }}>
+          <h2 style={{ margin: "0 0 8px" }}>{t("Your workspace could not be loaded.")}</h2>
+          <p className="muted-copy" style={{ margin: "0 0 16px" }}>{friendlyErrorMessage(workspaceError, t)}</p>
+          <button type="button" className="button" onClick={() => setWorkspaceAttempt(attempt => attempt + 1)}>
+            {t("Try again")}
+          </button>
+        </section>
+      </AppShell>
+    );
+  }
+
   if (authLoading || !user || !workspace) return <LoadingScreen />;
 
   const staleMs = data.lastLoadedAtMs ? Date.now() - data.lastLoadedAtMs : 0;
@@ -380,7 +405,15 @@ export default function HomePage() {
         {customising ? (
           <div className="home-customise-bar">
             <p>{t("Drag cards to rearrange. Use a card's menu to resize, recolour, rename or hide it.")}</p>
-            <button type="button" onClick={() => void commit(defaultHomeLayout())}>{t("Reset layout")}</button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm(t("Reset the Home layout? Your card sizes, colours and names go back to the defaults."))) return;
+                void commit(defaultHomeLayout());
+              }}
+            >
+              {t("Reset layout")}
+            </button>
           </div>
         ) : null}
 

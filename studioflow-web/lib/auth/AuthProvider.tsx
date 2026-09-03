@@ -27,6 +27,11 @@ function cachedLanguage(): string {
     return "";
   }
 }
+/** The app language as this device last saw it — for modules outside React. */
+export function deviceStudioLanguage(): string {
+  return cachedLanguage() || "English";
+}
+
 function rememberLanguage(language: string) {
   try {
     if (language && language.trim()) localStorage.setItem(LANGUAGE_CACHE_KEY, language.trim());

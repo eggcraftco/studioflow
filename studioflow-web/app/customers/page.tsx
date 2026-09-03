@@ -570,6 +570,14 @@ export default function CustomersPage() {
     event.preventDefault();
     if (!workspace || !formMode) return;
 
+    // A blank name used to be saved as the literal "New Project", which reads
+    // like a real customer and cannot be searched for.
+    if (!form.name.trim()) {
+      setActionStatus("");
+      setActionError("Enter a customer name first.");
+      return;
+    }
+
     setSavingCustomer(true);
     setActionStatus(formMode === "create" ? "Creating customer..." : "Saving customer...");
     setActionError("");
@@ -617,7 +625,10 @@ export default function CustomersPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete "${customerDisplayName(customer.name)}" from Customers? Related orders will stay in Orders, but their customer name will reset to "New Project".`);
+    const confirmed = window.confirm(
+      t("Delete \"{name}\" from Customers? Related orders will stay in Orders, but their customer name will reset to \"New Project\".")
+        .replace("{name}", customerDisplayName(customer.name))
+    );
     if (!confirmed) return;
 
     setSavingCustomer(true);

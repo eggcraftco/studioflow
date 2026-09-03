@@ -423,6 +423,24 @@ export function seatsForTeamSize(size: OnboardingTeamSize) {
 }
 
 /**
+ * The currency the app actually formats money with lives in `seciliParaBirimi`
+ * and is a SYMBOL. The wizard only ever wrote `selectedCurrency`, which nothing
+ * reads, so every price stayed on the default pound whatever was chosen here.
+ */
+const CURRENCY_SYMBOL_BY_CODE: Record<string, string> = {
+  GBP: "£", USD: "$", EUR: "€", TRY: "₺", JPY: "¥", INR: "₹", CNY: "¥",
+  RUB: "₽", BRL: "R$", AUD: "A$", CAD: "C$", NZD: "NZ$", CHF: "CHF",
+  SEK: "kr", NOK: "kr", DKK: "kr", PLN: "zł", AED: "د.إ", SAR: "﷼",
+};
+
+/** An ISO code becomes its symbol; anything else (already a symbol) is kept. */
+export function currencySymbolForOnboardingChoice(value: string): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return trimmed;
+  return CURRENCY_SYMBOL_BY_CODE[trimmed.toUpperCase()] ?? trimmed;
+}
+
+/**
  * Saves the wizard's answers, and the things they change.
  *
  * Two documents on purpose: the workspace SETTINGS carry everything that shapes
@@ -441,6 +459,8 @@ export async function saveOnboardingAnswers(
       ...presetPayload,
       selectedCountry: answers.country,
       selectedCurrency: answers.currency,
+      // The one the app reads.
+      seciliParaBirimi: currencySymbolForOnboardingChoice(answers.currency),
       selectedLanguage: answers.language,
       selectedTimeZone: answers.timeZone,
       onboardingWorkKinds: answers.workKinds,
