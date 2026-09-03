@@ -613,6 +613,32 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
     var todoItems: [OrderToDoItem]?
     var workSessions: [OrderWorkSessionItem]?
     var payments: [PaymentEntry]?
+    // Everything below was missing, so an order edited in aeroplane mode came
+    // back without its invoice lines, delivery address, repair record, estimate
+    // or portal link — and the queue then replayed that emptiness to the server.
+    // All optional, so a cache file written by an older build still decodes.
+    var lineItems: [LineItem]?
+    var invoiceNote: String?
+    var shippingName: String?
+    var shippingStreetAddress: String?
+    var shippingCity: String?
+    var shippingPostalCode: String?
+    var shippingCountry: String?
+    var shippingPhone: String?
+    var orderType: String?
+    var repairIntake: RepairIntake?
+    var estimates: [OrderEstimateSummary]?
+    var estimateStatus: String?
+    var portalToken: String?
+    var portalTokenId: String?
+    var portalVisibility: CustomerPortalVisibility?
+    var portalAutoUpdates: CustomerPortalAutoUpdates?
+    var productionStageOverride: String?
+    var productionBlocker: OrderProductionBlocker?
+    var assignedToUid: String?
+    var assignedToEmail: String?
+    var isDeleted: Bool?
+    var deletedAt: Date?
 
     var invoiceNumber: String = ""
 
@@ -664,6 +690,28 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         workSessions = siparis.workSessions
         payments = siparis.payments
         invoiceNumber = siparis.invoiceNumber
+        lineItems = siparis.lineItems
+        invoiceNote = siparis.invoiceNote
+        shippingName = siparis.shippingName
+        shippingStreetAddress = siparis.shippingStreetAddress
+        shippingCity = siparis.shippingCity
+        shippingPostalCode = siparis.shippingPostalCode
+        shippingCountry = siparis.shippingCountry
+        shippingPhone = siparis.shippingPhone
+        orderType = siparis.orderType
+        repairIntake = siparis.repairIntake
+        estimates = siparis.estimates
+        estimateStatus = siparis.estimateStatus
+        portalToken = siparis.portalToken
+        portalTokenId = siparis.portalTokenId
+        portalVisibility = siparis.portalVisibility
+        portalAutoUpdates = siparis.portalAutoUpdates
+        productionStageOverride = siparis.productionStageOverride
+        productionBlocker = siparis.productionBlocker
+        assignedToUid = siparis.assignedToUid
+        assignedToEmail = siparis.assignedToEmail
+        isDeleted = siparis.isDeleted
+        deletedAt = siparis.deletedAt
     }
 
     var restoredOrder: Siparis {
@@ -714,6 +762,28 @@ private struct StudioOfflineSiparisCacheItem: Codable, Equatable {
         restored.workSessions = workSessions
         restored.payments = payments
         restored.invoiceNumber = invoiceNumber
+        restored.lineItems = lineItems
+        restored.invoiceNote = invoiceNote
+        restored.shippingName = shippingName
+        restored.shippingStreetAddress = shippingStreetAddress
+        restored.shippingCity = shippingCity
+        restored.shippingPostalCode = shippingPostalCode
+        restored.shippingCountry = shippingCountry
+        restored.shippingPhone = shippingPhone
+        restored.orderType = orderType ?? "custom"
+        restored.repairIntake = repairIntake
+        restored.estimates = estimates
+        restored.estimateStatus = estimateStatus ?? ""
+        restored.portalToken = portalToken ?? ""
+        restored.portalTokenId = portalTokenId ?? ""
+        restored.portalVisibility = portalVisibility
+        restored.portalAutoUpdates = portalAutoUpdates
+        restored.productionStageOverride = productionStageOverride
+        restored.productionBlocker = productionBlocker
+        restored.assignedToUid = assignedToUid ?? ""
+        restored.assignedToEmail = assignedToEmail ?? ""
+        restored.isDeleted = isDeleted ?? false
+        restored.deletedAt = deletedAt
         return restored
     }
 }
