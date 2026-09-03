@@ -578,6 +578,12 @@ data class StudioWorkspaceSettings(
     val defaultTaxRate: Double = 20.0,
     val defaultDeliveryTime: Double = 30.0,
     val taxCalculationType: String = "Revenue",
+    // The Finance Engine's own three. Absent on a workspace that has not saved
+    // Financial Settings since these arrived, so each defaults to what it does
+    // today: registered, inclusive prices, and whichever method the old field named.
+    val vatRegistered: Boolean = true,
+    val pricesIncludeVat: Boolean = true,
+    val vatMethod: String = FinanceEngine.METHOD_STANDARD,
     val taxMilestoneEnabled: Boolean = false,
     val taxMilestoneDate: Double = 0.0,
     val taxRuleNameRevenue: String = "Standard VAT (Services/New)",

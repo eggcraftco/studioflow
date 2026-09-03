@@ -158,6 +158,11 @@ struct AyarlarView: View {
     @AppStorage("defaultTaxRate") private var defaultTaxRate: Double = 20.0
     @AppStorage("defaultDeliveryTime") private var defaultDeliveryTime: Double = 30.0
     @AppStorage("taxCalculationType") private var taxCalculationType: String = "Revenue"
+    // The Finance Engine's own three. Each defaults to what the workspace
+    // already does, so a Mac that has never opened this screen changes nothing.
+    @AppStorage("vatRegistered") private var vatRegistered: Bool = true
+    @AppStorage("pricesIncludeVat") private var pricesIncludeVat: Bool = true
+    @AppStorage("vatMethod") private var vatMethod: String = "standard"
     @AppStorage("taxMilestoneEnabled") private var taxMilestoneEnabled: Bool = false
     @AppStorage("taxMilestoneDate") private var taxMilestoneDate: Double = Date().timeIntervalSince1970
     @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard VAT (Services/New)"
@@ -3539,6 +3544,9 @@ struct AyarlarView: View {
         let latestDefaultTaxRate = min(max(defaultTaxRate, 0), 100)
         let latestDefaultDeliveryTime = min(max(defaultDeliveryTime.rounded(), 1), 730)
         let latestTaxCalculationType = taxCalculationType == "Profit" ? "Profit" : "Revenue"
+        let latestVatRegistered = vatRegistered
+        let latestPricesIncludeVat = pricesIncludeVat
+        let latestVatMethod = NDFinanceEngine.normalizeVatMethod(vatMethod.isEmpty ? taxCalculationType : vatMethod)
         let latestTaxMilestoneEnabled = taxMilestoneEnabled
         let latestTaxMilestoneDate = taxMilestoneDate
         let latestTaxRuleNameRevenue = taxRuleNameRevenue
@@ -3647,6 +3655,9 @@ struct AyarlarView: View {
                     "defaultTaxRate": latestDefaultTaxRate,
                     "defaultDeliveryTime": latestDefaultDeliveryTime,
                     "taxCalculationType": latestTaxCalculationType,
+                    "vatRegistered": latestVatRegistered,
+                    "pricesIncludeVat": latestPricesIncludeVat,
+                    "vatMethod": latestVatMethod,
                     "taxMilestoneEnabled": latestTaxMilestoneEnabled,
                     "taxMilestoneDate": latestTaxMilestoneDate,
                     "taxRuleNameRevenue": latestTaxRuleNameRevenue,
@@ -3719,7 +3730,7 @@ struct AyarlarView: View {
                 ]
                 // Owner/admin only — see canWriteFinancialSettings.
                 if !canWriteFinancialSettings {
-                    for key in ["seciliParaBirimi", "seciliOndalik", "feePercentage", "defaultTaxRate", "taxCalculationType", "taxMilestoneEnabled", "taxMilestoneDate", "taxRuleNameRevenue", "taxRuleNameProfit", "corporationTaxEnabled", "corporationTaxRate"] {
+                    for key in ["seciliParaBirimi", "seciliOndalik", "feePercentage", "defaultTaxRate", "taxCalculationType", "vatRegistered", "pricesIncludeVat", "vatMethod", "taxMilestoneEnabled", "taxMilestoneDate", "taxRuleNameRevenue", "taxRuleNameProfit", "corporationTaxEnabled", "corporationTaxRate"] {
                         workspaceSettingsPayload.removeValue(forKey: key)
                     }
                 }
@@ -5980,6 +5991,7 @@ struct AyarlarView: View {
     private var finansalAyar: some View {
         VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
             ndTwoColumns(financialCurrencyCard, financialDefaultsCard)
+            financialVatCard
             financialTaxCard
             ndTwoColumns(financialDatesCard, financialSummaryCard)
             financialToolsCard
@@ -6076,12 +6088,72 @@ struct AyarlarView: View {
         }
     }
 
+    /// Whether the workspace charges VAT at all, and whether the prices it
+    /// quotes already contain it. Both are new, and both default to what every
+    /// workspace does today, so this card changes nothing until it is touched.
+    private var financialVatCard: some View {
+        NDSettingsSurface(spacing: 14) {
+            NDSettingsCardHead(icon: "building.columns", title: t("VAT", lang: seciliDil))
+            Toggle(isOn: $vatRegistered) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Registered for VAT", lang: seciliDil))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(NDSettings.text(colorScheme))
+                    Text(t("Switch this off and no order owes VAT, whatever rate an order carries.", lang: seciliDil))
+                        .font(.system(size: 11.5))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .tint(NDSettings.accent)
+
+            let quoting = VStack(alignment: .leading, spacing: 10) {
+                NDChoiceCard(
+                    title: t("Prices include VAT", lang: seciliDil),
+                    description: t("The figure you enter is what the customer pays. £120 at 20% is £20 of VAT on £100.", lang: seciliDil),
+                    selected: pricesIncludeVat
+                ) { pricesIncludeVat = true }
+                NDChoiceCard(
+                    title: t("Prices exclude VAT", lang: seciliDil),
+                    description: t("The figure you enter is before VAT, and the customer pays it plus the VAT: £100 at 20% becomes £120.", lang: seciliDil),
+                    selected: !pricesIncludeVat
+                ) { pricesIncludeVat = false }
+            }
+            if isPhoneLayout {
+                quoting
+            } else {
+                HStack(alignment: .top, spacing: 10) { quoting }
+            }
+            Text(t("Every workspace has always quoted inclusive prices, so leave this alone unless you invoice before VAT.", lang: seciliDil))
+                .font(.system(size: 11.5))
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var financialTaxCard: some View {
         NDSettingsSurface(spacing: 16) {
             NDSettingsCardHead(icon: "percent", title: t("Tax calculation", lang: seciliDil))
             let choices = VStack(alignment: .leading, spacing: 10) {
-                NDChoiceCard(title: taxRuleNameRevenue.isEmpty ? t("Revenue", lang: seciliDil) : taxRuleNameRevenue, description: t("Prices include VAT. VAT is taken out of the customer price, not added on top.", lang: seciliDil), selected: taxCalculationType != "Profit") { taxCalculationType = "Revenue" }
-                NDChoiceCard(title: taxRuleNameProfit.isEmpty ? t("Profit", lang: seciliDil) : taxRuleNameProfit, description: t("VAT is due on the eligible margin, which already contains VAT.", lang: seciliDil), selected: taxCalculationType == "Profit") { taxCalculationType = "Profit" }
+                // Both values move together: the engine reads vatMethod, and a
+                // card that highlighted taxCalculationType alone would leave the
+                // two disagreeing the moment somebody picked one and then another.
+                NDChoiceCard(
+                    title: taxRuleNameRevenue.isEmpty ? t("Revenue", lang: seciliDil) : taxRuleNameRevenue,
+                    description: t("Prices include VAT. VAT is taken out of the customer price, not added on top.", lang: seciliDil),
+                    selected: vatMethod == "standard"
+                ) { taxCalculationType = "Revenue"; vatMethod = "standard" }
+                NDChoiceCard(
+                    title: taxRuleNameProfit.isEmpty ? t("Profit", lang: seciliDil) : taxRuleNameProfit,
+                    description: t("Margin scheme: VAT is due on the selling price less what you paid for the item, and nothing else comes off it.", lang: seciliDil),
+                    selected: vatMethod == "margin"
+                ) { taxCalculationType = "Profit"; vatMethod = "margin" }
+                NDChoiceCard(
+                    title: t("No VAT", lang: seciliDil),
+                    description: t("Nothing owes VAT by default. An order can still say otherwise on its own.", lang: seciliDil),
+                    selected: vatMethod == "none"
+                ) { vatMethod = "none" }
                 ndField(t("Rule 1 (Revenue)", lang: seciliDil)) {
                     TextField("", text: $taxRuleNameRevenue)
                         .textFieldStyle(.plain)

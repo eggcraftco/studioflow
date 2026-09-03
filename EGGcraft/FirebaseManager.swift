@@ -1462,6 +1462,12 @@ class FirebaseManager: ObservableObject {
                 applyDouble("defaultTaxRate", clampPercent: true)
                 applyDouble("feePercentage", clampPercent: true)
                 applyString("taxCalculationType") { $0 == "Profit" ? "Profit" : "Revenue" }
+                // The Finance Engine's own three. Without these a value set on
+                // the web would never reach the device, and the app's own
+                // preview would keep answering by the old workspace default.
+                applyBool("vatRegistered")
+                applyBool("pricesIncludeVat")
+                applyString("vatMethod") { NDFinanceEngine.normalizeVatMethod($0) }
                 applyBool("taxMilestoneEnabled")
                 applyDouble("taxMilestoneDate", clampPercent: false)
                 applyString("taxRuleNameRevenue")

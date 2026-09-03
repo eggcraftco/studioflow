@@ -118,6 +118,8 @@ import androidx.compose.foundation.verticalScroll
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneOffset
+import uk.co.eggcraft.studioflow.finance.FinanceEngine
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -1570,6 +1572,11 @@ private fun FinancialSettingsDetail(
     var defaultTaxRate by rememberSaveable(settings.defaultTaxRate) { mutableStateOf(settingsNumberText(settings.defaultTaxRate)) }
     var defaultDeliveryTime by rememberSaveable(settings.defaultDeliveryTime) { mutableStateOf(settingsNumberText(settings.defaultDeliveryTime)) }
     var taxCalculationType by rememberSaveable(settings.taxCalculationType) { mutableStateOf(settings.taxCalculationType) }
+    // The Finance Engine's own three. Each defaults to what the workspace
+    // already does, so a phone that has never opened this screen changes nothing.
+    var vatRegistered by rememberSaveable(settings.vatRegistered) { mutableStateOf(settings.vatRegistered) }
+    var pricesIncludeVat by rememberSaveable(settings.pricesIncludeVat) { mutableStateOf(settings.pricesIncludeVat) }
+    var vatMethod by rememberSaveable(settings.vatMethod) { mutableStateOf(settings.vatMethod) }
     var taxMilestoneEnabled by rememberSaveable(settings.taxMilestoneEnabled) { mutableStateOf(settings.taxMilestoneEnabled) }
     var taxMilestoneDate by rememberSaveable(settings.taxMilestoneDate) { mutableStateOf(settingsDateInput(settings.taxMilestoneDate)) }
     var corporationTaxEnabled by rememberSaveable(settings.corporationTaxEnabled) { mutableStateOf(settings.corporationTaxEnabled) }
@@ -1590,6 +1597,9 @@ private fun FinancialSettingsDetail(
             "defaultTaxRate" to parseSettingsNumber(defaultTaxRate, settings.defaultTaxRate).coerceIn(0.0, 100.0),
             "defaultDeliveryTime" to parseSettingsNumber(defaultDeliveryTime, settings.defaultDeliveryTime).coerceIn(1.0, 730.0),
             "taxCalculationType" to if (taxCalculationType == "Profit") "Profit" else "Revenue",
+            "vatRegistered" to vatRegistered,
+            "pricesIncludeVat" to pricesIncludeVat,
+            "vatMethod" to FinanceEngine.normalizeVatMethod(vatMethod.ifBlank { taxCalculationType }),
             "taxMilestoneEnabled" to taxMilestoneEnabled,
             "taxMilestoneDate" to settingsDateSeconds(taxMilestoneDate, settings.taxMilestoneDate),
             "corporationTaxEnabled" to corporationTaxEnabled,
@@ -1641,10 +1651,67 @@ private fun FinancialSettingsDetail(
         val symbol = selectedCurrency.ifBlank { "£" }
         fun money(value: Double): String = symbol + String.format(Locale.UK, "%,.2f", value)
         val basisName = if (taxCalculationType == "Profit") taxRuleNameProfit.ifBlank { t("Profit") } else taxRuleNameRevenue.ifBlank { t("Revenue") }
+        // Whether the workspace charges VAT at all, and whether the prices it
+        // quotes already contain it. Both default to what every workspace does
+        // today, so this card changes nothing until it is touched.
+        val vatCard: @Composable () -> Unit = {
+            NDSettingsSurface(spacing = 14.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.AccountBalance, title = t("VAT"))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(t("Registered for VAT"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+                        Text(
+                            t("Switch this off and no order owes VAT, whatever rate an order carries."),
+                            fontSize = 12.sp,
+                            color = NDSettings.muted()
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = vatRegistered,
+                        enabled = !state.settingsSaving,
+                        onCheckedChange = { vatRegistered = it }
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NDChoiceCard(
+                        title = t("Prices include VAT"),
+                        description = t("The figure you enter is what the customer pays. £120 at 20% is £20 of VAT on £100."),
+                        selected = pricesIncludeVat
+                    ) { pricesIncludeVat = true }
+                    NDChoiceCard(
+                        title = t("Prices exclude VAT"),
+                        description = t("The figure you enter is before VAT, and the customer pays it plus the VAT: £100 at 20% becomes £120."),
+                        selected = !pricesIncludeVat
+                    ) { pricesIncludeVat = false }
+                }
+                Text(
+                    t("Every workspace has always quoted inclusive prices, so leave this alone unless you invoice before VAT."),
+                    fontSize = 12.sp,
+                    color = NDSettings.muted()
+                )
+            }
+        }
+
         val taxChoices: @Composable () -> Unit = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NDChoiceCard(title = taxRuleNameRevenue.ifBlank { t("Revenue") }, description = t("Prices include VAT. VAT is taken out of the customer price, not added on top."), selected = taxCalculationType != "Profit") { taxCalculationType = "Revenue" }
-                NDChoiceCard(title = taxRuleNameProfit.ifBlank { t("Profit") }, description = t("VAT is due on the eligible margin, which already contains VAT."), selected = taxCalculationType == "Profit") { taxCalculationType = "Profit" }
+                // Both values move together: the engine reads vatMethod, and a
+                // card that highlighted taxCalculationType alone would leave the
+                // two disagreeing the moment somebody picked one and then another.
+                NDChoiceCard(
+                    title = taxRuleNameRevenue.ifBlank { t("Revenue") },
+                    description = t("Prices include VAT. VAT is taken out of the customer price, not added on top."),
+                    selected = vatMethod == FinanceEngine.METHOD_STANDARD
+                ) { taxCalculationType = "Revenue"; vatMethod = FinanceEngine.METHOD_STANDARD }
+                NDChoiceCard(
+                    title = taxRuleNameProfit.ifBlank { t("Profit") },
+                    description = t("Margin scheme: VAT is due on the selling price less what you paid for the item, and nothing else comes off it."),
+                    selected = vatMethod == FinanceEngine.METHOD_MARGIN
+                ) { taxCalculationType = "Profit"; vatMethod = FinanceEngine.METHOD_MARGIN }
+                NDChoiceCard(
+                    title = t("No VAT"),
+                    description = t("Nothing owes VAT by default. An order can still say otherwise on its own."),
+                    selected = vatMethod == FinanceEngine.METHOD_NONE
+                ) { vatMethod = FinanceEngine.METHOD_NONE }
                 OutlinedTextField(value = taxRuleNameRevenue, onValueChange = { taxRuleNameRevenue = it }, label = { Text(t("Rule 1 (Revenue)")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = taxRuleNameProfit, onValueChange = { taxRuleNameProfit = it }, label = { Text(t("Rule 2 (Profit)")) }, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 PercentTextField(label = t("Default VAT Rate (%)"), value = defaultTaxRate, enabled = !state.settingsSaving, onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) })
@@ -1713,6 +1780,7 @@ private fun FinancialSettingsDetail(
             NDTwoColumns(wide, currencyCard, defaultsCard)
             NDSettingsSurface(spacing = 14.dp) {
                 NDSettingsCardHead(icon = Icons.Filled.Percent, title = t("Tax calculation"))
+                vatCard()
                 NDTwoColumns(wide, taxChoices, taxPreview)
             }
             NDTwoColumns(wide, datesCard, footerCard)

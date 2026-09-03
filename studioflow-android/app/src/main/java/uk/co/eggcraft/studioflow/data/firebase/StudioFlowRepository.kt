@@ -58,6 +58,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioBankAuditEntry
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryCategory
+import uk.co.eggcraft.studioflow.finance.FinanceEngine
 import uk.co.eggcraft.studioflow.features.production.ProductionBlocker
 import uk.co.eggcraft.studioflow.features.production.ProductionStage
 import uk.co.eggcraft.studioflow.features.production.defaultProductionStages
@@ -4299,6 +4300,13 @@ private fun workspaceSettings(
         taxCalculationType = stringValue(data["taxCalculationType"], fallback.taxCalculationType).let {
             if (it.equals("Profit", ignoreCase = true)) "Profit" else "Revenue"
         },
+        // The Finance Engine's own three. Absent until the workspace saves
+        // Financial Settings once, so each falls back to what it does today.
+        vatRegistered = boolValue(data["vatRegistered"], true),
+        pricesIncludeVat = boolValue(data["pricesIncludeVat"], true),
+        vatMethod = FinanceEngine.normalizeVatMethod(
+            stringValue(data["vatMethod"], "").ifBlank { stringValue(data["taxCalculationType"], "Revenue") }
+        ),
         taxMilestoneEnabled = boolValue(data["taxMilestoneEnabled"], fallback.taxMilestoneEnabled),
         taxMilestoneDate = doubleValue(data["taxMilestoneDate"], fallback.taxMilestoneDate),
         taxRuleNameRevenue = stringValue(data["taxRuleNameRevenue"], fallback.taxRuleNameRevenue),
