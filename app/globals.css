@@ -3026,6 +3026,30 @@ button.toolbar-icon-button,
   background: rgba(255, 255, 255, 0.96);
 }
 
+/* The customer / add-order form kept a hard-coded white sheet, so in dark mode
+   its labels and inputs were near-invisible. Inputs already have a dark rule;
+   the sheet itself needed one. */
+body[data-studio-theme="dark"] .add-order-modal {
+  background: rgba(31, 31, 31, 0.98);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+body[data-studio-theme="dark"] .add-order-modal label,
+body[data-studio-theme="dark"] .add-order-modal h2,
+body[data-studio-theme="dark"] .add-order-modal p {
+  color: var(--text);
+}
+
+body[data-studio-theme="dark"] .add-order-modal .input,
+body[data-studio-theme="dark"] .add-order-modal input,
+body[data-studio-theme="dark"] .add-order-modal select,
+body[data-studio-theme="dark"] .add-order-modal textarea {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+}
+
 .add-order-header,
 .add-order-actions {
   display: flex;

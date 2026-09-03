@@ -7,6 +7,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioT } from "@/lib/studioflow/language";
+import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { doc, getDoc } from "firebase/firestore";
@@ -297,6 +298,14 @@ export default function NotesPage() {
     await deleteKeepNote(workspace.id, user.uid, id);
   }
 
+  // Only the per-note button asks. The two bulk paths ask once for the whole
+  // set before they call destroy(), and asking again per note turned "Empty
+  // Trash" into twenty blocking dialogs that a single Cancel aborted midway.
+  async function destroyWithConfirm(id: string) {
+    if (!window.confirm(t("Delete this note forever? This cannot be undone."))) return;
+    await destroy(id);
+  }
+
   async function duplicate(note: StudioKeepNote) {
     if (!workspace || !user) return;
     const copy = newKeepNote(user.uid, user.email ?? "", user.displayName ?? "");
@@ -521,11 +530,11 @@ export default function NotesPage() {
             {pinned.length > 0 && (
               <>
                 <SectionHeader title={t("PINNED")} />
-                <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
               </>
             )}
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
-            <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+            <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {search.trim()
@@ -1081,7 +1090,14 @@ function NoteCard({
               <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 7 * 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Next week")}</button>
               <input
                 type="date"
-                onChange={(e) => { if (e.target.value) { onSave({ ...note, reminderDateMillis: new Date(e.target.value).getTime() }); setReminderOpen(false); } }}
+                onChange={(e) => {
+                  // A picked date means that day where the reader lives; new Date("2026-03-05")
+                  // is UTC midnight, which is the evening BEFORE west of Greenwich.
+                  const picked = parseLocalDateInput(e.target.value, "noon");
+                  if (!picked) return;
+                  onSave({ ...note, reminderDateMillis: picked.getTime() });
+                  setReminderOpen(false);
+                }}
                 style={{ padding: 4, border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 12 }}
               />
               {note.reminderDateMillis && (
@@ -1139,8 +1155,7 @@ function NoteCard({
 // Local calendar date for a date input — never through toISOString, which
 // renders the previous day for evening timestamps east of UTC.
 function localDateInputValue(millis: number): string {
-  const date = new Date(millis);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return formatLocalDateInput(new Date(millis));
 }
 
 function NoteEditor({
@@ -1320,9 +1335,9 @@ function NoteEditor({
                 setReminderMillis(null);
                 return;
               }
-              const [y, m, d] = value.split("-").map(Number);
-              if (!y || !m || !d) return;
-              setReminderMillis(new Date(y, m - 1, d, 12, 0, 0).getTime());
+              const picked = parseLocalDateInput(value, "noon");
+              if (!picked) return;
+              setReminderMillis(picked.getTime());
             }}
             style={{ padding: 6, border: "1px solid #e5e7eb", borderRadius: 6 }}
           />

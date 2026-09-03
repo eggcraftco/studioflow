@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { auth, appleProvider, googleProvider } from "@/lib/firebase/client";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 
 function isApplePlatform() {
   if (typeof navigator === "undefined") return false;
@@ -37,6 +38,7 @@ export function AuthProviderButtons({
   appleLabel,
   googleLabel,
   appleUnavailableMessage,
+  translate,
   disabled,
   onStart,
   onSuccess,
@@ -45,6 +47,8 @@ export function AuthProviderButtons({
   appleLabel: string;
   googleLabel: string;
   appleUnavailableMessage: string;
+  /** Translator for the failure sentence; identity when the host has none. */
+  translate?: (text: string) => string;
   disabled?: boolean;
   onStart?: () => void;
   onSuccess: () => void;
@@ -70,7 +74,8 @@ export function AuthProviderButtons({
         onError(appleUnavailableMessage);
         return;
       }
-      onError(error instanceof Error ? error.message : "Sign-in failed.");
+      // "Firebase: Error (auth/popup-blocked)." is not a sentence anyone can act on.
+      onError(friendlyErrorMessage(error, translate ?? ((text: string) => text)));
     }
   }
 

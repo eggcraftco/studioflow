@@ -96,6 +96,7 @@ export function RecipesPanel({
   }
 
   async function remove(recipe: InventoryRecipe) {
+    if (!window.confirm(t("Delete the recipe \"{name}\"? This cannot be undone.").replace("{name}", recipe.name))) return;
     setBusy(true);
     setNotice("");
     try {

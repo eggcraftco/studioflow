@@ -270,7 +270,9 @@ export default function FilesPage() {
     }
     const label = group.customerName || "this order";
     const confirmed = window.confirm(
-      `Delete all ${group.files.length} file${group.files.length === 1 ? "" : "s"} for ${label}? This cannot be undone.`
+      t("Delete all {count} files for {name}? This cannot be undone.")
+        .replace("{count}", String(group.files.length))
+        .replace("{name}", label)
     );
     if (!confirmed) return;
 
@@ -495,7 +497,9 @@ export default function FilesPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete "${file.fileName}" from this order? This cannot be undone.`);
+    const confirmed = window.confirm(
+      t("Delete \"{name}\" from this order? This cannot be undone.").replace("{name}", file.fileName)
+    );
     if (!confirmed) return;
 
     setActioningFileId(file.id);

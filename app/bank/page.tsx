@@ -11,6 +11,7 @@ import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -20,6 +21,7 @@ import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows,
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
@@ -564,7 +566,18 @@ function BankPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, isOwner, searchParams]);
 
+  // The gate belongs on CONNECTING a bank, not on the page. Blocking the whole
+  // route stranded a workspace that connected during its trial and then dropped
+  // to Free: the feed, the receipts and the Disconnect button all became
+  // unreachable, with no way to end the connection. connectBank() below refuses
+  // instead, which is what the finding actually asked for.
+  const bankFeedIncluded = !workspace || workspace.entitlements.features.bank_feed === true;
+
   async function connectBank() {
+    if (!bankFeedIncluded) {
+      setError(t("Connecting a bank is available on NivaDesk Pro and Team. Your existing data stays here and the feed resumes when you upgrade."));
+      return;
+    }
     setBusy("connect");
     setError(null);
     try {
@@ -1609,6 +1622,9 @@ function BankPageContent() {
   if (loading || workspaceLoading) return <LoadingScreen />;
   if (!user) return null;
 
+  // The nav only HIDES Banking without the feature; a bookmark or a direct link
+  // still opened an empty, silently broken page. Say what it is and where it is.
+
   return (
     <AppShell>
       {/* With a transaction open the page becomes two columns: the list keeps a
@@ -1810,7 +1826,7 @@ function BankPageContent() {
                             {connection.status === "linked" && consentDaysLeft !== null ? (
                               <span style={consentDaysLeft <= 14 ? { color: "#b45309", fontWeight: 700 } : undefined}> · {t("Consent renews by")} {connection.consentExpiresAt!.toLocaleDateString()}</span>
                             ) : null}
-                            {unhealthy && connection.lastSyncError ? <span title={connection.lastSyncError}> · {reconsent ? t("The bank stopped sharing data — reconnect to resume the feed.") : connection.lastSyncError.slice(0, 80)}</span> : null}
+                            {unhealthy && connection.lastSyncError ? <span title={connection.lastSyncError}> · {reconsent ? t("The bank stopped sharing data — reconnect to resume the feed.") : friendlyErrorMessage(connection.lastSyncError, t)}</span> : null}
                           </div>
                         </div>
                       );
@@ -2241,7 +2257,10 @@ function BankPageContent() {
                       <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "bulk" || !bulkCategory} onClick={() => void applyBulkCategory(bulkCategory)}>
                         {busy === "bulk" ? t("Saving…") : t("Apply")}
                       </button>
-                      <button type="button" style={bankBtnSm} disabled={busy === "bulk"} onClick={() => void applyBulkCategory("")}>{t("Clear category")}</button>
+                      <button type="button" style={bankBtnSm} disabled={busy === "bulk"} onClick={() => {
+                        if (!window.confirm(t("Clear the category on {count} transactions?").replace("{count}", String(selectedIds.size)))) return;
+                        void applyBulkCategory("");
+                      }}>{t("Clear category")}</button>
                       <select value={bulkVat} onChange={event => setBulkVat(event.target.value)} style={{ ...pickerInput, flex: "0 1 160px" }} aria-label={t("Set VAT")}>
                         <option value="">{t("Set VAT")}…</option>
                         {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}

@@ -15,6 +15,7 @@ import {
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 
 type Phase =
   | "working"
@@ -124,7 +125,7 @@ function AuthActionContent() {
       await confirmPasswordReset(auth, oobCode, newPassword);
       setPhase("resetDone");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not update the password.");
+      setMessage(friendlyErrorMessage(error, t) || t("Could not update the password."));
     } finally {
       setBusy(false);
     }

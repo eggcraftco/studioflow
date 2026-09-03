@@ -20,6 +20,7 @@ import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { StudioToastHost } from "@/components/StudioToastHost";
+import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { auth, db } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
@@ -1044,6 +1045,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [financeOrdersLoaded, setFinanceOrdersLoaded] = useState<boolean>(
     () => cachedShellMatchesUser,
   );
+  // "Loaded" is not the same as "we were allowed to count". A member who cannot
+  // read finance orders gets an empty array too, and a failed read gets one as
+  // well — neither is evidence of a new workspace, so the first-project tour
+  // must not fire on them.
+  const [financeOrdersTrusted, setFinanceOrdersTrusted] = useState<boolean>(
+    () => cachedShellMatchesUser,
+  );
   const [cloudSyncState, setCloudSyncState] =
     useState<WebSyncState>("connecting");
   const [cloudSyncMessage, setCloudSyncMessage] = useState(
@@ -1176,6 +1184,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setFinanceOrders(loadedOrders);
         setFinanceOrdersLoaded(true);
+        setFinanceOrdersTrusted(canLoadFinance);
         setSettings(resolvedSettings);
         rememberAppShellSnapshot(currentUser.uid, {
           workspace: loadedWorkspace,
@@ -1184,6 +1193,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         });
       } catch {
         if (!cancelled) {
+          setFinanceOrdersTrusted(false);
           if (hasCachedShellForUser(currentUser.uid) && cachedWorkspace) {
             setWorkspace(cachedWorkspace);
             setSettings(cachedSettings);
@@ -1474,7 +1484,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               !n.isDeleted &&
               !n.isArchived &&
               n.reminderDateMillis != null &&
-              (n.reminderDateMillis as number) <= now
+              // A date-only reminder is stored as UTC midnight, which west of
+              // Greenwich is the previous evening — counting it the instant the
+              // stored value passes flagged it a day early, so it is late once
+              // that local day is over. A reminder the user gave a TIME to is
+              // due at that time; running it to the end of the day made
+              // "tomorrow at 10:00" show up fourteen hours late.
+              (isStoredAsPlainDate(n.reminderDateMillis as number)
+                ? endOfLocalDayMillis(n.reminderDateMillis as number)
+                : (n.reminderDateMillis as number)) <= now
           ).length
         );
       });
@@ -1665,6 +1683,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     canCreateToolbarOrder &&
     pathname.startsWith("/orders") &&
     financeOrdersLoaded &&
+    financeOrdersTrusted &&
     financeOrders.length === 0 &&
     !firstProjectGuide?.completed &&
     (firstProjectGuide === null || firstProjectGuide.step === 1),
@@ -2044,7 +2063,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 </div>
               ) : (
                 <div className="toolbar-role-strip" aria-label={t("Workspace role")}>
-                  <span>{workspace?.roleLabel?.trim() || t("Workflow Only")}</span>
+                  {/* An empty label used to read "Workflow Only", which is a
+                      specific role — a member with no label is simply a member. */}
+                  <span>{workspace?.roleLabel?.trim() || (normalizeWorkspaceRole(workspace?.role) === "workflow" ? t("Workflow Only") : t("Member"))}</span>
                 </div>
               )}
             </div>

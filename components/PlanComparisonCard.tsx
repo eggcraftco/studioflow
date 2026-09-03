@@ -25,7 +25,6 @@ function customerText(plan: PlanEntitlements) {
 
 function planFeatureRows(plan: PlanEntitlements) {
   const proOrTeam = plan.plan === "pro_monthly" || plan.plan === "team_monthly";
-  const liteOrAbove = plan.plan !== "demo";
   return [
     { title: orderText(plan), enabled: true },
     { title: customerText(plan), enabled: true },
@@ -36,7 +35,9 @@ function planFeatureRows(plan: PlanEntitlements) {
     { title: "Share Sheet", enabled: proOrTeam },
     { title: "Team Access", enabled: plan.features.team_access },
     { title: "Advanced Dashboard", enabled: proOrTeam },
-    { title: "Card Customization", enabled: liteOrAbove },
+    // Free grants card_customization; the hard-coded "Starter and above"
+    // list printed a padlock the app does not enforce.
+    { title: "Card Customization", enabled: plan.features.card_customization },
     { title: "Card Profile Sync", enabled: plan.plan === "team_monthly" }
   ];
 }

@@ -123,6 +123,9 @@ export function AccountingProviderSection({ workspace, language = "English", pro
   const [overview, setOverview] = useState<AccountingOverview | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // "Importing the chart of accounts…" is progress, not a result: it has to stop
+  // saying that when the first sync finishes — or fails — either way.
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
   const [environment, setEnvironment] = useState<QuickBooksEnvironment>("production");
@@ -191,7 +194,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     const state = params.get("state") || "";
     params.delete(ui.verdictParam); params.delete("reason"); params.delete("connection"); params.delete("state");
     window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
-    if (verdict === "connected") { setNotice(pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…")); setTab("setup"); }
+    if (verdict === "connected") { setImporting(true); setNotice(pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…")); setTab("setup"); }
     else if (verdict === "choose" && state) { setChooseState(state); setNotice(pt("Your {provider} sign-in covers more than one organisation. Choose the one this workspace keeps its books in.")); }
     else if (verdict === "cancelled") setError(pt("The {provider} connection was cancelled."));
     else if (reason === "state") setError(t("This connection link has expired. Start again from the Connect button."));
@@ -229,8 +232,18 @@ export function AccountingProviderSection({ workspace, language = "English", pro
 
   // A fresh connection imports itself once; the OAuth callback never does long work.
   useEffect(() => {
-    if (!connection || connection.setupState !== "importing" || busy || !isOwner) return;
-    void syncNow(true);
+    if (!connection) return;
+    // The connection settled without this screen running the import (another
+    // device did it, or the reader is not the owner) — stop promising progress.
+    if (connection.setupState !== "importing") {
+      if (importing) { setImporting(false); setNotice(""); }
+      return;
+    }
+    if (busy || !isOwner) return;
+    void syncNow(true).finally(() => {
+      setImporting(false);
+      setNotice(current => (current === pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…") ? "" : current));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection?.connectionId, connection?.setupState]);
 

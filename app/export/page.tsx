@@ -9,6 +9,7 @@ import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJs
 import { loadWorkspaceContext, loadWorkspaceExportData, workspaceAccessAllows, type WorkspaceContext, type WorkspaceExportData } from "@/lib/studioflow/firestore";
 import { ExportOrdersPanel } from "@/components/ExportOrdersPanel";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 
 function filePrefix(workspace: WorkspaceContext | null) {
   const base = workspace?.name || "studioflow";
@@ -50,7 +51,7 @@ export default function ExportPage() {
         setExportData(loadedExportData);
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Could not prepare export data.");
+          setError(friendlyErrorMessage(loadError, t) || t("Could not prepare export data."));
         }
       } finally {
         if (!cancelled) setLoadingExport(false);
@@ -141,7 +142,7 @@ export default function ExportPage() {
 
         <ExportCard
           title="Export Backup"
-          description="Download a NivaDesk app-compatible backup. This can be imported back into the Swift app or into the web portal."
+          description="Download a NivaDesk app-compatible backup. This can be imported back into NivaDesk or into the web portal."
           count={(exportData?.orders.length ?? 0) + (exportData?.customers.length ?? 0)}
           buttonTitle="Download backup"
           disabled={!exportAllowed || !exportData}

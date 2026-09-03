@@ -183,7 +183,10 @@ export function LocationsPanel({
                           type="button"
                           className="inventory-link inventory-link-danger"
                           disabled={busy}
-                          onClick={() => void run(() => deleteInventoryLocation(workspace, location.id), "The location could not be deleted.")}
+                          onClick={() => {
+                            if (!window.confirm(t("Delete the location \"{name}\"? This cannot be undone.").replace("{name}", location.name))) return;
+                            void run(() => deleteInventoryLocation(workspace, location.id), "The location could not be deleted.");
+                          }}
                         >{t("Delete")}</button>
                       </span>
                     ) : null}

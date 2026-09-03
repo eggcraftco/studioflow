@@ -4,6 +4,12 @@ import { functions, storage } from "@/lib/firebase/client";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
+import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+
+/** Toasts fired from this module are read by a person, so they get translated. */
+const toastT = (text: string) => studioT(text, deviceStudioLanguage());
 
 const PREVIEW_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 
@@ -193,7 +199,7 @@ function friendlyCreateOrderError(error: unknown) {
   if (/permission|role|denied/i.test(message)) {
     return "Your workspace role cannot create projects.";
   }
-  return message || "Could not create the project. Please try again.";
+  return message ? friendlyErrorMessage(error, text => text) : "Could not create the project. Please try again.";
 }
 
 function friendlyUpdateOrderError(error: unknown) {
@@ -201,13 +207,13 @@ function friendlyUpdateOrderError(error: unknown) {
   if (/^Your current role/i.test(message)) return message;
   if (/workflow/i.test(message)) return "Workflow Only can edit order details, but cannot edit finance fields.";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit this order.";
-  return message || "Could not update the order. Please try again.";
+  return message ? friendlyErrorMessage(error, text => text) : "Could not update the order. Please try again.";
 }
 
 function friendlyDeleteOrderError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot delete orders.";
-  return message || "Could not delete the order. Please try again.";
+  return message ? friendlyErrorMessage(error, text => text) : "Could not delete the order. Please try again.";
 }
 
 function extensionForPreviewImage(file: File) {
@@ -240,7 +246,9 @@ function announceTrialStart(result: CreateOrderResult) {
   const days = Number(result.trialDays) || 14;
   const plan = String(result.trialPlan || "").startsWith("team") ? "Team" : "Pro";
   dispatchStudioToast({
-    message: `Your ${plan} trial has started. Full access for ${days} days, no card required.`,
+    message: toastT("Your {plan} trial has started. Full access for {days} days, no card required.")
+      .replace("{plan}", plan)
+      .replace("{days}", String(days)),
     durationMs: 9000,
   });
 }
@@ -275,7 +283,7 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
         // confirmation and NO sales message. When a trial starts, that line
         // says it instead — one message at this moment, never two.
         dispatchStudioToast({
-          message: "Your first order is organised.",
+          message: toastT("Your first order is organised."),
           durationMs: 6000,
         });
       }

@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import { AuthFeatureRotator } from "@/components/AuthFeatureRotator";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import type { StudioLanguage } from "@/lib/studioflow/language";
+import { studioT, type StudioLanguage } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   PublicSiteLanguageProvider,
   usePublicSiteLanguage
@@ -49,7 +50,10 @@ function LoginLanguageSelector() {
 function LoginPageContent() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const { t } = usePublicSiteLanguage();
+  const { t, language } = usePublicSiteLanguage();
+  // The reset flow's own sentences live in the app dictionary (studioT), which
+  // is keyed by the English text rather than by a marketing-page key.
+  const tx = useCallback((text: string) => studioT(text, language), [language]);
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +61,11 @@ function LoginPageContent() {
   const [submitting, setSubmitting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSending, setResetSending] = useState(false);
 
   useEffect(() => {
     if (!loading && user) router.replace(nextDestination(HOME_AFTER_SIGN_IN));
@@ -70,9 +79,31 @@ function LoginPageContent() {
       await signInWithEmailAndPassword(auth, email, password);
       router.replace(nextDestination(HOME_AFTER_SIGN_IN));
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : t("login.errorLoginFailed"));
+      setError(friendlyErrorMessage(loginError, tx));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // Forgetting a password is the single most common reason someone cannot get
+  // back in. /auth/action already handles the link itself; this only asks
+  // Firebase to send it and says so plainly.
+  async function handleSendReset() {
+    setResetError(null);
+    setResetNotice(null);
+    const address = resetEmail.trim();
+    if (!address) {
+      setResetError(tx("Enter your email address first."));
+      return;
+    }
+    setResetSending(true);
+    try {
+      await sendPasswordResetEmail(auth, address, { url: `${window.location.origin}/login` });
+      setResetNotice(tx("We sent a password reset link to {email}. Check your inbox.").replace("{email}", address));
+    } catch (resetFailure) {
+      setResetError(friendlyErrorMessage(resetFailure, tx));
+    } finally {
+      setResetSending(false);
     }
   }
 
@@ -139,6 +170,7 @@ function LoginPageContent() {
           appleLabel={t("auth.apple")}
           googleLabel={t("auth.google")}
           appleUnavailableMessage={t("auth.appleUnavailable")}
+          translate={tx}
           disabled={submitting}
           onStart={() => {
             setError(null);
@@ -204,11 +236,59 @@ function LoginPageContent() {
                 onChange={event => setPassword(event.target.value)}
                 required
               />
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -4 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetError(null);
+                    setResetNotice(null);
+                    setResetEmail(current => current || email);
+                    setShowReset(open => !open);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    color: "var(--muted)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textDecoration: "underline"
+                  }}
+                >
+                  {tx("Forgot password?")}
+                </button>
+              </div>
               {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
               <button className="button" type="submit" disabled={submitting}>
                 {t("login.signIn")}
               </button>
             </form>
+
+            {/* Outside the sign-in form on purpose: an <input type="email"> inside
+                it would be validated on submit and could block signing in. */}
+            {showReset ? (
+              <div className="grid" style={{ gap: 8, marginTop: 12 }}>
+                <input
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  placeholder={t("login.emailPlaceholder")}
+                  value={resetEmail}
+                  onChange={event => setResetEmail(event.target.value)}
+                />
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={resetSending}
+                  onClick={() => void handleSendReset()}
+                >
+                  {resetSending ? tx("Sending…") : tx("Send reset link")}
+                </button>
+                {resetNotice ? <p style={{ color: "var(--success)", margin: 0, fontSize: 13 }}>{resetNotice}</p> : null}
+                {resetError ? <p style={{ color: "var(--danger)", margin: 0, fontSize: 13 }}>{resetError}</p> : null}
+              </div>
+            ) : null}
           </>
         ) : null}
         {!showEmailForm && error ? <p style={{ color: "var(--danger)", margin: "12px 0 0", textAlign: "center" }}>{error}</p> : null}

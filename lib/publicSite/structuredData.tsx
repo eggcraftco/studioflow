@@ -111,7 +111,7 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
     question: "How many users are included?",
     answer:
-      "Free, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
+      "Free, Starter and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
   },
   {
     question: "How much file storage do I get?",

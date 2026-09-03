@@ -2,6 +2,8 @@
 
 import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
+import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -160,6 +162,7 @@ type SettingsSection = {
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
+  paypal: "integrations",
   shopify: "integrations",
   inbound: "integrations",
   etsy: "integrations",
@@ -631,6 +634,29 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [user]);
+
+  // Branding and Profile & Security both show the workspace name. Renaming in
+  // one used to leave the other holding the name it read at mount, so its next
+  // Save posted the old one back. saveAccountProfile announces the new name;
+  // adopt it here so every section on this page agrees.
+  useEffect(() => {
+    function handleWorkspaceUpdated(event: Event) {
+      const detail = (event as CustomEvent<{ workspace?: { name?: string; currentMemberDisplayName?: string } }>).detail;
+      const patch = detail?.workspace;
+      if (!patch) return;
+      setWorkspace(current => {
+        if (!current) return current;
+        const next = { ...current };
+        if (typeof patch.name === "string" && patch.name.trim()) next.name = patch.name;
+        if (typeof patch.currentMemberDisplayName === "string" && patch.currentMemberDisplayName.trim()) {
+          next.currentMemberDisplayName = patch.currentMemberDisplayName;
+        }
+        return next;
+      });
+    }
+    window.addEventListener("studioflow-workspace-updated", handleWorkspaceUpdated);
+    return () => window.removeEventListener("studioflow-workspace-updated", handleWorkspaceUpdated);
+  }, []);
 
   const visibleSections = useMemo(
     () => SETTINGS_SECTIONS.filter(section => canSeeSettingsSection(workspace, section.id)),
@@ -3798,6 +3824,12 @@ function AccountSection({
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [displayName, setDisplayName] = useState(workspace.currentMemberDisplayName);
   const [companyName, setCompanyName] = useState(workspace.name);
+  // The workspace name also lives in Branding. Unless this form is the thing
+  // that changed it, Save Profile echoes the name as it stands right now
+  // instead of the one read at mount — which used to undo a Branding rename.
+  const companyNameTouchedRef = useRef(false);
+  const latestWorkspaceNameRef = useRef(workspace.name);
+  latestWorkspaceNameRef.current = workspace.name;
   const [accountPhotoUrl, setAccountPhotoUrl] = useState(workspace.currentMemberPhotoURL);
   const [accountEmail, setAccountEmail] = useState(userEmail);
   const [emailDraft, setEmailDraft] = useState(userEmail);
@@ -3839,6 +3871,7 @@ function AccountSection({
   }, [workspace.currentMemberDisplayName, workspace.currentMemberPhotoURL]);
 
   useEffect(() => {
+    companyNameTouchedRef.current = false;
     setCompanyName(workspace.name);
   }, [workspace.name]);
 
@@ -3912,12 +3945,20 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     try {
-      const result = await saveAccountProfile(workspace, { displayName, companyName });
+      const renamedHere = !hideWorkspaceIdentity
+        && canEditCompanyName
+        && companyNameTouchedRef.current
+        && companyName.trim() !== latestWorkspaceNameRef.current.trim();
+      const result = await saveAccountProfile(workspace, {
+        displayName,
+        companyName: renamedHere ? companyName : latestWorkspaceNameRef.current
+      });
       const profile = result.profile;
       if (profile) {
         setDisplayName(profile.displayName);
         setCompanyName(profile.companyName);
       }
+      companyNameTouchedRef.current = false;
       markProfileSaved();
       setProfileStatus(result.message || t("Profile updated."));
     } catch (saveError) {
@@ -4207,7 +4248,10 @@ function AccountSection({
                 value={companyName}
                 disabled={!canEditCompanyName || savingProfile}
                 placeholder={t("My Studio")}
-                onChange={event => setCompanyName(event.target.value)}
+                onChange={event => {
+                  companyNameTouchedRef.current = true;
+                  setCompanyName(event.target.value);
+                }}
               />
             </label>
           ) : null}
@@ -4425,15 +4469,18 @@ const FINANCIAL_CURRENCIES = [
   ["د.إ", "AED (د.إ)"]
 ] as const;
 
+// The stored value stays what the server expects — seconds since the epoch —
+// but it is read and written in the person's own time zone. toISOString() is
+// UTC, so east of Greenwich the date they picked came back a day earlier.
 function dateInputValueFromSeconds(seconds: number) {
   const date = new Date(seconds * 1000);
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
-  return date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return formatLocalDateInput(new Date());
+  return formatLocalDateInput(date);
 }
 
 function secondsFromDateInput(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? Date.now() / 1000 : date.getTime() / 1000;
+  const date = parseLocalDateInput(value, "start");
+  return date ? date.getTime() / 1000 : Date.now() / 1000;
 }
 
 function FinancialSettingsSection({
@@ -4457,7 +4504,11 @@ function FinancialSettingsSection({
   const [clearTaxUndoRunId, setClearTaxUndoRunId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  // The server refuses these writes without Advanced Finance, so an owner on
+  // Free or Starter was left filling in a form whose Save always failed.
+  const canEditRole = canEditWorkspaceSettingsForRole(workspace.role);
+  const planAllowsFinancial = workspace.entitlements.features.financial_advanced === true;
+  const canEdit = canEditRole && planAllowsFinancial;
   const t = (text: string) => studioT(text, language);
 
   useEffect(() => {
@@ -4798,7 +4849,13 @@ function FinancialSettingsSection({
         </SettingsDialog>
       ) : null}
       {!canEdit ? (
-        <p className="settings-notice is-caution"><strong>{t("Financial settings are read-only")}</strong> {t("Your current workspace role cannot edit Financial Settings.")}</p>
+        <p className="settings-notice is-caution">
+          <strong>{canEditRole ? t("Financial Settings need NivaDesk Pro") : t("Financial settings are read-only")}</strong>{" "}
+          {canEditRole
+            ? t("You can read these settings, but saving them is part of Advanced Finance on NivaDesk Pro and Team.")
+            : t("Your current workspace role cannot edit Financial Settings.")}
+          {canEditRole ? <>{" "}<Link href="/plan">{t("Open Plan & Billing")} ↗</Link></> : null}
+        </p>
       ) : null}
 
       {status ? <p className="success-copy">{t(status)}</p> : null}
@@ -5592,6 +5649,8 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
 function InboundWebhookSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
   const [copyStatus, setCopyStatus] = useState("");
+  // "The URL could not be replaced." used to render in the green success style.
+  const [copyStatusFailed, setCopyStatusFailed] = useState(false);
   const companyId = workspace.id.trim();
   const [deliveryUrl, setDeliveryUrl] = useState("");
   const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
@@ -5656,9 +5715,11 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
       const next = await rotateIntegrationWebhookToken("inbound", companyId);
       setWebhookInfo(next);
       setDeliveryUrl(next.deliveryUrl);
+      setCopyStatusFailed(false);
       setCopyStatus(t("Webhook URL replaced. Paste the new one into your shop."));
     } catch (rotateError) {
-      setCopyStatus(rotateError instanceof Error ? rotateError.message : t("The URL could not be replaced."));
+      setCopyStatusFailed(true);
+      setCopyStatus(friendlyErrorMessage(rotateError, t) || t("The URL could not be replaced."));
     } finally {
       setRotating(false);
       setConfirmRotate(false);
@@ -5669,8 +5730,10 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
+      setCopyStatusFailed(false);
       setCopyStatus(`${label} ${t("copied.")}`);
     } catch {
+      setCopyStatusFailed(true);
       setCopyStatus(t("Copy failed. Select the value and copy it manually."));
     }
     window.setTimeout(() => setCopyStatus(""), 1600);
@@ -5723,7 +5786,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
             <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
           </SettingsDialog>
         ) : null}
-        {copyStatus ? <p className="success-copy">{t(copyStatus)}</p> : null}
+        {copyStatus ? <p className={copyStatusFailed ? "layout-error" : "success-copy"}>{t(copyStatus)}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
@@ -8148,7 +8211,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
             <span className={online ? "settings-dot-status" : "settings-dot-status is-offline"}>{online ? t("Online") : t("Offline")}</span>
           </div>
         </div>
-        <p className="muted-copy">{t("NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.")}</p>
+        <p className="muted-copy">{t("NivaDesk keeps orders, Client Files, plan guards and card profiles in step across the Mac, iPhone and Android apps and the web portal.")}</p>
         <div className="settings-action-row">
           <button className="button secondary" type="button" onClick={() => { void copyDiagnostics(); }}>
             {t("Copy diagnostic info")}

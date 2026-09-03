@@ -1536,7 +1536,8 @@ function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; ton
     <div className="home-mix">
       <span className="home-mix-bar" aria-hidden="true">
         {mix.map((entry) => (
-          <i key={entry.key} className={`tone-${entry.tone}`} style={{ width: `${(entry.count / total) * 100}%` }} />
+          // A zero total is a real state (no customers yet); "NaN%" is not a width.
+          <i key={entry.key} className={`tone-${entry.tone}`} style={{ width: `${total > 0 ? (entry.count / total) * 100 : 0}%` }} />
         ))}
       </span>
       <ul className="home-mix-key">
@@ -2324,7 +2325,8 @@ function HomeProgress({ complete, total, t, hideLabel }: { complete: number; tot
         </p>
       )}
       <div className="home-progress" role="progressbar" aria-valuenow={complete} aria-valuemin={0} aria-valuemax={total}>
-        <span style={{ width: `${(complete / total) * 100}%` }} />
+        {/* Every step skipped leaves no steps at all, and 0/0 is NaN, not 0. */}
+        <span style={{ width: `${total > 0 ? Math.min(100, (complete / total) * 100) : 0}%` }} />
       </div>
     </>
   );

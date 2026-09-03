@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -52,6 +52,7 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderDetailContent } from "./OrderDetailContent";
 import {
@@ -166,14 +167,17 @@ export default function OrdersPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
 
+  // Reading window.location once on mount meant a link followed while already
+  // ON this page changed nothing: opening an order notification from /orders
+  // rewrote the URL and left the previous order on screen.
+  const searchParams = useSearchParams();
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setRequestedOrderId(params.get("selectedOrderId") ?? params.get("orderId") ?? "");
+    setRequestedOrderId(searchParams.get("selectedOrderId") ?? searchParams.get("orderId") ?? "");
     // "View All Orders" on a customer profile lands here filtered to that
     // customer — the search box already matches customer names.
-    const customerName = params.get("customerName");
+    const customerName = searchParams.get("customerName");
     if (customerName) setOrderSearch(customerName);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     setFirstProjectGuide(getFirstProjectGuideState());
@@ -484,7 +488,7 @@ export default function OrdersPage() {
     const targets = deletedOrders.filter(order => idSet.has(order.id));
     if (targets.length === 0) { clearOrderSelection(); return; }
     const confirmed = window.confirm(
-      `Permanently delete ${targets.length} order${targets.length === 1 ? "" : "s"}? This cannot be undone.`
+      t("Permanently delete {count} orders? This cannot be undone.").replace("{count}", String(targets.length))
     );
     if (!confirmed) return;
 
@@ -521,7 +525,7 @@ export default function OrdersPage() {
       return;
     }
     const confirmed = window.confirm(
-      `Move ${targets.length} order${targets.length === 1 ? "" : "s"} to Trash? You can restore them for 30 days.`
+      t("Move {count} orders to Trash? You can restore them for 30 days.").replace("{count}", String(targets.length))
     );
     if (!confirmed) return;
 
@@ -646,7 +650,10 @@ export default function OrdersPage() {
       || (workspace.memberAccess.assignedProjectsOnly === true
         && workspace.memberAccess.manageProjectAssignments !== true);
     if (requiresOwnerApproval) {
-      const confirmed = window.confirm(`Request deletion of "${order.customerName.trim() || "New Project"}"? The order will be deleted only after owner approval.`);
+      const confirmed = window.confirm(
+        t("Request deletion of \"{name}\"? The order will be deleted only after owner approval.")
+          .replace("{name}", order.customerName.trim() || t("New Project"))
+      );
       if (!confirmed) return;
       setOrderContextMenu(null);
       setOrderActionError(null);
@@ -664,7 +671,10 @@ export default function OrdersPage() {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
     }
-    const confirmed = window.confirm(`Move "${order.customerName.trim() || "New Project"}" to Trash? You can restore it for 30 days.`);
+    const confirmed = window.confirm(
+      t("Move \"{name}\" to Trash? You can restore it for 30 days.")
+        .replace("{name}", order.customerName.trim() || t("New Project"))
+    );
     if (!confirmed) return;
 
     setOrderContextMenu(null);
@@ -795,9 +805,11 @@ export default function OrdersPage() {
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
 
-  // A genuinely empty workspace, as opposed to a filter that matched nothing.
+  // A genuinely empty workspace — as opposed to a filter that matched nothing,
+  // or a load that failed. A refused read also returns no orders, and telling
+  // that person to "create your first order" hides the real problem.
   const workspaceHasNoOrders =
-    !loadingOrders && orders.length === 0 && orderFilter !== "trash";
+    !loadingOrders && !error && orders.length === 0 && orderFilter !== "trash";
   const canCreateFirstOrder = Boolean(
     workspace &&
     workspaceAccessAllows(workspace.memberAccess, "orders") &&
@@ -1286,7 +1298,7 @@ export default function OrdersPage() {
           {detailError ? (
             <section className="card order-error-card">
               <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load order")} />
-              <p style={{ color: "var(--danger)", margin: 0 }}>{t(detailError)}</p>
+              <p style={{ color: "var(--danger)", margin: 0 }}>{friendlyErrorMessage(detailError, t)}</p>
             </section>
           ) : null}
 

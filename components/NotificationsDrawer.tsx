@@ -49,6 +49,7 @@ export function NotificationsDrawer({
   const [optimisticReadIds, setOptimisticReadIds] = useState<Set<string>>(new Set());
   const [optimisticAllRead, setOptimisticAllRead] = useState(false);
   const [reviewingOrderId, setReviewingOrderId] = useState("");
+  const [permissionHelpOpen, setPermissionHelpOpen] = useState(false);
 
   // Persist dismissed IDs to localStorage so they don't come back after refresh.
   useEffect(() => {
@@ -170,7 +171,10 @@ export function NotificationsDrawer({
       router.push("/settings?section=support-tickets");
       onClose();
     } else if (route === "order" || n.orderId.trim()) {
-      router.push("/orders");
+      // Landing on the order list and leaving the reader to find the order
+      // again is not opening the notification.
+      const orderId = n.orderId.trim();
+      router.push(orderId ? `/orders?orderId=${encodeURIComponent(orderId)}` : "/orders");
       onClose();
     }
   };
@@ -179,10 +183,25 @@ export function NotificationsDrawer({
   const [permState, setPermState] = useState<NotificationPermission | "unsupported">("default");
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("Notification" in window)) { setPermState("unsupported"); return; }
-    setPermState(Notification.permission);
+    void import("@/lib/studioflow/pushNotifications").then((mod) => setPermState(mod.webPushPermissionState()));
   }, [open]);
   const showPermissionBanner = open && permState === "denied";
+  const showEnableInvitation = open && permState === "default";
+  const [enablingPush, setEnablingPush] = useState(false);
+
+  async function enableNotifications() {
+    if (!workspace || !uid) return;
+    setEnablingPush(true);
+    const mod = await import("@/lib/studioflow/pushNotifications");
+    try {
+      await mod.registerWebPush(workspace, { uid, email }, { requestPermission: true });
+    } catch {
+      /* the state below reports whatever the browser decided */
+    } finally {
+      setEnablingPush(false);
+      setPermState(mod.webPushPermissionState());
+    }
+  }
 
   if (!open) return null;
 
@@ -265,22 +284,34 @@ export function NotificationsDrawer({
           </div>
         </div>
 
+        {showEnableInvitation && (
+          <div className="notif-permission-banner is-invite">
+            <div style={{ flex: 1 }}>
+              <strong>Turn on notifications</strong>
+              <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
+                Get an alert when a message, order or support reply needs you.
+              </div>
+            </div>
+            <button type="button" disabled={enablingPush || !workspace} onClick={() => void enableNotifications()}>
+              {enablingPush ? "Asking…" : "Enable notifications"}
+            </button>
+          </div>
+        )}
+
         {showPermissionBanner && (
           <div className="notif-permission-banner">
             <div style={{ flex: 1 }}>
               <strong>Notifications are blocked</strong>
+              {/* A page cannot open chrome://settings — the browser blocks it and
+                  nothing happens. Say where the switch is instead. */}
               <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
-                Allow notifications in your browser settings to get push alerts.
+                {permissionHelpOpen
+                  ? "Click the padlock (or the icon left of the web address), find Notifications, and set it to Allow. Then reload this page."
+                  : "Allow notifications in your browser settings to get push alerts."}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window === "undefined") return;
-                window.open("chrome://settings/content/notifications", "_blank");
-              }}
-            >
-              How to enable
+            <button type="button" onClick={() => setPermissionHelpOpen((open) => !open)}>
+              {permissionHelpOpen ? "Hide" : "How to enable"}
             </button>
           </div>
         )}
@@ -389,8 +420,19 @@ function NotificationCard({
       className={`notif-card${isUnread ? " unread" : ""}`}
       onClick={onClick}
       onContextMenu={(e) => { e.preventDefault(); onDismiss(); }}
-      style={{ marginLeft: indent ? 16 : 0, cursor: "pointer" }}
+      style={{ marginLeft: indent ? 16 : 0, cursor: "pointer", position: "relative" }}
     >
+      {/* Right-click is not a discoverable way to clear one notification, and
+          on a touch screen it does not exist at all. */}
+      <button
+        type="button"
+        className="notif-row-dismiss"
+        aria-label="Dismiss this notification"
+        title="Dismiss"
+        onClick={(event) => { event.stopPropagation(); onDismiss(); }}
+      >
+        ×
+      </button>
       <div className="notif-card-row">
         <div className="notif-avatar" style={{ background: `${tint}26`, color: tint }}>
           {item.senderPhotoURL ? (
@@ -585,6 +627,13 @@ function DrawerStyles() {
       .notif-empty { padding: 32px; display: flex; flex-direction: column; align-items: center; text-align: center; }
       .notif-permission-banner { background: #fee2e2; color: #991b1b; border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
       .notif-permission-banner button { background: white; border: 1px solid #fca5a5; color: #991b1b; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+      /* An offer, not a failure — it must not be painted like the blocked banner. */
+      .notif-permission-banner.is-invite { background: rgba(37,99,235,0.10); color: #1d4ed8; }
+      .notif-permission-banner.is-invite button { border-color: rgba(37,99,235,0.35); color: #1d4ed8; }
+      .notif-permission-banner button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .notif-row-dismiss { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 999px; border: none; background: transparent; color: #9ca3af; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+      .notif-card:hover .notif-row-dismiss, .notif-row-dismiss:focus-visible { opacity: 1; }
+      @media (hover: none) { .notif-row-dismiss { opacity: 1; } }
     `}</style>
   );
 }
