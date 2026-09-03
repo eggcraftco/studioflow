@@ -1589,6 +1589,20 @@ class FirebaseManager: ObservableObject {
             siparis.deletedAt = (data["deletedAt"] as? Timestamp)?.dateValue()
             siparis.assignedToUid = stringValue(data["assignedToUid"])
             siparis.assignedToEmail = stringValue(data["assignedToEmail"])
+            // These used to be left at their defaults, so a document that fell
+            // into this branch came back as a plain "custom" order with no
+            // repair intake, no estimates, no portal link and no production
+            // override — and the next save wrote that emptiness to Firestore.
+            siparis.orderType = stringValue(data["orderType"], fallback: "custom")
+            siparis.estimateStatus = stringValue(data["estimateStatus"])
+            siparis.portalToken = stringValue(data["portalToken"])
+            siparis.portalTokenId = stringValue(data["portalTokenId"])
+            siparis.productionStageOverride = data["productionStageOverride"] as? String
+            siparis.repairIntake = firestoreValue(data["repairIntake"], as: RepairIntake.self)
+            siparis.estimates = firestoreArray(data["estimates"], as: [OrderEstimateSummary].self)
+            siparis.portalVisibility = firestoreValue(data["portalVisibility"], as: CustomerPortalVisibility.self)
+            siparis.portalAutoUpdates = firestoreValue(data["portalAutoUpdates"], as: CustomerPortalAutoUpdates.self)
+            siparis.productionBlocker = firestoreValue(data["productionBlocker"], as: OrderProductionBlocker.self)
             print("Recovered order document with app-compatible defaults: \(document.documentID). Decode fallback reason: \(error.localizedDescription)")
             return siparis
         }
@@ -1666,6 +1680,17 @@ class FirebaseManager: ObservableObject {
     }
 
     private func firestoreArray<T: Decodable>(_ value: Any?, as type: [T].Type) -> [T]? {
+        guard let value else { return nil }
+        if let decoded = try? Firestore.Decoder().decode(type, from: value) { return decoded }
+        // One malformed row must not cost the whole list: decode what can be
+        // decoded and keep it, rather than returning nil and letting the caller
+        // write an empty array back over the server's copy.
+        guard let rows = value as? [Any] else { return nil }
+        let salvaged = rows.compactMap { try? Firestore.Decoder().decode(T.self, from: $0) }
+        return salvaged.isEmpty && !rows.isEmpty ? nil : salvaged
+    }
+
+    private func firestoreValue<T: Decodable>(_ value: Any?, as type: T.Type) -> T? {
         guard let value else { return nil }
         return try? Firestore.Decoder().decode(type, from: value)
     }
@@ -2181,12 +2206,69 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+    // MARK: - Field-level writes
+
+    // A Mac/iPhone save used to REPLACE the whole order document, so every field
+    // the app's model does not know about was wiped by an ordinary edit: the
+    // `commerce` stamp (which is what stops a store re-delivering the same
+    // order), `etsySource`, `createdAt/createdBy*`, `source`, the portal's
+    // last-notified status. These lists name the fields the app itself owns and
+    // may therefore clear; anything absent from them is the server's and is left
+    // untouched by a merge.
+    private static let siparisClearableFields: [String] = [
+        "invoiceNote", "shippingName", "shippingStreetAddress", "shippingCity",
+        "shippingPostalCode", "shippingCountry", "shippingPhone", "extraStatuses",
+        "productionStageOverride", "productionBlocker", "customFields", "customToggles",
+        "historyLog", "clientFiles", "todoItems", "workSessions", "payments",
+        "refundedAmount", "lineItems", "repairIntake", "estimates",
+        "portalVisibility", "portalAutoUpdates", "deletedAt"
+    ]
+
+    private static let musteriClearableFields: [String] = [
+        "streetAddress", "city", "postalCode", "country", "shippingAddress",
+        "shippingStreetAddress", "shippingCity", "shippingPostalCode",
+        "shippingCountry", "shippingPhone", "source", "externalCustomerId",
+        "integrationSyncedAt", "integrationLastPayload", "primaryPhone",
+        "whatsappNumber", "company", "tags", "preferredChannel", "doNotContact",
+        "marketingOptIn", "nextFollowUpDate"
+    ]
+
+    /// Encodes a model for a merging write. Optional properties are omitted by
+    /// the encoder, which under `merge: true` would mean "leave as it was" — so
+    /// a field the user actually cleared is written as an explicit delete. The
+    /// result: every field the model owns is set or removed, and every field it
+    /// does not own survives.
+    private func mergePayload<T: Encodable>(_ value: T, clearable: [String]) throws -> [String: Any] {
+        var data = try Firestore.Encoder().encode(value)
+        for field in clearable where data[field] == nil {
+            data[field] = FieldValue.delete()
+        }
+        return data
+    }
+
+    private func writeSiparisMerging(_ siparis: Siparis, id: String) throws {
+        let payload = try mergePayload(siparis, clearable: Self.siparisClearableFields)
+        db.collection("siparisler").document(id).setData(payload, merge: true)
+    }
+
+    private func writeMusteriMerging(_ musteri: Musteri, id: String) throws {
+        let payload = try mergePayload(musteri, clearable: Self.musteriClearableFields)
+        db.collection("musteriler").document(id).setData(payload, merge: true)
+    }
+
     func updateSiparis(_ siparis: Siparis, previousSiparis: Siparis? = nil) {
         guard !currentCompanyId.isEmpty else { print("Company ID is not configured."); return }
         guard let id = siparis.id else { return }
         var guncelSiparis = siparis
         guncelSiparis.companyId = currentCompanyId
         let oncekiSiparis = previousSiparis ?? siparisler.first(where: { $0.id == id })
+        // Closing an order detail view calls this unconditionally. Without this
+        // guard, merely opening and closing an order wrote the document again —
+        // moving updatedAt/updatedBy and overwriting whatever the web had just
+        // saved in the meantime.
+        if previousSiparis == nil, let onceki = oncekiSiparis, onceki == guncelSiparis {
+            return
+        }
         if let onceki = oncekiSiparis, onceki != guncelSiparis {
             registerSiparisChange(before: onceki, after: guncelSiparis)
         }
@@ -2203,7 +2285,7 @@ class FirebaseManager: ObservableObject {
         }
 
         do {
-            try db.collection("siparisler").document(id).setData(from: guncelSiparis)
+            try writeSiparisMerging(guncelSiparis, id: id)
             upsertLocalSiparis(guncelSiparis)
             registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: guncelSiparis.customerName)
             withHistorySuspended {
@@ -2360,7 +2442,7 @@ class FirebaseManager: ObservableObject {
                     if let self,
                        var order = self.siparisler.first(where: { $0.id == orderId }),
                        var files = order.clientFiles,
-                       let idx = files.firstIndex(where: { $0.id.uuidString == fileId }) {
+                       let idx = files.firstIndex(where: { $0.id == fileId }) {
                         files[idx].fileName = trimmed
                         order.clientFiles = files
                         self.upsertLocalSiparis(order)
@@ -2504,7 +2586,7 @@ class FirebaseManager: ObservableObject {
             registerMusteriChange(before: onceki, after: guncelMusteri)
         }
         do {
-            try db.collection("musteriler").document(id).setData(from: guncelMusteri)
+            try writeMusteriMerging(guncelMusteri, id: id)
             upsertLocalMusteri(guncelMusteri)
             registerOfflineWriteIfNeeded(collection: "musteriler", documentId: id, action: "update", title: guncelMusteri.name)
             syncMusteriBilgileriniSiparislere(guncelMusteri, oncekiIsim: oncekiIsim)
@@ -2696,7 +2778,7 @@ class FirebaseManager: ObservableObject {
             guard degisti else { continue }
             guncelSiparis.companyId = currentCompanyId
             do {
-                try db.collection("siparisler").document(id).setData(from: guncelSiparis)
+                try writeSiparisMerging(guncelSiparis, id: id)
                 upsertLocalSiparis(guncelSiparis)
                 registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: guncelSiparis.customerName)
             } catch {
@@ -2738,7 +2820,7 @@ class FirebaseManager: ObservableObject {
 
             registerSiparisChange(before: siparis, after: guncelSiparis)
             do {
-                try db.collection("siparisler").document(id).setData(from: guncelSiparis)
+                try writeSiparisMerging(guncelSiparis, id: id)
                 upsertLocalSiparis(guncelSiparis)
                 registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: guncelSiparis.customerName)
             } catch {
@@ -2764,10 +2846,25 @@ class FirebaseManager: ObservableObject {
         }
     }
     
+    /// Writes the map key by key (`customFields.<key>`) instead of replacing the
+    /// whole map. The bank module writes `financialExpense::<Bank>` into the same
+    /// map and the web writes its layout/heading JSON there; a whole-map write
+    /// from a device holding a stale copy silently dropped both.
     func updateSiparisCustomFields(_ siparisID: String, customFields: [String: String]) {
-        db.collection("siparisler").document(siparisID).updateData([
-            "customFields": customFields
-        ]) { error in
+        // FieldPath rather than a dotted string, so a key that itself contains a
+        // dot is still addressed as one key.
+        var updates: [AnyHashable: Any] = [:]
+        for (key, value) in customFields {
+            updates[FieldPath(["customFields", key])] = value
+        }
+        // Keys the caller dropped are deleted explicitly. Keys this device never
+        // had — the bank module's, the web's — are in neither map, so they stay.
+        let previous = siparisler.first(where: { $0.id == siparisID })?.customFields ?? [:]
+        for key in previous.keys where customFields[key] == nil {
+            updates[FieldPath(["customFields", key])] = FieldValue.delete()
+        }
+        guard !updates.isEmpty else { return }
+        db.collection("siparisler").document(siparisID).updateData(updates) { error in
             if let error {
                 print("updateSiparisCustomFields failed: \(error.localizedDescription)")
             }
@@ -2862,13 +2959,13 @@ class FirebaseManager: ObservableObject {
     private func restoreSiparis(_ siparis: Siparis) {
         guard let id = siparis.id else { return }
         upsertLocalSiparis(siparis)
-        do { try db.collection("siparisler").document(id).setData(from: siparis) } catch { print("Undo Sipariş Hatası: \(error)") }
+        do { try writeSiparisMerging(siparis, id: id) } catch { print("Undo Sipariş Hatası: \(error)") }
     }
     
     private func restoreMusteri(_ musteri: Musteri) {
         guard let id = musteri.id else { return }
         upsertLocalMusteri(musteri)
-        do { try db.collection("musteriler").document(id).setData(from: musteri) } catch { print("Undo Müşteri Hatası: \(error)") }
+        do { try writeMusteriMerging(musteri, id: id) } catch { print("Undo Müşteri Hatası: \(error)") }
     }
     
     private func upsertLocalSiparis(_ siparis: Siparis) {
@@ -3315,7 +3412,7 @@ class FirebaseManager: ObservableObject {
                     if let index = self.siparisler.firstIndex(where: { $0.id == pending.orderId }) {
                         var order = self.siparisler[index]
                         var files = order.clientFiles ?? []
-                        files.removeAll { $0.pendingQueueId == pending.id.uuidString || $0.id.uuidString == pending.id.uuidString }
+                        files.removeAll { $0.pendingQueueId == pending.id.uuidString || $0.id == pending.id.uuidString }
                         files.insert(uploadedItem, at: 0)
                         order.clientFiles = files
                         self.updateSiparis(order)
@@ -3352,7 +3449,10 @@ class FirebaseManager: ObservableObject {
         guard let directory = offlineClientFilesCompanyDirectory() else { return nil }
         let ext = URL(fileURLWithPath: item.fileName).pathExtension.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let fileExtension = ext.isEmpty ? "file" : ext
-        return directory.appendingPathComponent("\(item.id.uuidString).\(fileExtension)")
+        // The id is now free-form text (the web mints its own), so it is
+        // sanitised before it becomes a path component.
+        let safeId = item.id.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "-" }
+        return directory.appendingPathComponent("\(String(safeId)).\(fileExtension)")
     }
 
     func isClientFileAvailableOffline(_ item: ClientFileItem) -> Bool {

@@ -2225,7 +2225,7 @@ struct StudioKeepNotesView: View {
                 let cleanTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 rows.append(
                     KeepOrderScheduleAlert(
-                        id: "\(orderKey)-\(item.id.uuidString)",
+                        id: "\(orderKey)-\(item.id)",
                         orderKey: orderKey,
                         orderLabel: orderLabel,
                         title: cleanTitle.isEmpty ? t("Reminder", lang: seciliDil) : cleanTitle,
@@ -11672,7 +11672,7 @@ struct ContentView: View {
             yeni.customerName = t("New Project", lang: seciliDil)
             yeni.historyLog = [
                 OrderHistoryLogItem(
-                    id: UUID(),
+                    id: UUID().uuidString,
                     createdAt: Date(),
                     title: "Order created",
                     oldValue: "-",
@@ -20211,7 +20211,7 @@ struct ClientFilesHubView: View {
 
     @State private var hubMode: String = "classic"
     @State private var previewItems: [ClientFileItem] = []
-    @State private var previewInitialID: UUID? = nil
+    @State private var previewInitialID: String? = nil
     @State private var showPreview = false
     @State private var statusMessage: String = ""
     @State private var downloadingScope: String? = nil
@@ -20475,7 +20475,7 @@ struct ClientFilesHubView: View {
                     return
                 }
                 let historyEntry = OrderHistoryLogItem(
-                    id: UUID(),
+                    id: UUID().uuidString,
                     createdAt: Date(),
                     title: item.isPendingUpload ? "Client file queued" : "Client file uploaded",
                     oldValue: "-",
@@ -20492,7 +20492,7 @@ struct ClientFilesHubView: View {
         let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
         renameTarget = nil
         guard !newName.isEmpty, newName != target.file.fileName else { return }
-        firebaseManager.renameClientFile(orderId: target.orderId, fileId: target.file.id.uuidString, newFileName: newName) { success in
+        firebaseManager.renameClientFile(orderId: target.orderId, fileId: target.file.id, newFileName: newName) { success in
             DispatchQueue.main.async {
                 statusMessage = success ? lt("File renamed") : (firebaseManager.lastUploadSafetyMessage.isEmpty ? lt("Rename failed") : firebaseManager.lastUploadSafetyMessage)
             }

@@ -192,7 +192,7 @@ struct ClientFilePreviewSheet: View {
     let onRemoveOffline: (ClientFileItem) -> Void
     let onOpenExternal: (ClientFileItem) -> Void
 
-    @State private var selectedItemID: UUID
+    @State private var selectedItemID: String
     /// Flipped by the offline buttons so the row redraws — the answer lives on
     /// disk, not in state, and SwiftUI has no reason to look again otherwise.
     @State private var offlineTick = 0
@@ -210,7 +210,7 @@ struct ClientFilePreviewSheet: View {
 
     init(
         items: [ClientFileItem],
-        initialItemID: UUID,
+        initialItemID: String,
         language: String,
         isAvailableOffline: @escaping (ClientFileItem) -> Bool,
         offlineURLProvider: @escaping (ClientFileItem) -> URL?,
@@ -767,10 +767,10 @@ private struct ToDoAssigneeOption: Identifiable, Equatable {
 
 private struct ToDoItemDropDelegate: DropDelegate {
     let item: OrderToDoItem
-    @Binding var draggingID: UUID?
+    @Binding var draggingID: String?
     let canEdit: Bool
-    let moveAction: (UUID, UUID) -> Void
-    let dropAction: (UUID?) -> Void
+    let moveAction: (String, String) -> Void
+    let dropAction: (String?) -> Void
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
@@ -1533,7 +1533,7 @@ struct SiparisDetayView: View {
     @State private var newToDoDueAt: Date = Date()
     @State private var newToDoHasDueDate: Bool = false
     @State private var toDoFilter: String = "Open"
-    @State private var draggingToDoItemID: UUID? = nil
+    @State private var draggingToDoItemID: String? = nil
     @State private var toDoMessage: String = ""
     @State private var newWorkSessionTitle: String = ""
     @State private var workTimeMessage: String = ""
@@ -5615,7 +5615,7 @@ struct SiparisDetayView: View {
         let pendingQueueId = item.pendingQueueId.trimmingCharacters(in: .whitespacesAndNewlines)
         if !pendingQueueId.isEmpty { return "pending:\(pendingQueueId)" }
 
-        return "id:\(item.id.uuidString)"
+        return "id:\(item.id)"
     }
 
     private func sortedClientFiles(_ files: [ClientFileItem]) -> [ClientFileItem] {
@@ -5646,7 +5646,7 @@ struct SiparisDetayView: View {
     }
 
     private func historyLogMergeKey(_ item: OrderHistoryLogItem) -> String {
-        "id:\(item.id.uuidString)"
+        "id:\(item.id)"
     }
 
     private func mergedHistoryLogFromCloud(_ cloudItems: [OrderHistoryLogItem]) -> [OrderHistoryLogItem] {
@@ -5704,7 +5704,7 @@ struct SiparisDetayView: View {
     private func recordOrderHistoryEvent(title: String, value: String = "") {
         let cleanedValue = cleanHistoryValue(value)
         var logs = siparis.historyLog ?? []
-        logs.insert(OrderHistoryLogItem(id: UUID(), createdAt: Date(), title: title, oldValue: "-", newValue: cleanedValue), at: 0)
+        logs.insert(OrderHistoryLogItem(id: UUID().uuidString, createdAt: Date(), title: title, oldValue: "-", newValue: cleanedValue), at: 0)
         if logs.count > 120 {
             logs = Array(logs.prefix(120))
         }
@@ -5769,7 +5769,7 @@ struct SiparisDetayView: View {
         guard cleanedOld != cleanedNew else { return }
 
         var logs = siparis.historyLog ?? []
-        logs.insert(OrderHistoryLogItem(id: UUID(), createdAt: Date(), title: title, oldValue: cleanedOld, newValue: cleanedNew), at: 0)
+        logs.insert(OrderHistoryLogItem(id: UUID().uuidString, createdAt: Date(), title: title, oldValue: cleanedOld, newValue: cleanedNew), at: 0)
         if logs.count > 120 {
             logs = Array(logs.prefix(120))
         }
@@ -5939,7 +5939,7 @@ struct SiparisDetayView: View {
         var items = siparis.todoItems ?? []
         items.insert(
             OrderToDoItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 title: title,
                 note: "",
                 assignedToUid: assignedUid,
@@ -6036,7 +6036,7 @@ struct SiparisDetayView: View {
         saveToDoItems(items, historyTitle: t("Task order updated", lang: seciliDil), historyValue: item.title)
     }
 
-    private func reorderToDoItem(draggedID: UUID, targetID: UUID) {
+    private func reorderToDoItem(draggedID: String, targetID: String) {
         guard canEditToDoItems, draggedID != targetID else { return }
         var items = siparis.todoItems ?? []
         guard let fromIndex = items.firstIndex(where: { $0.id == draggedID }),
@@ -6049,7 +6049,7 @@ struct SiparisDetayView: View {
         }
     }
 
-    private func finishToDoDrag(_ draggedID: UUID?) {
+    private func finishToDoDrag(_ draggedID: String?) {
         guard canEditToDoItems else { return }
         let title = (siparis.todoItems ?? []).first(where: { $0.id == draggedID })?.title ?? ""
         recordOrderHistoryEvent(title: t("Task order updated", lang: seciliDil), value: title)
@@ -6367,7 +6367,7 @@ struct SiparisDetayView: View {
                     #if os(macOS)
                     NSCursor.closedHand.set()
                     #endif
-                    return NSItemProvider(object: item.id.uuidString as NSString)
+                    return NSItemProvider(object: item.id as NSString)
                 }
                 .onDrop(
                     of: [UTType.plainText],
@@ -6701,7 +6701,7 @@ struct SiparisDetayView: View {
         var sessions = siparis.workSessions ?? []
         sessions.insert(
             OrderWorkSessionItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 title: cleanTitle,
                 startedAt: now,
                 endedAt: nil,
@@ -6757,7 +6757,7 @@ struct SiparisDetayView: View {
         var sessions = siparis.workSessions ?? []
         sessions.insert(
             OrderWorkSessionItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 title: title,
                 startedAt: now,
                 endedAt: nil,
@@ -9199,7 +9199,7 @@ struct SiparisDetayView: View {
                     files.insert(item, at: 0)
                     siparis.clientFiles = files
                     let historyEntry = OrderHistoryLogItem(
-                        id: UUID(),
+                        id: UUID().uuidString,
                         createdAt: Date(),
                         title: item.isPendingUpload ? t("Client file queued", lang: seciliDil) : "Client file uploaded",
                         oldValue: "-",
@@ -10029,7 +10029,7 @@ struct SiparisDetayView: View {
                 Label(lt("Only image files can be used in Preview."), systemImage: "info.circle")
             }
         }
-        .id("\(item.id.uuidString)-\(offlineClientFileRefreshToken.uuidString)")
+        .id("\(item.id)-\(offlineClientFileRefreshToken.uuidString)")
         .padding(10)
         .frame(minHeight: clientFilesRowHeight)
         .background(Color.primary.opacity(0.035))
@@ -10995,7 +10995,7 @@ struct SiparisDetayView: View {
 
         var updatedOrder = siparis
         let entry = PaymentEntry(
-            id: UUID(),
+            id: UUID().uuidString,
             amount: cleanAmount,
             date: Date(),
             method: method.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -11026,7 +11026,7 @@ struct SiparisDetayView: View {
         var logs = updatedOrder.historyLog ?? []
         logs.insert(
             OrderHistoryLogItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 createdAt: Date(),
                 title: markFinal ? "Full payment received" : "Payment received",
                 oldValue: cleanHistoryValue("Payment #\(ordinal)\(methodSuffix)"),
@@ -11053,7 +11053,7 @@ struct SiparisDetayView: View {
 
         var updatedOrder = siparis
         let entry = PaymentEntry(
-            id: UUID(),
+            id: UUID().uuidString,
             amount: amount,
             date: Date(),
             method: siparis.paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -11066,7 +11066,7 @@ struct SiparisDetayView: View {
         var logs = updatedOrder.historyLog ?? []
         logs.insert(
             OrderHistoryLogItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 createdAt: Date(),
                 title: "Payment received",
                 oldValue: cleanHistoryValue("Payment #1"),
@@ -11098,7 +11098,7 @@ struct SiparisDetayView: View {
         var logs = updatedOrder.historyLog ?? []
         logs.insert(
             OrderHistoryLogItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 createdAt: Date(),
                 title: "Remaining set",
                 oldValue: "-",
@@ -11139,7 +11139,7 @@ struct SiparisDetayView: View {
         var logs = updatedOrder.historyLog ?? []
         logs.insert(
             OrderHistoryLogItem(
-                id: UUID(),
+                id: UUID().uuidString,
                 createdAt: Date(),
                 title: "Payment removed",
                 oldValue: cleanHistoryValue(amountHistoryValue(entry.amount)),

@@ -11,7 +11,10 @@ func kdvBrutten(_ taxRate: Double, _ brutTutar: Double) -> Double {
 }
 
 struct OrderHistoryLogItem: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
+    // String, not UUID: the server and the web mint ids like
+    // "1757042318391-8f3a" and a UUID-typed field failed to decode the whole
+    // array, which the next save then wrote back empty.
+    var id: String = UUID().uuidString
     var createdAt: Date = Date()
     var title: String
     var oldValue: String
@@ -23,7 +26,10 @@ struct OrderHistoryLogItem: Identifiable, Codable, Equatable {
 // and how much the customer paid — even after "Full Payment Received" aggregates
 // everything into paidAmount.
 struct PaymentEntry: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
+    // String, not UUID: the server and the web mint ids like
+    // "1757042318391-8f3a" and a UUID-typed field failed to decode the whole
+    // array, which the next save then wrote back empty.
+    var id: String = UUID().uuidString
     var amount: Double
     var date: Date = Date()
     var method: String = ""   // optional: "Deposit", "Card", "Cash", "Final"...
@@ -52,7 +58,10 @@ struct LineItem: Identifiable, Codable, Equatable {
 
 
 struct OrderToDoItem: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
+    // String, not UUID: the server and the web mint ids like
+    // "1757042318391-8f3a" and a UUID-typed field failed to decode the whole
+    // array, which the next save then wrote back empty.
+    var id: String = UUID().uuidString
     var title: String
     var note: String = ""
     var assignedToUid: String = ""
@@ -69,7 +78,10 @@ struct OrderToDoItem: Identifiable, Codable, Equatable {
 }
 
 struct OrderWorkSessionItem: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
+    // String, not UUID: the server and the web mint ids like
+    // "1757042318391-8f3a" and a UUID-typed field failed to decode the whole
+    // array, which the next save then wrote back empty.
+    var id: String = UUID().uuidString
     var title: String = "Work session"
     var startedAt: Date = Date()
     var endedAt: Date? = nil
@@ -81,7 +93,10 @@ struct OrderWorkSessionItem: Identifiable, Codable, Equatable {
 }
 
 struct ClientFileItem: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
+    // String, not UUID: the server and the web mint ids like
+    // "1757042318391-8f3a" and a UUID-typed field failed to decode the whole
+    // array, which the next save then wrote back empty.
+    var id: String = UUID().uuidString
     var fileName: String
     var downloadURL: String
     var storagePath: String = ""
