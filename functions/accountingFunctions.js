@@ -1041,14 +1041,18 @@ function createAccountingFunctions(deps) {
     const r = store.refs(db(), companyId);
     const limit = Math.min(200, Math.max(10, Number(request.data?.limit) || 60));
     const connectionId = cleanText(request.data?.connectionId, 130);
-    const inboxQuery = connectionId ? r.inbox.where("connectionId", "==", connectionId) : r.inbox;
+    // Filtering by connection and ordering by time would need a composite index;
+    // one connection's inbox is small, so it is read by connection and sorted here.
     const [inboxSnap, auditSnap] = await Promise.all([
-      inboxQuery.orderBy("receivedAtMs", "desc").limit(limit).get(),
+      connectionId ? r.inbox.where("connectionId", "==", connectionId).limit(500).get() : r.inbox.orderBy("receivedAtMs", "desc").limit(limit).get(),
       r.audit.orderBy("createdAtMs", "desc").limit(limit).get()
     ]);
+    const inboxDocs = connectionId
+      ? inboxSnap.docs.slice().sort((a, b) => Number((b.data() || {}).receivedAtMs || 0) - Number((a.data() || {}).receivedAtMs || 0)).slice(0, limit)
+      : inboxSnap.docs;
     return {
       ok: true,
-      inbox: inboxSnap.docs.map((doc) => { const d = doc.data() || {}; return { id: doc.id, connectionId: d.connectionId || "", provider: d.provider || "", entityType: d.entityType, externalId: d.externalId, operation: d.operation, status: d.status, outcome: d.outcome || "", error: d.error || "", occurredAt: d.occurredAt, receivedAtMs: d.receivedAtMs, format: d.format }; }),
+      inbox: inboxDocs.map((doc) => { const d = doc.data() || {}; return { id: doc.id, connectionId: d.connectionId || "", provider: d.provider || "", entityType: d.entityType, externalId: d.externalId, operation: d.operation, status: d.status, outcome: d.outcome || "", error: d.error || "", occurredAt: d.occurredAt, receivedAtMs: d.receivedAtMs, format: d.format }; }),
       audit: auditSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
     };
   });
