@@ -2013,3 +2013,51 @@ siparişe gerçek bir teslim tarihi alanı eklemek demek; o ayrı bir iş.
 
 **Canlıda:** `createWebOrder`, `createSwiftOrder`, `saveSwiftOrder`, `undoOrderCreate` (yeni),
 `purgeWebOrders`. **KALAN:** web Round'u (kullanıcının sözünü bekliyor) ve native mağaza sürümleri.
+
+---
+
+## Koltuk askıya alma — plandan düşünce ne oluyor (3 Eylül 2026)
+
+**Karar §4 uygulandı.** Küçük plana geçen bir çalışma alanı **hiç kimseyi silmiyor**: üye kaydı,
+rolü, sipariş atamaları ve yazdığı her geçmiş kaydı olduğu gibi kalıyor. Limitin üzerindeki üyeler
+erişimlerini kaybediyor — hepsini. *Salt-okunur bırakmak bilinçli olarak reddedildi:* ayrılmış bir
+çalışanın müşteri kayıtlarını, faturaları ve dosyaları okumaya devam etmesi güvenlik sorunudur.
+
+**Kim gidiyor, tek yerde:** `functions/team/seats.js`. Kural üç ayrı yerde birebir aynı olmak
+zorunda — plan değişimine tepki veren tetikleyici, sahibin başka türlü seçmesini sağlayan callable,
+ve testler. Sahip asla düşmüyor. Geri kalanlar arasında **en eski gelenler kalıyor**; sahibin önden
+kestirebileceği ve itiraz edebileceği bir sıra, "haritada önce hangisi listelendiyse" değil.
+Katılma tarihi damgalanmadan önce gelen üyeler **sona** sıralanıyor: ne zaman geldiğini bilmemek,
+"hep buradaydı" demek değil.
+
+**Neden tetikleyici:** plan dört ayrı raydan küçülebiliyor — Stripe, Apple, Google ve aboneliğin
+bittiğine karar veren çözümleyici. Dördüncü raydan gelen düşüş de birincisi kadar sızdırır. Her
+şirket yazımı tetikleyiciye ulaşıyor (her proje oluşturmadaki sayaç dahil), o yüzden en ucuz soru
+ilk sorulup neredeyse her çağrı orada bitiyor.
+
+**Bayrağın yeri kritik:** askıya alma `members` haritasının İÇİNDE değil, ayrı bir üst düzey
+`suspendedMembers` alanında. Kurallar bir üst düzey alanı mutlak olarak sunucuya kapatabiliyor;
+`members`'ın tek bir alt anahtarını kapatamıyor — ve Team planında `members` zaten sahibin
+yazabildiği bir alan. Kayıt içinde saklansaydı sahip tarayıcı konsolundan çevirirdi: beş koltuk
+parası, yedi kişi. **Kural testi tam bunu iddia ediyor ve alan taşınana kadar kırmızıydı.**
+
+**Yükseltme kimseyi kendiliğinden geri almıyor.** Sahip `Restore Access`'e basıyor; koltuk doluysa
+sunucu sabit bir cümleyle reddediyor (sayı cümlenin içinde değil, hata ayrıntısında — istemciler
+hatayı birebir metin eşleyerek çeviriyor).
+
+**Dört platform:** web (ekip ekranı, satır sönük + "No access" + açıklama + Restore Access),
+Mac/iPhone (Manage menüsünde Remove Access / Restore Access) ve Android. Sayaç her yerde artık
+**koltuk** sayıyor, kişi değil — "3 / 2" sahibe aşmadığı bir limiti aştığını söylüyordu.
+
+**Askıdaki kişinin kendi ekranı:** çalışma alanı seçicide "No access" olarak görünüyor ve girmeye
+çalışınca "erişimin durduruldu, sahibinden geri vermesini iste" diyor. **KALAN:** aktif çalışma
+alanı elinden alınırsa web sessizce kendi kişisel alanına düşürüyor; oraya bir açıklama şeridi
+gerekiyor. Native'lerde de aynı şerit yok.
+
+**Doğrulama:** 14 koltuk kuralı testi + 27 kural testi emülatörde; mevcut altı kural takımı hâlâ
+yeşil; üç kasıtlı bozma (sahip koruması, sıralı dizim, varsayılansız okuma) da yakalanıyor.
+Sonuncusu en önemlisi: üretimde hiçbir çalışma alanında bu alan yok, varsayılansız okuma hepsini
+birden kilitlerdi.
+
+**KALAN:** sunucu + kurallar **deploy edilmedi**, web Round'u da bekliyor — ikisi de kullanıcının
+sözünü bekliyor. Native'ler bütünün sonundaki mağaza sürümüyle.

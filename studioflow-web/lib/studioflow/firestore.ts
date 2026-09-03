@@ -24,6 +24,10 @@ export type JoinedWorkspaceOption = {
   role: string;
   roleLabel: string;
   isCurrent: boolean;
+  /** True when this workspace's plan (or its owner) took this person's seat.
+   *  Still listed, because it is still theirs to be let back into — but it
+   *  cannot be opened, and saying so is kinder than making it disappear. */
+  suspended: boolean;
 };
 
 export type WorkspaceContext = {
@@ -1084,9 +1088,11 @@ export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: 
     const companySnapshot = await readWorkspaceDocument(companyId);
     if (!companySnapshot) return null;
 
+    let suspended = false;
     if (companyId !== uid) {
       const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", companyId));
       if (!accessSnapshot.exists()) return null;
+      suspended = accessSnapshot.data()?.suspended === true;
     }
 
     const companyData = companySnapshot.data();
@@ -1099,8 +1105,9 @@ export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: 
       id: companyId,
       name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
       role,
-      roleLabel: roleLabel(role),
-      isCurrent: companyId === currentCompanyId
+      roleLabel: suspended ? "No access" : roleLabel(role),
+      isCurrent: companyId === currentCompanyId,
+      suspended
     } satisfies JoinedWorkspaceOption;
   }));
 
@@ -1122,6 +1129,12 @@ export async function switchActiveWorkspace(uid: string, companyId: string) {
     const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", cleanCompanyId));
     if (!accessSnapshot.exists()) {
       throw new Error("Your access to this workspace is no longer available.");
+    }
+    // Say what happened. Without this the workspace simply refuses to open and
+    // the person is left guessing whether it is a bug, their connection, or
+    // something they did.
+    if (accessSnapshot.data()?.suspended === true) {
+      throw new Error("Your access to this workspace has been paused. Ask the owner to restore it.");
     }
   }
 

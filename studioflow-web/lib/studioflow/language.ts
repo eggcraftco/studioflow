@@ -660,6 +660,19 @@ const WEB_TRANSLATIONS: TranslationTable = {
   "Checking cloud connection for shared layout and settings.": { Türkçe: "Paylaşılan yerleşim ve ayarlar için bulut bağlantısı kontrol ediliyor." },
 
   // Product decision §4: a smaller plan takes a seat, never a person.
+  "Your access to this workspace has been paused. Ask the owner to restore it.": {
+    "Türkçe": "Bu çalışma alanına erişimin durduruldu. Sahibinden geri vermesini iste.",
+    "Deutsch": "Ihr Zugriff auf diesen Arbeitsbereich ist ausgesetzt. Bitten Sie den Besitzer, ihn wiederherzustellen.",
+    "Français": "Votre accès à cet espace est suspendu. Demandez au propriétaire de le rétablir.",
+    "Italiano": "Il tuo accesso a questo spazio è sospeso. Chiedi al proprietario di ripristinarlo.",
+    "Español (Spanish)": "Tu acceso a este espacio está en pausa. Pide al propietario que lo restaure.",
+    "Português": "O seu acesso a este espaço está em pausa. Peça ao proprietário para o restaurar.",
+    "Русский (Russian)": "Ваш доступ к этому пространству приостановлен. Попросите владельца вернуть его.",
+    "日本語 (Japanese)": "このワークスペースへのアクセスは停止中です。オーナーに戻してもらってください。",
+    "中文 (Chinese)": "你对这个工作区的访问已暂停。请让所有者恢复。",
+    "العربية (Arabic)": "تم إيقاف وصولك إلى مساحة العمل هذه. اطلب من المالك استعادته.",
+    "हिन्दी (Hindi)": "इस वर्कस्पेस तक आपकी पहुँच रोक दी गई है। मालिक से इसे बहाल करने को कहें।"
+  },
   "without access": {
     "Türkçe": "erişimi yok",
     "Deutsch": "ohne Zugriff",
