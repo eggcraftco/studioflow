@@ -102,6 +102,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.features.shell.SectionHeader
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
+import uk.co.eggcraft.studioflow.data.model.customerNameKey
 import uk.co.eggcraft.studioflow.language.studioT
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
@@ -110,8 +111,6 @@ private val dateTimeFormatter = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.get
 
 private fun moneyText(symbol: String, value: Double): String =
     symbol + String.format(Locale.UK, "%,.2f", value)
-
-private fun customerKey(name: String): String = name.trim().lowercase(Locale.UK)
 
 // Store-source badge labels — mirrors the web CUSTOMER_SOURCE_LABEL map.
 private fun customerSourceLabel(source: String): String = when (source) {
@@ -294,10 +293,10 @@ private fun CustomerListView(
     var showCreate by remember { mutableStateOf(false) }
 
     val orderCountByName = remember(state.orders) {
-        state.orders.groupingBy { customerKey(it.customerName) }.eachCount()
+        state.orders.groupingBy { customerNameKey(it.customerName) }.eachCount()
     }
     val ordersByName = remember(state.orders) {
-        state.orders.groupBy { customerKey(it.customerName) }
+        state.orders.groupBy { customerNameKey(it.customerName) }
     }
     // Segments: the union of workspace tags, with counts, for the filter row.
     val allSegments = remember(state.customers) {
@@ -315,13 +314,13 @@ private fun CustomerListView(
                 c.address, c.streetAddress, c.city, c.postalCode, c.country
             ).any { it.lowercase(Locale.UK).contains(query) } ||
                 // Web parity: find a customer by what they ordered (invoice or design).
-                ordersByName[customerKey(c.name)].orEmpty().any { order ->
+                ordersByName[customerNameKey(c.name)].orEmpty().any { order ->
                     order.invoiceNumber.lowercase(Locale.UK).contains(query) ||
                         order.designName.lowercase(Locale.UK).contains(query)
                 }
         }
         if (sortByOrders) {
-            filtered.sortedByDescending { orderCountByName[customerKey(it.name)] ?: 0 }
+            filtered.sortedByDescending { orderCountByName[customerNameKey(it.name)] ?: 0 }
         } else {
             filtered.sortedByDescending { it.lastContactDate?.time ?: 0L }
         }
@@ -334,7 +333,7 @@ private fun CustomerListView(
         if (term.isNotEmpty()) {
             for (c in visible) {
                 if (c.name.lowercase(Locale.UK).contains(term)) continue
-                val customerOrders = ordersByName[customerKey(c.name)].orEmpty()
+                val customerOrders = ordersByName[customerNameKey(c.name)].orEmpty()
                 val hint = when {
                     c.email.lowercase(Locale.UK).contains(term) -> "${t("Email")}: ${c.email}"
                     c.phone.lowercase(Locale.UK).contains(term) -> "${t("Phone")}: ${c.phone}"
@@ -565,9 +564,9 @@ private fun CreateCustomerDialog(
 }
 
 private fun designTitlesFor(customer: StudioCustomer, orders: List<StudioOrder>, t: (String) -> String): String {
-    val key = customerKey(customer.name)
+    val key = customerNameKey(customer.name)
     if (key.isBlank()) return "-"
-    val matched = orders.filter { customerKey(it.customerName) == key }
+    val matched = orders.filter { customerNameKey(it.customerName) == key }
         .sortedByDescending { it.paymentDate }
     val titles = matched.take(3).map { it.designName.ifBlank { t("Untitled design") } }
     val extra = if (matched.size > titles.size) " +${matched.size - titles.size}" else ""
@@ -729,8 +728,8 @@ private fun CustomerDetail(
     }
 
     val customerOrders = remember(orders, customer.name) {
-        val key = customerKey(customer.name)
-        orders.filter { customerKey(it.customerName) == key }
+        val key = customerNameKey(customer.name)
+        orders.filter { customerNameKey(it.customerName) == key }
             .sortedByDescending { it.paymentDate }
     }
     val totalSpent = customerOrders.sumOf { it.paidAmount + it.remainingAmount }

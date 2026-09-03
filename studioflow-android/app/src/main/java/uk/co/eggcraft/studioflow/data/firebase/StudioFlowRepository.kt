@@ -26,6 +26,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioBankRule
 import uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt
 import uk.co.eggcraft.studioflow.data.model.bankRuleFromDocument
 import uk.co.eggcraft.studioflow.data.model.bankWaitingReceiptFromDocument
+import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
@@ -1574,8 +1575,22 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "File deleted."
     }
 
-    /** What creating an order is worth saying out loud, if anything. */
-    data class OrderMilestone(val orderId: String, val message: String?)
+    /**
+     * What creating an order is worth saying out loud, plus the facts the undo
+     * bar needs. `projectNumber`/`projectName` come back from the server and are
+     * never re-derived here: the number is minted once per workspace, never
+     * reused, and the generated name is built from it.
+     */
+    data class OrderMilestone(
+        val orderId: String,
+        val message: String?,
+        val projectNumber: Int = 0,
+        val projectName: String = "",
+        val customerName: String = "",
+        val customerId: String = "",
+        val customerCreated: Boolean = false,
+        val firstOrder: Boolean = false
+    )
 
     /**
      * The first order starts the fortnight, and the owner has to hear it from
@@ -1584,20 +1599,25 @@ class StudioFlowRepository(
      * loud and gets NO sales message — so when a trial starts, that line is
      * shown instead. One message at this moment, never two.
      */
-    suspend fun createOrderWithMilestone(workspace: StudioWorkspace): OrderMilestone {
-        val result = functions.getHttpsCallable("createWebOrder")
-            .call(
-                mapOf(
-                    "companyId" to workspace.id,
-                    "customerName" to "New Project",
-                    "designName" to "",
-                    "orderValue" to 0,
-                    "paidAmount" to 0,
-                    "watchRef" to "",
-                    "notes" to ""
-                )
-            )
-            .await()
+    suspend fun createOrderWithMilestone(
+        workspace: StudioWorkspace,
+        draft: NewProjectDraft,
+        t: (String) -> String = { it }
+    ): OrderMilestone {
+        val payload = mutableMapOf<String, Any>(
+            "companyId" to workspace.id,
+            // Key-present semantics on the server: an ABSENT customerName still
+            // means the old "New Project" placeholder, so the key travels even
+            // when it is empty — that empty value is the answer, not a gap.
+            "customerName" to draft.customerName.trim(),
+            "designName" to draft.projectName.trim()
+        )
+        // The id wins over the typed text server-side: a lowercase spelling joins
+        // the customer that already exists instead of making a second one.
+        if (draft.customerId.isNotBlank()) payload["customerId"] = draft.customerId.trim()
+        if (draft.dueDate.isNotBlank()) payload["deliveryDueDate"] = draft.dueDate.trim()
+
+        val result = functions.getHttpsCallable("createWebOrder").call(payload).await()
         val data = result.data as? Map<*, *> ?: return OrderMilestone("", null)
         val orderId = data["orderId"] as? String ?: ""
         val message = when {
@@ -1606,14 +1626,46 @@ class StudioFlowRepository(
                 val plan = if ((data["trialPlan"] as? String).orEmpty().startsWith("team")) "Team" else "Pro"
                 "$plan trial started — full access for $days days, no card required."
             }
-            data["firstOrder"] == true -> "Your first order is organised."
+            // Said in the workspace's own language: this sentence reaches a person
+            // through settingsMessage and nothing downstream translates it.
+            data["firstOrder"] == true -> t("Your first order is organised.")
             else -> null
         }
-        return OrderMilestone(orderId, message)
+        return OrderMilestone(
+            orderId = orderId,
+            message = message,
+            projectNumber = (data["projectNumber"] as? Number)?.toInt() ?: 0,
+            projectName = data["projectName"] as? String ?: "",
+            customerName = data["customerName"] as? String ?: "",
+            customerId = data["customerId"] as? String ?: "",
+            customerCreated = data["customerCreated"] == true,
+            firstOrder = data["firstOrder"] == true
+        )
     }
 
-    suspend fun createOrder(workspace: StudioWorkspace): String =
-        createOrderWithMilestone(workspace).orderId
+    /**
+     * Takes back a project created moments ago, and the customer with it when
+     * this create was what made that customer. The server refuses anything else
+     * — someone else's project, one older than five minutes, one already worked
+     * on — as failed-precondition with a sentence worth showing.
+     */
+    suspend fun undoOrderCreate(
+        workspace: StudioWorkspace,
+        orderId: String,
+        customerCreated: Boolean
+    ): String {
+        val result = functions.getHttpsCallable("undoOrderCreate")
+            .call(
+                mapOf(
+                    "companyId" to workspace.id,
+                    "orderId" to orderId,
+                    "customerCreated" to customerCreated
+                )
+            )
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("message") as? String ?: "Project removed."
+    }
 
     suspend fun loadPersonalInterfaceSettings(workspace: StudioWorkspace): Map<String, Any?> {
         val result = functions.getHttpsCallable("getPersonalInterfaceSettings")

@@ -94,10 +94,12 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
+import uk.co.eggcraft.studioflow.data.model.customerNameKey
 import uk.co.eggcraft.studioflow.data.model.emailName
 import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
@@ -123,13 +125,29 @@ fun OrdersScreen(
     onRestoreOrder: (StudioOrder) -> Unit = {},
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
-    onCreateOrder: () -> Unit = {},
+    onCreateOrder: (NewProjectDraft) -> Unit = {},
     // Bumped by the top-bar logo: close any open order detail and show the list.
     resetToListKey: Int = 0
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val workspace = state.workspace
+    // One Quick Create form for the whole screen: the first-run card and the
+    // list header both open it, and neither writes anything on its own.
+    val canCreateOrders = state.workspace?.memberAccess?.orders == true
+    var quickCreateOpen by rememberSaveable { mutableStateOf(false) }
+    val startQuickCreate: () -> Unit = { quickCreateOpen = true }
+    if (quickCreateOpen) {
+        QuickCreateProjectDialog(
+            customers = state.customers,
+            creating = state.creatingOrder,
+            onDismiss = { quickCreateOpen = false },
+            onCreate = { draft ->
+                quickCreateOpen = false
+                onCreateOrder(draft)
+            }
+        )
+    }
     val context = LocalContext.current
     val ordersPrefs = remember(context, state.user?.uid, workspace?.id) {
         context.getSharedPreferences(ordersPreferenceName(state.user?.uid, workspace?.id), Context.MODE_PRIVATE)
@@ -286,7 +304,7 @@ fun OrdersScreen(
                         },
                         onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                         onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
-                        onCreateOrder = onCreateOrder,
+                        onStartCreateOrder = if (canCreateOrders) startQuickCreate else null,
                         wideLayout = true,
                         onToggleListVisibility = { saveOrderListVisibility(false, listPaneWidth) },
                         modifier = Modifier
@@ -427,7 +445,7 @@ fun OrdersScreen(
                 },
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
-                onCreateOrder = onCreateOrder,
+                onStartCreateOrder = if (canCreateOrders) startQuickCreate else null,
                 wideLayout = false,
                 modifier = Modifier.fillMaxSize()
             )
@@ -457,7 +475,9 @@ private fun OrderListPane(
     onDeleteOrder: (StudioOrder) -> Unit,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
-    onCreateOrder: () -> Unit = {},
+    /** Opens the Quick Create form; the pane writes nothing itself. Null
+     *  when this member's role cannot create projects. */
+    onStartCreateOrder: (() -> Unit)? = null,
     wideLayout: Boolean,
     onToggleListVisibility: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -485,6 +505,9 @@ private fun OrderListPane(
                 Surface(shape = RoundedCornerShape(10.dp), color = StudioBlue.copy(alpha = 0.12f)) {
                     Icon(Icons.Filled.Tune, contentDescription = "List controls", tint = StudioBlue, modifier = Modifier.padding(12.dp).size(18.dp))
                 }
+                if (onStartCreateOrder != null) {
+                    OrderListCreateButton(label = t("New"), onClick = onStartCreateOrder)
+                }
                 if (onToggleListVisibility != null) {
                     OrderListVisibilityButton(
                         visible = true,
@@ -501,6 +524,12 @@ private fun OrderListPane(
                 }
                 Surface(shape = RoundedCornerShape(12.dp), color = StudioBlue.copy(alpha = 0.12f)) {
                     Icon(Icons.Filled.Search, contentDescription = null, tint = StudioBlue, modifier = Modifier.padding(13.dp))
+                }
+                // Once a workspace has one order the first-run card is gone, and
+                // until now the Orders screen offered no way to start another.
+                if (onStartCreateOrder != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OrderListCreateButton(label = t("New Project"), onClick = onStartCreateOrder)
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -801,8 +830,10 @@ private fun OrderListPane(
                 item(key = "orders-first-run") {
                     OrdersFirstRunCard(
                         creating = state.creatingOrder,
-                        canCreate = state.workspace?.memberAccess?.orders == true,
-                        onCreateOrder = onCreateOrder,
+                        // The pane is handed an opener only when this member may
+                        // create; that null-ness is the gate, not a second copy of it.
+                        canCreate = onStartCreateOrder != null,
+                        onStartCreateOrder = onStartCreateOrder ?: {},
                         onRunBusinessSetup = {
                             onUpdateWorkspaceSettings(
                                 mapOf("businessOnboardingCompleted" to false),
@@ -890,6 +921,24 @@ internal fun OrderListSidebarPane(
         wideLayout = true,
         modifier = modifier
     )
+}
+
+@Composable
+private fun OrderListCreateButton(label: String, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = StudioGreen,
+        onClick = onClick
+    ) {
+        Text(
+            text = "+ " + label,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
+        )
+    }
 }
 
 @Composable
@@ -1830,10 +1879,12 @@ private fun orderStatusPayload(order: StudioOrder, status: String): Map<String, 
 }
 
 private fun canOpenCustomerForOrder(workspace: StudioWorkspace?, order: StudioOrder): Boolean {
-    val cleanName = order.displayCustomerName.trim()
+    // One normaliser for "same customer", shared with the directory screen and
+    // the Quick Create form rather than a third spelling of trim-and-lowercase.
+    val key = customerNameKey(order.displayCustomerName)
     return workspace?.memberAccess?.customers == true &&
-        cleanName.isNotBlank() &&
-        !cleanName.equals("New Project", ignoreCase = true)
+        key.isNotBlank() &&
+        key != customerNameKey("New Project")
 }
 
 private fun canManageOrderAssignments(workspace: StudioWorkspace?): Boolean {
@@ -2175,7 +2226,7 @@ private const val OrdersDayMs = 24L * 60L * 60L * 1000L
 private fun OrdersFirstRunCard(
     creating: Boolean,
     canCreate: Boolean,
-    onCreateOrder: () -> Unit,
+    onStartCreateOrder: () -> Unit,
     onRunBusinessSetup: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -2205,7 +2256,7 @@ private fun OrdersFirstRunCard(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = StudioGreen,
-                        modifier = Modifier.clickable(enabled = !creating) { onCreateOrder() }
+                        modifier = Modifier.clickable(enabled = !creating) { onStartCreateOrder() }
                     ) {
                         Text(
                             text = if (creating) t("Creating...") else t("Create First Order"),

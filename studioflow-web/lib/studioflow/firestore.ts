@@ -1651,6 +1651,29 @@ function parseCustomerOrderActivity(raw: unknown): CustomerOrderActivity[] {
     .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
 }
 
+export type CustomerPickerOption = {
+  id: string;
+  name: string;
+};
+
+/**
+ * The names only, for the Quick Create picker.
+ *
+ * Deliberately NOT loadWorkspaceCustomers: that one also reads every order in
+ * the workspace and computes per-customer totals, which is far too heavy to
+ * hang off a toolbar button. Opening the mini form must cost one small read.
+ */
+export async function loadCustomerPickerOptions(companyId: string): Promise<CustomerPickerOption[]> {
+  const snapshot = await getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId)));
+  return snapshot.docs
+    .map(customerDocument => ({
+      id: customerDocument.id,
+      name: stringValue(customerDocument.data().name, "").trim()
+    }))
+    .filter(option => option.name.length > 0)
+    .sort((lhs, rhs) => lhs.name.localeCompare(rhs.name));
+}
+
 export async function loadWorkspaceCustomers(companyId: string): Promise<CustomerDirectoryItem[]> {
   const [customersSnapshot, ordersSnapshot] = await Promise.all([
     getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId))),

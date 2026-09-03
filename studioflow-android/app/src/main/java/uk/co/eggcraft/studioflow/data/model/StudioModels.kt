@@ -1526,6 +1526,30 @@ data class StudioOrder(
     }
 }
 
+/**
+ * One rule for "are these the same customer". The directory screen and the
+ * orders list each had their own spelling of trim-and-lowercase; a third copy in
+ * the Quick Create form would have been the one that drifted, so both now read
+ * this.
+ */
+fun customerNameKey(name: String): String = name.trim().lowercase(Locale.UK)
+
+/**
+ * Everything the Quick Create form collected, and nothing else — no order value,
+ * no status, no placeholder customer. Every field is optional: a project may be
+ * opened for stock or for the window with no customer at all, and the server
+ * names it when the name is blank.
+ */
+data class NewProjectDraft(
+    /** Wins over [customerName] on the server: picking an existing record joins
+     *  that customer instead of minting a second one with a different spelling. */
+    val customerId: String = "",
+    val customerName: String = "",
+    val projectName: String = "",
+    /** `yyyy-MM-dd`, or blank to let the server pick its usual 45-day date. */
+    val dueDate: String = ""
+)
+
 /** A workspace customer record from the top-level `musteriler` collection (matches
  *  the Mac/iPhone and web customer directory). Editable contact details + notes. */
 data class StudioCustomer(

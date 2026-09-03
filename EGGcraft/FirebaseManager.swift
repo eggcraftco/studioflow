@@ -1671,6 +1671,10 @@ class FirebaseManager: ObservableObject {
             siparis.shippingCountry = data["shippingCountry"] as? String
             siparis.shippingPhone = data["shippingPhone"] as? String
             siparis.invoiceNumber = stringValue(data["invoiceNumber"])
+            // Carried through the recovery decoder too: nil here would be sent
+            // as "no key" on the next save, but a wrong 0 would be sent as a
+            // number and would overwrite the one the server minted.
+            siparis.projectNumber = (data["projectNumber"] as? NSNumber)?.intValue
             siparis.isDeleted = boolValue(data["isDeleted"])
             siparis.deletedAt = (data["deletedAt"] as? Timestamp)?.dateValue()
             siparis.assignedToUid = stringValue(data["assignedToUid"])
@@ -2253,6 +2257,266 @@ class FirebaseManager: ObservableObject {
             }
         #else
         print("Firebase Functions is not available for workflow order create.")
+        #endif
+    }
+
+    // MARK: - Quick Create
+
+    /// Everything the server decided about a project it has just made. Nothing
+    /// in here is worked out again on the device: the number and the generated
+    /// name are the server's, and re-deriving them would give the workspace two
+    /// answers to the same question.
+    struct StudioProjectCreateResult {
+        var orderId: String
+        var projectNumber: Int?
+        var projectName: String
+        var customerName: String
+        var customerId: String
+        var customerCreated: Bool
+        /// The network was away, so this is a row on this device and a job in
+        /// the offline queue — there is no server document behind it yet, and
+        /// therefore nothing to undo.
+        var queuedOffline: Bool
+    }
+
+    struct StudioProjectCreateError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private static let quickCreateDueDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// Days from today to the chosen due date, the same clamp the server uses,
+    /// so an order queued offline lands on the date the form showed.
+    private static func quickCreateDeliveryTime(from start: Date, to dueDate: Date?) -> Int {
+        guard let dueDate else { return 45 }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: start),
+            to: calendar.startOfDay(for: dueDate)
+        ).day ?? 45
+        return min(max(days, 1), 730)
+    }
+
+    /// The one rail Quick Create writes on.
+    ///
+    /// `addSiparis` picks between a callable and a direct Firestore write from
+    /// the workspace plan, and the direct branch builds the document itself and
+    /// creates the customer itself — so the very same form would produce a
+    /// different order, and a different customer record, on Pro than on Free.
+    /// A form the person filled in must mean one thing, so this always goes
+    /// through the server: `createWebOrder` online, and the offline queue's
+    /// `createSwiftOrder` when there is no network. Both mint the project
+    /// number, so a create replayed from a plane is shaped like every other.
+    func createProjectThroughCallable(
+        customerId: String,
+        customerName: String,
+        projectName: String,
+        dueDate: Date?,
+        completion: @escaping (Result<StudioProjectCreateResult, Error>) -> Void
+    ) {
+        guard !currentCompanyId.isEmpty else {
+            completion(.failure(StudioProjectCreateError(message: "Company ID is not configured.")))
+            return
+        }
+
+        let trimmedCustomerId = customerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCustomerName = customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProjectName = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        #if canImport(FirebaseFunctions)
+        guard isOnline else {
+            let queued = queueQuickCreateProjectOffline(
+                customerName: trimmedCustomerName,
+                projectName: trimmedProjectName,
+                dueDate: dueDate
+            )
+            completion(.success(queued))
+            return
+        }
+
+        var payload: [String: Any] = [
+            "companyId": currentCompanyId,
+            // Key-present semantics. An ABSENT customerName still means the old
+            // "New Project" default, so the empty string has to travel for a
+            // project deliberately opened with nobody on it.
+            "customerName": trimmedCustomerName,
+            "designName": trimmedProjectName
+        ]
+        if !trimmedCustomerId.isEmpty { payload["customerId"] = trimmedCustomerId }
+        if let dueDate {
+            payload["deliveryDueDate"] = Self.quickCreateDueDateFormatter.string(from: dueDate)
+        }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("createWebOrder")
+            .call(payload) { result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        completion(.failure(error))
+                        return
+                    }
+                    let data = (result?.data as? [String: Any]) ?? [:]
+                    let orderId = (data["orderId"] as? String) ?? ""
+                    guard !orderId.isEmpty else {
+                        completion(.failure(StudioProjectCreateError(message: "The server did not return a project.")))
+                        return
+                    }
+
+                    let outcome = StudioProjectCreateResult(
+                        orderId: orderId,
+                        projectNumber: (data["projectNumber"] as? NSNumber)?.intValue,
+                        projectName: (data["projectName"] as? String) ?? "",
+                        customerName: (data["customerName"] as? String) ?? trimmedCustomerName,
+                        customerId: (data["customerId"] as? String) ?? "",
+                        customerCreated: (data["customerCreated"] as? Bool) ?? false,
+                        queuedOffline: false
+                    )
+
+                    // The optimistic insert happens HERE and nowhere earlier.
+                    // A refused create — plan limit, role, network — used to
+                    // leave a row on the list and an undo entry pointing at a
+                    // document that was never written.
+                    let created = self.localSiparisForCreatedProject(outcome, dueDate: dueDate)
+                    self.upsertLocalSiparis(created)
+                    self.registerAction(.addedSiparis(created))
+                    self.announceOrderMilestone(data)
+                    completion(.success(outcome))
+                }
+            }
+        #else
+        completion(.failure(StudioProjectCreateError(message: "Firebase Functions is not available for project create.")))
+        #endif
+    }
+
+    /// The row this device shows for a project the server has just made. The
+    /// name and the number are copied from the response, never worked out here.
+    private func localSiparisForCreatedProject(_ outcome: StudioProjectCreateResult, dueDate: Date?) -> Siparis {
+        var siparis = quickCreateOrderSkeleton(
+            customerName: outcome.customerName,
+            projectName: outcome.projectName,
+            dueDate: dueDate
+        )
+        siparis.id = outcome.orderId
+        siparis.projectNumber = outcome.projectNumber
+        return siparis
+    }
+
+    /// The shared shape of a quick-created order on this device. It is only a
+    /// local mirror: the server writes the real document.
+    private func quickCreateOrderSkeleton(customerName: String, projectName: String, dueDate: Date?) -> Siparis {
+        var siparis = Siparis()
+        siparis.companyId = currentCompanyId
+        siparis.customerName = customerName
+        siparis.designName = projectName
+        siparis.deliveryTime = Self.quickCreateDeliveryTime(from: Date(), to: dueDate)
+        siparis.historyLog = [
+            OrderHistoryLogItem(
+                id: UUID().uuidString,
+                createdAt: Date(),
+                title: "Order created",
+                oldValue: "-",
+                newValue: "Created"
+            )
+        ]
+
+        if usesRestrictedAssignedProjectScope {
+            siparis.assignedToUid = Auth.auth().currentUser?.uid ?? ""
+            siparis.assignedToEmail = Auth.auth().currentUser?.email ?? ""
+        }
+
+        if normalizedWorkspaceRole(currentWorkspaceRole) == "workflowOnly" {
+            siparis.paidAmount = 0
+            siparis.remainingAmount = 0
+            siparis.watchPurchasePrice = 0
+            siparis.paymentFee = 0
+            siparis.deliveryCost = 0
+            siparis.taxAmount = 0
+        }
+
+        return siparis
+    }
+
+    /// No network: the create waits in the queue that already carries protected
+    /// order writes, and `createSwiftOrder` mints the project number when it
+    /// replays. The row appears now because nothing can refuse it yet.
+    private func queueQuickCreateProjectOffline(
+        customerName: String,
+        projectName: String,
+        dueDate: Date?
+    ) -> StudioProjectCreateResult {
+        let ref = db.collection("siparisler").document()
+        var siparis = quickCreateOrderSkeleton(
+            customerName: customerName,
+            projectName: projectName,
+            dueDate: dueDate
+        )
+        siparis.id = ref.documentID
+
+        queuePendingCallableOrderWrite(
+            siparis,
+            documentId: ref.documentID,
+            action: "add",
+            callableFunction: "createSwiftOrder"
+        )
+        upsertLocalSiparis(siparis)
+        registerAction(.addedSiparis(siparis))
+
+        return StudioProjectCreateResult(
+            orderId: ref.documentID,
+            projectNumber: nil,
+            projectName: siparis.designName,
+            customerName: siparis.customerName,
+            customerId: "",
+            customerCreated: false,
+            queuedOffline: true
+        )
+    }
+
+    /// Undoing a create is not deleting an order: the server hard-deletes the
+    /// document, and the customer only when this create is what made it. It
+    /// refuses anything else, so the message it sends back is the one to show.
+    func undoProjectCreate(
+        orderId: String,
+        customerCreated: Bool,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard !currentCompanyId.isEmpty, !orderId.isEmpty else {
+            completion(.failure(StudioProjectCreateError(message: "Company ID is not configured.")))
+            return
+        }
+
+        #if canImport(FirebaseFunctions)
+        guard isOnline else {
+            completion(.failure(StudioProjectCreateError(message: "You are offline. This project cannot be undone until you reconnect.")))
+            return
+        }
+
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("undoOrderCreate")
+            .call([
+                "companyId": currentCompanyId,
+                "orderId": orderId,
+                "customerCreated": customerCreated
+            ]) { _, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        completion(.failure(error))
+                        return
+                    }
+                    self.removeLocalSiparis(id: orderId)
+                    completion(.success(()))
+                }
+            }
+        #else
+        completion(.failure(StudioProjectCreateError(message: "Firebase Functions is not available for project undo.")))
         #endif
     }
 

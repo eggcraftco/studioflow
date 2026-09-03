@@ -126,7 +126,9 @@ fun HomeCardBody(
     /** The range the card's totals cover; only the money cards read it. */
     period: HomeCardPeriod = HomeCardPeriod.Month,
     t: (String) -> String,
-    onNewOrder: () -> Unit,
+    /** Opens the Quick Create form. Creating nothing is the point: the tile
+     *  used to write an empty project straight into the workspace. */
+    onStartNewOrder: () -> Unit,
     onOpenSection: (String) -> Unit,
     /** Getting started only: the steps this member has waved off, and the way to
      *  wave one off. */
@@ -138,7 +140,7 @@ fun HomeCardBody(
         HomeCardId.GettingStarted ->
             HomeGettingStartedBody(size, state, inventory, t, setupSkipped, onSkipSetupStep,
                 onRestoreSetupSkipped)
-        HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
+        HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onStartNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
@@ -670,7 +672,9 @@ private fun HomeQuickActionsBody(
     size: HomeCardSize,
     access: HomeAccess,
     t: (String) -> String,
-    onNewOrder: () -> Unit,
+    /** Opens the Quick Create form. Creating nothing is the point: the tile
+     *  used to write an empty project straight into the workspace. */
+    onStartNewOrder: () -> Unit,
     onOpenSection: (String) -> Unit
 ) {
     // An action the role cannot perform is hidden and the grid closes up behind
@@ -688,7 +692,7 @@ private fun HomeQuickActionsBody(
         if (access.bankFeed) add(QuickAction("Add expense", "BankSpending", Icons.Filled.CreditCard, HomeTone.accent, "Finance & communication"))
         add(QuickAction("Generate AI reply", "Messages", Icons.Filled.AutoAwesome, HomeTone.green, "Finance & communication"))
     }
-    val fire: (QuickAction) -> Unit = { if (it.destination.isEmpty()) onNewOrder() else onOpenSection(it.destination) }
+    val fire: (QuickAction) -> Unit = { if (it.destination.isEmpty()) onStartNewOrder() else onOpenSection(it.destination) }
 
     when (size) {
         HomeCardSize.OneByOne -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

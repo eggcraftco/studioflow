@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.features.production.ProductionStage
@@ -116,7 +118,7 @@ fun HomeScreen(
     state: StudioFlowUiState,
     access: HomeAccess,
     onOpenSection: (String) -> Unit,
-    onNewOrder: () -> Unit,
+    onNewOrder: (NewProjectDraft) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val lang = LocalStudioLanguage.current
@@ -126,6 +128,20 @@ fun HomeScreen(
     val repository = remember { StudioFlowRepository() }
     val workspaceId = state.workspace?.id.orEmpty()
     val userId = state.user?.uid.orEmpty()
+
+    // The tile opens the Quick Create form; nothing is written until Create.
+    var quickCreateOpen by rememberSaveable { mutableStateOf(false) }
+    if (quickCreateOpen) {
+        uk.co.eggcraft.studioflow.features.orders.QuickCreateProjectDialog(
+            customers = state.customers,
+            creating = state.creatingOrder,
+            onDismiss = { quickCreateOpen = false },
+            onCreate = { draft ->
+                quickCreateOpen = false
+                onNewOrder(draft)
+            }
+        )
+    }
 
     var layout by remember { mutableStateOf(HomeLayout.standard) }
     // The layout as the server last accepted it, so a failed save can be undone.
@@ -529,7 +545,7 @@ fun HomeScreen(
                             compact = compact,
                             period = slot.placement.period,
                             t = t,
-                            onNewOrder = onNewOrder,
+                            onStartNewOrder = { quickCreateOpen = true },
                             onOpenSection = onOpenSection,
                             setupSkipped = setupSkipped,
                             onSkipSetupStep = { skipSetupStep(it) },

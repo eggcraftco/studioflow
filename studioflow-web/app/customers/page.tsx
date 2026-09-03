@@ -30,6 +30,7 @@ import {
   updateCustomerFromWeb,
   uploadCustomerPhoto,
   CUSTOMER_PHOTO_ACCEPT,
+  customerSearchMatches,
   type CustomerFormInput
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
@@ -269,7 +270,7 @@ export default function CustomersPage() {
     const term = search.trim().toLowerCase();
     const bySegment = segmentFilter ? customers.filter(customer => customer.tags.includes(segmentFilter)) : customers;
     const filtered = term
-      ? bySegment.filter(customer => [
+      ? bySegment.filter(customer => customerSearchMatches(term, [
           customer.name,
           customer.email,
           customer.phone,
@@ -281,13 +282,11 @@ export default function CustomersPage() {
           customer.streetAddress,
           customer.city,
           customer.postalCode,
-          customer.country
-        ].some(value => value.toLowerCase().includes(term))
+          customer.country,
           // The report's ask: find a customer by what they ordered.
-          || customer.tags.some(tag => tag.toLowerCase().includes(term))
-          || customer.orders.some(order =>
-            order.invoiceNumber.toLowerCase().includes(term)
-            || order.designName.toLowerCase().includes(term)))
+          ...customer.tags,
+          ...customer.orders.flatMap(order => [order.invoiceNumber, order.designName])
+        ]))
       : bySegment;
 
     return [...filtered].sort((lhs, rhs) => {

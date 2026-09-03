@@ -340,6 +340,13 @@ struct Siparis: Identifiable, Codable {
     // present, their sum drives the order total (see lineItemsTotal / hasLineItems).
     var lineItems: [LineItem]?
     var invoiceNumber: String = ""
+    /// Minted by the server the moment the project is created: unique inside the
+    /// workspace, never reused, never rewritten. The device only ever reads it —
+    /// re-deriving it here would invent a second answer to "which project is this".
+    /// Optional on purpose: every order made before numbering existed has no key,
+    /// and the encoder leaves an absent optional out of a save, so a device that
+    /// never saw a number can never write one away.
+    var projectNumber: Int?
     // "custom" (something we make) or "repair" (something the customer brought in).
     var orderType: String = "custom"
     // Present only on repair orders. Optional so every existing order still decodes.

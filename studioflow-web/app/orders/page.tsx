@@ -34,7 +34,6 @@ import {
   canCreateOrdersForRole,
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
-  createOrderFromWeb,
   deleteOrderFromWeb,
   mergeOrders,
   purgeOrdersFromWeb,
@@ -53,6 +52,7 @@ import {
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderDetailContent } from "./OrderDetailContent";
 import {
@@ -153,8 +153,6 @@ export default function OrdersPage() {
   const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
-  const [creatingFirstOrder, setCreatingFirstOrder] = useState(false);
-  const [firstOrderError, setFirstOrderError] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const lastSelectedOrderIdRef = useRef<string | null>(null);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
@@ -183,6 +181,17 @@ export default function OrdersPage() {
     setFirstProjectGuide(getFirstProjectGuideState());
     return subscribeFirstProjectGuideState(setFirstProjectGuide);
   }, []);
+
+  // Read by the workspace load below WITHOUT being one of its dependencies.
+  // It used to be: opening a project (or creating one, which pushes
+  // ?selectedOrderId=) changed requestedOrderId, re-ran the entire workspace
+  // load, and raised the full-screen LoadingScreen a second time on top of the
+  // one the detail subscription was already showing. Selecting an order is not
+  // a reason to reload the workspace.
+  const requestedOrderIdRef = useRef("");
+  useEffect(() => {
+    requestedOrderIdRef.current = requestedOrderId;
+  }, [requestedOrderId]);
 
   useEffect(() => {
     if (!user) return;
@@ -214,7 +223,8 @@ export default function OrdersPage() {
         setMoneySettings(loadedMoneySettings);
         setShowOrderStatusBadges(loadedMoneySettings?.orderCardShowStatusBadges ?? true);
         setSelectedOrderId(current => {
-          if (requestedOrderId && loadedOrders.some(order => order.id === requestedOrderId)) return requestedOrderId;
+          const requested = requestedOrderIdRef.current;
+          if (requested && loadedOrders.some(order => order.id === requested)) return requested;
           return current || loadedOrders[0]?.id || "";
         });
       } catch (loadError) {
@@ -230,7 +240,15 @@ export default function OrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [requestedOrderId, user]);
+  }, [user]);
+
+  // The other half of that split: a link or a create that names an order only
+  // moves the selection. The detail subscription below loads it, and that is
+  // the only loading state a person should see.
+  useEffect(() => {
+    if (!requestedOrderId) return;
+    setSelectedOrderId(current => (current === requestedOrderId ? current : requestedOrderId));
+  }, [requestedOrderId]);
 
   useEffect(() => {
     if (!workspace || !selectedOrderId) {
@@ -325,8 +343,22 @@ export default function OrdersPage() {
       setRequestedOrderId(orderId);
     }
 
+    // Undo on the "Project created" toast hard-deletes the order. Reload the
+    // list; the effect above then moves the selection off the id that is gone.
+    async function handleRemovedOrder() {
+      if (!workspace) return;
+      const loadedOrders = await loadRecentOrders(workspace.id, workspace, uid);
+      setOrders(loadedOrders);
+      setRequestedOrderId("");
+      setSelectedOrderId(current => (loadedOrders.some(order => order.id === current) ? current : ""));
+    }
+
     window.addEventListener("studioflow-order-created", handleCreatedOrder);
-    return () => window.removeEventListener("studioflow-order-created", handleCreatedOrder);
+    window.addEventListener("studioflow-order-removed", handleRemovedOrder);
+    return () => {
+      window.removeEventListener("studioflow-order-created", handleCreatedOrder);
+      window.removeEventListener("studioflow-order-removed", handleRemovedOrder);
+    };
   }, [workspace, user]);
 
   useEffect(() => {
@@ -817,26 +849,13 @@ export default function OrdersPage() {
     workspace.entitlements.features.orders_create
   );
 
-  async function handleCreateFirstOrder() {
-    if (!workspace || creatingFirstOrder) return;
-    setFirstOrderError("");
-    setCreatingFirstOrder(true);
-    try {
-      const result = await createOrderFromWeb(workspace);
-      // The page already listens for this event: it reloads the list, selects the
-      // new order and starts the first-project guide where that is supported.
-      window.dispatchEvent(
-        new CustomEvent("studioflow-order-created", { detail: { orderId: result.orderId || "" } })
-      );
-    } catch (createError) {
-      setFirstOrderError(
-        createError instanceof Error
-          ? createError.message
-          : t("Could not create the project. Please try again.")
-      );
-    } finally {
-      setCreatingFirstOrder(false);
-    }
+  // The empty state used to keep its own copy of the create call, which is how
+  // it stayed an instant-write button after the toolbar stopped being one. It
+  // now raises the same quick action the toolbar does, so there is exactly one
+  // create path: AppShell opens the Quick Create form, and its create fires the
+  // "studioflow-order-created" event this page already listens for.
+  function handleCreateFirstOrder() {
+    dispatchQuickAction("order");
   }
 
   if (loading || !user) return <LoadingScreen />;
@@ -961,13 +980,11 @@ export default function OrdersPage() {
                 <button
                   type="button"
                   className="button orders-first-run-button"
-                  onClick={() => void handleCreateFirstOrder()}
-                  disabled={creatingFirstOrder}
+                  onClick={handleCreateFirstOrder}
                 >
-                  {creatingFirstOrder ? t("Creating...") : t("Create your first order")}
+                  {t("Create your first order")}
                 </button>
               ) : null}
-              {firstOrderError ? <p className="orders-sidebar-error">{t(firstOrderError)}</p> : null}
             </div>
           ) : filteredOrders.length === 0 && !loadingOrders ? (
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>

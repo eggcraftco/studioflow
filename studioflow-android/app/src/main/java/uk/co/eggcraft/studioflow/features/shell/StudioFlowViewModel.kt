@@ -32,6 +32,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
+import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
@@ -62,12 +63,32 @@ private data class BankFeedBundle(
     val customCategories: List<uk.co.eggcraft.studioflow.data.model.StudioBankCategory> = emptyList()
 )
 
+/** How long the "Project created · Undo" bar stays on screen. Brief on
+ *  purpose: the server's own undo window is five minutes, this is only the
+ *  offer. */
+const val UNDO_BAR_VISIBLE_MS = 9_000L
+
+/**
+ * A project created seconds ago that can still be taken back. It is kept apart
+ * from `settingsMessage` on purpose: that field still holds the PREVIOUS
+ * action's sentence on every create after the first, so an undo hung off it
+ * would offer to undo the wrong thing.
+ */
+data class PendingOrderUndo(
+    val orderId: String,
+    /** Only then does the undo also remove the customer this create minted. */
+    val customerCreated: Boolean = false,
+    val shownUntilMs: Long = 0L,
+    val busy: Boolean = false
+)
+
 data class StudioFlowUiState(
     val loading: Boolean = true,
     val signingIn: Boolean = false,
     // One-time post-signup "verify your email" confirmation.
     val showPostSignupVerifyNotice: Boolean = false,
     val creatingOrder: Boolean = false,
+    val pendingUndo: PendingOrderUndo? = null,
     val settingsSaving: Boolean = false,
     val user: FirebaseUser? = null,
     val workspace: StudioWorkspace? = null,
@@ -792,11 +813,15 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
-    fun createOrder() {
+    /**
+     * Writes the project the Quick Create form collected. Nothing reaches the
+     * server until this is called — the form itself creates nothing.
+     */
+    fun createOrder(draft: NewProjectDraft) {
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
-            mutableState.update { it.copy(creatingOrder = true, errorMessage = "") }
-            runCatching { repository.createOrderWithMilestone(workspace) }
+            mutableState.update { it.copy(creatingOrder = true, errorMessage = "", pendingUndo = null) }
+            runCatching { repository.createOrderWithMilestone(workspace, draft, ::t) }
                 .onSuccess { milestone ->
                     // The first order starts the fortnight; say so rather than
                     // let the owner notice their plan changed on its own.
@@ -804,7 +829,12 @@ class StudioFlowViewModel @JvmOverloads constructor(
                         it.copy(
                             creatingOrder = false,
                             errorMessage = "",
-                            settingsMessage = milestone.message ?: it.settingsMessage
+                            settingsMessage = milestone.message ?: it.settingsMessage,
+                            pendingUndo = if (milestone.orderId.isBlank()) null else PendingOrderUndo(
+                                orderId = milestone.orderId,
+                                customerCreated = milestone.customerCreated,
+                                shownUntilMs = System.currentTimeMillis() + UNDO_BAR_VISIBLE_MS
+                            )
                         )
                     }
                 }
@@ -814,6 +844,35 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
         }
+    }
+
+    /**
+     * Takes the just-created project back. The server is the judge of whether it
+     * still may be undone; a refusal arrives as failed-precondition carrying a
+     * sentence, which FriendlyErrors passes through untouched.
+     */
+    fun undoOrderCreate() {
+        val workspace = mutableState.value.workspace ?: return
+        val pending = mutableState.value.pendingUndo ?: return
+        if (pending.busy) return
+        viewModelScope.launch {
+            mutableState.update { it.copy(pendingUndo = it.pendingUndo?.copy(busy = true), errorMessage = "") }
+            runCatching { repository.undoOrderCreate(workspace, pending.orderId, pending.customerCreated) }
+                .onSuccess { mutableState.update { it.copy(pendingUndo = null) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(
+                            pendingUndo = null,
+                            errorMessage = friendlyErrorMessage(error, "Could not undo the new project.", ::t)
+                        )
+                    }
+                }
+        }
+    }
+
+    /** The offer ran out, or the person moved on. */
+    fun dismissPendingUndo() {
+        mutableState.update { it.copy(pendingUndo = null) }
     }
 
     fun updateWorkspaceSettings(updates: Map<String, Any?>, successMessage: String = "Settings saved.") {

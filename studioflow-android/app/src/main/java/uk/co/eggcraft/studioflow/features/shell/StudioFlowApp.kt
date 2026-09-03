@@ -538,6 +538,18 @@ private fun StudioFlowAppContent(
             onReloadMessageWorkspaceSettings = viewModel::reloadMessageWorkspaceSettings,
             onConsumePendingActivityNavigation = viewModel::consumePendingActivityNavigation
         )
+                // LAST child on purpose: the main screen's Column paints an
+                // opaque background, so an earlier sibling would render
+                // invisibly and give no hint that it had.
+                state.pendingUndo?.let { pending ->
+                    UndoBar(
+                        shownUntilMs = pending.shownUntilMs,
+                        busy = pending.busy,
+                        onUndo = viewModel::undoOrderCreate,
+                        onExpire = viewModel::dismissPendingUndo,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
             }
         }
     }

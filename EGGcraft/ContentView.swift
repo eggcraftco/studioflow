@@ -7555,6 +7555,11 @@ struct ContentView: View {
     @State private var selectedOrderIds: Set<String> = []
     @State private var lastSelectedOrderId: String?
     @State private var showMergeSelectedSheet = false
+    // Quick Create. "+ Add Project" opens this form and writes nothing; the
+    // create happens on confirm, and the bar underneath is how the person takes
+    // it back.
+    @State private var quickCreateVisible = false
+    @State private var quickCreateNotice: StudioUndoBarNotice?
     @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
     @AppStorage("ordersSidebarShowPreviewImages") private var showOrderPreviewImages: Bool = true
     @AppStorage("orderCardShowDeliveryTime") private var orderCardShowDeliveryTime: Bool = true
@@ -9392,6 +9397,24 @@ struct ContentView: View {
         }
         .overlay(alignment: .topTrailing) {
             macFirstProjectGuideOverlay
+        }
+        .overlay(alignment: .bottom) {
+            // A bar, not a dialog. presentPlanAccessAlert — how the milestone
+            // notice next door speaks — would put an OK button in front of the
+            // person for something they did not ask about.
+            StudioUndoBar(
+                notice: quickCreateNotice,
+                lang: seciliDil,
+                onUndo: { undoQuickCreatedProject() },
+                onDismiss: { quickCreateNotice = nil }
+            )
+        }
+        .sheet(isPresented: $quickCreateVisible) {
+            QuickCreateProjectSheet(
+                lang: seciliDil,
+                onCreated: { outcome in quickCreateProjectConfirmed(outcome) }
+            )
+            .environmentObject(firebaseManager)
         }
         .overlay(alignment: .trailing) {
             activityNotificationDrawerOverlay
@@ -11657,6 +11680,9 @@ struct ContentView: View {
         saveMacFirstProjectGuideState()
     }
 
+    /// OPENING the form. This half writes nothing at all — it only asks whether
+    /// this person may make a project at all, and then shows the sheet. The
+    /// checks are the same two that used to gate the create itself.
     private func yeniSiparisEkle() {
         guard canEditWorkflowFields else { return }
         guard authVM.canCreateMoreOrders(currentCount: firebaseManager.siparisler.count) else {
@@ -11667,21 +11693,21 @@ struct ContentView: View {
             return
         }
 
+        quickCreateVisible = true
+    }
+
+    /// CONFIRMED. The server has answered and the project exists, so this is the
+    /// first moment anything on this device may change.
+    private func quickCreateProjectConfirmed(_ outcome: FirebaseManager.StudioProjectCreateResult) {
+        // The Mac guide flips seventeen order-detail card flags and moves the
+        // guide on a step. It used to run at the moment "+ Add Project" was
+        // pressed, which on a form means a person who changed their mind and
+        // cancelled would have had their cards permanently rearranged for a
+        // project that was never made. It belongs here, after the create.
+        prepareMacFirstProjectGuideAfterAddProject()
+
         withAnimation {
-            var yeni = Siparis()
-            yeni.companyId = firebaseManager.currentCompanyId
-            prepareMacFirstProjectGuideAfterAddProject()
-            yeni.customerName = t("New Project", lang: seciliDil)
-            yeni.historyLog = [
-                OrderHistoryLogItem(
-                    id: UUID().uuidString,
-                    createdAt: Date(),
-                    title: "Order created",
-                    oldValue: "-",
-                    newValue: t("Created", lang: seciliDil)
-                )
-            ]
-            if let created = firebaseManager.addSiparis(yeni) {
+            if let created = firebaseManager.siparisler.first(where: { $0.id == outcome.orderId }) {
                 seciliSiparis = created
                 seciliSiparisGorunumKey = orderSelectionKey(created)
                 lastSelectedOrderId = orderSelectionKey(created)
@@ -11689,6 +11715,43 @@ struct ContentView: View {
             }
             aktifSekme = "Orders"
             orderListFocused = true
+        }
+
+        quickCreateNotice = StudioUndoBarNotice(
+            message: outcome.queuedOffline
+                ? t("Project saved on this device — it will be created when you are back online.", lang: seciliDil)
+                : t("Project created", lang: seciliDil),
+            orderId: outcome.orderId,
+            customerCreated: outcome.customerCreated,
+            // A create still sitting in the offline queue has no server
+            // document behind it, so there is nothing for an undo to delete.
+            canUndo: !outcome.queuedOffline
+        )
+    }
+
+    private func undoQuickCreatedProject() {
+        guard let notice = quickCreateNotice, notice.canUndo else { return }
+        quickCreateNotice = nil
+        firebaseManager.undoProjectCreate(
+            orderId: notice.orderId,
+            customerCreated: notice.customerCreated
+        ) { result in
+            switch result {
+            case .success:
+                if seciliSiparis?.id == notice.orderId {
+                    seciliSiparis = nil
+                    seciliSiparisGorunumKey = nil
+                }
+                quickCreateNotice = StudioUndoBarNotice(message: t("Project removed", lang: seciliDil))
+            case .failure(let error):
+                // The server refuses an undo that is too late, not yours, or on
+                // a project somebody has already worked on. It says which, and
+                // that sentence is more use than one we would write here.
+                presentPlanAccessAlert(
+                    title: t("Undo", lang: seciliDil),
+                    message: error.localizedDescription
+                )
+            }
         }
     }
     

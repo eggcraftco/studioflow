@@ -3105,6 +3105,121 @@ body[data-studio-theme="dark"] .add-order-modal textarea {
   margin-top: 4px;
 }
 
+/* ---- Quick Create mini form (nothing is written until Create Project) ---- */
+.quick-create-modal {
+  width: min(460px, 100%);
+}
+
+.quick-create-field {
+  display: grid;
+  gap: 6px;
+}
+
+.quick-create-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quick-create-picker {
+  position: relative;
+}
+
+.quick-create-options {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 232px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.12));
+  background: var(--card, #fff);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+}
+
+.quick-create-options > li > button {
+  display: block;
+  width: 100%;
+  text-align: start;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quick-create-options > li > button:hover,
+.quick-create-options > li > button.is-active {
+  background: rgba(47, 109, 246, 0.12);
+}
+
+.quick-create-options-empty {
+  padding: 7px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quick-create-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: start;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 6px 8px 6px 12px;
+  background: rgba(47, 109, 246, 0.12);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quick-create-chip > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.65;
+}
+
+.quick-create-hints {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.quick-create-link {
+  border: 0;
+  background: transparent;
+  color: #2f6df6;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+body[data-studio-theme="dark"] .quick-create-options {
+  background: #1b1b1b;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+body[data-studio-theme="dark"] .quick-create-link { color: #7db2ff; }
+
 .block-headings-modal {
   max-width: min(720px, calc(100vw - 28px));
   max-height: min(820px, calc(100vh - 28px));

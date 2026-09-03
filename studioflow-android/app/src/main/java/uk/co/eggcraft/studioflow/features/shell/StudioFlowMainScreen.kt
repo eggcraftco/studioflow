@@ -127,6 +127,7 @@ import uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
+import uk.co.eggcraft.studioflow.data.model.NewProjectDraft
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
 import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
@@ -189,7 +190,7 @@ fun StudioFlowMainScreen(
     requireDeviceUnlock: Boolean,
     onSetRequireDeviceUnlock: (Boolean) -> Unit,
     onSignOut: () -> Unit,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     onAssignOrder: (StudioOrder, StudioTeamMember?) -> Unit,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
     onSaveOrderCardLayout: (StudioOrder, String) -> Unit,
@@ -357,6 +358,10 @@ fun StudioFlowMainScreen(
         message = cloudMessageFor(state, cloudState),
         lastSavedAtMillis = lastCloudSavedAt
     )
+    // The same gate the Home tile and the first-run card already apply. The
+    // header button had none, so a member who cannot create projects was shown
+    // it and only learned otherwise when the server refused.
+    val canCreateOrders = state.workspace?.memberAccess?.orders == true
     val toggleSensitiveNumbers = {
         val next = !hideSensitiveNumbers
         hideSensitiveNumbers = next
@@ -561,6 +566,8 @@ fun StudioFlowMainScreen(
                     hideSensitiveNumbers = hideSensitiveNumbers,
                     showFinancialMetrics = state.workspace?.canSeeFinancialData == true,
                     cloudStatus = cloudStatus,
+                    canCreateOrder = canCreateOrders,
+                    customers = state.customers,
                     creatingOrder = state.creatingOrder,
                     sections = availableSections,
                     selectedSection = activeSection,
@@ -713,6 +720,8 @@ fun StudioFlowMainScreen(
                     workspaceLogoUrl = state.workspaceSettings.appLogoUrl,
                     hideSensitiveNumbers = hideSensitiveNumbers,
                     cloudStatus = cloudStatus,
+                    canCreateOrder = canCreateOrders,
+                    customers = state.customers,
                     creatingOrder = state.creatingOrder,
                     onToggleSensitiveNumbers = toggleSensitiveNumbers,
                     onCreateOrder = onCreateOrder,
@@ -1415,7 +1424,7 @@ private fun StudioSectionContent(
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     /** Home hands off to a full screen; the shell owns which section is showing. */
     onNavigateSection: (StudioSection) -> Unit,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
     onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
@@ -1703,13 +1712,15 @@ private fun StudioLargeTopBar(
     hideSensitiveNumbers: Boolean,
     showFinancialMetrics: Boolean,
     cloudStatus: HeaderCloudStatus,
+    canCreateOrder: Boolean,
+    customers: List<StudioCustomer>,
     creatingOrder: Boolean,
     sections: List<StudioSection>,
     selectedSection: StudioSection?,
     onSelectSection: (StudioSection) -> Unit,
     onLogoClick: () -> Unit,
     onToggleSensitiveNumbers: () -> Unit,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     onOpenAccount: () -> Unit,
     onSignOut: () -> Unit,
     compact: Boolean,
@@ -1785,6 +1796,8 @@ private fun StudioLargeTopBar(
                 iconSize = if (compact) 26.dp else 30.dp
             )
             HeaderAddProjectButton(
+                canCreateOrder = canCreateOrder,
+                customers = customers,
                 creatingOrder = creatingOrder,
                 onCreateOrder = onCreateOrder,
                 compact = compact
@@ -2098,12 +2111,14 @@ private fun StudioLargeSidebar(
     workspaceMeta: String,
     hideSensitiveNumbers: Boolean,
     cloudStatus: HeaderCloudStatus,
+    canCreateOrder: Boolean,
+    customers: List<StudioCustomer>,
     creatingOrder: Boolean,
     sections: List<StudioSection>,
     selectedSection: StudioSection?,
     onSelectSection: (StudioSection) -> Unit,
     onToggleSensitiveNumbers: () -> Unit,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     onSignOut: () -> Unit,
     notificationUnreadCount: Int = 0,
     messageUnreadCount: Int = 0,
@@ -2147,6 +2162,8 @@ private fun StudioLargeSidebar(
                 )
             }
             HeaderAddProjectButton(
+                canCreateOrder = canCreateOrder,
+                customers = customers,
                 creatingOrder = creatingOrder,
                 onCreateOrder = onCreateOrder,
                 compact = false,
@@ -2245,9 +2262,11 @@ private fun StudioMobileHeader(
     workspaceLogoUrl: String,
     hideSensitiveNumbers: Boolean,
     cloudStatus: HeaderCloudStatus,
+    canCreateOrder: Boolean,
+    customers: List<StudioCustomer>,
     creatingOrder: Boolean,
     onToggleSensitiveNumbers: () -> Unit,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     onSignOut: () -> Unit,
     sections: List<StudioSection>,
     onLogoClick: () -> Unit,
@@ -2296,6 +2315,8 @@ private fun StudioMobileHeader(
             )
             Spacer(modifier = Modifier.width(8.dp))
             HeaderAddProjectButton(
+                canCreateOrder = canCreateOrder,
+                customers = customers,
                 creatingOrder = creatingOrder,
                 onCreateOrder = onCreateOrder,
                 compact = true
@@ -2576,17 +2597,38 @@ private fun HeaderIconButton(
     }
 }
 
+/**
+ * The header's "+ Add Project". It opens the Quick Create form and writes
+ * nothing itself. A member whose role cannot create projects is not shown the
+ * button at all — it used to be unconditional, so they found out only when the
+ * call came back refused.
+ */
 @Composable
 private fun HeaderAddProjectButton(
+    canCreateOrder: Boolean,
+    customers: List<StudioCustomer>,
     creatingOrder: Boolean,
-    onCreateOrder: () -> Unit,
+    onCreateOrder: (NewProjectDraft) -> Unit,
     compact: Boolean,
     modifier: Modifier = Modifier
 ) {
+    if (!canCreateOrder) return
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var quickCreateOpen by rememberSaveable { mutableStateOf(false) }
+    if (quickCreateOpen) {
+        uk.co.eggcraft.studioflow.features.orders.QuickCreateProjectDialog(
+            customers = customers,
+            creating = creatingOrder,
+            onDismiss = { quickCreateOpen = false },
+            onCreate = { draft ->
+                quickCreateOpen = false
+                onCreateOrder(draft)
+            }
+        )
+    }
     Button(
-        onClick = onCreateOrder,
+        onClick = { quickCreateOpen = true },
         enabled = !creatingOrder,
         shape = RoundedCornerShape(if (compact) 15.dp else 18.dp),
         colors = ButtonDefaults.buttonColors(

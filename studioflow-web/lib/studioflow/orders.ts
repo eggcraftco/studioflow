@@ -17,6 +17,10 @@ export const ORDER_PREVIEW_IMAGE_ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,.webp";
 
 export type CreateOrderInput = {
   customerName: string;
+  /** When the picker matched an existing record, its id wins: the server reads
+   *  that customer and writes its stored spelling onto the order, so "anna b"
+   *  joins Anna B rather than starting a second customer. */
+  customerId?: string;
   designName: string;
   watchRef: string;
   orderValue: number;
@@ -30,6 +34,11 @@ export type CreateOrderInput = {
 export type CreateOrderResult = {
   ok?: boolean;
   orderId?: string;
+  /** Minted by the server: unique per workspace, never reused, immutable. */
+  projectNumber?: number;
+  /** The name the server actually stored. Never re-derived on the client. */
+  projectName?: string;
+  customerName?: string;
   customerId?: string;
   customerCreated?: boolean;
   /** The first real order starts the 14-day trial. The server says so here so
@@ -202,6 +211,21 @@ function friendlyCreateOrderError(error: unknown) {
   return message ? friendlyErrorMessage(error, text => text) : "Could not create the project. Please try again.";
 }
 
+function friendlyUndoOrderCreateError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  // The server refuses with failed-precondition and a sentence a person can
+  // read ("This project has already been edited."). Keep that sentence — it
+  // says which of the three guards stopped the undo.
+  if (message && /failed-precondition/i.test(message)) {
+    return message.replace(/^.*failed-precondition[:\s]*/i, "").trim()
+      || "This project can no longer be undone.";
+  }
+  if (/permission|role|denied/i.test(message)) {
+    return "Your workspace role cannot delete this project.";
+  }
+  return message ? friendlyErrorMessage(error, text => text) : "Could not undo the new project.";
+}
+
 function friendlyUpdateOrderError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/^Your current role/i.test(message)) return message;
@@ -291,6 +315,49 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
     }, "Saving new project to cloud.");
   } catch (error) {
     throw new Error(friendlyCreateOrderError(error));
+  }
+}
+
+export type UndoOrderCreateResult = {
+  ok?: boolean;
+  message?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * The other half of "Project created - Undo".
+ *
+ * It sits next to createOrderFromWeb on purpose: the same role gate, the same
+ * sync-status wrapper and the same friendly-error mapping, so undo cannot end
+ * up on a different set of rules than the create it reverses. The server does
+ * the real refusing — creator only, within five minutes, nothing touched — and
+ * hard-deletes the order plus, when this create made it and nothing else
+ * points at it, the customer.
+ */
+export async function undoOrderCreateFromWeb(
+  workspace: WorkspaceContext,
+  orderId: string,
+  customerCreated: boolean
+) {
+  if (!canCreateOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot create projects.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, UndoOrderCreateResult>(functions, "undoOrderCreate");
+      const response = await callable({
+        companyId: workspace.id,
+        orderId,
+        customerCreated
+      });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "Could not undo the new project.");
+      }
+      return response.data;
+    }, "Undoing the new project.");
+  } catch (error) {
+    throw new Error(friendlyUndoOrderCreateError(error));
   }
 }
 
