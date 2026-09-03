@@ -18,6 +18,8 @@
 //   companies/{companyId}/pandleConnection/main            owner-readable
 //     status (pending|linked|none), state, pandleCompanyId, pandleCompanyName,
 //     bankAccountId, bankAccountName,
+//     nivaAccountId  which NivaDesk feed account this Pandle bank account is;
+//                    empty = the bank feed, never PayPal (see rowFeedsPandleAccount),
 //     bankAccounts   [{id, name, code, currency}],
 //     categories     [{id, code, name}]        (Pandle nominal accounts)
 //     taxCodes       [{id, code, name, rate}]  (rate as a fraction, 0.2)
@@ -79,6 +81,41 @@ const DEFAULT_MAPPINGS = [
   { category: "Tax", nominalCode: "730", taxCode: "NV" },
   { category: "Other", nominalCode: "735", taxCode: "ST" }
 ];
+
+// A Pandle bank account is one real bank ledger. NivaDesk's bankTransactions is
+// not: since the PayPal feed shipped, PayPal rows sit in the same collection
+// (provider "paypal"), and a workspace can hold several bank accounts. The
+// matcher compares only amount, direction and date, so an unscoped queue lets a
+// PayPal row of the same amount within four days win the match against a real
+// bank line and be confirmed into the books under the wrong nominal and VAT.
+//
+// nivaAccountId pins the pairing once the owner has named one — that is what
+// makes a genuine PayPal-account-in-Pandle setup work. Until then the default is
+// the bank feed, as an allowlist: a source added later has to be paired
+// deliberately rather than silently joining someone's Check queue.
+const BANK_FEED_PROVIDERS = new Set(["truelayer"]);
+
+function pandleFeedScope(connection) {
+  const account = (Array.isArray(connection?.bankAccounts) ? connection.bankAccounts : [])
+    .find((item) => item && item.id === connection?.bankAccountId) || null;
+  return {
+    nivaAccountId: String(connection?.nivaAccountId || "").trim(),
+    currency: String(account?.currency || "").trim().toUpperCase()
+  };
+}
+
+function rowFeedsPandleAccount(row, scope) {
+  // A Pandle bank account keeps one currency, so a row in another one cannot be
+  // the same payment however exactly the amount lines up. Both sides have to be
+  // known — Pandle does not always return the account's currency.
+  const rowCurrency = String(row?.currency || "").trim().toUpperCase();
+  if (scope.currency && rowCurrency && rowCurrency !== scope.currency) return false;
+  if (scope.nivaAccountId) return String(row?.accountId || "") === scope.nivaAccountId;
+  // A row with no provider name predates the field (it arrived with the bank
+  // identities work, long after the feed itself), so it can only be the bank's.
+  const provider = String(row?.provider || "").trim().toLowerCase();
+  return !provider || BANK_FEED_PROVIDERS.has(provider);
+}
 
 function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner }) {
   const db = () => admin.firestore();
@@ -278,6 +315,19 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       if (out.length >= 200) break;
     }
     return out;
+  }
+
+  // The workspace's own feed accounts (bank and PayPal alike) — so a pairing
+  // cannot be saved against an account id that does not exist, which would
+  // empty the Pandle queue with nothing on screen to explain it.
+  async function feedAccountIds(companyId) {
+    const snap = await db().collection("companies").doc(companyId).collection("bankConnections").limit(50).get();
+    const ids = new Set();
+    snap.docs.forEach((doc) => {
+      const accounts = (doc.data() || {}).accounts;
+      (Array.isArray(accounts) ? accounts : []).forEach((account) => { if (account && account.id) ids.add(String(account.id)); });
+    });
+    return ids;
   }
 
   // The workspace's own bank category records (bankCategories) carry the
@@ -520,12 +570,24 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     const bankAccountId = cleanText(request.data?.bankAccountId, 40);
     const account = (connection.bankAccounts || []).find((item) => item.id === bankAccountId);
     if (!account) throw new HttpsError("not-found", "That Pandle bank account was not found — refresh the Pandle data.");
+    // Which NivaDesk feed account this Pandle account is. Optional: without it
+    // the queue is the bank feed. Sent as "" it clears the pairing, and picking
+    // a different Pandle account clears it too — it named the previous ledger.
+    const requested = cleanText(request.data?.nivaAccountId, 120);
+    let nivaAccountId = requested;
+    if (requested) {
+      const known = await feedAccountIds(companyId);
+      if (!known.has(requested)) throw new HttpsError("not-found", "That NivaDesk bank account was not found.");
+    } else if (request.data?.nivaAccountId === undefined && account.id === connection.bankAccountId) {
+      nivaAccountId = cleanText(connection.nivaAccountId, 120);
+    }
     await connectionRef(companyId).set({
       bankAccountId: account.id,
       bankAccountName: account.name,
+      nivaAccountId,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-    return { ok: true };
+    return { ok: true, nivaAccountId };
   });
 
   // Mapping can be edited before Pandle is connected (codes are Pandle's
@@ -554,6 +616,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       .map(normalizeImported);
 
     const customCategories = await loadCustomCategories(companyId);
+    const scope = pandleFeedScope(connection);
     const snap = await transactionsRef(companyId).orderBy("bookingDate", "desc").limit(3000).get();
     const nivaRows = snap.docs.map((doc) => {
       const data = doc.data() || {};
@@ -561,6 +624,10 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         id: doc.id,
         amount: Number(data.amount) || 0,
         currency: cleanText(data.currency, 8),
+        // Which feed this row came from; the filter below is the only thing
+        // keeping PayPal out of a bank account's Check queue.
+        accountId: cleanText(data.accountId, 120),
+        provider: cleanText(data.provider, 20),
         bookingDate: cleanText(data.bookingDate, 10),
         description: cleanText(data.description, 300),
         counterparty: cleanText(data.counterparty, 160),
@@ -576,7 +643,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         matchedImportedId: cleanText(data.pandle?.matchedImportedId, 40),
         rejectedImportedIds: Array.isArray(data.pandle?.rejectedImportedIds) ? data.pandle.rejectedImportedIds.map((id) => cleanText(id, 40)) : []
       };
-    }).filter((row) => row.pandleStatus !== "confirmed" && row.reviewStatusIgnored !== true);
+    }).filter((row) => row.pandleStatus !== "confirmed" && row.reviewStatusIgnored !== true && rowFeedsPandleAccount(row, scope));
 
     const { matches } = matchFeeds(nivaRows, pandleRows);
     const items = matches.map(({ niva, pandle, score, drift, manual }) => {
@@ -670,6 +737,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     }
 
     const customCategories = await loadCustomCategories(companyId);
+    const scope = pandleFeedScope(connection);
     // A per-row failure flips the review status to sync_error and keeps the
     // attempt trail on the doc; local enrichment is never lost, the push can
     // simply be tried again.
@@ -692,6 +760,25 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       if (!tx) { results.push({ ...item, ok: false, error: "Transaction not found." }); continue; }
       if (tx.pandle?.status === "confirmed") { results.push({ ...item, ok: true, skipped: true }); continue; }
       if (cleanText(tx.reviewStatus, 20) === "ignored") { results.push({ ...item, ok: false, error: "This transaction is marked Ignored." }); continue; }
+      // The client can replay a preview taken before the pairing changed, or one
+      // taken before this scope existed at all. No sync_error stamp: the row is
+      // not this Pandle account's business, and marking it would hang a problem
+      // on a bank line that has nothing wrong with it.
+      if (!rowFeedsPandleAccount(tx, scope)) {
+        // Two different refusals wear the same sentence otherwise, and only one
+        // of them is about a pairing. With nothing paired — every workspace
+        // today — the row was dropped because it is not from the bank feed at
+        // all, and telling somebody it "is not from the paired account" sends
+        // them looking for a setting they never made.
+        results.push({
+          ...item,
+          ok: false,
+          error: scope.nivaAccountId
+            ? "This transaction is not from the account paired with Pandle."
+            : "Only bank feed transactions can be sent to Pandle. This one came from a payment provider."
+        });
+        continue;
+      }
       if (Array.isArray(tx.splits) && tx.splits.length) {
         const message = "Split transactions can't be pushed to Pandle yet — confirm this one inside Pandle.";
         await stampFailure(txDoc.ref, message);
@@ -876,4 +963,4 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
   };
 }
 
-module.exports = { createPandleFunctions, DEFAULT_MAPPINGS };
+module.exports = { createPandleFunctions, DEFAULT_MAPPINGS, pandleFeedScope, rowFeedsPandleAccount };

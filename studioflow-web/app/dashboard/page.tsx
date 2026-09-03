@@ -163,7 +163,24 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   );
 }
 
-type DashboardChannel = "all" | "shopify" | "woocommerce" | "manual";
+type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "manual";
+
+// The store connectors the server stamps orders with, keyed by the exact
+// `Source` label it writes. Four writers, not one: functions/index.js maps
+// Shopify and the legacy WooCommerce path, functions/commerce/adapters maps the
+// queue path, and functions/etsy.js is Etsy's own live mapper. The display name
+// is also the prefix of every other field that connector writes, e.g.
+// "Etsy Currency". Etsy and Square shipped after
+// this filter was written and nobody added a branch for them, so their money
+// was reported under the Manual pill — a workshop could not see which shop it
+// came from. A table rather than a chain of `if`s so the next connector is one
+// line, and so a test can compare it with what the server actually writes.
+const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
+  { key: "shopify", source: "Shopify" },
+  { key: "woocommerce", source: "WooCommerce" },
+  { key: "etsy", source: "Etsy" },
+  { key: "square", source: "Square" }
+];
 
 // Workspace currency is stored as a display symbol; imported orders carry ISO
 // codes. Real conversion needs exchange-rate decisions that belong to the
@@ -175,9 +192,22 @@ const DASHBOARD_SYMBOL_TO_ISO: Record<string, string> = {
 };
 
 function dashboardOrderCurrency(order: DashboardFinanceOrder): string {
+  // Every connector files its currency under its own display name — the same
+  // `${Source} <field>` shape the order-detail channel strip reads — while the
+  // generic inbound webhook writes a plain "Currency". Naming two of those keys
+  // by hand meant an Etsy or Square order returned no code at all, so it never
+  // reached the foreign-currency breakdown and the Revenue card's "some orders
+  // are in other currencies" line stayed silent while the money was shown with
+  // the workspace's own symbol.
+  // Matched the way dashboardOrderChannel matches, case folded. The two used to
+  // disagree: an order whose Source was spelled "etsy" was filed under the Etsy
+  // pill and then found no currency, because the key was built from the raw
+  // spelling. Two helpers reading the same field must read it the same way.
+  const raw = (order.customFields["Source"] || "").trim();
+  const known = DASHBOARD_CHANNELS.find(channel => channel.source.toLowerCase() === raw.toLowerCase());
+  const source = known ? known.source : raw;
   return (
-    order.customFields["Shopify Currency"]
-    || order.customFields["WooCommerce Currency"]
+    (source ? order.customFields[`${source} Currency`] : "")
     || order.customFields["Currency"]
     || ""
   ).trim().toUpperCase();
@@ -185,9 +215,9 @@ function dashboardOrderCurrency(order: DashboardFinanceOrder): string {
 
 function dashboardOrderChannel(order: DashboardFinanceOrder): DashboardChannel {
   const source = (order.customFields["Source"] || "").trim().toLowerCase();
-  if (source === "shopify") return "shopify";
-  if (source === "woocommerce") return "woocommerce";
-  return "manual";
+  // Anything the table does not name is manual, which still covers the generic
+  // inbound webhook's own labels (Website, Wix, Squarespace, Zapier, Make).
+  return DASHBOARD_CHANNELS.find(channel => channel.source.toLowerCase() === source)?.key ?? "manual";
 }
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
@@ -596,8 +626,8 @@ export default function DashboardPage() {
 
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
-  // Store-channel filter (dashboard report): every money view can be scoped
-  // to Shopify, WooCommerce or manually created orders. The pills only render
+  // Store-channel filter (dashboard report): every money view can be scoped to
+  // one connected shop or to manually created orders. The pills only render
   // when an integration channel actually exists in the workspace.
   const [channelFilter, setChannelFilter] = useState<DashboardChannel>("all");
   const availableChannels = useMemo(() => {
@@ -843,12 +873,15 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {availableChannels.has("shopify") || availableChannels.has("woocommerce") ? (
+            {DASHBOARD_CHANNELS.some(channel => availableChannels.has(channel.key)) ? (
               <div className="segmented-control dashboard-channel-control" aria-label={t("Sales channel")}>
                 {([
                   ["all", t("All channels")],
-                  ...(availableChannels.has("shopify") ? [["shopify", "Shopify"] as const] : []),
-                  ...(availableChannels.has("woocommerce") ? [["woocommerce", "WooCommerce"] as const] : []),
+                  // Brand names are not translated. Gating on two of them meant
+                  // an Etsy-only workshop got no pills at all.
+                  ...DASHBOARD_CHANNELS
+                    .filter(channel => availableChannels.has(channel.key))
+                    .map(channel => [channel.key, channel.source] as const),
                   ["manual", t("Manual")]
                 ] as Array<readonly [DashboardChannel, string]>).map(([key, label]) => (
                   <button

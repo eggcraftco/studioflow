@@ -108,6 +108,11 @@ function createAccountingFunctions(deps) {
   const credentialsFor = (provider) => credentials[provider] || credentials.quickbooks_online;
   const box = (plain, provider) => encryptToken(plain, credentialsFor(provider).tokenKey());
   const unbox = (b, provider) => (b && typeof b === "object" ? decryptToken(b, credentialsFor(provider).tokenKey()) : "");
+  // A blob that will not decrypt is permanent — the token key rotated, or the
+  // row is corrupt — and only reconnecting fixes it. It has to be told apart
+  // from "nothing stored" (""), so null says unreadable; etsyConnect.js names
+  // the same failure token_unreadable.
+  const unboxReadable = (b, provider) => { try { return unbox(b, provider); } catch (_unreadable) { return null; } };
   const redirectUri = (provider) => `${functionsBaseUrl()}/${moduleFor(provider).callbackFunction}`;
   const tokenDocIdOf = (connection) => connection.tokenDocId || connection.connectionId;
 
@@ -166,8 +171,24 @@ function createAccountingFunctions(deps) {
       return { row };
     });
     if (!claimed) return "";
-    if (claimed.locked || claimed.fresh) return unbox(claimed.row.accessTokenEncrypted, provider);
-    const refreshToken = unbox(claimed.row.refreshTokenEncrypted, provider);
+    // Both blobs are boxed with the same key, so one unreadable means both, and
+    // no refresh can repair it. These two lines used to throw here — outside the
+    // try below — so `status` stayed "linked", the owner was shown a raw Node
+    // crypto message, and the web offered no Connect again. Xero shares the
+    // QuickBooks key, so a single rotation lands on both connectors at once.
+    const markUnreadable = async () => {
+      await markConnection({ status: "reconnect_required", syncState: "needs_reconnect", lastError: "token_unreadable" });
+      return "";
+    };
+    if (claimed.locked || claimed.fresh) {
+      const accessToken = unboxReadable(claimed.row.accessTokenEncrypted, provider);
+      return accessToken === null ? markUnreadable() : accessToken;
+    }
+    const refreshToken = unboxReadable(claimed.row.refreshTokenEncrypted, provider);
+    if (refreshToken === null) {
+      await tokenRef.set({ tokenRefreshLockUntilMs: 0 }, { merge: true });
+      return markUnreadable();
+    }
     if (!refreshToken) {
       await markConnection({ status: "reconnect_required", syncState: "needs_reconnect", lastError: "refresh_token_missing" });
       await tokenRef.set({ tokenRefreshLockUntilMs: 0 }, { merge: true });
@@ -803,7 +824,10 @@ function createAccountingFunctions(deps) {
       const others = siblings.docs.filter((doc) => doc.id !== connectionId && (doc.data() || {}).status === "linked");
       if (!others.length) {
         const tokenSnap = await r.tokens.doc(tokenDocId).get();
-        const refreshToken = tokenSnap.exists ? unbox((tokenSnap.data() || {}).refreshTokenEncrypted, provider) : "";
+        // Revoking needs the token, but disconnecting must not depend on it: an
+        // unreadable blob used to throw out of here as INTERNAL, so a rotated
+        // key left a connection that could not even be cleared from the UI.
+        const refreshToken = tokenSnap.exists ? (unboxReadable((tokenSnap.data() || {}).refreshTokenEncrypted, provider) ?? "") : "";
         if (refreshToken) {
           try { revoked = await creds.oauth.revokeToken({ clientId: creds.clientId(), clientSecret: creds.clientSecret(), token: refreshToken, fetchImpl }); } catch (error) { console.warn("xero revoke failed:", error?.message || error); }
         }
@@ -811,7 +835,7 @@ function createAccountingFunctions(deps) {
       }
     } else {
       const tokenSnap = await r.tokens.doc(tokenDocId).get();
-      const refreshToken = tokenSnap.exists ? unbox((tokenSnap.data() || {}).refreshTokenEncrypted, provider) : "";
+      const refreshToken = tokenSnap.exists ? (unboxReadable((tokenSnap.data() || {}).refreshTokenEncrypted, provider) ?? "") : "";
       if (refreshToken) {
         try { revoked = await creds.oauth.revokeToken({ clientId: creds.clientId(), clientSecret: creds.clientSecret(), token: refreshToken, fetchImpl }); } catch (error) { console.warn("quickbooks revoke failed:", error?.message || error); }
       }
