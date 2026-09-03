@@ -1908,3 +1908,34 @@ Kaynak: `NivaDesk_Dis_Goz_Denetim_Raporu_20260902.md` (43+80+54+62+52+53 madde).
 **1. ürün kararı uygulandı:** müşteri profili silinince siparişlerdeki ad ve geçmiş KORUNUYOR; "New Project"e döndürme kaldırıldı (sunucu + Mac). Kişisel veriyi silmek ayrı işlem olarak Anonymise'da kalıyor.
 
 **Sıradaki (kullanıcı kararları, `NivaDesk_Urun_Kararlari_20260903.md`):** Archive/Delete Profile/Erase Personal Data ayrımı; merkezi server-side Finance Engine (Gross Margin / Net Profit / VAT Due, Standard + Margin Scheme, UI görünürlüğü hesabı değiştirmez); "+ Add Project" Quick Create mini formu; plan düşüşünde fazla üyelerin Suspended/No Access olması + Restore; e-posta ile ekip daveti. Bunlar dört platforma dokunan ayrı iş programları.
+
+## Merkezi Finance Engine — sunucu + dört ayna CANLI (3 Eyl 2026, akşam)
+
+Kaynak karar: `NivaDesk_Urun_Kararlari_20260903.md` §2. Sözleşme: `docs/finance-engine.md`.
+Survey: `docs/finance-engine-findings.md`.
+
+**Neyi düzeltti.** Aynı sipariş için **beş ayrı kâr tanımı** vardı (web araç çubuğu, web pano,
+`Siparis.netKar`, `OrderProfit`, Android `netProfit`) ve özel tutar toplamada **dört ayrı kural**
+(web'in kendi içinde ikisi). Sunucu negatif tutarları 0'a kırpıyordu, istemciler kırpmıyordu.
+`financialShowBaseCost` kapalıyken web ve Swift base cost'u kârdan da çıkarıyordu. `refundedAmount`
+hiçbir platformda kârdan düşülmüyordu. Marj rejimi komisyon/kargo/gider de düşüyordu, yani KDV'yi
+olduğundan az hesaplıyordu.
+
+**Mimari.** `functions/finance/engine.js` saf modül (Firestore/saat/dil bilmez). Cevabı bir
+tetikleyici her siparişe `finance` bloğu olarak damgalıyor — her yazıcıyı tek tek değiştirmek
+yerine, çünkü yazıcıların bir kısmı bizim elimizde değil (Pro/Team Mac doğrudan yazıyor, beş
+entegrasyon, ödeme defteri, banka iadesi). Mevcut siparişler için 20 dakikada bir süpürme işi;
+bitirdiği sürümü kaydedip duruyor, sürüm artınca yeniden başlıyor. Dört platformun aynası da var
+(kullanıcı yazarken önizleme) ve **dördü de sunucunun aynı `vectors.json` dosyasını koşuyor**.
+
+**Testler:** motor 19 vektör + 12 kural; damga 16 birim + 8 gerçek Firestore (döngü koruması on
+geçiş boyunca hiçbir şey yazmıyor); web/Swift/Kotlin aynaları 19'ar vektör; sunucu paketi 39/39;
+kural paketleri 86 PASS.
+
+**Yeni ayarlar** (kararın istediği): `vatRegistered`, `pricesIncludeVat`, `vatMethod`
+(standard/margin/none). Sunucuda saklanıyor, kurallarda vergi oranıyla aynı kapıda, web'de arayüzü
+var. Üçü de bugünkü davranışa eşit varsayılanla geliyor.
+
+**Canlıda:** `firestore.rules`, 12 fonksiyon, web Round 156 (`afd09c6`, chunk'ta teyit edildi).
+
+**KALAN:** Mac ve Android Settings'te üç VAT ayarının arayüzü; native mağaza sürümleri.

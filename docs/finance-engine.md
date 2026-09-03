@@ -235,4 +235,32 @@ kapalı çalışma alanlarında net kâr **azalır** (base cost artık her zaman
 
 ## 10. Sürüm
 
-`engineVersion: 1`. Formül değişirse sürüm artar ve toplu yeniden hesaplama yeniden koşar.
+`engineVersion: 2`. Sürüm 2 bloğa `receivablesTotal` ekledi. Süpürme işi bitirdiği sürümü
+kaydeder, sürüm artınca yürüyüşe yeniden başlar — yani formül değişikliği bir migration
+script'i değil, bir deploy.
+
+---
+
+## 11. Ne kuruldu (3 Eyl 2026)
+
+| Parça | Yer | Test |
+|---|---|---|
+| Motor (saf) | `functions/finance/engine.js` | 19 vektör + 12 kural |
+| Altın vektörler | `functions/finance/vectors.json` | dört uygulamanın ortak sözleşmesi |
+| Damga (tetikleyici) | `functions/finance/stamp.js` | 16 birim + 8 gerçek Firestore |
+| Toplu iş + süpürme | aynı dosya | süpürme sonlanıyor, sonra boşta |
+| Web aynası | `studioflow-web/lib/studioflow/financeEngine.ts` | `npm run test:finance` |
+| Swift aynası | `EGGcraft/FinanceEngine.swift` (+ `FinanceEngineBridge.swift`) | `scripts/check-finance-vectors-swift.sh` |
+| Kotlin aynası | `.../finance/FinanceEngine.kt` | `FinanceEngineVectorsTest` |
+
+**Motoru okuyanlar.** Web: `finance.ts` içindeki her yardımcı (36 çağrı yeri dokunulmadı) +
+müşteriler yükleyicisi. Swift: `Siparis.netKar`/`brutMarj`/`customRemainingTotal`,
+`OrderProfit`'in üçü, sipariş detayının `financeBlock`'u ve `otomatikKesintiHesapla`.
+Kotlin: `StudioModels.netProfit`/`grossMargin`/`customRemainingTotal`.
+
+**Ayarlar.** Üç yeni ayar sunucuda saklanıyor, kurallarda vergi oranıyla aynı kapıda ve
+web'de arayüzü var. **Mac ve Android'de arayüzü henüz yok** — motor onları okuyor, sadece
+oradan değiştirilemiyor.
+
+**Canlıda:** kurallar, 12 fonksiyon (motor + damga + süpürme + finans ayarları + sipariş
+yazıcıları), web Round 156.
