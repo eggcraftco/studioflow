@@ -398,6 +398,14 @@ function createEtsySyncFunctions(deps) {
     });
     const receiptId = normalised.source.receiptId;
 
+    const key = etsy.externalOrderKey(companyId, shopId, receiptId);
+    const externalRef = externalOrders().doc(key);
+    const existingSnap = await externalRef.get();
+    const existing = existingSnap.exists ? (existingSnap.data() || {}) : null;
+    // Whether the studio already has this order decides one thing only: whether
+    // a cancellation is allowed past the import rules below.
+    const holdsThisOrderAlready = Boolean(existing && existing.nivadeskOrderId);
+
     // The seller's choices are not a preview-only courtesy. The preview
     // honoured "do not import cancelled orders" and then the 15-minute sweep
     // and the webhooks brought them in anyway, half an hour later, with nothing
@@ -421,19 +429,32 @@ function createEtsySyncFunctions(deps) {
       if (connectionData.importRules) {
         const stored = normaliseRules(connectionData.importRules);
         const verdict = classify(normalised, stored);
-        if (verdict.outcome === "unsupported") {
+        if (verdict.outcome === "unsupported" && !holdsThisOrderAlready) {
           return { status: "skipped", receiptId, reason: verdict.reason };
+        }
+        // "Do not import cancelled orders" is a rule about what to PULL IN. It
+        // is not a rule about whether the studio may be told that an order it
+        // ALREADY HOLDS has been cancelled — and that is the case this used to
+        // swallow: the buyer cancels, the sweep or the order.canceled webhook
+        // brings the receipt back, classify() calls it unsupported, and the job
+        // sits in the workshop as live work with its full value still counting
+        // as revenue.
+        //
+        // Narrowed to the cancellation reason on purpose. Every other
+        // "unsupported" answer — no line items, a shape we cannot map — is a
+        // receipt we genuinely cannot act on, and letting those through on the
+        // strength of "we hold this order" would write a broken update over a
+        // good one.
+        if (verdict.outcome === "unsupported") {
+          if (verdict.reason !== "cancelled_at_source" || !normalised.source.isCancelled) {
+            return { status: "skipped", receiptId, reason: verdict.reason };
+          }
         }
         if (!stored.includeCompleted && String(normalised.source.status) === "completed") {
           return { status: "skipped", receiptId, reason: "completed" };
         }
       }
     }
-
-    const key = etsy.externalOrderKey(companyId, shopId, receiptId);
-    const externalRef = externalOrders().doc(key);
-    const existingSnap = await externalRef.get();
-    const existing = existingSnap.exists ? (existingSnap.data() || {}) : null;
 
     // Out-of-order protection. Etsy webhooks are not ordered, and a
     // reconciliation sweep can overtake one. Without this, an older snapshot
@@ -473,10 +494,49 @@ function createEtsySyncFunctions(deps) {
     // over it again on every webhook. One extra read, only when the order is
     // not new.
     const existingOrder = isNew ? null : ((await orderRef.get()).data() || {});
-    await orderRef.set(
-      integrationOrderUpdate(normalised.order, isNew, existingOrder, etsy.ETSY_UNKNOWN_ON_UPDATE),
-      { merge: true }
-    );
+
+    // A cancellation changes the STATUS, not the money.
+    //
+    // `status` is deliberately not a shop-owned field — otherwise every resync
+    // would drag a job back out of production — so the mapper's "Cancelled"
+    // never survives an ordinary update, which is why a cancelled Etsy order
+    // stayed live in the workshop. It is set explicitly here instead, and only
+    // here.
+    //
+    // And ONLY the status: the ordinary patch is skipped for a cancellation
+    // because the mapper rewrites the money for a cancelled receipt, which
+    // would turn a paid job into an unpaid one. The sale happened. If the money
+    // came back, that is a refund, and refunds have their own field.
+    //
+    // One direction. Etsy may cancel an order; nothing at Etsy un-cancels one
+    // on the studio's behalf, and a studio that cancelled it by hand is left
+    // alone.
+    const cancelling = !isNew
+      && normalised.source.isCancelled
+      && String(existingOrder?.status || "") !== "Cancelled";
+
+    if (cancelling) {
+      await orderRef.set({
+        status: "Cancelled",
+        historyLog: [
+          ...(Array.isArray(existingOrder?.historyLog) ? existingOrder.historyLog : []),
+          {
+            id: `etsy-cancel-${receiptId}`,
+            // A date, not a millisecond number: the four clients read
+            // `createdAt` here and render nothing at all for `createdAtMs`.
+            createdAt: new Date(),
+            title: "Order cancelled",
+            oldValue: String(existingOrder?.status || ""),
+            newValue: "Cancelled"
+          }
+        ].slice(-200)
+      }, { merge: true });
+    } else if (!normalised.source.isCancelled || isNew) {
+      await orderRef.set(
+        integrationOrderUpdate(normalised.order, isNew, existingOrder, etsy.ETSY_UNKNOWN_ON_UPDATE),
+        { merge: true }
+      );
+    }
 
     // The read-only source panel. Kept apart from the order's own fields so a
     // resync can refresh it without ever reaching into the studio's work.
