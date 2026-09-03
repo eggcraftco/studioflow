@@ -15200,9 +15200,8 @@ struct AccountProfileView: View {
     }
 
     private var teamAccessCard: some View {
+        // The Settings page header already names the section; the card starts with content.
         VStack(alignment: .leading, spacing: 16) {
-            sectionTitle(t("Team Access", lang: seciliDil), icon: "person.2.fill")
-
             // Workspace membership and switching are available to every accepted role.
             // Management controls remain gated separately below.
             ViewThatFits(in: .horizontal) {

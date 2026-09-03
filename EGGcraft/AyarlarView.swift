@@ -4013,96 +4013,105 @@ struct AyarlarView: View {
     }
 
 
+    /// PDF Export — the visible sections grouped by what they are for, the
+    /// company numbers, and the invoice footer, each on its own card.
     private var pdfAyari: some View {
-        SettingsCard(title: t("PDF Export Settings", lang: seciliDil), iconName: "doc.richtext") {
-            VStack(alignment: .leading, spacing: 18) {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 15) {
-                    Toggle(isOn: $pdfShowCustomer) { Text(t("Customer & Design", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowContact) { Text(t("Contact & Notes", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowPreview) { Text(t("Preview Image", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowMaterials) { Text(t("Materials & Inventory", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowPriority) { Text(t("Priority / Risk", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowFinCustomer) { Text(t("Financials: Paid & Remaining", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowPaymentMethod) { Text(t("Payment Method", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowFinInternal) { Text(t("Internal Financials", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowStatus) { Text(t("Production Status", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowShipping) { Text(t("Shipping & Tracking", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowAddress) { Text(t("Billing Address", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
-                    Toggle(isOn: $pdfShowShippingAddress) { Text(t("Shipping Address", lang: seciliDil)).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading) }
+        VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
+            NDSettingsSurface(spacing: 14) {
+                NDSettingsCardHead(icon: "doc.richtext", title: t("Visible sections", lang: seciliDil), subtitle: t("Choose what appears on invoices, estimates and internal documents.", lang: seciliDil))
+                pdfToggleGroup(t("Customer details", lang: seciliDil), [
+                    (t("Customer & Design", lang: seciliDil), $pdfShowCustomer),
+                    (t("Contact & Notes", lang: seciliDil), $pdfShowContact),
+                    (t("Preview Image", lang: seciliDil), $pdfShowPreview),
+                    (t("Billing Address", lang: seciliDil), $pdfShowAddress),
+                    (t("Shipping Address", lang: seciliDil), $pdfShowShippingAddress)
+                ])
+                pdfToggleGroup(t("Operations", lang: seciliDil), [
+                    (t("Materials & Inventory", lang: seciliDil), $pdfShowMaterials),
+                    (t("Priority / Risk", lang: seciliDil), $pdfShowPriority),
+                    (t("Production Status", lang: seciliDil), $pdfShowStatus),
+                    (t("Shipping & Tracking", lang: seciliDil), $pdfShowShipping)
+                ])
+                pdfToggleGroup(t("Payments", lang: seciliDil), [
+                    (t("Financials: Paid & Remaining", lang: seciliDil), $pdfShowFinCustomer),
+                    (t("Payment Method", lang: seciliDil), $pdfShowPaymentMethod),
+                    (t("Internal Financials", lang: seciliDil), $pdfShowFinInternal)
+                ])
+            }
+
+            NDSettingsSurface(spacing: 12) {
+                NDSettingsCardHead(icon: "number", title: t("Company invoice numbers", lang: seciliDil), subtitle: t("VAT, EORI, company number or any reference you want to show on PDF invoices.", lang: seciliDil)) {
+                    NDSecondaryButton(title: t("Add", lang: seciliDil), icon: "plus") {
+                        withAnimation { companyNumbers.append(CompanyNumberSettingDTO(title: t("New Number", lang: seciliDil), value: "")) }
+                    }
+                }
+                if companyNumbers.isEmpty {
+                    Text(t("No company numbers added yet.", lang: seciliDil))
+                        .font(.system(size: 12))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.panel(colorScheme)))
+                } else {
+                    ForEach($companyNumbers) { $item in
+                        HStack(spacing: 10) {
+                            TextField("Label", text: $item.title)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13, weight: .semibold))
+                                .padding(9)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(NDSettings.panel(colorScheme)))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+                                .frame(maxWidth: isPhoneLayout ? .infinity : 210)
+                            TextField(t("Number / value", lang: seciliDil), text: $item.value)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13))
+                                .padding(9)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(NDSettings.panel(colorScheme)))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+                            Button(action: { withAnimation { companyNumbers.removeAll { $0.id == item.id } } }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(NDSettings.danger)
+                                    .frame(width: 32, height: 32)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            NDSettingsSurface(spacing: 10) {
+                NDSettingsCardHead(icon: "text.alignleft", title: t("Invoice footer", lang: seciliDil), subtitle: t("Shown at the bottom of the customer Invoice PDF (e.g. bank details, payment terms, thank-you note).", lang: seciliDil))
+                TextEditor(text: $invoiceFooterNote)
+                    .font(.system(size: 13))
+                    .frame(minHeight: 80)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(NDSettings.panel(colorScheme)))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+            }
+        }
+    }
+
+    /// A small uppercase group label with switch rows and hairlines beneath it.
+    private func pdfToggleGroup(_ title: String, _ rows: [(String, Binding<Bool>)]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title.uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .tracking(0.6)
+                .foregroundColor(NDSettings.muted(colorScheme))
+                .padding(.bottom, 6)
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                Toggle(isOn: row.1) {
+                    Text(row.0)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(NDSettings.text(colorScheme))
                 }
                 .toggleStyle(.switch)
-                .controlSize(.small)
-                .tint(.blue)
-
-                Divider().background(Color.primary.opacity(0.1))
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(t("Company invoice numbers", lang: seciliDil))
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.primary)
-                            Text(t("VAT, EORI, company number or any reference you want to show on PDF invoices.", lang: seciliDil))
-                                .font(.system(size: 11))
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        Button(action: { withAnimation { companyNumbers.append(CompanyNumberSettingDTO(title: t("New Number", lang: seciliDil), value: "")) } }) {
-                            HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text(t("Add", lang: seciliDil)) }
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if companyNumbers.isEmpty {
-                        Text(t("No company numbers added yet.", lang: seciliDil))
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.primary.opacity(0.04))
-                            .cornerRadius(8)
-                    } else {
-                        ForEach($companyNumbers) { $item in
-                            HStack(spacing: 10) {
-                                TextField("Label", text: $item.title)
-                                    .textFieldStyle(.plain)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .padding(9)
-                                    .background(Color.primary.opacity(0.05))
-                                    .cornerRadius(6)
-                                    .frame(width: 210)
-                                TextField(t("Number / value", lang: seciliDil), text: $item.value)
-                                    .textFieldStyle(.plain)
-                                    .font(.system(size: 13))
-                                    .padding(9)
-                                    .background(Color.primary.opacity(0.05))
-                                    .cornerRadius(6)
-                                Button(action: { withAnimation { companyNumbers.removeAll { $0.id == item.id } } }) {
-                                    Image(systemName: "trash.fill")
-                                        .foregroundColor(.red.opacity(0.8))
-                                        .padding(8)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(t("Invoice Footer / Payment Terms", lang: seciliDil))
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(t("Shown at the bottom of the customer Invoice PDF (e.g. bank details, payment terms, thank-you note).", lang: seciliDil))
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                        TextEditor(text: $invoiceFooterNote)
-                            .font(.system(size: 13))
-                            .frame(minHeight: 70)
-                            .padding(6)
-                            .background(Color.primary.opacity(0.05))
-                            .cornerRadius(8)
-                    }
-                    .padding(.top, 4)
+                .tint(NDSettings.accent)
+                .frame(minHeight: 36)
+                if index < rows.count - 1 {
+                    Divider().overlay(NDSettings.border(colorScheme))
                 }
             }
         }
@@ -5672,76 +5681,75 @@ struct AyarlarView: View {
         .padding(20)
     }
 
+    /// AI Reply — the master switch as its own row, the engine as three choice
+    /// cards, then the style and the engine's own settings on separate cards.
     private var quickReplyAyari: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(LinearGradient(colors: [Color.blue, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .frame(width: 44, height: 44)
-
-                Text(t("Quick Reply Settings", lang: seciliDil))
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.primary)
-            }
-
+        VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
             if canEditWorkspace {
-                Toggle(isOn: Binding(
-                    get: { authVM.quickReplyMenuEnabled },
-                    set: { newValue in
-                        authVM.quickReplyMenuEnabled = newValue
-                        firebaseManager.setQuickReplyMenuEnabled(newValue)
+                NDSettingsSurface(spacing: 0) {
+                    Toggle(isOn: Binding(
+                        get: { authVM.quickReplyMenuEnabled },
+                        set: { newValue in
+                            authVM.quickReplyMenuEnabled = newValue
+                            firebaseManager.setQuickReplyMenuEnabled(newValue)
+                        }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t("Show \"AI Replies\" in the menu", lang: seciliDil))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(NDSettings.text(colorScheme))
+                            Text(t("Turn this off to hide the menu item.", lang: seciliDil))
+                                .font(.system(size: 12))
+                                .foregroundColor(NDSettings.muted(colorScheme))
+                        }
                     }
-                )) {
-                    Text(t("Show \"AI Replies\" in the menu", lang: seciliDil))
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
+                    .toggleStyle(.switch)
+                    .tint(NDSettings.accent)
                 }
-                .tint(.green)
-                .padding(14)
-                .background(Color.secondary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text(t("Reply Engine", lang: seciliDil))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-
-                Picker(t("Mode", lang: seciliDil), selection: $replyMode) {
-                    Label(t("Apple On-Device", lang: seciliDil), systemImage: "apple.logo").tag("Apple")
-                    Label(t("OpenAI Online", lang: seciliDil), systemImage: "sparkles").tag("AI")
-                    Label(t("Offline Template", lang: seciliDil), systemImage: "doc.text").tag("Offline")
+            NDSettingsSurface(spacing: 12) {
+                NDSettingsCardHead(icon: "sparkles", title: t("Reply engine", lang: seciliDil), subtitle: t("Choose where replies are created.", lang: seciliDil))
+                let engines: [(key: String, title: String, description: String)] = [
+                    ("Apple", t("Apple On-Device", lang: seciliDil), t("Runs on Mac or iPhone. Free, private and app only.", lang: seciliDil)),
+                    ("AI", t("OpenAI Online", lang: seciliDil), t("Creates fresh replies from your knowledge base. Requires internet and may cost per reply.", lang: seciliDil)),
+                    ("Offline", t("Offline Template", lang: seciliDil), t("Uses the same fixed wording every time. No key or internet.", lang: seciliDil))
+                ]
+                let selectedEngine = replyMode == "Local" ? "Apple" : replyMode
+                if isPhoneLayout {
+                    VStack(spacing: 10) {
+                        ForEach(engines, id: \.key) { engine in
+                            NDChoiceCard(title: engine.title, description: engine.description, selected: selectedEngine == engine.key) { replyMode = engine.key }
+                        }
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(engines, id: \.key) { engine in
+                            NDChoiceCard(title: engine.title, description: engine.description, selected: selectedEngine == engine.key) { replyMode = engine.key }
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
                 }
-                .pickerStyle(.segmented)
-                .tint(.blue)
-
                 Text(quickReplyEngineDescription)
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-                    .lineSpacing(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.system(size: 12))
+                    .foregroundColor(NDSettings.muted(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            quickReplyStyleSettings
+            NDSettingsSurface(spacing: 14) {
+                quickReplyStyleSettings
+            }
 
-            if replyMode == "Apple" || replyMode == "Local" {
-                quickReplyAppleAISettings
-            } else if replyMode == "AI" {
-                quickReplyOnlineAISettings
-            } else {
-                quickReplyOfflineTemplateSettings
+            NDSettingsSurface(spacing: 14) {
+                if replyMode == "Apple" || replyMode == "Local" {
+                    quickReplyAppleAISettings
+                } else if replyMode == "AI" {
+                    quickReplyOnlineAISettings
+                } else {
+                    quickReplyOfflineTemplateSettings
+                }
             }
         }
-        .padding(28)
-        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.primary.opacity(0.08), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.06), radius: 18, y: 8)
         .onAppear {
             if replyMode == "Local" {
                 replyMode = "Apple"

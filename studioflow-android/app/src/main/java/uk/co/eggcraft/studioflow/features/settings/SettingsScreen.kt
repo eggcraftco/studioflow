@@ -1144,7 +1144,7 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
     val normalizedRole = state.workspace?.role.orEmpty().lowercase().replace("_", "").replace("-", "").replace(" ", "")
     val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
     DetailColumn {
-        DetailCard(title = t("PDF Export Settings"), icon = Icons.Filled.Description) {
+        DetailCard(title = t("Visible sections"), icon = Icons.Filled.Description, subtitle = t("Choose what appears on invoices, estimates and internal documents.")) {
             if (isWorkflowOnly) {
                 Text(
                     "PDF Export remains available for your workflow. Workspace-wide PDF settings are owner-managed, and payment or financial PDF fields are hidden for this role.",
@@ -1167,35 +1167,44 @@ private fun PdfExportDetail(state: StudioFlowUiState, onSave: (Map<String, Any?>
                     onSave = { key, value -> onSave(mapOf(key to value), "Personal PDF preference saved.") }
                 )
             } else {
+                val save: (String, Boolean) -> Unit = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
+                Text(t("Customer details").uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NDSettings.muted())
                 TwoColumnSwitches(
                     listOf(
                         SwitchSpec("Customer & Design", settings.pdfShowCustomer, "pdfShowCustomer"),
                         SwitchSpec("Contact & Notes", settings.pdfShowContact, "pdfShowContact"),
                         SwitchSpec("Preview Image", settings.pdfShowPreview, "pdfShowPreview"),
-                        SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "pdfShowMaterials"),
-                        SwitchSpec("Priority / Risk", settings.pdfShowPriority, "pdfShowPriority"),
-                        SwitchSpec("Financials: Paid & Remaining", settings.pdfShowFinCustomer, "pdfShowFinCustomer"),
-                        SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
-                        SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal"),
-                        SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
-                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping"),
                         SwitchSpec("Billing Address", settings.pdfShowAddress, "pdfShowAddress"),
                         SwitchSpec("Shipping Address", settings.pdfShowShippingAddress, "pdfShowShippingAddress")
                     ),
-                    onSave = { key, value -> onSave(mapOf(key to value), "PDF settings saved.") }
+                    onSave = save
                 )
-                HorizontalDivider()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(t("Company invoice numbers"), fontWeight = FontWeight.ExtraBold)
-                        Text(t("VAT, EORI, company number or any reference you want to show on PDF invoices."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = {
+                Text(t("Operations").uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NDSettings.muted())
+                TwoColumnSwitches(
+                    listOf(
+                        SwitchSpec("Materials & Inventory", settings.pdfShowMaterials, "pdfShowMaterials"),
+                        SwitchSpec("Priority / Risk", settings.pdfShowPriority, "pdfShowPriority"),
+                        SwitchSpec("Production Status", settings.pdfShowStatus, "pdfShowStatus"),
+                        SwitchSpec("Shipping & Tracking", settings.pdfShowShipping, "pdfShowShipping")
+                    ),
+                    onSave = save
+                )
+                Text(t("Payments").uppercase(), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NDSettings.muted())
+                TwoColumnSwitches(
+                    listOf(
+                        SwitchSpec("Financials: Paid & Remaining", settings.pdfShowFinCustomer, "pdfShowFinCustomer"),
+                        SwitchSpec("Payment Method", settings.pdfShowPaymentMethod, "pdfShowPaymentMethod"),
+                        SwitchSpec("Internal Financials", settings.pdfShowFinInternal, "pdfShowFinInternal")
+                    ),
+                    onSave = save
+                )
+            }
+        }
+        if (!isWorkflowOnly) {
+            NDSettingsSurface(spacing = 12.dp) {
+                NDSettingsCardHead(icon = Icons.Filled.Badge, title = t("Company invoice numbers"), subtitle = t("VAT, EORI, company number or any reference you want to show on PDF invoices.")) {
+                    NDSecondaryButton(title = t("Add"), icon = Icons.Filled.AddCircle) {
                         onSave(mapOf("companyNumbersJSON" to companyNumbersJson(settings.companyNumbers + StudioCompanyNumber("New Number", ""))), "Invoice numbers saved.")
-                    }) {
-                        Icon(Icons.Filled.AddCircle, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(t("Add"))
                     }
                 }
                 settings.companyNumbers.forEachIndexed { index, item ->
@@ -1239,34 +1248,37 @@ private fun QuickReplySettingsDetail(state: StudioFlowUiState, onSave: (Map<Stri
         )
     }
     DetailColumn {
-        DetailCard(title = t("Quick Reply Settings"), icon = Icons.Outlined.AutoAwesome) {
-            if (canManageCoreAI) {
-                val menuEnabled = state.workspace?.quickReplyMenuEnabled ?: true
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
-                ) {
-                    Text(
-                        t("Show \"AI Replies\" in the menu"),
-                        modifier = Modifier.weight(1f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+        if (canManageCoreAI) {
+            val menuEnabled = state.workspace?.quickReplyMenuEnabled ?: true
+            NDSettingsSurface(spacing = 0.dp, padding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(t("Show \"AI Replies\" in the menu"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NDSettings.text())
+                        Text(t("Turn this off to hide the menu item."), fontSize = 12.sp, color = NDSettings.muted())
+                    }
                     androidx.compose.material3.Switch(
                         checked = menuEnabled,
                         onCheckedChange = { onSave(mapOf("quickReplyMenuEnabled" to it), "Saved.") }
                     )
                 }
             }
-            Text(t("Reply Engine"), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-            SegmentedRow(listOf("On-Device AI", "OpenAI Online", "Offline Template"), engineLabel(selectedReplyMode)) {
-                val mode = when (it) {
-                    "On-Device AI" -> "Apple"
-                    "Offline Template" -> "Offline"
-                    else -> "AI"
+        }
+        DetailCard(title = t("Reply engine"), icon = Icons.Outlined.AutoAwesome, subtitle = t("Choose where replies are created.")) {
+            val engines = listOf(
+                Triple("Apple", t("On-Device AI"), t("Runs on Mac or iPhone. Free, private and app only.")),
+                Triple("AI", t("OpenAI Online"), t("Creates fresh replies from your knowledge base. Requires internet and may cost per reply.")),
+                Triple("Offline", t("Offline Template"), t("Uses the same fixed wording every time. No key or internet."))
+            )
+            val selectedEngine = if (selectedReplyMode == "Local") "Apple" else selectedReplyMode
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                engines.forEach { (mode, title, description) ->
+                    NDChoiceCard(title = title, description = description, selected = selectedEngine == mode) {
+                        if (selectedEngine != mode) {
+                            selectedReplyMode = mode
+                            onSave(mapOf("replyMode" to mode), "Reply engine saved.")
+                        }
+                    }
                 }
-                selectedReplyMode = mode
-                onSave(mapOf("replyMode" to mode), "Reply engine saved.")
             }
             Text(engineDescription(selectedReplyMode), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -4926,23 +4938,9 @@ private fun TeamAccessDetail(
     val ownerCanManage = workspace?.isOwner == true && canViewTeamManagement
     val roleOptions = remember(state.customRoles) { teamRoleOptions(state.customRoles) }
     DetailColumn {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp
-        ) {
-            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconBubble(icon = Icons.Filled.People, tint = StudioBlue, container = StudioBlue.copy(alpha = 0.12f), size = 64.dp)
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(t("Team Access"), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(t("Manage workspace members, roles and join requests."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
+        // The page header above already names the section; no second banner here.
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val useTwoColumns = maxWidth >= 720.dp
+            val useTwoColumns = maxWidth >= 640.dp
             if (useTwoColumns) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
