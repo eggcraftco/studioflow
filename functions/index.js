@@ -5762,6 +5762,29 @@ const inventoryExports = createInventoryFunctions({
 const { _internal: inventoryInternal, ...inventoryCallables } = inventoryExports;
 Object.assign(exports, inventoryCallables);
 
+// The Finance Engine's answer, stamped onto every order by a trigger rather
+// than by each of the many writers. See functions/finance/stamp.js for why a
+// trigger, and docs/finance-engine.md for what it computes.
+const { createFinanceStamp } = require("./finance/stamp");
+const { _internal: financeStampInternal, ...financeStampExports } = createFinanceStamp({
+  admin,
+  onDocumentWritten,
+  onCall,
+  HttpsError,
+  // Owner or admin, and deliberately no plan gate: the finance block is what
+  // every screen reads, so a Free workspace needs it as much as a Team one.
+  requireFinanceBackfill: async (request) => {
+    const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+    if (role !== "owner" && role !== "admin") {
+      throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot recalculate the workspace finances.`);
+    }
+    return { uid, companyId, email: String(request.auth?.token?.email || "") };
+  },
+  region: "europe-west2"
+});
+Object.assign(exports, financeStampExports);
+
 // Production: the operations layer between Orders ("what was ordered") and
 // Schedule ("when is it due"). It answers "where is this on the bench right
 // now" and deliberately keeps that answer apart from order, payment and
