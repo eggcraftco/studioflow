@@ -62,13 +62,22 @@ service cloud.firestore {
     // assigned orders. They can create/read/update/delete their OWN orders directly
     // (full member-tier access including financial fields), but cannot reassign them
     // to someone else and cannot see other people's orders.
+    // Read with .get() defaults: a memberAccess entry written before a key
+    // existed (or a member with no entry at all) must evaluate to "not
+    // restricted", not error the whole rule. A missing assignedProjectsOnly
+    // used to throw "Property assignedProjectsOnly is undefined" and lock the
+    // member out of every list query.
+    function memberAccessEntry(companyId) {
+      return get(companyPath(companyId)).data.get('memberAccess', {}).get(request.auth.uid, {});
+    }
+
     function isAssignedOnlyCustomMember(companyId) {
       return signedIn()
         && !isCompanyOwner(companyId)
         && companyExists(companyId)
         && !isWorkflowOnlyMember(companyId)
-        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].assignedProjectsOnly == true
-        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].manageProjectAssignments != true;
+        && memberAccessEntry(companyId).get('assignedProjectsOnly', false) == true
+        && memberAccessEntry(companyId).get('manageProjectAssignments', false) != true;
     }
 
     // Per-member access flag granted by the owner in Team Access. The server
@@ -77,7 +86,7 @@ service cloud.firestore {
     function memberAccessAllows(companyId, key) {
       return signedIn()
         && companyExists(companyId)
-        && get(companyPath(companyId)).data.memberAccess[request.auth.uid][key] == true;
+        && memberAccessEntry(companyId).get(key, false) == true;
     }
 
     // Bank Spending feed: owner, or a member the owner explicitly granted bankFeed.
@@ -408,11 +417,12 @@ service cloud.firestore {
       match /workspaceAccess/{companyId} {
         allow read: if signedIn() && userId == request.auth.uid;
 
-        allow create, update, delete: if signedIn()
-          && (
-            userId == request.auth.uid
-            || isCompanyOwner(companyId)
-          );
+        // Written only by the Admin SDK (approve/add/remove team member,
+        // reconcile). storage.rules counts this document as proof of
+        // membership, so a client must never be able to write one — a removed
+        // member could otherwise re-admit themselves to another workspace's
+        // files with a single self-write.
+        allow create, update, delete: if false;
       }
     }
 
@@ -451,7 +461,10 @@ service cloud.firestore {
         && validCompanyBillingUpdate()
         && validOwnerUidUpdate()
         && validTeamWorkspaceUpdate(companyId);
-      allow delete: if isCompanyOwner(companyId);
+      // Deleting the workspace document from a client would strand every
+      // subcollection, Storage object and member; deleteMyAccount /
+      // deleteWorkspaceData do it properly server-side.
+      allow delete: if false;
     }
 
     match /companies/{companyId}/billing/{document=**} {
@@ -848,6 +861,9 @@ service cloud.firestore {
         && collectionId != 'wooMergedPayments'
         && collectionId != 'workspaceTickets'
         && collectionId != 'supportSettings'
+        && collectionId != 'paypalPayouts'
+        && collectionId != 'squarePayouts'
+        && collectionId != 'trackingResults'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -902,7 +918,28 @@ service cloud.firestore {
         && collectionId != 'wooMergedPayments'
         && collectionId != 'workspaceTickets'
         && collectionId != 'supportSettings'
+        && collectionId != 'paypalPayouts'
+        && collectionId != 'squarePayouts'
+        && collectionId != 'trackingResults'
         && canWriteCompanyData(companyId);
+    }
+
+    // Processor payouts are money: readable with the bank feed, written only by
+    // the sync jobs. Tracking results are written by the courier refresh job;
+    // clients only listen to them.
+    match /companies/{companyId}/paypalPayouts/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/squarePayouts/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/trackingResults/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
     }
 
     match /siparisler/{orderId} {
@@ -972,22 +1009,40 @@ service cloud.firestore {
       // changed only through saveQuickReplySettings callable validation.
       // The audit stamp is writable, but only as yourself — the change
       // history must not let one member sign another member's name.
+      // Which keys this write touches (every key on create).
+      function settingsKeysTouched() {
+        return resource == null
+          ? request.resource.data.keys()
+          : request.resource.data.diff(resource.data).affectedKeys();
+      }
+
+      // Customer SMS costs money and is owner-only in saveWorkspaceSmsSettings;
+      // a member could previously flip triggers or the sender straight from a
+      // client write. Same for the tax/fee basis: saveFinancialSettings is
+      // owner/admin, so the direct write is too.
+      function ownerOnlySettingsKeys() {
+        return ['smsTriggers', 'smsSenderId', 'smsSenderStatus', 'smsDefaultCallingCode'];
+      }
+
+      function financeSettingsKeys() {
+        return ['seciliParaBirimi', 'seciliOndalik', 'feePercentage', 'defaultTaxRate',
+          'taxRuleNameRevenue', 'taxRuleNameProfit', 'taxCalculationType', 'taxMilestoneEnabled',
+          'taxMilestoneDate', 'corporationTaxEnabled', 'corporationTaxRate'];
+      }
+
+      function isCompanyAdminOrOwner(companyId) {
+        return isCompanyOwner(companyId) || memberRole(companyId) in ['owner', 'admin'];
+      }
+
       allow write: if canWriteCompanyData(companyId)
-        && (
-          resource == null
-            ? (!request.resource.data.keys().hasAny([
-                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
-                'customProductsJSON', 'customRulesJSON'
-              ])
-              && (!request.resource.data.keys().hasAny(['lastSettingsWriteByUid'])
-                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
-            : (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
-                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
-                'customProductsJSON', 'customRulesJSON'
-              ])
-              && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastSettingsWriteByUid'])
-                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
-        );
+        && !settingsKeysTouched().hasAny([
+          'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+          'customProductsJSON', 'customRulesJSON'
+        ])
+        && (!settingsKeysTouched().hasAny(['lastSettingsWriteByUid'])
+          || request.resource.data.lastSettingsWriteByUid == request.auth.uid)
+        && (isCompanyOwner(companyId) || !settingsKeysTouched().hasAny(ownerOnlySettingsKeys()))
+        && (isCompanyAdminOrOwner(companyId) || !settingsKeysTouched().hasAny(financeSettingsKeys()));
     }
 
     match /quickReplySecrets/{companyId} {

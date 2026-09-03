@@ -203,10 +203,26 @@ service firebase.storage {
         );
     }
 
+    // Mirrors trialLapsed() in firestore.rules (and trialHasExpired() on the
+    // server, 36-hour grace): a trial that ended keeps its billingPlan on the
+    // document, so reading the plan alone kept Pro/Team storage open for a
+    // workspace every callable had already dropped to Free.
+    function trialLapsed(data) {
+      return data.get('billingStatus', '') == 'trialing'
+        && (
+          (data.get('billingTrialEndsAt', null) is timestamp
+            && request.time > data.billingTrialEndsAt + duration.value(36, 'h'))
+          || (!(data.get('billingTrialEndsAt', null) is timestamp)
+            && data.get('billingCurrentPeriodEnd', null) is timestamp
+            && request.time > data.billingCurrentPeriodEnd + duration.value(36, 'h'))
+        );
+    }
+
     function clientFilesPlanAllowed(companyId) {
-      let rawPlan = companyData(companyId).billingPlan;
+      let data = companyData(companyId);
+      let rawPlan = data.billingPlan;
       let plan = rawPlan is string ? rawPlan : "free_demo";
-      return plan in [
+      return !trialLapsed(data) && plan in [
         "pro_monthly", "pro_yearly",
         "team_monthly", "team_yearly",
         "proMonthly", "proYearly",
@@ -215,9 +231,10 @@ service firebase.storage {
     }
 
     function messageFilesPlanAllowed(companyId) {
-      let rawPlan = companyData(companyId).billingPlan;
+      let data = companyData(companyId);
+      let rawPlan = data.billingPlan;
       let plan = rawPlan is string ? rawPlan : "free_demo";
-      return plan in [
+      return !trialLapsed(data) && plan in [
         "team_monthly", "team_yearly",
         "teamMonthly", "teamYearly"
       ];
@@ -271,16 +288,24 @@ service firebase.storage {
     }
 
 
+    // Support-ticket attachments belong to the person who raised the ticket:
+    // that person and the workspace owner read them, only they may remove
+    // them. Any member could previously read or delete another member's
+    // attachment.
+    function ownsSupportFolder(companyId, userId) {
+      return signedIn() && (request.auth.uid == userId || isOwner(companyId));
+    }
+
     match /companies/{companyId}/support_files/{userId}/{fileName} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if canEditWorkspaceFiles(companyId);
+      allow read: if ownsSupportFolder(companyId, userId) && canReadWorkspace(companyId);
+      allow create, update: if request.auth.uid == userId && canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if ownsSupportFolder(companyId, userId) && canEditWorkspaceFiles(companyId);
     }
 
     match /companies/{companyId}/support_files/{userId}/{subPath=**} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if canEditWorkspaceFiles(companyId);
+      allow read: if ownsSupportFolder(companyId, userId) && canReadWorkspace(companyId);
+      allow create, update: if request.auth.uid == userId && canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if ownsSupportFolder(companyId, userId) && canEditWorkspaceFiles(companyId);
     }
 
     // Inventory item photos. Readable by the workspace; written by the roles

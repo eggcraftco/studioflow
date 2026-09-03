@@ -160,7 +160,27 @@ function createInventoryFunctions({
     };
   }
 
-  function normalizeItemInput(input = {}, existing = null) {
+  // On update, every field the client did not send keeps its stored value.
+  // The photos modal sends five fields; without this the server rebuilt the
+  // item from that input and blanked brand, SKU, location, costs and stock.
+  function inputOverExisting(input = {}, existing = null) {
+    if (!existing) return input;
+    const quantity = existing.quantity && typeof existing.quantity === "object" ? existing.quantity : {};
+    const base = {
+      ...existing,
+      onHand: quantity.onHand,
+      reservedQuantity: quantity.reserved,
+      incomingQuantity: quantity.incoming,
+      unit: quantity.unit
+    };
+    for (const [key, value] of Object.entries(input || {})) {
+      if (value !== undefined) base[key] = value;
+    }
+    return base;
+  }
+
+  function normalizeItemInput(rawInput = {}, existing = null) {
+    const input = inputOverExisting(rawInput, existing);
     const trackingType = TRACKING_TYPES.includes(String(input.trackingType || ""))
       ? String(input.trackingType)
       : (existing ? existing.trackingType : "unique");
@@ -205,14 +225,14 @@ function createInventoryFunctions({
       // URL expires. A form that does not send the field leaves the photos
       // alone; sending an empty array is how they are deliberately cleared.
       // Without that distinction, every name edit would silently wipe them.
-      photos: input.photos === undefined && existing
+      photos: rawInput.photos === undefined && existing
         ? (Array.isArray(existing.photos) ? existing.photos : [])
         : (Array.isArray(input.photos) ? input.photos.slice(0, 12) : [])
             .map((path) => clean(path, "", 600))
             .filter(Boolean),
       // Key-present semantics, same as customer segments: a form that does not
       // send tags leaves them alone; sending an empty array clears them.
-      tags: input.tags === undefined && existing
+      tags: rawInput.tags === undefined && existing
         ? (Array.isArray(existing.tags) ? existing.tags : [])
         : (Array.isArray(input.tags) ? input.tags.slice(0, 20) : [])
             .map((tag) => clean(tag, "", 30))

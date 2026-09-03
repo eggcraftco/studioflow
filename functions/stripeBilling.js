@@ -567,6 +567,33 @@ function createStripeBillingFunctions({
     const subscriptionId = String(subscription?.id || "").trim();
     if (!workspace?.ref || !subscriptionId || !item) return;
 
+    // Stripe does not promise delivery in order. A `customer.subscription.updated`
+    // that was retried after a network blip used to overwrite a newer one, so a
+    // workspace that had just gone active could be pushed back to `trialing`
+    // until the hourly reconcile noticed. The subscription object carries its own
+    // last-modified moment; an older one is recorded but never applied.
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
+    const subscriptionUpdatedAtMs = Number(subscription.created || 0) * 1000;
+    const eventSequence = Math.max(
+      subscriptionUpdatedAtMs,
+      Number(subscription.current_period_start || 0) * 1000,
+      Number(subscription.trial_end || 0) * 1000,
+      Number(subscription.canceled_at || 0) * 1000,
+      Number(subscription.ended_at || 0) * 1000
+    );
+    try {
+      const existing = await ledgerRef.get();
+      const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
+      if (seen > 0 && eventSequence > 0 && eventSequence < seen) {
+        console.warn("Stripe subscription event arrived out of order; not applied.", {
+          subscriptionId, eventType, eventSequence, seen
+        });
+        return { skipped: true, reason: "stale_subscription_event" };
+      }
+    } catch (error) {
+      console.warn("Stripe ledger ordering check failed:", error?.message || error);
+    }
+
     const metadata = subscription.metadata || {};
     const activeForEntitlement = subscriptionActiveForEntitlement(status, shouldFallback);
     const quantity = Math.max(
@@ -574,8 +601,9 @@ function createStripeBillingFunctions({
       Number(Array.isArray(subscription.items?.data) ? subscription.items.data[0]?.quantity || 1 : 1) || 1
     );
 
-    await workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId)).set({
+    await ledgerRef.set({
       provider: "stripe",
+      stripeEventSequence: eventSequence,
       subscriptionType: item.type,
       planTier: item.type === "plan" ? planTierForItem(item) : "",
       internalPlanKey: item.plan || "",
@@ -597,7 +625,6 @@ function createStripeBillingFunctions({
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
     const ledgerSnap = await ledgerRef.get();
     if (!ledgerSnap.exists || !ledgerSnap.data()?.createdAt) {
       await ledgerRef.set({ createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
@@ -999,9 +1026,12 @@ function createStripeBillingFunctions({
     const result = await applySubscription(subscription, "checkout.session.completed");
 
     if (result.updated && result.workspaceId) {
+      const startedTrial = String(subscription.status || "") === "trialing" || Number(subscription.trial_end || 0) > 0;
       await admin.firestore().collection("companies").doc(result.workspaceId).set({
         billingCheckoutSessionId: session.id || "",
-        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp()
+        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Stamped only now that a subscription with a trial really exists.
+        ...(startedTrial ? { billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp() } : {})
       }, { merge: true });
     }
 
@@ -1543,11 +1573,9 @@ function createStripeBillingFunctions({
     }
 
     const session = await stripe.checkout.sessions.create(sessionPayload);
-    if (sessionPayload.subscription_data?.trial_period_days) {
-      await companyRef.set({
-        billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
+    // The once-per-workspace trial stamp is written when the checkout
+    // COMPLETES (applyCompletedSubscriptionCheckout), not here: opening the
+    // payment page and closing it must not burn the free fortnight.
     await companyRef.collection("billing").doc("stripePendingCheckout").set({
       sessionId: session.id,
       itemKey: item.key,

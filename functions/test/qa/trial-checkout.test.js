@@ -63,15 +63,20 @@ const block = SOURCE.slice(
   pass("add-ons never carry a trial");
 }
 
-// 5. The stamp is written only when a trial was actually granted — writing it
-// unconditionally would burn the workspace's one trial on an add-on purchase.
+// 5. The stamp is written when a trial subscription actually STARTS — in
+// applyCompletedSubscriptionCheckout, conditional on the subscription carrying
+// a trial — never when the checkout page is merely opened (audit S#11: opening
+// the payment page and closing it used to burn the workspace's one trial), and
+// never unconditionally (an add-on purchase must not spend it either).
 {
   const after = SOURCE.slice(SOURCE.indexOf("const session = await stripe.checkout.sessions.create(sessionPayload);"));
-  const stampBlock = after.slice(0, after.indexOf("stripePendingCheckout"));
-  assert(/if \(sessionPayload\.subscription_data\?\.trial_period_days\)/.test(stampBlock),
-    "the stamp is conditional on a trial having been granted");
-  assert(/billingTrialUsedAt/.test(stampBlock), "the stamp is written");
-  pass("the one trial is spent only when it is granted");
+  const sessionBlock = after.slice(0, after.indexOf("stripePendingCheckout"));
+  assert(!/billingTrialUsedAt:/.test(sessionBlock), "opening a checkout session does not spend the trial");
+  const completed = SOURCE.slice(SOURCE.indexOf("async function applyCompletedSubscriptionCheckout("));
+  const completedBlock = completed.slice(0, completed.indexOf("\n  }\n"));
+  assert(/startedTrial/.test(completedBlock) && /billingTrialUsedAt/.test(completedBlock), "the completed checkout writes the stamp");
+  assert(/\.\.\.\(startedTrial \? \{ billingTrialUsedAt/.test(completedBlock), "the stamp is conditional on the subscription having a trial");
+  pass("the one trial is spent only when a trial subscription starts");
 }
 
 // 6. A cancelled subscription must drop the workspace to Free rather than
