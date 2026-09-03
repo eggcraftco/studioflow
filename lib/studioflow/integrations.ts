@@ -36,7 +36,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks" | "xero";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks" | "xero" | "chatgpt";
 
 export type IntegrationProvider = {
   id: string;
@@ -54,6 +54,15 @@ export type IntegrationProvider = {
 };
 
 export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
+  {
+    // Listed at last. The grant lives in a collection no client may read, so
+    // for months a workspace that HAD connected ChatGPT was shown nothing at
+    // all — and had no way to disconnect it either.
+    id: "chatgpt", name: "ChatGPT", category: "automation", kind: "native",
+    logo: "/brand/integrations/chatgpt.svg",
+    blurb: "Ask ChatGPT about your orders, notes and spending. Access lasts 30 days and you can withdraw it here.",
+    capabilities: ["Orders", "Notes", "Banking"], manage: "chatgpt",
+  },
   {
     id: "shopify", name: "Shopify", category: "commerce", kind: "native",
     logo: "/brand/integrations/shopify.svg",
@@ -169,7 +178,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, accounting] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, accounting, chatgpt] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -178,6 +187,12 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     getWooConnections(companyId),
     getSquareConnections(companyId),
     getDocs(collection(db, "companies", companyId, "accountingConnections")),
+    // The ChatGPT grant lives in a top-level collection no client may read, so
+    // this is the only way a workspace can be told it has one. Owner-only on
+    // the server; for anybody else it settles as a rejection and the hub simply
+    // shows nothing, which is what it showed before.
+    httpsCallable<{ companyId: string }, { connections: ChatGPTConnection[] }>(
+      functions, "listChatGPTConnections")({ companyId }),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -212,11 +227,32 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     accountingConnections: accounting.status === "fulfilled"
       ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production") }; })
       : [],
+    chatgptConnections: chatgpt.status === "fulfilled" ? (chatgpt.value.data?.connections ?? []) : [],
   };
 }
 
+export type ChatGPTConnection = {
+  /** Identifies a grant so it can be withdrawn. Not the token, and useless as one. */
+  tokenHash: string;
+  clientId: string;
+  scope: string;
+  grantedByEmail: string;
+  grantedByUid: string;
+  createdAtMs: number;
+  expiresAtMs: number;
+};
+
+/** Ends ChatGPT's access. No tokenHash means every grant this workspace has. */
+export async function revokeChatGPTConnection(companyId: string, tokenHash = ""): Promise<string> {
+  const call = httpsCallable<{ companyId: string; tokenHash?: string }, { message: string }>(
+    functions, "revokeChatGPTConnection"
+  );
+  const response = await call({ companyId, ...(tokenHash ? { tokenHash } : {}) });
+  return response.data.message;
+}
+
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [],
 };
 
 export type IntegrationSignals = {
@@ -235,6 +271,8 @@ export type IntegrationSignals = {
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
   accountingConnections: { provider: string; status: string; mode: string; companyName: string; syncState: string; environment: string }[];
+  /** Live ChatGPT app grants. Empty for anybody but the owner, and when there are none. */
+  chatgptConnections: ChatGPTConnection[];
 };
 
 export function resolveIntegrationState(
@@ -266,6 +304,17 @@ export function resolveIntegrationState(
     return {
       state: broken === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} shops`,
+    };
+  }
+
+  if (provider.id === "chatgpt") {
+    // Only the owner ever gets a non-empty list, so for everybody else this
+    // reads "Available" — which is honest: they cannot connect or disconnect it.
+    const live = signals.chatgptConnections || [];
+    if (live.length === 0) return { state: "available" };
+    return {
+      state: "connected",
+      detail: live.length === 1 ? (live[0].grantedByEmail || "Connected") : `${live.length} connections`,
     };
   }
 
