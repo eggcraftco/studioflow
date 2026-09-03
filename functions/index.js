@@ -2811,12 +2811,22 @@ function heldIntegrationOrdersRef(companyId) {
  * Parks one order and tells the owner — once a day at most, because a busy
  * store would otherwise send a notification per sale.
  */
+// Ninety days, deliberately long. These are real unimported sales, not error
+// rows: an owner who is over their plan limit for a fortnight must not come back
+// to find the orders gone. But they are also the raw provider payload — name,
+// email, phone, billing and shipping address, unmasked — and they had no end
+// date at all, so a workspace that hit its limit once kept a stranger's personal
+// data forever. Masking is not the control here, because releasing one replays
+// the payload into a real order and a redacted one would import a nameless sale.
+const HELD_ORDER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
 async function holdIntegrationOrder(companyId, provider, externalId, payload, capacity, extra = {}) {
   const id = `${provider}_${String(externalId || Date.now()).replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 180);
   await heldIntegrationOrdersRef(companyId).doc(id).set({
     provider,
     externalId: String(externalId || ""),
     payload,
+    expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + HELD_ORDER_TTL_MS),
     // Whatever the release path will need to replay this. Etsy needs to know
     // which shop it came from; a raw receipt does not say.
     ...extra,
@@ -13838,6 +13848,37 @@ function composeCustomerAddressParts(streetAddress = "", city = "", postalCode =
     .join(", ");
 }
 
+/**
+ * Whether this customer has asked not to be contacted.
+ *
+ * The order carries a name rather than a customer id, so this looks the person
+ * up by name — the same exact-name match upsertCustomerForWebOrder uses to find
+ * or create them, so it finds the same record that screen wrote the flag on.
+ * There is no stored normalised key to query on; normalizedCustomerKey exists
+ * only for in-memory comparison after a fetch.
+ *
+ * A lookup failure returns false, i.e. the message still goes. A transient
+ * Firestore error must not silently stop a workshop's order updates, and the
+ * flag is rare while the messages are the product. The failure is logged so a
+ * persistent one is visible.
+ */
+async function customerHasOptedOut(companyId, customerName) {
+  const name = cleanOrderText(customerName, "", 180);
+  if (!companyId || !name) return false;
+  try {
+    const snap = await admin.firestore().collection("musteriler")
+      .where("companyId", "==", companyId)
+      .where("name", "==", name)
+      .limit(1)
+      .get();
+    if (snap.empty) return false;
+    return snap.docs[0].data()?.doNotContact === true;
+  } catch (error) {
+    console.warn("customerHasOptedOut lookup failed", { companyId, error: String(error?.message || error) });
+    return false;
+  }
+}
+
 function normalizedCustomerKey(value) {
   return cleanOrderText(value, "", 180).toLowerCase();
 }
@@ -19615,6 +19656,50 @@ async function recordIntegrationDelivery(companyId, kind, outcome) {
   }
 }
 
+/**
+ * Records a request that failed authentication, apart from the delivery log.
+ *
+ * A rejected request used to write `lastDeliveryOk: false` and a delivery-log
+ * entry, which is what the Integrations cards read — so anybody who knew a
+ * workspace id could POST once, unauthenticated, and turn the Wix, Squarespace,
+ * Zapier and Make cards red for that workspace. Four cards, from one request,
+ * by a stranger.
+ *
+ * The signal is still worth keeping: a token that went stale inside somebody's
+ * Zap looks exactly like this and the owner needs to know. So it is kept — just
+ * not where it can be mistaken for the channel's health, and not somewhere a
+ * stranger's write shows up as the workspace's own status.
+ */
+async function recordIntegrationRejection(companyId, kind, outcome = {}) {
+  if (!INTEGRATION_KINDS[kind] || !companyId) return;
+  try {
+    const ref = integrationSecretRef(companyId, kind);
+    const entry = {
+      atMs: Date.now(),
+      error: String(outcome.error || "unauthorized").slice(0, 200),
+      source: String(outcome.source || "").slice(0, 80)
+    };
+    let recent = [entry];
+    try {
+      const snap = await ref.get();
+      const prior = snap.exists && Array.isArray((snap.data() || {}).recentRejections)
+        ? snap.data().recentRejections
+        : [];
+      recent = [entry, ...prior].slice(0, 9);
+    } catch {
+      /* keep the single fresh entry */
+    }
+    await ref.set({
+      lastRejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastRejectedError: entry.error,
+      rejectedCount: admin.firestore.FieldValue.increment(1),
+      recentRejections: recent
+    }, { merge: true });
+  } catch (error) {
+    console.warn("recordIntegrationRejection failed", { companyId, kind, error: String(error) });
+  }
+}
+
 function integrationStatusPayload(data = {}) {
   return {
     tokenCreatedAtMs: integrationMillis(data.createdAt),
@@ -19629,15 +19714,28 @@ function integrationStatusPayload(data = {}) {
       error: String((d && d.error) || ""),
       orderId: String((d && d.orderId) || ""),
       source: String((d && d.source) || "")
-    }))
+    })),
+    // Kept apart from the deliveries above, and reported as a note rather than
+    // as the channel's health: anybody who knows a workspace id can produce
+    // these, so they must never be able to colour a card. A real stale token in
+    // somebody's Zap looks the same, which is why they are still shown at all.
+    lastRejectedAtMs: integrationMillis(data.lastRejectedAt),
+    lastRejectedError: String(data.lastRejectedError || ""),
+    rejectedCount: Number(data.rejectedCount) || 0
   };
 }
 
-// The requester's address, for the delivery log. Behind Google's front end the
-// first x-forwarded-for hop is the client.
+// The requester's address, for the delivery log.
+//
+// req.ip first: Express has already resolved it through the trusted proxy chain,
+// whereas x-forwarded-for is a header the caller can write, so reading that
+// first let anybody put any string in the workspace's own log. Kept as a
+// fallback for a runtime that does not populate req.ip, and truncated either
+// way by the caller.
 function integrationRequestSource(req) {
-  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return fwd || String(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || "");
+  const resolved = String(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || "").trim();
+  if (resolved) return resolved;
+  return String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
 }
 
 // Rotating invalidates the old URL immediately. That is the point: a token that
@@ -20883,8 +20981,7 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
     const { token: workspaceToken } = await readIntegrationSecret(companyId, "inbound");
     if (!workspaceToken || !nvTimingSafeEqual(providedToken, workspaceToken)) {
-      await recordIntegrationDelivery(companyId, "inbound", {
-        ok: false,
+      await recordIntegrationRejection(companyId, "inbound", {
         error: workspaceToken ? "invalid token" : "no token in the delivery URL",
         source: integrationRequestSource(req)
       });
@@ -26648,6 +26745,12 @@ async function sendWorkspaceSMS({ companyData, settings, companyId, orderId, ord
   if (entitlements.smsNotificationsEnabled !== true) {
     return { sent: false, reason: "plan" };
   }
+  // The last gate before a message leaves the building, and the one place every
+  // outbound SMS passes through. The status trigger checks this too and stops
+  // earlier; this is here so a future sender cannot be written that does not.
+  if (await customerHasOptedOut(companyId, customerName)) {
+    return { sent: false, reason: "do_not_contact" };
+  }
   if (!provider.isConfigured()) return { sent: false, reason: "provider_not_configured" };
 
   const config = workspaceSmsConfig(settings || {});
@@ -27336,6 +27439,22 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const orderId = String(event.params.orderId || "");
     const companyId = orderCompanyId(after);
     if (!companyId) return;
+
+    // "Do not contact" has to mean it.
+    //
+    // The flag was written by the customer screen and read by nothing: every
+    // automated status message went out regardless, which is the opposite of
+    // what the switch says and the opposite of what a customer who asked for it
+    // expects. Checked here, after the cheap gates, so it costs one read only
+    // when a message was actually about to be sent.
+    //
+    // Matched on the same normalised name key the order-to-customer sync
+    // already uses, because an order carries the customer's NAME, not their id.
+    if (await customerHasOptedOut(companyId, after.customerName)) {
+      await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
+      console.log("notifyCustomerOnStatusChange: customer has asked not to be contacted", { companyId, orderId });
+      return;
+    }
 
     const [settings, companySnap] = await Promise.all([
       portalWorkspaceSettings(companyId),
@@ -31975,6 +32094,28 @@ async function redactShopifyCustomerData(companyId, email, phone) {
     }
   } catch (error) {
     console.warn("shopify redact customer query failed:", error?.message || error);
+  }
+
+  // Parked orders hold the raw provider payload — name, email, phone and both
+  // addresses — waiting for room on the plan. A customers/redact request that
+  // cleaned the imported orders and left those behind would answer Shopify's
+  // legal request with a copy of the customer still on disk. Deleted rather
+  // than masked: a masked parked order would import as a nameless sale if it
+  // were ever released.
+  try {
+    const heldSnap = await heldIntegrationOrdersRef(companyId).where("provider", "==", "shopify").limit(500).get();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanPhone = String(phone || "").replace(/[^0-9]/g, "");
+    for (const docSnap of heldSnap.docs) {
+      const held = docSnap.data() || {};
+      const raw = JSON.stringify(held.payload || {}).toLowerCase();
+      const emailHit = Boolean(cleanEmail) && raw.includes(cleanEmail);
+      const phoneHit = Boolean(cleanPhone) && raw.replace(/[^0-9]/g, "").includes(cleanPhone);
+      if (!emailHit && !phoneHit) continue;
+      await docSnap.ref.delete();
+    }
+  } catch (error) {
+    console.warn("shopify redact held-order query failed:", error?.message || error);
   }
 }
 

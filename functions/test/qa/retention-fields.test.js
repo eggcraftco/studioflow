@@ -27,4 +27,28 @@ function pass(name) { console.log("PASS ", name); }
   pass("an Etsy OAuth state carries both the numeric expiry and its Timestamp twin");
 }
 
+// A parked order is the raw provider payload — name, email, phone and both
+// addresses — waiting for room on the plan, and it had no end date at all. A
+// workspace that hit its limit once kept a stranger's personal data forever.
+// Ninety days rather than the seven above: these are real unimported sales, and
+// an owner over their limit for a fortnight must not lose them.
+{
+  const index = fs.readFileSync(path.join(root, "index.js"), "utf8");
+  const held = index.slice(index.indexOf("async function holdIntegrationOrder("), index.indexOf("async function holdIntegrationOrder(") + 900);
+  assert(/expireAt: admin\.firestore\.Timestamp\.fromMillis\(Date\.now\(\) \+ HELD_ORDER_TTL_MS\)/.test(held),
+    "a parked integration order carries an expireAt the TTL policy can read");
+  assert(/const HELD_ORDER_TTL_MS = 90 \* 24 \* 60 \* 60 \* 1000;/.test(index),
+    "ninety days, long enough that an owner over their limit does not lose real sales");
+  pass("a parked integration order carries a ninety-day expireAt");
+
+  // Masking is deliberately NOT the control: releasing a parked order replays
+  // the payload into a real order, so a redacted one would import a nameless
+  // sale. A privacy request therefore deletes the parked copy instead.
+  const redact = index.slice(index.indexOf("async function redactShopifyCustomerData("), index.indexOf("async function handleShopifyPrivacyTopic("));
+  assert(/heldIntegrationOrdersRef\(companyId\)/.test(redact),
+    "a customers/redact request must reach the parked copy too");
+  assert(/docSnap\.ref\.delete\(\)/.test(redact), "and delete it rather than mask it");
+  pass("a Shopify redaction request reaches the parked copy");
+}
+
 console.log("\n✅ RETENTION FIELDS GEÇTİ");
