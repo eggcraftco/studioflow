@@ -54,6 +54,12 @@ export type FinancialSettingsInput = {
   defaultTaxRate: number;
   defaultDeliveryTime?: number;
   taxCalculationType: string;
+  /** The Finance Engine's own three. Each is optional so a caller that has not
+   *  been updated still saves the screen, and the server falls back to what the
+   *  workspace already does. */
+  vatRegistered?: boolean;
+  pricesIncludeVat?: boolean;
+  vatMethod?: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
   corporationTaxEnabled?: boolean;

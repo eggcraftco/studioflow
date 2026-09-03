@@ -16,6 +16,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
 import { entitlementsForPlan, normalizeBillingPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+import { FINANCE_ENGINE_VERSION, REMAINING_PREFIX, customLineTotal, type FinanceBlock } from "@/lib/studioflow/financeEngine";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -185,6 +186,11 @@ export type DashboardFinanceOrder = {
    * Optional so structural supersets (the order-detail model) stay assignable
    * to the finance helpers; absent means "counts". */
   countsTowardBalance?: boolean;
+  /** What the server's Finance Engine computed for this order. The finance
+   * helpers read this in preference to working the figures out again, which is
+   * how every screen came to agree. Absent on an order the stamping trigger
+   * has not reached yet, and the helpers fall back to the mirror. */
+  finance?: FinanceBlock | null;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -201,6 +207,13 @@ export type WorkspaceSettingsOverview = {
   defaultTaxRate: number;
   defaultDeliveryTime: number;
   taxCalculationType: string;
+  /** Whether the workspace charges VAT at all, whether its prices are quoted
+   *  inclusive of it, and which of the three methods it uses. Absent on a
+   *  workspace that has not saved Financial Settings since these arrived, so
+   *  the reader supplies today's behaviour. */
+  vatRegistered: boolean;
+  pricesIncludeVat: boolean;
+  vatMethod: string;
   taxMilestoneEnabled: boolean;
   taxMilestoneDate: number;
   companyNumbers: CompanyNumberSetting[];
@@ -1191,6 +1204,20 @@ function orderCountsTowardBalance(data: Record<string, unknown>): boolean {
     ).toLowerCase() !== "refunded";
 }
 
+/**
+ * The Finance Engine's block as the server stamped it. Only a block from the
+ * engine version this build knows is used; anything older is ignored so the
+ * helpers fall back to the mirror rather than showing figures from a formula
+ * that has since changed.
+ */
+function financeBlockValue(raw: unknown): FinanceBlock | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const block = raw as Partial<FinanceBlock>;
+  if (Number(block.engineVersion) !== FINANCE_ENGINE_VERSION) return null;
+  if (typeof block.revenue !== "number" || typeof block.netProfit !== "number") return null;
+  return block as FinanceBlock;
+}
+
 export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
   const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
   return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
@@ -1208,7 +1235,8 @@ export async function loadDashboardFinanceOrders(companyId: string): Promise<Das
       customerName: stringValue(data.customerName, ""),
       designName: stringValue(data.designName, ""),
       watchRef: stringValue(data.watchRef, ""),
-      countsTowardBalance: orderCountsTowardBalance(data)
+      countsTowardBalance: orderCountsTowardBalance(data),
+      finance: financeBlockValue(data.finance)
     };
   });
 }
@@ -1240,6 +1268,12 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     defaultTaxRate: numberValue(data.defaultTaxRate, 20),
     defaultDeliveryTime: numberValue(data.defaultDeliveryTime, 30),
     taxCalculationType: stringValue(data.taxCalculationType, "Revenue"),
+    // Absent until the workspace saves Financial Settings once, so each falls
+    // back to what it already does: registered, inclusive prices, and whichever
+    // method taxCalculationType named.
+    vatRegistered: booleanValue(data.vatRegistered, true),
+    pricesIncludeVat: booleanValue(data.pricesIncludeVat, true),
+    vatMethod: stringValue(data.vatMethod, "") || (stringValue(data.taxCalculationType, "Revenue") === "Profit" ? "margin" : "standard"),
     taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
     taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),
     companyNumbers: decodeCompanyNumbers(data.companyNumbersJSON),
@@ -1651,15 +1685,14 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       paidAmount: numberValue(data.paidAmount, 0),
       refundedAmount: numberValue(data.refundedAmount, 0),
       remainingAmount: numberValue(data.remainingAmount, 0),
-      customRemainingTotal: Object.entries(
-        data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
-          ? data.customFields as Record<string, unknown>
-          : {}
-      ).reduce((total, [key, raw]) => {
-        if (!key.startsWith("financialRemaining::")) return total;
-        const parsed = Number(String(raw ?? "").replace(/,/g, ""));
-        return total + (Number.isFinite(parsed) ? parsed : 0);
-      }, 0),
+      // A sixth rule for the same total used to live here, reading the keys
+      // with its own comma-stripping parse. It is the engine's figure now.
+      customRemainingTotal: financeBlockValue(data.finance)?.receivablesTotal
+        ?? customLineTotal(
+          data.customFields as Record<string, unknown> | null,
+          REMAINING_PREFIX,
+          "orderRemainingItemsJSON"
+        ).total,
       paymentDate,
       dueDate,
       invoiceNumber: stringValue(data.invoiceNumber, ""),

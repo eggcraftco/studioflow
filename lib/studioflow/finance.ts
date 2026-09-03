@@ -1,4 +1,45 @@
 import type { DashboardFinanceOrder, WorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
+import { financeFor, type FinanceBlock } from "@/lib/studioflow/financeEngine";
+
+// Every figure below now comes from ONE definition: the Finance Engine, which
+// the server stamps onto each order as `finance`. These functions kept their
+// names so the thirty-six places that call them did not have to change, but
+// what they return is the engine's answer, not a local formula.
+//
+// Two of the definitions moved, deliberately, because the product decision
+// says so (NivaDesk_Urun_Kararlari_20260903.md §2):
+//
+//   orderGrossMargin  is now revenue less the purchase price. It used to take
+//                     the platform fee and the shipping off as well, which is
+//                     not what a gross margin is.
+//   baseCostTotal     is now the purchase price whatever the card settings say.
+//                     It used to return zero when Base Cost was hidden, so
+//                     hiding a figure quietly raised the profit.
+//
+// `financeFor` prefers the stamped block and falls back to the mirror for an
+// order the stamping trigger has not reached yet — the sweep clears those
+// within the hour, and the mirror gives the same numbers meanwhile.
+
+/** What the engine needs from the workspace settings, from what the web has. */
+function engineSettings(settings: WorkspaceSettingsOverview | null | undefined) {
+  if (!settings) return {};
+  return {
+    feePercentage: settings.feePercentage,
+    defaultTaxRate: settings.defaultTaxRate,
+    taxCalculationType: settings.taxCalculationType,
+    vatRegistered: settings.vatRegistered,
+    pricesIncludeVat: settings.pricesIncludeVat,
+    vatMethod: settings.vatMethod,
+    taxMilestoneEnabled: settings.taxMilestoneEnabled,
+    taxMilestoneDate: settings.taxMilestoneDate
+  };
+}
+
+function blockFor(order: DashboardFinanceOrder, settings?: WorkspaceSettingsOverview | null): FinanceBlock {
+  return financeFor(order, engineSettings(settings), {
+    paymentDateMs: order.paymentDate instanceof Date ? order.paymentDate.getTime() : undefined
+  });
+}
 
 type FinancialItem = {
   title: string;
@@ -19,7 +60,7 @@ type DashboardCostOptions = {
 // tax stay in, which is why the strip says "Margin". The Dashboard's
 // adjustedDashboardNetProfit is the figure that deducts them.
 export function orderGrossMargin(order: DashboardFinanceOrder) {
-  return orderSalesTotal(order) - order.watchPurchasePrice - order.paymentFee - order.deliveryCost;
+  return blockFor(order).grossMargin;
 }
 
 // Total of the order's custom "Remaining" receivables (customFields keyed
@@ -28,35 +69,17 @@ export function orderGrossMargin(order: DashboardFinanceOrder) {
 // prefix counts (covers workspace-template titles). Matches the Mac model and
 // the backend calculation.
 export function orderCustomRemainingTotal(order: DashboardFinanceOrder) {
-  const ownTitles = decodeFinancialItemsWithId((order.customFields.orderRemainingItemsJSON ?? "").trim()).map(item => item.title);
-  const allowed = ownTitles.length > 0 ? new Set(ownTitles) : null;
-  let total = 0;
-  for (const [key, raw] of Object.entries(order.customFields)) {
-    if (!key.startsWith("financialRemaining::")) continue;
-    const title = key.slice("financialRemaining::".length);
-    if (allowed && !allowed.has(title)) continue;
-    total += parseFinancialAmount(String(raw ?? ""), "");
-  }
-  return total;
+  return blockFor(order).receivablesTotal;
 }
 
 // Order value: classic paid+remaining plus custom receivables — same on every platform.
 export function orderSalesTotal(order: DashboardFinanceOrder) {
-  return order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+  return blockFor(order).revenue;
 }
 
 // Settings-free counterpart of customExpenseTotal, mirroring orderCustomRemainingTotal.
 export function orderCustomExpenseTotalLocal(order: DashboardFinanceOrder) {
-  const ownTitles = decodeFinancialItemsWithId((order.customFields.orderExpenseItemsJSON ?? "").trim()).map(item => item.title);
-  const allowed = ownTitles.length > 0 ? new Set(ownTitles) : null;
-  let total = 0;
-  for (const [key, raw] of Object.entries(order.customFields)) {
-    if (!key.startsWith("financialExpense::")) continue;
-    const title = key.slice("financialExpense::".length);
-    if (allowed && !allowed.has(title)) continue;
-    total += parseFinancialAmount(String(raw ?? ""), "");
-  }
-  return total;
+  return blockFor(order).otherExpenses;
 }
 
 export function decodeFinancialItems(json: string): FinancialItem[] {
@@ -162,37 +185,19 @@ export function customFinancialAmount(
 }
 
 export function customExpenseTotal(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
-  if (!settings) return 0;
-  return customFinancialAmount(
-    order,
-    "financialExpense::",
-    decodeOrderFinancialItems(order, "orderExpenseItemsJSON", settings.financialExpenseItemsJSON),
-    settings.selectedCurrency
-  );
+  return blockFor(order, settings).otherExpenses;
 }
 
 export function customPendingTotal(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
-  if (!settings) return 0;
-  return customFinancialAmount(
-    order,
-    "financialRemaining::",
-    decodeOrderFinancialItems(order, "orderRemainingItemsJSON", settings.financialRemainingItemsJSON),
-    settings.selectedCurrency
-  );
+  return blockFor(order, settings).receivablesTotal;
 }
 
 export function baseCostTotal(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
-  return settings?.financialShowBaseCost ?? true ? order.watchPurchasePrice : 0;
+  return blockFor(order, settings).directCost;
 }
 
 export function adjustedDashboardNetProfit(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
-  const salesTotal = orderSalesTotal(order);
-  return salesTotal
-    - baseCostTotal(order, settings)
-    - customExpenseTotal(order, settings)
-    - order.paymentFee
-    - order.deliveryCost
-    - order.taxAmount;
+  return blockFor(order, settings).netProfit;
 }
 
 export function dashboardCostTotal(
@@ -201,11 +206,13 @@ export function dashboardCostTotal(
   options: DashboardCostOptions = {}
 ) {
   const { showFee = true, showShipping = true, showTax = true } = options;
-  let total = baseCostTotal(order, settings) + customExpenseTotal(order, settings);
-
-  if (!showFee) total += order.paymentFee;
-  if (!showShipping) total += order.deliveryCost;
-  if (!showTax) total += order.taxAmount;
-
+  const finance = blockFor(order, settings);
+  // The cost row the Dashboard draws: the purchase price and the other
+  // expenses always, plus whichever of the fee, the shipping and the VAT are
+  // not already shown as rows of their own.
+  let total = finance.directCost + finance.otherExpenses;
+  if (!showFee) total += finance.platformFee;
+  if (!showShipping) total += finance.deliveryCost;
+  if (!showTax) total += finance.vatDue;
   return total;
 }

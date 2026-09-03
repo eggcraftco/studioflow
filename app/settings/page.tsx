@@ -4540,7 +4540,7 @@ function FinancialSettingsSection({
   }
 
   function updateString(
-    key: "selectedCurrency" | "selectedDecimalSeparator" | "taxRuleNameRevenue" | "taxRuleNameProfit" | "taxCalculationType" | "invoiceFooterNote",
+    key: "selectedCurrency" | "selectedDecimalSeparator" | "taxRuleNameRevenue" | "taxRuleNameProfit" | "taxCalculationType" | "vatMethod" | "invoiceFooterNote",
     value: string
   ) {
     setDraft(current => current ? { ...current, [key]: value } : current);
@@ -4554,7 +4554,7 @@ function FinancialSettingsSection({
     setError("");
   }
 
-  function updateBoolean(key: "taxMilestoneEnabled" | "corporationTaxEnabled", value: boolean) {
+  function updateBoolean(key: "taxMilestoneEnabled" | "corporationTaxEnabled" | "vatRegistered" | "pricesIncludeVat", value: boolean) {
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
@@ -4575,6 +4575,9 @@ function FinancialSettingsSection({
         defaultTaxRate: draft.defaultTaxRate,
         defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
+        vatRegistered: draft.vatRegistered,
+        pricesIncludeVat: draft.pricesIncludeVat,
+        vatMethod: draft.vatMethod,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
         corporationTaxEnabled: draft.corporationTaxEnabled,
@@ -4621,6 +4624,9 @@ function FinancialSettingsSection({
         defaultTaxRate: draft.defaultTaxRate,
         defaultDeliveryTime: draft.defaultDeliveryTime,
         taxCalculationType: draft.taxCalculationType,
+        vatRegistered: draft.vatRegistered,
+        pricesIncludeVat: draft.pricesIncludeVat,
+        vatMethod: draft.vatMethod,
         taxMilestoneEnabled: draft.taxMilestoneEnabled,
         taxMilestoneDate: draft.taxMilestoneDate,
         corporationTaxEnabled: draft.corporationTaxEnabled,
@@ -4943,6 +4949,53 @@ function FinancialSettingsSection({
         </section>
       </div>
 
+      <section className="card app-card" id="financial-vat">
+        <SettingsCardHead icon={<CardIconGlyph icon="docText" />} title={t("VAT")} />
+        <div className="settings-field-stack">
+          <label className="settings-field-row">
+            <span className="settings-field-label">{t("Registered for VAT")}</span>
+            <input
+              type="checkbox"
+              checked={draft.vatRegistered}
+              disabled={!canEdit || saving}
+              onChange={event => updateBoolean("vatRegistered", event.target.checked)}
+            />
+          </label>
+          <p className="settings-field-hint">
+            {t("Switch this off and no order owes VAT, whatever rate an order carries.")}
+          </p>
+          <div className="financial-tax-choice" role="radiogroup" aria-label={t("How prices are quoted")}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={draft.pricesIncludeVat}
+              data-active={draft.pricesIncludeVat ? "true" : "false"}
+              className="financial-tax-choice-card"
+              disabled={!canEdit || saving}
+              onClick={() => updateBoolean("pricesIncludeVat", true)}
+            >
+              <strong>{t("Prices include VAT")}</strong>
+              <p>{t("The figure you enter is what the customer pays. The VAT is taken out of it: £120 at 20% is £20 of VAT on £100.")}</p>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!draft.pricesIncludeVat}
+              data-active={!draft.pricesIncludeVat ? "true" : "false"}
+              className="financial-tax-choice-card"
+              disabled={!canEdit || saving}
+              onClick={() => updateBoolean("pricesIncludeVat", false)}
+            >
+              <strong>{t("Prices exclude VAT")}</strong>
+              <p>{t("The figure you enter is before VAT, and the customer pays it plus the VAT: £100 at 20% becomes £120.")}</p>
+            </button>
+          </div>
+          <p className="settings-field-hint">
+            {t("Every workspace has always quoted inclusive prices, so leave this alone unless you invoice before VAT.")}
+          </p>
+        </div>
+      </section>
+
       <section className="card app-card" id="financial-tax">
         <SettingsCardHead icon={<CardIconGlyph icon="docText" />} title={t("Tax calculation")} />
         <div className="settings-two-col">
@@ -4951,11 +5004,11 @@ function FinancialSettingsSection({
               <button
                 type="button"
                 role="radio"
-                aria-checked={draft.taxCalculationType !== "Profit"}
-                data-active={draft.taxCalculationType !== "Profit" ? "true" : "false"}
+                aria-checked={draft.vatMethod === "standard"}
+                data-active={draft.vatMethod === "standard" ? "true" : "false"}
                 className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("taxCalculationType", "Revenue")}
+                onClick={() => { updateString("taxCalculationType", "Revenue"); updateString("vatMethod", "standard"); }}
               >
                 <strong>{draft.taxRuleNameRevenue || "Revenue"}</strong>
                 <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
@@ -4963,14 +5016,26 @@ function FinancialSettingsSection({
               <button
                 type="button"
                 role="radio"
-                aria-checked={draft.taxCalculationType === "Profit"}
-                data-active={draft.taxCalculationType === "Profit" ? "true" : "false"}
+                aria-checked={draft.vatMethod === "margin"}
+                data-active={draft.vatMethod === "margin" ? "true" : "false"}
                 className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("taxCalculationType", "Profit")}
+                onClick={() => { updateString("taxCalculationType", "Profit"); updateString("vatMethod", "margin"); }}
               >
                 <strong>{draft.taxRuleNameProfit || "Profit"}</strong>
-                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
+                <p>{t("Margin scheme: VAT is due on your margin — the selling price less what you paid for the item, and nothing else off it.")}</p>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={draft.vatMethod === "none"}
+                data-active={draft.vatMethod === "none" ? "true" : "false"}
+                className="financial-tax-choice-card"
+                disabled={!canEdit || saving}
+                onClick={() => { updateString("vatMethod", "none"); }}
+              >
+                <strong>{t("No VAT")}</strong>
+                <p>{t("Nothing owes VAT by default. An order can still say otherwise on its own.")}</p>
               </button>
             </div>
             <label className="settings-field-row">
