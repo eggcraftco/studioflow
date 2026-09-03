@@ -2863,6 +2863,13 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    /// Product decision, 3 September 2026: deleting a customer PROFILE leaves
+    /// their orders alone. The name on an order is what the job was booked under
+    /// and what the invoice says; rewriting it to "New Project" and clearing the
+    /// contact details destroyed the meaning of every past record — and did it
+    /// to every other customer who happened to share the name, since the match
+    /// is by name alone. Removing personal data is the separate, deliberate
+    /// Anonymise action. This only leaves a line in each order's history.
     private func silinenMusteriyiSiparislerdenAyir(_ musteri: Musteri) {
         let silinenAnahtar = musteriAnahtari(musteri.name)
         guard !silinenAnahtar.isEmpty else { return }
@@ -2871,36 +2878,25 @@ class FirebaseManager: ObservableObject {
         for siparis in eslesenSiparisler {
             guard let id = siparis.id else { continue }
             var guncelSiparis = siparis
-            guncelSiparis.customerName = "New Project"
-            guncelSiparis.emailAddress = ""
-            guncelSiparis.whatsappNumber = ""
-            guncelSiparis.instagramUsername = ""
-            guncelSiparis.communication = guncelSiparis.communication.filter { channel in
-                let temizKanal = channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                return temizKanal != "instagram" && temizKanal != "whatsapp" && temizKanal != "tiktok"
-            }
-
-            var customFields = guncelSiparis.customFields ?? [:]
-            customFields.removeValue(forKey: "communicationAddress")
-            customFields.removeValue(forKey: "Address")
-            customFields.removeValue(forKey: "communicationCustomerNotes")
-            for key in Array(customFields.keys).filter({ $0.hasPrefix("communicationChannel::") }) {
-                customFields.removeValue(forKey: key)
-            }
-            guncelSiparis.customFields = customFields.isEmpty ? nil : customFields
-
             var history = guncelSiparis.historyLog ?? []
-            history.insert(OrderHistoryLogItem(title: "Customer deleted", oldValue: siparis.customerName, newValue: "New Project"), at: 0)
+            history.insert(
+                OrderHistoryLogItem(
+                    id: UUID().uuidString,
+                    createdAt: Date(),
+                    title: "Customer profile deleted",
+                    oldValue: siparis.customerName,
+                    newValue: siparis.customerName
+                ),
+                at: 0
+            )
             guncelSiparis.historyLog = Array(history.prefix(120))
             guncelSiparis.companyId = currentCompanyId
-
-            registerSiparisChange(before: siparis, after: guncelSiparis)
             do {
                 try writeSiparisMerging(guncelSiparis, id: id)
                 upsertLocalSiparis(guncelSiparis)
                 registerOfflineWriteIfNeeded(collection: "siparisler", documentId: id, action: "update", title: guncelSiparis.customerName)
             } catch {
-                print("Silinen müşteri siparişten ayrılamadı: \(error)")
+                print("Silinen müşteri geçmişi yazılamadı: \(error)")
             }
         }
     }

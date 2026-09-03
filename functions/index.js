@@ -13804,6 +13804,15 @@ async function syncCustomerContactToOrders(companyId, previousName, customerPayl
 }
 
 async function clearDeletedCustomerFromOrders(companyId, deletedCustomerName, uid = "", email = "") {
+  // Product decision, 3 September 2026: deleting a CUSTOMER PROFILE must not
+  // rewrite the orders that customer placed. The name on an order is what the
+  // job was booked under and what the invoice says; turning it into
+  // "New Project" and wiping the contact details destroyed the meaning of every
+  // past record, and did it to anyone who happened to share the name.
+  //
+  // Removing the personal data is a separate, deliberate act —
+  // anonymizeWebCustomer — which stamps the orders as anonymised. This function
+  // now only leaves a note in each order's history saying the profile is gone.
   const deletedKey = normalizedCustomerKey(deletedCustomerName);
   if (!deletedKey) return 0;
 
@@ -13819,52 +13828,16 @@ async function clearDeletedCustomerFromOrders(companyId, deletedCustomerName, ui
     const orderData = orderDoc.data() || {};
     if (normalizedCustomerKey(orderData.customerName) !== deletedKey) return;
 
-    const updates = {
-      customerName: "New Project",
-      emailAddress: "",
-      whatsappNumber: "",
-      instagramUsername: "",
+    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    batch.set(orderDoc.ref, {
+      historyLog: [
+        webHistoryEntry("Customer profile deleted", orderData.customerName, orderData.customerName, uid, email),
+        ...existingHistory
+      ].slice(0, 120),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedByUid: uid,
       updatedByEmail: email
-    };
-
-    const currentFields = orderData.customFields && typeof orderData.customFields === "object" && !Array.isArray(orderData.customFields)
-      ? { ...orderData.customFields }
-      : {};
-    let customFieldsChanged = false;
-    ["communicationAddress", "Address", "communicationCustomerNotes"].forEach((key) => {
-      if (hasOwnField(currentFields, key)) {
-        delete currentFields[key];
-        customFieldsChanged = true;
-      }
-    });
-    Object.keys(currentFields).forEach((key) => {
-      if (key.startsWith("communicationChannel::")) {
-        delete currentFields[key];
-        customFieldsChanged = true;
-      }
-    });
-    if (customFieldsChanged) {
-      updates.customFields = currentFields;
-    }
-
-    const previousCommunication = cleanCommunicationChannels(orderData.communication);
-    const nextCommunication = previousCommunication.filter((channel) => {
-      const normalized = channel.toLowerCase();
-      return normalized !== "instagram" && normalized !== "whatsapp" && normalized !== "tiktok";
-    });
-    if (!sameStringArray(previousCommunication, nextCommunication)) {
-      updates.communication = nextCommunication;
-    }
-
-    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
-    updates.historyLog = [
-      webHistoryEntry("Customer deleted", orderData.customerName, "New Project", uid, email),
-      ...existingHistory
-    ].slice(0, 120);
-
-    batch.set(orderDoc.ref, updates, { merge: true });
+    }, { merge: true });
     changedCount += 1;
   });
 
@@ -14009,7 +13982,9 @@ exports.deleteWebCustomer = onCall({ region: "europe-west2", timeoutSeconds: 300
     companyId,
     customerId,
     clearedOrderCount,
-    message: "Customer deleted."
+    message: clearedOrderCount > 0
+      ? `Customer profile deleted. ${clearedOrderCount} order${clearedOrderCount === 1 ? "" : "s"} kept their name and history.`
+      : "Customer profile deleted."
   };
 });
 
@@ -26085,13 +26060,29 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     if ((!auto.email || !toEmail.includes("@")) && (!auto.sms || !toPhone)) return;
     // A repeated status (a correction, a sync echo) must not re-send.
     if (cleanOrderText(after.portalLastNotifiedStatus, "", 60).toLowerCase() === status.toLowerCase()) return;
-    // Nor a status this order has already announced once: A → B → A used to
-    // send the A message a second time, because only the LAST status was
-    // remembered. Every message costs a segment and reads to the customer as
-    // fresh news about their order.
-    const alreadyAnnounced = (Array.isArray(after.portalNotifiedStatuses) ? after.portalNotifiedStatuses : [])
-      .map((item) => cleanOrderText(item, "", 60).toLowerCase());
-    if (alreadyAnnounced.includes(status.toLowerCase())) return;
+    // Nor a status this order announced in the last day: A → B → A used to send
+    // the A message a second time, because only the LAST status was remembered,
+    // and every message costs a segment and reads to the customer as fresh news.
+    //
+    // A day, not for ever: a repair that is ready, goes back to the bench and
+    // is ready again a week later is a real second collection, and the customer
+    // has to be told. Only the same-day bounce is silenced.
+    const REANNOUNCE_AFTER_MS = 24 * 60 * 60 * 1000;
+    const announcedRows = Array.isArray(after.portalNotifiedStatuses) ? after.portalNotifiedStatuses : [];
+    const announcedAtFor = (value) => {
+      for (const row of announcedRows) {
+        if (row && typeof row === "object") {
+          if (cleanOrderText(row.status, "", 60).toLowerCase() === value) return Number(row.atMs) || 0;
+        } else if (cleanOrderText(row, "", 60).toLowerCase() === value) {
+          // Rows written before this carried the status alone; treat them as
+          // long past so they never block a fresh announcement.
+          return 0;
+        }
+      }
+      return null;
+    };
+    const lastAnnouncedAt = announcedAtFor(status.toLowerCase());
+    if (lastAnnouncedAt !== null && lastAnnouncedAt > 0 && Date.now() - lastAnnouncedAt < REANNOUNCE_AFTER_MS) return;
 
     const orderId = String(event.params.orderId || "");
     const companyId = orderCompanyId(after);
@@ -26179,9 +26170,15 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const history = Array.isArray(after.historyLog) ? after.historyLog : [];
     await orderDocRef(orderId).update({
       portalLastNotifiedStatus: status,
-      // The roll of everything this order has already told its customer, so a
-      // status the job returns to is not announced a second time.
-      portalNotifiedStatuses: [...alreadyAnnounced, status.toLowerCase()].slice(-40),
+      // What this order has told its customer and when, so a status it bounces
+      // back to on the same day is not announced twice.
+      portalNotifiedStatuses: [
+        ...announcedRows.filter((row) => {
+          const value = row && typeof row === "object" ? row.status : row;
+          return cleanOrderText(value, "", 60).toLowerCase() !== status.toLowerCase();
+        }),
+        { status: status.toLowerCase(), atMs: Date.now() }
+      ].slice(-40),
       historyLog: [
         webHistoryEntry("Customer notified", "-", status, "", "automatic"),
         ...history

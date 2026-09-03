@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -167,14 +167,17 @@ export default function OrdersPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
 
+  // Reading window.location once on mount meant a link followed while already
+  // ON this page changed nothing: opening an order notification from /orders
+  // rewrote the URL and left the previous order on screen.
+  const searchParams = useSearchParams();
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setRequestedOrderId(params.get("selectedOrderId") ?? params.get("orderId") ?? "");
+    setRequestedOrderId(searchParams.get("selectedOrderId") ?? searchParams.get("orderId") ?? "");
     // "View All Orders" on a customer profile lands here filtered to that
     // customer — the search box already matches customer names.
-    const customerName = params.get("customerName");
+    const customerName = searchParams.get("customerName");
     if (customerName) setOrderSearch(customerName);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     setFirstProjectGuide(getFirstProjectGuideState());

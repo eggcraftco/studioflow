@@ -31,7 +31,10 @@ export function formatStudioMoney(
 /** The characters a locale uses to group thousands and to mark decimals. */
 function localeSeparators(locale: string): { group: string; decimal: string } {
   try {
-    const parts = new Intl.NumberFormat(locale || undefined).formatToParts(1234.5);
+    // Seven digits, because several locales (Spanish, Italian) do not group a
+    // four-digit number at all — asking 1234.5 returned no group part and the
+    // fallback "," then inverted their decimal comma.
+    const parts = new Intl.NumberFormat(locale || undefined).formatToParts(1234567.5);
     const group = parts.find(part => part.type === "group")?.value ?? ",";
     const decimal = parts.find(part => part.type === "decimal")?.value ?? ".";
     return { group, decimal };
@@ -47,8 +50,9 @@ function localeSeparators(locale: string): { group: string; decimal: string } {
  * Whitespace, currency symbols and letters are dropped. When both "," and "."
  * appear, the LAST one is the decimal separator and the other groups
  * thousands. With only one kind: once, followed by one or two digits — a
- * decimal; once, followed by exactly three digits — grouping if it is the
- * locale's grouping character, otherwise a decimal; more than once — grouping.
+ * decimal; once, followed by exactly three digits — grouping only if it is the
+ * locale's grouping character AND the digits before it could be a leading
+ * group; more than once — grouping.
  * Returns null when nothing numeric is left.
  */
 export function parseAmountInput(raw: string, locale: string): number | null {
@@ -70,10 +74,20 @@ export function parseAmountInput(raw: string, locale: string): number | null {
     if (occurrences > 1) {
       digits = digits.split(separator).join("");
     } else {
-      const after = digits.slice(digits.indexOf(separator) + 1);
-      const isGrouping = after.length === 3 && localeSeparators(locale).group === separator;
-      if (isGrouping) digits = digits.replace(separator, "");
-      else if (separator === ",") digits = digits.replace(",", ".");
+      const cut = digits.indexOf(separator);
+      const before = digits.slice(0, cut);
+      const after = digits.slice(cut + 1);
+      const { group, decimal } = localeSeparators(locale);
+      // A thousands group is exactly three digits, is preceded by one to three
+      // digits, and never follows a lone leading zero — nobody writes 750 as
+      // "0,750", so "0.750" on a Turkish keyboard is three-quarters of a gram.
+      const looksGrouped = after.length === 3
+        && before.length > 0
+        && before.length <= 3
+        && !/^0/.test(before);
+      const isGrouping = looksGrouped && separator === group && separator !== decimal;
+      if (isGrouping) digits = before + after;
+      else if (separator === ",") digits = `${before}.${after}`;
     }
   }
 

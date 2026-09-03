@@ -32,3 +32,16 @@ export function endOfLocalDayMillis(millis: number): number {
   if (Number.isNaN(date.getTime())) return millis;
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999).getTime();
 }
+
+/**
+ * True when a stored millisecond value carries no time of day — the shape a
+ * date-only reminder is saved in (UTC midnight). A reminder the user gave a
+ * time to is due at that time and must not be pushed to the end of the day.
+ */
+export function isStoredAsPlainDate(millis: number): boolean {
+  const date = new Date(millis);
+  return date.getUTCHours() === 0
+    && date.getUTCMinutes() === 0
+    && date.getUTCSeconds() === 0
+    && date.getUTCMilliseconds() === 0;
+}

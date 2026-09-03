@@ -562,36 +562,39 @@ function createStripeBillingFunctions({
     status,
     periodEnd,
     customerId,
-    shouldFallback
+    shouldFallback,
+    eventCreatedMs = 0
   }) {
     const subscriptionId = String(subscription?.id || "").trim();
     if (!workspace?.ref || !subscriptionId || !item) return;
 
-    // Stripe does not promise delivery in order. A `customer.subscription.updated`
-    // that was retried after a network blip used to overwrite a newer one, so a
-    // workspace that had just gone active could be pushed back to `trialing`
-    // until the hourly reconcile noticed. The subscription object carries its own
-    // last-modified moment; an older one is recorded but never applied.
+    // Stripe does not promise delivery in order: a `customer.subscription.updated`
+    // retried after a network blip could overwrite a newer one and push a
+    // workspace that had just gone active back to `trialing`.
+    //
+    // The comparison is the WEBHOOK EVENT's own created time, which is the only
+    // value that reliably increases from one delivery to the next. An earlier
+    // attempt built a sequence out of the subscription's own date fields, and
+    // that is not monotonic — once canceled_at was set it out-ranked every
+    // later event, so a resubscribe or a manual resync was dropped for good.
+    //
+    // Anything without an event time (the reconcile job, the owner's own
+    // "Refresh subscription access") is never treated as stale.
     const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
-    const subscriptionUpdatedAtMs = Number(subscription.created || 0) * 1000;
-    const eventSequence = Math.max(
-      subscriptionUpdatedAtMs,
-      Number(subscription.current_period_start || 0) * 1000,
-      Number(subscription.trial_end || 0) * 1000,
-      Number(subscription.canceled_at || 0) * 1000,
-      Number(subscription.ended_at || 0) * 1000
-    );
-    try {
-      const existing = await ledgerRef.get();
-      const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
-      if (seen > 0 && eventSequence > 0 && eventSequence < seen) {
-        console.warn("Stripe subscription event arrived out of order; not applied.", {
-          subscriptionId, eventType, eventSequence, seen
-        });
-        return { skipped: true, reason: "stale_subscription_event" };
+    const eventSequence = Number(eventCreatedMs) > 0 ? Number(eventCreatedMs) : 0;
+    if (eventSequence > 0) {
+      try {
+        const existing = await ledgerRef.get();
+        const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
+        if (seen > 0 && eventSequence < seen) {
+          console.warn("Stripe subscription event arrived out of order; not applied.", {
+            subscriptionId, eventType, eventSequence, seen
+          });
+          return { skipped: true, reason: "stale_subscription_event" };
+        }
+      } catch (error) {
+        console.warn("Stripe ledger ordering check failed:", error?.message || error);
       }
-    } catch (error) {
-      console.warn("Stripe ledger ordering check failed:", error?.message || error);
     }
 
     const metadata = subscription.metadata || {};
@@ -603,7 +606,8 @@ function createStripeBillingFunctions({
 
     await ledgerRef.set({
       provider: "stripe",
-      stripeEventSequence: eventSequence,
+      // Only advanced by a real webhook delivery; a reconcile leaves it alone.
+      ...(eventSequence > 0 ? { stripeEventSequence: eventSequence } : {}),
       subscriptionType: item.type,
       planTier: item.type === "plan" ? planTierForItem(item) : "",
       internalPlanKey: item.plan || "",
@@ -1038,7 +1042,7 @@ function createStripeBillingFunctions({
     return result;
   }
 
-  async function applySubscription(subscription, eventType) {
+  async function applySubscription(subscription, eventType, eventCreatedMs = 0) {
     const metadata = subscription.metadata || {};
     const item = itemFromMetadataOrSubscription(metadata, subscription);
     const workspace = await workspaceRefFromStripeRefs({
@@ -1068,7 +1072,8 @@ function createStripeBillingFunctions({
       status,
       periodEnd,
       customerId,
-      shouldFallback
+      shouldFallback,
+      eventCreatedMs
     });
 
     if (item.type === "storage_addon") {
@@ -1220,7 +1225,7 @@ function createStripeBillingFunctions({
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      result = await applySubscription(object, event.type);
+      result = await applySubscription(object, event.type, Number(event.created || 0) * 1000);
     } else if (event.type === "invoice.paid") {
       result = await applyInvoicePaid(stripe, object);
     } else if (event.type === "invoice.payment_failed") {

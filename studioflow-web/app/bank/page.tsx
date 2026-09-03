@@ -566,7 +566,18 @@ function BankPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, isOwner, searchParams]);
 
+  // The gate belongs on CONNECTING a bank, not on the page. Blocking the whole
+  // route stranded a workspace that connected during its trial and then dropped
+  // to Free: the feed, the receipts and the Disconnect button all became
+  // unreachable, with no way to end the connection. connectBank() below refuses
+  // instead, which is what the finding actually asked for.
+  const bankFeedIncluded = !workspace || workspace.entitlements.features.bank_feed === true;
+
   async function connectBank() {
+    if (!bankFeedIncluded) {
+      setError(t("Connecting a bank is available on NivaDesk Pro and Team. Your existing data stays here and the feed resumes when you upgrade."));
+      return;
+    }
     setBusy("connect");
     setError(null);
     try {
@@ -1613,25 +1624,6 @@ function BankPageContent() {
 
   // The nav only HIDES Banking without the feature; a bookmark or a direct link
   // still opened an empty, silently broken page. Say what it is and where it is.
-  if (workspace && workspace.entitlements.features.bank_feed !== true) {
-    return (
-      <AppShell>
-        <section className="card" style={{ padding: 28, maxWidth: 760 }}>
-          <div className="pill">{t("Available on Pro and Team")}</div>
-          <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
-            {t("Banking is not included in {plan}.").replace("{plan}", workspace.billingPlanName)}
-          </h1>
-          <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
-            {t("A read-only bank feed, receipt matching and spending categories are available on NivaDesk Pro and Team. NivaDesk can never move money.")}
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link className="button" href="/plan">{t("View plans")}</Link>
-            <Link className="button secondary" href="/dashboard">{t("Back to dashboard")}</Link>
-          </div>
-        </section>
-      </AppShell>
-    );
-  }
 
   return (
     <AppShell>

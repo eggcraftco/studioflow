@@ -295,8 +295,15 @@ export default function NotesPage() {
 
   async function destroy(id: string) {
     if (!workspace || !user) return;
-    if (!window.confirm(t("Delete this note forever? This cannot be undone."))) return;
     await deleteKeepNote(workspace.id, user.uid, id);
+  }
+
+  // Only the per-note button asks. The two bulk paths ask once for the whole
+  // set before they call destroy(), and asking again per note turned "Empty
+  // Trash" into twenty blocking dialogs that a single Cancel aborted midway.
+  async function destroyWithConfirm(id: string) {
+    if (!window.confirm(t("Delete this note forever? This cannot be undone."))) return;
+    await destroy(id);
   }
 
   async function duplicate(note: StudioKeepNote) {
@@ -523,11 +530,11 @@ export default function NotesPage() {
             {pinned.length > 0 && (
               <>
                 <SectionHeader title={t("PINNED")} />
-                <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
               </>
             )}
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
-            <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+            <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {search.trim()

@@ -20,7 +20,7 @@ import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { StudioToastHost } from "@/components/StudioToastHost";
-import { endOfLocalDayMillis } from "@/lib/studioflow/localDate";
+import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { auth, db } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
@@ -1484,11 +1484,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               !n.isDeleted &&
               !n.isArchived &&
               n.reminderDateMillis != null &&
-              // A reminder names a DAY. Counting it the instant its stored
-              // timestamp passes flagged reminders a day early west of
-              // Greenwich, where a date saved as UTC midnight is the previous
-              // evening. It is late once that local day is over.
-              endOfLocalDayMillis(n.reminderDateMillis as number) <= now
+              // A date-only reminder is stored as UTC midnight, which west of
+              // Greenwich is the previous evening — counting it the instant the
+              // stored value passes flagged it a day early, so it is late once
+              // that local day is over. A reminder the user gave a TIME to is
+              // due at that time; running it to the end of the day made
+              // "tomorrow at 10:00" show up fourteen hours late.
+              (isStoredAsPlainDate(n.reminderDateMillis as number)
+                ? endOfLocalDayMillis(n.reminderDateMillis as number)
+                : (n.reminderDateMillis as number)) <= now
           ).length
         );
       });
