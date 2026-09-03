@@ -5787,6 +5787,11 @@ const {
 } = require("./orders/projectNumber");
 const { isSuspendedUid, seatsToSuspend, canRestoreMember, activeSeatCount } = require("./team/seats");
 const {
+  isRevenueRow: nvIsRevenueRow,
+  isSpendRow: nvIsSpendRow,
+  summarizeRows: nvBankSummarize
+} = require("./bank/classification");
+const {
   normalizeRedirectUri: nvNormalizeRedirectUri,
   isRegisteredRedirectUri: nvIsRegisteredRedirectUri,
   clientRecord: nvOAuthClientRecord
@@ -19709,6 +19714,13 @@ exports._billingPlanFromCompanyData = billingPlanFromCompanyData;
 // is written. See test/qa/no-mail-from-tests.mjs.
 exports._nvMailTransport = nvMailTransport;
 exports._nvMessagingProvider = activeMessagingProvider;
+// Exported for functions/test/qa/mcp-permissions.test.js. What the assistant is
+// allowed to see and call is worth testing directly rather than by reading the
+// source and hoping.
+exports._nvSafeOrderForChatGPT = nvSafeOrderForChatGPT;
+exports._nvRequireOrdersArea = nvRequireOrdersArea;
+exports._nvMcpAvailableActions = nvMcpAvailableActions;
+exports._nvChatGPTDispatchAction = nvChatGPTDispatchAction;
 
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
@@ -22339,8 +22351,27 @@ function nvRequireWorkflowAssignedOrder(context = {}, orderData = {}) {
   }
 }
 
-function nvSafeOrderForChatGPT(doc) {
+/**
+ * One order, as ChatGPT is allowed to see it.
+ *
+ * The finance context is not optional. Without it this handed paidAmount,
+ * remainingAmount and watchPurchasePrice to every caller, which walked straight
+ * through a wall the Firestore rules put up on purpose: a Workflow Only member
+ * cannot read /siparisler at all (firestore.rules), and the substitute view
+ * they DO get — WORKFLOW_ORDER_VIEW_FIELDS — deliberately leaves those three
+ * fields out. Over MCP they came back. The same file's dashboard tool has
+ * always redacted exactly these three; this is that, applied where it was
+ * missed.
+ *
+ * A context is required rather than defaulted, so a new caller has to say what
+ * the person may see instead of silently getting the permissive answer.
+ */
+function nvSafeOrderForChatGPT(doc, context) {
   const data = doc.data ? (doc.data() || {}) : (doc || {});
+  const showFinance = nvRoleCanAccessFinancialInfo(
+    (context && context.companyData) || {},
+    (context && context.uid) || ""
+  );
   return {
     id: doc.id || data.id || "",
     companyId: data.companyId || "",
@@ -22360,9 +22391,11 @@ function nvSafeOrderForChatGPT(doc) {
     courier: data.courier || "",
     isDispatched: Boolean(data.isDispatched),
     isDelivered: Boolean(data.isDelivered),
-    paidAmount: Number(data.paidAmount || 0),
-    remainingAmount: Number(data.remainingAmount || 0),
-    watchPurchasePrice: Number(data.watchPurchasePrice || 0),
+    ...(showFinance ? {
+      paidAmount: Number(data.paidAmount || 0),
+      remainingAmount: Number(data.remainingAmount || 0),
+      watchPurchasePrice: Number(data.watchPurchasePrice || 0)
+    } : {}),
     deliveryTime: Number(data.deliveryTime || 0),
     paymentDate: data.paymentDate || null,
     deliveryDueDate: data.deliveryDueDate || data.dueDate || data.deliveryDate || null,
@@ -22434,6 +22467,25 @@ async function nvRequireChatGPTWorkspaceAccess(req, companyId = "") {
 function nvRequireWriteAccess(context) {
   if (!nvRoleCanWriteOrders(context.companyData, context.uid)) {
     throw new HttpsError("permission-denied", "Your role cannot create or update orders.");
+  }
+  nvRequireOrdersArea(context);
+}
+
+/**
+ * The workspace's own "Orders" switch, which MCP was not asking about.
+ *
+ * An owner who unticks Orders for somebody expects that to hold everywhere. The
+ * app's order callables check it; the MCP tools checked the role and stopped
+ * there, so the assistant was a way round a restriction the owner had set. Read
+ * and write both, because the point of the switch is that the area is not
+ * theirs.
+ */
+function nvRequireOrdersArea(context) {
+  const companyData = (context && context.companyData) || {};
+  const uid = (context && context.uid) || "";
+  if (uidIsCompanyOwner(companyData, uid)) return;
+  if (!uidCanAccessWorkspaceArea(companyData, uid, "orders")) {
+    throw new HttpsError("permission-denied", "Your workspace access does not include Orders.");
   }
 }
 
@@ -23186,11 +23238,12 @@ async function nvChatGPTCreateOrder(context, args = {}) {
   return {
     ok: true,
     action: "create_order",
-    order: nvSafeOrderForChatGPT({ id: ref.id, data: () => payload })
+    order: nvSafeOrderForChatGPT({ id: ref.id, data: () => payload }, context)
   };
 }
 
 async function nvChatGPTSearchOrders(context, args = {}) {
+  nvRequireOrdersArea(context);
   const rawQuery = nvCleanString(args.query || args.keyword || "", 240).toLowerCase();
   const status = nvCleanString(args.status || "", 120).toLowerCase();
   const limit = Math.min(Math.max(Number(args.limit || 30), 1), 100);
@@ -23203,7 +23256,7 @@ async function nvChatGPTSearchOrders(context, args = {}) {
   }
   const snap = await ordersQuery.limit(250).get();
 
-  let orders = snap.docs.map(nvSafeOrderForChatGPT);
+  let orders = snap.docs.map((doc) => nvSafeOrderForChatGPT(doc, context));
 
   if (rawQuery) {
     orders = orders.filter((order) => {
@@ -23232,6 +23285,7 @@ async function nvChatGPTSearchOrders(context, args = {}) {
 }
 
 async function nvChatGPTGetOrderDetail(context, args = {}) {
+  nvRequireOrdersArea(context);
   const orderId = nvCleanString(args.orderId || args.id || "", 160);
   if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
   const ref = admin.firestore().collection("siparisler").doc(orderId);
@@ -23242,7 +23296,7 @@ async function nvChatGPTGetOrderDetail(context, args = {}) {
     throw new HttpsError("permission-denied", "This order belongs to another workspace.");
   }
     nvRequireWorkflowAssignedOrder(context, data);
-  return { ok: true, action: "get_order_detail", order: nvSafeOrderForChatGPT(snap) };
+  return { ok: true, action: "get_order_detail", order: nvSafeOrderForChatGPT(snap, context) };
 }
 
 async function nvChatGPTAddOrderNote(context, args = {}) {
@@ -23499,8 +23553,34 @@ async function nvChatGPTArchiveNote(context, args = {}) {
 }
 
 
+/**
+ * The tools this deployment actually offers.
+ *
+ * The review flags used to filter only the schema that tools/list advertises,
+ * while the dispatcher answered every name unconditionally — so a tool hidden
+ * for an app review was hidden from the listing and live at the call. One list,
+ * consulted by both, is the only way those two stay in step.
+ */
+function nvMcpAvailableActions() {
+  const actions = [
+    "create_order", "search_orders", "get_order_detail", "add_order_note", "update_order_status",
+    "create_note", "search_notes", "get_note_detail", "append_note", "update_note", "pin_note", "archive_note",
+    "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview",
+    "get_bank_spending_summary", "search_bank_transactions", "attach_bank_receipt"
+  ];
+  if (NV_MCP_INVENTORY) actions.push("search_inventory", "create_inventory_item");
+  return actions;
+}
+
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
-  switch (String(action || "").trim()) {
+  const requested = String(action || "").trim();
+  if (requested && !nvMcpAvailableActions().includes(requested)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `Unknown action. Supported actions: ${nvMcpAvailableActions().join(", ")}.`
+    );
+  }
+  switch (requested) {
     case "create_order":
       return nvChatGPTCreateOrder(context, args);
     case "search_orders":
@@ -23544,7 +23624,10 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
     case "create_inventory_item":
       return nvChatGPTCreateInventoryItem(context, args);
     default:
-      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_bank_spending_summary, search_bank_transactions, attach_bank_receipt" + (NV_MCP_INVENTORY ? ", search_inventory, create_inventory_item." : "."));
+      throw new HttpsError(
+        "invalid-argument",
+        `Unknown action. Supported actions: ${nvMcpAvailableActions().join(", ")}.`
+      );
   }
 }
 
@@ -23733,6 +23816,12 @@ async function nvLoadBankTransactions(companyId) {
       hasReceipt: Boolean(data.receiptPath),
       receiptName: nvCleanString(data.receiptName || "", 200),
       linkedOrderLabel: nvCleanString(data.linkedOrderLabel || "", 120),
+      // What the row actually IS. Without these two the assistant could only
+      // read the sign, so a £5,000 transfer between the owner's own accounts
+      // was reported to them as £5,000 earned. Every human-facing bank screen
+      // has always read them. See functions/bank/classification.js.
+      incomingKind: nvCleanString(data.incomingKind || "", 40),
+      outgoingKind: nvCleanString(data.outgoingKind || "", 40),
       pandleConfirmed: data.pandle && data.pandle.status === "confirmed"
     };
   });
@@ -23760,10 +23849,12 @@ async function nvChatGPTGetBankSpendingSummary(context, args = {}) {
   let prevYear = year, prevMonth = month;
   if (period === "year") prevYear -= 1; else if (month === 1) { prevMonth = 12; prevYear -= 1; } else prevMonth -= 1;
   const prevRows = all.filter((tx) => inPeriod(tx, prevYear, prevMonth));
-  const spent = (list) => nvRound2(list.filter((tx) => tx.amount < 0).reduce((acc, tx) => acc + Math.abs(tx.amount), 0));
+  // A refund or a chargeback leaves as a negative row and is not an expense —
+  // it is a sale reversing, which the order it belongs to accounts for.
+  const spent = (list) => nvRound2(list.filter(nvIsSpendRow).reduce((acc, tx) => acc + Math.abs(tx.amount), 0));
   const spentTotal = spent(rows);
   const prevSpent = spent(prevRows);
-  const incoming = nvRound2(rows.filter((tx) => tx.amount > 0).reduce((acc, tx) => acc + tx.amount, 0));
+  const incoming = nvRound2(rows.filter(nvIsRevenueRow).reduce((acc, tx) => acc + tx.amount, 0));
 
   const byCategory = {};
   const byMerchant = {};
@@ -23839,8 +23930,13 @@ async function nvChatGPTSearchBankTransactions(context, args = {}) {
 
   const all = await nvLoadBankTransactions(context.companyId);
   const rows = all.filter((tx) => {
-    if (direction === "out" && tx.amount >= 0) return false;
-    if (direction === "in" && tx.amount <= 0) return false;
+    // "in" means money earned and "out" means money spent, which is not the
+    // same as the sign: a payout, a transfer or an owner contribution is
+    // incoming and is not income, and a refund is outgoing and is not an
+    // expense. Asking for spending and being handed refunds is how the
+    // assistant's answer stopped matching the bank screen's.
+    if (direction === "out" && !nvIsSpendRow(tx)) return false;
+    if (direction === "in" && !nvIsRevenueRow(tx)) return false;
     if (from && tx.bookingDate < from) return false;
     if (to && tx.bookingDate > to) return false;
     if (query && !`${tx.counterparty} ${tx.description}`.toLowerCase().includes(query)) return false;
@@ -23859,7 +23955,10 @@ async function nvChatGPTSearchBankTransactions(context, args = {}) {
     ok: true,
     total: rows.length,
     returned: Math.min(rows.length, limit),
-    totalAmount: nvRound2(rows.reduce((acc, tx) => acc + tx.amount, 0)),
+    // The net of the rows as classified, not the sum of their signs: a list
+    // that happens to include a transfer would otherwise total as if the money
+    // had been earned and spent.
+    totalAmount: nvBankSummarize(rows).net,
     transactions: rows.slice(0, limit).map((tx) => ({
       transactionId: tx.id,
       date: tx.bookingDate,
@@ -23939,8 +24038,14 @@ async function nvChatGPTAttachBankReceipt(context, args = {}) {
   if (!inboxPath) {
     const receipt = args.receipt && typeof args.receipt === "object" ? args.receipt : null;
     const chatFileUrl = nvCleanString(receipt?.download_url || "", 2000);
-    const linkUrl = nvCleanString(args.receiptUrl || "", 2000);
-    const email = args.emailReceipt && typeof args.emailReceipt === "object" ? args.emailReceipt : null;
+    // These two arguments only exist in the advertised schema when the review
+    // flag is on. Reading them regardless meant a caller could use a parameter
+    // this deployment does not admit to having — the same drift the tool list
+    // had, one level down.
+    const linkUrl = NV_MCP_EMAIL_RECEIPTS ? nvCleanString(args.receiptUrl || "", 2000) : "";
+    const email = NV_MCP_EMAIL_RECEIPTS && args.emailReceipt && typeof args.emailReceipt === "object"
+      ? args.emailReceipt
+      : null;
 
     if (chatFileUrl || linkUrl) {
       const source = chatFileUrl && /^https:\/\//i.test(chatFileUrl) ? chatFileUrl : nvAssertPublicHttpsUrl(linkUrl);

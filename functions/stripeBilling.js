@@ -643,7 +643,8 @@ function createStripeBillingFunctions({
   async function persistApplePlanSubscription(workspace, transaction, {
     environmentName = "Sandbox",
     eventType = "client.verify",
-    notificationStatus = null
+    notificationStatus = null,
+    eventSequenceMs = 0
   } = {}) {
     const item = appleItemForProductId(transaction?.productId);
     const originalTransactionId = String(transaction?.originalTransactionId || "").trim();
@@ -665,8 +666,32 @@ function createStripeBillingFunctions({
     const ledgerRef = workspace.ref.collection("subscriptions").doc(appleLedgerId(originalTransactionId));
     const existing = await ledgerRef.get();
 
+    // Apple does not promise delivery in order either, and this was the one
+    // rail with no guard: Stripe compares the webhook event's own time, and
+    // Google ignores the pushed payload and re-reads live state, which is
+    // inherently order-safe. Here a DID_RENEW delivered late — after a REFUND
+    // that had already revoked the subscription — overwrote `providerStatus`,
+    // `activeForEntitlement` and `currentPeriodEnd` unconditionally and handed
+    // the workspace its paid plan back. The expiry reconcile does not catch it,
+    // because the row it left behind has a future period end.
+    //
+    // The comparison is the NOTIFICATION's signedDate, the only value that
+    // reliably increases from one delivery to the next. Anything without one —
+    // the owner's own "Refresh subscription access", a client verify — is never
+    // treated as stale, exactly as on the Stripe side.
+    const appleSequence = Number(eventSequenceMs) > 0 ? Number(eventSequenceMs) : 0;
+    if (appleEventIsStale(existing.exists ? existing.data() : null, appleSequence)) {
+      console.warn("Apple subscription notification arrived out of order; not applied.", {
+        originalTransactionId, eventType, appleSequence
+      });
+      return { skipped: true, reason: "stale_apple_event" };
+    }
+
     await ledgerRef.set({
       provider: "apple",
+      // Only advanced by a real notification; a client verify leaves it alone,
+      // so an owner re-checking their own purchase can never be dropped.
+      ...(appleSequence > 0 ? { appleEventSequence: appleSequence } : {}),
       subscriptionType: "plan",
       planTier: planTierForItem(item),
       internalPlanKey: item.plan || "",
@@ -700,7 +725,8 @@ function createStripeBillingFunctions({
   async function persistAppleStorageAddon(workspace, transaction, {
     environmentName = "Sandbox",
     eventType = "client.verify",
-    notificationStatus = null
+    notificationStatus = null,
+    eventSequenceMs = 0
   } = {}) {
     const item = appleItemForProductId(transaction?.productId);
     const originalTransactionId = String(transaction?.originalTransactionId || "").trim();
@@ -722,8 +748,18 @@ function createStripeBillingFunctions({
     const ledgerRef = workspace.ref.collection("subscriptions").doc(appleLedgerId(originalTransactionId));
     const existing = await ledgerRef.get();
 
+    // The same ordering guard as the plan ledger above, for the same reason.
+    const appleSequence = Number(eventSequenceMs) > 0 ? Number(eventSequenceMs) : 0;
+    if (appleEventIsStale(existing.exists ? existing.data() : null, appleSequence)) {
+      console.warn("Apple storage add-on notification arrived out of order; not applied.", {
+        originalTransactionId, eventType, appleSequence
+      });
+      return { skipped: true, reason: "stale_apple_event" };
+    }
+
     await ledgerRef.set({
       provider: "apple",
+      ...(appleSequence > 0 ? { appleEventSequence: appleSequence } : {}),
       subscriptionType: "storage_addon",
       itemKey: item.key,
       interval: item.interval || "",
@@ -1726,7 +1762,12 @@ function createStripeBillingFunctions({
       await persistApplePurchase({ id: workspaceId, ref: companyRef }, transaction, {
         environmentName: transactionVerified.environmentName,
         eventType: `notification.${String(notification.notificationType || "unknown")}`,
-        notificationStatus: notification.data?.status
+        notificationStatus: notification.data?.status,
+        // Apple stamps every notification with the moment it signed it. That is
+        // the only value here that reliably increases from one delivery to the
+        // next — the transaction's own dates do not, so a REFUND followed by a
+        // late DID_RENEW would look newer by expiry date and win.
+        eventSequenceMs: Number(notification.signedDate || 0) || 0
       });
       response.status(200).json({ received: true, processed: true });
     } catch (error) {
@@ -2198,8 +2239,33 @@ function createStripeBillingFunctions({
   };
 }
 
+/**
+ * Whether an App Store notification has been overtaken by one already applied.
+ *
+ * Apple does not promise delivery in order, and this rail had no guard at all:
+ * Stripe compares the webhook event's own time, and Google ignores the pushed
+ * payload and re-reads live state, which is inherently order-safe. Here a
+ * DID_RENEW delivered late — after a REFUND that had already revoked the
+ * subscription — overwrote the ledger unconditionally and handed the workspace
+ * its paid plan back, with a future period end that the expiry reconcile then
+ * leaves alone.
+ *
+ * A sequence of zero means "this did not come from a notification": the owner's
+ * own Refresh subscription access, a client verify, the reconcile job. Those are
+ * never stale, or an owner could not recover from a bad row.
+ */
+function appleEventIsStale(existingData, eventSequenceMs) {
+  const incoming = Number(eventSequenceMs);
+  if (!Number.isFinite(incoming) || incoming <= 0) return false;
+  const seen = Number((existingData && existingData.appleEventSequence) || 0);
+  if (!Number.isFinite(seen) || seen <= 0) return false;
+  return incoming < seen;
+}
+
 module.exports = {
   STRIPE_BILLING_ITEMS,
   APPLE_PLAN_PRODUCTS,
-  createStripeBillingFunctions
+  createStripeBillingFunctions,
+  // Exported for functions/test/qa/apple-billing-order.test.js.
+  appleEventIsStale
 };
