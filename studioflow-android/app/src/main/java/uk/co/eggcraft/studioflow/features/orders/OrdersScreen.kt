@@ -161,7 +161,12 @@ fun OrdersScreen(
     var resizingOrderList by remember { mutableStateOf(false) }
     var resizeBaseListWidth by remember { mutableStateOf(0f) }
     var resizeListDeltaDp by remember { mutableStateOf(0f) }
-    var selectedOrderIds by remember(workspace?.id, state.user?.uid) { mutableStateOf(emptySet<String>()) }
+    // A bulk selection is real work; rotating the phone must not throw it away.
+    var selectedOrderIds by rememberSaveable(
+        workspace?.id,
+        state.user?.uid,
+        stateSaver = OrderIdSetSaver
+    ) { mutableStateOf(emptySet<String>()) }
     val selectedOrder = selectedOrderId?.let { id -> state.orders.firstOrNull { it.id == id } }
     val currentUserId = state.user?.uid.orEmpty()
     val currentUserEmail = state.user?.email.orEmpty()
@@ -1391,8 +1396,17 @@ private fun OrderListCard(
         if (confirmDeleteOpen) {
             AlertDialog(
                 onDismissRequest = { confirmDeleteOpen = false },
-                title = { Text(if (canRequestOrderDeletionFromList(workspace)) "Request deletion?" else "Delete order?") },
-                text = { Text(if (canRequestOrderDeletionFromList(workspace)) "Request deletion of \"${order.displayCustomerName}\"? The order will be removed only after owner approval." else "Delete \"${order.displayCustomerName}\"? This cannot be undone.") },
+                title = { Text(if (canRequestOrderDeletionFromList(workspace)) t("Request deletion?") else t("Delete order?")) },
+                text = {
+                    Text(
+                        if (canRequestOrderDeletionFromList(workspace)) {
+                            t("Request deletion of \"{name}\"? The order will be removed only after owner approval.")
+                                .replace("{name}", order.displayCustomerName)
+                        } else {
+                            t("Delete \"{name}\"? This cannot be undone.").replace("{name}", order.displayCustomerName)
+                        }
+                    )
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -1400,7 +1414,7 @@ private fun OrderListCard(
                             onDeleteOrder()
                         }
                     ) {
-                        Text(if (canRequestOrderDeletionFromList(workspace)) "Send Request" else t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
+                        Text(if (canRequestOrderDeletionFromList(workspace)) t("Send Request") else t("Delete"), color = StudioRed, fontWeight = FontWeight.ExtraBold)
                     }
                 },
                 dismissButton = {
@@ -1938,6 +1952,12 @@ private fun orderFilterFromKey(key: String?): OrderFilter {
 private fun orderSortModeFromKey(key: String?): OrderSortMode {
     return OrderSortMode.entries.firstOrNull { it.key == key } ?: OrderSortMode.Smart
 }
+
+// A Bundle takes no Set, so the selection travels as the list of order ids.
+private val OrderIdSetSaver = androidx.compose.runtime.saveable.listSaver<Set<String>, String>(
+    save = { it.toList() },
+    restore = { it.toSet() }
+)
 
 private fun ordersPreferenceName(userId: String?, workspaceId: String?): String {
     return "studioflow_orders_${userId.orEmpty()}_${workspaceId.orEmpty()}"

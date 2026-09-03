@@ -422,10 +422,17 @@ class StudioFlowRepository(
         val userPayload = mutableMapOf<String, Any>(
             "uid" to uid,
             "email" to email,
-            "displayName" to displayName,
-            "photoURL" to photoUrl,
             "updatedAt" to FieldValue.serverTimestamp()
         )
+        // The Auth profile is only the seed for these two. Rewriting them on
+        // every launch reverted a name or photo the person changed on the web,
+        // so they are written only when the user document has none.
+        if (displayName.isNotBlank() && userDoc.getString("displayName").isNullOrBlank()) {
+            userPayload["displayName"] = displayName
+        }
+        if (photoUrl.isNotBlank() && userDoc.getString("photoURL").isNullOrBlank()) {
+            userPayload["photoURL"] = photoUrl
+        }
         if (userDoc.getString("activeCompanyId").isNullOrBlank()) {
             userPayload["activeCompanyId"] = uid
         }
@@ -595,7 +602,7 @@ class StudioFlowRepository(
                     return@addSnapshotListener
                 }
                 val orders = snapshot?.documents
-                    ?.map { StudioOrder.fromDocument(it) }
+                    ?.mapNotNull { document -> decodeDocument(document.id, "order") { StudioOrder.fromDocument(document) } }
                     ?.filter { order ->
                         !workspace.shouldShowOnlyAssignedProjects || orderIsAssignedToUser(order, user)
                     }
@@ -605,6 +612,16 @@ class StudioFlowRepository(
             }
         awaitClose { registration.remove() }
     }
+
+    // One malformed document (a field written with an unexpected type by another
+    // client) must cost that single row, never the whole list or the process.
+    private fun <T> decodeDocument(id: String, kind: String, decode: () -> T): T? =
+        try {
+            decode()
+        } catch (error: Throwable) {
+            android.util.Log.w("StudioFlowRepository", "Skipped $kind document $id: ${error.message}", error)
+            null
+        }
 
     // Customers live in the top-level `musteriler` collection (same as Mac/iPhone
     // and web), scoped by companyId.
@@ -617,7 +634,7 @@ class StudioFlowRepository(
                     return@addSnapshotListener
                 }
                 val customers = snapshot?.documents
-                    ?.map { StudioCustomer.fromDocument(it) }
+                    ?.mapNotNull { document -> decodeDocument(document.id, "customer") { StudioCustomer.fromDocument(document) } }
                     .orEmpty()
                 trySend(customers)
             }
@@ -1454,7 +1471,8 @@ class StudioFlowRepository(
     ): String {
         val maxMb = maxSizeMb.coerceIn(1, 50)
         requireImageBytes(bytes, maxMb, "Choose a preview image under $maxMb MB.")
-        validateWorkspacePlanAction(workspace, "upload_preview_image", bytes.size)
+        // No plan gate here: the server's BILLING_ACTIONS knows no
+        // "upload_preview_image", so asking it refused the upload on every plan.
         val cleanType = cleanImageContentType(contentType)
         val extension = extensionForImageContentType(cleanType)
         val cleanName = cleanClientFileName(fileName).ifBlank { "Preview image" }

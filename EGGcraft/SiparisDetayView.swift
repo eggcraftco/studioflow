@@ -10928,12 +10928,7 @@ struct SiparisDetayView: View {
     private func customCurrencyValue(prefix: String, title: String) -> Double {
         let key = financialCustomKey(prefix: prefix, title: title)
         let raw = siparis.customFields?[key] ?? ""
-        let cleaned = raw
-            .replacingOccurrences(of: ",", with: "")
-            .replacingOccurrences(of: seciliParaBirimi, with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return Double(cleaned) ?? 0
+        return nvParseAmount(raw.replacingOccurrences(of: seciliParaBirimi, with: "")) ?? 0
     }
 
     private func customCurrencyBinding(prefix: String, title: String) -> Binding<Double> {
@@ -11319,7 +11314,7 @@ struct SiparisDetayView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(t("Payment Method", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
                 Picker("", selection: $newPaymentMethod) {
-                    ForEach(["Deposit", "Card", "Apple Pay", "PayPal", "Direct Transfer", "Cash", "Final"], id: \.self) { option in
+                    ForEach(["Deposit", "Card", "Cash", "Bank Transfer", "PayPal", "Apple Pay", "Final", "Other"], id: \.self) { option in
                         Text(t(option, lang: seciliDil)).tag(option)
                     }
                 }
@@ -12850,14 +12845,14 @@ struct SiparisDetayView: View {
         let toplamSatis = siparis.salesTotal
 
         if toplamSatis >= 0 {
-            siparis.paymentFee = (toplamSatis * feePercentage) / 100.0
+            siparis.paymentFee = nvRoundMoney((toplamSatis * feePercentage) / 100.0)
         }
 
         if siparis.taxType == "Revenue" {
-            siparis.taxAmount = kdvBrutten(siparis.taxRate, toplamSatis)
+            siparis.taxAmount = nvRoundMoney(kdvBrutten(siparis.taxRate, toplamSatis))
         } else {
             let brutKar = toplamSatis - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee
-            siparis.taxAmount = brutKar > 0 ? kdvBrutten(siparis.taxRate, brutKar) : 0
+            siparis.taxAmount = brutKar > 0 ? nvRoundMoney(kdvBrutten(siparis.taxRate, brutKar)) : 0
         }
     }
     private func kargoSayfasiniAc(firma: String, kod: String) { let tKod = kod.trimmingCharacters(in: .whitespacesAndNewlines); var url = ""; switch firma { case "DHL": url = "https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=\(tKod)"; case "Royal Mail": url = "https://www.royalmail.com/track-your-item#/tracking-results/\(tKod)"; case "FedEx": url = "https://www.fedex.com/fedextrack/?trknbr=\(tKod)"; case "UPS": url = "https://www.ups.com/track?tracknum=\(tKod)"; default: url = "https://www.17track.net/en/track-details?nums=\(tKod)" }; if let u = URL(string: url) { openURL(u) } }
@@ -13771,7 +13766,7 @@ struct DetayKarti<Content: View>: View {
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
-    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan: String = StudioBillingPlan.teamMonthly.rawValue
+    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan: String = StudioBillingPlan.demo.rawValue
     // Workspace-shared colour meaning labels: companySettings.cardColorMeaningsJSON,
     // mirrored into UserDefaults by FirebaseManager's companySettings listener.
     @AppStorage("cardColorMeaningsJSON") private var cardColorMeaningsJSON: String = ""
@@ -14037,7 +14032,7 @@ struct DetayKarti<Content: View>: View {
     }
 
     private var canCustomizeThisCard: Bool {
-        let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .teamMonthly
+        let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .demo
         return plan.entitlements.cardCustomizationEnabled
     }
 

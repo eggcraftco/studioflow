@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.billing
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
+import uk.co.eggcraft.studioflow.util.friendlyErrorMessage
 
 /** One purchasable plan/interval row, mirroring the iOS StoreKit product summary. */
 data class StudioGooglePlanOffer(
@@ -59,7 +61,9 @@ class StudioGooglePlayBillingManager(
     private val verifier: suspend (StudioGooglePurchaseResult) -> String,
     private val onPlanResolved: (String) -> Unit = {},
     private val onMessage: (String) -> Unit = {},
-    private val onError: (String) -> Unit = {}
+    private val onError: (String) -> Unit = {},
+    /** Translates a sentence for the person reading it; the manager itself speaks English. */
+    private val translate: (String) -> String = { it }
 ) {
     companion object {
         // Mirror of the backend GOOGLE_PLAY_PRODUCTS map. The annual base plans are
@@ -83,17 +87,33 @@ class StudioGooglePlayBillingManager(
             Triple(200, "year", "nivadesk_storage_200gb" to "storage-200gb-annual")
         )
 
-        private val SUBSCRIPTION_IDS: List<String> =
-            (PLAN_OFFERS.map { it.third.first } + STORAGE_OFFERS.map { it.third.first }).distinct()
+        private val PLAN_SUBSCRIPTION_IDS: List<String> = PLAN_OFFERS.map { it.third.first }.distinct()
+        private val STORAGE_SUBSCRIPTION_IDS: List<String> = STORAGE_OFFERS.map { it.third.first }.distinct()
+        private val SUBSCRIPTION_IDS: List<String> = (PLAN_SUBSCRIPTION_IDS + STORAGE_SUBSCRIPTION_IDS).distinct()
+
+        private const val TAG = "NivaDeskBilling"
     }
 
     private val purchasesListener = PurchasesUpdatedListener { result, purchases ->
-        if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
-            purchases.forEach { handlePurchase(it) }
-        } else if (result.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
-            onMessage("Purchase cancelled.")
-        } else {
-            onError("Purchase failed. ${result.debugMessage}".trim())
+        when (result.responseCode) {
+            BillingClient.BillingResponseCode.OK -> {
+                if (purchases.isNullOrEmpty()) _isPurchasing.value = false
+                else purchases.forEach { handlePurchase(it) }
+            }
+            BillingClient.BillingResponseCode.USER_CANCELED -> {
+                _isPurchasing.value = false
+                onMessage(translate("Purchase cancelled."))
+            }
+            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                // Google already holds a purchase for this; make sure the server knows about it.
+                _isPurchasing.value = false
+                onMessage(translate("You already own this subscription."))
+                reconcilePurchases()
+            }
+            else -> {
+                _isPurchasing.value = false
+                onError(billingSentence(result.responseCode))
+            }
         }
     }
 
@@ -118,7 +138,27 @@ class StudioGooglePlayBillingManager(
     private val _isPurchasing = MutableStateFlow(false)
     val isPurchasing: StateFlow<Boolean> = _isPurchasing.asStateFlow()
 
-    private fun ensureConnected(onReady: () -> Unit) {
+    // One reconcile per connection: purchases Google granted (or completed from
+    // pending) while the app was away get verified the moment billing is back.
+    private var reconciledThisConnection = false
+    @Volatile private var reconciling = false
+
+    /** A plain sentence for a Play response code, never the SDK's debug text. */
+    private fun billingSentence(code: Int): String = translate(
+        when (code) {
+            BillingClient.BillingResponseCode.USER_CANCELED -> "Purchase cancelled."
+            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> "You already own this subscription."
+            BillingClient.BillingResponseCode.ITEM_UNAVAILABLE -> "This plan is not available for purchase yet."
+            BillingClient.BillingResponseCode.NETWORK_ERROR,
+            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE -> "Please check your internet connection and try again."
+            BillingClient.BillingResponseCode.BILLING_UNAVAILABLE,
+            BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED,
+            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED -> "Google Play is not available on this device."
+            else -> "Google Play could not complete the purchase. Please try again."
+        }
+    )
+
+    private fun ensureConnected(quiet: Boolean = false, onFailed: () -> Unit = {}, onReady: () -> Unit) {
         if (billingClient.isReady) {
             onReady()
             return
@@ -127,20 +167,26 @@ class StudioGooglePlayBillingManager(
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     onReady()
+                    if (!reconciledThisConnection) {
+                        reconciledThisConnection = true
+                        reconcilePurchases()
+                    }
                 } else {
-                    onError("Google Play billing is unavailable. ${result.debugMessage}".trim())
+                    onFailed()
+                    if (!quiet) onError(billingSentence(result.responseCode))
                 }
             }
 
             override fun onBillingServiceDisconnected() {
                 // Reconnection is attempted lazily on the next call.
+                reconciledThisConnection = false
             }
         })
     }
 
     fun loadProducts() {
         _isLoading.value = true
-        ensureConnected {
+        ensureConnected(onFailed = { _isLoading.value = false }) {
             scope.launch {
                 try {
                     val products = SUBSCRIPTION_IDS.map { id ->
@@ -158,10 +204,10 @@ class StudioGooglePlayBillingManager(
                         productDetailsById = list.associateBy { it.productId }
                         rebuildOffers()
                     } else {
-                        onError("Could not load products. ${result.billingResult.debugMessage}".trim())
+                        onError(billingSentence(result.billingResult.responseCode))
                     }
                 } catch (error: Exception) {
-                    onError(error.message ?: "Could not load Google Play products.")
+                    onError(friendlyErrorMessage(error, "Could not load Google Play products.", translate))
                 } finally {
                     _isLoading.value = false
                 }
@@ -202,51 +248,102 @@ class StudioGooglePlayBillingManager(
         return offer.offerToken to price
     }
 
+    private suspend fun currentSubscriptionPurchases(): List<Purchase> {
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.SUBS)
+            .build()
+        val result = billingClient.queryPurchasesAsync(params)
+        return if (result.billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+            result.purchasesList
+        } else {
+            emptyList()
+        }
+    }
+
     fun purchase(activity: Activity, subscriptionId: String, basePlanId: String, obfuscatedAccountId: String) {
         val details = productDetailsById[subscriptionId]
         val token = offerToken(subscriptionId, basePlanId)?.first
         if (details == null || token == null) {
-            onError("This plan is not available for purchase yet.")
+            onError(translate("This plan is not available for purchase yet."))
             return
         }
-        val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(details)
-            .setOfferToken(token)
-            .build()
-        val flowParams = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(listOf(productParams))
-            .setObfuscatedAccountId(obfuscatedAccountId)
-            .build()
         _isPurchasing.value = true
-        ensureConnected {
-            val result = billingClient.launchBillingFlow(activity, flowParams)
-            if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                _isPurchasing.value = false
-                onError("Could not start purchase. ${result.debugMessage}".trim())
+        ensureConnected(onFailed = { _isPurchasing.value = false }) {
+            scope.launch {
+                // A plan replaces the plan subscription already held (Starter → Pro,
+                // monthly → annual); a storage tier replaces the storage tier. Without
+                // the old token Play answers ITEM_ALREADY_OWNED, or bills twice.
+                val family = if (subscriptionId in PLAN_SUBSCRIPTION_IDS) PLAN_SUBSCRIPTION_IDS else STORAGE_SUBSCRIPTION_IDS
+                val existing = runCatching { currentSubscriptionPurchases() }.getOrDefault(emptyList())
+                    .firstOrNull { purchase ->
+                        purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+                            purchase.purchaseToken.isNotBlank() &&
+                            purchase.products.any { it in family }
+                    }
+                val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(details)
+                    .setOfferToken(token)
+                    .build()
+                val flowParams = BillingFlowParams.newBuilder()
+                    .setProductDetailsParamsList(listOf(productParams))
+                    .setObfuscatedAccountId(obfuscatedAccountId)
+                    .apply {
+                        if (existing != null) {
+                            setSubscriptionUpdateParams(
+                                BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                                    .setOldPurchaseToken(existing.purchaseToken)
+                                    .setSubscriptionReplacementMode(
+                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.CHARGE_PRORATED_PRICE
+                                    )
+                                    .build()
+                            )
+                        }
+                    }
+                    .build()
+                val result = billingClient.launchBillingFlow(activity, flowParams)
+                if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+                    _isPurchasing.value = false
+                    onError(billingSentence(result.responseCode))
+                }
             }
         }
     }
 
     fun restorePurchases() {
         _isPurchasing.value = true
-        ensureConnected {
+        ensureConnected(onFailed = { _isPurchasing.value = false }) {
             scope.launch {
                 try {
-                    val params = QueryPurchasesParams.newBuilder()
-                        .setProductType(BillingClient.ProductType.SUBS)
-                        .build()
-                    val result = billingClient.queryPurchasesAsync(params)
-                    val active = result.purchasesList.firstOrNull {
-                        it.purchaseState == Purchase.PurchaseState.PURCHASED
+                    val purchases = currentSubscriptionPurchases()
+                    val active = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                    if (active.isEmpty()) {
+                        val pending = purchases.any { it.purchaseState == Purchase.PurchaseState.PENDING }
+                        onMessage(
+                            if (pending) translate("Your purchase is pending approval. It will activate automatically once Google confirms it.")
+                            else translate("No active purchase was found.")
+                        )
+                        return@launch
                     }
-                    if (active != null) {
-                        verifyAndAcknowledge(active)
-                        onMessage("Purchase restored. Your workspace plan is active.")
+                    // Every purchase, not only the first: a plan and a storage add-on
+                    // are two subscriptions, and both need the server to know.
+                    var verified = 0
+                    var lastError: Throwable? = null
+                    for (purchase in active) {
+                        runCatching { verifyAndAcknowledge(purchase, announce = false) }
+                            .onSuccess { verified += 1 }
+                            .onFailure { lastError = it }
+                    }
+                    if (verified > 0) {
+                        onMessage(translate("Purchase restored. Your workspace plan is active."))
                     } else {
-                        onMessage("No active purchase was found.")
+                        val failure = lastError
+                        onError(
+                            if (failure != null) friendlyErrorMessage(failure, "Could not restore purchases.", translate)
+                            else translate("Could not restore purchases.")
+                        )
                     }
                 } catch (error: Exception) {
-                    onError(error.message ?: "Could not restore purchases.")
+                    onError(friendlyErrorMessage(error, "Could not restore purchases.", translate))
                 } finally {
                     _isPurchasing.value = false
                 }
@@ -254,23 +351,57 @@ class StudioGooglePlayBillingManager(
         }
     }
 
-    private fun handlePurchase(purchase: Purchase) {
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) {
-            _isPurchasing.value = false
-            return
-        }
-        scope.launch {
-            try {
-                verifyAndAcknowledge(purchase)
-            } catch (error: Exception) {
-                onError(error.message ?: "Could not verify purchase.")
-            } finally {
-                _isPurchasing.value = false
+    /**
+     * Anything Google has granted that the server has not confirmed yet — a
+     * pending purchase that completed while the app was closed, or a purchase
+     * whose verification failed on the way. Called on every billing connection
+     * and when the app returns to the foreground. Quiet: nothing to say when
+     * there is nothing to do.
+     */
+    fun reconcilePurchases() {
+        if (reconciling) return
+        reconciling = true
+        ensureConnected(quiet = true, onFailed = { reconciling = false }) {
+            scope.launch {
+                try {
+                    val purchases = currentSubscriptionPurchases()
+                    for (purchase in purchases) {
+                        if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED && !purchase.isAcknowledged) {
+                            runCatching { verifyAndAcknowledge(purchase, announce = true) }
+                                .onFailure { Log.w(TAG, "Could not verify a held purchase: ${it.message}") }
+                        }
+                    }
+                } catch (error: Exception) {
+                    Log.w(TAG, "Purchase reconcile failed: ${error.message}")
+                } finally {
+                    reconciling = false
+                }
             }
         }
     }
 
-    private suspend fun verifyAndAcknowledge(purchase: Purchase) {
+    private fun handlePurchase(purchase: Purchase) {
+        when (purchase.purchaseState) {
+            Purchase.PurchaseState.PURCHASED -> scope.launch {
+                try {
+                    verifyAndAcknowledge(purchase, announce = true)
+                } catch (error: Exception) {
+                    onError(friendlyErrorMessage(error, "Could not verify purchase.", translate))
+                } finally {
+                    _isPurchasing.value = false
+                }
+            }
+            // Cash at a kiosk, a card that needs approval: Google will finish it
+            // later and the next reconcile picks it up. Not a failure.
+            Purchase.PurchaseState.PENDING -> {
+                _isPurchasing.value = false
+                onMessage(translate("Your purchase is pending approval. It will activate automatically once Google confirms it."))
+            }
+            else -> _isPurchasing.value = false
+        }
+    }
+
+    private suspend fun verifyAndAcknowledge(purchase: Purchase, announce: Boolean) {
         val subscriptionId = purchase.products.firstOrNull().orEmpty()
         val resolvedPlan = verifier(
             StudioGooglePurchaseResult(
@@ -288,7 +419,7 @@ class StudioGooglePlayBillingManager(
         if (resolvedPlan.isNotEmpty()) {
             onPlanResolved(resolvedPlan)
         }
-        onMessage("Purchase verified. Your workspace plan is active.")
+        if (announce) onMessage(translate("Purchase verified. Your workspace plan is active."))
     }
 
     fun release() {

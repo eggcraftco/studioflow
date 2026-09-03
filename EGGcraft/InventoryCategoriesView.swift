@@ -234,11 +234,13 @@ struct InventoryCategoriesTab: View {
 
     private func addRow() {
         guard rows.count < 40 else { return }
-        rows.append(InventoryCategory([
+        // `?? rows[0]` crashed on the first category of an empty workspace.
+        guard let row = InventoryCategory([
             "id": "category_\(Int(Date().timeIntervalSince1970 * 1000))",
             "title": t("New category", lang: lang),
             "icon": "◇"
-        ]) ?? rows[0])
+        ]) else { return }
+        rows.append(row)
         dirty = true
     }
 

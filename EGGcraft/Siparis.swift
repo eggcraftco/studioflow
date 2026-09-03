@@ -365,8 +365,7 @@ struct Siparis: Identifiable, Codable {
     var customRemainingTotal: Double {
         (customFields ?? [:]).reduce(0.0) { acc, entry in
             guard entry.key.hasPrefix("financialRemaining::") else { return acc }
-            let cleaned = entry.value.replacingOccurrences(of: ",", with: "")
-            return acc + (Double(cleaned) ?? 0)
+            return acc + (nvParseAmount(entry.value) ?? 0)
         }
     }
 

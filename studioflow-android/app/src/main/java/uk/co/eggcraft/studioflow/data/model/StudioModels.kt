@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.ceil
+import uk.co.eggcraft.studioflow.util.parseStoredAmount
 
 enum class StudioBillingPlan(
     val raw: String,
@@ -604,7 +605,10 @@ data class StudioWorkspaceSettings(
     val businessType: String = "Photography Studio",
     val businessDescriptionPrompt: String = "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up.",
     val businessOnboardingCompleted: Boolean = false,
-    val activeStatuses: List<String> = listOf("Not Yet", "In Progress", "Pending", "Ready", "Done", "Cancelled", "Design", "Painting", "Shipped"),
+    // Same default as the server (functions/index.js defaultHeadingSettings) and
+    // the web/Mac clients, so a workspace that never edited its statuses sees the
+    // same five everywhere.
+    val activeStatuses: List<String> = listOf("New", "Not Yet", "In Progress", "Done", "Cancelled"),
     val customSteps: List<String> = listOf("Design", "Painting"),
     val customToggles: List<String> = emptyList(),
     val customFields: List<String> = emptyList(),
@@ -1354,7 +1358,7 @@ data class StudioOrder(
     // remainingAmount, on every platform.
     val customRemainingTotal: Double
         get() = customFields.entries.sumOf { (key, raw) ->
-            if (key.startsWith("financialRemaining::")) raw.replace(",", "").toDoubleOrNull() ?: 0.0 else 0.0
+            if (key.startsWith("financialRemaining::")) parseStoredAmount(raw) ?: 0.0 else 0.0
         }
 
     val orderValue: Double get() = paidAmount + remainingAmount + customRemainingTotal
@@ -1416,8 +1420,10 @@ data class StudioOrder(
                 designName = document.getString("designName").orEmpty(),
                 designLink = document.getString("designLink").orEmpty(),
                 watchRef = document.getString("watchRef").orEmpty(),
-                paymentDate = document.getTimestamp("paymentDate")?.toDate() ?: Date(),
-                deliveryTime = document.getLong("deliveryTime")?.toInt() ?: 1,
+                paymentDate = document.readDate("paymentDate") ?: Date(),
+                // An order with no delivery window is not late tomorrow: Mac and
+                // iPhone both assume 45 days when the field is missing.
+                deliveryTime = document.readLong("deliveryTime")?.toInt() ?: 45,
                 paidAmount = document.getDouble("paidAmount") ?: 0.0,
                 refundedAmount = document.getDouble("refundedAmount") ?: 0.0,
                 remainingAmount = document.getDouble("remainingAmount") ?: 0.0,
@@ -1482,7 +1488,7 @@ data class StudioOrder(
                 productionBlockerNote = ((document.get("productionBlocker") as? Map<*, *>)
                     ?.get("note") as? String).orEmpty(),
                 isDeleted = document.getBoolean("isDeleted") ?: false,
-                deletedAt = document.getDate("deletedAt")
+                deletedAt = document.readDate("deletedAt")
             )
         }
     }
@@ -1564,16 +1570,16 @@ data class StudioCustomer(
             shippingPhone = document.getString("shippingPhone").orEmpty(),
             notes = document.getString("notes").orEmpty(),
             profileImageUrl = document.getString("profileImageUrl").orEmpty(),
-            lastContactDate = document.getDate("lastContactDate"),
+            lastContactDate = document.readDate("lastContactDate"),
             source = document.getString("source").orEmpty(),
             externalCustomerId = document.getString("externalCustomerId").orEmpty(),
-            integrationSyncedAt = document.getDate("integrationSyncedAt"),
+            integrationSyncedAt = document.readDate("integrationSyncedAt"),
             integrationLastPayload = document.getString("integrationLastPayload").orEmpty(),
             tags = stringList(document.get("tags")).map { it.trim() }.filter { it.isNotEmpty() },
             preferredChannel = document.getString("preferredChannel").orEmpty(),
             doNotContact = document.getBoolean("doNotContact") == true,
             marketingOptIn = document.getString("marketingOptIn").orEmpty(),
-            nextFollowUpDate = document.getDate("nextFollowUpDate")
+            nextFollowUpDate = document.readDate("nextFollowUpDate")
         )
     }
 }

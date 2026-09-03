@@ -1138,6 +1138,27 @@ private fun MessageBubble(
     val clipboardManager: ClipboardManager = LocalClipboardManager.current
     var menuOpen by remember { mutableStateOf(false) }
     var showReactionPicker by remember { mutableStateOf(false) }
+    // Unsending for everyone cannot be taken back, so it is asked first.
+    var confirmDeleteForEveryone by remember { mutableStateOf(false) }
+
+    if (confirmDeleteForEveryone) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteForEveryone = false },
+            title = { Text(t("Delete for everyone?"), fontWeight = FontWeight.Bold) },
+            text = { Text(t("This message will be removed for everyone in the conversation.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeleteForEveryone = false
+                    onDeleteForEveryone()
+                }) {
+                    Text(t("Delete"), color = uk.co.eggcraft.studioflow.ui.theme.StudioRed, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteForEveryone = false }) { Text(t("Cancel")) }
+            }
+        )
+    }
 
     // Row layout: avatar (theirs left / mine right) + content column with sender label, bubble, time below
     Row(
@@ -1217,7 +1238,7 @@ private fun MessageBubble(
                 }
                 DropdownMenuItem(text = { Text(t("Delete for me")) }, onClick = { menuOpen = false; onDeleteForMe() })
                 if (isMine && !item.isDeleted) {
-                    DropdownMenuItem(text = { Text(t("Delete for everyone")) }, onClick = { menuOpen = false; onDeleteForEveryone() })
+                    DropdownMenuItem(text = { Text(t("Delete for everyone")) }, onClick = { menuOpen = false; confirmDeleteForEveryone = true })
                 }
             }
             DropdownMenu(expanded = showReactionPicker, onDismissRequest = { showReactionPicker = false }) {

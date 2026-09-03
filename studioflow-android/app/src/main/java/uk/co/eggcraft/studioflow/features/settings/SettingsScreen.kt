@@ -356,6 +356,9 @@ fun SettingsScreen(
         }
 
         if (selected != null) {
+            // Phone layout: system back walks up to the settings list instead of
+            // dropping the person out of the app from a sub-page.
+            androidx.activity.compose.BackHandler(enabled = true) { selectedKey = null }
             SettingsDetailScreen(
                 section = selected,
                 state = state,
@@ -985,7 +988,21 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
     val settings = state.workspaceSettings
     var statusExpanded by rememberSaveable { mutableStateOf(false) }
     var businessPrompt by rememberSaveable(settings.businessDescriptionPrompt) { mutableStateOf(settings.businessDescriptionPrompt) }
-    val statusPool = listOf("Not Yet", "In Progress", t("Pending"), "Ready", "Ready to Ship", "Done", t("Cancelled"), "Design", "Painting", "Shipped")
+    // Raw English is what gets stored — the same 22-value pool the web offers
+    // (app/settings/page.tsx STATUS_OPTION_POOL). t() is applied at display
+    // time only; putting t("Pending") in this list saved "Beklemede" into the
+    // order documents and every other client stopped recognising the status.
+    val statusPool = remember(settings.activeStatuses) {
+        val web = listOf(
+            "New", "Quoted", "Waiting for Deposit", "Deposit Paid", "Waiting for Customer",
+            "Waiting for Approval", "Approved", "Not Yet", "In Progress", "Waiting for Material",
+            "Ready for Review", "Revision Needed", "Ready to Ship", "Shipped", "Delivered",
+            "Done", "Completed", "Cancelled", "Refunded", "On Hold", "Blocked", "Overdue"
+        )
+        // Anything a workspace already saved (older Android defaults, or a value
+        // written by another client) keeps its switch instead of vanishing.
+        web + settings.activeStatuses.filter { saved -> web.none { it == saved } }
+    }
     DetailColumn {
         DetailCard(title = t("Business Type"), icon = Icons.Filled.Business) {
             MenuField(
@@ -1063,7 +1080,7 @@ private fun WorkflowStepsDetail(state: StudioFlowUiState, onSave: (Map<String, A
             if (statusExpanded) {
                 statusPool.forEach { status ->
                     SettingSwitch(
-                        label = status,
+                        label = t(status),
                         checked = settings.activeStatuses.contains(status),
                         onCheckedChange = { checked ->
                             val next = settings.activeStatuses.toMutableSet()
@@ -4826,6 +4843,28 @@ private fun PlanAccessDetail(
                         Text(t("Restore Purchases"))
                     }
                 }
+                // Cancelling or switching a Play subscription happens in Play, not
+                // here; this is the shortcut straight to this app's entry there.
+                OutlinedButton(
+                    onClick = {
+                        val playContext = activity ?: return@OutlinedButton
+                        runCatching {
+                            playContext.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(
+                                        "https://play.google.com/store/account/subscriptions?package=" +
+                                            BuildConfig.APPLICATION_ID
+                                    )
+                                )
+                            )
+                        }
+                    },
+                    enabled = activity != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(t("Manage subscription on Google Play"))
+                }
                 if (googlePlanOffers.isEmpty()) {
                     Text(
                         t("Create this product ID in Google Play Console."),
@@ -4954,6 +4993,8 @@ private fun TeamAccessDetail(
     var customRoleAccess by remember { mutableStateOf(WorkspaceMemberAccess()) }
     val canViewTeamManagement = workspace?.billingPlan?.hasTeamAccess == true && workspace.memberAccess.teamAccess
     val ownerCanManage = workspace?.isOwner == true && canViewTeamManagement
+    // Removing someone is instant and cannot be undone from here, so it is asked first.
+    var pendingRemoveMember by remember { mutableStateOf<StudioTeamMember?>(null) }
     val roleOptions = remember(state.customRoles) { teamRoleOptions(state.customRoles) }
     DetailColumn {
         // The page header above already names the section; no second banner here.
@@ -5227,7 +5268,7 @@ private fun TeamAccessDetail(
                                         Text(if (editingMemberId == member.id) "Hide Permissions" else t("Permissions"), fontWeight = FontWeight.ExtraBold)
                                     }
                                     TextButton(
-                                        onClick = { onRemoveTeamMember(member) },
+                                        onClick = { pendingRemoveMember = member },
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text(t("Remove"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
@@ -5258,6 +5299,25 @@ private fun TeamAccessDetail(
                 )
             }
         }
+    }
+
+    pendingRemoveMember?.let { member ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoveMember = null },
+            title = { Text(t("Remove team member?"), fontWeight = FontWeight.Bold) },
+            text = { Text(t("This member will lose access to this workspace immediately.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRemoveMember = null
+                    onRemoveTeamMember(member)
+                }) {
+                    Text(t("Remove"), color = DangerRed, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoveMember = null }) { Text(t("Cancel")) }
+            }
+        )
     }
 }
 
@@ -6739,7 +6799,8 @@ private fun EditableQuickReminderList(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         MenuChip(
                             value = item.priority,
-                            options = listOf("Low", "Normal", "High", t("Urgent")),
+                            // Raw values are stored; MenuChip translates for display.
+                            options = listOf("Low", "Normal", "High", "Urgent"),
                             modifier = Modifier.weight(1f)
                         ) { selected ->
                             onChange(normalizedValues.updated(index, item.copy(priority = selected)))

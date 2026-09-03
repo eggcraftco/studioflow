@@ -88,6 +88,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
+import uk.co.eggcraft.studioflow.util.parseStoredAmount
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
@@ -1453,7 +1454,7 @@ private fun ExtraSpendingSummarySection(
             for (item in dashboardOrderExpenseTitles(o, workspaceExpenseTitles)) {
                 val raw = o.customFields["financialExpense::${item.title}"]
                     ?: o.customFields["financialExpense::${item.id}"]
-                val amount = raw?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                val amount = parseStoredAmount(raw) ?: 0.0
                 if (amount > 0) add(item.title, "Custom expense", amount)
             }
             if (entries.isNotEmpty()) {
@@ -1699,7 +1700,7 @@ internal fun dashboardCustomExpenseTotal(order: StudioOrder, workspaceTitles: Li
     for (item in dashboardOrderExpenseTitles(order, workspaceTitles)) {
         val raw = order.customFields["financialExpense::${item.title}"]
             ?: order.customFields["financialExpense::${item.id}"]
-        total += raw?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+        total += parseStoredAmount(raw) ?: 0.0
     }
     return total
 }

@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -155,14 +156,21 @@ fun ClientFilesScreen(
     val totalCount = groups.sumOf { it.clientFiles.size }
     val totalBytes = groups.sumOf { order -> order.clientFiles.sumOf { it.fileSize } }
 
-    var statusMessage by remember { mutableStateOf("") }
-    var downloadingScope by remember { mutableStateOf<String?>(null) }
-    var previewFile by remember { mutableStateOf<StudioClientFile?>(null) }
-    var pendingDeleteOrder by remember { mutableStateOf<StudioOrder?>(null) }
+    // The panel's own state survives a rotation. The two that point at a record
+    // are held by id and resolved from the live list, so a restored dialog shows
+    // the current row rather than a stale copy — and closes itself if the row is gone.
+    var statusMessage by rememberSaveable { mutableStateOf("") }
+    var downloadingScope by rememberSaveable { mutableStateOf<String?>(null) }
+    var previewFileId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingDeleteOrderId by rememberSaveable { mutableStateOf<String?>(null) }
+    val previewFile: StudioClientFile? = previewFileId?.let { id ->
+        groups.firstNotNullOfOrNull { order -> order.clientFiles.firstOrNull { it.id == id } }
+    }
+    val pendingDeleteOrder: StudioOrder? = pendingDeleteOrderId?.let { id -> groups.firstOrNull { it.id == id } }
     var pendingZipBytes by remember { mutableStateOf<ByteArray?>(null) }
     // Upload flow: the user picks a target order, then a file. We stash the chosen
     // order while the system file picker is open so the result can be routed to it.
-    var showOrderPicker by remember { mutableStateOf(false) }
+    var showOrderPicker by rememberSaveable { mutableStateOf(false) }
     var uploadTargetOrder by remember { mutableStateOf<StudioOrder?>(null) }
     // Rename flow: the order + file currently being renamed (null = dialog closed).
     var renameTarget by remember { mutableStateOf<Pair<StudioOrder, StudioClientFile>?>(null) }
@@ -334,7 +342,7 @@ fun ClientFilesScreen(
                                     Text(if (downloadingScope == order.id) t("Preparing…") else "ZIP", fontSize = 12.sp)
                                 }
                                 if (canDeleteFiles) {
-                                    TextButton(onClick = { pendingDeleteOrder = order }) {
+                                    TextButton(onClick = { pendingDeleteOrderId = order.id }) {
                                         Text(t("Delete all"), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                                     }
                                 }
@@ -352,7 +360,7 @@ fun ClientFilesScreen(
                                     file = file,
                                     canDelete = canDeleteFiles,
                                     canRename = canManageClientFiles,
-                                    onPreview = { previewFile = file },
+                                    onPreview = { previewFileId = file.id },
                                     onRename = { renameTarget = order to file },
                                     onDelete = { onDeleteClientFile(order, file.id) }
                                 )
@@ -367,7 +375,7 @@ fun ClientFilesScreen(
     previewFile?.let { file ->
         ClientFilePreviewDialog(
             file = file,
-            onDismiss = { previewFile = null },
+            onDismiss = { previewFileId = null },
             onOpenExternal = {
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(file.downloadUrl)))
@@ -378,7 +386,7 @@ fun ClientFilesScreen(
 
     pendingDeleteOrder?.let { order ->
         AlertDialog(
-            onDismissRequest = { pendingDeleteOrder = null },
+            onDismissRequest = { pendingDeleteOrderId = null },
             title = { Text(t("Delete all")) },
             text = {
                 Text(
@@ -388,11 +396,11 @@ fun ClientFilesScreen(
             confirmButton = {
                 TextButton(onClick = {
                     order.clientFiles.forEach { onDeleteClientFile(order, it.id) }
-                    pendingDeleteOrder = null
+                    pendingDeleteOrderId = null
                 }) { Text(t("Delete all"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDeleteOrder = null }) { Text(t("Cancel")) }
+                TextButton(onClick = { pendingDeleteOrderId = null }) { Text(t("Cancel")) }
             }
         )
     }

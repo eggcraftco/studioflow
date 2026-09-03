@@ -24,6 +24,7 @@ struct MusterilerView: View {
     @State private var seciliSegment: String? = nil
     @State private var phoneShowsCustomerDetail: Bool = false
     @State private var showCustomerLimitAlert: Bool = false
+    @State private var silinecekMusteri: Musteri? = nil
     @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
     @AppStorage("ordersSidebarVisible") private var isOrdersSidebarVisible: Bool = true
     @State private var temporaryOrdersSidebarWidth: Double?
@@ -195,6 +196,17 @@ struct MusterilerView: View {
                   let guncelMusteri = guncelMusteriler.first(where: { $0.id == seciliId }),
                   guncelMusteri != seciliMusteri else { return }
             seciliMusteri = guncelMusteri
+        }
+        .alert(
+            t("Delete this customer?", lang: seciliDil),
+            isPresented: Binding(get: { silinecekMusteri != nil }, set: { if !$0 { silinecekMusteri = nil } }),
+            presenting: silinecekMusteri
+        ) { musteri in
+            Button(t("Delete", lang: seciliDil), role: .destructive) { silmeyiOnayla(musteri) }
+            Button(t("Cancel", lang: seciliDil), role: .cancel) { silinecekMusteri = nil }
+        } message: { musteri in
+            Text(t("{name} will be removed for good, and their name and contact details will be cleared from every order they have.", lang: seciliDil)
+                .replacingOccurrences(of: "{name}", with: musteri.name))
         }
         .alert(t("Plan limit reached", lang: seciliDil), isPresented: $showCustomerLimitAlert) {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
@@ -556,7 +568,13 @@ struct MusterilerView: View {
             }
         )
     }
-    private func silMusteri(_ musteri: Musteri) { withAnimation { if seciliMusteri?.id == musteri.id { seciliMusteri = nil }; if let id = musteri.id { firebaseManager.deleteMusteri(id: id) } } }
+    /// Asks first. Deleting a customer is permanent — there is no customer
+    /// trash — and it also strips the name and every contact detail from all of
+    /// that customer's orders, which is not what a stray context-menu tap should
+    /// be able to do.
+    private func silMusteri(_ musteri: Musteri) { silinecekMusteri = musteri }
+
+    private func silmeyiOnayla(_ musteri: Musteri) { withAnimation { if seciliMusteri?.id == musteri.id { seciliMusteri = nil }; if let id = musteri.id { firebaseManager.deleteMusteri(id: id) } } }
 
     private func ekleMusteri() {
         guard authVM.canCreateMoreCustomers(currentCount: firebaseManager.musteriler.count) else {

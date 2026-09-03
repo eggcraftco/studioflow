@@ -1,27 +1,19 @@
 package uk.co.eggcraft.studioflow
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowApp
 import uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
 import uk.co.eggcraft.studioflow.services.StudioMessagingService
-import uk.co.eggcraft.studioflow.ui.theme.StudioFlowTheme
 
-class MainActivity : ComponentActivity() {
-
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* granted or not — we don't need to react further; system remembers the choice */ }
+// A FragmentActivity, not a bare ComponentActivity: BiometricPrompt needs one,
+// and the app lock silently fell back to the legacy keyguard without it.
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +28,8 @@ class MainActivity : ComponentActivity() {
         }
         if (BuildConfig.DEBUG) connectLocalEmulatorsIfRequested()
         StudioMessagingService.ensureChannel(this)
-        requestNotificationPermissionIfNeeded()
+        // The notification permission is asked for once the person is signed in
+        // and looking at their workspace (StudioFlowApp), not on a cold start.
         handleStudioIntent(intent)
         setContent {
             // StudioFlowApp internally wraps its content with StudioFlowTheme,
@@ -108,17 +101,6 @@ class MainActivity : ComponentActivity() {
         // Notes widget tapped: land on the Notes section (no editor).
         if (intent?.getBooleanExtra("studio_open_notes", false) == true) {
             StudioMessageRouteHolder.setPendingOpenNotes()
-        }
-    }
-
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val granted = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }

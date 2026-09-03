@@ -9,7 +9,9 @@ import SwiftUI
 /// because conflating them is how a workshop loses track of its own work.
 struct ProductionView: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
-    @AppStorage("secilenDil") private var seciliDil: String = "English"
+    // "seciliDil" — the key the other forty views use. The typo here left the
+    // board in English whatever language the workspace was set to.
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("customStepsJSON") private var customStepsJSON: String = ""
     let canEdit: Bool
     /// Opens the order in the Orders tab — the board never becomes a second

@@ -19,6 +19,39 @@ object StudioMessageRouteHolder {
     private const val PUSH_PREFS = "push_token_registration"
     private const val KEY_LAST_TOKEN = "lastSavedToken"
     private const val KEY_LAST_COMPANY = "lastSavedCompanyId"
+    // The app language, kept here (and on disk for the messaging service, which
+    // may run without the app) so the device token says which language its
+    // pushes should arrive in — the same value studioT translates with.
+    private const val KEY_LANGUAGE = "appLanguage"
+    @Volatile private var currentLanguage: String = ""
+
+    fun currentLanguage(context: Context?): String {
+        val remembered = currentLanguage
+        if (remembered.isNotBlank()) return remembered
+        val stored = context?.applicationContext
+            ?.getSharedPreferences(PUSH_PREFS, Context.MODE_PRIVATE)
+            ?.getString(KEY_LANGUAGE, "")
+            .orEmpty()
+        return stored.ifBlank { uk.co.eggcraft.studioflow.language.deviceDefaultStudioLanguage() }
+    }
+
+    /// Records the language the app is showing. When it changes while a
+    /// workspace is active, the device token is re-saved so the server starts
+    /// sending pushes in the new language straight away.
+    fun setCurrentLanguage(context: Context, language: String) {
+        val clean = language.trim().ifBlank { uk.co.eggcraft.studioflow.language.deviceDefaultStudioLanguage() }
+        val changed = clean != currentLanguage
+        currentLanguage = clean
+        val appContext = context.applicationContext
+        appContext.getSharedPreferences(PUSH_PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_LANGUAGE, clean).apply()
+        val companyId = currentCompanyId
+        if (changed && companyId.isNotBlank()) {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (!token.isNullOrBlank()) saveDeviceToken(companyId, token, appContext)
+            }
+        }
+    }
 
     fun setCurrentCompanyId(context: Context, companyId: String) {
         val clean = companyId.trim()
@@ -158,7 +191,7 @@ object StudioMessageRouteHolder {
             "token" to cleanToken,
             "companyId" to cleanCompanyId,
             "platform" to "Android",
-            "language" to "English",
+            "language" to currentLanguage(context),
             "enabled" to true,
             "appName" to "NivaDesk",
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()

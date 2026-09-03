@@ -243,6 +243,8 @@ fun CustomersScreen(
                 }
             }
         } else if (selected != null) {
+            // Phone layout: back closes the customer, it does not leave the app.
+            androidx.activity.compose.BackHandler(enabled = true) { selectedCustomerId = null }
             CustomerDetail(
                 customer = selected,
                 orders = state.orders,

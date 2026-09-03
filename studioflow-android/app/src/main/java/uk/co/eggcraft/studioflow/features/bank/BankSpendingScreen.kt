@@ -1711,6 +1711,24 @@ private fun RuleRow(
     // created and deleted before, so getting one wrong meant deleting it and
     // typing it again.
     var editing by remember(rule.id) { mutableStateOf(false) }
+    // Deleting a rule silently changes how every future transaction is filed, so it is asked first.
+    var confirmDelete by remember(rule.id) { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(t("Delete rule?"), fontWeight = FontWeight.Bold) },
+            text = { Text(t("Future transactions will no longer be categorised by this rule.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) {
+                    Text(t("Delete"), color = RED, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(t("Cancel")) } }
+        )
+    }
     if (editing) {
         RuleEditor(rule, categoryOptions, t,
             onCancel = { editing = false },
@@ -1740,7 +1758,7 @@ private fun RuleRow(
             Chip(t(rule.category), categoryColor(rule.category))
             Chip(t("Active"), GREEN)
             if (isOwner) IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, contentDescription = t("Edit"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
-            if (isOwner) IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
+            if (isOwner) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = t("Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
         }
         if (expanded) {
             Surface(shape = RoundedCornerShape(9.dp), color = BLUE.copy(alpha = 0.07f), modifier = Modifier.fillMaxWidth()) {

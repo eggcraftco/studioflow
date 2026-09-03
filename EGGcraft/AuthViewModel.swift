@@ -906,8 +906,16 @@ class AuthViewModel: ObservableObject {
         Auth.auth().currentUser?.providerData.contains(where: { $0.providerID == "google.com" }) ?? false
     }
 
+    /// The plan the server will actually honour. A lapsed trial keeps its paid
+    /// `billingPlan` on the workspace document — the server drops it to Free on
+    /// every call — so without this the app kept showing paid features whose
+    /// every action the next callable refused.
+    var effectiveBillingPlan: StudioBillingPlan {
+        trialHasEnded ? .demo : currentBillingPlan
+    }
+
     var currentPlanEntitlements: StudioPlanEntitlements {
-        currentBillingPlan.entitlements
+        effectiveBillingPlan.entitlements
     }
 
     var currentPlanDisplayName: String {
@@ -1060,7 +1068,7 @@ class AuthViewModel: ObservableObject {
                 self?.isLoading = false
                 if let error = error {
                     self?.bypassNextLocalUnlockAfterInteractiveSignIn = false
-                    self?.errorMessage = error.localizedDescription
+                    self?.errorMessage = nvAuthErrorText(error)
                 } else {
                     onSuccess?()
                 }
@@ -1473,6 +1481,23 @@ class AuthViewModel: ObservableObject {
                 } else {
                     self.localUnlockMessage = error?.localizedDescription ?? "Could not unlock NivaDesk."
                 }
+            }
+        }
+    }
+
+    /// Sign-in screen path: someone who cannot remember their password has no
+    /// session, so the address has to come from the form. Until this existed the
+    /// only reset in the whole app was inside Settings, which is behind the
+    /// password.
+    func sendPasswordResetEmail(to address: String, completion: @escaping (String?) -> Void) {
+        let email = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, email.contains("@") else {
+            completion(nvAuthErrorText(nil, fallback: "Enter your email address first."))
+            return
+        }
+        Auth.auth().sendPasswordReset(withEmail: email) { error in
+            Task { @MainActor in
+                completion(error.map { nvAuthErrorText($0) })
             }
         }
     }

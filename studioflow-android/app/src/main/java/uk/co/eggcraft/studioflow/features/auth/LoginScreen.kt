@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,6 +37,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +50,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.co.eggcraft.studioflow.R
+import uk.co.eggcraft.studioflow.util.friendlyErrorMessage
 
 @Composable
 fun LoginScreen(
@@ -59,15 +63,24 @@ fun LoginScreen(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isLoginMode by remember { mutableStateOf(true) }
-    var fullName by remember { mutableStateOf("") }
-    var studioName by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var localError by remember { mutableStateOf("") }
-    var showEmailForm by remember { mutableStateOf(false) }
+    // Rotating the phone (or the process being reclaimed behind the keyboard)
+    // must not empty a half-typed sign-up form.
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var isLoginMode by rememberSaveable { mutableStateOf(true) }
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var studioName by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var localError by rememberSaveable { mutableStateOf("") }
+    var showEmailForm by rememberSaveable { mutableStateOf(false) }
     val passwordsMismatchText = t("Passwords do not match.")
+    // Item 8: the reset-password dialog, opened from under the password field.
+    var resetDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var resetEmail by rememberSaveable { mutableStateOf("") }
+    var resetMessage by rememberSaveable { mutableStateOf("") }
+    var resetError by rememberSaveable { mutableStateOf("") }
+    var resetSending by rememberSaveable { mutableStateOf(false) }
+    val resetScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -204,6 +217,25 @@ fun LoginScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                 )
+                if (isLoginMode) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        TextButton(
+                            onClick = {
+                                resetEmail = email.trim()
+                                resetMessage = ""
+                                resetError = ""
+                                resetDialogOpen = true
+                            }
+                        ) {
+                            Text(
+                                t("Forgot password?"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 if (errorMessage.isNotBlank() || localError.isNotBlank()) {
                     Text(
                         text = if (localError.isNotBlank()) localError else errorMessage,
@@ -263,6 +295,74 @@ fun LoginScreen(
                 }
             }
         }
+    }
+
+    if (resetDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { if (!resetSending) resetDialogOpen = false },
+            title = { Text(t("Reset password"), fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(t("Enter your email and we'll send you a link to reset your password."), fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = {
+                            resetEmail = it
+                            resetError = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(t("Email")) },
+                        singleLine = true,
+                        enabled = !resetSending,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                    )
+                    if (resetMessage.isNotBlank()) {
+                        Text(resetMessage, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (resetError.isNotBlank()) {
+                        Text(resetError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !resetSending,
+                    onClick = {
+                        val address = resetEmail.trim()
+                        if (address.isBlank()) {
+                            resetError = t("Email is required.")
+                            return@TextButton
+                        }
+                        resetSending = true
+                        resetMessage = ""
+                        resetError = ""
+                        resetScope.launch {
+                            runCatching {
+                                com.google.firebase.auth.FirebaseAuth.getInstance()
+                                    .sendPasswordResetEmail(address)
+                                    .await()
+                            }
+                                .onSuccess {
+                                    resetSending = false
+                                    resetMessage = t("We sent a password reset link to {email}.")
+                                        .replace("{email}", address)
+                                }
+                                .onFailure { error ->
+                                    resetSending = false
+                                    resetError = friendlyErrorMessage(error, "Could not send password reset email.", t)
+                                }
+                        }
+                    }
+                ) {
+                    Text(t("Send reset link"), fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !resetSending, onClick = { resetDialogOpen = false }) {
+                    Text(t("Cancel"))
+                }
+            }
+        )
     }
 }
 

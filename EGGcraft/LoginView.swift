@@ -196,6 +196,8 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isLoginMode = true
+    @State private var passwordResetNotice = ""
+    @State private var isSendingPasswordReset = false
     @State private var signupFullName = ""
     @State private var signupStudioName = ""
     @State private var lastAutofilledEmail = ""
@@ -385,6 +387,35 @@ struct LoginView: View {
                                 }
                         }
                         .padding(.vertical, 6)
+
+                        if isLoginMode {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    passwordResetNotice = ""
+                                    isSendingPasswordReset = true
+                                    authVM.sendPasswordResetEmail(to: email) { errorText in
+                                        isSendingPasswordReset = false
+                                        passwordResetNotice = errorText
+                                            ?? t("We sent a password reset link to that address. Check your inbox.", lang: seciliDil)
+                                    }
+                                } label: {
+                                    Text(t("Forgot password?", lang: seciliDil))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isSendingPasswordReset)
+                            }
+                        }
+
+                        if !passwordResetNotice.isEmpty {
+                            Text(passwordResetNotice)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         if !authVM.errorMessage.isEmpty {
                             Text(authVM.errorMessage)

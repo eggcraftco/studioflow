@@ -133,7 +133,7 @@ struct DashboardView: View {
     // Card names tell the truth: the KPI is "Revenue"; the workspace's tax-rule
     // name is context, demoted to a small subtitle (same default as Settings).
     @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard VAT (Services/New)"
-    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan = StudioBillingPlan.teamMonthly.rawValue
+    @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan = StudioBillingPlan.demo.rawValue
 
     private var canSeeAdvancedFinance: Bool {
         let plan = StudioBillingPlan(rawValue: storedBillingPlan) ?? .teamMonthly

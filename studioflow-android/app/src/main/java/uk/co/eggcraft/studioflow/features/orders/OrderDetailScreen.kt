@@ -200,6 +200,8 @@ import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.StudioWorkSession
 import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
+import uk.co.eggcraft.studioflow.util.cleanAmountInput
+import uk.co.eggcraft.studioflow.util.parseLocalizedAmount
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
@@ -12055,10 +12057,7 @@ private fun financialCustomValue(order: StudioOrder, prefix: String, title: Stri
 }
 
 private fun parseCurrencyLike(raw: String): Double {
-    val cleaned = raw
-        .replace(",", "")
-        .filter { it.isDigit() || it == '.' }
-    return cleaned.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+    return parseLocalizedAmount(raw, Locale.getDefault())?.coerceAtLeast(0.0) ?: 0.0
 }
 
 private fun financialCustomTotal(order: StudioOrder, prefix: String, items: List<StudioHeadingItem>): Double {
@@ -12089,34 +12088,37 @@ private fun decimalText(value: Double): String {
     return if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.UK, "%.2f", value)
 }
 
+// A money field keeps whichever decimal mark the person typed: a Turkish or
+// German keyboard sends "12,50" and that has to read back as 12.5, never 1250.
 private fun cleanDecimalInput(value: String): String {
-    val filtered = value.filter { it.isDigit() || it == '.' }
-    val firstDot = filtered.indexOf('.')
-    return if (firstDot < 0) {
+    val filtered = cleanAmountInput(value).filter { it.isDigit() || it == '.' || it == ',' }
+    val firstSeparator = filtered.indexOfFirst { it == '.' || it == ',' }
+    return if (firstSeparator < 0) {
         val digits = filtered.take(9)
         digits.trimStart('0').ifBlank { if (digits.isNotEmpty()) "0" else "" }
     } else {
-        val whole = filtered.take(firstDot).take(9)
+        val separator = filtered[firstSeparator]
+        val whole = filtered.take(firstSeparator).take(9)
         val cleanWhole = whole.trimStart('0').ifBlank { "0" }
-        val fraction = filtered.drop(firstDot + 1).filter { it != '.' }.take(2)
-        "$cleanWhole.$fraction"
+        val fraction = filtered.drop(firstSeparator + 1).filter { it != '.' && it != ',' }.take(2)
+        "$cleanWhole$separator$fraction"
     }
 }
 
 private fun parseDecimal(value: String, fallback: Double): Double {
-    val clean = value.trim().replace(",", "")
-    if (clean.isBlank() || clean == ".") return 0.0
-    return clean.toDoubleOrNull()?.coerceAtLeast(0.0) ?: fallback
+    val clean = value.trim()
+    if (clean.isBlank() || clean == "." || clean == ",") return 0.0
+    return parseLocalizedAmount(clean, Locale.getDefault())?.coerceAtLeast(0.0) ?: fallback
 }
 
 private fun isZeroLikeDecimalInput(value: String): Boolean {
-    return value.trim().replace(",", "").toDoubleOrNull() == 0.0
+    return parseLocalizedAmount(value, Locale.getDefault()) == 0.0
 }
 
 private fun formattedDecimalInput(value: String, decimalSeparator: String): String {
-    val clean = value.trim().replace(",", "")
-    if (clean.isBlank() || clean == ".") return ""
-    val parsed = clean.toDoubleOrNull() ?: return value
+    val clean = value.trim()
+    if (clean.isBlank() || clean == "." || clean == ",") return ""
+    val parsed = parseLocalizedAmount(clean, Locale.getDefault()) ?: return value
     val formatted = String.format(Locale.UK, "%,.2f", parsed)
     return if (decimalSeparator == ",") {
         formatted.replace(",", "_").replace(".", ",").replace("_", ".")

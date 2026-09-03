@@ -339,7 +339,7 @@ struct HomeGettingStartedBody: View {
                 .replacingOccurrences(of: "{total}", with: "\(all.count)"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.secondary)
-            HomeProgressBar(fraction: Double(done.count) / Double(all.count))
+            HomeProgressBar(fraction: all.isEmpty ? 0 : Double(done.count) / Double(all.count))
 
             if size == .oneByOne {
                 if let step = next {

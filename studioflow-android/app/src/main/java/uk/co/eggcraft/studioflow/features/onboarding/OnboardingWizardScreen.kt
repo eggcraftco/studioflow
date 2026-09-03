@@ -31,6 +31,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -257,6 +259,63 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
  * later" is a real answer on the step that offers the connections, so the
  * workspace still learns what the person chose.
  */
+// OnboardingAnswers is a data class of enums and lists, none of which a Bundle
+// accepts. Saved as flat strings (enum names, lists joined on a separator no
+// enum name can contain) so the wizard can be restored field for field.
+private const val OnboardingSaverSeparator = "\u001f"
+
+private inline fun <reified T : Enum<T>> onboardingEnum(name: String): T? =
+    if (name.isEmpty()) null else enumValues<T>().firstOrNull { it.name == name }
+
+private inline fun <reified T : Enum<T>> onboardingEnums(joined: String): List<T> =
+    if (joined.isEmpty()) emptyList()
+    else joined.split(OnboardingSaverSeparator).mapNotNull { onboardingEnum<T>(it) }
+
+private val OnboardingAnswersSaver = listSaver<OnboardingAnswers, String>(
+    save = { answers ->
+        listOf(
+            answers.country,
+            answers.currency,
+            answers.language,
+            answers.timeZone,
+            answers.workKinds.joinToString(OnboardingSaverSeparator) { it.name },
+            answers.workflow.name,
+            answers.teamSize.name,
+            answers.volume?.name.orEmpty(),
+            answers.businessAge?.name.orEmpty(),
+            answers.inventoryExperience?.name.orEmpty(),
+            answers.heardFrom,
+            answers.mainGoal?.name.orEmpty(),
+            answers.otherGoal,
+            answers.extraGoals.joinToString(OnboardingSaverSeparator) { it.name },
+            answers.start?.name.orEmpty(),
+            answers.plan?.name.orEmpty()
+        )
+    },
+    restore = { values ->
+        val fallback = OnboardingAnswers()
+        fun at(index: Int): String = values.getOrNull(index).orEmpty()
+        OnboardingAnswers(
+            country = at(0).ifEmpty { fallback.country },
+            currency = at(1).ifEmpty { fallback.currency },
+            language = at(2).ifEmpty { fallback.language },
+            timeZone = at(3).ifEmpty { fallback.timeZone },
+            workKinds = onboardingEnums<OnboardingWorkKind>(at(4)),
+            workflow = onboardingEnum<OnboardingWorkflow>(at(5)) ?: fallback.workflow,
+            teamSize = onboardingEnum<OnboardingTeamSize>(at(6)) ?: fallback.teamSize,
+            volume = onboardingEnum<OnboardingVolume>(at(7)),
+            businessAge = onboardingEnum<OnboardingBusinessAge>(at(8)),
+            inventoryExperience = onboardingEnum<OnboardingInventoryExperience>(at(9)),
+            heardFrom = at(10),
+            mainGoal = onboardingEnum<OnboardingGoal>(at(11)),
+            otherGoal = at(12),
+            extraGoals = onboardingEnums<OnboardingGoal>(at(13)),
+            start = onboardingEnum<OnboardingStart>(at(14)),
+            plan = onboardingEnum<OnboardingTrialPlan>(at(15))
+        )
+    }
+)
+
 @Composable
 fun OnboardingWizardScreen(
     saving: Boolean,
@@ -269,8 +328,10 @@ fun OnboardingWizardScreen(
     /** Applied the moment it changes, so the wizard itself switches over. */
     onLanguageChange: (String) -> Unit = {}
 ) {
-    var step by remember { mutableStateOf(1) }
-    var answers by remember { mutableStateOf(OnboardingAnswers()) }
+    // A rotation, or Android reclaiming the process behind a bank app, must not
+    // throw away four screens of answers: both survive as saved instance state.
+    var step by rememberSaveable { mutableStateOf(1) }
+    var answers by rememberSaveable(stateSaver = OnboardingAnswersSaver) { mutableStateOf(OnboardingAnswers()) }
     val scrollState = rememberScrollState()
     val total = wizardSteps.size
     val stepKey = wizardSteps[step - 1]

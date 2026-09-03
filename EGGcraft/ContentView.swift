@@ -9371,7 +9371,9 @@ struct ContentView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 1550, minHeight: 700)
+        // 1550 pt was wider than a 13-inch MacBook's whole screen (1470 pt), so
+        // the window could not be shown in full on the most common Mac there is.
+        .frame(minWidth: 1180, minHeight: 700)
         #else
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif

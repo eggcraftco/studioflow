@@ -48,6 +48,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
@@ -152,6 +154,11 @@ private fun TrackingTypeChips(selected: StudioTrackingType, t: (String) -> Strin
  * photos — because the server rebuilds the whole document from the input and
  * blanks whatever is not sent.
  */
+private val TrackingTypeSaver = Saver<StudioTrackingType, String>(
+    save = { it.name },
+    restore = { name -> StudioTrackingType.entries.firstOrNull { it.name == name } }
+)
+
 @Composable
 fun NewInventoryItemDialog(
     symbol: String,
@@ -173,33 +180,36 @@ fun NewInventoryItemDialog(
 ) {
     fun numberText(value: Double): String = if (value <= 0.0) "" else inventoryQuantity(value)
 
-    var trackingType by remember { mutableStateOf(existing?.trackingType ?: StudioTrackingType.Unique) }
-    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    var category by remember {
+    // A half-filled new item must survive a rotation, or the process being
+    // reclaimed while its owner takes a call: every typed field is saved
+    // instance state now, not composition state that dies with the activity.
+    var trackingType by rememberSaveable(stateSaver = TrackingTypeSaver) { mutableStateOf(existing?.trackingType ?: StudioTrackingType.Unique) }
+    var name by rememberSaveable { mutableStateOf(existing?.name.orEmpty()) }
+    var category by rememberSaveable {
         mutableStateOf(existing?.category ?: defaultCategory.ifEmpty { "Other" })
     }
-    var brand by remember { mutableStateOf(existing?.brand.orEmpty()) }
-    var model by remember { mutableStateOf(existing?.model.orEmpty()) }
-    var reference by remember { mutableStateOf(existing?.reference.orEmpty()) }
-    var serialNumber by remember { mutableStateOf(existing?.serialNumber.orEmpty()) }
-    var year by remember { mutableStateOf(existing?.year.orEmpty()) }
-    var condition by remember { mutableStateOf(existing?.condition.orEmpty()) }
-    var sku by remember { mutableStateOf(existing?.sku.orEmpty()) }
-    var onHand by remember { mutableStateOf(numberText(existing?.onHand ?: 0.0)) }
-    var unit by remember { mutableStateOf(existing?.unit.orEmpty()) }
-    var lowStockAt by remember { mutableStateOf(numberText(existing?.lowStockAt ?: 0.0)) }
-    var location by remember { mutableStateOf(existing?.location.orEmpty()) }
-    var supplierName by remember { mutableStateOf(existing?.supplierName.orEmpty()) }
-    var purchaseDate by remember { mutableStateOf(existing?.purchaseDate.orEmpty()) }
-    var purchasePrice by remember { mutableStateOf(numberText(existing?.purchasePrice ?: 0.0)) }
-    var currentValueEst by remember { mutableStateOf(numberText(existing?.currentValueEst ?: 0.0)) }
-    var extraLabel by remember { mutableStateOf("") }
-    var extraAmount by remember { mutableStateOf("") }
+    var brand by rememberSaveable { mutableStateOf(existing?.brand.orEmpty()) }
+    var model by rememberSaveable { mutableStateOf(existing?.model.orEmpty()) }
+    var reference by rememberSaveable { mutableStateOf(existing?.reference.orEmpty()) }
+    var serialNumber by rememberSaveable { mutableStateOf(existing?.serialNumber.orEmpty()) }
+    var year by rememberSaveable { mutableStateOf(existing?.year.orEmpty()) }
+    var condition by rememberSaveable { mutableStateOf(existing?.condition.orEmpty()) }
+    var sku by rememberSaveable { mutableStateOf(existing?.sku.orEmpty()) }
+    var onHand by rememberSaveable { mutableStateOf(numberText(existing?.onHand ?: 0.0)) }
+    var unit by rememberSaveable { mutableStateOf(existing?.unit.orEmpty()) }
+    var lowStockAt by rememberSaveable { mutableStateOf(numberText(existing?.lowStockAt ?: 0.0)) }
+    var location by rememberSaveable { mutableStateOf(existing?.location.orEmpty()) }
+    var supplierName by rememberSaveable { mutableStateOf(existing?.supplierName.orEmpty()) }
+    var purchaseDate by rememberSaveable { mutableStateOf(existing?.purchaseDate.orEmpty()) }
+    var purchasePrice by rememberSaveable { mutableStateOf(numberText(existing?.purchasePrice ?: 0.0)) }
+    var currentValueEst by rememberSaveable { mutableStateOf(numberText(existing?.currentValueEst ?: 0.0)) }
+    var extraLabel by rememberSaveable { mutableStateOf("") }
+    var extraAmount by rememberSaveable { mutableStateOf("") }
     val extras = remember { existing?.additionalCosts.orEmpty().toMutableList().toMutableStateList() }
-    var isCustomerOwned by remember { mutableStateOf(existing?.isCustomerOwned ?: false) }
-    var notes by remember { mutableStateOf(existing?.notes.orEmpty()) }
+    var isCustomerOwned by rememberSaveable { mutableStateOf(existing?.isCustomerOwned ?: false) }
+    var notes by rememberSaveable { mutableStateOf(existing?.notes.orEmpty()) }
     val tags = remember { existing?.tags.orEmpty().toMutableList().toMutableStateList() }
-    var tagInput by remember { mutableStateOf("") }
+    var tagInput by rememberSaveable { mutableStateOf("") }
 
     // Photos picked before the item exists. Storage paths are keyed by the item
     // id, which only exists once the server has assigned one, so the files wait

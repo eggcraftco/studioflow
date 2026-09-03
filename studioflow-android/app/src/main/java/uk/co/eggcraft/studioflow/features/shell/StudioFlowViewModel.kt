@@ -41,6 +41,9 @@ import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceOption
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
 import uk.co.eggcraft.studioflow.widgets.WidgetSummaryBridge
+import uk.co.eggcraft.studioflow.language.studioT
+import uk.co.eggcraft.studioflow.util.friendlyErrorMessage
+import kotlinx.coroutines.flow.retryWhen
 
 sealed class PendingActivityNavigation {
     object Messages : PendingActivityNavigation()
@@ -308,7 +311,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(signingIn = false, loading = false, errorMessage = error.message ?: "Could not create the account.")
+                        it.copy(signingIn = false, loading = false, errorMessage = friendlyErrorMessage(error, "Could not create the account.", ::t))
                     }
                 }
         }
@@ -328,7 +331,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             runCatching { repository.signIn(email, password) }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(signingIn = false, loading = false, errorMessage = error.message ?: "Could not sign in.")
+                        it.copy(signingIn = false, loading = false, errorMessage = friendlyErrorMessage(error, "Could not sign in.", ::t))
                     }
                 }
         }
@@ -358,7 +361,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             runCatching { repository.signInWithGoogleIdToken(idToken) }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(signingIn = false, loading = false, errorMessage = error.message ?: "Could not sign in with Google.")
+                        it.copy(signingIn = false, loading = false, errorMessage = friendlyErrorMessage(error, "Could not sign in with Google.", ::t))
                     }
                 }
         }
@@ -369,11 +372,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
             mutableState.update { it.copy(signingIn = true, errorMessage = "") }
             runCatching { repository.signInWithApple(activity) }
                 .onFailure { error ->
-                    val message = error.message ?: "Could not sign in with Apple."
-                    // The user simply closing the Apple web sheet is not an error to surface.
-                    val cancelled = message.contains("canceled", ignoreCase = true) ||
-                        message.contains("cancelled", ignoreCase = true) ||
-                        message.contains("WEB_CONTEXT_CANCELED", ignoreCase = true)
+                    val message = friendlyErrorMessage(error, "Could not sign in with Apple.", ::t)
+                    // The user simply closing the Apple web sheet is not an error to
+                    // surface. Read the raw SDK text for that, not the friendly one.
+                    val raw = error.message.orEmpty()
+                    val cancelled = raw.contains("canceled", ignoreCase = true) ||
+                        raw.contains("cancelled", ignoreCase = true) ||
+                        raw.contains("WEB_CONTEXT_CANCELED", ignoreCase = true)
                     mutableState.update {
                         it.copy(
                             signingIn = false,
@@ -385,10 +390,50 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    // Everything the view model puts in front of a person goes through the
+    // workspace's chosen language, same as the screens do.
+    private fun t(text: String): String =
+        studioT(text, mutableState.value.workspaceSettings.selectedLanguage)
+
+    // 1s, 2s, 4s … capped at 30s.
+    private fun listenerBackoffMs(attempt: Long): Long {
+        val shift = attempt.coerceIn(0L, 5L).toInt()
+        return (1_000L shl shift).coerceAtMost(30_000L)
+    }
+
     private fun clearDeviceLocalWorkspaceCache() {
         val app = getApplication<Application>()
-        for (name in listOf("studioflow_order_detail_layout", "studio_customer_pane")) {
+        // Everything this device kept for the account that is leaving. A shared
+        // phone must not hand the next person message drafts, dismissed banners
+        // or saved list filters. Deliberately kept: "push_token_registration",
+        // which holds the device token and the app language, neither of which
+        // belongs to an account.
+        val names = listOf(
+            "studioflow_order_detail_layout",
+            "studio_customer_pane",
+            "studio_message_drafts",
+            "studio_message_local",
+            "studio_message_deleted_threads",
+            "studioflow_header",
+            "trial_banner",
+            "demo_plan_banner",
+            "email_verify_banner",
+            "studioflow_android_local_security"
+        )
+        for (name in names) {
             app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        // The orders list keeps one file per user and workspace
+        // (studioflow_orders_<uid>_<companyId>), so they are found by prefix.
+        runCatching {
+            java.io.File(app.applicationInfo.dataDir, "shared_prefs")
+                .listFiles { _, fileName ->
+                    fileName.startsWith("studioflow_orders_") && fileName.endsWith(".xml")
+                }
+                ?.forEach { file ->
+                    app.getSharedPreferences(file.name.removeSuffix(".xml"), Context.MODE_PRIVATE)
+                        .edit().clear().apply()
+                }
         }
     }
 
@@ -432,7 +477,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.assignOrder(workspace, order, member) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not assign project.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not assign project.", ::t)) }
                 }
         }
     }
@@ -443,7 +488,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
             runCatching { repository.updateOrderFields(workspace, order, payload) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not update project.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not update project.", ::t)) }
                 }
         }
     }
@@ -455,7 +500,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             runCatching { repository.restoreOrder(workspace, order) }
                 .onSuccess { mutableState.update { it.copy(settingsMessage = "Order restored.") } }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not restore this order.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not restore this order.", ::t)) }
                 }
         }
     }
@@ -466,7 +511,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.updateCustomer(workspace.id, customer) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not save the customer.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not save the customer.", ::t)) }
                 }
         }
     }
@@ -478,7 +523,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.updateCustomer(workspace.id, customer, patch) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not save the customer.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not save the customer.", ::t)) }
                 }
         }
     }
@@ -493,7 +538,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(settingsMessage = "Resynced from store data.${if (applied > 0) " ($applied)" else ""}") }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "The customer could not be resynced.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "The customer could not be resynced.", ::t)) }
                 }
         }
     }
@@ -529,7 +574,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             }
                 .onSuccess { message -> mutableState.update { it.copy(settingsMessage = message) } }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not create the customer.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not create the customer.", ::t)) }
                 }
         }
     }
@@ -540,7 +585,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.uploadCustomerImage(workspace, user, customer, bytes, contentType) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not upload the customer photo.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not upload the customer photo.", ::t)) }
                 }
         }
     }
@@ -552,7 +597,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             runCatching { repository.deleteCustomer(workspace.id, customerId) }
                 .onSuccess { mutableState.update { it.copy(settingsMessage = "Customer deleted.") } }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not delete the customer.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not delete the customer.", ::t)) }
                 }
         }
     }
@@ -568,7 +613,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(settingsMessage = if (workflowRequest) "Deletion request sent to workspace owner." else "Order deleted.") }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not delete this order.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not delete this order.", ::t)) }
                 }
         }
     }
@@ -582,7 +627,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(settingsMessage = if (approve) "Deletion approved and order deleted." else "Deletion request rejected.") }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not review deletion request.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not review deletion request.", ::t)) }
                 }
         }
     }
@@ -597,7 +642,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not save this order layout.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not save this order layout.", ::t))
                     }
                 }
         }
@@ -613,7 +658,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not rejoin the shared layout.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not rejoin the shared layout.", ::t))
                     }
                 }
         }
@@ -642,7 +687,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not upload client file.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not upload client file.", ::t))
                     }
                 }
         }
@@ -684,7 +729,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not upload preview image.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not upload preview image.", ::t))
                     }
                 }
         }
@@ -703,7 +748,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not refresh live tracking.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not refresh live tracking.", ::t))
                     }
                 }
         }
@@ -720,7 +765,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not rename client file.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not rename client file.", ::t))
                     }
                 }
         }
@@ -737,7 +782,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not delete client file.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not delete client file.", ::t))
                     }
                 }
         }
@@ -761,7 +806,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(creatingOrder = false, errorMessage = error.message ?: "Could not create project.")
+                        it.copy(creatingOrder = false, errorMessage = friendlyErrorMessage(error, "Could not create project.", ::t))
                     }
                 }
         }
@@ -813,7 +858,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                         it.copy(
                             workspaceSettings = if (isPersonalInterfaceUpdate) previousSettings else it.workspaceSettings,
                             settingsSaving = false,
-                            errorMessage = error.message ?: "Could not save settings."
+                            errorMessage = friendlyErrorMessage(error, "Could not save settings.", ::t)
                         )
                     }
                 }
@@ -892,7 +937,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not start Google Play purchase.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not start Google Play purchase.", ::t)) }
                 }
         }
     }
@@ -909,7 +954,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not start Google Play purchase.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not start Google Play purchase.", ::t)) }
                 }
         }
     }
@@ -940,7 +985,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not change plan.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not change plan.", ::t))
                     }
                 }
         }
@@ -959,7 +1004,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not recalculate financial settings.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not recalculate financial settings.", ::t))
                     }
                 }
         }
@@ -977,7 +1022,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not save profile.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not save profile.", ::t))
                     }
                 }
         }
@@ -995,7 +1040,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not upload avatar.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not upload avatar.", ::t))
                     }
                 }
         }
@@ -1013,7 +1058,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not remove avatar.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not remove avatar.", ::t))
                     }
                 }
         }
@@ -1031,7 +1076,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not upload workspace logo.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not upload workspace logo.", ::t))
                     }
                 }
         }
@@ -1047,7 +1092,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not remove workspace logo.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not remove workspace logo.", ::t))
                     }
                 }
         }
@@ -1065,7 +1110,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not change email.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not change email.", ::t))
                     }
                 }
         }
@@ -1082,7 +1127,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not send password reset email.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not send password reset email.", ::t))
                     }
                 }
         }
@@ -1106,7 +1151,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 observeWorkspace(workspace, user)
             }.onFailure { error ->
                 mutableState.update {
-                    it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not switch workspace.")
+                    it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not switch workspace.", ::t))
                 }
             }
         }
@@ -1122,7 +1167,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not request access.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not request access.", ::t))
                     }
                 }
         }
@@ -1193,7 +1238,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not import backup.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not import backup.", ::t))
                     }
                 }
         }
@@ -1217,7 +1262,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not import backup.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not import backup.", ::t))
                     }
                 }
         }
@@ -1237,7 +1282,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not delete data.")
+                        it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, "Could not delete data.", ::t))
                     }
                 }
         }
@@ -1251,7 +1296,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(settingsSaving = false, settingsMessage = message) }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(settingsSaving = false, errorMessage = error.message ?: fallbackError) }
+                    mutableState.update { it.copy(settingsSaving = false, errorMessage = friendlyErrorMessage(error, fallbackError, ::t)) }
                 }
         }
     }
@@ -1289,7 +1334,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(loading = false, errorMessage = error.message ?: "Could not load workspace.")
+                        it.copy(loading = false, errorMessage = friendlyErrorMessage(error, "Could not load workspace.", ::t))
                     }
                     // Offline or flaky network at launch: retry quietly so the app
                     // recovers by itself instead of sitting on a blank screen.
@@ -1348,7 +1393,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         messageItemsJob = viewModelScope.launch {
             repository.messageItemsFlow(workspaceId, threadId, userUid)
                 .catch { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not load messages.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not load messages.", ::t)) }
                 }
                 .collect { items ->
                     mutableState.update { current ->
@@ -1482,7 +1527,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not forward message.")
+                        it.copy(isSendingMessage = false, messageError = friendlyErrorMessage(error, "Could not forward message.", ::t))
                     }
                 }
         }
@@ -1498,7 +1543,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     if (newId.isNotBlank()) mutableState.update { it.copy(selectedMessageThreadId = newId) }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not create conversation.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not create conversation.", ::t)) }
                 }
         }
     }
@@ -1514,7 +1559,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     if (newId.isNotBlank()) mutableState.update { it.copy(selectedMessageThreadId = newId) }
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not create group.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not create group.", ::t)) }
                 }
         }
     }
@@ -1524,7 +1569,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.addMembersToMessageThread(workspace, threadId, memberUids) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not add members.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not add members.", ::t)) }
                 }
         }
     }
@@ -1534,7 +1579,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.renameMessageThread(workspace, threadId, title) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not rename group.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not rename group.", ::t)) }
                 }
         }
     }
@@ -1544,7 +1589,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.leaveMessageThread(workspace, threadId) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not leave conversation.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not leave conversation.", ::t)) }
                 }
         }
     }
@@ -1554,7 +1599,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.removeMemberFromMessageThread(workspace, threadId, memberUid) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not remove member.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not remove member.", ::t)) }
                 }
         }
     }
@@ -1690,7 +1735,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
             runCatching { repository.inviteKeepNoteCollaborator(workspace.id, note, targetUserId, targetEmail) }
-                .onFailure { e -> mutableState.update { it.copy(errorMessage = e.message ?: "Could not invite collaborator.") } }
+                .onFailure { e -> mutableState.update { it.copy(errorMessage = friendlyErrorMessage(e, "Could not invite collaborator.", ::t)) } }
         }
     }
 
@@ -1746,7 +1791,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     )
                 }
             }.onFailure { e ->
-                mutableState.update { it.copy(errorMessage = e.message ?: "Could not upload image.") }
+                mutableState.update { it.copy(errorMessage = friendlyErrorMessage(e, "Could not upload image.", ::t)) }
             }
         }
     }
@@ -1805,7 +1850,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update {
                         it.copy(
                             isSavingMessageWorkspaceSettings = false,
-                            messageWorkspaceSettingsStatus = "Error: ${error.message ?: "Could not save."}"
+                            messageWorkspaceSettingsStatus = "Error: ${friendlyErrorMessage(error, "Could not save.", ::t)}"
                         )
                     }
                 }
@@ -1827,7 +1872,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.setMessageThreadMute(workspace, threadId, mode) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not change mute.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not change mute.", ::t)) }
                 }
         }
     }
@@ -1870,7 +1915,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not send message.")
+                        it.copy(isSendingMessage = false, messageError = friendlyErrorMessage(error, "Could not send message.", ::t))
                     }
                 }
         }
@@ -1910,7 +1955,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isSendingMessage = false, messageError = error.message ?: "Could not send attachment.")
+                        it.copy(isSendingMessage = false, messageError = friendlyErrorMessage(error, "Could not send attachment.", ::t))
                     }
                 }
         }
@@ -1924,7 +1969,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.toggleMessageReaction(workspace, user, threadId, messageId, emoji) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not react.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not react.", ::t)) }
                 }
         }
     }
@@ -1939,7 +1984,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 else repository.pinMessageInThread(workspace, threadId, messageId)
             }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not pin message.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not pin message.", ::t)) }
                 }
         }
     }
@@ -1951,7 +1996,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.editThreadMessage(workspace, threadId, messageId, newText) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not edit message.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not edit message.", ::t)) }
                 }
         }
     }
@@ -1963,7 +2008,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.deleteMessageForMe(workspace, threadId, messageId) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not delete message.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not delete message.", ::t)) }
                 }
         }
     }
@@ -1975,7 +2020,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             runCatching { repository.deleteMessageForEveryone(workspace, threadId, messageId) }
                 .onFailure { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not delete message.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not delete message.", ::t)) }
                 }
         }
     }
@@ -2010,7 +2055,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             messageThreadsJob = viewModelScope.launch {
                 repository.messageThreadsFlow(workspace, user.uid)
                 .catch { error ->
-                    mutableState.update { it.copy(messageError = error.message ?: "Could not load messages.") }
+                    mutableState.update { it.copy(messageError = friendlyErrorMessage(error, "Could not load messages.", ::t)) }
                 }
                 .collect { threads ->
                     val previousSelected = mutableState.value.selectedMessageThreadId
@@ -2091,7 +2136,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
         settingsJob = viewModelScope.launch {
             repository.workspaceSettingsFlow(workspace.id, user.uid, workspace.ownerUid, workspace.role)
                 .catch { error ->
-                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not load workspace settings.") }
+                    mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not load workspace settings.", ::t)) }
                 }
                 .collect { settings ->
                     mutableState.update { it.copy(workspaceSettings = settings) }
@@ -2101,9 +2146,18 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
         ordersJob = viewModelScope.launch {
             repository.ordersFlow(workspace, user)
+                // A transient permission or network blip must not empty the list
+                // until the app is killed: keep what is on screen, say so, and
+                // resubscribe with a widening delay.
+                .retryWhen { cause, attempt ->
+                    if (cause is kotlinx.coroutines.CancellationException) return@retryWhen false
+                    mutableState.update { it.copy(errorMessage = t("Orders could not be refreshed. Retrying…")) }
+                    delay(listenerBackoffMs(attempt))
+                    true
+                }
                 .catch { error ->
                     mutableState.update {
-                        it.copy(errorMessage = error.message ?: "Could not load projects.", orders = emptyList())
+                        it.copy(errorMessage = friendlyErrorMessage(error, "Could not load projects.", ::t))
                     }
                 }
                 .collect { orders ->
@@ -2117,6 +2171,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
         customersJob = viewModelScope.launch {
             repository.customersFlow(workspace)
+                // Same rule as the orders listener: the directory already loaded
+                // stays on screen while the subscription is rebuilt.
+                .retryWhen { cause, attempt ->
+                    if (cause is kotlinx.coroutines.CancellationException) return@retryWhen false
+                    delay(listenerBackoffMs(attempt))
+                    true
+                }
                 .catch { /* customer directory is best-effort; ignore listener errors */ }
                 .collect { customers ->
                     mutableState.update { it.copy(customers = customers) }
@@ -2168,7 +2229,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             teamJob = viewModelScope.launch {
                 repository.teamAccessFlow(workspace.id)
                     .catch { error ->
-                        mutableState.update { it.copy(errorMessage = error.message ?: "Could not load team members.") }
+                        mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not load team members.", ::t)) }
                     }
                     .collect { snapshot ->
                         mutableState.update { it.copy(teamMembers = snapshot.members, customRoles = snapshot.customRoles) }
@@ -2177,7 +2238,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             joinRequestsJob = viewModelScope.launch {
                 repository.joinRequestsFlow(workspace)
                     .catch { error ->
-                        mutableState.update { it.copy(errorMessage = error.message ?: "Could not load join requests.") }
+                        mutableState.update { it.copy(errorMessage = friendlyErrorMessage(error, "Could not load join requests.", ::t)) }
                     }
                     .collect { requests ->
                         mutableState.update { it.copy(joinRequests = requests) }
