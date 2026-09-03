@@ -144,6 +144,25 @@ export async function updateTeamMemberAccess(workspace: WorkspaceContext, member
   });
 }
 
+/**
+ * Take a colleague's access away, or give it back.
+ *
+ * Restoring can be refused: a workspace cannot hold more active people than the
+ * plan has seats, and the server answers with a sentence saying so rather than
+ * quietly doing nothing.
+ */
+export async function setTeamMemberSuspended(
+  workspace: WorkspaceContext,
+  member: TeamMemberDetail,
+  suspended: boolean
+) {
+  return callTeamFunction("updateWorkspaceMemberSuspension", {
+    companyId: workspace.id,
+    memberUid: member.id,
+    suspended
+  });
+}
+
 export async function removeTeamMember(workspace: WorkspaceContext, member: TeamMemberDetail) {
   return callTeamFunction("removeWorkspaceTeamMember", {
     companyId: workspace.id,

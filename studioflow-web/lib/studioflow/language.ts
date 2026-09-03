@@ -657,7 +657,152 @@ const WEB_TRANSLATIONS: TranslationTable = {
     Türkçe: "Kaydedildi. Aynı workspace'i Mac, iPad ve iPhone'da açabilirsiniz."
   },
   "There was a problem syncing your changes.": { Türkçe: "Değişiklikler senkronlanırken sorun oluştu." },
-  "Checking cloud connection for shared layout and settings.": { Türkçe: "Paylaşılan yerleşim ve ayarlar için bulut bağlantısı kontrol ediliyor." }
+  "Checking cloud connection for shared layout and settings.": { Türkçe: "Paylaşılan yerleşim ve ayarlar için bulut bağlantısı kontrol ediliyor." },
+
+  // Product decision §4: a smaller plan takes a seat, never a person.
+  "without access": {
+    "Türkçe": "erişimi yok",
+    "Deutsch": "ohne Zugriff",
+    "Français": "sans accès",
+    "Italiano": "senza accesso",
+    "Español (Spanish)": "sin acceso",
+    "Português": "sem acesso",
+    "Русский (Russian)": "без доступа",
+    "日本語 (Japanese)": "アクセス権なし",
+    "中文 (Chinese)": "无访问权限",
+    "العربية (Arabic)": "بلا وصول",
+    "हिन्दी (Hindi)": "बिना पहुँच"
+  },
+  "No access": {
+    "Türkçe": "Erişim yok",
+    "Deutsch": "Kein Zugriff",
+    "Français": "Aucun accès",
+    "Italiano": "Nessun accesso",
+    "Español (Spanish)": "Sin acceso",
+    "Português": "Sem acesso",
+    "Русский (Russian)": "Нет доступа",
+    "日本語 (Japanese)": "アクセス権なし",
+    "中文 (Chinese)": "无访问权限",
+    "العربية (Arabic)": "لا يوجد وصول",
+    "हिन्दी (Hindi)": "पहुँच नहीं"
+  },
+  "Restore Access": {
+    "Türkçe": "Erişimi Geri Ver",
+    "Deutsch": "Zugriff wiederherstellen",
+    "Français": "Rétablir l'accès",
+    "Italiano": "Ripristina accesso",
+    "Español (Spanish)": "Restaurar acceso",
+    "Português": "Restaurar acesso",
+    "Русский (Russian)": "Вернуть доступ",
+    "日本語 (Japanese)": "アクセスを戻す",
+    "中文 (Chinese)": "恢复访问权限",
+    "العربية (Arabic)": "استعادة الوصول",
+    "हिन्दी (Hindi)": "पहुँच बहाल करें"
+  },
+  "Remove Access": {
+    "Türkçe": "Erişimi Kaldır",
+    "Deutsch": "Zugriff entziehen",
+    "Français": "Retirer l'accès",
+    "Italiano": "Rimuovi accesso",
+    "Español (Spanish)": "Quitar acceso",
+    "Português": "Remover acesso",
+    "Русский (Russian)": "Убрать доступ",
+    "日本語 (Japanese)": "アクセスを外す",
+    "中文 (Chinese)": "移除访问权限",
+    "العربية (Arabic)": "إزالة الوصول",
+    "हिन्दी (Hindi)": "पहुँच हटाएँ"
+  },
+  "Access restored.": {
+    "Türkçe": "Erişim geri verildi.",
+    "Deutsch": "Zugriff wiederhergestellt.",
+    "Français": "Accès rétabli.",
+    "Italiano": "Accesso ripristinato.",
+    "Español (Spanish)": "Acceso restaurado.",
+    "Português": "Acesso restaurado.",
+    "Русский (Russian)": "Доступ возвращён.",
+    "日本語 (Japanese)": "アクセスを戻しました。",
+    "中文 (Chinese)": "已恢复访问权限。",
+    "العربية (Arabic)": "تمت استعادة الوصول.",
+    "हिन्दी (Hindi)": "पहुँच बहाल कर दी गई।"
+  },
+  "Access removed.": {
+    "Türkçe": "Erişim kaldırıldı.",
+    "Deutsch": "Zugriff entzogen.",
+    "Français": "Accès retiré.",
+    "Italiano": "Accesso rimosso.",
+    "Español (Spanish)": "Acceso retirado.",
+    "Português": "Acesso removido.",
+    "Русский (Russian)": "Доступ убран.",
+    "日本語 (Japanese)": "アクセスを外しました。",
+    "中文 (Chinese)": "已移除访问权限。",
+    "العربية (Arabic)": "تمت إزالة الوصول.",
+    "हिन्दी (Hindi)": "पहुँच हटा दी गई।"
+  },
+  "Take away access for": {
+    "Türkçe": "Şu kişinin erişimi kaldırılsın mı:",
+    "Deutsch": "Zugriff entziehen für",
+    "Français": "Retirer l'accès de",
+    "Italiano": "Rimuovere l'accesso a",
+    "Español (Spanish)": "¿Quitar el acceso a",
+    "Português": "Remover o acesso de",
+    "Русский (Russian)": "Убрать доступ у",
+    "日本語 (Japanese)": "次の人のアクセスを外しますか:",
+    "中文 (Chinese)": "移除以下成员的访问权限：",
+    "العربية (Arabic)": "إزالة وصول",
+    "हिन्दी (Hindi)": "इनकी पहुँच हटाएँ:"
+  },
+  "Nothing they did is deleted, and you can give it back.": {
+    "Türkçe": "Yaptığı hiçbir şey silinmez, istediğinde geri verebilirsin.",
+    "Deutsch": "Nichts von ihrer Arbeit wird gelöscht, und Sie können den Zugriff jederzeit zurückgeben.",
+    "Français": "Rien de leur travail n'est supprimé, et vous pouvez le rétablir quand vous voulez.",
+    "Italiano": "Nulla del loro lavoro viene eliminato e puoi ridare l'accesso quando vuoi.",
+    "Español (Spanish)": "No se borra nada de su trabajo y puedes devolverle el acceso cuando quieras.",
+    "Português": "Nada do trabalho deles é apagado e pode devolver o acesso quando quiser.",
+    "Русский (Russian)": "Ничего из сделанного не удаляется, доступ можно вернуть в любой момент.",
+    "日本語 (Japanese)": "その人の作業は何も消えません。あとで戻すこともできます。",
+    "中文 (Chinese)": "他们做过的一切都不会被删除，你随时可以恢复。",
+    "العربية (Arabic)": "لا يُحذف أي شيء مما قاموا به، ويمكنك إعادة الوصول في أي وقت.",
+    "हिन्दी (Hindi)": "उनका किया हुआ कुछ भी नहीं मिटता, और आप पहुँच वापस दे सकते हैं।"
+  },
+  "Their seat was taken when the plan changed. Everything they did is still here.": {
+    "Türkçe": "Plan değişince koltuğu alındı. Yaptığı her şey hâlâ burada.",
+    "Deutsch": "Beim Planwechsel wurde ihr Platz frei. Ihre gesamte Arbeit ist weiterhin da.",
+    "Français": "Sa place a été reprise lors du changement de forfait. Tout son travail est toujours là.",
+    "Italiano": "Il suo posto è stato tolto al cambio di piano. Tutto il suo lavoro è ancora qui.",
+    "Español (Spanish)": "Perdió su plaza al cambiar de plan. Todo su trabajo sigue aquí.",
+    "Português": "O lugar foi retirado quando o plano mudou. Todo o trabalho continua aqui.",
+    "Русский (Russian)": "Место освободилось при смене тарифа. Всё, что человек сделал, на месте.",
+    "日本語 (Japanese)": "プラン変更で席がなくなりました。その人の作業はすべて残っています。",
+    "中文 (Chinese)": "套餐变更时收回了席位。他们做过的一切都还在。",
+    "العربية (Arabic)": "أُخذ مقعده عند تغيير الخطة. كل ما قام به لا يزال موجودًا.",
+    "हिन्दी (Hindi)": "प्लान बदलने पर उनकी सीट चली गई। उनका किया हुआ सब कुछ अब भी यहीं है।"
+  },
+  "You removed their access. Everything they did is still here.": {
+    "Türkçe": "Erişimini sen kaldırdın. Yaptığı her şey hâlâ burada.",
+    "Deutsch": "Sie haben den Zugriff entzogen. Die gesamte Arbeit ist weiterhin da.",
+    "Français": "Vous avez retiré son accès. Tout son travail est toujours là.",
+    "Italiano": "Hai rimosso il suo accesso. Tutto il suo lavoro è ancora qui.",
+    "Español (Spanish)": "Le quitaste el acceso. Todo su trabajo sigue aquí.",
+    "Português": "Removeu o acesso desta pessoa. Todo o trabalho continua aqui.",
+    "Русский (Russian)": "Вы убрали доступ. Всё, что человек сделал, на месте.",
+    "日本語 (Japanese)": "あなたがアクセスを外しました。その人の作業はすべて残っています。",
+    "中文 (Chinese)": "你移除了他们的访问权限。他们做过的一切都还在。",
+    "العربية (Arabic)": "أنت أزلت وصوله. كل ما قام به لا يزال موجودًا.",
+    "हिन्दी (Hindi)": "आपने उनकी पहुँच हटाई। उनका किया हुआ सब कुछ अब भी यहीं है।"
+  },
+  "This workspace has no free seats. Remove someone else's access first, or add a seat.": {
+    "Türkçe": "Bu çalışma alanında boş koltuk yok. Önce başka birinin erişimini kaldır ya da koltuk ekle.",
+    "Deutsch": "In diesem Arbeitsbereich ist kein Platz frei. Entziehen Sie zuerst jemand anderem den Zugriff oder fügen Sie einen Platz hinzu.",
+    "Français": "Aucune place libre dans cet espace. Retirez d'abord l'accès de quelqu'un d'autre, ou ajoutez une place.",
+    "Italiano": "Non ci sono posti liberi in questo spazio. Rimuovi prima l'accesso a qualcun altro, oppure aggiungi un posto.",
+    "Español (Spanish)": "Este espacio no tiene plazas libres. Quita antes el acceso a otra persona o añade una plaza.",
+    "Português": "Este espaço não tem lugares livres. Remova primeiro o acesso de outra pessoa ou adicione um lugar.",
+    "Русский (Russian)": "В этом пространстве нет свободных мест. Сначала уберите доступ у кого-то другого или добавьте место.",
+    "日本語 (Japanese)": "このワークスペースに空き席がありません。先に誰かのアクセスを外すか、席を追加してください。",
+    "中文 (Chinese)": "这个工作区没有空余席位。请先移除其他成员的访问权限，或增加席位。",
+    "العربية (Arabic)": "لا توجد مقاعد شاغرة في مساحة العمل هذه. أزل وصول شخص آخر أولًا، أو أضف مقعدًا.",
+    "हिन्दी (Hindi)": "इस वर्कस्पेस में कोई खाली सीट नहीं है। पहले किसी और की पहुँच हटाएँ, या एक सीट जोड़ें।"
+  },
 };
 
 const TOP_MENU_TRANSLATIONS: TranslationTable = {

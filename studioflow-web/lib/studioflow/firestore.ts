@@ -2300,6 +2300,12 @@ export type TeamMemberDetail = {
   access: WorkspaceMemberAccess;
   addedAt: Date | null;
   isOwner: boolean;
+  /** True when a smaller plan took this person's seat. Their record is intact;
+   *  they simply have no access until the owner restores them. */
+  suspended: boolean;
+  /** "plan_downgrade" when the plan took the seat, "manual" when the owner did. */
+  suspendedReason: string;
+  suspendedAt: Date | null;
 };
 
 export type JoinRequestDetail = {
@@ -2320,6 +2326,16 @@ export type TeamAccessData = {
 
 function mapCompanyMembers(companyData: Record<string, unknown>, companyId: string): TeamMemberDetail[] {
   const ownerUid = stringValue(companyData.ownerUid, companyId);
+  // Suspension is kept beside the members map, not inside it, so that the rules
+  // can hold it server-only. See functions/team/seats.js.
+  const suspended = companyData.suspendedMembers && typeof companyData.suspendedMembers === "object"
+    && !Array.isArray(companyData.suspendedMembers)
+    ? companyData.suspendedMembers as Record<string, unknown>
+    : {};
+  const suspensionOf = (uid: string) => {
+    const raw = suspended[uid];
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+  };
   const customRoles = customRolesMap(companyData);
   const members = companyData.members && typeof companyData.members === "object"
     ? companyData.members as Record<string, unknown>
@@ -2339,7 +2355,10 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       roleLabel: customRoles[role]?.name ?? roleLabel(effectiveRole),
       access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"),
       addedAt: dateValue(memberData.addedAt) ?? dateValue(memberData.updatedAt),
-      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"
+      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner",
+      suspended: Object.prototype.hasOwnProperty.call(suspended, uid),
+      suspendedReason: stringValue(suspensionOf(uid)?.reason, ""),
+      suspendedAt: dateValue(suspensionOf(uid)?.at)
     };
   });
 
@@ -2354,13 +2373,20 @@ function mapCompanyMembers(companyData: Record<string, unknown>, companyId: stri
       roleLabel: "Owner",
       access: normalizeWorkspaceMemberAccess(null, true),
       addedAt: dateValue(companyData.createdAt),
-      isOwner: true
+      isOwner: true,
+      suspended: false,
+      suspendedReason: "",
+      suspendedAt: null
     });
   }
 
   return output.sort((lhs, rhs) => {
     if (lhs.isOwner && !rhs.isOwner) return -1;
     if (!lhs.isOwner && rhs.isOwner) return 1;
+    // Suspended colleagues sit below the working team. They are still listed —
+    // the decision is that they are never deleted — but the owner reads this
+    // screen to see who is on the job.
+    if (lhs.suspended !== rhs.suspended) return lhs.suspended ? 1 : -1;
     const roleRank: Record<string, number> = { owner: 0, admin: 1, member: 2, viewer: 3, workflow: 4 };
     const lhsRank = roleRank[normalizeWorkspaceRole(lhs.effectiveRole)] ?? 9;
     const rhsRank = roleRank[normalizeWorkspaceRole(rhs.effectiveRole)] ?? 9;

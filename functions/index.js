@@ -17058,9 +17058,14 @@ exports.updateWorkspaceMemberSuspension = onCall({ region: "europe-west2" }, asy
   const seatLimit = Number(limits.teamMemberLimit || 1);
 
   if (!suspended && !canRestoreMember(workspace, seatLimit)) {
+    // Deliberately a fixed sentence with the number in the details rather than
+    // in the text: the clients translate an error by matching its exact words,
+    // and a sentence with a number baked into it matches nothing in any of the
+    // eleven languages.
     throw new HttpsError(
       "failed-precondition",
-      `This workspace has ${seatLimit} ${seatLimit === 1 ? "seat" : "seats"} and they are all in use. Suspend somebody else first, or add a seat.`
+      "This workspace has no free seats. Remove someone else's access first, or add a seat.",
+      { seatLimit }
     );
   }
 

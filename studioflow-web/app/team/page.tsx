@@ -24,6 +24,7 @@ import {
   deleteWorkspaceCustomRole,
   declineJoinRequest,
   removeTeamMember,
+  setTeamMemberSuspended,
   requestWorkspaceAccess,
   saveWorkspaceCustomRole,
   syncAcceptedJoinRequests,
@@ -175,7 +176,12 @@ export default function TeamPage() {
   const canViewTeamManagement = Boolean(workspace && hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canManageTeam = Boolean(isOwner && canViewTeamManagement && workspace);
   const teamLimit = workspace?.billingTeamMemberLimit ?? workspace?.entitlements.teamMemberLimit ?? 1;
-  const currentMemberCount = members.length;
+  // Seats in use, which is not the same as people listed. A suspended
+  // colleague stays on this screen — their record is never deleted — but they
+  // hold no seat, and showing "3 / 2" would tell the owner they are over a
+  // limit they are not over.
+  const currentMemberCount = members.filter(member => !member.suspended).length;
+  const suspendedCount = members.length - currentMemberCount;
   const limitText = teamLimit > 9999 ? t("Unlimited") : `${currentMemberCount} / ${teamLimit}`;
   const roleOptions = useMemo(() => roleOptionsWithCustom(customRoles), [customRoles]);
 
@@ -463,7 +469,13 @@ export default function TeamPage() {
       ) : null}
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", marginBottom: 18 }}>
-        <StatCard label={t("Members")} value={`${currentMemberCount}`} note={`${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit}`} />
+        <StatCard
+          label={t("Members")}
+          value={`${currentMemberCount}`}
+          note={suspendedCount > 0
+            ? `${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit} · ${suspendedCount} ${t("without access")}`
+            : `${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit}`}
+        />
         <StatCard label={t("Pending join requests")} value={`${joinRequests.length}`} note={isOwner ? t("Owner only") : t("Only owners can review requests")} />
         <StatCard label={t("Roles")} value={`${Object.keys(roleCounts).length}`} note={Object.entries(roleCounts).map(([role, count]) => `${role}: ${count}`).join(" · ") || t("No members")} />
       </div>
@@ -509,16 +521,36 @@ export default function TeamPage() {
             {members.map(member => {
               const changingKey = `role-${member.id}`;
               const removeKey = `remove-${member.id}`;
+              const seatKey = `seat-${member.id}`;
               const canChangeRole = canManageTeam && !member.isOwner;
               return (
-                <article key={member.id} className="card" style={{ padding: 14, background: "rgba(255,255,255,0.58)", boxShadow: "none" }}>
+                <article
+                  key={member.id}
+                  className="card"
+                  style={{
+                    padding: 14,
+                    // Dimmed, not hidden: they are still part of the workspace's
+                    // history and their name is still on the orders they worked.
+                    background: member.suspended ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.58)",
+                    boxShadow: "none",
+                    opacity: member.suspended ? 0.72 : 1
+                  }}
+                >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <strong>{memberLabel(member)}</strong>
                       <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>{member.email || member.id}</p>
+                      {member.suspended ? (
+                        <p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 13 }}>
+                          {member.suspendedReason === "plan_downgrade"
+                            ? t("Their seat was taken when the plan changed. Everything they did is still here.")
+                            : t("You removed their access. Everything they did is still here.")}
+                        </p>
+                      ) : null}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "start", flexWrap: "wrap", justifyContent: "flex-end" }}>
                       {member.isOwner ? <span className="pill">{t("Owner")}</span> : null}
+                      {member.suspended ? <span className="pill">{t("No access")}</span> : null}
                       <span className="pill">{member.roleLabel}</span>
                     </div>
                   </div>
@@ -562,6 +594,29 @@ export default function TeamPage() {
                           {t("Remove")}
                         </button>
                         {actioning === removeKey ? <span className="pill">{t("Removing...")}</span> : null}
+                        <button
+                          className="button secondary"
+                          onClick={() => {
+                            if (member.suspended) {
+                              runTeamAction(
+                                seatKey,
+                                () => setTeamMemberSuspended(workspace!, member, false),
+                                t("Access restored.")
+                              );
+                              return;
+                            }
+                            if (!window.confirm(`${t("Take away access for")} ${memberLabel(member)}? ${t("Nothing they did is deleted, and you can give it back.")}`)) return;
+                            runTeamAction(
+                              seatKey,
+                              () => setTeamMemberSuspended(workspace!, member, true),
+                              t("Access removed.")
+                            );
+                          }}
+                          disabled={Boolean(actioning)}
+                        >
+                          {member.suspended ? t("Restore Access") : t("Remove Access")}
+                        </button>
+                        {actioning === seatKey ? <span className="pill">{t("Updating...")}</span> : null}
                       </>
                     ) : null}
                   </div>
