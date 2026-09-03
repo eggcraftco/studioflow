@@ -226,10 +226,19 @@ fun SettingsScreen(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(mapLegacySettingsKey(initialSectionKey)) }
+    // Design handoff: a search box on top, collapsible groups, 44dp rows.
+    var settingsSearch by rememberSaveable { mutableStateOf("") }
+    var collapsedGroups by rememberSaveable { mutableStateOf(setOf<String>()) }
     val currentPlan = state.workspace?.billingPlan ?: StudioBillingPlan.Demo
     val currentAccess = state.workspace?.memberAccess
     val currentRole = state.workspace?.role.orEmpty()
-    val sections = rememberSettingsSections(currentPlan, currentAccess, currentRole)
+    val allSections = rememberSettingsSections(currentPlan, currentAccess, currentRole)
+    val searchQuery = settingsSearch.trim().lowercase()
+    val sections = if (searchQuery.isEmpty()) allSections else allSections.filter { section ->
+        t(section.title).lowercase().contains(searchQuery) || t(section.group).lowercase().contains(searchQuery) || t(section.subtitle).lowercase().contains(searchQuery)
+    }
+    val searching = searchQuery.isNotEmpty()
+    val toggleGroup: (String) -> Unit = { group -> collapsedGroups = if (collapsedGroups.contains(group)) collapsedGroups - group else collapsedGroups + group }
     val settingsRepository = remember { StudioFlowRepository() }
     var supportUnreadCount by remember { mutableStateOf(0) }
 
@@ -259,29 +268,42 @@ fun SettingsScreen(
         val selected = sections.firstOrNull { it.key == selectedKey } ?: if (isWide) sections.firstOrNull() else null
 
         if (isWide) {
-            Row(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize().background(NDSettings.canvas())) {
                 Column(
                     modifier = Modifier
-                        .width(if (containerWidth >= 1200.dp) 390.dp else 340.dp)
+                        .width(NDSettings.sidebarWidth)
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
+                        .background(NDSettings.surface())
+                        .padding(start = 14.dp, end = 14.dp, top = 20.dp, bottom = 24.dp)
                 ) {
-                    SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 0.dp).padding(bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(t("Settings"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
+                        Text(t("Manage your account and workspace."), fontSize = 13.sp, color = NDSettings.muted())
+                    }
+                    NDSettingsSearchField(value = settingsSearch, placeholder = t("Search settings..."), onValueChange = { settingsSearch = it })
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                         itemsIndexed(sections, key = { _, it -> it.key }) { index, section ->
+                            val collapsed = !searching && collapsedGroups.contains(section.group)
                             if (index == 0 || sections[index - 1].group != section.group) {
-                                SettingsGroupLabel(title = t(section.group), topPadding = if (index == 0) 0.dp else 12.dp)
+                                Column(modifier = Modifier.padding(top = if (index == 0) 0.dp else 8.dp)) {
+                                    NDSettingsGroupHeader(title = t(section.group), collapsed = collapsed, onClick = { toggleGroup(section.group) })
+                                }
                             }
-                            SettingsRow(
-                                section = section,
-                                selected = section.key == selected?.key,
-                                unreadCount = if (section.key == "support") supportUnreadCount else 0,
-                                onClick = { selectedKey = section.key }
-                            )
+                            if (!collapsed) {
+                                NDSettingsSidebarRow(
+                                    title = t(section.title),
+                                    icon = section.icon,
+                                    selected = section.key == selected?.key,
+                                    badgeCount = if (section.key == "support") supportUnreadCount else 0,
+                                    onClick = { selectedKey = section.key }
+                                )
+                            }
                         }
                         item { Spacer(modifier = Modifier.height(16.dp)) }
                     }
                 }
+                Box(modifier = Modifier.width(1.dp).fillMaxSize().background(NDSettings.border()))
                 selected?.let { section ->
                     SettingsDetailScreen(
                         section = section,
@@ -373,19 +395,43 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(NDSettings.canvas())
         ) {
-            SectionHeader(title = t("Settings"), subtitle = "Choose a section to edit.")
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                itemsIndexed(sections, key = { _, it -> it.key }) { index, section ->
-                    if (index == 0 || sections[index - 1].group != section.group) {
-                        SettingsGroupLabel(title = t(section.group), topPadding = if (index == 0) 2.dp else 14.dp)
+            Column(modifier = Modifier.fillMaxWidth().background(NDSettings.surface()).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(t("Settings"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
+                    Text(t("Manage your account and workspace."), fontSize = 13.sp, color = NDSettings.muted())
+                }
+                NDSettingsSearchField(value = settingsSearch, placeholder = t("Search settings..."), onValueChange = { settingsSearch = it })
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NDSettings.border()))
+            val groups = sections.map { it.group }.distinct()
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp)) {
+                items(groups, key = { it }) { group ->
+                    val rows = sections.filter { it.group == group }
+                    val collapsed = !searching && collapsedGroups.contains(group)
+                    Column {
+                        NDSettingsGroupHeader(title = t(group), collapsed = collapsed, onClick = { toggleGroup(group) })
+                        if (!collapsed) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(NDSettings.surface(), RoundedCornerShape(NDSettings.cardRadius))
+                                    .border(1.dp, NDSettings.border(), RoundedCornerShape(NDSettings.cardRadius))
+                            ) {
+                                rows.forEachIndexed { index, section ->
+                                    NDSettingsListRow(
+                                        title = t(section.title),
+                                        subtitle = t(section.subtitle),
+                                        icon = section.icon,
+                                        badgeCount = if (section.key == "support") supportUnreadCount else 0,
+                                        showsDivider = index < rows.size - 1,
+                                        onClick = { selectedKey = section.key }
+                                    )
+                                }
+                            }
+                        }
                     }
-                    SettingsRow(
-                        section = section,
-                        unreadCount = if (section.key == "support") supportUnreadCount else 0,
-                        onClick = { selectedKey = section.key }
-                    )
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
@@ -403,17 +449,17 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("profileSecurity", "Profile & Security", "Your name, photo, sign-in email and password.", Icons.Filled.AccountCircle, "Personal"),
         SettingsSection("preferences", "Preferences", "Your personal theme and language.", Icons.Filled.Tune, "Personal"),
         SettingsSection("about", "About", "App version and product information.", Icons.Filled.Info, "Personal"),
-        SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace Design"),
-        SettingsSection("clientDomain", "Customer Portal Domain", "Branded customer links: your subdomain and your own domain.", Icons.Filled.Language, "Workspace Design"),
-        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace Design"),
+        SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace"),
+        SettingsSection("clientDomain", "Customer Portal Domain", "Branded customer links: your subdomain and your own domain.", Icons.Filled.Language, "Workspace"),
+        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace"),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workflow"),
         SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workflow"),
         SettingsSection("customerSms", "Customer SMS", "Text messages to customers: sender, triggers and usage.", Icons.Filled.Sms, "Workflow"),
         SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent, "Finance & Tax"),
         SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People, "Team & Permissions"),
         SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat, "Team & Permissions"),
-        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Files & Security"),
-        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Data & Backups"),
+        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Files & Data"),
+        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Files & Data"),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard, "Billing"),
         SettingsSection("integrations", "Integrations", "Connect the tools you use to run your business.", Icons.Filled.Hub, "Integrations"),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email, "Support"),
@@ -561,10 +607,15 @@ private fun SettingsDetailScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(NDSettings.canvas()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { DetailTopBar(section = section, onBack = onBack, showBack = showBack) }
+        if (showBack) item { DetailTopBar(section = section, onBack = onBack, showBack = showBack) }
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = if (showBack) 0.dp else 24.dp)) {
+                NDSettingsPageHeader(eyebrow = t(section.group), title = t(section.title), subtitle = t(section.subtitle), compact = showBack)
+            }
+        }
         item {
             when (section.key) {
                 "profileSecurity" -> AccountDetail(
@@ -684,25 +735,26 @@ private fun SettingsDetailScreen(
 private fun DetailTopBar(section: SettingsSection, onBack: () -> Unit, showBack: Boolean) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
+    Column(modifier = Modifier.fillMaxWidth().background(NDSettings.surface())) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showBack) {
                 TextButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp), tint = NDSettings.accent)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(t("Settings"), fontWeight = FontWeight.Bold)
+                    Text(t("Settings"), fontWeight = FontWeight.SemiBold, color = NDSettings.accent)
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Icon(section.icon, contentDescription = null, tint = NDSettings.muted(), modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(t(section.title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t(section.title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NDSettings.text())
         }
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NDSettings.border()))
     }
 }
 
@@ -6348,20 +6400,9 @@ private fun DetailColumn(content: @Composable ColumnScope.() -> Unit) {
 private fun DetailCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            }
-            content()
-        }
+    NDSettingsSurface(spacing = 14.dp) {
+        NDSettingsCardHead(icon = icon, title = title)
+        content()
     }
 }
 

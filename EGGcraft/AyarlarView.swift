@@ -32,6 +32,9 @@ struct AyarlarView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @State private var seciliAyarSekmesi: String
     @State private var phoneShowsSettingsDetail: Bool = false
+    /// Sidebar groups the person folded away (design handoff: collapsible groups, chevrons, 44pt rows).
+    @State private var collapsedSettingsGroups: Set<String> = []
+    @State private var settingsSearch: String = ""
     @State private var wooCommerceCopyFeedback: String = ""
     /// Which provider's screen the Integrations hub is showing, "" for the grid.
     @State private var integrationsManaging: String = ""
@@ -237,7 +240,7 @@ struct AyarlarView: View {
     @State private var importOnayGosteriliyor = false
     @State private var importOnayMesaji = ""
 
-    var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.94) }
+    var bgMain: Color { NDSettings.canvas(colorScheme) }
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
 
     private var canManageQuickReplyCore: Bool {
@@ -352,7 +355,7 @@ struct AyarlarView: View {
         ].joined(separator: "||")
     }
 
-    var bgSidebar: Color { colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.97) }
+    var bgSidebar: Color { NDSettings.surface(colorScheme) }
 
     private func workspaceAccessAllows(_ key: String) -> Bool {
         authVM.currentWorkspaceAccess[key] ?? true
@@ -423,17 +426,17 @@ struct AyarlarView: View {
             ("Profile & Security", t("Profile & Security", lang: seciliDil), "person.crop.circle", "Personal"),
             ("Preferences", t("Preferences", lang: seciliDil), "slider.horizontal.3", "Personal"),
             ("About", t("About", lang: seciliDil), "info.circle.fill", "Personal"),
-            ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace Design"),
-            ("Client Domain", t("Customer Portal Domain", lang: seciliDil), "globe", "Workspace Design"),
-            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace Design"),
+            ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace"),
+            ("Client Domain", t("Customer Portal Domain", lang: seciliDil), "globe", "Workspace"),
+            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace"),
             ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workflow"),
             ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workflow"),
             ("Customer SMS", t("Customer SMS", lang: seciliDil), "message.fill", "Workflow"),
             ("Financial", t("Financial Settings", lang: seciliDil), "percent", "Finance & Tax"),
             ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill", "Team & Permissions"),
             ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill", "Team & Permissions"),
-            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Files & Security"),
-            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Data & Backups"),
+            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Files & Data"),
+            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Files & Data"),
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill", "Billing"),
             ("Integrations", t("Integrations", lang: seciliDil), "puzzlepiece.extension.fill", "Integrations"),
             ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill", "Support"),
@@ -451,47 +454,100 @@ struct AyarlarView: View {
         settingsSections.first(where: { $0.key == seciliAyarSekmesi })?.icon ?? "gearshape"
     }
 
-    private var desktopSettingsView: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("Settings", lang: seciliDil))
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.primary)
-                    .padding(.bottom, 20)
-                    .padding(.leading, 10)
+    /// Sections that match the sidebar search (title, group or description).
+    private var visibleSettingsSections: [(key: String, title: String, icon: String, group: String)] {
+        let query = settingsSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return settingsSections }
+        return settingsSections.filter { section in
+            section.title.lowercased().contains(query)
+                || t(section.group, lang: seciliDil).lowercased().contains(query)
+                || settingsSectionDescription(section.key).lowercased().contains(query)
+        }
+    }
 
-                // The section list (now grouped Account / Workspace) can be taller
-                // than the window, so it scrolls on its own instead of overflowing
-                // and pushing the whole sidebar up.
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(settingsSections.enumerated()), id: \.element.key) { index, section in
-                            if index == 0 || settingsSections[index - 1].group != section.group {
-                                SettingsGroupLabel(title: t(section.group, lang: seciliDil), topPadding: index == 0 ? 0 : 14)
-                            }
-                            AyarMenuButonu(
-                                title: section.title,
-                                icon: section.icon,
-                                isSelected: seciliAyarSekmesi == section.key,
-                                badgeCount: supportSectionUnreadBadgeCount(section.key)
-                            ) {
-                                seciliAyarSekmesi = section.key
-                            }
-                        }
+    private var currentSettingsGroup: String {
+        settingsSections.first(where: { $0.key == seciliAyarSekmesi })?.group ?? "Personal"
+    }
+
+    /// The one page header every section shares: eyebrow (group), title, purpose.
+    private var settingsPageHeader: some View {
+        NDSettingsPageHeader(
+            eyebrow: t(currentSettingsGroup, lang: seciliDil),
+            title: currentSettingsTitle,
+            subtitle: settingsSectionDescription(seciliAyarSekmesi),
+            status: canEditWorkspace ? nil : .readonly,
+            statusText: t("Read-only", lang: seciliDil),
+            compact: isPhoneLayout
+        )
+    }
+
+    @ViewBuilder
+    private var settingsSidebarList: some View {
+        let sections = visibleSettingsSections
+        let searching = !settingsSearch.trimmingCharacters(in: .whitespaces).isEmpty
+        ForEach(Array(sections.enumerated()), id: \.element.key) { index, section in
+            if index == 0 || sections[index - 1].group != section.group {
+                NDSettingsGroupHeader(title: t(section.group, lang: seciliDil), collapsed: !searching && collapsedSettingsGroups.contains(section.group)) {
+                    withAnimation(.snappy) {
+                        if collapsedSettingsGroups.contains(section.group) { collapsedSettingsGroups.remove(section.group) } else { collapsedSettingsGroups.insert(section.group) }
                     }
                 }
+                .padding(.top, index == 0 ? 0 : 8)
             }
-            .padding(20)
-            .frame(width: 260)
-            .background(bgSidebar)
+            if searching || !collapsedSettingsGroups.contains(section.group) {
+                NDSettingsSidebarRow(
+                    title: section.title,
+                    icon: section.icon,
+                    isSelected: seciliAyarSekmesi == section.key,
+                    badgeCount: supportSectionUnreadBadgeCount(section.key)
+                ) {
+                    seciliAyarSekmesi = section.key
+                }
+            }
+        }
+    }
 
-            Divider().background(Color.primary.opacity(0.1))
+    private var desktopSettingsView: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Settings", lang: seciliDil))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(NDSettings.text(colorScheme))
+                    Text(t("Manage your account and workspace.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 14)
+
+                NDSettingsSearchField(text: $settingsSearch, placeholder: t("Search settings...", lang: seciliDil))
+                    .padding(.bottom, 12)
+
+                // Groups fold, the list scrolls on its own, and the main pane
+                // never changes width when a group is collapsed.
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        settingsSidebarList
+                    }
+                    .padding(.bottom, 12)
+                }
+            }
+            .padding(EdgeInsets(top: 20, leading: 14, bottom: 24, trailing: 14))
+            .frame(width: NDSettings.sidebarWidth)
+            .background(NDSettings.surface(colorScheme))
+
+            Rectangle().fill(NDSettings.border(colorScheme)).frame(width: 1)
 
             ScrollView {
-                settingsContent
-                    .padding(40)
-                    .frame(maxWidth: 800, alignment: .leading)
+                VStack(alignment: .leading, spacing: NDSettings.sectionGap) {
+                    settingsPageHeader
+                    settingsContent
+                }
+                .padding(EdgeInsets(top: 24, leading: 28, bottom: 32, trailing: 28))
+                .frame(maxWidth: NDSettings.contentMaxWidth + 56, alignment: .leading)
             }
+            .background(NDSettings.canvas(colorScheme))
         }
     }
 
@@ -535,9 +591,12 @@ struct AyarlarView: View {
                 Divider().background(Color.primary.opacity(0.1))
 
                 ScrollView {
-                    settingsContent
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 16) {
+                        settingsPageHeader
+                        settingsContent
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .background(bgMain)
             }
@@ -548,78 +607,58 @@ struct AyarlarView: View {
 
     private var phoneSettingsListView: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t("Settings", lang: seciliDil))
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.primary)
-
-                Text(t("Choose a section to edit.", lang: seciliDil))
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Settings", lang: seciliDil))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(NDSettings.text(colorScheme))
+                    Text(t("Manage your account and workspace.", lang: seciliDil))
+                        .font(.system(size: 13))
+                        .foregroundColor(NDSettings.muted(colorScheme))
+                }
+                NDSettingsSearchField(text: $settingsSearch, placeholder: t("Search settings...", lang: seciliDil))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(bgSidebar)
 
-            Divider().background(Color.primary.opacity(0.1))
+            Rectangle().fill(NDSettings.border(colorScheme)).frame(height: 1)
 
             ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(Array(settingsSections.enumerated()), id: \.element.key) { index, section in
-                        if index == 0 || settingsSections[index - 1].group != section.group {
-                            SettingsGroupLabel(title: t(section.group, lang: seciliDil), topPadding: index == 0 ? 2 : 12)
-                        }
-                        Button {
-                            seciliAyarSekmesi = section.key
+                let sections = visibleSettingsSections
+                let searching = !settingsSearch.trimmingCharacters(in: .whitespaces).isEmpty
+                let groups = sections.reduce(into: [String]()) { acc, section in if !acc.contains(section.group) { acc.append(section.group) } }
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(groups, id: \.self) { group in
+                        let rows = sections.filter { $0.group == group }
+                        let collapsed = !searching && collapsedSettingsGroups.contains(group)
+                        NDSettingsGroupHeader(title: t(group, lang: seciliDil), collapsed: collapsed) {
                             withAnimation(.snappy) {
-                                phoneShowsSettingsDetail = true
+                                if collapsedSettingsGroups.contains(group) { collapsedSettingsGroups.remove(group) } else { collapsedSettingsGroups.insert(group) }
                             }
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: section.icon)
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundColor(.blue)
-                                    .frame(width: 38, height: 38)
-                                    .background(Color.blue.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(section.title)
-                                        .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
-
-                                    Text(settingsSectionDescription(section.key))
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(2)
-                                }
-
-                                Spacer()
-
-                                if supportSectionUnreadBadgeCount(section.key) > 0 {
-                                    Text("\(supportSectionUnreadBadgeCount(section.key))")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 5)
-                                        .background(Color.red)
-                                        .clipShape(Capsule())
-                                        .shadow(color: Color.red.opacity(0.25), radius: 4, y: 2)
-                                        .accessibilityLabel(Text("\(supportSectionUnreadBadgeCount(section.key)) new support tickets"))
-                                }
-
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(.secondary.opacity(0.7))
-                            }
-                            .padding(14)
-                            .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 5, y: 2)
                         }
-                        .buttonStyle(.plain)
+                        if !collapsed {
+                            VStack(spacing: 0) {
+                                ForEach(Array(rows.enumerated()), id: \.element.key) { index, section in
+                                    NDSettingsListRow(
+                                        title: section.title,
+                                        subtitle: settingsSectionDescription(section.key),
+                                        icon: section.icon,
+                                        badgeCount: supportSectionUnreadBadgeCount(section.key),
+                                        showsDivider: index < rows.count - 1
+                                    ) {
+                                        seciliAyarSekmesi = section.key
+                                        withAnimation(.snappy) {
+                                            phoneShowsSettingsDetail = true
+                                        }
+                                    }
+                                }
+                            }
+                            .background(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).fill(NDSettings.surface(colorScheme)))
+                            .overlay(RoundedRectangle(cornerRadius: NDSettings.cardRadius, style: .continuous).stroke(NDSettings.border(colorScheme), lineWidth: 1))
+                            .padding(.bottom, 6)
+                        }
                     }
                 }
                 .padding(14)
@@ -7750,7 +7789,33 @@ extension Array where Element: Hashable {
     }
 }
 
-struct SettingsCard<Content: View>: View { @Environment(\.colorScheme) var colorScheme; let title: String; let iconName: String; var footerText: String? = nil; let content: Content; init(title: String, iconName: String, footerText: String? = nil, @ViewBuilder content: () -> Content) { self.title = title; self.iconName = iconName; self.footerText = footerText; self.content = content() }; var body: some View { VStack(alignment: .leading, spacing: 15) { HStack(spacing: 10) { Image(systemName: iconName).foregroundColor(.gray); Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(.primary) }.padding(.bottom, 5); content; if let footer = footerText { Text(footer).font(.system(size: 11)).foregroundColor(.gray.opacity(0.7)).padding(.top, 5) } }.padding(25).background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white).cornerRadius(12).shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2) } }
+struct SettingsCard<Content: View>: View {
+    @Environment(\.colorScheme) var colorScheme
+    let title: String
+    let iconName: String
+    var subtitle: String = ""
+    var footerText: String? = nil
+    let content: Content
+    init(title: String, iconName: String, subtitle: String = "", footerText: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.iconName = iconName
+        self.subtitle = subtitle
+        self.footerText = footerText
+        self.content = content()
+    }
+    var body: some View {
+        NDSettingsSurface(spacing: 16) {
+            NDSettingsCardHead(icon: iconName, title: title, subtitle: subtitle)
+            content
+            if let footer = footerText {
+                Text(footer)
+                    .font(.system(size: 12))
+                    .foregroundColor(NDSettings.muted(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
 struct SettingsLogoURLField: View {
     let label: String
     @Binding var text: String
