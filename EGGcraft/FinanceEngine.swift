@@ -17,7 +17,7 @@ import Foundation
 /// vector, then port it across. Specification: `docs/finance-engine.md`.
 enum NDFinanceEngine {
 
-    static let version = 1
+    static let version = 2
 
     static let remainingPrefix = "financialRemaining::"
     static let expensePrefix = "financialExpense::"

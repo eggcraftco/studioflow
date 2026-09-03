@@ -18,7 +18,7 @@ package uk.co.eggcraft.studioflow.finance
  */
 object FinanceEngine {
 
-    const val VERSION = 1
+    const val VERSION = 2
 
     const val REMAINING_PREFIX = "financialRemaining::"
     const val EXPENSE_PREFIX = "financialExpense::"

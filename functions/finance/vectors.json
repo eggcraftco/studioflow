@@ -1,5 +1,5 @@
 {
-  "engineVersion": 1,
+  "engineVersion": 2,
   "note": "Golden vectors for the Finance Engine. The server test runs these against functions/finance/engine.js; every platform's mirror must run the same file and produce the same numbers. Adding a case here is how a rule becomes real. Spec: docs/finance-engine.md.",
   "cases": [
     {

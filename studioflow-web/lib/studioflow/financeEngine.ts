@@ -13,7 +13,7 @@
 // Do not "improve" a formula here. Change functions/finance/engine.js, add a
 // vector, then port it across. Spec: docs/finance-engine.md.
 
-export const FINANCE_ENGINE_VERSION = 1;
+export const FINANCE_ENGINE_VERSION = 2;
 
 export const REMAINING_PREFIX = "financialRemaining::";
 export const EXPENSE_PREFIX = "financialExpense::";

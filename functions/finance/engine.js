@@ -17,7 +17,9 @@
 // arrives as an argument, so the golden vectors in test/finance/vectors.json
 // pin it exactly and each platform's mirror can be held to the same numbers.
 
-const ENGINE_VERSION = 1;
+// 2: the block gained `receivablesTotal`, so every order stamped under 1 is
+// re-stamped by the sweep rather than left with a field the clients now read.
+const ENGINE_VERSION = 2;
 
 const REMAINING_PREFIX = "financialRemaining::";
 const EXPENSE_PREFIX = "financialExpense::";
