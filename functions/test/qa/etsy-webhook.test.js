@@ -46,11 +46,17 @@ function makeWorld({ connections = [{ id: "c1_222", companyId: "c1", externalSho
       doc: (id) => handle(`${name}/${id}`),
       where: (field, _op, value) => {
         const filters = [[field, value]];
+        // The limit is honoured, because it is the thing under test: the
+        // webhook used to take limit(1) and reach only whichever connection id
+        // sorted first. A fake that ignored it passed either way.
+        let cap = Infinity;
         const q = {
           where: (f, _o, v) => { filters.push([f, v]); return q; },
-          limit: () => q,
+          limit: (n) => { cap = Number(n) || Infinity; return q; },
           get: async () => {
-            const rows = connections.filter((row) => filters.every(([f, v]) => String(row[f]) === String(v)));
+            const rows = connections
+              .filter((row) => filters.every(([f, v]) => String(row[f]) === String(v)))
+              .slice(0, cap);
             return {
               empty: rows.length === 0,
               docs: rows.map((row) => ({ id: row.id, data: () => row, ref: handle(`etsyConnections/${row.id}`) }))
@@ -291,6 +297,50 @@ test("a flood of bad signatures does not buy a diagnosis each time", async () =>
     assert.strictEqual(r.code, 401, "every probe is still rejected");
   }
   assert.ok(diagnoses <= 1, `at most one diagnosis for five probes, ran ${diagnoses}`);
+});
+
+test("a shop connected to two workspaces reaches both, not whichever sorts first", async () => {
+  // One shop really can be connected twice — a seller with two NivaDesk
+  // accounts, or a workshop mid-migration. The design already allows for it:
+  // order document ids carry the workspace precisely so the two cannot fight
+  // over one order, and Square's webhook already fans out. This one took
+  // limit(1), so a receipt went to whichever connection id happened to sort
+  // first and the other workspace waited up to fifteen minutes for the sweep.
+  const world = makeWorld({
+    connections: [
+      { id: "c1_222", companyId: "c1", externalShopId: "222", status: "connected" },
+      { id: "c2_222", companyId: "c2", externalShopId: "222", status: "connected" }
+    ]
+  });
+  const applied = [];
+  const fn = build({ world, onApply: async ({ companyId }) => { applied.push(companyId); return { status: "created", receiptId: "555" }; } });
+  const out = res();
+  await fn(req(PAID, { id: "fanout" }), out);
+  assert.strictEqual(out.payload.ok, true);
+  assert.deepStrictEqual(applied.slice().sort(), ["c1", "c2"], "both workspaces holding the shop must get the receipt");
+  assert.strictEqual(out.payload.applied, 2);
+});
+
+test("one workspace failing still asks Etsy to send it again", async () => {
+  // Losing the delivery for the healthy workspace would be worse than
+  // re-applying it: the order id is deterministic and applyReceipt refuses a
+  // snapshot older than the one it holds, so a retry is safe.
+  const world = makeWorld({
+    connections: [
+      { id: "c1_222", companyId: "c1", externalShopId: "222", status: "connected" },
+      { id: "c2_222", companyId: "c2", externalShopId: "222", status: "connected" }
+    ]
+  });
+  const fn = build({
+    world,
+    onApply: async ({ companyId }) => {
+      if (companyId === "c2") throw new Error("firestore blew up");
+      return { status: "created", receiptId: "555" };
+    }
+  });
+  const out = res();
+  await fn(req(PAID, { id: "partial" }), out);
+  assert.strictEqual(out.code, 500, "a partial failure must still be retried");
 });
 
 (async () => {

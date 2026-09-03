@@ -110,7 +110,10 @@ const ctx = { connectionId: "c1_shop.example.com", siteUrl: "https://shop.exampl
       if (u.pathname.endsWith("/webhooks") && init.method === "POST") return { ok: true, status: 201, headers: { get: () => null }, json: async () => ({ id: 77, ...JSON.parse(init.body) }) };
       return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) };
     };
-    const client = createWooClient({ siteUrl: "https://shop.example.com/", consumerKey: "ck_x", consumerSecret: "cs_y", fetchImpl });
+    // checkHost is injected here for the same reason fetchImpl is: this suite
+    // drives the client without a store, and shop.example.com does not resolve.
+    // The guard itself is exercised below, on its own.
+    const client = createWooClient({ siteUrl: "https://shop.example.com/", consumerKey: "ck_x", consumerSecret: "cs_y", fetchImpl, checkHost: async () => {} });
     const p1 = await client.listOrders({ modifiedAfterIso: "2026-09-02T00:00:00Z", page: 1 });
     assert.strictEqual(p1.orders.length, 1); assert.strictEqual(p1.totalPages, 2);
     const p2 = await client.listOrders({ modifiedAfterIso: "2026-09-02T00:00:00Z", page: 2 });
@@ -126,6 +129,60 @@ const ctx = { connectionId: "c1_shop.example.com", siteUrl: "https://shop.exampl
     const hook = await client.createWebhook({ name: "NivaDesk orders", topic: "order.updated", deliveryUrl: "https://x/hook", secret: "s" });
     assert.strictEqual(hook.id, 77); assert.strictEqual(hook.topic, "order.updated"); assert.strictEqual(hook.status, "active");
   });
-  console.log(failures === 0 ? "\n✅ COMMERCE WOO ADAPTER GEÇTİ" : `\n❌ ${failures} BAŞARISIZ`);
+  {
+  // WOO-003, the half that was missing: the URL is checked when the merchant
+  // types it and DNS is checked once, at connect. Neither runs again — so a
+  // store domain later repointed at 10.x, at 127.0.0.1 or at the cloud
+  // metadata service went on receiving authenticated requests from the
+  // fifteen-minute reconcile job, with our credentials, for as long as the
+  // connection lived.
+  const { assertPublicHost } = require("../../commerce/woo/client");
+  let checked = 0;
+  // The REAL guard, with only the resolver stubbed. An earlier version of this
+  // stubbed checkHost itself and so tested the test: narrowing the guard to the
+  // first address only sailed through it.
+  const guarded = (addresses) => createWooClient({
+    siteUrl: "https://shop.example.com/", consumerKey: "ck", consumerSecret: "cs",
+    fetchImpl: async () => { throw new Error("the request must never be made"); },
+    checkHost: (host) => {
+      checked += 1;
+      return assertPublicHost(host, async () => addresses.map((address) => ({ address, family: 4 })));
+    }
+  });
+
+  await assert.rejects(
+    guarded(["10.0.0.7"]).getOrder("1"),
+    (e) => e instanceof WooApiError && e.message === "woo_private_address",
+    "a store now pointing at a private address must be refused"
+  );
+  await assert.rejects(
+    guarded(["169.254.169.254"]).getOrder("1"),
+    (e) => e.message === "woo_private_address",
+    "and at the cloud metadata service"
+  );
+  await assert.rejects(
+    guarded(["93.184.216.34", "127.0.0.1"]).getOrder("1"),
+    (e) => e.message === "woo_private_address",
+    "one public answer does not make a mixed result safe"
+  );
+
+  // And the real resolver refuses a name that does not resolve at all, rather
+  // than letting the request through.
+  await assert.rejects(
+    assertPublicHost("no-such-host.invalid", async () => { throw new Error("ENOTFOUND"); }),
+    (e) => /woo_dns_failed/.test(e.message)
+  );
+  await assert.rejects(
+    assertPublicHost("empty.example", async () => []),
+    (e) => /woo_dns_failed/.test(e.message),
+    "a name that resolves to nothing is not a reason to proceed"
+  );
+  await assert.rejects(assertPublicHost(""), (e) => e.message === "woo_private_address");
+
+  assert.ok(checked >= 3, "the guard runs on every request, not once at connect");
+  console.log("PASS  a store repointed at a private address is refused on every request");
+}
+
+console.log(failures === 0 ? "\n✅ COMMERCE WOO ADAPTER GEÇTİ" : `\n❌ ${failures} BAŞARISIZ`);
   process.exit(failures === 0 ? 0 : 1);
 })();

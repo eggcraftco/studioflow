@@ -2,19 +2,54 @@
 // drive it without a store. Basic auth over HTTPS with the consumer pair;
 // pagination by X-WP-TotalPages; every non-2xx becomes an error that carries
 // the status, so the retry policy can classify it (§5.5).
+const dns = require("dns");
+const { isPrivateAddress } = require("./url");
+
 const DEFAULT_PER_PAGE = 50;
+
+/**
+ * Refuses a host that resolves somewhere private, on every request.
+ *
+ * The URL check runs when the merchant types it and the DNS check runs once, at
+ * connect. Neither runs again — so a store domain later repointed at 10.x, at
+ * 127.0.0.1 or at the cloud metadata service kept receiving authenticated
+ * requests from the fifteen-minute reconcile job, with our credentials, for as
+ * long as the connection lived. Checked here because here is where every
+ * outbound request goes.
+ *
+ * Resolution is per request rather than cached: caching would reintroduce
+ * exactly the staleness this exists to close.
+ */
+async function assertPublicHost(host, resolve = (name) => dns.promises.lookup(name, { all: true })) {
+  const name = String(host || "").trim().toLowerCase();
+  if (!name) throw new WooApiError("woo_private_address", 0);
+  let addresses;
+  try {
+    addresses = await resolve(name);
+  } catch (error) {
+    throw new WooApiError(`woo_dns_failed: ${String(error?.message || error).slice(0, 80)}`, 0);
+  }
+  if (!addresses.length) throw new WooApiError("woo_dns_failed: no address", 0);
+  // Every answer, not the first: a host that returns one public and one private
+  // address is not safe, and which one a connection picks is not ours to say.
+  if (addresses.some((row) => isPrivateAddress(row.address))) {
+    throw new WooApiError("woo_private_address", 0);
+  }
+}
 
 class WooApiError extends Error {
   constructor(message, status, retryAfter = null) { super(message); this.name = "WooApiError"; this.status = status; this.retryAfter = retryAfter; }
 }
 
-function createWooClient({ siteUrl, consumerKey, consumerSecret, fetchImpl = globalThis.fetch, timeoutMs = 25000 }) {
+function createWooClient({ siteUrl, consumerKey, consumerSecret, fetchImpl = globalThis.fetch, timeoutMs = 25000, checkHost = assertPublicHost }) {
   const base = `${String(siteUrl).replace(/\/+$/, "")}/wp-json/wc/v3`;
   const auth = "Basic " + Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
 
   async function request(method, path, { query = {}, body = null } = {}) {
     const url = new URL(base + path);
     for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+    // Before the request, every time. See assertPublicHost.
+    if (typeof checkHost === "function") await checkHost(url.hostname);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response;
@@ -58,4 +93,4 @@ function createWooClient({ siteUrl, consumerKey, consumerSecret, fetchImpl = glo
   };
 }
 
-module.exports = { createWooClient, WooApiError, DEFAULT_PER_PAGE };
+module.exports = { createWooClient, WooApiError, DEFAULT_PER_PAGE, assertPublicHost };

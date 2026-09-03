@@ -133,10 +133,20 @@ function createEtsyWebhookFunction(deps) {
     try {
       // Which workspace owns this shop? The webhook says nothing about that,
       // and we must never take a workspace id from an inbound request.
+      // EVERY workspace that has this shop connected, not the first one.
+      //
+      // One shop really can be connected twice: a seller with two NivaDesk
+      // accounts, or a workshop mid-migration between them. The design already
+      // allows for it — order document ids carry the workspace, precisely so
+      // two workspaces cannot fight over one order — and Square's webhook
+      // already fans out the same way. Only this one took `limit(1)`, so a
+      // receipt went to whichever connection id happened to sort first and the
+      // other workspace waited up to fifteen minutes for the sweep to notice.
+      // Arbitrary from both tenants' point of view, and invisible.
       const snap = await db().collection(etsy.CONNECTION_COLLECTION)
         .where("externalShopId", "==", shopId)
         .where("status", "==", "connected")
-        .limit(1)
+        .limit(10)
         .get();
       if (snap.empty) {
         await eventRef.set({ outcome: "no_connection" }, { merge: true });
@@ -144,41 +154,71 @@ function createEtsyWebhookFunction(deps) {
         return;
       }
 
-      const connectionSnap = snap.docs[0];
-      const connectionData = connectionSnap.data() || {};
-      const companyId = String(connectionData.companyId || "");
-      const connectionRef = connectionSnap.ref;
+      const outcomes = [];
+      let fetchedAny = false;
+      for (const connectionSnap of snap.docs) {
+        const connectionData = connectionSnap.data() || {};
+        const companyId = String(connectionData.companyId || "");
+        const connectionRef = connectionSnap.ref;
+        if (!companyId) continue;
 
-      // The resource_url is where Etsy says the fresh data lives. Only accept
-      // one that points at Etsy's own API — an attacker who ever got past the
-      // signature must not also get a request sent wherever they like.
-      let receipt = null;
-      if (resourceUrl.startsWith(etsy.ETSY_API_BASE) || resourceUrl.startsWith("https://openapi.etsy.com/")) {
-        receipt = await connect.callEtsy(connectionRef, resourceUrl);
+        try {
+          // The resource_url is where Etsy says the fresh data lives. Only
+          // accept one that points at Etsy's own API — an attacker who ever got
+          // past the signature must not also get a request sent wherever they
+          // like.
+          //
+          // Fetched per connection because each holds its own token; a shop
+          // whose second workspace has a stale token must not stop the first
+          // from being updated.
+          let receipt = null;
+          if (resourceUrl.startsWith(etsy.ETSY_API_BASE) || resourceUrl.startsWith("https://openapi.etsy.com/")) {
+            receipt = await connect.callEtsy(connectionRef, resourceUrl);
+          }
+          if (!receipt) {
+            outcomes.push({ companyId, status: "no_resource" });
+            continue;
+          }
+          fetchedAny = true;
+
+          const settings = await companySettingsDocRef(companyId).get().catch(() => null);
+          const result = await applyReceipt({
+            companyId,
+            connectionRef,
+            connectionData,
+            receipt,
+            defaultDeliveryTime: resolveDefaultDeliveryTime(settings?.data() || {})
+          });
+          outcomes.push({ companyId, status: result.status, receiptId: result.receiptId });
+          await connect.writeSyncEvent(connectionRef, {
+            type: "webhook",
+            event: eventType,
+            receiptId: result.receiptId,
+            outcome: result.status
+          });
+        } catch (error) {
+          // Recorded, not swallowed: a failure still has to reach the 500 below
+          // so Etsy sends the delivery again. Re-applying it to the workspaces
+          // that already took it is safe — the order id is deterministic and
+          // applyReceipt refuses a snapshot older than the one it holds — and
+          // losing it for one workspace is not.
+          console.warn("etsyWebhook connection failed:", connectionSnap.id, error?.message || error);
+          outcomes.push({ companyId, status: "failed", error });
+        }
       }
-      if (!receipt) {
+
+      if (!fetchedAny) {
         await eventRef.set({ outcome: "no_resource" }, { merge: true });
         res.status(200).json({ ok: true, fetched: false });
         return;
       }
 
-      const settings = await companySettingsDocRef(companyId).get().catch(() => null);
-      const result = await applyReceipt({
-        companyId,
-        connectionRef,
-        connectionData,
-        receipt,
-        defaultDeliveryTime: resolveDefaultDeliveryTime(settings?.data() || {})
-      });
+      const firstFailure = outcomes.find((row) => row.status === "failed");
+      if (firstFailure) throw firstFailure.error || new Error("etsy webhook apply failed");
 
-      await eventRef.set({ outcome: result.status, receiptId: result.receiptId }, { merge: true });
-      await connect.writeSyncEvent(connectionRef, {
-        type: "webhook",
-        event: eventType,
-        receiptId: result.receiptId,
-        outcome: result.status
-      });
-      res.status(200).json({ ok: true, outcome: result.status });
+      const primary = outcomes.find((row) => row.status && row.status !== "no_resource") || outcomes[0] || {};
+      await eventRef.set({ outcome: primary.status || "failed", receiptId: primary.receiptId || "", applied: outcomes.length }, { merge: true });
+      res.status(200).json({ ok: true, outcome: primary.status || "failed", applied: outcomes.length });
     } catch (error) {
       console.error("etsyWebhook processing failed:", error?.message || error);
       // Release the dedupe key so Etsy's retry can genuinely retry rather than
