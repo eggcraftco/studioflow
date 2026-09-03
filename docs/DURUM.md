@@ -1861,3 +1861,7 @@ Kullanıcı "onay, faz 1 ve 2'ye geç" dedi. **Faz 1:** `accountingFunctions.js`
 ## Xero canlıda: app + secret'lar + ITR OK (3 Eyl 2026, 01:30 BST / 22:27 UTC)
 
 Kullanıcı Xero developer hesabı açtı; app "NivaDesk" (14bf723b-…) benim tarafımdan kuruldu: iki redirect URI, webhook (Contacts/Invoices/Credit notes/Prepayments/Overpayments), AI kullanımı "No", güvenlik gereksinimleri kullanıcı tarafından onaylandı. Üç secret girildi. **Tuzak:** CLI'nin fonksiyon keşfi ne kabuk ortamını ne `functions/.env`'i okuyor → env bayrağıyla iki deploy Xero secret'larını bağlamadı (webhook her isteğe 401 verdi, ITR düştü). Çözüm `functions/.xero-secrets-ready` işaret dosyası; üçüncü deploy'da 8 fonksiyon secret'larla bağlandı, ITR **OK** (22:26:54 UTC). Kalan: web deploy ("canlıya at"), Demo Company'yi my.xero.com'dan açıp Settings → Integrations → Xero'dan bağlamak.
+
+## Round 154 CANLI (3 Eyl 2026, 02:11 BST)
+
+"canlıya at" → Round 154 (yayın deposu 9300e88): Xero kartı + provider-generic Accounting bölümü + `/xero/callback`; 01:11 UTC'de settings chunk'ında `xeroConnectStart` görüldü. Sırada: kullanıcı nivadesk.app → Settings → Integrations → Xero → Connect; Xero izin ekranında Demo Company seçimi (yeni login'de organizasyon yok, "Add your business" duvarında demo bağlantısı yok — izin ekranından bekleniyor).
