@@ -23,6 +23,23 @@ service cloud.firestore {
       return get(companyPath(companyId)).data.members[request.auth.uid].role;
     }
 
+    // A member whose seat a smaller plan took away. Their record stays whole —
+    // the name on old orders, the history they wrote, their assignments — but
+    // they are out of the workspace until the owner puts them back. Read-only
+    // was rejected deliberately: somebody who has left should not go on reading
+    // customer records, invoices and files.
+    //
+    // Kept in its own top-level map rather than as a flag inside `members`,
+    // because `members` is a field an owner on a Team plan may write from a
+    // client, and rules cannot protect one sub-key of it. suspendedMembers is
+    // in protectedBillingFields(): no client writes it, ever. Read with a
+    // default, because a workspace that has never suspended anybody has no such
+    // field and an undefined here would lock everybody out instead of one
+    // person in.
+    function memberSuspended(companyId) {
+      return request.auth.uid in get(companyPath(companyId)).data.get('suspendedMembers', {});
+    }
+
     function isCompanyOwner(companyId) {
       return isOwnWorkspace(companyId)
         || (
@@ -38,6 +55,7 @@ service cloud.firestore {
           signedIn()
           && companyExists(companyId)
           && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
+          && !memberSuspended(companyId)
         );
     }
 
@@ -47,6 +65,7 @@ service cloud.firestore {
           signedIn()
           && companyExists(companyId)
           && memberRole(companyId) in ['owner', 'admin', 'member']
+          && !memberSuspended(companyId)
         );
     }
 
@@ -54,7 +73,8 @@ service cloud.firestore {
       return signedIn()
         && !isCompanyOwner(companyId)
         && companyExists(companyId)
-        && memberRole(companyId) in ['workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only'];
+        && memberRole(companyId) in ['workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
+        && !memberSuspended(companyId);
     }
 
     // Custom role with "Assigned Projects Only" toggled ON and "Change Project Assignments"
@@ -153,6 +173,7 @@ service cloud.firestore {
           signedIn()
           && companyExists(companyId)
           && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
+          && !memberSuspended(companyId)
         );
     }
 
@@ -162,6 +183,7 @@ service cloud.firestore {
           signedIn()
           && companyExists(companyId)
           && memberRole(companyId) in ['owner', 'admin', 'member']
+          && !memberSuspended(companyId)
         );
     }
 
@@ -250,6 +272,12 @@ service cloud.firestore {
 
     function protectedBillingFields() {
       return [
+        // Who currently holds a seat. It decides how many people a workspace
+        // runs on, so it is as much a billing field as the plan is: an owner who
+        // could restore members from a client would run seven people on five
+        // seats. Written only by enforceWorkspaceSeatLimit and
+        // updateWorkspaceMemberSuspension.
+        'suspendedMembers',
         'billingPlan',
         'billingPlanName',
         'billingPlanSource',

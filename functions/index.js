@@ -2442,10 +2442,16 @@ function workspaceMemberRole(companyData = {}, uid = "", memberFallback = "membe
   return roleValue ? effectiveWorkspaceRole(companyData, roleValue, "unknown") : "unknown";
 }
 
+// Seats in use. A suspended member is not one: they hold no access, so the
+// seat a smaller plan took from them is free for somebody else — and if it were
+// still counted, a workspace that downgraded could never fill the seats it
+// still pays for.
 function teamMemberCountFromCompanyData(data = {}) {
   const ownerUid = String(data.ownerUid || data.id || "").trim();
   const members = companyMembersMap(data);
-  const memberIds = new Set(Object.keys(members).filter(Boolean));
+  const memberIds = new Set(
+    Object.keys(members).filter((memberUid) => memberUid && !isSuspendedUid(data, memberUid))
+  );
   if (ownerUid) memberIds.add(ownerUid);
   return Math.max(1, memberIds.size);
 }
@@ -2458,6 +2464,10 @@ function uidHasCompanyAccess(data = {}, uid = "") {
   if (normalizedUid === ownerUid) return true;
   if (workspaceId && normalizedUid === workspaceId) return true;
   const members = companyMembersMap(data);
+  // Suspended is not a lesser role, it is no access at all. The record stays —
+  // the name on old orders, the history, the assignments — but the person is
+  // out until the owner puts them back.
+  if (isSuspendedUid(data, normalizedUid)) return false;
   if (Boolean(members[normalizedUid])) return true;
   const memberRoles = companyMemberRolesMap(data);
   return Object.prototype.hasOwnProperty.call(memberRoles, normalizedUid);
@@ -5775,6 +5785,7 @@ const {
   commitProjectNumber,
   generatedProjectName: buildProjectName
 } = require("./orders/projectNumber");
+const { isSuspendedUid, seatsToSuspend, canRestoreMember, activeSeatCount } = require("./team/seats");
 const generatedProjectName = (customerName, projectNumber) =>
   buildProjectName(customerName, projectNumber, (value) => cleanOrderText(value, "", 180));
 const { createFinanceStamp } = require("./finance/stamp");
@@ -16934,6 +16945,168 @@ exports.updateWorkspaceMemberAccess = onCall({ region: "europe-west2" }, async (
     memberUid,
     access,
     message: "Team member access updated."
+  };
+});
+
+// A plan got smaller. Take the seats it no longer pays for.
+//
+// A trigger rather than a line in the Stripe handler because a plan can shrink
+// down four different rails — Stripe, Apple, Google, and the resolver that
+// decides a subscription has simply ended — and a workspace whose ex-colleagues
+// keep reading its finances because the change came down the fourth rail is the
+// same security hole either way. The limit is written to one field on one
+// document, so that field is what this watches.
+exports.enforceWorkspaceSeatLimit = onDocumentWritten(
+  { document: "companies/{companyId}", region: "europe-west2" },
+  async (event) => {
+    const after = event.data?.after?.data();
+    if (!after) return;
+
+    const before = event.data?.before?.data() || {};
+    const companyId = event.params.companyId;
+
+    const limitOf = (data) => {
+      const raw = Number(data.billingTeamMemberLimit);
+      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : null;
+    };
+    const nextLimit = limitOf(after);
+    if (nextLimit == null) return;
+
+    // Every write to a company document reaches this — a settings save, the
+    // project counter on every single create, the finance sweep — so the
+    // cheapest possible question is asked first and almost every invocation
+    // ends on this line. Only a real drop acts: a workspace sitting over its
+    // limit for some other reason must not have its team taken away by an
+    // unrelated save, and this function's own write must not start it again.
+    const previousLimit = limitOf(before);
+    if (previousLimit != null && previousLimit <= nextLimit) return;
+
+    const workspace = { ...after, ownerUid: String(after.ownerUid || companyId || "").trim() };
+    const toSuspend = seatsToSuspend(workspace, nextLimit);
+    if (!toSuspend.length) return;
+
+    const db = admin.firestore();
+    const patch = {
+      seatLimitEnforcedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    for (const memberUid of toSuspend) {
+      patch[`suspendedMembers.${memberUid}`] = {
+        reason: "plan_downgrade",
+        at: admin.firestore.Timestamp.now(),
+        seatLimit: nextLimit
+      };
+    }
+
+    try {
+      await db.collection("companies").doc(companyId).update(patch);
+    } catch (error) {
+      // The workspace was deleted between the event and this write, or another
+      // write beat us to it. Neither is worth a retry storm.
+      console.warn("seat limit enforcement write failed", companyId, error.message);
+      return;
+    }
+
+    // Their own device has to be told why, or it shows an empty workspace and
+    // a string of permission errors with nothing to explain them.
+    await Promise.all(toSuspend.map(async (memberUid) => {
+      try {
+        await db.collection("users").doc(memberUid).collection("workspaceAccess").doc(companyId).set({
+          suspended: true,
+          suspendedReason: "plan_downgrade",
+          suspendedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        console.warn("seat suspension access stamp failed", companyId, memberUid, error.message);
+      }
+    }));
+
+    console.log("seat limit enforced", { companyId, previousLimit, nextLimit, suspended: toSuspend.length });
+  }
+);
+
+// The owner's own choice, in both directions.
+//
+// The automatic rule keeps the longest-standing colleagues, which is a
+// defensible default and nothing more: the owner may well want the new hire who
+// is actually working this week over the one who left in March. Restoring is
+// the only direction that can push a workspace back over its limit, so it is
+// the direction that has to ask.
+exports.updateWorkspaceMemberSuspension = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
+  const memberUid = String(request.data?.memberUid || "").trim();
+  const suspended = request.data?.suspended === true;
+
+  if (!memberUid) {
+    throw new HttpsError("invalid-argument", "memberUid is required.");
+  }
+  if (memberUid === uid || memberUid === String(companyData.ownerUid || "") || memberUid === companyId) {
+    throw new HttpsError("failed-precondition", "The workspace owner always keeps a seat.");
+  }
+
+  const members = companyMembersMap(companyData);
+  if (!members[memberUid]) {
+    throw new HttpsError("not-found", "That person is not a member of this workspace.");
+  }
+  const workspace = { ...companyData, ownerUid: String(companyData.ownerUid || companyId) };
+  if (isSuspendedUid(workspace, memberUid) === suspended) {
+    return { ok: true, unchanged: true, memberUid, suspended };
+  }
+
+  const limits = planLimitsFromEntitlements(billingEntitlementsForCompany(companyData), companyData);
+  const seatLimit = Number(limits.teamMemberLimit || 1);
+
+  if (!suspended && !canRestoreMember(workspace, seatLimit)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `This workspace has ${seatLimit} ${seatLimit === 1 ? "seat" : "seats"} and they are all in use. Suspend somebody else first, or add a seat.`
+    );
+  }
+
+  const patch = {
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  if (suspended) {
+    patch[`suspendedMembers.${memberUid}`] = {
+      reason: "manual",
+      at: admin.firestore.Timestamp.now(),
+      by: uid
+    };
+  } else {
+    // Deleted rather than marked false: once somebody is back, the workspace
+    // should read as it did before any of this happened. A colleague carrying
+    // "suspended: false" for the rest of the workspace's life is a scar.
+    patch[`suspendedMembers.${memberUid}`] = admin.firestore.FieldValue.delete();
+  }
+
+  await companyRef.update(patch);
+
+  const accessRef = admin.firestore().collection("users").doc(memberUid).collection("workspaceAccess").doc(companyId);
+  await accessRef.set(suspended
+    ? {
+      suspended: true,
+      suspendedReason: "manual",
+      suspendedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+    : {
+      suspended: admin.firestore.FieldValue.delete(),
+      suspendedReason: admin.firestore.FieldValue.delete(),
+      suspendedAt: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+  const nextSuspended = { ...(workspace.suspendedMembers || {}) };
+  if (suspended) nextSuspended[memberUid] = { reason: "manual" };
+  else delete nextSuspended[memberUid];
+
+  return {
+    ok: true,
+    memberUid,
+    suspended,
+    seatLimit,
+    seatsInUse: activeSeatCount({ ...workspace, suspendedMembers: nextSuspended })
   };
 });
 
