@@ -1,88 +1,54 @@
 # Dış göz denetimi — sabah deploy listesi (3 Eyl 2026)
 
-`firestore.rules` ve `storage.rules` GECE DEPLOY EDİLDİ ve canlı.
-Cloud Functions değişiklikleri kodda, test edildi (QA 37/37, kural testleri 78 PASS) ama **deploy edilmedi**.
+`firestore.rules` ve `storage.rules` GECE DEPLOY EDİLDİ ve canlı. Cloud Functions düzeltmeleri
+kodda ve test edildi (QA 37/37, kural testleri 78 PASS) ama **deploy edilmedi**.
 
-## Neden isimle ve neden hepsi
-
-Bu dalda kör `firebase deploy --only functions` GÜVENSİZ: canlıda bu daldan daha yeni 7 fonksiyon
+Bu dalda kör `firebase deploy --only functions` GÜVENSİZ: canlıda bu daldan daha yeni fonksiyonlar
 var ve prune `wooCommerceSiparis`'i siler (hafıza notu: functions-deploy-branch-divergence).
-İsimle deploy prune yapmaz.
+İsimle deploy prune yapmaz. Deploy edilmeyen fonksiyon eski kodla çalışmaya devam eder.
 
-Düzeltmelerin çoğu paylaşılan yardımcılarda (`sendPushNotificationToCompany`, `ChunkedBatch`,
-`businessNameFor`, `mergePayload` karşılığı sunucu tarafı, `workspaceSettingsWithName`), bu yüzden
-"sadece değişen fonksiyonlar" listesi eksik kalır. Doğrusu: **her fonksiyonu adıyla** deploy etmek.
-Kaynak ağacı temiz, hepsi aynı güncel kaynaktan derlenecek.
+## 1) Gitmesi gerekenler (48 fonksiyon)
 
-Toplam 331 fonksiyon. Firebase 40'lık gruplar halinde gönderir; komutu üç parçaya bölmek en sağlıklısı:
+Gövdesi ya da kullandığı yardımcı gerçekten değişenler.
 
 ```bash
 npx firebase deploy --project eggcraft-studio --only \
-  functions:_billingPlanFromCompanyData,functions:_e2e,functions:_nvMailTransport,functions:_nvMessagingProvider,functions:_wooWebhookAuthDecision,functions:acceptPersonalNoteCollaborationInvite,functions:accountingAttentionResolve,functions:accountingMappingSuggestions,functions:accountingOverview,functions:accountingPlanMigration,functions:accountingSaveMappings,functions:accountingSetMode,functions:accountingSyncActivity,functions:addMembersToMessageThread,functions:addSupportTicketReply,functions:addWorkspaceTeamMember,functions:addWorkspaceTicketReply,functions:anonymizeWebCustomer,functions:appendClientFile,functions:appleAppStoreServerNotification,functions:applyRecipeToOrder,functions:approveWorkflowOrderDeletion,functions:approveWorkspaceJoinRequest,functions:askAppAssistant,functions:assignInvoiceNumber,functions:assignSupportTicket,functions:assignWorkspaceTicket,functions:auditSquareOrders,functions:auditWooOrders,functions:backupAuthUsers
+  functions:addWorkspaceTeamMember,functions:anonymizeWebCustomer,functions:approveWorkspaceJoinRequest,functions:changeAccountEmail,functions:cleanupStaleUnverifiedAccounts,functions:createStripeCheckoutSession,functions:createSwiftOrder,functions:createWebOrder,functions:deleteMyAccount,functions:deleteWebCustomer,functions:deleteWorkspaceData,functions:exportOrders,functions:getAdminFeatureUsageDetail,functions:getAdminInsights,functions:getAdminLookup,functions:getAdminOnboardingDetail,functions:getAdminPlansDetail,functions:getAdminRevenueDetail,functions:getAdminStorageDetail,functions:getAdminSubscriptionsDetail,functions:getAdminUsersWorkspacesDetail,functions:getCustomOrderLandingStats,functions:getEstimateForVisitor,functions:getPortalForVisitor
 ```
 
 ```bash
 npx firebase deploy --project eggcraft-studio --only \
-  functions:beginEtsyConnect,functions:beginSquareConnect,functions:beginWooConnect,functions:blockDisposableSignups,functions:cancelStocktake,functions:changeAccountEmail,functions:chatgptMcp,functions:chatgptOAuthApprove,functions:chatgptOAuthAuthorizationServer,functions:chatgptOAuthAuthorize,functions:chatgptOAuthProtectedResource,functions:chatgptOAuthRegister,functions:chatgptOAuthToken,functions:chatgptOAuthWorkspaces,functions:chatgptWorkspaceAction,functions:cleanupExpiredOrderFiles,functions:cleanupStaleUnverifiedAccounts,functions:clearAllOrdersTax,functions:clearMessageTypingStatus,functions:commerceEventWorker,functions:commitStocktake,functions:consumeInventoryForOrder,functions:createMessageThread,functions:createOrderEstimate,functions:createOrderPortalLink,functions:createPersonalNoteCollaborationInvite,functions:createStripeCheckoutSession,functions:createStripeCustomerPortalSession,functions:createSupportTicket,functions:createSwiftOrder
+  functions:getSearchConsoleStats,functions:getSiteStats,functions:importOpeningStock,functions:importWorkspaceBackup,functions:initializeFreeDemoWorkspace,functions:mergeOrders,functions:mergeWebCustomers,functions:notifyCustomerOnStatusChange,functions:postEstimateDecision,functions:purgeExpiredEstimateLinks,functions:recalculateWorkspacePlanUsage,functions:removeWorkspaceTeamMember,functions:resetCustomOrderLandingStats,functions:resyncStripeWorkspaceEntitlements,functions:revokeOrderEstimateLink,functions:saveInventoryItem,functions:saveSwiftOrder,functions:saveThemeBrandingSettings,functions:scheduledBillingEntitlementReconcile,functions:scheduledReminderCheck,functions:sendOrderEstimate,functions:stripeWebhook,functions:syncWorkflowSafeOrderView,functions:updateWebOrder
 ```
+
+## 2) Sonra, acelesi yok
+
+Bunların tek değişikliği `sendPushNotificationToCompany`'nin ölü cihaz token'larını artık silmesi.
+Deploy edilmezlerse yalnızca eski davranış sürer, bir şey bozulmaz.
 
 ```bash
 npx firebase deploy --project eggcraft-studio --only \
-  functions:createWebCustomer,functions:createWebOrder,functions:createWebsiteChat,functions:createWorkspaceTicket,functions:declinePersonalNoteCollaborationInvite,functions:declineWorkspaceJoinRequest,functions:deleteClientFile,functions:deleteInventoryCategory,functions:deleteInventoryItem,functions:deleteInventoryLocation,functions:deleteInventoryRecipe,functions:deleteMessageForEveryone,functions:deleteMessageForMe,functions:deleteMyAccount,functions:deletePurchase,functions:deleteQuickReplyContribution,functions:deleteWebCustomer,functions:deleteWebOrder,functions:deleteWorkspaceCustomRole,functions:deleteWorkspaceData,functions:disconnectEtsyShop,functions:disconnectSquare,functions:disconnectWooShop,functions:dismissActivityNotifications,functions:downloadClientFilesZip,functions:editThreadMessage,functions:ensureWorkflowAssignedOrderViews,functions:etsyOAuthCallback,functions:etsyWebhook,functions:exportOrders
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:finishWooConnect,functions:generateQuickReply,functions:getAdminFeatureUsageDetail,functions:getAdminInsights,functions:getAdminLookup,functions:getAdminOnboardingDetail,functions:getAdminPlansDetail,functions:getAdminRevenueDetail,functions:getAdminStorageDetail,functions:getAdminSubscriptionsDetail,functions:getAdminUsersWorkspacesDetail,functions:getAppAssistantAvailability,functions:getCommerceCapabilities,functions:getCommerceHealth,functions:getCustomOrderLandingStats,functions:getEstimateForVisitor,functions:getEtsyConnections,functions:getInboundWebhookToken,functions:getInventoryReport,functions:getInventorySummary,functions:getMessageWorkspaceSettings,functions:getOrderEstimateRecord,functions:getOrderInventory,functions:getPersonalInterfaceSettings,functions:getPortalForVisitor,functions:getQuickReplyPersonalSettings,functions:getSearchConsoleStats,functions:getShopifyIntegrationsForWorkspace,functions:getShopifyWebhookToken,functions:getSitePresence
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:getSiteStats,functions:getSquareConnections,functions:getStocktake,functions:getSupportTicketUnreadSummary,functions:getUserGuide,functions:getWebsiteAssistantConfig,functions:getWebsiteChatThread,functions:getWooCommerceWebhookToken,functions:getWooConnections,functions:getWorkspaceBlockHeadings,functions:getWorkspaceCardLayout,functions:getWorkspacePlanUsage,functions:getWorkspaceSmsSettings,functions:getWorkspaceSupportManagers,functions:googlePlayRtdnNotification,functions:importOpeningStock,functions:importWorkspaceBackup,functions:inboundOrderWebhook,functions:initializeFreeDemoWorkspace,functions:leaveMessageThread,functions:linkPurchaseToBankTransaction,functions:listCommerceEvents,functions:listCommerceReviewQueue,functions:listHeldIntegrationOrders,functions:listInventoryCategories,functions:listInventoryItems,functions:listInventoryLocations,functions:listInventoryMovements,functions:listInventoryRecipes,functions:listMessageThreads
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:listMySupportTickets,functions:listPersonalNoteCollaborationInvites,functions:listPurchases,functions:listQuickReplyContributions,functions:listSquarePayouts,functions:listSquareUnmatched,functions:listStocktakes,functions:listSuppliers,functions:listSupportTicketMessages,functions:listThreadMessages,functions:listWorkspaceTicketMessages,functions:listWorkspaceTickets,functions:markActivityNotificationRead,functions:markAllActivityNotificationsRead,functions:markMessageThreadRead,functions:markSupportTicketRead,functions:markWorkspaceTicketRead,functions:matchSquarePayoutToBank,functions:mergeInventoryCategories,functions:mergeOrderIntoOrder,functions:mergeOrders,functions:mergeWebCustomers,functions:notifyCustomerOnStatusChange,functions:nvCreateFileLink,functions:nvViewSharedFile,functions:parseOpeningStock,functions:pinMessageInThread,functions:postEstimateDecision,functions:postWebsiteChatMessage,functions:prepareAppleSubscriptionPurchase
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:prepareGooglePlayPurchase,functions:previewClearAllOrdersTax,functions:previewEtsyImport,functions:previewFinancialRecalculationForOrders,functions:previewSquareImport,functions:previewWooImport,functions:purgeDeletedOrders,functions:purgeExpiredEstimateLinks,functions:purgeWebOrders,functions:quickbooksConnectStart,functions:quickbooksDisconnect,functions:quickbooksOAuthCallback,functions:quickbooksSyncNow,functions:quickbooksWebhook,functions:recalculateFinancialSettingsForOrders,functions:recalculateWorkspacePlanUsage,functions:receivePurchase,functions:reconcileEtsyConnections,functions:reconcileSquareConnections,functions:reconcileWooConnections,functions:recordInventoryLoss,functions:recordSiteVisit,functions:recreateWooWebhooks,functions:registerTracking,functions:rejectWorkflowOrderDeletion,functions:releaseHeldIntegrationOrders,functions:releaseInventoryFromOrder,functions:removeMemberFromMessageThread,functions:removeSharedPersonalNoteFromWorkspaceMember,functions:removeWorkspaceTeamMember
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:renameClientFile,functions:renameMessageThread,functions:requestWorkflowOrderDeletion,functions:requestWorkspaceAccess,functions:reserveInventoryForOrder,functions:resetCustomOrderLandingStats,functions:resetOrderWorkspaceCardLayout,functions:resolveCommerceReview,functions:resolveEtsyCustomerMatch,functions:restoreWebOrder,functions:resyncIntegrationCustomer,functions:resyncStripeWorkspaceEntitlements,functions:retryCommerceEvent,functions:revokeOrderEstimateLink,functions:revokeOrderPortalLink,functions:rotateIntegrationWebhookToken,functions:runEtsyImport,functions:runSquareImport,functions:runWooImport,functions:saveAccountAvatar,functions:saveAccountProfile,functions:saveDashboardWidgetVisibility,functions:saveFinancialSettings,functions:saveIntegrationSyncSettings,functions:saveInventoryCategories,functions:saveInventoryItem,functions:saveInventoryLocation,functions:saveInventoryRecipe,functions:saveLanguageSettings,functions:saveOrderCardDisplaySettings
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:saveOrderPortalSettings,functions:saveOrderWorkspaceCardLayout,functions:savePdfExportSettings,functions:savePersonalInterfaceSettings,functions:savePurchase,functions:saveQuickReplyContribution,functions:saveQuickReplyPersonalSettings,functions:saveQuickReplySettings,functions:saveStocktakeCounts,functions:saveSupplier,functions:saveSwiftOrder,functions:saveSwiftWorkspaceCardProfile,functions:saveThemeBrandingSettings,functions:saveTypeWorkspaceCardLayout,functions:saveUploadSafetySettings,functions:saveWooSignatureSecret,functions:saveWorkspaceBlockHeadings,functions:saveWorkspaceCardLayout,functions:saveWorkspaceCustomRole,functions:saveWorkspaceLogo,functions:saveWorkspaceSidebarLayout,functions:saveWorkspaceSmsSettings,functions:scheduleDeletedOrderFileCleanup,functions:scheduledAccountingReconcile,functions:scheduledBillingEntitlementReconcile,functions:scheduledReminderCheck,functions:scheduledTrackingRefresh,functions:sendOrderEstimate,functions:sendTestInboundWebhook,functions:sendTestIntegrationWebhook
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:sendThreadMessage,functions:setInventoryItemStatus,functions:setMessageThreadActive,functions:setMessageThreadMute,functions:setMessageTypingStatus,functions:setMessageWorkspaceSettings,functions:setSharedPersonalNoteEditingPresence,functions:setShopifyIntegrationState,functions:setTrialPlan,functions:setWebsiteAssistant,functions:setWorkspaceSupportManagers,functions:sharePersonalNoteWithWorkspaceMember,functions:shopifyAppBridge,functions:shopifyAppWebhook,functions:shopifyCompleteConnect,functions:shopifyImportOrders,functions:shopifyOrderWebhook,functions:shopifyReconcileOrders,functions:smsDeliveryWebhook,functions:snapshotSearchConsoleDaily,functions:squareOAuthCallback,functions:squareWebhook,functions:startStocktake,functions:stripeWebhook,functions:swapInventoryForOrder,functions:syncEtsyNow,functions:syncSharedPersonalNoteContent,functions:syncSquareNow,functions:syncWooNow,functions:syncWorkflowSafeOrderView
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:syncWorkspaceAcceptedJoinRequests,functions:testQuickReplyApiKey,functions:toggleMessageReaction,functions:track17Webhook,functions:undoClearAllOrdersTax,functions:undoWorkspaceBackupImport,functions:unpinMessageInThread,functions:updateSquareConnectionSettings,functions:updateSupportTicketStatus,functions:updateWebCustomer,functions:updateWebOrder,functions:updateWorkspaceMemberAccess,functions:updateWorkspaceMemberProfile,functions:updateWorkspaceMemberRole,functions:updateWorkspaceTicketStatus,functions:validateInboundOrderPayload,functions:validateWorkspacePlanAction,functions:verifyAppleSubscriptionPurchase,functions:verifyEtsyConnection,functions:verifyGooglePlayPurchase,functions:websiteChatRequestHuman,functions:wooAuthCallback,functions:wooConnectorWebhook,functions:woocommerceOrderWebhook,functions:xeroConnectStart,functions:xeroDisconnect,functions:xeroListTenants,functions:xeroOAuthCallback,functions:xeroSelectTenant,functions:xeroSyncNow
-```
-
-```bash
-npx firebase deploy --project eggcraft-studio --only \
-  functions:xeroWebhook
+  functions:etsyWebhook,functions:holdIntegrationOrder,functions:markActivityNotificationRead,functions:scheduledTrackingRefresh,functions:shopifyOrderWebhook,functions:squareWebhook,functions:wooCommerceSiparis
 ```
 
 ## Deploy sonrası hızlı kontrol
 
-- `scheduledReminderCheck` logu: artık `test_studio_123` değil, gerçek çalışma alanları için çalışıyor.
-- Bir siparişin durumunu A → B → A yapınca müşteriye A mesajı ikinci kez GİTMEMELİ.
-- Free bir hesapta Mac'ten girilen ödeme, defterde kalmalı (eskiden sessizce düşüyordu).
-- Yeni bir Mac/iPhone/Android kaydında 14 günlük deneme başlamalı.
-- Stripe ödeme sayfasını açıp vazgeçen kullanıcı denemesini KAYBETMEMELİ.
-- Bir üye web'de Orders'ı açabilmeli (kural düzeltmesi zaten canlı).
+- `scheduledReminderCheck` logu: artık gerçek çalışma alanları için çalışıyor (eskiden yalnız `test_studio_123`).
+- Bir siparişin durumunu A → B → A yapın: müşteriye A mesajı İKİNCİ KEZ gitmemeli.
+- Free bir hesapta Mac'ten ödeme girin: defterde kalmalı (eskiden sessizce düşüyordu).
+- Yeni bir Mac/iPhone/Android kaydı: 14 günlük deneme başlamalı.
+- Stripe ödeme sayfasını açıp vazgeçin: deneme hakkı YANMAMALI.
+- Bir üyeyle web'de Orders açılmalı (kural düzeltmesi zaten canlı).
+- Bir müşteriyi silin: onay ekranı çıkmalı (Mac) ve sipariş adları "New Project"e dönmemeli KARARI BEKLİYOR (aşağı bakın).
 
 Web ayrıca "canlıya at" denince Round N ile yayınlanmalı; native değişiklikler mağaza sürümü bekliyor.
+
+## Karar bekleyen 5 madde
+
+Bunlar ürün kararı olduğu için elimden geldiğince dokunmadım; DURUM.md ve sabah özetinde ayrıntısı var.
+
+1. Müşteri silinince siparişlerdeki ad "New Project" oluyor (Sunucu #6) — ad kalsın mı, sadece iletişim mi silinsin?
+2. Aynı sipariş için kâr ve KDV dört platformda farklı hesaplanıyor (Parite #4-#7) — tek doğru kural hangisi?
+3. "+ Add Project" hiç sormadan boş sipariş açıyor (Elle #12) — mini form mu, geri-al bildirimi mi?
+4. Team planından düşünce mevcut üyeler tam erişimle kalıyor (Sunucu #20) — salt okunur mu olsunlar?
+5. Davet akışı ters: sahip kimseyi davet edemiyor (Elle #24) — e-posta ile davet linki yazılsın mı?
