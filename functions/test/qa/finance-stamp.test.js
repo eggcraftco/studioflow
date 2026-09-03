@@ -54,6 +54,7 @@ function buildStamp(store) {
     admin: { firestore: () => store.db },
     onDocumentWritten: (_options, handler) => handler,
     onCall: (_options, handler) => handler,
+    onSchedule: (_options, handler) => handler,
     HttpsError: class extends Error {},
     requireFinanceBackfill: async () => ({ uid: "u1", companyId: "c1", email: "a@b.c" }),
     region: "europe-west2"

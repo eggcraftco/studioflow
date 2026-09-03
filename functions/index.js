@@ -5770,6 +5770,7 @@ const { _internal: financeStampInternal, ...financeStampExports } = createFinanc
   admin,
   onDocumentWritten,
   onCall,
+  onSchedule,
   HttpsError,
   // Owner or admin, and deliberately no plan gate: the finance block is what
   // every screen reads, so a Free workspace needs it as much as a Team one.

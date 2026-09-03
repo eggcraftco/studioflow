@@ -41,6 +41,7 @@ const { _internal } = createFinanceStamp({
   admin,
   onDocumentWritten: (_options, fn) => { handler = fn; return fn; },
   onCall: (_options, fn) => fn,
+  onSchedule: (_options, fn) => fn,
   HttpsError: class extends Error {},
   requireFinanceBackfill: async () => ({ uid: "u-e2e", companyId: COMPANY, email: "e2e@nivadesk.test" }),
   region: "europe-west2"
@@ -147,6 +148,7 @@ async function main() {
       admin,
       onDocumentWritten: (_o, fn) => fn,
       onCall: (_o, fn) => fn,
+      onSchedule: (_o, fn) => fn,
       HttpsError: class extends Error {},
       requireFinanceBackfill: async () => ({ uid: "u-e2e", companyId: COMPANY, email: "e2e@nivadesk.test" }),
       region: "europe-west2"
@@ -168,6 +170,57 @@ async function main() {
     // scheme owes exactly what the standard scheme would: 600 x 20/120.
     assert.strictEqual(second.grossMargin, 600);
     assert.strictEqual(second.vatDue, 100);
+  });
+
+  await check("the sweep walks every order, then stops until the engine changes", async () => {
+    const { _internal: sweepInternal } = createFinanceStamp({
+      admin,
+      onDocumentWritten: (_o, fn) => fn,
+      onCall: (_o, fn) => fn,
+      onSchedule: (_o, fn) => fn,
+      HttpsError: class extends Error {},
+      requireFinanceBackfill: async () => ({ uid: "u-e2e", companyId: COMPANY, email: "e2e@nivadesk.test" }),
+      region: "europe-west2"
+    });
+    const { runFinanceSweep, sweepStateRef } = sweepInternal;
+
+    await sweepStateRef().delete().catch(() => undefined);
+    // Three orders with no block at all.
+    for (const id of ["sweep-1", "sweep-2", "sweep-3"]) {
+      await db.collection("siparisler").doc(id).set({
+        companyId: COMPANY, paidAmount: 300, remainingAmount: 0, watchPurchasePrice: 100, taxRate: 20
+      });
+    }
+
+    // Runs until it reports done, which also proves it terminates.
+    let done = false;
+    let stampedTotal = 0;
+    for (let pass = 0; pass < 12 && !done; pass += 1) {
+      const result = await runFinanceSweep();
+      stampedTotal += result.stamped || 0;
+      done = result.done === true;
+    }
+    assert.strictEqual(done, true, "the sweep never reported finishing");
+    assert.ok(stampedTotal >= 3, `the three new orders were not stamped: ${stampedTotal}`);
+
+    for (const id of ["sweep-1", "sweep-2", "sweep-3"]) {
+      const finance = (await db.collection("siparisler").doc(id).get()).data().finance;
+      assert.ok(finance, `${id} has no block`);
+      assert.strictEqual(finance.revenue, 300);
+      assert.strictEqual(finance.grossMargin, 200);
+      assert.strictEqual(finance.vatDue, 33.33, "margin 200 at 20/120");
+    }
+
+    // Having finished for this version it must now do nothing at all, however
+    // often the schedule fires.
+    const idle = await runFinanceSweep();
+    assert.strictEqual(idle.done, true);
+    assert.strictEqual(idle.reason, "already_swept_for_this_version");
+
+    for (const id of ["sweep-1", "sweep-2", "sweep-3"]) {
+      await db.collection("siparisler").doc(id).delete().catch(() => undefined);
+    }
+    await sweepStateRef().delete().catch(() => undefined);
   });
 
   // Leave the emulator as we found it.

@@ -27,6 +27,7 @@ function createFinanceStamp({
   admin,
   onDocumentWritten,
   onCall,
+  onSchedule,
   HttpsError,
   requireFinanceBackfill,
   region = "europe-west2"
@@ -223,10 +224,107 @@ function createFinanceStamp({
     }
   );
 
+  // ------------------------------------------------------------------------
+  // The sweep
+  //
+  // The trigger only sees an order that is written, and the backfill needs
+  // somebody to press it. Neither migrates the orders already sitting there,
+  // so this walks every order in the database once and stamps the ones whose
+  // block is missing or was computed by an older engine.
+  //
+  // Paged by document id, which needs no index, with the cursor kept in a
+  // single document. When it reaches the end it records the version it
+  // finished and then does nothing at all — until the engine version changes,
+  // which starts it again. That is what makes a formula change a deployment
+  // rather than a migration script.
+  // ------------------------------------------------------------------------
+  const SWEEP_PAGE = 1000;
+  const SWEEP_WRITE_LIMIT = 2000;
+
+  function sweepStateRef() {
+    return db().collection("financeEngineSweeps").doc("state");
+  }
+
+  async function runFinanceSweep() {
+    const stateSnap = await sweepStateRef().get().catch(() => null);
+    const state = stateSnap && stateSnap.exists ? stateSnap.data() || {} : {};
+
+    if (Number(state.completedVersion) === ENGINE_VERSION) {
+      return { ok: true, done: true, reason: "already_swept_for_this_version", engineVersion: ENGINE_VERSION };
+    }
+
+    const startAfterId = String(state.cursorDocId || "");
+    const database = db();
+    let query = database.collection("siparisler").orderBy(admin.firestore.FieldPath.documentId()).limit(SWEEP_PAGE);
+    if (startAfterId) query = query.startAfter(startAfterId);
+
+    const page = await query.get();
+    if (page.empty) {
+      await sweepStateRef().set({
+        completedVersion: ENGINE_VERSION,
+        cursorDocId: "",
+        completedAtMs: Date.now()
+      }, { merge: true });
+      console.log("financeSweep finished", { engineVersion: ENGINE_VERSION });
+      return { ok: true, done: true, engineVersion: ENGINE_VERSION };
+    }
+
+    const settingsByCompany = new Map();
+    let batch = database.batch();
+    let pending = 0;
+    let stamped = 0;
+    let unchanged = 0;
+
+    async function flush(force) {
+      if (pending === 0) return;
+      if (!force && pending < 400) return;
+      await batch.commit();
+      batch = database.batch();
+      pending = 0;
+    }
+
+    for (const orderDoc of page.docs) {
+      if (stamped >= SWEEP_WRITE_LIMIT) break;
+      const data = orderDoc.data() || {};
+      const companyId = orderCompanyId(data);
+      if (!companyId) { unchanged += 1; continue; }
+
+      if (!settingsByCompany.has(companyId)) {
+        settingsByCompany.set(companyId, await financeSettingsFor(companyId, Date.now()));
+      }
+      const { computed, block } = financeBlockFor(data, settingsByCompany.get(companyId), Date.now());
+      if (sameFinance(data.finance, computed)) { unchanged += 1; continue; }
+
+      batch.update(orderDoc.ref, { finance: block });
+      pending += 1;
+      stamped += 1;
+      await flush(false);
+    }
+    await flush(true);
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    await sweepStateRef().set({
+      cursorDocId: lastId,
+      lastRunAtMs: Date.now(),
+      lastRunStamped: stamped,
+      lastRunUnchanged: unchanged,
+      engineVersion: ENGINE_VERSION
+    }, { merge: true });
+
+    console.log("financeSweep page", { stamped, unchanged, read: page.size, cursorDocId: lastId });
+    return { ok: true, done: false, stamped, unchanged, read: page.size };
+  }
+
+  const scheduledFinanceSweep = onSchedule(
+    { schedule: "every 20 minutes", timeZone: "Europe/London", region, timeoutSeconds: 540, memory: "512MiB" },
+    async () => { await runFinanceSweep(); }
+  );
+
   return {
     stampOrderFinance,
     backfillWorkspaceFinance,
-    _internal: { financeBlockFor, sameFinance, financeSettingsFor, COMPARED, ENGINE_VERSION }
+    scheduledFinanceSweep,
+    _internal: { financeBlockFor, sameFinance, financeSettingsFor, runFinanceSweep, sweepStateRef, COMPARED, ENGINE_VERSION }
   };
 }
 
