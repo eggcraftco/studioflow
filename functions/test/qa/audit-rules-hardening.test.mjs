@@ -33,6 +33,7 @@ const check = async (name, p) => {
 };
 
 const OWNER = "owner-uid", ADMIN = "admin-uid", MEMBER = "member-uid", VIEWER = "viewer-uid", STRANGER = "stranger-uid";
+const FINANCE_MEMBER = "finance-member-uid";
 const CID = OWNER;
 
 await env.withSecurityRulesDisabled(async (ctx) => {
@@ -40,11 +41,15 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "companies", CID), {
     companyId: CID, ownerUid: OWNER, name: "Audit Co",
     billingPlan: "team_monthly", billingStatus: "active",
-    memberUids: [OWNER, ADMIN, MEMBER, VIEWER],
-    memberRoles: { [OWNER]: "owner", [ADMIN]: "admin", [MEMBER]: "member", [VIEWER]: "viewer" },
-    members: { [OWNER]: { role: "owner" }, [ADMIN]: { role: "admin" }, [MEMBER]: { role: "member" }, [VIEWER]: { role: "viewer" } },
+    memberUids: [OWNER, ADMIN, MEMBER, VIEWER, FINANCE_MEMBER],
+    memberRoles: { [OWNER]: "owner", [ADMIN]: "admin", [MEMBER]: "member", [VIEWER]: "viewer", [FINANCE_MEMBER]: "member" },
+    members: { [OWNER]: { role: "owner" }, [ADMIN]: { role: "admin" }, [MEMBER]: { role: "member" }, [VIEWER]: { role: "viewer" }, [FINANCE_MEMBER]: { role: "member" } },
     // The member's access entry deliberately lacks assignedProjectsOnly (Elle #17).
-    memberAccess: { [MEMBER]: { orders: true, dashboard: true }, [VIEWER]: { orders: true, bankFeed: true } }
+    memberAccess: {
+      [MEMBER]: { orders: true, dashboard: true },
+      [VIEWER]: { orders: true, bankFeed: true },
+      [FINANCE_MEMBER]: { orders: true, settingsFinancial: true, financialInfo: true }
+    }
   });
   await setDoc(doc(db, "companySettings", CID), {
     companyId: CID, feePercentage: 3, smsTriggers: { estimateReady: false }, customStepsJSON: "[]"
@@ -64,11 +69,20 @@ await check("…and read one order",
 await check("a viewer with an entry that names other keys reads the bank-scoped payouts it was granted",
   assertSucceeds(getDoc(doc(as(VIEWER), "companies", CID, "paypalPayouts", "p-1"))));
 
-// ---- S#1: workspaceAccess is the server's ------------------------------------
+// ---- S#1: workspaceAccess is the owner's, never your own ---------------------
 await check("a user cannot write their own workspaceAccess record for another workspace",
   assertFails(setDoc(doc(as(STRANGER), "users", STRANGER, "workspaceAccess", CID), { role: "admin" })));
-await check("…nor can the owner write it from a client (Admin SDK only)",
-  assertFails(setDoc(doc(as(OWNER), "users", MEMBER, "workspaceAccess", CID), { role: "admin" })));
+await check("…nor can a member re-admit themselves after being removed",
+  assertFails(setDoc(doc(as(MEMBER), "users", MEMBER, "workspaceAccess", CID), { role: "admin" })));
+// The regression this pair exists to stop: Team Access on Mac and iPhone
+// changes a member's role by writing this document in the same batch as the
+// company's members map. Denying the owner broke team management outright.
+await check("the workspace owner CAN write a member's access record (Mac/iPhone Team Access)",
+  assertSucceeds(setDoc(doc(as(OWNER), "users", MEMBER, "workspaceAccess", CID), { role: "viewer", companyId: CID })));
+await check("…and can remove it again",
+  assertSucceeds(deleteDoc(doc(as(OWNER), "users", MEMBER, "workspaceAccess", CID))));
+await check("someone who is not the owner cannot write another person's access record",
+  assertFails(setDoc(doc(as(ADMIN), "users", MEMBER, "workspaceAccess", CID), { role: "admin" })));
 await check("a user still reads their own workspaceAccess",
   assertSucceeds(getDoc(doc(as(MEMBER), "users", MEMBER, "workspaceAccess", CID))));
 
@@ -91,8 +105,12 @@ await check("an admin cannot change the SMS sender either (owner-only in the cal
   assertFails(updateDoc(doc(as(ADMIN), "companySettings", CID), { smsSenderId: "EVIL" })));
 await check("the owner may still write SMS fields directly",
   assertSucceeds(updateDoc(doc(as(OWNER), "companySettings", CID), { smsTriggers: { estimateReady: true } })));
-await check("a member cannot change the platform fee",
+await check("a member without the Financial Settings permission cannot change the platform fee",
   assertFails(updateDoc(doc(as(MEMBER), "companySettings", CID), { feePercentage: 0 })));
+// saveFinancialSettings grants this to a member holding settingsFinancial +
+// financialInfo, so the rule must not be stricter than the callable.
+await check("a member the owner granted Financial Settings CAN change the tax rate",
+  assertSucceeds(updateDoc(doc(as(FINANCE_MEMBER), "companySettings", CID), { defaultTaxRate: 5 })));
 await check("an admin may change the platform fee (Mac/Android save Financial Settings directly)",
   assertSucceeds(updateDoc(doc(as(ADMIN), "companySettings", CID), { feePercentage: 2.5 })));
 await check("a member still saves workflow settings",

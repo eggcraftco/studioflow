@@ -288,24 +288,26 @@ service firebase.storage {
     }
 
 
-    // Support-ticket attachments belong to the person who raised the ticket:
-    // that person and the workspace owner read them, only they may remove
-    // them. Any member could previously read or delete another member's
-    // attachment.
-    function ownsSupportFolder(companyId, userId) {
-      return signedIn() && (request.auth.uid == userId || isOwner(companyId));
+    // NOTE: the segment after support_files is the TICKET id, not a user id —
+    // clients upload to companies/{id}/support_files/{ticketId}/<file>
+    // (studioflow-web/lib/studioflow/supportTickets.ts:304,
+    // EGGcraft/FirebaseManager.swift:4713). Scoping it to the signed-in uid
+    // rejected every upload, so access stays workspace-wide here.
+    //
+    // The audit's point still stands: one member can read another member's
+    // ticket attachment. Narrowing it properly means reading the ticket
+    // document to learn who raised it, which is a firestore.get per object —
+    // designed separately rather than guessed at from the path.
+    match /companies/{companyId}/support_files/{ticketId}/{fileName} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId);
     }
 
-    match /companies/{companyId}/support_files/{userId}/{fileName} {
-      allow read: if ownsSupportFolder(companyId, userId) && canReadWorkspace(companyId);
-      allow create, update: if request.auth.uid == userId && canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if ownsSupportFolder(companyId, userId) && canEditWorkspaceFiles(companyId);
-    }
-
-    match /companies/{companyId}/support_files/{userId}/{subPath=**} {
-      allow read: if ownsSupportFolder(companyId, userId) && canReadWorkspace(companyId);
-      allow create, update: if request.auth.uid == userId && canEditWorkspaceFiles(companyId) && safeUploadSize();
-      allow delete: if ownsSupportFolder(companyId, userId) && canEditWorkspaceFiles(companyId);
+    match /companies/{companyId}/support_files/{ticketId}/{subPath=**} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow delete: if canEditWorkspaceFiles(companyId);
     }
 
     // Inventory item photos. Readable by the workspace; written by the roles

@@ -417,12 +417,15 @@ service cloud.firestore {
       match /workspaceAccess/{companyId} {
         allow read: if signedIn() && userId == request.auth.uid;
 
-        // Written only by the Admin SDK (approve/add/remove team member,
-        // reconcile). storage.rules counts this document as proof of
-        // membership, so a client must never be able to write one — a removed
-        // member could otherwise re-admit themselves to another workspace's
-        // files with a single self-write.
-        allow create, update, delete: if false;
+        // The workspace OWNER writes these — Team Access on Mac and iPhone
+        // manages a member's role through this document, in the same batch as
+        // the company's members map.
+        //
+        // What is gone is the self-write. storage.rules counts this document as
+        // proof of membership, so allowing `userId == request.auth.uid` let a
+        // removed member — or anyone who knew a Company ID — re-admit
+        // themselves to another workspace's files with one write.
+        allow create, update, delete: if signedIn() && isCompanyOwner(companyId);
       }
     }
 
@@ -1030,8 +1033,15 @@ service cloud.firestore {
           'taxMilestoneDate', 'corporationTaxEnabled', 'corporationTaxRate'];
       }
 
-      function isCompanyAdminOrOwner(companyId) {
-        return isCompanyOwner(companyId) || memberRole(companyId) in ['owner', 'admin'];
+      // saveFinancialSettings asks for uidCanEditWorkspaceSettings plus the
+      // financialInfo and settingsFinancial permissions — NOT for owner or
+      // admin. A member the owner granted Financial Settings must be able to
+      // save them, so this mirrors the callable rather than out-ranking it.
+      function canWriteFinanceSettings(companyId) {
+        return isCompanyOwner(companyId)
+          || memberRole(companyId) in ['owner', 'admin']
+          || (memberAccessAllows(companyId, 'settingsFinancial')
+              && memberAccessAllows(companyId, 'financialInfo'));
       }
 
       allow write: if canWriteCompanyData(companyId)
@@ -1042,7 +1052,7 @@ service cloud.firestore {
         && (!settingsKeysTouched().hasAny(['lastSettingsWriteByUid'])
           || request.resource.data.lastSettingsWriteByUid == request.auth.uid)
         && (isCompanyOwner(companyId) || !settingsKeysTouched().hasAny(ownerOnlySettingsKeys()))
-        && (isCompanyAdminOrOwner(companyId) || !settingsKeysTouched().hasAny(financeSettingsKeys()));
+        && (canWriteFinanceSettings(companyId) || !settingsKeysTouched().hasAny(financeSettingsKeys()));
     }
 
     match /quickReplySecrets/{companyId} {
