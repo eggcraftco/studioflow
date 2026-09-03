@@ -5766,6 +5766,12 @@ Object.assign(exports, inventoryCallables);
 // than by each of the many writers. See functions/finance/stamp.js for why a
 // trigger, and docs/finance-engine.md for what it computes.
 const financeEngine = require("./finance/engine");
+// The project number and the name built from it — their own module so the two
+// rules that matter can be tested: the counter only counts up, and nothing
+// hands a number back. See functions/orders/projectNumber.js.
+const { nextProjectNumber, generatedProjectName: buildProjectName } = require("./orders/projectNumber");
+const generatedProjectName = (customerName, projectNumber) =>
+  buildProjectName(customerName, projectNumber, (value) => cleanOrderText(value, "", 180));
 const { createFinanceStamp } = require("./finance/stamp");
 const { _internal: financeStampInternal, ...financeStampExports } = createFinanceStamp({
   admin,
@@ -14469,7 +14475,15 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const creatorRole = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
   const workflowOnlyCreator = creatorRole === "workflowOnly";
   const assignedScopeCreator = usesRestrictedAssignedProjectScope(companyData, uid, creatorRole);
-  const customerName = cleanOrderText(requestData.customerName, "New Project", 180) || "New Project";
+  // Key-present semantics. A client that sends no customerName at all is an
+  // older one that never had a form, and keeps the "New Project" it has always
+  // had. The Quick Create form always sends the key, so an empty value there
+  // means the person deliberately opened a job with no customer — for stock, or
+  // for the window — and it stays empty rather than becoming a ghost name.
+  const customerName = hasOwnField(requestData, "customerName")
+    ? cleanOrderText(requestData.customerName, "", 180)
+    : "New Project";
+  const requestedCustomerId = cleanOrderText(requestData.customerId, "", 200);
   const designName = cleanOrderText(requestData.designName, "", 180);
 
   const orderValue = workflowOnlyCreator ? 0 : cleanOrderNumber(requestData.orderValue);
@@ -14564,9 +14578,35 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   };
 
   let customerResult = { created: false, customerId: "" };
+  let projectNumber = 0;
+  let resolvedCustomerName = customerName;
+  let projectName = designName;
   await db.runTransaction(async (transaction) => {
-    customerResult = await upsertCustomerForWebOrder(transaction, companyId, customerName, paymentDate, uid, email);
-    transaction.set(orderRef, orderPayload);
+    // A picked customer wins over the typed text: the control sends the record
+    // it matched, and the name stored on that record is the one every screen
+    // joins on, so "ayşe" typed against a stored "Ayşe" must not create a second
+    // customer that looks the same and totals separately.
+    if (requestedCustomerId) {
+      const pickedRef = db.collection("musteriler").doc(requestedCustomerId);
+      const picked = await transaction.get(pickedRef);
+      const pickedData = picked.exists ? picked.data() || {} : {};
+      if (picked.exists && String(pickedData.companyId || "") === companyId) {
+        resolvedCustomerName = cleanOrderText(pickedData.name, resolvedCustomerName, 180);
+      }
+    }
+
+    projectNumber = await nextProjectNumber(transaction, companyRef, usage.orderCount);
+    if (!projectName) projectName = generatedProjectName(resolvedCustomerName, projectNumber);
+
+    customerResult = await upsertCustomerForWebOrder(transaction, companyId, resolvedCustomerName, paymentDate, uid, email);
+    transaction.set(orderRef, {
+      ...orderPayload,
+      customerName: resolvedCustomerName,
+      designName: projectName,
+      // Given once and never given again, so it survives every rename of the
+      // project it belongs to.
+      projectNumber
+    });
   });
 
   try {
@@ -14591,6 +14631,9 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     ok: true,
     companyId,
     orderId: orderRef.id,
+    projectNumber,
+    projectName,
+    customerName: resolvedCustomerName,
     customerId: customerResult.customerId,
     customerCreated: customerResult.created,
     firstOrder,
@@ -14951,6 +14994,10 @@ exports.purgeWebOrders = onCall({ region: "europe-west2" }, async (request) => {
 });
 
 const SWIFT_ORDER_FIELDS = [
+  // Given once at creation and never again, so it has to survive every save
+  // that follows — without it here the next write strips the field and the
+  // snapshot after that takes the number off the person's screen.
+  "projectNumber",
   "paymentMethod",
   "customerName",
   "paymentDate",
@@ -15014,6 +15061,8 @@ const SWIFT_ORDER_FIELDS = [
 // Fee, shipping and tax are the plan-gated figures. The payment ledger is not
 // one of them — every plan can record who paid what, and dropping it silently
 // left paidAmount and the ledger disagreeing on Free and Starter.
+// projectNumber belongs on this list or the next Swift save strips it and the
+// following snapshot takes it off the person's screen.
 const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount"]);
 
 function preserveBasicPlanCustomFinancialFields(incoming = {}, existing = {}) {
@@ -15139,6 +15188,105 @@ exports.saveSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
   };
 });
 
+// Undoing a create, which is a different act from deleting an order.
+//
+// deleteWebOrder is a soft delete: it leaves the row in the bin for thirty days,
+// does not touch the customer the create made, and — decisively — refuses
+// assigned-scope roles outright, which are exactly the people a mis-tap hurts
+// most. So this makes the create un-happen instead, on a narrower licence: you
+// may undo a create YOU made, within five minutes, that nobody has touched.
+//
+// The project number is NOT returned to the counter. A number that can come
+// round again is not an identifier, and this one is promised never to repeat.
+exports.undoOrderCreate = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data?.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const db = admin.firestore();
+  const orderRef = db.collection("siparisler").doc(orderId);
+  const UNDO_WINDOW_MS = 5 * 60 * 1000;
+
+  const outcome = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(orderRef);
+    if (!snap.exists) return { ok: true, alreadyGone: true };
+    const data = snap.data() || {};
+
+    if (orderCompanyId(data) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+    if (String(data.createdByUid || "") !== uid) {
+      throw new HttpsError("permission-denied", "Only the person who created this project can undo it.");
+    }
+    const createdAtMs = timestampMillis(data.createdAt) || 0;
+    if (!createdAtMs || Date.now() - createdAtMs > UNDO_WINDOW_MS) {
+      throw new HttpsError("failed-precondition", "This project is no longer new enough to undo. Move it to the Trash instead.");
+    }
+    // Anything at all having happened to it means somebody has started working,
+    // and an undo would take their work with it. The seeded "Order created"
+    // entry is the only history an untouched order has.
+    const history = Array.isArray(data.historyLog) ? data.historyLog : [];
+    const untouched = history.length <= 1
+      && !cleanOrderText(data.invoiceNumber, "", 60)
+      && !(Array.isArray(data.payments) && data.payments.length)
+      && !(Array.isArray(data.clientFiles) && data.clientFiles.length)
+      && !(Array.isArray(data.lineItems) && data.lineItems.length)
+      && cleanOrderNumber(data.paidAmount) === 0;
+    if (!untouched) {
+      throw new HttpsError("failed-precondition", "This project has been worked on. Move it to the Trash instead.");
+    }
+
+    // The customer goes only if this create is what made it, no other order
+    // carries the name, and nothing has been added to the record since.
+    const customerName = cleanOrderText(data.customerName, "", 180);
+    let removedCustomerId = "";
+    if (request.data?.customerCreated === true && customerName) {
+      const siblings = await transaction.get(
+        db.collection("siparisler")
+          .where("companyId", "==", companyId)
+          .where("customerName", "==", customerName)
+          .limit(2)
+      );
+      const others = siblings.docs.filter((doc) => doc.id !== orderId);
+      if (others.length === 0) {
+        const customers = await transaction.get(
+          db.collection("musteriler")
+            .where("companyId", "==", companyId)
+            .where("name", "==", customerName)
+            .limit(1)
+        );
+        if (!customers.empty) {
+          const customerDoc = customers.docs[0];
+          const customerData = customerDoc.data() || {};
+          const bare = !cleanOrderText(customerData.email, "", 240)
+            && !cleanOrderText(customerData.phone, "", 60)
+            && !cleanOrderText(customerData.notes, "", 2000);
+          if (bare) {
+            transaction.delete(customerDoc.ref);
+            removedCustomerId = customerDoc.id;
+          }
+        }
+      }
+    }
+
+    transaction.delete(orderRef);
+    return { ok: true, alreadyGone: false, removedCustomerId };
+  });
+
+  try {
+    const updatedCompanySnap = await companyRef.get();
+    const entitlements = billingEntitlementsForCompany(updatedCompanySnap.data() || companyData);
+    const limits = planLimitsFromEntitlements(entitlements, companyData);
+    const updatedUsage = await workspaceBillingUsage(companyId, updatedCompanySnap.data() || companyData);
+    await saveWorkspaceBillingUsage(companyRef, updatedUsage, entitlements, limits, "order_create_undone");
+  } catch (error) {
+    console.warn("undoOrderCreate usage update failed:", error?.message || error);
+  }
+
+  console.log("undoOrderCreate", { companyId, orderId, uid, ...outcome });
+  return { ...outcome, companyId, orderId, message: "Project removed." };
+});
+
 exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const rawRole = workspaceOrderRole(companyData, uid);
@@ -15210,12 +15358,20 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
     orderPayload.taxAmount = 0;
   }
 
+  let projectNumber = 0;
   await admin.firestore().runTransaction(async (transaction) => {
     const existingSnap = await transaction.get(orderRef);
     if (existingSnap.exists) {
       throw new HttpsError("already-exists", "Order already exists.");
     }
-    transaction.set(orderRef, orderPayload);
+    // An order the queue replays after a spell offline is minted here, so a
+    // create made on a plane ends up shaped exactly like one made online.
+    projectNumber = await nextProjectNumber(transaction, companyRef, usage.orderCount);
+    const namedPayload = { ...orderPayload, projectNumber };
+    if (!cleanOrderText(namedPayload.designName, "", 180)) {
+      namedPayload.designName = generatedProjectName(namedPayload.customerName, projectNumber);
+    }
+    transaction.set(orderRef, namedPayload);
   });
 
   try {
