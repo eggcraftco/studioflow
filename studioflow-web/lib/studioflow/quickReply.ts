@@ -21,6 +21,17 @@ export type QuickReplySaveInput = {
 export type QuickReplyGenerateInput = {
   mode?: string;
   customerMessage?: string;
+  /**
+   * The order this reply is about, when there is one.
+   *
+   * Preferred over `customerName`: the server reads the order, applies the
+   * marketplace's own conditions to it, and uses only the name it is allowed
+   * to. A name posted straight from a client leaves the server nothing to
+   * check — it cannot tell whose data that name is, so it cannot apply anyone's
+   * rules to it. See functions/privacy/outbound.js.
+   */
+  orderId?: string;
+  /** Only for a reply with no order behind it; ignored when orderId is given. */
   customerName?: string;
   selectedCategory?: string;
   selectedTopic?: string;

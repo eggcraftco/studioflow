@@ -13866,6 +13866,32 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "نصيحة: أضف أكبر قدر من السياق للحصول على أفضل رد.",
     "हिन्दी (Hindi)": "सुझाव: सर्वोत्तम उत्तर के लिए अधिकतम संदर्भ शामिल करें।"
   },
+  "Which order is this about?": {
+    "Türkçe": "Bu hangi siparişle ilgili?",
+    "Deutsch": "Um welche Bestellung geht es?",
+    "Français": "De quelle commande s'agit-il ?",
+    "Italiano": "Di quale ordine si tratta?",
+    "Español (Spanish)": "¿De qué pedido se trata?",
+    "Português": "A que encomenda se refere?",
+    "Русский (Russian)": "К какому заказу это относится?",
+    "日本語 (Japanese)": "どの注文についてですか？",
+    "中文 (Chinese)": "这是关于哪个订单的？",
+    "العربية (Arabic)": "بأي طلب يتعلق هذا؟",
+    "हिन्दी (Hindi)": "यह किस ऑर्डर के बारे में है?"
+  },
+  "Not about a specific order": {
+    "Türkçe": "Belirli bir siparişle ilgili değil",
+    "Deutsch": "Nicht zu einer bestimmten Bestellung",
+    "Français": "Sans commande particulière",
+    "Italiano": "Non riguarda un ordine specifico",
+    "Español (Spanish)": "No es sobre un pedido concreto",
+    "Português": "Não é sobre uma encomenda específica",
+    "Русский (Russian)": "Не о конкретном заказе",
+    "日本語 (Japanese)": "特定の注文についてではない",
+    "中文 (Chinese)": "与特定订单无关",
+    "العربية (Arabic)": "لا يتعلق بطلب معيّن",
+    "हिन्दी (Hindi)": "किसी खास ऑर्डर के बारे में नहीं"
+  },
   "Paste the customer's email or message here...": {
     "Türkçe": "Müşterinin e-postasını veya mesajını buraya yapıştır...",
     "Deutsch": "E-Mail oder Nachricht des Kunden hier einfügen...",

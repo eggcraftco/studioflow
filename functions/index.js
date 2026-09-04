@@ -8574,13 +8574,57 @@ exports.generateQuickReply = onCall({ region: "europe-west2" }, async (request) 
   const politeness = cleanQuickReplyOption(request.data?.politeness || settings.quickReplyPoliteness, QUICK_REPLY_POLITENESS, "Warm");
   const length = cleanQuickReplyOption(request.data?.length || settings.quickReplyLength, QUICK_REPLY_LENGTHS, "Short");
 
+  // The customer's name comes from the ORDER, not from the caller.
+  //
+  // A client that posts `customerName` straight into a request bound for
+  // OpenAI leaves the server with nothing to check: it cannot tell whose data
+  // that name is, so it cannot apply the marketplace's conditions to it. The
+  // contract is now an order id — the server reads the order, applies the same
+  // outbound policy every other path uses, and passes on only what that policy
+  // allows. See functions/privacy/outbound.js.
+  //
+  // A request with no order id is not a marketplace request: the website chat
+  // and a blank draft have no order behind them, and a name typed by the
+  // workshop in that context is the workshop's own.
+  const quickReplyOrderId = String(request.data?.orderId || "").trim();
+  let customerNameForReply = "";
+  let quickReplyProvider = "";
+  let quickReplyAiAllowed = true;
+  if (quickReplyOrderId) {
+    const orderSnap = await orderDocRef(quickReplyOrderId).get();
+    const orderData = orderSnap.exists ? orderSnap.data() || {} : {};
+    // Somebody else's workspace is not a source of names.
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "That order is not in your workspace.");
+    }
+    const outbound = require("./privacy/outbound");
+    const { record, verdict } = outbound.redactForChannel(orderData, "ai_reply");
+    customerNameForReply = String(record.customerName || "");
+    quickReplyProvider = verdict.provider;
+    quickReplyAiAllowed = verdict.allow && !verdict.minimal;
+    if (!verdict.allow || verdict.minimal) {
+      recordPiiAccess({
+        companyId, actorUid: uid, actorEmail: String(request.auth?.token?.email || ""),
+        action: "api", source: "server",
+        subject: { kind: "order", id: quickReplyOrderId, provider: verdict.provider },
+        categories: ["name"],
+        note: `ai_reply blocked:${verdict.reason}`
+      }).catch(() => undefined);
+    }
+  } else if (request.data?.customerName) {
+    // Accepted only where there is no order to check it against, and never
+    // when an order id was supplied — a caller cannot use both to smuggle a
+    // name past the policy.
+    customerNameForReply = cleanQuickReplyText(request.data.customerName, 120);
+  }
+
   if (requestedMode === "Offline") {
     return {
       ok: true,
       companyId,
       mode: "Offline",
       reply: generateOfflineQuickReply(settings, {
-        customerName: request.data?.customerName,
+        customerName: customerNameForReply,
         selectedCategory: request.data?.selectedCategory,
         selectedTopic: request.data?.selectedTopic,
         politeness,
@@ -8602,6 +8646,20 @@ exports.generateQuickReply = onCall({ region: "europe-west2" }, async (request) 
   }
   if (!customerMessage) {
     throw new HttpsError("invalid-argument", "Customer message is empty. Please paste a message.");
+  }
+
+  // A denied provider does not get an online draft at all.
+  //
+  // The prompt below carries the message the workshop pasted, and on a
+  // marketplace order that message is the buyer's own words — which is the
+  // marketplace's data reaching OpenAI just as surely as the name would. There
+  // is no redaction that helps here: the text is the payload. So the request is
+  // refused, with a sentence that says why rather than a generic failure.
+  if (quickReplyProvider && !quickReplyAiAllowed) {
+    throw new HttpsError(
+      "failed-precondition",
+      "AI replies are turned off for orders from this marketplace, because its terms do not allow the buyer's details to be sent to an outside AI service. You can still write a reply yourself, or use an offline template."
+    );
   }
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {

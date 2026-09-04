@@ -110,6 +110,31 @@ fun QuickReplyScreen(
     var selectedTopic by rememberSaveable(topics.joinToString("|")) {
         mutableStateOf(topics.firstOrNull() ?: "Price & Info")
     }
+    // Which order this reply is about. Empty means "no order behind it", which
+    // is a real case: an enquiry from somebody who has never ordered. When it is
+    // set, the server takes the customer's name from the order and applies that
+    // marketplace's own rules, instead of trusting what this app sends.
+    var selectedOrderId by rememberSaveable { mutableStateOf("") }
+    val orderChoices = remember(state.orders) {
+        // A menu, not a list: a workshop with thousands of orders should not
+        // scroll through them to answer an email.
+        val seen = mutableMapOf<String, Int>()
+        state.orders.take(300).mapNotNull { order ->
+            if (order.id.isBlank()) return@mapNotNull null
+            val base = listOf(order.customerName.trim(), order.designName.trim())
+                .filter { it.isNotEmpty() }
+                .joinToString(" · ")
+                .ifBlank { order.id }
+            // Two orders can read identically — same customer, same piece. The
+            // label is what the picker matches on, so it has to be unique or
+            // choosing one would silently select the other.
+            val count = (seen[base] ?: 0) + 1
+            seen[base] = count
+            val label = if (count == 1) base else "$base (#$count)"
+            label to order.id
+        }
+    }
+    val orderLabelById = remember(orderChoices) { orderChoices.associate { it.second to it.first } }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
@@ -135,7 +160,11 @@ fun QuickReplyScreen(
                     knowledge = settings.aiKnowledgeBase,
                     products = filteredProducts.ifEmpty { settings.quickReplyProducts },
                     rules = filteredRules.ifEmpty { settings.quickReplyRules },
-                    customerName = customerName.trim()
+                    customerName = if (selectedOrderId.isNotBlank()) {
+                        state.orders.firstOrNull { it.id == selectedOrderId }?.customerName?.trim().orEmpty()
+                    } else {
+                        customerName.trim()
+                    }
                 )
             }
             else -> {
@@ -155,7 +184,8 @@ fun QuickReplyScreen(
                                 "mode" to "AI",
                                 "customerMessage" to input,
                                 "politeness" to politeness,
-                                "length" to length
+                                "length" to length,
+                                "orderId" to selectedOrderId
                             ))
                             .await()
                         val data = result.data as? Map<*, *>
@@ -212,6 +242,10 @@ fun QuickReplyScreen(
                 QuickReplyDetailsCard(
                     customerName = customerName,
                     onCustomerNameChange = { customerName = it },
+                    orderChoices = orderChoices,
+                    selectedOrderId = selectedOrderId,
+                    selectedOrderLabel = orderLabelById[selectedOrderId].orEmpty(),
+                    onOrderSelect = { selectedOrderId = it },
                     categories = categories,
                     selectedCategory = selectedCategory,
                     onCategoryChange = { selectedCategory = it },
@@ -448,6 +482,10 @@ private fun QuickReplyStyleCard(
 private fun QuickReplyDetailsCard(
     customerName: String,
     onCustomerNameChange: (String) -> Unit,
+    orderChoices: List<Pair<String, String>>,
+    selectedOrderId: String,
+    selectedOrderLabel: String,
+    onOrderSelect: (String) -> Unit,
     categories: List<String>,
     selectedCategory: String,
     onCategoryChange: (String) -> Unit,
@@ -459,15 +497,30 @@ private fun QuickReplyDetailsCard(
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     QuickReplyCard {
         SegmentTitle(Icons.Filled.PersonOutline, t("Details"))
-        OutlinedTextField(
-            value = customerName,
-            onValueChange = onCustomerNameChange,
-            label = { Text(t("Customer name")) },
-            placeholder = { Text("e.g. John") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+        val noOrderLabel = t("Not about a specific order")
+        DropdownPicker(
+            label = t("Which order is this about?"),
+            value = selectedOrderLabel.ifBlank { noOrderLabel },
+            options = listOf(noOrderLabel) + orderChoices.map { it.first },
+            onSelect = { chosen ->
+                onOrderSelect(orderChoices.firstOrNull { it.first == chosen }?.second.orEmpty())
+            }
         )
         Spacer(modifier = Modifier.height(10.dp))
+        // Picking the order is what lets NivaDesk apply a marketplace's own
+        // rules to the customer's details. With an order chosen the name comes
+        // from it, so this box is only for a reply with no order behind it.
+        if (selectedOrderId.isBlank()) {
+            OutlinedTextField(
+                value = customerName,
+                onValueChange = onCustomerNameChange,
+                label = { Text(t("Customer name")) },
+                placeholder = { Text("e.g. John") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
         if (categories.isNotEmpty()) {
             DropdownPicker(
                 label = "Product / Service",

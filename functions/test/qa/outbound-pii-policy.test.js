@@ -33,15 +33,16 @@ check("Amazon buyer data cannot reach the assistant", () => {
   assert.strictEqual(verdict.reason, "denied_by_policy");
 });
 
-check("Amazon is denied on every channel except the one it was lent for", () => {
-  for (const channel of ["assistant", "ai_reply", "analytics", "accounting", "export"]) {
-    assert.strictEqual(outbound.mayReleasePii(order("amazon"), channel).allow, false, `${channel} is open`);
+check("Amazon is denied on every channel, with no exception for fulfilment", () => {
+  // Even messaging. A dispatch notice would be defensible in principle, but the
+  // first application asks for neither Buyer Communication nor
+  // Direct-to-Consumer Shipping, so there is no role under which an Amazon
+  // buyer's details should be reaching Twilio or an email provider.
+  for (const channel of outbound.OUTBOUND_CHANNELS) {
+    const verdict = outbound.mayReleasePii(order("amazon"), channel);
+    assert.strictEqual(verdict.allow, false, `${channel} is open`);
+    assert.strictEqual(verdict.minimal, false, `${channel} leaks a minimal release`);
   }
-  // Fulfilment is the purpose the data was lent for, and even then only the
-  // minimum the channel cannot do without.
-  const messaging = outbound.mayReleasePii(order("amazon"), "messaging");
-  assert.strictEqual(messaging.allow, true);
-  assert.strictEqual(messaging.minimal, true);
 });
 
 check("a marketplace nobody has described is denied everywhere", () => {
@@ -103,7 +104,10 @@ check("a blocked record loses the person and keeps the work", () => {
 });
 
 check("a minimal release keeps only what the channel cannot do without", () => {
-  const { record } = outbound.redactForChannel(order("amazon"), "messaging");
+  // eBay is the live example of a minimal release: a marketplace whose buyer
+  // may still be told their parcel has left, by name and nothing else.
+  assert.strictEqual(outbound.PROVIDER_PII_POLICY.ebay.messaging, outbound.MINIMAL);
+  const { record } = outbound.redactForChannel(order("ebay"), "messaging");
   assert.strictEqual(record.customerName, "Ada Lovelace", "a parcel notice with no name is not a notice");
   assert.strictEqual(record.emailAddress, "", "the address list travelled to a third party anyway");
   assert.strictEqual(record.shippingStreetAddress, "");

@@ -62,9 +62,15 @@ const PROVIDER_PII_POLICY = Object.freeze({
   amazon: {
     assistant: DENY,
     ai_reply: DENY,
-    // Fulfilment is the one purpose the data was lent for. Even then, only what
-    // is needed to tell a buyer their parcel has gone.
-    messaging: MINIMAL,
+    // Denied, not minimal.
+    //
+    // Fulfilment is the purpose the data was lent for, so a dispatch notice
+    // would be defensible in principle — but the first application requests
+    // neither Buyer Communication nor Direct-to-Consumer Shipping, so there is
+    // no role under which Amazon buyer data should be reaching Twilio or an
+    // email provider at all. Opened deliberately if and when those roles are
+    // granted and the controls behind them exist, and not before.
+    messaging: DENY,
     analytics: DENY,
     // Reopened deliberately when the accounting phase is built with the
     // controls that phase needs, and not before.

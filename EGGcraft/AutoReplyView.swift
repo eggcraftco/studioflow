@@ -32,6 +32,12 @@ struct AutoReplyView: View {
     
     @State private var customerMessage: String = ""
     @State private var customerName: String = ""
+    // Which order this reply is about. Empty means "no order behind it", which
+    // is a real case: a website enquiry from somebody who has never ordered.
+    // When it is set, the server takes the customer's name from the order and
+    // applies that marketplace's own rules, instead of trusting whatever this
+    // app decided to send.
+    @State private var quickReplyOrderId: String = ""
     @State private var selectedCategory: String = ""
     @State private var selectedTopic: String = "Price & Info"
     @State private var generatedText: String = ""
@@ -450,6 +456,22 @@ struct AutoReplyView: View {
                             focus: .customerMessage,
                             bordered: true
                         )
+
+                        HStack(spacing: 10) {
+                            Text(t("Which order is this about?", lang: seciliDil))
+                                .font(.system(size: 13))
+                                .foregroundColor(quickReplyMutedText)
+                            Picker("", selection: $quickReplyOrderId) {
+                                Text(t("Not about a specific order", lang: seciliDil)).tag("")
+                                ForEach(quickReplyOrderChoices, id: \.id) { choice in
+                                    Text(choice.label).tag(choice.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 2)
 
                         HStack(spacing: 8) {
                             Image(systemName: "sparkles")
@@ -1038,6 +1060,19 @@ struct AutoReplyView: View {
         }
     }
 
+    /// The orders this reply could be about, newest first. Capped because this
+    /// is a menu, not a list: a workshop with four thousand orders should not
+    /// have to scroll through them to answer an email.
+    private var quickReplyOrderChoices: [(id: String, label: String)] {
+        firebaseManager.siparisler.prefix(300).compactMap { siparis in
+            guard let id = siparis.id, !id.isEmpty else { return nil }
+            let name = siparis.customerName.trimmingCharacters(in: .whitespaces)
+            let design = siparis.designName.trimmingCharacters(in: .whitespaces)
+            let label = [name, design].filter { !$0.isEmpty }.joined(separator: " · ")
+            return (id: id, label: label.isEmpty ? id : label)
+        }
+    }
+
     private func fetchAIResponse() async {
         let message = customerMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else {
@@ -1050,7 +1085,8 @@ struct AutoReplyView: View {
             "mode": "AI",
             "customerMessage": message,
             "politeness": quickReplyPoliteness,
-            "length": quickReplyLength
+            "length": quickReplyLength,
+            "orderId": quickReplyOrderId
         ]
         do {
             let result = try await Functions.functions(region: "europe-west2").httpsCallable("generateQuickReply").call(payload)
