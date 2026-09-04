@@ -19,6 +19,8 @@
 
 const { validateSafeEnvelope } = require("./envelope");
 const { mintIntent } = require("./intent");
+const { splitAmazonOrder, scanForPii } = require("./sanitize");
+const { normalizeAmazonOrder } = require("../adapters/amazon");
 const { idempotencyKey } = require("../events");
 
 const SYNC_IDENTITY = "amazon-sync@nivadesk-amazon.iam.gserviceaccount.com";
@@ -36,7 +38,7 @@ function json(status, body) { return { status, body }; }
 function createAmazonIngest({
   db,
   applyEnvelope,
-  normalize,
+  normalize = normalizeAmazonOrder,
   contextFor,
   verifyIdToken,
   audience,
@@ -72,12 +74,36 @@ function createAmazonIngest({
       return json(422, { error: "unsafe_envelope", violations: violations.slice(0, 20) });
     }
 
+    // The allowlist has already refused every field known to carry a person.
+    // The split runs anyway: the rule that nothing reaches the adapter except
+    // through it holds on both sides of the boundary. Anything the scan still
+    // finds under a name neither layer knows is refused outright.
+    const { safe, restricted, removed } = splitAmazonOrder(body.order, body.items);
+    const leftovers = scanForPii(safe);
+    if (leftovers.length) {
+      logger.error(`ingestAmazonEnvelope refused a personal field neither layer knew: ${leftovers.slice(0, 5).join("; ")}`);
+      return json(422, { error: "unsafe_envelope", violations: leftovers.slice(0, 20) });
+    }
+
     const companyId = String(body.companyId);
     const ctxBase = await contextFor(companyId);
     if (!ctxBase) return json(404, { error: "unknown_workspace" });
 
-    const envelope = normalize(body.order, {
-      items: body.items,
+    // Access control policy §5: a marketplace buyer's details live ONLY in the
+    // server-only restrictedCustomer document, never on the order. In phase A1
+    // this branch is unreachable — BUYER and RECIPIENT are never requested and
+    // the allowlist refuses their fields before this line — but the day a later
+    // phase admits them, this is where they go, and the order document is not.
+    if (Object.keys(restricted).length) {
+      const orderId = ctxBase.orderIdFor({ identity: { external_id: String(safe.order.AmazonOrderId) } });
+      await db.collection("companies").doc(companyId).collection("restrictedCustomer").doc(orderId).set({
+        provider: "amazon", connectionId: String(body.connectionId), fields: restricted, paths: removed, updatedAtMs: now()
+      }, { merge: true });
+      logger.warn(`ingestAmazonEnvelope diverted ${removed.length} personal field(s) to restrictedCustomer for ${orderId}`);
+    }
+
+    const envelope = normalize(safe.order, {
+      items: safe.items,
       connectionId: body.connectionId,
       marketplaceId: body.marketplaceId,
       eventOrigin: "provider",

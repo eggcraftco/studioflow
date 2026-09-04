@@ -5975,9 +5975,7 @@ const commerce = {
   capabilities: require("./commerce/capabilities"),
   shopify: require("./commerce/adapters/shopify"),
   cursors: require("./commerce/cursors"),
-  health: require("./commerce/health"),
-  // The Amazon adapter: SP-API order (already sanitized upstream) → canonical envelope.
-  amazon: require("./commerce/adapters/amazon")
+  health: require("./commerce/health")
 };
 const { createEtsyConnectFunctions } = require("./etsyConnect");
 // Etsy's callback URL is registered with Etsy itself and cannot drift: it is
@@ -34227,7 +34225,6 @@ exports.maintainFileScans = onSchedule(
 // signed connect intent or an admin call. Logic in commerce/amazon/ingest.js;
 // this is wiring.
 const AMAZON_INTENT_HMAC_KEY = defineSecret("AMAZON_INTENT_HMAC_KEY");
-const AMAZON_CALLER_SA = "amazon-caller@eggcraft-studio.iam.gserviceaccount.com";
 const AMAZON_INGEST_AUDIENCE = "https://europe-west2-eggcraft-studio.cloudfunctions.net/ingestAmazonEnvelope";
 const amazonIngestModule = require("./commerce/amazon/ingest");
 
@@ -34258,7 +34255,6 @@ function amazonIngest() {
     amazonIngestSingleton = amazonIngestModule.createAmazonIngest({
       db: admin.firestore(),
       applyEnvelope: (db, envelope, ctx) => commerce.engine.applyEnvelope(db, envelope, ctx),
-      normalize: (order, ctx) => commerce.amazon.normalizeAmazonOrder(order, ctx),
       contextFor: amazonContextFor,
       verifyIdToken: async (idToken) => (await oidc.verifyIdToken({ idToken, audience: AMAZON_INGEST_AUDIENCE })).getPayload(),
       audience: AMAZON_INGEST_AUDIENCE
@@ -34280,7 +34276,7 @@ exports.ingestAmazonEnvelope = onRequest(
 // Outbound: the owner's connect intent. Runs as amazon-caller@, which holds
 // the signing key and nothing else.
 exports.amazonConnectStart = onCall(
-  { region: "europe-west2", secrets: [AMAZON_INTENT_HMAC_KEY], serviceAccount: AMAZON_CALLER_SA },
+  { region: "europe-west2", secrets: [AMAZON_INTENT_HMAC_KEY], serviceAccount: "amazon-caller@eggcraft-studio.iam.gserviceaccount.com" },
   async (request) => {
     const { uid, companyId } = await requireWorkspaceForBilling(request, true);
     const connect = amazonIngestModule.createAmazonConnect({ hmacKeyHex: AMAZON_INTENT_HMAC_KEY.value() });
@@ -34301,7 +34297,7 @@ function amazonAdminClient() {
 }
 
 exports.amazonStatus = onCall(
-  { region: "europe-west2", serviceAccount: AMAZON_CALLER_SA },
+  { region: "europe-west2", serviceAccount: "amazon-caller@eggcraft-studio.iam.gserviceaccount.com" },
   async (request) => {
     const { companyId } = await requireWorkspaceForBilling(request, false);
     const r = await amazonAdminClient().status(companyId);
@@ -34311,7 +34307,7 @@ exports.amazonStatus = onCall(
 );
 
 exports.amazonDisconnect = onCall(
-  { region: "europe-west2", serviceAccount: AMAZON_CALLER_SA },
+  { region: "europe-west2", serviceAccount: "amazon-caller@eggcraft-studio.iam.gserviceaccount.com" },
   async (request) => {
     const { companyId } = await requireWorkspaceForBilling(request, true);
     const connectionId = String(request.data?.connectionId || "").trim();
