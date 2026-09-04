@@ -9677,6 +9677,25 @@ exports.exportOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, mem
   }
   orders.sort((a, b) => (a.paymentDate ? a.paymentDate.getTime() : 0) - (b.paymentDate ? b.paymentDate.getTime() : 0));
 
+  // An export is the moment personal data leaves NivaDesk entirely, so it is
+  // the channel a marketplace's conditions bite hardest on. Each order is
+  // redacted according to the same table every other outbound path consults —
+  // the row still appears, with its dates and its money, and the buyer's name
+  // and address are blank. A missing row would look like a bug; a blank name
+  // reads as what it is. See functions/privacy/outbound.js.
+  const outboundPolicy = require("./privacy/outbound");
+  let redactedForExport = 0;
+  for (const order of orders) {
+    const { record, verdict } = outboundPolicy.redactForChannel(order.data, "export");
+    if (!verdict.allow || verdict.minimal) {
+      order.data = record;
+      redactedForExport += 1;
+    }
+  }
+  if (redactedForExport > 0) {
+    console.log("exportOrders: outbound policy redacted buyer details", { companyId, template, redactedForExport });
+  }
+
   let header = [];
   const rows = [];
 
@@ -9843,7 +9862,7 @@ exports.exportOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, mem
     // string, and a postcode is indistinguishable from a product code.
     categories: EXPORT_TEMPLATE_CATEGORIES[template] || ["name"],
     recordCount: rows.length,
-    note: `template=${template}`
+    note: `template=${template} redacted=${redactedForExport}`
   }).catch(() => undefined);
 
   return {
@@ -22915,7 +22934,43 @@ function nvRequireWorkflowAssignedOrder(context = {}, orderData = {}) {
  * the person may see instead of silently getting the permissive answer.
  */
 function nvSafeOrderForChatGPT(doc, context) {
-  const data = doc.data ? (doc.data() || {}) : (doc || {});
+  const raw = doc.data ? (doc.data() || {}) : (doc || {});
+
+  // The one gate every assistant order path goes through.
+  //
+  // An Amazon order lands in the same collection as everything else, and the
+  // assistant's own query filters on companyId and nothing more — so without
+  // this, connecting Amazon would make Amazon buyer data reachable by an
+  // OpenAI-hosted assistant and no line of code would look wrong. The policy
+  // lives in one table (functions/privacy/outbound.js) and every outbound path
+  // asks it the same question.
+  //
+  // A blocked record is not withheld entirely: the buyer's details are removed
+  // and the rest stays, so the assistant can still say the workshop has four
+  // orders due on Friday — the workshop's own fact — without naming anybody.
+  const outbound = require("./privacy/outbound");
+  const { record: data, verdict, removed } = outbound.redactForChannel(raw, "assistant");
+  if (!verdict.allow || verdict.minimal) {
+    // A block is a fact worth keeping. One that nobody can see is
+    // indistinguishable from a feature that quietly does not work.
+    recordPiiAccess({
+      companyId: String(raw.companyId || (context && context.companyId) || ""),
+      actorUid: String((context && context.uid) || ""),
+      actorEmail: String((context && context.email) || ""),
+      actorRole: "chatgpt_connection",
+      action: "assistant",
+      source: "mcp",
+      subject: {
+        kind: "order",
+        id: String(doc.id || raw.id || ""),
+        provider: verdict.provider,
+        externalId: String(raw?.commerce?.externalId || "")
+      },
+      categories: ["name", "email", "phone", "address"],
+      note: `blocked:${verdict.reason} fields=${removed.length}`
+    }).catch(() => undefined);
+  }
+
   const showFinance = nvRoleCanAccessFinancialInfo(
     (context && context.companyData) || {},
     (context && context.uid) || ""
@@ -27945,6 +28000,28 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     if (await customerHasOptedOut(companyId, after.customerName)) {
       await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
       console.log("notifyCustomerOnStatusChange: customer has asked not to be contacted", { companyId, orderId });
+      return;
+    }
+
+    // Whose data is going out, and where it is allowed to go.
+    //
+    // A marketplace lends the buyer's details for fulfilment, and a dispatch
+    // notice is squarely that — but it goes through Twilio and an email
+    // provider, which are third parties, so the amount that travels is the
+    // amount the channel cannot do without. The table decides, not this
+    // function. See functions/privacy/outbound.js.
+    const messagingVerdict = require("./privacy/outbound").mayReleasePii(after, "messaging");
+    if (!messagingVerdict.allow) {
+      await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
+      console.log("notifyCustomerOnStatusChange: outbound policy refuses this provider", {
+        companyId, orderId, provider: messagingVerdict.provider, reason: messagingVerdict.reason
+      });
+      recordPiiAccess({
+        companyId, actorUid: "", actorRole: "system", action: "api", source: "server",
+        subject: { kind: "order", id: orderId, provider: messagingVerdict.provider },
+        categories: ["name", "phone", "email"],
+        note: `messaging blocked:${messagingVerdict.reason}`
+      }).catch(() => undefined);
       return;
     }
 
