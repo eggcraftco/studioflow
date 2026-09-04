@@ -28972,6 +28972,126 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
   }
 });
 
+/**
+ * The activation funnel, across every workspace.
+ *
+ * Thirty-seven workspaces outside this studio have signed up and not one has
+ * ever created a customer record. That number came from a hand-run query, which
+ * is why nobody had seen it for weeks — a measurement that takes an engineer an
+ * afternoon is a measurement nobody takes.
+ *
+ * Deliberately DERIVED rather than read from a stored funnel: nothing has been
+ * recording lifecycle events, and waiting for them would leave every workspace
+ * that already signed up permanently invisible. The events come out of the
+ * documents each workspace already has (functions/lifecycle/derive.js), which
+ * works retroactively and writes nothing.
+ *
+ * Admin-only, and it reads real business data across every tenant — so it is
+ * gated the same way the landing-page statistics are, on a verified address in
+ * the support-admin list, and it returns COUNTS and states rather than the
+ * orders and customers it derived them from.
+ */
+exports.getActivationFunnel = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || request.auth.token?.email_verified !== true || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "The activation funnel is restricted to NivaDesk admins.");
+  }
+
+  const lifecycle = {
+    derive: require("./lifecycle/derive"),
+    activation: require("./lifecycle/activation"),
+    risk: require("./lifecycle/risk")
+  };
+  const db = admin.firestore();
+  const nowMs = Date.now();
+  const limit = Math.min(Math.max(Number(request.data?.limit) || 200, 1), 500);
+
+  const companiesSnap = await db.collection("companies").limit(limit).get();
+  const rows = [];
+
+  for (const companyDoc of companiesSnap.docs) {
+    const companyId = companyDoc.id;
+    const company = companyDoc.data() || {};
+    // Each workspace is read on its own rather than through collection-group
+    // queries, because the counts have to be attributable to a workspace and a
+    // cross-tenant scan that mixed them up would be worse than no number.
+    const [settingsSnap, orders, customers, banks, accounting, inventory] = await Promise.all([
+      db.collection("companySettings").doc(companyId).get(),
+      db.collection("siparisler").where("companyId", "==", companyId).limit(400).get(),
+      db.collection("musteriler").where("companyId", "==", companyId).limit(400).get(),
+      db.collection("companies").doc(companyId).collection("bankConnections").limit(20).get(),
+      db.collection("companies").doc(companyId).collection("accountingConnections").limit(20).get(),
+      db.collection("companies").doc(companyId).collection("inventoryItems").limit(400).get().catch(() => ({ docs: [] }))
+    ]);
+
+    const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
+    const snapshot = {
+      settings,
+      orders: orders.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      customers: customers.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      bankConnections: banks.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      accountingConnections: accounting.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      inventoryItems: (inventory.docs || []).map((doc) => ({ id: doc.id, ...doc.data() }))
+    };
+
+    const { events, missing } = lifecycle.derive.deriveEvents(snapshot);
+    const path = lifecycle.activation.activationPathFor(settings);
+    const state = lifecycle.activation.lifecycleState({ events, path, nowMs });
+    const meaningful = lifecycle.activation.meaningfulEvents(events);
+    const signedUpAtMs = lifecycle.derive.firstTime(company.createdAt, company.createdAtMs, settings.businessOnboardingCompletedAt);
+    const risk = lifecycle.risk.riskScore({
+      nowMs, signedUpAtMs,
+      activated: state.progress.activated,
+      activatedAtMs: state.progress.activatedAtMs,
+      lastMeaningfulAtMs: meaningful.length ? meaningful[0].atMs : 0
+    });
+
+    rows.push({
+      companyId,
+      name: String(company.name || settings.companyName || "").slice(0, 120),
+      path,
+      state: state.state,
+      reason: state.reason,
+      activated: state.progress.activated,
+      activatedAtMs: state.progress.activatedAtMs,
+      steps: state.progress.steps,
+      signedUpAtMs: signedUpAtMs || 0,
+      orderCount: snapshot.orders.length,
+      customerCount: snapshot.customers.length,
+      meaningfulEventCount: meaningful.length,
+      lastMeaningfulAtMs: meaningful.length ? meaningful[0].atMs : 0,
+      riskScore: risk.score,
+      riskLevel: risk.level,
+      riskReasons: risk.reasons,
+      // Which of this workspace's answers could not be derived at all, so a
+      // zero here is never mistaken for a workspace that did nothing.
+      underivable: missing
+    });
+  }
+
+  const byState = {};
+  for (const row of rows) byState[row.state] = (byState[row.state] || 0) + 1;
+  const byPath = {};
+  for (const row of rows) byPath[row.path] = (byPath[row.path] || 0) + 1;
+
+  return {
+    ok: true,
+    generatedAtMs: nowMs,
+    workspaces: rows.sort((a, b) => b.riskScore - a.riskScore || b.signedUpAtMs - a.signedUpAtMs),
+    totals: {
+      workspaces: rows.length,
+      activated: rows.filter((row) => row.activated).length,
+      withCustomers: rows.filter((row) => row.customerCount > 0).length,
+      withOrders: rows.filter((row) => row.orderCount > 0).length,
+      byState,
+      byPath
+    },
+    // Said once, at the top, rather than implied by silence.
+    derivedFrom: "existing workspace documents",
+    underivable: lifecycle.derive.UNDERIVABLE_EVENTS
+  };
+});
+
 // Admin-only aggregation for the /custom-order-management landing page. Reads
 // the daily customOrderLandingStats counters and returns per-day rows + totals
 // + device/source breakdowns. The dashboard derives CTR + conversion rates.
