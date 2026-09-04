@@ -91,7 +91,7 @@ check("the policy document says what is enforced where", () => {
   }
 });
 
-check("the operator audit is not marked done before it is done", () => {
+check("the questionnaire answer follows the audit table, in both directions", () => {
   // The failure this guards against is the easy one: a written policy read as a
   // completed control. Until every operator account has actually been checked
   // against §6, the questionnaire answer is No, and the document has to keep
@@ -99,30 +99,41 @@ check("the operator audit is not marked done before it is done", () => {
   const doc = read("docs", "security", "password-and-mfa-policy.md");
   assert.ok(/## 8\. Outstanding: the operator account audit/.test(doc),
     "the operator account audit section is gone");
-  assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
-    "the document no longer states that the answer stays No until the audit is done");
-  // The rule is not "has the audit run" but "did every account pass". A first
-  // pass that FOUND problems is still a reason to answer No, and that is the
-  // easy thing to get wrong once the table stops being empty.
+  // The rule is not "has the audit run" but "did every row reach a verdict".
+  // An earlier version of this looked for the word "no" anywhere in a row and
+  // called that non-compliance — which flagged the sentence "there is no second
+  // human" as a failure. The verdict lives in the last cell, so read that.
   const table = doc.slice(doc.indexOf("| # | Account"));
   const rows = table.split("\n").filter((line) => /^\| \d+ \|/.test(line));
   assert.ok(rows.length > 0, "the audit table lost its rows");
 
-  const failing = rows.filter((row) => /\bNo\b|Unverified/i.test(row));
-  if (failing.length) {
+  const verdictOf = (row) => {
+    const cells = row.split("|").map((c) => c.trim());
+    return cells[cells.length - 2] || "";
+  };
+  const open = rows.filter((row) => !/^\*\*Closed\*\*|^\*\*Out of scope\*\*/.test(verdictOf(row)));
+
+  if (open.length) {
     assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
-      `${failing.length} audited account row(s) are non-compliant or unverified, but §8 no longer answers No`);
-    assert.ok(/NOT passed|Not yet/.test(doc),
-      "the review record does not say the audit failed, while the table says it did");
+      `${open.length} audit row(s) have not reached a verdict, but §8 no longer answers No:\n  ` +
+      open.map((r) => verdictOf(r).slice(0, 70)).join("\n  "));
   } else {
-    // Every row clean: the answer may change, and the review record must say so.
+    // Every row closed: the answer may be Yes, and the review record must agree.
     assert.ok(!/NivaDesk answers\s+\*\*No\*\*/.test(doc),
-      "every account passes but §8 still answers No — update it deliberately");
+      "every row is closed but §8 still answers No — change it deliberately");
+    assert.ok(/\*\*PASSED\*\*/.test(doc),
+      "every row is closed but the §7 review record does not say the audit passed");
+    // A Yes that is not qualified would overstate what these services can show.
+    // The qualification has to sit in the sentence that states the answer, not
+    // merely somewhere in the file — the word appears in several notes.
+    const answer = doc.slice(doc.indexOf("NivaDesk\ntherefore answers"), doc.indexOf("## 8") + 4000);
+    const sentence = answer.slice(0, answer.indexOf("\n\n"));
+    assert.ok(/attestation/.test(sentence),
+      "the sentence that states the Yes answer does not say that the length and character-class " +
+      "cells are attestations rather than readings");
   }
   for (const row of rows) {
-    const cells = row.split("|").map((c) => c.trim());
-    assert.ok(cells[cells.length - 2],
-      `an audit row has no result: ${cells[2] || row.slice(0, 60)}`);
+    assert.ok(verdictOf(row), `an audit row has no result: ${row.slice(0, 60)}`);
   }
 });
 
