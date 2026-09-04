@@ -698,6 +698,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // How far the retention sweep has got in this workspace. It holds no
+    // personal data — one timestamp — but it decides what the sweep looks at,
+    // and a member who could push it forward would stop buyer details ever
+    // being deleted. Server-written only.
+    match /companies/{companyId}/privacyState/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -901,6 +910,7 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
+        && collectionId != 'privacyState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -959,6 +969,7 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
+        && collectionId != 'privacyState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'

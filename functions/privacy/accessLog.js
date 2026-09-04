@@ -44,7 +44,11 @@ const ACCESS_ACTIONS = Object.freeze([
   // before restricted fields can be read, so the request and the read are two
   // separate facts and both belong here.
   "rdt_requested",
-  "restricted_resource_accessed"
+  "restricted_resource_accessed",
+  // The other end of the obligation. Deleting somebody's details on time is
+  // only demonstrable if the deletion left a record, and that record is the one
+  // thing a scrub cannot leave in the order itself.
+  "erased"
 ]);
 
 /** Where the request came from. */
@@ -135,6 +139,10 @@ function accessEntry(input = {}) {
 function worthLogging(entry) {
   if (!entry || !entry.companyId || !entry.atMs) return false;
   if (entry.action === "rdt_requested" || entry.action === "restricted_resource_accessed") return true;
+  // An erasure is worth recording even when the order had nothing left to
+  // remove: "we looked and there was nothing" is a different fact from "we
+  // never looked", and only one of them is defensible.
+  if (entry.action === "erased") return true;
   return entry.categories.length > 0;
 }
 

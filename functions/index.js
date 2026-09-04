@@ -11952,6 +11952,142 @@ exports.cleanupExpiredOrderFiles = onSchedule(
 // would reset their password on restore; OAuth users restore fully. Kept private
 // (admin-only path) and pruned after AUTH_BACKUP_RETENTION_DAYS.
 const AUTH_BACKUP_RETENTION_DAYS = 30;
+// ---------------------------------------------------------------------------
+// Marketplace PII retention sweep
+//
+// A marketplace lends a seller a buyer's name and address so the seller can make
+// the thing and post it. Amazon's Data Protection Policy ends that loan thirty
+// days after fulfilment. The decision about any one order is in
+// privacy/retention.js — pure, no clock, no database — and this is the part that
+// walks the workspaces and writes.
+//
+// Three things shape how it walks.
+//
+// It goes workspace by workspace rather than issuing one collection-group query,
+// because a collection-group query needs its own composite index, and an index
+// that has not been deployed does not fail — it returns nothing. A retention
+// sweep that silently returns nothing looks exactly like a retention sweep with
+// no work to do, and would go on looking like that for months.
+//
+// It keeps a cursor per workspace, so each night it reads the orders delivered
+// since the last pass rather than every delivered order ever. Without one, an
+// order scrubbed in January is re-read every night for the rest of its life.
+//
+// It advances that cursor only past orders it actually finished with. An order
+// that is not yet due holds the cursor where it is, so the next pass sees it
+// again rather than stepping over it forever.
+// ---------------------------------------------------------------------------
+
+const RETENTION_SWEEP_COMPANY_LIMIT = 400;
+const RETENTION_SWEEP_ORDER_LIMIT = 200;
+
+/** The shortest positive retention anybody imposes, in days. Bounds the query. */
+function shortestRetentionDays() {
+  const retention = require("./privacy/retention");
+  const days = Object.values(retention.PROVIDER_RETENTION)
+    .map((rule) => Number(rule && rule.days) || 0)
+    .filter((d) => d > 0);
+  return days.length ? Math.min(...days) : 0;
+}
+
+/**
+ * One workspace's pass. Returns what it did, so the scheduled job can report a
+ * total rather than a shrug.
+ */
+async function sweepCompanyMarketplacePii(companyId, nowMs) {
+  const retention = require("./privacy/retention");
+  const db = admin.firestore();
+  const stateRef = db.collection("companies").doc(companyId).collection("privacyState").doc("retention");
+  const stateSnap = await stateRef.get();
+  const cursor = Number((stateSnap.data() || {}).sweptDeliveredAtMs) || 0;
+
+  const minDays = shortestRetentionDays();
+  if (!minDays) return { scanned: 0, scrubbed: 0, cursor };
+  // A superset: every order that COULD be due under the shortest rule. The
+  // per-order decision still uses that provider's own number.
+  const cutoffMs = nowMs - minDays * 24 * 60 * 60 * 1000;
+  if (cutoffMs <= cursor) return { scanned: 0, scrubbed: 0, cursor };
+
+  const due = await db.collection("companies").doc(companyId).collection("siparisler")
+    .where("deliveredAtMs", ">", cursor)
+    .where("deliveredAtMs", "<=", cutoffMs)
+    .orderBy("deliveredAtMs", "asc")
+    .limit(RETENTION_SWEEP_ORDER_LIMIT)
+    .get();
+
+  let scrubbed = 0;
+  const considered = [];
+
+  for (const doc of due.docs) {
+    const order = doc.data() || {};
+    const { patch, decision } = retention.scrubPatch(order, nowMs);
+    considered.push({ deliveredAtMs: Number(order.deliveredAtMs) || 0, decision });
+
+    if (!decision.scrub) continue;
+    await doc.ref.set(patch, { merge: true });
+    scrubbed += 1;
+    // The order can no longer show what was removed, so the log has to. It
+    // records categories and ids, never the values — an audit trail that
+    // contains the data it audits is a second copy of the problem.
+    await recordPiiAccess({
+      companyId,
+      actorUid: "",
+      actorEmail: "",
+      action: "erased",
+      source: "server",
+      subject: { kind: "order", id: doc.id, provider: decision.rule ? decision.rule.provider : "" },
+      categories: ["name", "email", "phone", "address"],
+      note: `retention:${decision.reason}`
+    }).catch(() => undefined);
+  }
+
+  // Where the cursor may move to. An order that is not yet due holds it, so the
+  // next pass finds that order again instead of stepping past it forever.
+  const nextCursor = retention.cursorAfterSweep(cursor, considered);
+
+  // A full page means there is more behind it; leave the cursor where the page
+  // ended and let tomorrow continue, rather than looping until a timeout.
+  if (nextCursor > cursor) {
+    await stateRef.set({
+      sweptDeliveredAtMs: nextCursor,
+      lastSweptAtMs: nowMs,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+
+  return { scanned: due.size, scrubbed, cursor: nextCursor };
+}
+
+exports.sweepMarketplacePii = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 540, memory: "512MiB" },
+  async () => {
+    const nowMs = Date.now();
+    if (!shortestRetentionDays()) {
+      console.log("sweepMarketplacePii: no provider imposes a retention period; nothing to do.");
+      return;
+    }
+    const companies = await admin.firestore().collection("companies")
+      .limit(RETENTION_SWEEP_COMPANY_LIMIT).get();
+
+    let scanned = 0;
+    let scrubbed = 0;
+    let failed = 0;
+    for (const company of companies.docs) {
+      try {
+        const result = await sweepCompanyMarketplacePii(company.id, nowMs);
+        scanned += result.scanned;
+        scrubbed += result.scrubbed;
+      } catch (error) {
+        // One workspace's failure is not the sweep's failure. It is reported and
+        // the cursor is left alone, so tomorrow tries again from the same place.
+        failed += 1;
+        console.warn(`sweepMarketplacePii: ${company.id} failed:`, String(error?.message || error).slice(0, 300));
+      }
+    }
+    console.log(`sweepMarketplacePii: ${companies.size} workspaces, ${scanned} orders considered, ${scrubbed} scrubbed, ${failed} failed.`);
+  }
+);
+
 exports.backupAuthUsers = onSchedule(
   { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2" },
   async () => {

@@ -153,7 +153,43 @@ function scrubPatch(order = {}, nowMs = 0, overrides = {}) {
   return { patch, decision };
 }
 
+/**
+ * Whether a decision is one the sweep is finished with.
+ *
+ * Finished means: this order will never need looking at again for this reason.
+ * Scrubbed, already scrubbed, or nobody imposes a rule on it. "Not due" and
+ * "not delivered" are the opposite — they are answers that change with time.
+ */
+function decisionIsFinal(decision) {
+  if (!decision) return false;
+  if (decision.scrub) return true;
+  return decision.reason === "already_scrubbed" || decision.reason === "no_retention_rule";
+}
+
+/**
+ * Where the sweep's cursor should sit after a pass.
+ *
+ * The cursor is what stops the sweep re-reading every delivered order it has
+ * ever seen, every night, forever. It may only move past orders the sweep has
+ * finished with: one order that is not yet due holds it, so the next pass finds
+ * that order again instead of stepping over it and never returning.
+ *
+ * Items arrive in delivery order, which is the order the query returns them in.
+ * A gap — a finished order after an unfinished one — does not move the cursor,
+ * because moving it would skip the unfinished one in between.
+ */
+function cursorAfterSweep(previousCursor = 0, items = []) {
+  let cursor = Number(previousCursor) || 0;
+  for (const item of Array.isArray(items) ? items : []) {
+    const at = Number(item && item.deliveredAtMs) || 0;
+    if (!decisionIsFinal(item && item.decision)) break;
+    if (at > cursor) cursor = at;
+  }
+  return cursor;
+}
+
 module.exports = {
   PROVIDER_RETENTION, PII_FIELDS, KEPT_ON_PURPOSE,
-  providerOf, retentionRuleFor, scrubDecision, scrubPatch
+  providerOf, retentionRuleFor, scrubDecision, scrubPatch,
+  decisionIsFinal, cursorAfterSweep
 };
