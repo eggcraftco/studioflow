@@ -6,6 +6,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onTaskDispatched } = require("firebase-functions/v2/tasks");
 const { getFunctions } = require("firebase-admin/functions");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const { onObjectFinalized } = require("firebase-functions/v2/storage");
 const archiver = require("archiver");
 const nodemailer = require("nodemailer");
 
@@ -52,6 +53,8 @@ function nvMailTransport(options) {
   return nodemailer.createTransport(options);
 }
 const { defineSecret } = require("firebase-functions/params");
+const { createClamavScanner } = require("./security/clamavClient");
+const { createMalwareScanTrigger } = require("./malwareScanTrigger");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
 // admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
@@ -34084,6 +34087,64 @@ exports.shopifyReconcileOrders = onSchedule({
   }
   console.log(`shopify reconcile sweep: ${swept} store(s), ${missed} caught up, ${failed} failed, ${snap.size} active`);
 });
+
+// ---------------------------------------------------------------------------
+// Uploaded-file malware scanning (MAL-001).
+//
+// Two switches, both off by default, and BOTH are required:
+//   NIVADESK_CLAMAV_URL   the private Cloud Run scanner's URL
+//   NIVADESK_MALWARE_SCAN "1" to actually act on uploads
+//
+// Without the URL createClamavScanner returns null, and shouldHandle refuses to
+// run with no scanner rather than passing files through unscanned. Half of this
+// mechanism is worse than none: a scan that always answers "clean" is a false
+// assurance, so every failure here withholds the download token instead.
+//
+// The order is the control, and it does not change: strip the Firebase download
+// token first, scan second, restore the SAME token only on a clean verdict.
+const malwareScanner = createClamavScanner({
+  endpoint: String(process.env.NIVADESK_CLAMAV_URL || "").trim()
+});
+
+const malwareScanTrigger = createMalwareScanTrigger({
+  admin,
+  scanBuffer: malwareScanner,
+  enabled: String(process.env.NIVADESK_MALWARE_SCAN || "") === "1",
+  scannerName: "clamav"
+});
+
+// Named, not defaulted. The SDK's default bucket resolves to <project>.appspot.com,
+// which does not exist here — every upload the app makes goes to the
+// firebasestorage.app bucket instead, and a trigger on the wrong bucket is a
+// scanner that silently never runs.
+const MALWARE_SCAN_BUCKET = String(
+  process.env.NIVADESK_SCAN_BUCKET || "eggcraft-studio.firebasestorage.app"
+).trim();
+
+exports.scanUploadedFile = onObjectFinalized(
+  { bucket: MALWARE_SCAN_BUCKET, region: "europe-west2", memory: "512MiB", timeoutSeconds: 540, retry: false },
+  async (event) => {
+    try {
+      const result = await malwareScanTrigger.handleFinalizedObject({
+        bucket: event.data.bucket,
+        name: event.data.name,
+        contentType: event.data.contentType,
+        size: event.data.size,
+        generation: event.data.generation,
+        metadata: event.data.metadata || {}
+      });
+      if (result && result.handled) {
+        console.log(`scanUploadedFile: ${event.data.name} -> ${result.verdict || result.reason}`);
+      }
+    } catch (error) {
+      // A throw here would make Cloud Storage redeliver the event, and the
+      // claim already recorded means the retry finds it "already scanned" and
+      // does nothing. Swallow it: the token stays withheld, which is the safe
+      // side, and the record says why.
+      console.error("scanUploadedFile failed:", String(error?.message || error).slice(0, 300));
+    }
+  }
+);
 
 if (process.env.NIVADESK_E2E === "1") {
   exports._e2e = {

@@ -307,6 +307,25 @@ downloadable is evidence of activity, not a control. Which of the three to
 build is a decision, and it should be taken before the scanner is wired up
 rather than after.
 
+### Status, 4 September 2026
+
+Option 1 is **built and passing in staging**, and is **not in production**. Full
+results in [`malware-scanning-staging-report.md`](malware-scanning-staging-report.md):
+the ClamAV service is deployed private to `europe-west2`, an authenticated clean
+file scans clean, EICAR is caught by name, an oversized file is refused rather
+than passed, and an instance whose clamd has not finished loading refuses
+traffic instead of calling everything clean.
+
+Two things follow from that, and neither is optional:
+
+- `scanUploadedFile` is wired into `functions/index.js` with both switches off
+  and has **not been deployed**. Turning it on is the user's call, twice over:
+  once to deploy with the flag off, once to set the flag.
+- **The anti-malware answer stays No.** Option 3 is not built, the
+  `getDownloadURL` race above is still open, and nothing here is in production.
+  Staging passing is not the same as the control existing, which is precisely
+  what §8 says.
+
 ## 8. The rule this document exists to enforce
 
 A control counts as implemented when it is **in production and evidenced**. A

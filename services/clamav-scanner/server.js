@@ -13,15 +13,27 @@ const http = require("http");
 const net = require("net");
 
 const PORT = Number(process.env.PORT) || 8080;
-const CLAMD_HOST = process.env.CLAMD_HOST || "127.0.0.1";
-const CLAMD_PORT = Number(process.env.CLAMD_PORT) || 3310;
-const MAX_BYTES = Number(process.env.MAX_SCAN_BYTES) || 32 * 1024 * 1024;
+// The official ClamAV image runs clamd on a unix socket, not TCP. Connecting to
+// 127.0.0.1:3310 got a refusal on every attempt, so the startup probe never
+// went green and the revision never took traffic — which is the failure mode
+// working exactly as intended, just for the wrong reason.
+const CLAMD_SOCKET = process.env.CLAMD_SOCKET || "/tmp/clamd.sock";
+const CLAMD_HOST = process.env.CLAMD_HOST || "";
+const CLAMD_PORT = Number(process.env.CLAMD_PORT) || 0;
+
+/** The socket to clamd: the unix one this image provides, or TCP if configured. */
+function connectToClamd() {
+  return CLAMD_HOST && CLAMD_PORT
+    ? net.createConnection({ host: CLAMD_HOST, port: CLAMD_PORT })
+    : net.createConnection({ path: CLAMD_SOCKET });
+}
+const MAX_BYTES = Number(process.env.MAX_SCAN_BYTES) || 25 * 1024 * 1024;
 const CLAMD_TIMEOUT_MS = Number(process.env.CLAMD_TIMEOUT_MS) || 90000;
 
 /** clamd's INSTREAM: length-prefixed chunks, terminated by a zero-length one. */
 function scanWithClamd(buffer) {
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: CLAMD_HOST, port: CLAMD_PORT });
+    const socket = connectToClamd();
     let reply = "";
     const fail = (error) => { socket.destroy(); reject(error); };
 
@@ -48,7 +60,7 @@ function scanWithClamd(buffer) {
 /** Is clamd up and holding signatures? Used by readiness, not by scanning. */
 function clamdReady() {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host: CLAMD_HOST, port: CLAMD_PORT });
+    const socket = connectToClamd();
     let reply = "";
     const done = (ok) => { socket.destroy(); resolve(ok); };
     socket.setTimeout(5000, () => done(false));
@@ -63,17 +75,27 @@ function clamdReady() {
 
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
-    const chunks = [];
+    let chunks = [];
     let total = 0;
+    let overflowed = false;
     req.on("data", (chunk) => {
+      // Past the cap we drain without keeping anything, so an oversized upload
+      // still cannot exhaust this container's memory. What we must NOT do is
+      // destroy the socket here: that kills the response along with the
+      // request, and the caller sees a dropped connection instead of the
+      // too_large verdict. The socket is closed by the handler, after it answers.
+      if (overflowed) return;
       total += chunk.length;
-      // Refused rather than buffered. A request larger than the cap must not be
-      // able to exhaust this container's memory on the way to being rejected.
-      if (total > limit) { reject(new Error("too_large")); req.destroy(); return; }
+      if (total > limit) {
+        overflowed = true;
+        chunks = [];
+        reject(new Error("too_large"));
+        return;
+      }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
+    req.on("end", () => { if (!overflowed) resolve(Buffer.concat(chunks)); });
+    req.on("error", (error) => { if (!overflowed) reject(error); });
   });
 }
 
@@ -96,7 +118,13 @@ http.createServer(async (req, res) => {
   try {
     bytes = await readBody(req, MAX_BYTES);
   } catch (error) {
-    if (String(error.message) === "too_large") return send(res, 200, { status: "too_large" });
+    if (String(error.message) === "too_large") {
+      // 200, not 413: the caller reads the verdict out of the body, and a
+      // non-2xx would collapse "too big to scan" into "scanner broken".
+      // Hang up once the answer is on the wire so the rest of the upload stops.
+      res.on("finish", () => req.destroy());
+      return send(res, 200, { status: "too_large" });
+    }
     return send(res, 503, { status: "read_failed" });
   }
   if (!bytes.length) return send(res, 200, { status: "clean", note: "empty file" });

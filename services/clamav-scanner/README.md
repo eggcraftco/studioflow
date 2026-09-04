@@ -34,14 +34,14 @@ deployed in two steps.
 
 ```bash
 gcloud builds submit services/clamav-scanner \
-  --tag europe-west2-docker.pkg.dev/<project>/nivadesk/clamav-scanner:v1 \
+  --tag europe-west2-docker.pkg.dev/<project>/cloud-run-source-deploy/clamav-scanner:v1 \
   --project <project>
 ```
 
 **2. Deploy the service from the spec**
 
 ```bash
-sed 's|IMAGE_PLACEHOLDER|europe-west2-docker.pkg.dev/<project>/nivadesk/clamav-scanner:v1|' \
+sed 's|IMAGE_PLACEHOLDER|europe-west2-docker.pkg.dev/<project>/cloud-run-source-deploy/clamav-scanner:v1|' \
   services/clamav-scanner/service.yaml > /tmp/clamav-service.yaml
 
 gcloud run services replace /tmp/clamav-service.yaml \
@@ -94,6 +94,27 @@ comes back clean, EICAR comes back infected, an oversized file comes back
 pass. The EICAR string is assembled at runtime so this repository never contains
 it — checking it in would have every scanner on every developer machine
 quarantine the checkout.
+
+## The size cap has to stay under Cloud Run's
+
+`MAX_SCAN_BYTES` is **25 MiB**, and three places have to agree on it: this
+service's env, `server.js`'s fallback, and `maxScanBytes` in
+`functions/malwareScanTrigger.js` (which is the one that matters, because it
+decides before downloading anything).
+
+It must stay strictly below Cloud Run's 32 MiB request limit. When ours was also
+32 MiB, Cloud Run's front door rejected oversized requests with an HTML `413`
+that never reached this server — so the verdict came from Google's proxy instead
+of us, and `too_large` was unreachable code. It failed closed, but it reported
+"scanner broken" for a file that was merely too big.
+
+`functions/test/qa/malware-scan-trigger.test.js` pins all three and fails if any
+of them drifts.
+
+One related trap, since it cost an afternoon: do **not** call `req.destroy()`
+when the cap is exceeded. That closes the socket the response has to travel on,
+and the caller sees a dropped connection instead of the verdict. Stop buffering,
+answer, and hang up afterwards.
 
 ## Only then
 

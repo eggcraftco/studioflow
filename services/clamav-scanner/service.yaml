@@ -18,6 +18,13 @@ spec:
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
         run.googleapis.com/execution-environment: gen2
+        # CPU allocated for the container's whole life, not only while it is
+        # handling a request. ClamAV loads 3.6 million signatures at startup,
+        # which happens BEFORE any request exists — under Cloud Run's default
+        # throttling that load creeps along at a fraction of a CPU and the
+        # startup probe times out before clamd is ever ready. With minScale 0
+        # this still costs nothing while no instance is running.
+        run.googleapis.com/cpu-throttling: "false"
     spec:
       # A scan of a 32 MiB file has to finish inside this, cold start included.
       timeoutSeconds: 300
@@ -34,7 +41,7 @@ spec:
               cpu: "2"
           env:
             - name: MAX_SCAN_BYTES
-              value: "33554432"
+              value: "26214400"
           # THE important setting. Cloud Run's default startup probe is a TCP
           # connect, which succeeds the moment the HTTP server binds its port —
           # and this server binds long before clamd has loaded its signatures.
@@ -51,7 +58,9 @@ spec:
             initialDelaySeconds: 10
             timeoutSeconds: 5
             periodSeconds: 10
-            failureThreshold: 30
+            # Ten minutes. Loading the signature database on a cold instance
+            # is minutes of work, and giving up early means no scanner at all.
+            failureThreshold: 60
           # After startup, a liveness check on the same endpoint so an instance
           # whose clamd has died is replaced rather than left answering 503s.
           livenessProbe:

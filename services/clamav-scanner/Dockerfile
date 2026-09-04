@@ -10,8 +10,15 @@
 # service is ever called. The file is unreachable while we wait.
 FROM clamav/clamav:1.4
 
-# freshclam runs on boot in this image; the database is baked in as a floor so a
-# cold start is not also a download.
+# The image's own supervisor starts clamd and freshclam. Both stay on: freshclam
+# keeps signatures current, and a scanner running yesterday's database is a
+# scanner that misses today's malware.
+#
+# The variable names are the ones /init actually reads — CLAMAV_NO_FRESHCLAMD,
+# not CLAMAV_NO_FRESHCLAM. The first attempt used the wrong one, which is why
+# freshclam was running while clamd was not: two different variables, and only
+# one of them was being answered.
+ENV CLAMAV_NO_CLAMD=false
 ENV CLAMAV_NO_FRESHCLAMD=false
 
 RUN apk add --no-cache nodejs
@@ -22,8 +29,19 @@ COPY server.js /srv/server.js
 ENV PORT=8080
 EXPOSE 8080
 
-# clamd first, then the HTTP front. The front reports not-ready until clamd
-# answers, so Cloud Run's health check does not send traffic to a scanner that
-# has no signatures loaded yet — a scanner that says "clean" because it has
-# nothing to compare against is the worst possible failure here.
-CMD ["/bin/sh", "-c", "/init-unprivileged & exec node /srv/server.js"]
+# ENTRYPOINT is cleared deliberately, and this is the line that took three
+# deploys to get right.
+#
+# The base image's entrypoint is /init, so a CMD is passed to it as ARGUMENTS —
+# and /init has a branch for that: given an argument that is an executable, it
+# sets CLAMAV_NO_CLAMD=true and execs it instead of starting clamd. So
+# `CMD ["/bin/sh", "-c", …]` became `/init /bin/sh -c …`, clamd was disabled by
+# the image itself, and the environment variable was inherited by the inner
+# /init too. freshclam ran, the database downloaded, the socket was never
+# created, and the startup probe refused the revision — correctly, for a reason
+# that had nothing to do with anything the probe could see.
+#
+# With the entrypoint cleared, /init runs with no arguments and starts clamd the
+# way it is meant to. The HTTP front runs beside it.
+ENTRYPOINT []
+CMD ["/bin/sh", "-c", "node /srv/server.js & exec /init"]
