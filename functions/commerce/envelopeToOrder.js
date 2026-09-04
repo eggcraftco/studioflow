@@ -152,7 +152,14 @@ function shopOwnedFields(envelope, ctx = {}) {
     // in. `taxResponsibility` decides whether it joins the studio's VAT due or
     // is shown as tax the marketplace collected; `unknown` asks rather than
     // guesses. See functions/finance/engine.js.
-    taxAmountKnown: true,
+    // Known when the provider actually told us, not merely because the field
+    // exists. Amazon phase A1 does not request the TAX dataset, so its orders
+    // arrive with no tax figure at all — and `taxAmount: 0, taxAmountKnown:
+    // true` would tell the Finance Engine that the tax on a £120 sale is zero,
+    // which is the same shape as the bug that had channel orders reporting no
+    // VAT. Every other adapter fills tax_total in (a real "0.00" included), so
+    // for them this stays true and nothing changes.
+    taxAmountKnown: envelope.order.tax_total !== null && envelope.order.tax_total !== undefined,
     taxResponsibility: envelope.order.tax_responsibility || "unknown",
     taxIncludedInPrice: envelope.order.tax_included_in_price !== false,
     customFields: providerCustomFields(envelope)

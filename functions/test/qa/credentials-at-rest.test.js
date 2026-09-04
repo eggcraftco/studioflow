@@ -155,7 +155,12 @@ check("nothing new writes a credential as a plain string", () => {
   const allowed = new Map([
     // Minted, returned to ChatGPT, and stored only as a SHA-256 — the document
     // id IS the hash. The raw value never reaches the database.
-    ["index.js:accessToken: rawToken,", "returned to the caller; stored hashed, as the document id"]
+    ["index.js:accessToken: rawToken,", "returned to the caller; stored hashed, as the document id"],
+    // Amazon's LWA access token lives an hour and is fetched from the refresh
+    // token on every sync. It is returned to the caller and held in memory for
+    // the length of one call; §12 of the spec makes "never store the access
+    // token" a hard rule, and the check below proves this one is not stored.
+    ['commerce/amazon/oauth.js:accessToken: String(data.access_token || ""),', "returned to the caller; never persisted"]
   ]);
   const found = [];
   const walk = dir => {
@@ -176,6 +181,45 @@ check("nothing new writes a credential as a plain string", () => {
   assert.deepStrictEqual(found, [],
     "a credential is being written as a plain string. Seal it with security/tokenBox, or — if it is " +
     "genuinely not stored — add it to the allow-list above with the reason:\n  " + found.join("\n  "));
+});
+
+check("Amazon's short-lived access token is never written down", () => {
+  // The allow-list entry above says this token is not stored. That is a claim
+  // about the rest of the connector, so it is checked there rather than taken
+  // on trust: no Amazon file may write an access token to Firestore, and the
+  // refresh token — the one that IS durable — must be sealed.
+  const files = [];
+  const walk = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (entry.name.endsWith(".js")) files.push(full);
+    }
+  };
+  walk(path.join(root, "commerce", "amazon"));
+  if (fs.existsSync(path.join(root, "amazonConnector.js"))) files.push(path.join(root, "amazonConnector.js"));
+
+  assert.ok(files.length > 0, "there are no Amazon files to check — has the connector moved?");
+  for (const file of files) {
+    const body = fs.readFileSync(file, "utf8");
+    const rel = path.relative(root, file);
+    // Sealing the access token would be no better than storing it plainly: it
+    // lasts an hour and is fetched on demand, so keeping it at all turns a
+    // one-hour grant into a durable credential.
+    assert.ok(!/accessTokenEncrypted/.test(body),
+      `${rel} stores an Amazon access token. It lasts an hour and is fetched from the refresh token ` +
+      "on demand; keeping it turns a one-hour grant into a durable credential.");
+    // A Firestore write whose object carries a bare credential field. Matches
+    // the write, not the word — `url.searchParams.set("state", …)` is not one.
+    const writes = [...body.matchAll(/\.(?:set|update|create)\(\s*\{([\s\S]{0,600}?)\}/g)].map((m) => m[1]);
+    for (const written of writes) {
+      for (const field of ["refreshToken", "accessToken", "clientSecret"]) {
+        assert.ok(!new RegExp(`\\b${field}\\s*:`).test(written),
+          `${rel} writes a bare ${field} to a document. Seal it with security/tokenBox first.`);
+      }
+    }
+  }
 });
 
 check("the one allowed plain token really is stored hashed", () => {
