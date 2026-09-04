@@ -41,98 +41,114 @@ Measured from the running project on 4 September 2026.
 | `nivadesk.app` | Cloudflare nameservers → Hostinger origin (the marketing and app site) |
 | `mcp.nivadesk.app` | Firebase Hosting → `chatgptMcp` |
 
-## 3. The two findings that change the plan
+## 3. The decision: a separate security boundary, not a retrofit
 
-### 3.1 Cloud Armor in front of the callables is a client change, not a config change
+The first version of this assessment measured what it would cost to bring the
+existing project up to Amazon's four controls, and found two walls.
 
-Cloud Armor attaches to a Global External Application Load Balancer. Putting the
-HTTP functions behind one is ordinary work. The callables are not.
+**Cloud Armor could not be put in front of the callables without a client
+migration.** 353 of the 388 endpoints are called by the Firebase SDKs on four
+clients, which resolve their own address. Routing them through a load balancer
+means changing the client configuration in web, Swift and Kotlin, shipping the
+native apps through the stores, waiting for adoption, and only then closing the
+direct `run.app` bypass — because closing it first takes the product down for
+everyone still on the old address.
 
-All 353 callables are invoked by the Firebase SDKs on four clients, which resolve
-their own endpoint — `cloudfunctions.net` or the `run.app` address. To route
-those through a load balancer, the clients must be told to call a custom origin
-instead. That means:
+**A VPC Service Controls perimeter around Firestore would break every
+customer.** All four clients read and write Firestore directly from the end
+user's own device, including real-time listeners, and there is no ingress rule
+to write for arbitrary consumer addresses.
 
-- a change to the Firebase Functions client configuration in web, Swift and
-  Kotlin;
-- a release of the macOS, iOS and Android apps, through the stores;
-- a period where older installed versions still call the old address.
+Both walls exist only because the work was framed as *changing the existing
+project*. It does not have to be.
 
-And the bypass has to be closed for the control to mean anything. Setting
-function ingress to `internal-and-cloud-load-balancing` closes it — and the
-moment it is set, every client still calling the old address fails. So the
-sequence is: move clients first, wait for adoption, then close ingress. Doing it
-in the other order takes the product down.
+**Amazon Information gets its own Google Cloud project, hardened from the first
+day.** Nothing is migrated. The main NivaDesk project keeps its 407 functions,
+its four clients talking directly to Firestore, and its current network posture.
+The Amazon boundary is built once, correctly, with no legacy clients to break.
 
-**This is the "big architectural change" flag.** It is not difficult so much as
-irreversible-in-the-short-term, and it is gated on app store review times.
+### What lives inside the boundary
 
-### 3.2 A VPC Service Controls perimeter around Firestore would break every customer
+- Amazon LWA / OAuth: the consent flow, the client secret, the state store.
+- The Amazon connector functions — SP-API calls, order ingestion, the sanitizer.
+- Amazon secrets and the token-encryption key, readable only by that project's
+  own service accounts.
+- The Amazon access log and audit trail.
+- Restricted buyer PII, if and when a restricted role is ever granted. It does
+  **not** go into the main Firestore.
+- Security Command Center Premium, Cloud Armor, VPC Service Controls, dedicated
+  service accounts.
 
-VPC Service Controls restricts access to a Google API to callers inside the
-perimeter. Every one of our end users is outside it: their browser, their Mac,
-their phone. All four clients read and write Firestore directly, including
-real-time listeners.
+### What crosses the boundary
 
-A perimeter that includes `firestore.googleapis.com` therefore stops the product
-working for everybody, on every platform, at the moment it is enforced. This is
-not a tuning problem that dry-run mode reveals and ingress rules fix — end-user
-devices have no stable identity or address to write a rule for.
+One thing, in one direction: the **sanitized, non-PII envelope** that
+`commerce/amazon/sanitize.js` already produces. The split that was built before
+any Amazon data existed turns out to be the boundary's contract — the safe half
+is exactly what may leave, and the restricted half now has somewhere to stay.
 
-There is a design that is both honest and safe, and it follows from where Amazon
-Information actually lives:
+Nothing flows the other way except the order id a sync needs to reconcile.
 
-- Amazon buyer data is **server-only** by construction. The restricted
-  subcollection is denied to every client; the connector runs server-side; the
-  outbound policy denies all six release channels.
-- So the perimeter should enclose **where Amazon Information is handled** —
-  Secret Manager, the Amazon connector's functions, and the server-side
-  surface — rather than the whole database that also serves the workshop's own
-  clients.
+### Why this is a better answer to Amazon, not merely a cheaper one
 
-That is a defensible answer to a segmentation question and it does not take the
-product down. It needs writing up carefully, because "we did not put Firestore
-in the perimeter" has to be presented as a boundary decision with a reason, not
-as a gap.
+"We isolate Amazon Information in a dedicated project with its own perimeter,
+its own service accounts, its own threat detection and its own WAF, and only
+de-identified order data crosses into the main application" is a stronger answer
+to a network segmentation question than any retrofit of a shared project would
+have produced. The segmentation is real and it is drawn around the data the
+question is about.
 
-**Confirm before building:** the exact VPC-SC behaviour for Firestore accessed
-by Firebase client SDKs should be verified against Google's current
-documentation and, ideally, a support case — this assessment is based on how
-VPC-SC works in principle, and the consequence of being wrong is an outage.
+It also disposes of the Cloud Armor bypass at no cost. Google's own guidance is
+that a serverless default URL left open bypasses Armor, and the fix is ingress
+`Internal and Cloud Load Balancing`. In the existing project that setting costs
+a mobile migration. In a project with no clients yet, it is the first day's
+configuration.
 
-## 4. The four controls, mapped to this architecture
+## 4. The four controls in the new project
 
-| Amazon's control | What we would actually build | Size |
+| Amazon's control | What is built | Note |
 |---|---|---|
-| **Firewall** | Global external ALB + Cloud Armor: WAF rules, rate limiting, DDoS. All Amazon-related HTTP paths behind it, and the direct `run.app` bypass closed via ingress | **Large** — see 3.1 |
-| **IDS/IPS** | Security Command Center with Event Threat Detection and Cloud Run Threat Detection, paired with Cloud Armor blocking so detection and prevention are a chain | **Cost-gated** — see 5 |
-| **Anti-malware** | Malware scanning on Storage uploads, **plus** managed AV/EDR on every human device with production access, with update cadence recorded | **Medium** |
-| **Network segmentation** | VPC Service Controls perimeter scoped to where Amazon Information is handled; dry-run, analyse violations, then enforce | **Medium, with a design decision** — see 3.2 |
-| *Extra: App Check* | Monitor → Enforce, after testing every client call path | Small, but it can lock users out if a path is missed |
-| *Extra: web hardening* | HSTS, a real CSP, `X-Content-Type-Options`, frame protection | Small |
+| **Firewall** | External HTTPS load balancer with Cloud Armor: WAF rules and rate limiting in front of every Amazon HTTP path. Function ingress set to `internal-and-cloud-load-balancing` from the first deploy, so the default `run.app` address is not a way round it | No clients to migrate |
+| **IDS/IPS** | Security Command Center Premium at **project level, pay-as-you-go**, with Event Threat Detection and Cloud Run Threat Detection. Cloud Armor blocking completes the detect-and-prevent chain | Cloud Run Threat Detection requires the **second-generation execution environment** — set at creation, not retrofitted |
+| **Anti-malware** | Malware scanning on any uploaded file, **plus** managed AV/EDR on every human device with production access, with a recorded update cadence. The Google-managed serverless host layer is documented as shared responsibility, separately from our endpoint responsibility | The endpoint half is not optional; file scanning alone does not answer the question |
+| **Network segmentation** | VPC Service Controls perimeter around the Amazon project's Firestore/Storage, Secret Manager and serverless services. Explicit egress: SP-API and LWA only, plus the controlled sanitized bridge to the main project | The main project's Firestore is deliberately **outside** any perimeter, and that is a boundary decision with a reason rather than a gap |
 
-App Check and the security headers are defence in depth. They are not answers to
-Amazon's question and must not be counted as such.
+App Check enforcement and the web security headers are defence in depth on the
+main application. They are not answers to Amazon's question and are not counted
+as such.
 
 ## 5. Cost
 
-Figures are order-of-magnitude and **must be confirmed against current pricing
-before anything is committed**. They are here to size decisions, not to budget.
+Unit prices are the figures to confirm on the current rate card before anything
+is switched on. The workload is our own assumption and is stated so it can be
+argued with.
 
-| Item | Shape of the cost | Note |
-|---|---|---|
-| Global external ALB | Monthly forwarding-rule charge plus data processing | Required *before* Cloud Armor can exist; the LB is the bigger half of this line at our volume |
-| Cloud Armor | Per-policy and per-rule monthly, plus per-million-requests | Modest at our traffic |
-| **Security Command Center** | Event Threat Detection and Cloud Run Threat Detection are **Premium/Enterprise tier**, not the free Standard tier. Premium is priced against total Google Cloud spend with a floor | **The single largest unknown.** Our GCP spend is very small, so a percentage-of-spend model may still land on a minimum commitment far above it. Needs a quote before the plan is committed |
-| Storage malware scanning | Small — an extension or a scanning service on Cloud Run | Per-file compute |
-| Endpoint EDR | Per device per month, for the machines with production access | Two devices today |
-| VPC Service Controls | No direct charge | The cost is engineering time and outage risk |
-| Annual penetration test | Four figures | See §6 |
-| Monthly vulnerability scanning | Low, or free with the right tooling | See §6 |
+**Assumed first-year load:** 5 connected sellers, syncing every 30 minutes,
+3 SP-API calls per sync — about 21,600 Cloud Run requests a month.
 
-**The SCC tier question should be answered first.** If Premium's minimum is out
-of proportion to a project spending pennies a day, the IDS/IPS control needs a
-different answer, and that changes the plan rather than the budget.
+| Line | Monthly |
+|---|---|
+| Cloud Run (gen2, scale-to-zero) | ~$1.10 |
+| Load balancer forwarding rule | ~$18.25 |
+| Load balancer data processing (5 GiB) | ~$0.04 |
+| Cloud Armor policy + 8 rules | ~$13.00 |
+| Cloud Armor requests | ~$0.02 |
+| VPC Service Controls | $0.00 — no charge |
+| Secret Manager | ~$0.30 |
+| Logging and audit logs | ~$0.50 — the first 50 GiB are free |
+| **Subtotal, excluding SCC** | **~$33 / month (~£26)** |
+
+**Security Command Center Premium** is billed at project level, pay-as-you-go,
+against this project's own protected spend rather than the organisation's — and
+this project's spend is the ~$33 above. There is a 30-day trial, which covers
+the entire build-out. The $15,000 figure applies to the annual fixed
+subscription and is not what this project would be on.
+
+Separate from the monthly run rate: endpoint EDR for the two devices with
+production access (~$10–30/month), an annual penetration test (four figures),
+and monthly vulnerability scanning (low or free with the right tooling).
+
+**The load balancer, not Cloud Armor, is the largest recurring line.** A
+forwarding rule costs the same whether it carries 20,000 requests or 20 million.
 
 ## 6. The requirements beyond the four controls
 
@@ -151,21 +167,28 @@ after a second refusal.
 
 ## 7. Sequence
 
-Nothing here is built. The order matters more than the list.
+Nothing in the new project is built. The order matters more than the list, and
+each of the last four steps needs sign-off before it runs.
 
-1. **Answer the SCC tier question.** It can invalidate the IDS/IPS approach.
-2. **Confirm the VPC-SC and Firebase client behaviour** in §3.2 against Google's
-   documentation. It can invalidate the segmentation approach.
-3. Web hardening and Storage malware scanning — independent of both, low risk,
-   start whenever.
-4. EDR on the production devices, with the update cadence recorded.
-5. VPC-SC perimeter: design, **dry-run**, analyse violations, then enforce.
-6. Cloud Armor: build the LB, move the clients to the custom origin, ship the
-   native apps, wait for adoption, **then** close ingress.
-7. App Check monitor → enforce, after every client path is tested.
-8. Evidence pack for all four controls: configuration, test, owner, review
-   cadence.
-9. Only then: change the Developer Profile answer and submit a new application.
+1. **Web hardening on the main application** — done 4 September 2026: HSTS,
+   `nosniff`, frame protection, referrer and permissions policy, and the
+   framework banner removed. A Content-Security-Policy follows, in report-only
+   first, once the origin inventory is complete.
+2. **Storage malware scanning** — built and tested in staging, fail-closed: a
+   file that has not been scanned clean is not usable.
+3. **EDR on the production devices**, with the update cadence recorded.
+4. **Design the Amazon project** — services, service accounts, perimeter shape,
+   ingress and egress rules, the bridge contract. → *show before creating.*
+5. **Create the project**, Cloud Run gen2 from the first deploy. → *show first.*
+6. **SCC Premium**, project-level pay-as-you-go, on the trial. → *show the
+   estimated cost first.*
+7. **Load balancer + Cloud Armor**, ingress closed on day one.
+8. **VPC Service Controls**: dry-run, analyse every violation, then enforce.
+   → *show the dry-run findings before enforcing.*
+9. **App Check** monitor → enforce on the main application, after every client
+   path is tested.
+10. Evidence pack for all four controls.
+11. Only then: change the Developer Profile answer and submit a new application.
 
 ## 8. The rule this document exists to enforce
 
