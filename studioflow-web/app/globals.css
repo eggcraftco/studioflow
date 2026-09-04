@@ -26161,6 +26161,11 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left;
 }
 .getting-started-steps li[data-done="true"] button { opacity: 0.6; text-decoration: line-through; }
+/* The first line of the personalised list is the answer they already gave, and
+   there is nowhere to send them for it — so it reads as a statement rather than
+   sitting there looking like a button that does nothing. */
+.getting-started-steps button:disabled { cursor: default; border-style: dashed; opacity: 0.75; }
+.getting-started-steps button:disabled .getting-started-arrow { display: none; }
 .getting-started-tick {
   width: 20px; height: 20px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 999px; border: 1.5px solid rgba(47, 111, 109, 0.5); color: #16a34a; font-size: 11px; font-weight: 800;
