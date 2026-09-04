@@ -154,16 +154,55 @@ function scrubPatch(order = {}, nowMs = 0, overrides = {}) {
 }
 
 /**
+ * The distinct retention periods anybody imposes, shortest first.
+ *
+ * The sweep runs one pass per period rather than one pass over everything, and
+ * that is not tidiness. A single pass has to bound its query by the SHORTEST
+ * period, which means it sees orders belonging to longer ones — and an order
+ * that is not yet due holds the cursor. One eBay order with a sixty-day rule
+ * would sit in a thirty-day pass and stall deletion for every workspace behind
+ * it, quietly, while the job reported success. Inside a pass for period D,
+ * every order that matters is due, so nothing can hold the cursor.
+ */
+function retentionPeriodsInDays(overrides = {}) {
+  const table = { ...PROVIDER_RETENTION, ...(overrides || {}) };
+  const days = new Set();
+  for (const rule of Object.values(table)) {
+    const n = Number(rule && rule.days);
+    if (Number.isFinite(n) && n > 0) days.add(n);
+  }
+  return [...days].sort((a, b) => a - b);
+}
+
+/**
+ * The decision for one order inside the pass for `days`.
+ *
+ * An order belonging to a different period is finished with AS FAR AS THIS PASS
+ * IS CONCERNED — its own pass will handle it — so it does not hold this pass's
+ * cursor. That distinction is the whole reason the passes are separate.
+ */
+function sweepDecision(order = {}, nowMs = 0, days = 0, overrides = {}) {
+  const rule = retentionRuleFor(order, overrides);
+  if (rule && Number(days) > 0 && rule.days !== Number(days)) {
+    return { scrub: false, reason: "other_retention_period", rule };
+  }
+  return scrubDecision(order, nowMs, overrides);
+}
+
+/**
  * Whether a decision is one the sweep is finished with.
  *
- * Finished means: this order will never need looking at again for this reason.
- * Scrubbed, already scrubbed, or nobody imposes a rule on it. "Not due" and
- * "not delivered" are the opposite — they are answers that change with time.
+ * Finished means: this pass will never need to look at this order again.
+ * Scrubbed, already scrubbed, nobody imposes a rule, or somebody else's pass
+ * owns it. "Not due" and "not delivered" are the opposite — they are answers
+ * that change with time.
  */
 function decisionIsFinal(decision) {
   if (!decision) return false;
   if (decision.scrub) return true;
-  return decision.reason === "already_scrubbed" || decision.reason === "no_retention_rule";
+  return decision.reason === "already_scrubbed"
+    || decision.reason === "no_retention_rule"
+    || decision.reason === "other_retention_period";
 }
 
 /**
@@ -191,5 +230,5 @@ function cursorAfterSweep(previousCursor = 0, items = []) {
 module.exports = {
   PROVIDER_RETENTION, PII_FIELDS, KEPT_ON_PURPOSE,
   providerOf, retentionRuleFor, scrubDecision, scrubPatch,
-  decisionIsFinal, cursorAfterSweep
+  retentionPeriodsInDays, sweepDecision, decisionIsFinal, cursorAfterSweep
 };

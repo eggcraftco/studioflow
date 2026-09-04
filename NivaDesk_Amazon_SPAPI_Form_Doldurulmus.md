@@ -106,7 +106,7 @@ Yedi cevap da senin beyanın. Bugünkü **doğru** cevaplar:
 ### "List all outside parties…"
 
 ```
-Google Cloud Platform acts as our cloud infrastructure provider and hosts the NivaDesk application, database and associated backend services. Amazon Information retrieved through the Selling Partner API is processed and stored within this infrastructure solely to provide the services requested by the authorized seller.
+Google Cloud Platform acts as our cloud infrastructure provider and hosts the NivaDesk application, database and associated backend services. All of this infrastructure is located in a single Google Cloud region, London (europe-west2): the Cloud Functions that process Amazon Information, and the Cloud Firestore database that stores it, both run there. Amazon Information retrieved through the Selling Partner API is processed and stored within this infrastructure solely to provide the services requested by the authorized seller.
 
 We do not sell, license, pool, disclose or use Amazon Information for advertising, profiling or data-broker purposes. We do not share Amazon Information with third parties for our own independent purposes.
 
@@ -127,9 +127,13 @@ Hepsi kullanıcı tarafından yakalandı ve koddan doğrulandı:
    entries there"** — bugün YANLIŞ. Üç muhasebe adaptörü de `posting_not_available_yet`
    fırlatıyor (`functions/accounting/{quickbooks,xero}/adapter.js`). Defter yazımı Faz 3 ve
    henüz yok. Gelecek zamanlı ve koşullu ifadeyle değiştirildi.
-2. **"Ireland and London regions"** — doğrulanmamış varsayım. Cloud Functions `europe-west2`
-   ama Firestore'un konumu depoda tanımlı değil ve `firebase projects:list` "Not specified"
-   diyor. Region iddiası tamamen kaldırıldı.
+2. **"Ireland and London regions"** — yanlıştı, ve 4 Eyl 2026'da doğrulanıp **tek bölge
+   olarak düzeltildi**. `firebase firestore:databases:get` Firestore `(default)` için
+   `Location: europe-west2` döndürüyor; Cloud Functions da `europe-west2`. Yani Amazon
+   Information'ı işleyen ve saklayan her şey tek bir bölgede: **Londra (europe-west2)**.
+   İrlanda yok. Başvuru metnindeki cümle bu doğrulanmış haliyle yeniden yazıldı — daha önce
+   iddia tamamen kaldırılmıştı çünkü `firebase projects:list` "Not specified" diyor ve o
+   komut veritabanının konumunu göstermiyor; doğru komut `firestore:databases:get`.
 3. **ChatGPT/MCP yolu listelenmemişti.** `nvChatGPTSearchOrders` siparişleri **yalnız
    `companyId`** ile süzüyor — hiçbir sağlayıcı filtresi yok. Amazon siparişleri aynı
    koleksiyona girerse asistan üzerinden OpenAI'ye gidebilirdi. §6'daki izolasyon işi

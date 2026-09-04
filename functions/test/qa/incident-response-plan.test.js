@@ -97,8 +97,10 @@ check("the recovery the plan offers is scheduled, with the retention it states",
   assert.ok(/\*\*Daily backup schedule\*\*, retention \*\*14 days\*\*/.test(plan), "the backup schedule is gone");
   // The uncomfortable one. Recovery is worth nothing if the database itself can
   // be deleted, and the plan says so until somebody turns it on.
-  assert.ok(/Delete protection on the database is currently DISABLED/.test(plan)
-    || /Delete protection.*ENABLED/.test(plan),
+  // Recovery is worth nothing if the database itself can be deleted, so the
+  // plan has to keep saying which state it is in — and if it ever goes back to
+  // disabled, saying that instead.
+  assert.ok(/\*\*Delete protection: enabled\*\*/.test(plan) || /Delete protection.*DISABLED/.test(plan),
     "the plan stopped saying anything about delete protection");
 });
 

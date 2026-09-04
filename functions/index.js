@@ -11959,56 +11959,57 @@ const AUTH_BACKUP_RETENTION_DAYS = 30;
 // the thing and post it. Amazon's Data Protection Policy ends that loan thirty
 // days after fulfilment. The decision about any one order is in
 // privacy/retention.js — pure, no clock, no database — and this is the part that
-// walks the workspaces and writes.
+// walks the orders and writes.
 //
-// Three things shape how it walks.
+// Three things shape how it walks, and the first two are corrections.
 //
-// It goes workspace by workspace rather than issuing one collection-group query,
-// because a collection-group query needs its own composite index, and an index
-// that has not been deployed does not fail — it returns nothing. A retention
-// sweep that silently returns nothing looks exactly like a retention sweep with
-// no work to do, and would go on looking like that for months.
+// It reads the TOP-LEVEL `siparisler` collection. The first version of this
+// walked `companies/{id}/siparisler`, which sounds right and does not exist:
+// every order in NivaDesk is a top-level document carrying a companyId field.
+// That version scanned nothing, advanced nothing, and logged a cheerful zero
+// every night — the exact silent-success failure the collection-group note
+// below is about, arrived at by a different route.
 //
-// It keeps a cursor per workspace, so each night it reads the orders delivered
-// since the last pass rather than every delivered order ever. Without one, an
-// order scrubbed in January is re-read every night for the rest of its life.
+// It runs ONE PASS PER RETENTION PERIOD. A single pass has to bound its query by
+// the shortest period, so it meets orders belonging to longer ones, and an order
+// that is not yet due holds the cursor. One order under a sixty-day rule would
+// sit in the thirty-day pass and stall deletion for everybody behind it. Inside
+// a pass for period D every order that matters is due, so nothing holds it.
 //
-// It advances that cursor only past orders it actually finished with. An order
-// that is not yet due holds the cursor where it is, so the next pass sees it
-// again rather than stepping over it forever.
+// It does not use a collection-group query, and it orders by the same field it
+// ranges over. A collection-group query needs its own composite index, and so
+// does a range on one field ordered by another — and an index that has not been
+// deployed does not fail, it returns nothing. Range and order on `deliveredAtMs`
+// alone is served by the automatic single-field index, so there is no index to
+// forget.
 // ---------------------------------------------------------------------------
 
-const RETENTION_SWEEP_COMPANY_LIMIT = 400;
-const RETENTION_SWEEP_ORDER_LIMIT = 200;
+const RETENTION_SWEEP_ORDER_LIMIT = 300;
 
-/** The shortest positive retention anybody imposes, in days. Bounds the query. */
-function shortestRetentionDays() {
-  const retention = require("./privacy/retention");
-  const days = Object.values(retention.PROVIDER_RETENTION)
-    .map((rule) => Number(rule && rule.days) || 0)
-    .filter((d) => d > 0);
-  return days.length ? Math.min(...days) : 0;
+/** Where a pass keeps its place. Top-level: the sweep is not a workspace's own job. */
+function retentionCursorRef(days) {
+  return admin.firestore().collection("privacyState").doc(`retention-${days}d`);
 }
 
 /**
- * One workspace's pass. Returns what it did, so the scheduled job can report a
- * total rather than a shrug.
+ * One pass, for one retention period. Returns what it did, so the scheduled job
+ * can report a total rather than a shrug.
  */
-async function sweepCompanyMarketplacePii(companyId, nowMs) {
+async function sweepRetentionPeriod(days, nowMs) {
   const retention = require("./privacy/retention");
   const db = admin.firestore();
-  const stateRef = db.collection("companies").doc(companyId).collection("privacyState").doc("retention");
-  const stateSnap = await stateRef.get();
-  const cursor = Number((stateSnap.data() || {}).sweptDeliveredAtMs) || 0;
+  const cursorRef = retentionCursorRef(days);
+  const cursorSnap = await cursorRef.get();
+  const cursor = Number((cursorSnap.data() || {}).sweptDeliveredAtMs) || 0;
 
-  const minDays = shortestRetentionDays();
-  if (!minDays) return { scanned: 0, scrubbed: 0, cursor };
-  // A superset: every order that COULD be due under the shortest rule. The
-  // per-order decision still uses that provider's own number.
-  const cutoffMs = nowMs - minDays * 24 * 60 * 60 * 1000;
-  if (cutoffMs <= cursor) return { scanned: 0, scrubbed: 0, cursor };
+  const cutoffMs = nowMs - days * 24 * 60 * 60 * 1000;
+  if (cutoffMs <= cursor) return { scanned: 0, scrubbed: 0, failed: 0, cursor };
 
-  const due = await db.collection("companies").doc(companyId).collection("siparisler")
+  // Taken from the engine rather than typed again. The first version of this
+  // function typed its own collection path and got it wrong, and a literal here
+  // would let that happen a second time.
+  const { ORDER_COLLECTION } = require("./commerce/engine");
+  const due = await db.collection(ORDER_COLLECTION)
     .where("deliveredAtMs", ">", cursor)
     .where("deliveredAtMs", "<=", cutoffMs)
     .orderBy("deliveredAtMs", "asc")
@@ -12016,75 +12017,84 @@ async function sweepCompanyMarketplacePii(companyId, nowMs) {
     .get();
 
   let scrubbed = 0;
+  let failed = 0;
   const considered = [];
 
   for (const doc of due.docs) {
     const order = doc.data() || {};
-    const { patch, decision } = retention.scrubPatch(order, nowMs);
-    considered.push({ deliveredAtMs: Number(order.deliveredAtMs) || 0, decision });
-
-    if (!decision.scrub) continue;
-    await doc.ref.set(patch, { merge: true });
-    scrubbed += 1;
-    // The order can no longer show what was removed, so the log has to. It
-    // records categories and ids, never the values — an audit trail that
-    // contains the data it audits is a second copy of the problem.
-    await recordPiiAccess({
-      companyId,
-      actorUid: "",
-      actorEmail: "",
-      action: "erased",
-      source: "server",
-      subject: { kind: "order", id: doc.id, provider: decision.rule ? decision.rule.provider : "" },
-      categories: ["name", "email", "phone", "address"],
-      note: `retention:${decision.reason}`
-    }).catch(() => undefined);
+    const deliveredAtMs = Number(order.deliveredAtMs) || 0;
+    let decision = retention.sweepDecision(order, nowMs, days);
+    try {
+      if (decision.scrub) {
+        const { patch } = retention.scrubPatch(order, nowMs);
+        await doc.ref.set(patch, { merge: true });
+        scrubbed += 1;
+        // The order can no longer show what was removed, so the log has to. It
+        // records categories and ids, never the values — an audit trail that
+        // contains the data it audits is a second copy of the problem.
+        await recordPiiAccess({
+          companyId: orderCompanyId(order),
+          actorUid: "",
+          actorEmail: "",
+          action: "erased",
+          source: "server",
+          subject: { kind: "order", id: doc.id, provider: decision.rule ? decision.rule.provider : "" },
+          categories: ["name", "email", "phone", "address"],
+          note: `retention:${decision.reason}`
+        }).catch(() => undefined);
+      }
+    } catch (error) {
+      // One order's failure is not the pass's failure — but it is also not
+      // finished with, so it must hold the cursor rather than be stepped over.
+      failed += 1;
+      decision = { scrub: false, reason: "not_due" };
+      console.warn(`sweepMarketplacePii: order ${doc.id} failed:`, String(error?.message || error).slice(0, 300));
+    }
+    considered.push({ deliveredAtMs, decision });
   }
 
-  // Where the cursor may move to. An order that is not yet due holds it, so the
-  // next pass finds that order again instead of stepping past it forever.
+  // Where the cursor may move to. An order this pass did not finish with holds
+  // it, so the next pass finds that order again instead of stepping past it.
   const nextCursor = retention.cursorAfterSweep(cursor, considered);
-
-  // A full page means there is more behind it; leave the cursor where the page
-  // ended and let tomorrow continue, rather than looping until a timeout.
   if (nextCursor > cursor) {
-    await stateRef.set({
+    await cursorRef.set({
       sweptDeliveredAtMs: nextCursor,
+      retentionDays: days,
       lastSweptAtMs: nowMs,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   }
 
-  return { scanned: due.size, scrubbed, cursor: nextCursor };
+  return { scanned: due.size, scrubbed, failed, cursor: nextCursor };
 }
 
 exports.sweepMarketplacePii = onSchedule(
   { schedule: "every 24 hours", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 540, memory: "512MiB" },
   async () => {
+    const retention = require("./privacy/retention");
     const nowMs = Date.now();
-    if (!shortestRetentionDays()) {
+    const periods = retention.retentionPeriodsInDays();
+    if (!periods.length) {
       console.log("sweepMarketplacePii: no provider imposes a retention period; nothing to do.");
       return;
     }
-    const companies = await admin.firestore().collection("companies")
-      .limit(RETENTION_SWEEP_COMPANY_LIMIT).get();
-
     let scanned = 0;
     let scrubbed = 0;
     let failed = 0;
-    for (const company of companies.docs) {
+    for (const days of periods) {
       try {
-        const result = await sweepCompanyMarketplacePii(company.id, nowMs);
+        const result = await sweepRetentionPeriod(days, nowMs);
         scanned += result.scanned;
         scrubbed += result.scrubbed;
+        failed += result.failed;
       } catch (error) {
-        // One workspace's failure is not the sweep's failure. It is reported and
-        // the cursor is left alone, so tomorrow tries again from the same place.
+        // One period's failure is not the sweep's failure. Its cursor is left
+        // where it was, so tomorrow tries again from the same place.
         failed += 1;
-        console.warn(`sweepMarketplacePii: ${company.id} failed:`, String(error?.message || error).slice(0, 300));
+        console.warn(`sweepMarketplacePii: ${days}-day pass failed:`, String(error?.message || error).slice(0, 300));
       }
     }
-    console.log(`sweepMarketplacePii: ${companies.size} workspaces, ${scanned} orders considered, ${scrubbed} scrubbed, ${failed} failed.`);
+    console.log(`sweepMarketplacePii: ${periods.length} retention period(s), ${scanned} orders considered, ${scrubbed} scrubbed, ${failed} failed.`);
   }
 );
 

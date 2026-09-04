@@ -165,10 +165,11 @@ Each of these is a real mechanism in the running service, not an aspiration.
   - **Daily backup schedule**, retention **14 days** (1209600s).
   - Firebase Authentication users are snapshotted daily to private storage and
     kept for **30 days**.
-  - **Delete protection on the database is currently DISABLED.** It is recorded
-    here rather than quietly omitted: with it off, the database itself can be
-    deleted, and no amount of point-in-time recovery survives that. Enabling it
-    is an outstanding action, tracked in §11.
+  - **Delete protection: enabled** (4 September 2026). It was off until that
+    date, which is worth recording rather than quietly fixing: with it off, the
+    database itself could be deleted, and no amount of point-in-time recovery
+    survives that. Every recovery mechanism above assumes there is still a
+    database to recover into.
 
   These are re-read at each review of this document, from the API rather than
   from this page, and §11 records the date they were last confirmed.
@@ -230,7 +231,8 @@ the result below.
 
 | Action | Raised | Owner | Status |
 |---|---|---|---|
-| Enable delete protection on the Firestore `(default)` database | 4 September 2026 | Incident Lead | Open — see §8 |
+| Enable delete protection on the Firestore `(default)` database | 4 September 2026 | Incident Lead | **Done, 4 September 2026** — confirmed `DELETE_PROTECTION_ENABLED` |
+| Audit every operator account against the password and MFA policy §6 | 4 September 2026 | Incident Lead | Open — the table is in `password-and-mfa-policy.md` §8, and the questionnaire answer stays No until it is filled in |
 | Appoint a second person as Deputy Incident Lead | 4 September 2026 | Incident Lead | Open — see §3 |
 | Run the first tabletop exercise (§10) | 4 September 2026 | Incident Lead | Due at the March 2027 review |
 

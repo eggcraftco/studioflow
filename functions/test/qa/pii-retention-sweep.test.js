@@ -18,7 +18,7 @@ const check = (name, run) => checks.push({ name, run });
 
 const root = path.join(__dirname, "..", "..");
 const source = fs.readFileSync(path.join(root, "index.js"), "utf8");
-const sweepStart = source.indexOf("async function sweepCompanyMarketplacePii(");
+const sweepStart = source.indexOf("async function sweepRetentionPeriod(");
 const sweep = sweepStart > 0
   ? source.slice(sweepStart, source.indexOf("exports.sweepMarketplacePii", sweepStart))
   : "";
@@ -58,10 +58,11 @@ check("the cursor never goes backwards", () => {
   assert.strictEqual(retention.cursorAfterSweep(0, [{ deliveredAtMs: 0, decision: final }]), 0);
 });
 
-check("only two answers count as finished, and they are the two that never change", () => {
+check("three answers count as finished, and only those three", () => {
   assert.strictEqual(retention.decisionIsFinal({ scrub: true, reason: "amazon_dpp" }), true);
   assert.strictEqual(retention.decisionIsFinal({ scrub: false, reason: "already_scrubbed" }), true);
   assert.strictEqual(retention.decisionIsFinal({ scrub: false, reason: "no_retention_rule" }), true);
+  assert.strictEqual(retention.decisionIsFinal({ scrub: false, reason: "other_retention_period" }), true);
   // These change with time or with the order, so treating them as finished
   // would be treating "come back later" as "nothing to do here, ever".
   for (const reason of ["not_due", "not_delivered", "no_delivery_date", "no_clock"]) {
@@ -100,14 +101,67 @@ check("the sweep exists and is scheduled", () => {
     "the sweep is no longer daily");
 });
 
-check("it walks workspace by workspace, not by collection group", () => {
-  // A collection-group query needs its own composite index, and an index that
-  // has not been deployed does not fail — it returns nothing. A retention sweep
-  // that silently returns nothing is indistinguishable from one with no work.
+check("it reads the collection orders are actually in", () => {
+  // This is the check that was missing, and its absence let a sweep ship that
+  // read `companies/{id}/siparisler` — a path that sounds right and holds
+  // nothing. It scanned zero documents and reported success every night.
+  //
+  // Asserting a literal here would only pin whatever literal was typed. The
+  // engine owns the collection name; the sweep must take it from there.
+  const { ORDER_COLLECTION } = require("../../commerce/engine");
+  assert.strictEqual(ORDER_COLLECTION, "siparisler");
+  assert.ok(/require\("\.\/commerce\/engine"\)/.test(sweep),
+    "the sweep names its own collection instead of taking it from the engine");
+  assert.ok(/db\.collection\(ORDER_COLLECTION\)/.test(sweep),
+    "the sweep queries something other than the order collection");
+  assert.ok(!/\.doc\(companyId\)\.collection\(/.test(sweep),
+    "the sweep is reading a subcollection of a company; orders are top-level documents with a companyId field");
+  // And the order document really is top-level, in the rules and in the reader
+  // every other function uses.
+  const rules = fs.readFileSync(path.join(root, "..", "firestore.rules"), "utf8");
+  assert.ok(/\n\s*match \/siparisler\/\{orderId\} \{/.test(rules),
+    "orders are no longer a top-level collection — re-check what the sweep should query");
+  assert.ok(/collection\("siparisler"\)\.doc\(orderId\)/.test(source),
+    "orderDocRef no longer reads the top-level collection");
+});
+
+check("it does not need an index somebody has to remember to deploy", () => {
+  // A collection-group query needs its own composite index, and so does a range
+  // on one field ordered by another. An index that has not been deployed does
+  // not fail — it returns nothing, which for this job is indistinguishable from
+  // having no work to do.
   assert.ok(!/collectionGroup\(/.test(sweep),
     "the sweep uses a collection-group query, which fails as 'nothing found' when its index is missing");
-  assert.ok(/collection\("companies"\)\.doc\(companyId\)\.collection\("siparisler"\)/.test(sweep),
-    "the sweep no longer reads each workspace's own orders");
+  const ranged = [...sweep.matchAll(/\.where\("([^"]+)",\s*"(>|>=|<|<=)"/g)].map((m) => m[1]);
+  const ordered = [...sweep.matchAll(/\.orderBy\("([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(ranged.length > 0, "the sweep has no range filter");
+  const fields = new Set([...ranged, ...ordered]);
+  assert.strictEqual(fields.size, 1,
+    `range and order must be the same single field to use the automatic index; found ${[...fields].join(", ")}`);
+  // Equality filters count too: companyId == x with a range on deliveredAtMs is
+  // a composite index, which is the trap this check exists for.
+  assert.ok(!/\.where\("[^"]+",\s*"=="/.test(sweep),
+    "an equality filter alongside the range makes this a composite-index query");
+});
+
+check("one pass per retention period, so a longer rule cannot stall a shorter one", () => {
+  // A single pass bounded by the shortest period meets orders belonging to
+  // longer ones, and an order that is not yet due holds the cursor — one
+  // sixty-day order stalling deletion for everybody behind it.
+  assert.ok(/retentionPeriodsInDays\(\)/.test(source), "the sweep no longer enumerates the retention periods");
+  assert.ok(/sweepRetentionPeriod\(days, nowMs\)/.test(source), "the sweep no longer runs a pass per period");
+  assert.deepStrictEqual(retention.retentionPeriodsInDays(), [30],
+    "the retention table changed; check the passes still make sense");
+  assert.deepStrictEqual(retention.retentionPeriodsInDays({ ebay: { days: 60, reason: "x" } }), [30, 60],
+    "a second period does not produce a second pass");
+  // An order belonging to another period must not hold this pass's cursor.
+  const amazon = { commerce: { provider: "amazon" }, isDelivered: true, deliveredAtMs: 1000, customerName: "A" };
+  const inWrongPass = retention.sweepDecision(amazon, 1000 + 90 * 24 * 60 * 60 * 1000, 60);
+  assert.strictEqual(inWrongPass.reason, "other_retention_period");
+  assert.strictEqual(retention.decisionIsFinal(inWrongPass), true,
+    "an order belonging to another period holds this pass's cursor forever");
+  const inRightPass = retention.sweepDecision(amazon, 1000 + 90 * 24 * 60 * 60 * 1000, 30);
+  assert.strictEqual(inRightPass.scrub, true, "the pass that owns the order does not scrub it");
 });
 
 check("it reads only what could be due, and in delivery order", () => {
@@ -122,9 +176,20 @@ check("the cursor it writes is the one the pure rule produced", () => {
   assert.ok(/retention\.cursorAfterSweep\(cursor, considered\)/.test(sweep),
     "the sweep decides the cursor itself again, where no test can reach the decision");
   assert.ok(/if \(nextCursor > cursor\)/.test(sweep), "the cursor can be written backwards");
+  // Each period keeps its own place. One shared cursor would let the thirty-day
+  // pass step the sixty-day pass over its own work.
+  assert.ok(/retention-\$\{days\}d/.test(source), "the passes share one cursor");
 });
 
-check("one workspace's failure does not end the sweep", () => {
+check("a failing order holds the cursor rather than being skipped", () => {
+  // Counting a failed order as finished would step the cursor past it, and it
+  // would never be looked at again — a deletion silently dropped.
+  assert.ok(/decision = \{ scrub: false, reason: "not_due" \}/.test(sweep),
+    "an order that threw is still treated as finished with");
+  assert.strictEqual(retention.decisionIsFinal({ scrub: false, reason: "not_due" }), false);
+});
+
+check("one period's failure does not end the sweep", () => {
   // Bounded to this function's own body. Sliced to the end of the file, the
   // next unrelated try/catch in index.js would satisfy the check and the sweep
   // could throw on the first bad workspace unnoticed.
@@ -132,9 +197,9 @@ check("one workspace's failure does not end the sweep", () => {
   assert.ok(from > 0, "the scheduled sweep is gone");
   const scheduled = source.slice(from, source.indexOf("\n);", from));
   assert.ok(/catch \(error\) \{[\s\S]{0,400}failed \+= 1;/.test(scheduled),
-    "a single workspace throwing now stops every workspace after it");
-  assert.ok(/sweepCompanyMarketplacePii\(company\.id, nowMs\)/.test(scheduled),
-    "the per-workspace pass is no longer what is being guarded");
+    "a single period throwing now stops every period after it");
+  assert.ok(/sweepRetentionPeriod\(days, nowMs\)/.test(scheduled),
+    "the per-period pass is no longer what is being guarded");
 });
 
 check("an erasure is written down", () => {
@@ -154,16 +219,21 @@ check("an erasure is written down", () => {
     "an erasure with nothing left to remove is not recorded, so 'we looked and there was nothing' cannot be shown");
 });
 
-check("the cursor is server-written only", () => {
-  // A member who could push the cursor forward would stop buyer details ever
-  // being deleted — quietly, with the job still reporting success.
+check("the cursor is unreachable from any client", () => {
+  // Anybody who could push the cursor forward would stop buyer details ever
+  // being deleted — quietly, with the job still reporting success. The cursor
+  // is top-level rather than per-workspace, because the sweep is nobody's own
+  // job; a top-level collection is denied by the catch-all, and named here as
+  // well so a rule written later cannot widen it by accident.
   const rules = fs.readFileSync(path.join(root, "..", "firestore.rules"), "utf8");
-  const block = rules.slice(rules.indexOf("match /companies/{companyId}/privacyState"));
-  assert.ok(block.startsWith("match /companies/{companyId}/privacyState"), "privacyState has no rule of its own");
-  assert.ok(/allow write: if false;/.test(block.slice(0, 300)), "a client can write the sweep's cursor");
-  const denials = rules.match(/collectionId != 'privacyState'/g) || [];
-  assert.strictEqual(denials.length, 2,
-    `privacyState must be excluded from both wildcard blocks; found ${denials.length}`);
+  const at = rules.indexOf("match /privacyState/{document=**}");
+  assert.ok(at > 0, "privacyState has no rule of its own");
+  assert.ok(/allow read, write: if false;/.test(rules.slice(at, at + 200)),
+    "a client can reach the sweep's cursor");
+  assert.ok(!/collectionId != 'privacyState'/.test(rules),
+    "privacyState is still listed in the company wildcard deny-list, where it no longer lives");
+  assert.ok(/match \/\{document=\*\*\} \{\s*\n\s*allow read, write: if false;/.test(rules),
+    "the catch-all that denies everything unmatched is gone");
 });
 
 for (const { name, run } of checks) {

@@ -698,15 +698,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // How far the retention sweep has got in this workspace. It holds no
-    // personal data — one timestamp — but it decides what the sweep looks at,
-    // and a member who could push it forward would stop buyer details ever
-    // being deleted. Server-written only.
-    match /companies/{companyId}/privacyState/{document=**} {
-      allow read: if isCompanyOwner(companyId);
-      allow write: if false;
-    }
-
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -910,7 +901,6 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
-        && collectionId != 'privacyState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -969,7 +959,6 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
-        && collectionId != 'privacyState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -1235,6 +1224,16 @@ service cloud.firestore {
     }
 
     match /chatgptOAuthTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    // How far each retention pass has got. One timestamp per retention period,
+    // no personal data — but it decides which orders the sweep looks at, and
+    // anybody who could push it forward would stop buyer details ever being
+    // deleted, quietly, with the job still reporting success. The catch-all
+    // below already denies it; saying so here means a rule written later for
+    // some other reason cannot widen it by accident.
+    match /privacyState/{document=**} {
       allow read, write: if false;
     }
 
