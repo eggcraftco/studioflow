@@ -29892,12 +29892,25 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   padding: 2px 9px; border-radius: 999px; white-space: nowrap;
 }
 .integration-state.is-connected { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+/* Connected, but its real-time half has never fired. Deliberately not the red
+   of "attention" and not the green of "connected": the six-hourly poll covers
+   the gap, so nothing is broken — the badge simply stops claiming more than we
+   know. */
+.integration-state.is-unproven { background: rgba(180, 130, 20, 0.14); color: #8a6100; }
 .integration-state.is-attention { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
 .integration-state.is-available { background: rgba(100, 116, 139, 0.14); color: #475569; }
 .integration-state.is-webhook { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
 .integration-state.is-planned { background: rgba(100, 116, 139, 0.12); color: #64748b; }
 
 .integration-detail { margin: 0; font-size: 12.5px; font-weight: 600; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Not a badge: the card's state is about the new connector, and this is about
+   an old address the shop may still be posting to. It sits in the body, where
+   there is room to say what happened, and wraps rather than truncating. */
+.integration-legacy-address {
+  margin: 0; font-size: 12px; line-height: 1.4; font-weight: 600;
+  color: #8a6100; background: rgba(180, 130, 20, 0.12);
+  border: 1px solid rgba(180, 130, 20, 0.28); border-radius: 8px; padding: 7px 9px;
+}
 .integration-blurb { margin: 0; font-size: 12.5px; opacity: 0.7; line-height: 1.4; }
 .integration-caps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
 .integration-caps li {
@@ -31212,6 +31225,7 @@ body[data-studio-theme="dark"] .settings-calc-preview { background: rgba(123, 13
 .settings-content-pane .integration-state { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--settings-canvas); color: var(--muted); }
 .settings-content-pane .integration-state::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .settings-content-pane .integration-state.is-connected { background: var(--success-soft); color: var(--settings-success-text); }
+.settings-content-pane .integration-state.is-unproven { background: rgba(180, 130, 20, 0.14); color: #8a6100; }
 .settings-content-pane .integration-state.is-attention,
 .settings-content-pane .integration-state.is-webhook { background: var(--warning-soft); color: var(--settings-caution-text); }
 .settings-content-pane .integration-state.is-available { background: var(--accent-soft); color: var(--accent); }

@@ -47,6 +47,9 @@ enum class IntegrationState(val label: String) {
     Available("Available"),
     Webhook("Via webhook"),
     Planned("Coming soon"),
+    // Not "Coming soon": QuickBooks and Xero connect today, on the web. A phone
+    // that says they are coming sends somebody away from something they have.
+    WebOnly("Set up on the web"),
 }
 
 data class IntegrationChannel(
@@ -107,6 +110,7 @@ data class IntegrationProvider(
     }
 
     fun state(signals: IntegrationSignals): IntegrationState {
+        if (kind == "webOnly") return IntegrationState.WebOnly
         if (kind == "planned") return IntegrationState.Planned
         if (id == "shopify") {
             val live = signals.shopifyStores.filterValues { it != "unlinked" }
@@ -174,8 +178,8 @@ val INTEGRATION_PROVIDERS = listOf(
     IntegrationProvider("openbanking", "Open Banking", "banking", "native",
         "Read-only bank transaction sync.", listOf("Transactions", "Receipts"), "", "B"),
     IntegrationProvider("pandle", "Pandle", "banking", "planned", "", emptyList(), "", "P"),
-    IntegrationProvider("quickbooks", "QuickBooks", "banking", "planned", "", emptyList(), "", "Q"),
-    IntegrationProvider("xero", "Xero", "banking", "planned", "", emptyList(), "", "X"),
+    IntegrationProvider("quickbooks", "QuickBooks", "banking", "webOnly", "Connect from nivadesk.app; the phone shows what it reads.", listOf("Accounting"), "", "Q"),
+    IntegrationProvider("xero", "Xero", "banking", "webOnly", "Connect from nivadesk.app; the phone shows what it reads.", listOf("Accounting"), "", "X"),
     IntegrationProvider("zapier", "Zapier", "automation", "webhook",
         "Send anything into NivaDesk from a Zap.", listOf("Automation"), "inbound", "Z"),
     IntegrationProvider("make", "Make", "automation", "webhook",
@@ -197,7 +201,7 @@ fun IntegrationTile(
     val tone = when (state) {
         IntegrationState.Connected -> Color(0xFF15803D)
         IntegrationState.Attention, IntegrationState.Webhook -> Color(0xFFC2410C)
-        IntegrationState.Available -> Color(0xFF475569)
+        IntegrationState.Available, IntegrationState.WebOnly -> Color(0xFF475569)
         IntegrationState.Planned -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Column(

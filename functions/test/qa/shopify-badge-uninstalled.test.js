@@ -52,6 +52,10 @@ const shipped = (() => {
   const source = [
     lift("export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [", "\n];"),
     lift("export function resolveIntegrationState(", "\n}"),
+    // The exported entry point is a thin wrapper — it adds the retired-address
+    // notice and hands off. Lifting both keeps this test on the door the hub
+    // actually calls rather than on the rule behind it.
+    lift("function resolveProviderState(", "\n}"),
     lift("export const INTEGRATION_STATE_LABELS: Record<IntegrationState, string> = {", "\n};"),
   ]
     .join("\n")
@@ -61,7 +65,12 @@ const shipped = (() => {
     .replace(
       /function resolveIntegrationState\(\s*provider: IntegrationProvider,\s*signals: IntegrationSignals,\s*\): IntegrationLiveState \{/,
       "function resolveIntegrationState(provider, signals) {"
-    );
+    )
+    .replace(
+      /function resolveProviderState\(\s*provider: IntegrationProvider,\s*signals: IntegrationSignals,\s*\): IntegrationLiveState \{/,
+      "function resolveProviderState(provider, signals) {"
+    )
+    .replace(/const decorate = \(live: IntegrationLiveState\): IntegrationLiveState =>/, "const decorate = (live) =>");
   assert(
     !/IntegrationProvider|IntegrationSignals|IntegrationLiveState|IntegrationState,/.test(source),
     "type annotations survived the strip; the resolver cannot be run"
@@ -76,9 +85,25 @@ const signals = (...stores) => ({
   shopifyStores: stores,
   channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [],
   squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [],
+  retiredHolds: [],
 });
 const store = (shop, status) => ({ shop, status });
 const label = (state) => shipped.INTEGRATION_STATE_LABELS[state];
+
+check("a workspace still holding the retired webhook address is told, green badge or not", () => {
+  // The badge is about the NEW connector; the old pasted-URL address is the one
+  // the shop may still be posting to, and it answers 410 and writes nothing.
+  // The notice therefore has to survive a card that is otherwise perfectly fine.
+  const live = { ...signals(store("live.myshopify.com", "active")), retiredHolds: ["shopify"] };
+  const resolved = shipped.resolveIntegrationState(SHOPIFY, live);
+  assert.strictEqual(resolved.state, "connected", "the connector's own state is unchanged");
+  assert.strictEqual(resolved.legacyAddress, true, "the retired address goes unmentioned on a green card");
+  // And a workspace holding nothing says nothing.
+  assert.ok(!shipped.resolveIntegrationState(SHOPIFY, signals(store("live.myshopify.com", "active"))).legacyAddress);
+  // A hold against another provider is not this card's business.
+  const other = { ...signals(store("live.myshopify.com", "active")), retiredHolds: ["woocommerce"] };
+  assert.ok(!shipped.resolveIntegrationState(SHOPIFY, other).legacyAddress);
+});
 
 check("the resolver was lifted from the shipping file, not reimplemented here", () => {
   assert.strictEqual(typeof shipped.resolveIntegrationState, "function");

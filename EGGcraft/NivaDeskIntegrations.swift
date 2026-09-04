@@ -10,7 +10,7 @@ import SwiftUI
 /// statuses in the design sheet are sample data; a card that says "Connected"
 /// when nothing has ever arrived is worse than no card at all.
 enum NivaDeskIntegrationState {
-    case connected, attention, available, webhook, planned
+    case connected, attention, available, webhook, planned, webOnly
 
     var label: String {
         switch self {
@@ -19,6 +19,10 @@ enum NivaDeskIntegrationState {
         case .available: return "Available"
         case .webhook: return "Via webhook"
         case .planned: return "Coming soon"
+        // Not "Coming soon": QuickBooks and Xero connect today, on the web. A
+        // phone that says they are coming sends somebody away from something
+        // they already have.
+        case .webOnly: return "Set up on the web"
         }
     }
 
@@ -28,6 +32,7 @@ enum NivaDeskIntegrationState {
         case .attention, .webhook: return HomeTone.orange
         case .available: return HomeTone.slate
         case .planned: return .secondary
+        case .webOnly: return HomeTone.slate
         }
     }
 }
@@ -106,10 +111,12 @@ struct NivaDeskIntegration: Identifiable {
               capabilities: ["Transactions", "Receipts"], manage: "", asset: "", mark: "B"),
         .init(id: "pandle", name: "Pandle", category: "banking", kind: "planned",
               blurb: "", capabilities: [], manage: "", asset: "", mark: "P"),
-        .init(id: "quickbooks", name: "QuickBooks", category: "banking", kind: "planned",
-              blurb: "", capabilities: [], manage: "", asset: "", mark: "Q"),
-        .init(id: "xero", name: "Xero", category: "banking", kind: "planned",
-              blurb: "", capabilities: [], manage: "", asset: "", mark: "X"),
+        .init(id: "quickbooks", name: "QuickBooks", category: "banking", kind: "webOnly",
+              blurb: "Connect from nivadesk.app; the phone shows what it reads.",
+              capabilities: ["Accounting"], manage: "", asset: "", mark: "Q"),
+        .init(id: "xero", name: "Xero", category: "banking", kind: "webOnly",
+              blurb: "Connect from nivadesk.app; the phone shows what it reads.",
+              capabilities: ["Accounting"], manage: "", asset: "", mark: "X"),
         .init(id: "zapier", name: "Zapier", category: "automation", kind: "webhook",
               blurb: "Send anything into NivaDesk from a Zap.",
               capabilities: ["Automation"], manage: "inbound", asset: "", mark: "Z"),
@@ -145,6 +152,7 @@ struct NivaDeskIntegration: Identifiable {
     }
 
     func state(signals: NivaDeskIntegrationSignals) -> NivaDeskIntegrationState {
+        if kind == "webOnly" { return .webOnly }
         if kind == "planned" { return .planned }
 
         if id == "shopify" {

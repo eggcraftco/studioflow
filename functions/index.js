@@ -19664,7 +19664,9 @@ function woocommerceDeliveryUrl(companyId, token) {
 // then the endpoints answer 410 and write nothing, the token callables refuse
 // to mint, and the hubs say "Coming soon". The inbound channel (Zapier, Make,
 // Wix, Squarespace, a website) is not part of this — it stays live.
+const { RETIRED_KINDS: RETIRED_HOLD_KINDS, retiredHolds } = require("./integrations/retiredHolds");
 const RETIRED_INTEGRATION_KINDS = new Set(["woocommerce", "shopify"]);
+
 const RETIRED_INTEGRATION_MESSAGE =
   "This connection method has been retired. Shopify connects through the official NivaDesk app; WooCommerce is coming back as a full connector.";
 
@@ -19675,6 +19677,18 @@ function assertIntegrationKindLive(kind) {
 }
 
 function retiredWebhookResponse(res, kind) {
+  // Deliberately writes nothing.
+  //
+  // A workspace whose shop still posts to the old address gets a 410 and no
+  // sign of it inside NivaDesk — its orders simply stop, quietly. The obvious
+  // fix, recording the hit in the workspace's delivery log, would re-open the
+  // hole this same audit raised elsewhere: the stub has no token to check, so
+  // it would have to trust an unauthenticated companyId in the query string,
+  // and anybody could then paint a stranger's integration cards red.
+  //
+  // The signal is on the READ side instead: a workspace that still holds a
+  // legacy webhook token is told, on the Integrations screen, that the method
+  // it is holding was retired. See integrationStatusPayload's `retired` flag.
   res.status(410).json({ ok: false, error: "integration_retired", kind, message: RETIRED_INTEGRATION_MESSAGE });
 }
 
@@ -19719,6 +19733,25 @@ async function readIntegrationSecret(companyId, kind) {
   }, { merge: true });
   return { token: legacyToken, data: { token: legacyToken, createdAt } };
 }
+
+/**
+ * "The address you pasted into your shop no longer works."
+ *
+ * The retired endpoints cannot say this themselves — see retiredHolds.js for
+ * why — so the hub asks, as the signed-in owner, whether the workspace is still
+ * holding a token for one of them.
+ */
+exports.listRetiredIntegrationHolds = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const snaps = await Promise.all(
+    RETIRED_HOLD_KINDS.map((kind) => integrationSecretRef(companyId, kind).get())
+  );
+  const secrets = {};
+  RETIRED_HOLD_KINDS.forEach((kind, index) => {
+    secrets[kind] = snaps[index].exists ? snaps[index].data() || {} : null;
+  });
+  return { ok: true, companyId, holds: retiredHolds(secrets), message: RETIRED_INTEGRATION_MESSAGE };
+});
 
 async function mintIntegrationToken(companyId, kind) {
   if (!INTEGRATION_KINDS[kind]) throw new HttpsError("invalid-argument", "Unknown integration.");
@@ -19835,7 +19868,12 @@ function integrationStatusPayload(data = {}) {
     // somebody's Zap looks the same, which is why they are still shown at all.
     lastRejectedAtMs: integrationMillis(data.lastRejectedAt),
     lastRejectedError: String(data.lastRejectedError || ""),
-    rejectedCount: Number(data.rejectedCount) || 0
+    rejectedCount: Number(data.rejectedCount) || 0,
+    // The workspace is still holding a token for a delivery address that now
+    // answers 410. Nothing it posts arrives, and nothing tells it so — the
+    // endpoint cannot say anything without trusting an unauthenticated
+    // workspace id, so the screen says it instead.
+    retired: RETIRED_INTEGRATION_KINDS.has(String(data.kind || "")) || Boolean(data.retiredMethod)
   };
 }
 
@@ -31673,11 +31711,20 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
     }
 
     if (action === "disconnect") {
+      // The attribution is moved, not erased. Blanking linkedUid/linkedEmail
+      // with nothing kept meant a store could be unlinked and there was no
+      // record anywhere of who had held it or who let it go — the only
+      // connector that erased its own history on the way out.
+      const previous = (await ref.get()).data() || {};
       await ref.set({
         companyId: "",
         linkedUid: "",
         linkedEmail: "",
         status: "pending",
+        unlinkedFromCompanyId: String(previous.companyId || ""),
+        unlinkedFromUid: String(previous.linkedUid || ""),
+        unlinkedFromEmail: String(previous.linkedEmail || ""),
+        unlinkedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
       res.json({ ok: true });

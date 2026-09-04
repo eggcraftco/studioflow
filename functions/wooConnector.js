@@ -213,7 +213,7 @@ function createWooConnectorFunctions(deps) {
   });
 
   const disconnectWooShop = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
-    const { companyId } = await requireWorkspaceOwner(request);
+    const { uid, companyId } = await requireWorkspaceOwner(request);
     const { ref, data } = await loadOwnedConnection(companyId, request.data?.connectionId);
     let removed = 0;
     try {
@@ -222,7 +222,7 @@ function createWooConnectorFunctions(deps) {
     } catch { /* no usable credentials: nothing to remove */ }
     await ref.set({
       status: "disconnected", consumerKeyEncrypted: FieldValue.delete(), consumerSecretEncrypted: FieldValue.delete(), webhookSecretEncrypted: FieldValue.delete(),
-      deliveryToken: FieldValue.delete(), webhooks: [], webhooksHealthy: false, disconnectedAtMs: now(), updatedAt: FieldValue.serverTimestamp()
+      deliveryToken: FieldValue.delete(), webhooks: [], webhooksHealthy: false, disconnectedAtMs: now(), disconnectedByUid: uid, updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     return { ok: true, webhooksRemoved: removed, ordersKept: true };
   });

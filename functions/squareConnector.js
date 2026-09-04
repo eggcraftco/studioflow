@@ -284,7 +284,7 @@ function createSquareConnectorFunctions(deps) {
   });
 
   const disconnectSquare = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
-    const { companyId } = await requireWorkspaceOwner(request);
+    const { uid, companyId } = await requireWorkspaceOwner(request);
     const { ref, data } = await loadOwnedConnection(companyId, request.data?.connectionId);
     let revoked = false;
     try {
@@ -293,7 +293,7 @@ function createSquareConnectorFunctions(deps) {
     } catch (error) { console.warn("square revoke failed:", String(error?.message || error).slice(0, 120)); }
     await ref.set({
       status: "disconnected", accessTokenEncrypted: FieldValue.delete(), refreshTokenEncrypted: FieldValue.delete(), tokenExpiresAtMs: 0, tokenRefreshLockUntilMs: 0,
-      disconnectedAtMs: now(), updatedAt: FieldValue.serverTimestamp()
+      disconnectedAtMs: now(), disconnectedByUid: uid, updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     return { ok: true, revoked, ordersKept: true };
   });

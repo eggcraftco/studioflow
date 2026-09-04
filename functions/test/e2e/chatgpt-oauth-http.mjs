@@ -124,6 +124,84 @@ const approveUnknownClient = await post("chatgptOAuthApprove", {
 });
 check("approve refuses a client that never registered", approveUnknownClient.status === 400, JSON.stringify(approveUnknownClient.json));
 
+// ---- the code, and every way it must not be spent --------------------------
+//
+// A code is a bearer credential with a short life. These are the negative paths
+// the endpoints had no coverage of at all: nine OAuth and MCP handlers, and not
+// one test between them, while the Etsy connector next door has an exemplary
+// negative-path suite.
+const CODE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+async function token(body) {
+  const res = await fetch(`${BASE}/chatgptOAuthToken`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  let json = null;
+  try { json = await res.json(); } catch { /* not json */ }
+  return { status: res.status, json };
+}
+
+const unknownCode = await token({
+  grant_type: "authorization_code", code: "nope-not-a-code",
+  client_id: clientId, redirect_uri: GOOD, code_verifier: "x".repeat(43)
+});
+check("a code nobody minted is refused", unknownCode.status >= 400, JSON.stringify(unknownCode.json));
+
+const noGrant = await token({ code: "anything", client_id: clientId, redirect_uri: GOOD, code_verifier: "x".repeat(43) });
+check("a request with no grant_type is refused", noGrant.status >= 400, String(noGrant.status));
+
+const wrongGrant = await token({
+  grant_type: "password", code: "anything",
+  client_id: clientId, redirect_uri: GOOD, code_verifier: "x".repeat(43)
+});
+check("a grant type we do not support is refused", wrongGrant.status >= 400, String(wrongGrant.status));
+
+const noVerifier = await token({
+  grant_type: "authorization_code", code: "anything", client_id: clientId, redirect_uri: GOOD
+});
+check("a code redeemed with no PKCE verifier is refused", noVerifier.status >= 400, String(noVerifier.status));
+
+// ---- the MCP surface, unauthenticated --------------------------------------
+async function mcp(body, headers = {}) {
+  const res = await fetch(`${BASE}/chatgptMcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body)
+  });
+  let json = null;
+  try { json = await res.json(); } catch { /* not json */ }
+  return { status: res.status, json };
+}
+
+const noToken = await mcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search_orders", arguments: { companyId: "qa-workspace" } } });
+check("an MCP tool call with no bearer token is refused",
+  noToken.status === 401 || /unauthenticated|unauthorized/i.test(JSON.stringify(noToken.json || {})),
+  `${noToken.status} ${JSON.stringify(noToken.json)}`);
+
+const badToken = await mcp(
+  { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "search_orders", arguments: { companyId: "qa-workspace" } } },
+  { authorization: "Bearer not-a-real-token" }
+);
+check("an invented bearer token is refused",
+  badToken.status === 401 || /unauthenticated|unauthorized|invalid/i.test(JSON.stringify(badToken.json || {})),
+  `${badToken.status} ${JSON.stringify(badToken.json)}`);
+
+const hidden = await mcp(
+  { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "search_inventory", arguments: { companyId: "qa-workspace" } } },
+  { authorization: "Bearer not-a-real-token" }
+);
+check("a tool hidden by a review flag is not a way past authentication",
+  hidden.status === 401 || /unauthenticated|unauthorized|invalid/i.test(JSON.stringify(hidden.json || {})),
+  `${hidden.status} ${JSON.stringify(hidden.json)}`);
+
+// ---- what the discovery documents may say -----------------------------------
+const meta = await fetch(`${BASE}/chatgptOAuthAuthorizationServer`).then((r) => r.json()).catch(() => null);
+check("the discovery document names PKCE S256 and the authorization_code grant",
+  Boolean(meta) && JSON.stringify(meta.code_challenge_methods_supported || []).includes("S256"),
+  JSON.stringify(meta));
+
 if (failures) {
   console.log(`\n❌ ${failures} failing`);
   process.exit(1);

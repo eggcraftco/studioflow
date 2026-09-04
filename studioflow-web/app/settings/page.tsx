@@ -5466,9 +5466,13 @@ function IntegrationCard({
   onManage: () => void;
   categoryLabel?: string;
 }) {
-  const label = INTEGRATION_STATE_LABELS[live.state];
+  // Connected, but its real-time half has never fired. The poll covers it, so
+  // this is not "attention" — it is a green badge that would otherwise claim
+  // more than we know, on the card whose whole job is to say whether the data
+  // is moving.
+  const label = live.unproven ? "Connected · webhook unproven" : INTEGRATION_STATE_LABELS[live.state];
   return (
-    <article className={`integration-card is-${live.state}${highlighted ? " is-highlighted" : ""}`}>
+    <article className={`integration-card is-${live.state}${live.unproven ? " is-unproven" : ""}${highlighted ? " is-highlighted" : ""}`}>
       <div className="integration-card-head">
         {/* The brand's own file where we have one we are allowed to use, and its
             initial where we do not — never a drawing of someone's logo. */}
@@ -5479,7 +5483,7 @@ function IntegrationCard({
         </span>
         <div>
           <strong>{provider.name}</strong>
-          <span className={`integration-state is-${live.state}`}>{t(label)}</span>
+          <span className={`integration-state is-${live.unproven ? "unproven" : live.state}`}>{t(label)}</span>
         </div>
         {categoryLabel ? <span className="settings-tag is-muted integration-category">{categoryLabel}</span> : null}
       </div>
@@ -5489,6 +5493,11 @@ function IntegrationCard({
       {live.state === "planned" ? null : (
         <>
           {live.detail ? <p className="integration-detail">{live.detail}</p> : null}
+          {live.legacyAddress ? (
+            <p className="integration-legacy-address">
+              {t("The old webhook address for this shop was retired and no longer accepts orders. Anything still posting to it is being turned away.")}
+            </p>
+          ) : null}
           <p className="integration-blurb">{t(provider.blurb)}</p>
           {provider.capabilities.length > 0 ? (
             <ul className="integration-caps">

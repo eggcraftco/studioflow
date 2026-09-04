@@ -799,7 +799,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   // also removes every imported transaction of this connection.
   // No plan gate: disconnecting must never need the plan that connected — otherwise a downgrade traps the workspace with a live feed it cannot remove.
   const bankDeleteConnection = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 180 }, async (request) => {
-    const { companyId } = await requireOwner(request, { requirePlan: false });
+    const { uid, companyId } = await requireOwner(request, { requirePlan: false });
     const connectionId = cleanText(request.data?.requisitionId, 120);
     if (!connectionId) throw new HttpsError("invalid-argument", "requisitionId is required.");
     const connectionDoc = await connectionsRef(companyId).doc(connectionId).get();
@@ -811,13 +811,17 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       await connectionsRef(companyId).doc(connectionId).set({
         status: "disconnected",
         syncState: "disconnected",
-        disconnectedAt: admin.firestore.FieldValue.serverTimestamp()
+        disconnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Who, not only when. Owner-only today, so it can only be one person —
+        // but a workspace that adds an admin tomorrow would have no way to tell
+        // them apart, and the accounting connectors already record this.
+        disconnectedByUid: uid
       }, { merge: true });
       const stillLinked = await connectionsRef(companyId).where("status", "==", "linked").limit(1).get();
       if (stillLinked.empty) {
         await db().collection("companies").doc(companyId).set({ bankFeedEnabled: false }, { merge: true });
       }
-      await logBankAudit(companyId, { kind: "disconnected", ok: true, connectionId, kept: true });
+      await logBankAudit(companyId, { kind: "disconnected", ok: true, connectionId, kept: true, actorUid: uid });
       return { disconnected: true, kept: true };
     }
 

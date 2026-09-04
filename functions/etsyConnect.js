@@ -537,7 +537,7 @@ function createEtsyConnectFunctions(deps) {
    * possible and destroyed here either way.
    */
   const disconnectEtsyShop = onCall({ region: "europe-west2" }, async (request) => {
-    const { companyId } = await requireWorkspaceOwner(request);
+    const { companyId, uid } = await requireWorkspaceOwner(request);
     const { ref, data } = await loadConnection(request.data?.connectionId, companyId);
     await ref.set({
       status: "disconnected",
@@ -546,6 +546,11 @@ function createEtsyConnectFunctions(deps) {
       tokenExpiresAt: admin.firestore.FieldValue.delete(),
       refreshLockAt: admin.firestore.FieldValue.delete(),
       disconnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Who did it, not only when. Every connect and disconnect callable is
+      // owner-only, so this can only ever be the owner today — but a workspace
+      // that adds an admin tomorrow would otherwise have no way to tell two
+      // people apart, and the accounting connectors already record it.
+      disconnectedByUid: uid,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
     await writeSyncEvent(ref, { type: "disconnected" });
