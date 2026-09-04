@@ -224,5 +224,5 @@ Each review confirms:
 
 | Review date | Carried out by | Operator accounts checked | Changes made |
 |---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | Yes | Initial version |
+| 4 September 2026 | Gunes Gocmen | Yes | Initial version |
 | *4 March 2027 (due)* | | | |

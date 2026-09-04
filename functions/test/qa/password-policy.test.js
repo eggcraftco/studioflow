@@ -101,24 +101,28 @@ check("the operator audit is not marked done before it is done", () => {
     "the operator account audit section is gone");
   assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
     "the document no longer states that the answer stays No until the audit is done");
-  // §7 and §8 have to agree. While the review table says the audit has not
-  // happened, §8 must still say the answer is No — the two drifting apart is
-  // precisely how a document comes to claim a control nobody performed.
-  const notYetAudited = /Operator accounts audited/.test(doc) && /\*\*Not yet\*\*/.test(doc);
-  if (notYetAudited) {
+  // The rule is not "has the audit run" but "did every account pass". A first
+  // pass that FOUND problems is still a reason to answer No, and that is the
+  // easy thing to get wrong once the table stops being empty.
+  const table = doc.slice(doc.indexOf("| # | Account"));
+  const rows = table.split("\n").filter((line) => /^\| \d+ \|/.test(line));
+  assert.ok(rows.length > 0, "the audit table lost its rows");
+
+  const failing = rows.filter((row) => /\bNo\b|Unverified/i.test(row));
+  if (failing.length) {
     assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
-      "the review table says the operator audit has not happened, but §8 no longer answers No");
+      `${failing.length} audited account row(s) are non-compliant or unverified, but §8 no longer answers No`);
+    assert.ok(/NOT passed|Not yet/.test(doc),
+      "the review record does not say the audit failed, while the table says it did");
   } else {
-    // Audit recorded as done: then every row must carry a result, or the record
-    // is ahead of the work.
-    const rows = doc.slice(doc.indexOf("| # | Account")).split("\n")
-      .filter((line) => /^\| \d+ \|/.test(line));
-    assert.ok(rows.length > 0, "the audit table lost its rows");
-    for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim());
-      assert.ok(cells[cells.length - 2],
-        `the review table says the audit is done, but this row has no result: ${cells[2] || row}`);
-    }
+    // Every row clean: the answer may change, and the review record must say so.
+    assert.ok(!/NivaDesk answers\s+\*\*No\*\*/.test(doc),
+      "every account passes but §8 still answers No — update it deliberately");
+  }
+  for (const row of rows) {
+    const cells = row.split("|").map((c) => c.trim());
+    assert.ok(cells[cells.length - 2],
+      `an audit row has no result: ${cells[2] || row.slice(0, 60)}`);
   }
 });
 

@@ -56,7 +56,7 @@ a named holder at all times, and the holder is recorded here.
 
 | Role | Responsibility | Holder |
 |---|---|---|
-| **Incident Lead** | Declares an incident, sets severity, owns the timeline, decides on containment that degrades the service, and signs off closure. Every decision in an incident is theirs to make or delegate. | Görkem Öçmen — contact@nivadesk.co.uk |
+| **Incident Lead** | Declares an incident, sets severity, owns the timeline, decides on containment that degrades the service, and signs off closure. Every decision in an incident is theirs to make or delegate. | Gunes Gocmen — contact@nivadesk.co.uk |
 | **Deputy Incident Lead** | Takes the Lead's authority in full when the Lead is unreachable for more than 60 minutes, or when the Lead is themselves the subject of the incident (for example, a compromised administrator account). | Named at each six-month review; recorded in §11. Until a second person is appointed, the escalation is to the registered company director, and this limitation is stated openly rather than papered over. |
 | **Technical Remediation** | Executes containment and recovery: revokes tokens, rotates secrets, deploys fixes, restores from backup. | Incident Lead |
 | **Communications** | Writes and sends every external notification: affected customers, Amazon, the ICO, connected platforms. Keeps one thread per recipient so the record is coherent afterwards. | Incident Lead |
@@ -224,7 +224,7 @@ the result below.
 
 | Review date | Carried out by | Roles confirmed | §8 values re-read | Exercise run | Changes made |
 |---|---|---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | Yes — single-operator limitation recorded | Yes — PITR 7 days, daily backup 14 days, Auth snapshot 30 days, all read from the API | Plan authored; first exercise due at next review | Initial version |
+| 4 September 2026 | Gunes Gocmen | Yes — single-operator limitation recorded | Yes — PITR 7 days, daily backup 14 days, Auth snapshot 30 days, all read from the API | Plan authored; first exercise due at next review | Initial version |
 | *4 March 2027 (due)* | | | | | |
 
 ### Outstanding actions

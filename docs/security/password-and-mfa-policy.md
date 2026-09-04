@@ -176,7 +176,7 @@ Each review confirms:
 
 | Review date | Carried out by | Console policy | Operator accounts audited | Changes made |
 |---|---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **Not yet** — see §8 | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
+| 4 September 2026 | Gunes Gocmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **First pass done, NOT passed** — see §8: one account 19 months overdue, one with two-factor off, four unverified | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
 | *4 March 2027 (due)* | | | | |
 
 ## 8. Outstanding: the operator account audit
@@ -190,16 +190,37 @@ existing is not the same as the accounts complying, and answering Yes on the
 strength of the document would be the exact failure this policy is meant to
 prevent.
 
-The audit covers every account that can reach production or Amazon Information:
+The audit covers every account that can reach production or Amazon Information.
+First pass carried out 4 September 2026, read-only, from the browser and the
+CLI. Nothing was changed.
 
-| # | Account | 12+ chars | Special char | Unique to service | MFA on | Age < 365 days | Result |
-|---|---|---|---|---|---|---|---|
-| 1 | Google account on the Firebase / Google Cloud project (`contact@eggcraft.co.uk`) | | | | | | |
-| 2 | Any additional Google account with IAM access to the project | | | | | | |
-| 3 | Source repository account with write access (`eggcraftco/studioflow`) | | | | | | |
-| 4 | Domain registrar and DNS account | | | | | | |
-| 5 | Hostinger deployment account | | | | | | |
-| 6 | Any account holding Secret Manager access separately from #1 | | | | | | |
+| # | Account | System | Privileged access | MFA | 12+ chars | Special char | Age < 365d | Annual rotation | Result |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | Unverified — Google does not show it | Unverified — Google does not show it | **No — last changed 13 February 2024 (19 months)** | **No** | **Rotate the password** |
+| 2 | `eggcraftco@gmail.com` (account holder: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk`; GitHub `eggcraftco` linked | **No — two-factor is off** | n/a — no Hostinger password is set; sign-in is Google social login | n/a | n/a | n/a | **Enable two-factor. Confirm the linked Google account's own security, which is the only factor today** |
+| 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | Unverified — the CLI token lacks the `user` scope and the browser is not signed in | Unverified | Unverified | Unverified | Unverified | **Verify 2FA in the browser** |
+| 4 | Cloudflare account | Cloudflare | Nameservers for `nivadesk.app`; Worker and SaaS routing | Unverified — not signed in; the login page names `contact@eggcraft.co.uk` as last used | Unverified | Unverified | Unverified | Unverified | **Sign in and verify** |
+| 5 | The second GCP human account | Google Cloud IAM | Unknown — Firebase reports "1 additional user has access to Firebase and/or Google Cloud resources" | Unverified | Unverified | Unverified | Unverified | Unverified | **Identify it. The Cloud console requires a passkey that only the account holder can present** |
+| 6 | `gunes.gocmen@gmail.com` | Google | No project access observed; it is the browser's default account | Yes — 2SV since 18 Apr 2023, 1 passkey | Unverified | Unverified | Unverified — password last changed 25 January, year not shown | Unverified | **Confirm whether it holds any production access at all** |
+
+Notes that matter more than the cells:
+
+- **Google never shows a password's length or whether it contains a special
+  character.** Those columns cannot be filled from a browser for any Google
+  account, and they are recorded as unverified rather than assumed. Anything
+  else would be inventing a control.
+- Row 2 is the finding this audit existed to produce. The account that holds
+  production hosting and two of the three domains is in a second person's name,
+  has two-factor **off**, has no password of its own, and is linked to the
+  GitHub account with admin on the publish repo. Its only factor today is
+  whatever protects `eggcraftco@gmail.com` at Google, which is not signed in
+  here and therefore not verified.
+- Row 1 fails on age alone. Nineteen months is not within 365 days, and no
+  further verification can change that.
+- There is no password expiry mechanism on any of these systems. "Annual
+  rotation" is therefore a practice to perform and record, not a setting to
+  read — which is why the column asks for evidence of rotation rather than for
+  a policy toggle.
 
 Rules for filling it in:
 
