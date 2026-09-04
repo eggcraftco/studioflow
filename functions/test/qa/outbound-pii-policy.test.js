@@ -121,6 +121,130 @@ check("an allowed release is handed over untouched", () => {
 
 // ---- every outbound path really asks ------------------------------------------
 
+check("no assistant tool returns a buyer's name without asking the policy", () => {
+  // The check that was missing, and its absence let three live tools ship.
+  // nvSafeOrderForChatGPT gated the two tools that return an ORDER, and that
+  // looked like the whole story — but get_dashboard_summary,
+  // get_financial_overview, get_extra_spending_overview and
+  // get_order_financials build their own summaries, and every one of them
+  // carried customerName straight out of the document.
+  //
+  // Naming those four would only pin those four. This follows the data
+  // instead: a function that emits a personal field is acceptable only if the
+  // policy runs somewhere on every path that reaches it.
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const PII = /(customerName|emailAddress|shippingPhone|shippingStreetAddress|whatsappNumber|instagramUsername)\s*:/;
+  const GATE = /redactForChannel|nvChatGPTLoadWorkspaceOrders|nvSafeOrderForChatGPT/;
+
+  const fns = new Map();
+  for (const m of source.matchAll(/\n(?:async )?function (nvChatGPT[A-Za-z0-9_]+)\s*\(([\s\S]*?)\n\}/g)) {
+    fns.set(m[1], m[2]);
+  }
+  assert.ok(fns.size > 10, `only found ${fns.size} assistant functions — has the naming changed?`);
+
+  // A function is safe if the policy runs inside it, or if it is only ever
+  // called by safe functions. Iterated to a fixed point, so a pure shaper three
+  // calls below a gated loader is safe and an orphan is not.
+  const safe = new Set([...fns].filter(([, body]) => GATE.test(body)).map(([name]) => name));
+  const callersOf = (name) => [...fns].filter(([other, body]) =>
+    other !== name && new RegExp(`\\b${name}\\s*\\(`).test(body)).map(([other]) => other);
+
+  for (let pass = 0; pass < fns.size; pass += 1) {
+    let grew = false;
+    for (const [name] of fns) {
+      if (safe.has(name)) continue;
+      const callers = callersOf(name);
+      if (callers.length && callers.every((c) => safe.has(c))) { safe.add(name); grew = true; }
+    }
+    if (!grew) break;
+  }
+
+  const leaking = [...fns]
+    .filter(([name, body]) => PII.test(body) && !safe.has(name))
+    .map(([name]) => name);
+  assert.ok([...fns].some(([, body]) => PII.test(body)),
+    "no assistant function emits a personal field — check this test, not the code");
+  assert.deepStrictEqual(leaking, [],
+    "these assistant functions put a buyer's name in front of ChatGPT with no path through the outbound " +
+    `policy: ${leaking.join(", ")}. Gate them, or feed them from nvChatGPTLoadWorkspaceOrders.`);
+});
+
+check("a tool that asks the policy then ignores the answer is not gated", () => {
+  // Mentioning redactForChannel is not the same as using what it returned.
+  // get_order_financials calls the policy to record the access and could still
+  // hand the RAW document to the shaper that emits customerName — a hole the
+  // reachability check above cannot see, because the policy really is called.
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const start = source.indexOf("async function nvChatGPTGetOrderFinancials(");
+  assert.ok(start > 0, "get_order_financials is gone");
+  const body = source.slice(start, source.indexOf("\nfunction nvChatGPTDashboardBuckets(", start));
+  const redacted = body.match(/const \{ record: (\w+)[^}]*\} = \w+\.redactForChannel\(/);
+  assert.ok(redacted, "get_order_financials no longer redacts its document");
+  const safeName = redacted[1];
+  for (const shaper of ["nvChatGPTOrderFinancialsFromData", "nvChatGPTBasicOrderFinancialsFromData"]) {
+    const call = body.match(new RegExp(`${shaper}\\(\\s*(\\w+)`));
+    assert.ok(call, `${shaper} is no longer called here`);
+    assert.strictEqual(call[1], safeName,
+      `${shaper} is given "${call[1]}" — the raw document — while the redacted copy sits unused in "${safeName}"`);
+  }
+});
+
+check("the loader every overview tool reads through is the gate", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const loader = source.slice(
+    source.indexOf("async function nvChatGPTLoadWorkspaceOrders("),
+    source.indexOf("async function nvChatGPTGetDashboardSummary(")
+  );
+  assert.ok(/redactForChannel\(doc\.data\(\) \|\| \{\}, "assistant"\)/.test(loader),
+    "the shared assistant loader hands out raw documents again");
+  assert.ok(!/\.\.\.\(doc\.data\(\) \|\| \{\}\)/.test(loader),
+    "the loader spreads the raw document beside the redacted one");
+});
+
+check("a marketplace read is auditable even when it is allowed", () => {
+  // Logging every allow would be an audit trail nobody reads. Logging none of
+  // them would make an opened channel the one access nobody can show. The rule
+  // is: blocks and minimal releases always, plus any decision about a provider
+  // whose buyer belongs to somebody else.
+  const deny = outbound.mayReleasePii(order("amazon"), "assistant");
+  assert.strictEqual(outbound.decisionNeedsAudit(deny), true);
+  const minimal = outbound.mayReleasePii(order("ebay"), "messaging");
+  assert.strictEqual(minimal.minimal, true);
+  assert.strictEqual(outbound.decisionNeedsAudit(minimal), true);
+  // A shop the workshop runs itself, and a workshop's own record: not audited.
+  assert.strictEqual(outbound.decisionNeedsAudit(outbound.mayReleasePii(order("shopify"), "assistant")), false);
+  assert.strictEqual(outbound.decisionNeedsAudit(outbound.mayReleasePii(order(""), "assistant")), false);
+  // The case the rule exists for: if Amazon messaging is ever opened, that
+  // release must still be recorded.
+  assert.strictEqual(
+    outbound.decisionNeedsAudit({ allow: true, minimal: false, provider: "amazon", channel: "messaging", reason: "allowed_by_policy" }),
+    true,
+    "an allow granted to Amazon later would go unrecorded"
+  );
+  assert.strictEqual(outbound.PROVIDER_PII_POLICY.amazon.restricted, true);
+  assert.strictEqual(outbound.PROVIDER_PII_POLICY.ebay.restricted, true);
+});
+
+check("a workshop's own lead-source label is not mistaken for a marketplace", () => {
+  // providerOf falls back to customFields.Source for orders written before the
+  // commerce stamp existed. That field is one a workshop creates and types
+  // into, and honouring whatever it said blanked a workshop's OWN customers
+  // from exports, the assistant, quick replies and dispatch messages the
+  // moment somebody used a custom field called "Source" to record where a
+  // commission came from.
+  for (const label of ["Instagram", "Word of mouth", "Craft fair", "Referral"]) {
+    const verdict = outbound.mayReleasePii(order("", { customFields: { Source: label } }), "export");
+    assert.strictEqual(verdict.allow, true, `a workshop's own customer was blocked by Source="${label}"`);
+    assert.strictEqual(verdict.reason, "workspace_own_record");
+  }
+  // A legacy stamp that DOES name a marketplace still counts.
+  assert.strictEqual(outbound.mayReleasePii(order("", { customFields: { Source: "Amazon" } }), "export").allow, false);
+  assert.strictEqual(outbound.mayReleasePii(order("", { customFields: { Source: "Etsy" } }), "export").allow, true);
+  // And a provider the SERVER stamped is still taken at face value, so an
+  // undescribed one fails closed.
+  assert.strictEqual(outbound.mayReleasePii(order("brand_new_marketplace"), "export").reason, "provider_policy_undefined");
+});
+
 check("the four server paths consult the policy rather than each having their own", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
   const sites = [

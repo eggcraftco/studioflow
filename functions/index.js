@@ -8602,7 +8602,7 @@ exports.generateQuickReply = onCall({ region: "europe-west2" }, async (request) 
     customerNameForReply = String(record.customerName || "");
     quickReplyProvider = verdict.provider;
     quickReplyAiAllowed = verdict.allow && !verdict.minimal;
-    if (!verdict.allow || verdict.minimal) {
+    if (outbound.decisionNeedsAudit(verdict)) {
       recordPiiAccess({
         companyId, actorUid: uid, actorEmail: String(request.auth?.token?.email || ""),
         action: "api", source: "server",
@@ -9745,7 +9745,7 @@ exports.exportOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, mem
   let redactedForExport = 0;
   for (const order of orders) {
     const { record, verdict } = outboundPolicy.redactForChannel(order.data, "export");
-    if (!verdict.allow || verdict.minimal) {
+    if (outboundPolicy.decisionNeedsAudit(verdict)) {
       order.data = record;
       redactedForExport += 1;
     }
@@ -23154,7 +23154,7 @@ function nvSafeOrderForChatGPT(doc, context) {
   // orders due on Friday — the workshop's own fact — without naming anybody.
   const outbound = require("./privacy/outbound");
   const { record: data, verdict, removed } = outbound.redactForChannel(raw, "assistant");
-  if (!verdict.allow || verdict.minimal) {
+  if (outbound.decisionNeedsAudit(verdict)) {
     // A block is a fact worth keeping. One that nobody can see is
     // indistinguishable from a feature that quietly does not work.
     recordPiiAccess({
@@ -23530,14 +23530,32 @@ async function nvChatGPTGetOrderFinancials(context, args = {}) {
     throw new HttpsError("permission-denied", "This order belongs to another workspace.");
   }
 
+  // This tool loads its own document rather than going through
+  // nvChatGPTLoadWorkspaceOrders, so it needs the same gate. Both financial
+  // shapes return customerName, and without this an Amazon buyer's name
+  // reaches OpenAI through a tool nobody would think to look at.
+  const outboundPolicyForFinancials = require("./privacy/outbound");
+  const { record: safe, verdict } = outboundPolicyForFinancials.redactForChannel(data, "assistant");
+  if (outboundPolicyForFinancials.decisionNeedsAudit(verdict)) {
+    recordPiiAccess({
+      companyId: context.companyId,
+      actorUid: context.uid,
+      actorEmail: String(context.email || ""),
+      action: "assistant", source: "mcp",
+      subject: { kind: "order", id: orderId, provider: verdict.provider },
+      categories: ["name"],
+      note: `get_order_financials blocked:${verdict.reason}`
+    }).catch(() => undefined);
+  }
+
   return {
     ok: true,
     action: "get_order_financials",
     orderId,
     resolvedBy: query && !(args.orderId || args.id) ? "query" : "orderId",
     financials: nvChatGPTHasAdvancedFinance(context)
-      ? nvChatGPTOrderFinancialsFromData(data, orderId)
-      : nvChatGPTBasicOrderFinancialsFromData(data, orderId)
+      ? nvChatGPTOrderFinancialsFromData(safe, orderId)
+      : nvChatGPTBasicOrderFinancialsFromData(safe, orderId)
   };
 }
 
@@ -23845,7 +23863,23 @@ async function nvChatGPTLoadWorkspaceOrders(context, limit = 500) {
     .limit(Math.min(Math.max(Number(limit || 500), 1), 1000))
     .get();
 
-  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+  // Redacted HERE, at the read, rather than in each tool that consumes it.
+  //
+  // nvSafeOrderForChatGPT gates the two tools that return an order to the
+  // assistant, and for a while that looked like the whole story. It was not:
+  // get_dashboard_summary, get_financial_overview and get_extra_spending_overview
+  // load orders through this function and build their own summaries, and those
+  // summaries carried customerName straight out of the document. Three live
+  // tools, no policy anywhere near them.
+  //
+  // Gating each consumer would leave the next one to be written unguarded. The
+  // read is the choke point, so the read is where the policy runs — money and
+  // work survive, the person does not.
+  const outbound = require("./privacy/outbound");
+  return snap.docs.map((doc) => {
+    const { record } = outbound.redactForChannel(doc.data() || {}, "assistant");
+    return { id: doc.id, ...record };
+  });
 }
 
 async function nvChatGPTGetDashboardSummary(context, args = {}) {
@@ -24380,7 +24414,14 @@ function nvMcpAvailableActions() {
 }
 
 /** The MCP actions that hand a workspace's own customer data to an assistant. */
-const MCP_ACTIONS_READING_PII = new Set(["search_orders", "get_order_detail", "list_customers", "get_customer"]);
+// Actions that put a person in front of the assistant. Stale on both sides
+// until September 2026: it listed list_customers and get_customer, which are
+// not dispatchable actions at all, and omitted the three order tools that
+// really do emit a buyer's name.
+const MCP_ACTIONS_READING_PII = new Set([
+  "search_orders", "get_order_detail",
+  "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview"
+]);
 
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
   const requested = String(action || "").trim();
@@ -28215,7 +28256,7 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     // amount the channel cannot do without. The table decides, not this
     // function. See functions/privacy/outbound.js.
     const messagingVerdict = require("./privacy/outbound").mayReleasePii(after, "messaging");
-    if (!messagingVerdict.allow) {
+    if (require("./privacy/outbound").decisionNeedsAudit(messagingVerdict)) {
       await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
       console.log("notifyCustomerOnStatusChange: outbound policy refuses this provider", {
         companyId, orderId, provider: messagingVerdict.provider, reason: messagingVerdict.reason

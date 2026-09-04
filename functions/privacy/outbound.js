@@ -60,6 +60,9 @@ const PROVIDER_PII_POLICY = Object.freeze({
   // Amazon connector yet — so this layer exists before the data does, and the
   // connector arrives on top of it rather than beside it.
   amazon: {
+    // Somebody else's buyer. Every decision about this provider is audited,
+    // including an allow, if one is ever granted — see decisionNeedsAudit.
+    restricted: true,
     assistant: DENY,
     ai_reply: DENY,
     // Denied, not minimal.
@@ -81,6 +84,7 @@ const PROVIDER_PII_POLICY = Object.freeze({
   // until somebody has actually read them and decided, rather than allowed
   // because nobody has objected yet.
   ebay: {
+    restricted: true,
     assistant: DENY,
     ai_reply: DENY,
     messaging: MINIMAL,
@@ -111,11 +115,32 @@ function normalizeChannel(raw) {
 }
 
 /** The provider stamped on an order, or "" when the workshop typed it itself. */
+/**
+ * Which marketplace this record came from, if any.
+ *
+ * Two sources, and they are not equally trustworthy.
+ *
+ * `commerce.provider` is written by the server when a connector creates the
+ * order, and is validated against the envelope's provider list. Whatever it
+ * says is taken at face value — including a name nobody has described, which
+ * then fails closed, because a provider the server stamped and the policy has
+ * never heard of is exactly the case this layer exists for.
+ *
+ * `customFields.Source` is a legacy stamp from before `commerce` existed, and
+ * it is a field a workshop can create and type into. So it is honoured ONLY
+ * when it names a marketplace the policy knows. It used to be honoured
+ * whatever it said, and a workshop using a custom field called "Source" to
+ * record where a commission came from — "Instagram", "Word of mouth" — had its
+ * OWN customers' names blanked from exports, the assistant, quick replies and
+ * dispatch messages. Fail-closed is right for somebody else's data and wrong
+ * for a workshop's own, and a free-text box cannot tell you which it is.
+ */
 function providerOf(order) {
   const stamped = order && order.commerce && order.commerce.provider;
   if (stamped) return String(stamped).trim().toLowerCase();
-  const source = order && order.customFields && order.customFields.Source;
-  return String(source || "").trim().toLowerCase();
+  const source = String((order && order.customFields && order.customFields.Source) || "")
+    .trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(PROVIDER_PII_POLICY, source) ? source : "";
 }
 
 /**
@@ -186,8 +211,28 @@ function redactForChannel(order = {}, channel = "") {
   return { record, verdict, removed };
 }
 
+/**
+ * Whether this decision has to be written to the access log.
+ *
+ * Not every decision. Logging every allow would mean a row for every assistant
+ * query and every export in every workspace — an audit trail nobody can read,
+ * about data that was the workshop's own to begin with.
+ *
+ * What must be recorded is the marketplace half: a block, a minimal release,
+ * and — for a provider whose buyer belongs to somebody else — an allow too.
+ * Amazon denies all six channels today, so every Amazon decision is already a
+ * block; the day one of them is opened, that release is recorded rather than
+ * quietly becoming the one kind of access nobody can show.
+ */
+function decisionNeedsAudit(verdict) {
+  if (!verdict) return false;
+  if (!verdict.allow || verdict.minimal) return true;
+  const policy = PROVIDER_PII_POLICY[verdict.provider];
+  return Boolean(policy && policy.restricted);
+}
+
 module.exports = {
   OUTBOUND_CHANNELS, PROVIDER_PII_POLICY, MINIMAL_CATEGORIES, PII_FIELD_CATEGORIES,
-  ALLOW, DENY, MINIMAL,
+  ALLOW, DENY, MINIMAL, decisionNeedsAudit,
   providerOf, mayReleasePii, redactForChannel
 };
