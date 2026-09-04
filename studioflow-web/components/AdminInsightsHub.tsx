@@ -2989,6 +2989,202 @@ function AdminOverviewPanel() {
 
 
 
+
+// ---------------------------------------------------------------- activation
+//
+// The number that started this: thirty-seven workspaces signed up and none had
+// ever created a customer record. It came from a query somebody ran by hand,
+// which is why it went unseen for weeks — so it becomes a page.
+//
+// Every figure here is DERIVED from documents each workspace already has, which
+// is what makes it work retroactively; nothing has been recording lifecycle
+// events, and a stored funnel would show every existing workspace as having
+// done nothing at all. The panel says so out loud, and names the events that
+// cannot be derived, because an unmeasured thing shown as a zero is worse than
+// no number.
+
+type FunnelWorkspace = {
+  companyId: string;
+  name: string;
+  path: string;
+  state: string;
+  reason: string;
+  activated: boolean;
+  activatedAtMs: number;
+  steps: Record<string, boolean>;
+  signedUpAtMs: number;
+  orderCount: number;
+  customerCount: number;
+  meaningfulEventCount: number;
+  lastMeaningfulAtMs: number;
+  riskScore: number;
+  riskLevel: string;
+  riskReasons: string[];
+  underivable: string[];
+};
+
+type FunnelResult = {
+  ok: boolean;
+  generatedAtMs: number;
+  workspaces: FunnelWorkspace[];
+  totals: {
+    workspaces: number;
+    activated: number;
+    withCustomers: number;
+    withOrders: number;
+    byState: Record<string, number>;
+    byPath: Record<string, number>;
+  };
+  derivedFrom: string;
+  underivable: string[];
+};
+
+/** The states in the order a workspace passes through them, so the row reads as a journey. */
+const FUNNEL_STATE_ORDER = ["new", "onboarding", "setup_started", "activated", "engaged", "at_risk", "dormant", "churned"];
+
+const FUNNEL_STATE_LABELS: Record<string, string> = {
+  new: "Signed up",
+  onboarding: "In onboarding",
+  setup_started: "Set something up",
+  activated: "Got value",
+  engaged: "Using it regularly",
+  at_risk: "Slowing down",
+  dormant: "Gone quiet",
+  churned: "Cancelled"
+};
+
+function funnelDate(ms: number): string {
+  if (!ms) return "—";
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function AdminActivationFunnelSection() {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  const [data, setData] = useState<FunnelResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ limit?: number }, FunnelResult>(functions, "getActivationFunnel");
+    callable({ limit: 500 })
+      .then(result => { if (!cancelled) setData(result.data); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the activation funnel."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const totals = data?.totals;
+  const workspaces = data?.workspaces ?? [];
+  // Worst first, because the list exists to be acted on rather than admired.
+  const shown = showAll ? workspaces : workspaces.slice(0, 25);
+  const cell = { padding: "8px 6px" } as const;
+  const head = { textAlign: "left" as const, color: "var(--muted)", fontSize: 11, fontWeight: 800 };
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <section className="card app-card">
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Activation" />
+        <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+          {t("Every figure here is worked out from what each workspace already has — its orders, customers, connections and bank matches. Nothing new is recorded to produce it, which is why it covers workspaces that signed up long before this page existed.")}
+        </p>
+        {loading ? <p style={{ fontSize: 13, color: "var(--muted)" }}>{t("Working it out…")}</p> : null}
+        {error ? <p style={{ fontSize: 13, color: "var(--danger, #b91c1c)", fontWeight: 700 }}>{error}</p> : null}
+
+        {totals ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
+            <LandingMetricTile label={t("Workspaces")} value={totals.workspaces.toLocaleString()} />
+            <LandingMetricTile label={t("Got value")} value={totals.activated.toLocaleString()} sub={t("first real use, not a connection")} />
+            <LandingMetricTile label={t("Have a customer")} value={totals.withCustomers.toLocaleString()} />
+            <LandingMetricTile label={t("Have an order")} value={totals.withOrders.toLocaleString()} />
+          </div>
+        ) : null}
+      </section>
+
+      {totals ? (
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Funnel" title="Where they stopped" />
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr style={head}><th style={cell}>{t("Stage")}</th><th style={{ ...cell, textAlign: "right" }}>{t("Workspaces")}</th></tr></thead>
+              <tbody>
+                {FUNNEL_STATE_ORDER.filter(state => (totals.byState[state] || 0) > 0).map(state => (
+                  <tr key={state}>
+                    <td style={cell}>{t(FUNNEL_STATE_LABELS[state] || state)}</td>
+                    <td style={{ ...cell, textAlign: "right", fontWeight: 800 }}>{totals.byState[state]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {workspaces.length ? (
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Most at risk first" title="Workspaces" />
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={head}>
+                  <th style={cell}>{t("Workspace")}</th><th style={cell}>{t("Came for")}</th><th style={cell}>{t("Stage")}</th>
+                  <th style={{ ...cell, textAlign: "right" }}>{t("Orders")}</th>
+                  <th style={{ ...cell, textAlign: "right" }}>{t("Customers")}</th>
+                  <th style={cell}>{t("Signed up")}</th><th style={cell}>{t("Last activity")}</th>
+                  <th style={{ ...cell, textAlign: "right" }}>{t("Risk")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(row => (
+                  <tr key={row.companyId}>
+                    <td style={cell} title={row.companyId}>{row.name || row.companyId.slice(0, 8)}</td>
+                    <td style={cell}>{row.path.replace(/_/g, " ")}</td>
+                    {/* The reason on hover, not just the state: "slowing down"
+                        on its own is not something anybody can act on. */}
+                    <td style={cell} title={row.reason.replace(/_/g, " ")}>{t(FUNNEL_STATE_LABELS[row.state] || row.state)}</td>
+                    <td style={{ ...cell, textAlign: "right" }}>{row.orderCount}</td>
+                    <td style={{ ...cell, textAlign: "right" }}>{row.customerCount}</td>
+                    <td style={cell}>{funnelDate(row.signedUpAtMs)}</td>
+                    <td style={cell}>{funnelDate(row.lastMeaningfulAtMs)}</td>
+                    <td style={{ ...cell, textAlign: "right", fontWeight: 800 }} title={row.riskReasons.map(reason => reason.replace(/_/g, " ")).join(", ")}>
+                      {row.riskScore} · {row.riskLevel}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {workspaces.length > shown.length ? (
+            <button type="button" className="button secondary" style={{ marginTop: 10 }} onClick={() => setShowAll(true)}>
+              {t("Show all")} ({workspaces.length})
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {data ? (
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Honest limits" title="What this cannot see" />
+          <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+            {t("These leave no record on any document, so a workspace that did them still reads as though it did not. Somebody opening a connect screen and giving up is the clearest example — and the one this page most needs.")}
+          </p>
+          <ul style={{ display: "flex", flexWrap: "wrap", gap: 6, listStyle: "none", padding: 0, marginTop: 10 }}>
+            {(data.underivable ?? []).map(name => (
+              <li key={name} style={{ fontSize: 11.5, fontWeight: 700, border: "1px solid var(--border)", borderRadius: 999, padding: "4px 10px", color: "var(--muted)" }}>
+                {name.replace(/_/g, " ")}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 type AdminHubPage =
   | "overview"
   | "users"
@@ -3001,7 +3197,8 @@ type AdminHubPage =
   | "sitestats"
   | "searchconsole"
   | "customorderlanding"
-  | "onboarding";
+  | "onboarding"
+  | "activation";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -3015,7 +3212,8 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "sitestats", label: "Global Statistics" },
   { id: "searchconsole", label: "Google Search" },
   { id: "customorderlanding", label: "Custom Order Landing Page" },
-  { id: "onboarding", label: "Setup Answers" }
+  { id: "onboarding", label: "Setup Answers" },
+  { id: "activation", label: "Activation" }
 ];
 
 export function AdminInsightsHub() {
@@ -3049,6 +3247,7 @@ export function AdminInsightsHub() {
         {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} /> : null}
+        {page === "activation" ? <AdminActivationFunnelSection /> : null}
       </div>
     </div>
   );
