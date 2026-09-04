@@ -2223,5 +2223,26 @@ değil. Mesaj bastırma kuralları da: **"İlk mağazanı bağla" mesajı mağaz
 şartnamenin zorunlu kıldığı kural, ve ürünün dinlemediğini gösteren tek mesaj öncesindeki her iyi mesajı
 siler.
 
+### Gecenin ikinci yarısı — aktivasyon görünür oldu
+
+`functions/lifecycle/` altında altı saf modül: olay kaydı, aktivasyon/lifecycle, mesaj bastırma, risk
+ve feedback skorları, **türetme**, ve kişiselleştirilmiş kurulum listesi.
+
+**Türetme kararı önemli.** Olayları kaydetmeye başlayıp haftalarca beklemek yerine, çoğu cevap zaten
+diskte: `commerce` damgalı sipariş = içe aktarılmış mağaza siparişi; `linkedOrderId` taşıyan banka
+satırı = birinin yaptığı eşleştirme. Geriye dönük çalışıyor, hiçbir yeni yazma yolu yok — **aylar önce
+kaydolmuş 37 çalışma alanı bu gece ölçülebiliyor.** Türetilemeyenler de açıkça listeleniyor (bağlantı
+ekranını açıp vazgeçen kullanıcı hiçbir dokümana iz bırakmıyor — ve bu sistemin en çok ihtiyaç
+duyduğu sinyal tam olarak o).
+
+**Görünen iki yüzey:** admin panelinde *Activation* sayfası (kaç çalışma alanı, kaçı değer gördü,
+nerede durdular, risk sırasına göre liste, sebebi hover'da) ve dashboard'daki karşılama kartı. Kart
+eskiden herkese aynı beş adımı gösteriyor ve **bir sayfayı açmayı ilerleme sayıyordu**; artık
+onboarding'de seçilen hedeften geliyor ve tik "yapıldı" demek. Kaldırılamayan bir tuzak da kapatıldı:
+mağaza siparişini `commerce.provider` ile sorgulamak bileşik indeks ister, indeks yoksa sorgu "hiç
+sipariş yok" diye başarısız olur — yani 200 Etsy satışı olan atölyeye "ilk siparişini içe aktar"
+denirdi. Kanıt artık `externalEntities` (tek eşitlik, indekssiz).
+
 **Sonraki:** QBO/Xero Faz 3 defter yazımı (denetimin kalan tek maddesi), Amazon/eBay için hesap +
-OAuth (kullanıcıyla), Native Onboarding'in geri kalanı.
+OAuth (kullanıcıyla), Native Onboarding'in geri kalanı (feedback döngüsü, mesaj gönderimi, native
+ekranlar).
