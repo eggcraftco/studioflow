@@ -197,11 +197,12 @@ CLI. Nothing was changed.
 | # | Account | System | Privileged access | MFA | 12+ chars | Special char | Age < 365d | Annual rotation | Result |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | **Attested** — generated in a password manager to the §6 standard on 4 Sep 2026; Google never displays length | **Attested** — same, and not displayable | **Yes — changed 4 September 2026 17:34**, confirmed in the account's own security event log (was 934 days) | **Attested** — first rotation done; the next is due 4 Sep 2027 and is recorded in §7 | Length and character class are attestations, not readings — see the note below |
-| 2 | `eggcraftco@gmail.com` (account holder: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk`; GitHub `eggcraftco` linked | **No — two-factor is off** | n/a — no Hostinger password is set; sign-in is Google social login | n/a | n/a | n/a | **Enable two-factor. Confirm the linked Google account's own security, which is the only factor today** |
+| 2 | `eggcraftco@gmail.com` (account holder: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk`; GitHub `eggcraftco` linked | **Yes at the Hostinger layer** — enabled 4 Sep 2026, read back as "Etkin". The first factor is still Google social login, whose own security is row 8 | n/a — no Hostinger password is set | n/a | n/a | n/a | **Blocked on row 8.** Also: no recovery email and no password here, so a lost authenticator has no second route back in |
 | 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | Unverified — the CLI token lacks the `user` scope and the browser is not signed in | Unverified | Unverified | Unverified | Unverified | **Verify 2FA in the browser** |
 | 4 | Cloudflare account | Cloudflare | Nameservers for `nivadesk.app`; Worker and SaaS routing | Unverified — not signed in; the login page names `contact@eggcraft.co.uk` as last used | Unverified | Unverified | Unverified | Unverified | **Sign in and verify** |
 | 5 | The second GCP human account | Google Cloud IAM | Unknown — Firebase reports "1 additional user has access to Firebase and/or Google Cloud resources" | Unverified | Unverified | Unverified | Unverified | Unverified | **Identify it.** It is none of the three Google accounts signed into this browser: `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com` were both tested against the project and refused, and `contact@eggcraft.co.uk` is the one Firebase already lists. Only the Cloud console IAM screen can name it, and that screen requires a passkey only the account holder can present |
 | 6 | `gunes.gocmen@gmail.com` | Google | **None found.** Refused by the Firebase project; not the GitHub account (`eggcraftco`); not the Hostinger account (`eggcraftco@gmail.com`) | Yes — 2SV since 18 Apr 2023, 1 passkey | n/a | n/a | n/a | n/a | **Not privileged / Out of scope** — revisit only if it turns out to hold Cloudflare access, which is still unverified |
+| 8 | `eggcraftco@gmail.com` | Google | **The only credential behind row 2.** Hostinger has no password of its own, so whatever protects this Google account is what protects production hosting and two domains | Unverified — not signed in on this machine | Unverified | Unverified | Unverified | Unverified | **Sign in and read its security page.** Row 2 cannot pass until this does |
 | 7 | `ecem.okm@gmail.com` (Ecem Okumus) | Google | **None found on GCP** — refused by the Firebase project. The same person holds row 2's Hostinger account under a different address (`eggcraftco@gmail.com`), and that access is real | Unverified | n/a | n/a | n/a | n/a | **Out of scope as a Google account.** The privilege sits on row 2, not here |
 
 Notes that matter more than the cells:
@@ -219,12 +220,19 @@ Notes that matter more than the cells:
   be inspected. The date is in §7 and the next one is due twelve months after
   it. A missed rotation shows up as a stale date in this table, which is the
   only mechanism there is.
-- Row 2 is the finding this audit existed to produce. The account that holds
-  production hosting and two of the three domains is in a second person's name,
-  has two-factor **off**, has no password of its own, and is linked to the
-  GitHub account with admin on the publish repo. Its only factor today is
-  whatever protects `eggcraftco@gmail.com` at Google, which is not signed in
-  here and therefore not verified.
+- Row 2 is the finding this audit existed to produce, and it is now half
+  fixed. The account that holds production hosting and two of the three domains
+  is in a second person's name and has the GitHub account with admin on the
+  publish repo linked to it. Its two-factor was **off**; it was enabled on
+  4 September 2026 and reads back as enabled. What has not changed is that it
+  has no password of its own — sign-in is Google social login — so the
+  credential that actually opens it is row 8, and row 2 stays open until row 8
+  is read.
+- Neither the Hostinger account nor its Google login has a recovery email set
+  on the Hostinger side. With no password and no recovery address, a lost
+  authenticator leaves no second route into production hosting. That is an
+  availability risk rather than a security one, and it is written down so it is
+  a decision rather than a surprise.
 - Row 1 no longer fails on age. The password was rotated on 4 September 2026 at
   17:34 and the account's own security event log records the change, which is
   the closest thing to independent evidence the interface offers.
