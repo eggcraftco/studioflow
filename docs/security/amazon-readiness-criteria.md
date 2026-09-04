@@ -111,19 +111,25 @@ and Adaptive Protection. Cloud Run ingress is `internal-and-cloud-load-balancing
 on every service, enforced by the **`run.allowedIngress` organisation policy
 on the project**, so the default `run.app` address is not a way round the
 firewall. Every service authenticates callers (OIDC) on top of that. Outbound
-traffic leaves through the VPC via Cloud NAT with a static address, VPC
-firewall rules allow only TCP/443 egress, and a **Secure Web Proxy** allowlist
-restricts destinations to the SP-API and Login-with-Amazon hosts and the one
-main-project bridge host.
+traffic leaves by **direct VPC egress** through Cloud NAT with one static
+address; VPC firewall rules deny all egress except TCP/443; an
+**application-layer hostname allowlist** in the connector refuses any
+destination but the SP-API regional hosts, Login with Amazon and the one
+main-project bridge endpoint, and logs every destination; VPC Flow Logs and
+NAT logging record every connection. (A Secure Web Proxy was evaluated and
+not adopted: ~$900/month, and not required by Amazon's guidance —
+`amazon-hardened-project-design.md` §0.)
 
 **Passes when** an unauthenticated request to any path is refused at the
 edge, a request to a non-enumerated path is refused, the `run.app` address
-answers 403/404 for every service, and an egress attempt to a host outside the
-allowlist is refused and logged.
+answers 403 for every service, an egress attempt to a host outside the
+allowlist is refused by the wrapper and logged, and a non-443 egress attempt
+is dropped by the VPC firewall.
 
 **Evidence.** Cloud Armor policy (JSON) and LB configuration; the org policy;
-each service's ingress setting; the SWP policy; request logs showing a
-blocked WAF hit, a rate-limit block, a refused egress; the diagram.
+each service's ingress setting; VPC firewall rules, NAT and static-IP
+configuration; `egress.js` and its tests; request logs showing a blocked WAF
+hit, a rate-limit block, a refused egress, a NAT translation; the diagram.
 
 ### 3. IDS / IPS / threat detection
 

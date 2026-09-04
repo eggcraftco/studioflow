@@ -1,0 +1,82 @@
+# amazon-sync — the scheduled order sync and the bridge to the main project.
+# No load-balancer path at all: Cloud Scheduler calls /run with an OIDC token
+# for amazon-sync@ itself, and the ingress setting admits nothing else.
+#
+# This is the one identity with a VPC-SC egress rule and run.invoker on the
+# main project's ingestAmazonEnvelope.
+#
+# Placeholders (filled by deploy.sh): PROJECT_ID, PROJECT_NUMBER, IMAGE.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: amazon-sync
+  labels:
+    boundary: amazon
+  annotations:
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      labels:
+        boundary: amazon
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/network-interfaces: '[{"network":"amazon-vpc","subnetwork":"amazon-subnet"}]'
+        run.googleapis.com/vpc-access-egress: all-traffic
+    spec:
+      serviceAccountName: amazon-sync@PROJECT_ID.iam.gserviceaccount.com
+      # One run at a time: the sync is a loop over connections, and two
+      # overlapping runs would send the same orders twice.
+      containerConcurrency: 1
+      timeoutSeconds: 900
+      containers:
+        - image: IMAGE
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: ROLE
+              value: sync
+            - name: GOOGLE_CLOUD_PROJECT
+              value: PROJECT_ID
+            - name: REGION
+              value: europe-west2
+            - name: LWA_CLIENT_ID
+              value: "LWA_CLIENT_ID"
+            - name: SP_API_REGION
+              value: eu
+            # Who may trigger a run: the scheduler job runs as amazon-sync@ and
+            # mints a token for this service's own deterministic URL.
+            - name: SYNC_CALLER_EMAIL
+              value: amazon-sync@PROJECT_ID.iam.gserviceaccount.com
+            - name: SYNC_AUDIENCE
+              value: https://amazon-sync-PROJECT_NUMBER.europe-west2.run.app
+            # The one door out. Its host is the only non-Amazon host egress.js allows.
+            - name: BRIDGE_URL
+              value: https://europe-west2-eggcraft-studio.cloudfunctions.net/ingestAmazonEnvelope
+            - name: SYNC_OVERLAP_MINUTES
+              value: "15"
+            - name: SYNC_MAX_ORDERS_PER_RUN
+              value: "500"
+            - name: ORDER_RETENTION_DAYS
+              value: "90"
+            - name: LWA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lwa-client-secret
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
+            timeoutSeconds: 3

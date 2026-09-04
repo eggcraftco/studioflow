@@ -1,0 +1,83 @@
+# amazon-oauth — the browser-facing consent flow, reached only through the
+# load balancer. Every setting that the design depends on is in this file,
+# which makes the file itself evidence.
+#
+# Placeholders (filled by deploy.sh): PROJECT_ID, PROJECT_NUMBER, IMAGE.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: amazon-oauth
+  labels:
+    boundary: amazon
+  annotations:
+    # The org policy run.allowedIngress makes any other value undeployable;
+    # stating it here as well means the file says what the project enforces.
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      labels:
+        boundary: amazon
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        # Cloud Run Threat Detection needs the second-generation environment.
+        run.googleapis.com/execution-environment: gen2
+        # Direct VPC egress: every byte out goes through amazon-vpc, the
+        # firewall, and Cloud NAT's one static address. No connector.
+        run.googleapis.com/network-interfaces: '[{"network":"amazon-vpc","subnetwork":"amazon-subnet"}]'
+        run.googleapis.com/vpc-access-egress: all-traffic
+    spec:
+      serviceAccountName: amazon-oauth@PROJECT_ID.iam.gserviceaccount.com
+      containerConcurrency: 20
+      timeoutSeconds: 60
+      containers:
+        - image: IMAGE
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: ROLE
+              value: oauth
+            - name: GOOGLE_CLOUD_PROJECT
+              value: PROJECT_ID
+            - name: REGION
+              value: europe-west2
+            - name: SP_API_APPLICATION_ID
+              value: "SP_API_APPLICATION_ID"
+            - name: LWA_CLIENT_ID
+              value: "LWA_CLIENT_ID"
+            - name: SELLER_CENTRAL_HOST
+              value: sellercentral-europe.amazon.com
+            - name: SP_API_REGION
+              value: eu
+            - name: SP_API_DRAFT
+              value: "1"
+            - name: OAUTH_REDIRECT_URI
+              value: https://amazon.nivadesk.app/oauth/callback
+            - name: MAIN_APP_RETURN_URL
+              value: https://app.nivadesk.app/settings/integrations
+            # Secrets are mounted from Secret Manager; never in this file.
+            - name: LWA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lwa-client-secret
+                  key: latest
+            - name: INTENT_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: intent-hmac-key
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 10
+            timeoutSeconds: 3
