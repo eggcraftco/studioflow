@@ -5,7 +5,7 @@
 //
 //   1. It is a MARKETPLACE, not the studio's own storefront. On most sales eBay
 //      collects the tax and remits it itself, and it says so per tax line
-//      (`collectedBy`) — so whose tax it is comes out of the payload rather
+//      in its own array — so whose tax it is comes out of the payload rather
 //      than out of an assumption about the channel. Where it does not say,
 //      the envelope says `unknown` and the order asks, which is the rule the
 //      Finance Engine enforces (functions/finance/engine.js).
@@ -42,51 +42,80 @@ function netOf(charge, discount) {
 /**
  * Whose tax it is, from what eBay actually said.
  *
- * Every tax line carries `collectedBy`: "ebay" when the marketplace collected
- * and remits it, "seller" when the studio is responsible. A mixed order — VAT
- * the seller owes beside a sales tax eBay remits — cannot be one answer, so it
- * is reported as `unknown` and the studio is asked once rather than the engine
- * quietly picking a side and moving somebody's VAT return.
+ * There is no `collectedBy` on a tax line. eBay says it structurally instead,
+ * with two separate arrays on each line item:
+ *
+ *   taxes[]                   the SELLER's own tax table — the studio charged
+ *                             it and the studio declares it
+ *   ebayCollectAndRemitTaxes[] tax eBay collected and remits itself, which the
+ *                             studio never sees and must not declare
+ *
+ * The presence of the second array IS the marketplace-collected signal. A line
+ * can carry both — the seller's VAT beside a sales tax eBay remits — and one
+ * order cannot then have one answer, so it is reported as unknown and the
+ * studio is asked once rather than the engine picking a side and moving
+ * somebody's VAT return.
  */
-function taxResponsibilityOf(order) {
-  const lines = [];
-  for (const item of Array.isArray(order?.lineItems) ? order.lineItems : []) {
-    for (const tax of Array.isArray(item?.taxes) ? item.taxes : []) {
-      const amount = Number(ebayMoney(tax?.amount));
-      if (!Number.isFinite(amount) || amount === 0) continue;
-      lines.push(text(tax?.collectedBy).toLowerCase());
-    }
-  }
-  if (!lines.length) return "unknown";
-  if (lines.every((by) => by === "ebay")) return "platform";
-  if (lines.every((by) => by === "seller")) return "merchant";
-  return "unknown";
-}
-
-/** The tax charged across every line, which eBay does not total for us. */
-function taxTotalOf(order) {
-  // eBay states the tax twice: per line, and once on the pricing summary. The
-  // summary is the authority — some orders carry the tax only there, and
-  // summing the lines alone loses it entirely.
-  const summary = ebayMoney(order?.pricingSummary?.tax);
-  if (summary !== null) return summary;
-  const amounts = [];
+function taxLinesOf(order) {
+  const seller = [];
+  const marketplace = [];
   for (const item of Array.isArray(order?.lineItems) ? order.lineItems : []) {
     for (const tax of Array.isArray(item?.taxes) ? item.taxes : []) {
       const amount = ebayMoney(tax?.amount);
-      if (amount !== null) amounts.push(amount);
+      if (amount !== null && Number(amount) !== 0) seller.push({ amount, taxType: text(tax?.taxType, 80) });
+    }
+    for (const tax of Array.isArray(item?.ebayCollectAndRemitTaxes) ? item.ebayCollectAndRemitTaxes : []) {
+      const amount = ebayMoney(tax?.amount);
+      if (amount === null || Number(amount) === 0) continue;
+      marketplace.push({
+        amount,
+        taxType: text(tax?.taxType, 80),
+        // NET means eBay collected it from the buyer SEPARATELY, so it is not
+        // inside the order total; GROSS means it is.
+        collectionMethod: text(tax?.collectionMethod, 20).toUpperCase() || "GROSS",
+        reference: text(tax?.ebayReference?.value, 120)
+      });
     }
   }
-  return amounts.length ? sumDecimal(amounts) : null;
+  return { seller, marketplace };
+}
+
+function taxResponsibilityOf(order) {
+  const { seller, marketplace } = taxLinesOf(order);
+  if (seller.length && marketplace.length) return "unknown";
+  if (marketplace.length) return "platform";
+  if (seller.length) return "merchant";
+  return "unknown";
+}
+
+/**
+ * The tax charged on this order, wherever eBay stated it.
+ *
+ * `pricingSummary.tax` is the authority for what is INSIDE the order total, and
+ * some orders state the tax only there. A NET collect-and-remit tax is not in
+ * that figure at all — eBay took it from the buyer separately — so it is added,
+ * or it disappears from an order the buyer plainly paid it on.
+ */
+function taxTotalOf(order) {
+  const { seller, marketplace } = taxLinesOf(order);
+  const inTotal = ebayMoney(order?.pricingSummary?.tax);
+  const insideParts = inTotal !== null
+    ? [inTotal]
+    : [...seller.map((t) => t.amount), ...marketplace.filter((t) => t.collectionMethod === "GROSS").map((t) => t.amount)];
+  const outsideParts = inTotal !== null
+    ? marketplace.filter((t) => t.collectionMethod === "NET").map((t) => t.amount)
+    : marketplace.filter((t) => t.collectionMethod === "NET").map((t) => t.amount);
+  const parts = [...insideParts, ...outsideParts];
+  return parts.length ? sumDecimal(parts) : null;
 }
 
 /**
  * An extended amount divided by its quantity, but only when the answer is exact
  * to the penny. Anything else is a number the provider never stated.
  *
- * The first version of this compared the UNROUNDED quotient with itself —
- * `perUnit * count` against `extended` where `perUnit = extended / count` — so
- * it was true for every input and guarded nothing.
+ * The first version compared the UNROUNDED quotient with itself — `perUnit *
+ * count` against `extended` where `perUnit = extended / count` — so it was true
+ * for every input and guarded nothing.
  */
 function unitPriceOf(extended, quantity) {
   const total = Number(extended);
@@ -113,7 +142,10 @@ function lineItemsOf(order) {
     const unit = unitPriceOf(lineTotal, count);
     return {
       external_line_id: text(item?.lineItemId, 120) || null,
-      product_external_id: text(item?.legacyItemId, 120) || text(item?.listingMarketplaceId, 120) || null,
+      // `legacyItemId` or nothing. `listingMarketplaceId` is the SITE the
+      // listing is on ("EBAY_GB"), so using it as a fallback gave every line of
+      // every order on that site the same product identity.
+      product_external_id: text(item?.legacyItemId, 120) || null,
       variant_external_id: text(item?.legacyVariationId, 120) || null,
       sku: text(item?.sku, 120) || null,
       title: text(item?.title, 400) || "Item",
@@ -137,12 +169,27 @@ function lineItemsOf(order) {
  * refunds, each with its own status. A payment that is not FAILED is money the
  * studio has been credited with; a pending one is not yet.
  */
+/** The processor's own reference for a payment, from eBay's array of them. */
+function paymentReferenceOf(payment) {
+  const list = Array.isArray(payment?.paymentReferenceId) ? payment.paymentReferenceId : [];
+  for (const entry of list) {
+    const id = text(entry?.referenceId, 200);
+    if (id) return id;
+  }
+  // Some responses carry a bare string; take it rather than losing the id.
+  const bare = typeof payment?.paymentReferenceId === "string" ? text(payment.paymentReferenceId, 200) : "";
+  return bare || null;
+}
+
 function paymentsOf(order) {
   const summary = order?.paymentSummary || {};
   return (Array.isArray(summary.payments) ? summary.payments : [])
     .filter((payment) => text(payment?.paymentStatus).toUpperCase() !== "FAILED")
     .map((payment) => ({
-      external_id: text(payment?.paymentReferenceId, 200) || null,
+      // An ARRAY of {referenceId, referenceType}, not a string. Stringifying it
+      // gave every payment on every order the id "[object Object]" — and that
+      // id is what bank and payout matching keys on.
+      external_id: paymentReferenceOf(payment),
       provider: text(payment?.paymentMethod, 80) || "eBay",
       method: text(payment?.paymentMethod, 80) || null,
       amount: ebayMoney(payment?.amount),
@@ -165,7 +212,10 @@ function refundsOf(order) {
     // take it back out of the studio's revenue.
     .filter((refund) => text(refund?.refundStatus).toUpperCase() !== "FAILED")
     .map((refund) => ({
-    external_id: text(refund?.refundReferenceId, 200) || null,
+    // eBay's own refundId first: refundReferenceId is the payment processor's,
+    // and a refund that carries only the former had no id at all, so a resync
+    // could not recognise it as one it had already seen.
+    external_id: text(refund?.refundId, 200) || text(refund?.refundReferenceId, 200) || null,
     amount: ebayMoney(refund?.amount),
     currency: text(refund?.amount?.currency, 8) || null,
     reason: text(refund?.refundStatus, 200) || null,
@@ -286,7 +336,7 @@ function normalizeEbayOrder(order, ctx = {}) {
       subtotal: ebayMoney(order?.pricingSummary?.priceSubtotal),
       discount_total: ebayMoney(order?.pricingSummary?.priceDiscount),
       tax_total: taxTotalOf(order),
-      // From eBay's own `collectedBy`, never from the fact that it is eBay.
+      // From eBay's own two tax arrays, never from the fact that it is eBay.
       tax_responsibility: taxResponsibility,
       // pricingSummary.total is what the buyer paid, tax inside it.
       tax_included_in_price: true,
@@ -303,7 +353,15 @@ function normalizeEbayOrder(order, ctx = {}) {
       // carried by platform_status and cancelled_at; this stays the money.
       payment_status: paymentStatusOf(order, payments, refunds),
       fulfillment_status: fulfillmentStatusOf(order),
-      cancelled_at: cancelled ? (text(order?.cancelStatus?.cancelRequests?.[0]?.cancelRequestedDate) || text(order?.lastModifiedDate) || null) : null,
+      // When the cancellation COMPLETED. A request that sat pending for days
+      // was being stamped with the day it was asked for, which can put the
+      // cancellation in a period the order was still live in.
+      cancelled_at: cancelled
+        ? (text(order?.cancelStatus?.cancelledDate)
+          || text(order?.cancelStatus?.cancelRequests?.[0]?.cancelCompletedDate)
+          || text(order?.cancelStatus?.cancelRequests?.[0]?.cancelRequestedDate)
+          || text(order?.lastModifiedDate) || null)
+        : null,
       placed_at: text(order?.creationDate) || null,
       buyer_note: text(order?.buyerCheckoutNotes, 2000) || null,
       is_test: false,
@@ -344,6 +402,10 @@ function normalizeEbayOrder(order, ctx = {}) {
         fulfillment_status_raw: text(order?.orderFulfillmentStatus, 40) || null,
         payment_status_raw: text(order?.orderPaymentStatus, 40) || null,
         cancel_state: cancelState || null,
+        // The seller's own charge or credit on the order. It is inside `total`,
+        // so leaving it unrecorded made the components stop reconciling to the
+        // figure eBay states, with nothing on the order to explain the gap.
+        adjustment: ebayMoney(order?.pricingSummary?.adjustment),
         // The order's own fields, in the shape every connector uses: the
         // dashboard files a sale under `Source` and reads its currency from
         // "<Source> Currency", so a connector that skips these is counted as a
@@ -368,4 +430,4 @@ function normalizeEbayOrder(order, ctx = {}) {
   });
 }
 
-module.exports = { normalizeEbayOrder, ebayMoney, taxResponsibilityOf, taxTotalOf };
+module.exports = { normalizeEbayOrder, ebayMoney, taxResponsibilityOf, taxTotalOf, taxLinesOf, paymentReferenceOf, unitPriceOf };

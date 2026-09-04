@@ -48,7 +48,7 @@ const ebayOrder = (extra = {}) => ({
   orderPaymentStatus: "PAID", orderFulfillmentStatus: "NOT_STARTED",
   buyer: { username: "ada_l" },
   pricingSummary: { priceSubtotal: money("100.00"), deliveryCost: money("4.99"), total: money("120.00") },
-  lineItems: [{ lineItemId: "L1", legacyItemId: "111", sku: "RING-1", title: "Signet ring", quantity: 1, lineItemCost: money("100.00"), total: money("120.00"), taxes: [{ amount: money("20.00"), collectedBy: "ebay" }] }],
+  lineItems: [{ lineItemId: "L1", legacyItemId: "111", sku: "RING-1", title: "Signet ring", quantity: 1, lineItemCost: money("100.00"), total: money("120.00"), ebayCollectAndRemitTaxes: [{ amount: money("20.00"), collectionMethod: "GROSS", taxType: "VAT" }] }],
   paymentSummary: { payments: [{ paymentMethod: "PAYPAL", paymentStatus: "PAID", amount: money("120.00"), paymentDate: "2026-09-01T09:05:00.000Z", paymentReferenceId: "P1" }], refunds: [] },
   ...extra
 });
@@ -186,6 +186,107 @@ check("both adapters write the address keys the order document reads", () => {
   assert.strictEqual(ebay.customer.shipping_address.state, "Greater London");
 });
 
+// ---- fields the provider actually sends -------------------------------------
+//
+// An adversarial pass against the real API contracts found seven places where
+// the adapters read something the provider never sends. Each was invisible: the
+// code looked right, the suite was green, and the wrong answer was a plausible
+// one.
+
+check("eBay says whose tax it is with an array, not with a field called collectedBy", () => {
+  const { taxResponsibilityOf } = require("../../commerce/adapters/ebay");
+  // There is no `collectedBy` on a tax line. Reading one meant every real order
+  // fell through to "unknown" and every order in the tests said whatever the
+  // fixtures invented.
+  const remitted = { lineItems: [{ ebayCollectAndRemitTaxes: [{ amount: money("21.00"), collectionMethod: "GROSS" }] }] };
+  assert.strictEqual(taxResponsibilityOf(remitted), "platform");
+  const sellerTable = { lineItems: [{ taxes: [{ amount: money("21.00"), taxType: "VAT" }] }] };
+  assert.strictEqual(taxResponsibilityOf(sellerTable), "merchant");
+  const mixed = { lineItems: [
+    { ebayCollectAndRemitTaxes: [{ amount: money("21.00"), collectionMethod: "GROSS" }] },
+    { taxes: [{ amount: money("2.00"), taxType: "VAT" }] }
+  ] };
+  assert.strictEqual(taxResponsibilityOf(mixed), "unknown", "one order cannot have two answers");
+  // A field nobody sends must not decide anything.
+  const fictional = { lineItems: [{ taxes: [{ amount: money("21.00"), collectedBy: "ebay" }] }] };
+  assert.strictEqual(taxResponsibilityOf(fictional), "merchant", "collectedBy is not read, so this is the seller's own tax table");
+});
+
+check("a NET collect-and-remit tax is outside the order total and must not vanish", () => {
+  const { normalizeEbayOrder } = require("../../commerce/adapters/ebay");
+  // eBay took this one from the buyer separately, so it is in neither
+  // pricingSummary.tax nor the seller's taxes[] — and summing only those
+  // reported no tax at all on an order the buyer plainly paid it on.
+  const env = normalizeEbayOrder({
+    orderId: "12-1", creationDate: "2026-09-01T09:00:00.000Z", lastModifiedDate: "2026-09-01T09:00:00.000Z",
+    orderPaymentStatus: "PAID", orderFulfillmentStatus: "NOT_STARTED", buyer: { username: "ada" },
+    pricingSummary: { priceSubtotal: money("100.00"), total: money("100.00") },
+    lineItems: [{ lineItemId: "L1", title: "Ring", quantity: 1, lineItemCost: money("100.00"), taxes: [],
+      ebayCollectAndRemitTaxes: [{ amount: money("21.00"), collectionMethod: "NET", taxType: "VAT" }] }],
+    paymentSummary: { payments: [], refunds: [] }
+  }, { connectionId: "c" });
+  assert.strictEqual(env.order.tax_total, "21.00");
+  assert.strictEqual(env.order.tax_responsibility, "platform");
+});
+
+check("an eBay payment reference is an array of references, not a string", () => {
+  const { paymentReferenceOf } = require("../../commerce/adapters/ebay");
+  // String([{...}]) is "[object Object]", which gave every payment on every
+  // order the same id — and that id is what bank and payout matching keys on.
+  assert.strictEqual(paymentReferenceOf({ paymentReferenceId: [{ referenceId: "9DK64274TF868384H", referenceType: "PAYPAL_TRANSACTION_ID" }] }), "9DK64274TF868384H");
+  assert.strictEqual(paymentReferenceOf({ paymentReferenceId: "PAY-9F2" }), "PAY-9F2", "a bare string is still taken rather than lost");
+  assert.strictEqual(paymentReferenceOf({ paymentReferenceId: [] }), null);
+  assert.strictEqual(paymentReferenceOf({}), null);
+
+  // And through the adapter, not only the helper: testing the pure function
+  // alone left the call site free to stringify the array anyway, which is
+  // exactly what it was doing.
+  const { normalizeEbayOrder } = require("../../commerce/adapters/ebay");
+  const env = normalizeEbayOrder({
+    orderId: "12-3", creationDate: "2026-09-01T09:00:00.000Z", lastModifiedDate: "2026-09-01T09:00:00.000Z",
+    orderPaymentStatus: "PAID", orderFulfillmentStatus: "NOT_STARTED",
+    pricingSummary: { total: money("100.00") },
+    lineItems: [{ lineItemId: "L1", title: "Ring", quantity: 1, lineItemCost: money("100.00"), taxes: [] }],
+    paymentSummary: { payments: [{ paymentMethod: "PAYPAL", paymentStatus: "PAID", amount: money("100.00"),
+      paymentReferenceId: [{ referenceId: "9DK64274TF868384H", referenceType: "PAYPAL_TRANSACTION_ID" }] }], refunds: [] }
+  }, { connectionId: "c" });
+  assert.strictEqual(env.payments[0].external_id, "9DK64274TF868384H");
+  assert.ok(!String(env.payments[0].external_id).includes("object"), "every payment on every order got the id [object Object]");
+});
+
+check("a line with no listing id has no product identity, rather than the site's name", () => {
+  const { normalizeEbayOrder } = require("../../commerce/adapters/ebay");
+  // listingMarketplaceId is "EBAY_GB" — the site. Using it as a fallback gave
+  // every line of every order on that site the same product.
+  const env = normalizeEbayOrder({
+    orderId: "12-2", creationDate: "2026-09-01T09:00:00.000Z", lastModifiedDate: "2026-09-01T09:00:00.000Z",
+    orderPaymentStatus: "PAID", orderFulfillmentStatus: "NOT_STARTED",
+    pricingSummary: { total: money("100.00") },
+    lineItems: [{ lineItemId: "L1", sku: "RING-1", title: "Ring", quantity: 1, listingMarketplaceId: "EBAY_GB", lineItemCost: money("100.00"), taxes: [] }],
+    paymentSummary: { payments: [], refunds: [] }
+  }, { connectionId: "c" });
+  assert.strictEqual(env.order.line_items[0].product_external_id, null);
+  assert.strictEqual(env.order.line_items[0].sku, "RING-1", "the SKU is still the studio's own handle on it");
+});
+
+check("Amazon's buyer block is empty when it is restricted, not missing", () => {
+  const env = normalizeAmazonOrder(
+    amazonOrder({ BuyerInfo: {}, ShippingAddress: undefined }),
+    amazonCtx([amazonItem()])
+  );
+  assert.ok(env.review.reasons.includes("buyer_data_restricted"), "testing for an absent block never fired on the shape Amazon sends");
+  assert.strictEqual(env.customer.name, null);
+});
+
+check("Amazon's gift wrap is money the buyer paid, and is inside the order total", () => {
+  const items = [amazonItem({ BuyerInfo: { GiftWrapPrice: gbp("5.00"), GiftWrapTax: gbp("1.00") } })];
+  const env = normalizeAmazonOrder(amazonOrder(), amazonCtx(items));
+  const wrap = env.order.line_items[0].properties.find((p) => p.name === "Gift wrap");
+  assert.ok(wrap, "gift wrap was dropped, so the components no longer add up to the total Amazon states");
+  assert.strictEqual(wrap.value, "5.00");
+  assert.strictEqual(env.order.tax_total, "21.00", "20.00 item tax + 1.00 gift wrap tax");
+});
+
 // ---- the whole point: what reaches the Finance Engine ------------------------
 
 check("a marketplace-collected tax reaches the order as the studio's to show, not to declare", () => {
@@ -210,7 +311,7 @@ check("a seller-collected eBay tax is the studio's VAT, and reaches it", () => {
   const { shopOwnedFields } = require("../../commerce/envelopeToOrder");
   const { computeOrderFinance } = require("../../finance/engine");
   const env = normalizeEbayOrder(ebayOrder({
-    lineItems: [{ lineItemId: "L1", title: "Signet ring", quantity: 1, lineItemCost: money("100.00"), taxes: [{ amount: money("20.00"), collectedBy: "seller" }] }],
+    lineItems: [{ lineItemId: "L1", title: "Signet ring", quantity: 1, lineItemCost: money("100.00"), taxes: [{ amount: money("20.00"), taxType: "VAT" }] }],
     pricingSummary: { priceSubtotal: money("100.00"), total: money("120.00") }
   }), { connectionId: "con_ebay_1" });
   const fields = shopOwnedFields(env, { companyId: "co1" });

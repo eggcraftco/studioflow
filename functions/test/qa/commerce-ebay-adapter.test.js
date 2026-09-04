@@ -5,7 +5,7 @@
 // back what the adapter happens to do.
 //
 // The rule that runs through all of it: whose tax a marketplace charged is a
-// question eBay answers per line (`collectedBy`), and one order cannot have two
+// question eBay answers per line with a separate array, and one order cannot have two
 // answers. merchant / platform / unknown — see functions/finance/engine.js.
 const assert = require("assert");
 const { normalizeEbayOrder, taxResponsibilityOf, taxTotalOf, ebayMoney } = require("../../commerce/adapters/ebay");
@@ -23,7 +23,12 @@ const ring = (extra = {}) => ({
   sku: "RING-1", title: "Signet ring", quantity: 1, soldFormat: "FIXED_PRICE",
   listingMarketplaceId: "EBAY_GB", purchaseMarketplaceId: "EBAY_GB", lineItemFulfillmentStatus: "NOT_STARTED",
   lineItemCost: money("90.00"), deliveryCost: { shippingCost: money("5.00") },
-  taxes: [{ taxType: "VAT", amount: money("19.00"), collectedBy: "eBay" }],
+  // eBay does NOT have a `collectedBy` field on a tax line. It says whose tax
+  // it is structurally: `taxes[]` is the SELLER's own tax table, and
+  // `ebayCollectAndRemitTaxes[]` is tax eBay collected and remits itself. This
+  // fixture was written against a field that does not exist, which made the
+  // check green while the adapter read something else entirely.
+  ebayCollectAndRemitTaxes: [{ taxType: "VAT", amount: money("19.00"), collectionMethod: "GROSS", ebayReference: { name: "VAT", value: "GB123456789" } }],
   total: money("114.00"),
   variationAspects: [{ name: "Size", value: "M" }],
   ...extra
@@ -35,7 +40,7 @@ const band = (extra = {}) => ({
   quantity: 2, soldFormat: "FIXED_PRICE", listingMarketplaceId: "EBAY_GB", purchaseMarketplaceId: "EBAY_GB",
   lineItemFulfillmentStatus: "NOT_STARTED",
   lineItemCost: money("10.00"), deliveryCost: { shippingCost: money("0.00") },
-  taxes: [{ taxType: "VAT", amount: money("2.00"), collectedBy: "eBay" }],
+  ebayCollectAndRemitTaxes: [{ taxType: "VAT", amount: money("2.00"), collectionMethod: "GROSS", ebayReference: { name: "VAT", value: "GB123456789" } }],
   total: money("12.00"), variationAspects: [],
   ...extra
 });
@@ -160,7 +165,7 @@ check("buyer, checkout note and shipping address (§23, §25)", () => {
 
 // §44 — TaxResponsibility: seller | marketplace | unknown. The engine spells the
 // first two merchant | platform and normalises both spellings.
-check("every taxed line collectedBy eBay is the platform's tax (§44)", () => {
+check("tax in ebayCollectAndRemitTaxes is the platform's, because eBay remits it (§44)", () => {
   const env = normalizeEbayOrder(order(), ctx);
   assert.strictEqual(env.order.tax_responsibility, "platform");
   assert.strictEqual(env.order.tax_total, "21.00");
@@ -168,15 +173,15 @@ check("every taxed line collectedBy eBay is the platform's tax (§44)", () => {
   assert.ok(!env.review.reasons.includes("tax_responsibility_unknown"), "eBay answered, so nothing to ask");
   assert.strictEqual(taxResponsibilityOf(order()), "platform");
   // A zero-amount tax line states no liability and must not drag the answer to unknown.
-  const withZero = order({ lineItems: [ring(), band({ taxes: [{ taxType: "VAT", amount: money("0.00"), collectedBy: "Seller" }], total: money("10.00") })] });
+  const withZero = order({ lineItems: [ring(), band({ ebayCollectAndRemitTaxes: [], taxes: [{ taxType: "VAT", amount: money("0.00") }], total: money("10.00") })] });
   assert.strictEqual(normalizeEbayOrder(withZero, ctx).order.tax_responsibility, "platform");
 });
 
-check("every taxed line collectedBy Seller is the merchant's own tax (§44)", () => {
+check("tax in the seller's own taxes[] table is the merchant's (§44)", () => {
   const sellerTax = order({
     lineItems: [
-      ring({ taxes: [{ taxType: "VAT", amount: money("19.00"), collectedBy: "Seller" }] }),
-      band({ taxes: [{ taxType: "VAT", amount: money("2.00"), collectedBy: "Seller" }] })
+      ring({ ebayCollectAndRemitTaxes: [], taxes: [{ taxType: "VAT", amount: money("19.00") }] }),
+      band({ ebayCollectAndRemitTaxes: [], taxes: [{ taxType: "VAT", amount: money("2.00") }] })
     ]
   });
   const env = normalizeEbayOrder(sellerTax, ctx);
@@ -190,8 +195,8 @@ check("every taxed line collectedBy Seller is the merchant's own tax (§44)", ()
 check("a MIXED order has no single answer: unknown, and it asks (§44)", () => {
   const mixed = order({
     lineItems: [
-      ring(),                                                                                   // collectedBy eBay
-      band({ taxes: [{ taxType: "VAT", amount: money("2.00"), collectedBy: "Seller" }] })        // collectedBy the studio
+      ring(),                                                                                  // eBay collects and remits
+      band({ ebayCollectAndRemitTaxes: [], taxes: [{ taxType: "VAT", amount: money("2.00") }] }) // the studio's own tax table
     ]
   });
   const env = normalizeEbayOrder(mixed, ctx);
@@ -205,7 +210,8 @@ check("a MIXED order has no single answer: unknown, and it asks (§44)", () => {
 
 check("an order with no tax at all states none and asks nothing", () => {
   const noTax = order({
-    lineItems: [ring({ taxes: [], total: money("95.00") }), band({ taxes: [], total: money("10.00") })],
+    // BOTH tax arrays cleared, and no summary tax: eBay charged nothing.
+    lineItems: [ring({ taxes: [], ebayCollectAndRemitTaxes: [], total: money("95.00") }), band({ taxes: [], ebayCollectAndRemitTaxes: [], total: money("10.00") })],
     pricingSummary: { priceSubtotal: money("100.00"), priceDiscount: money("10.00"), deliveryCost: money("5.00"), total: money("95.00") },
     paymentSummary: { totalDueSeller: money("83.00"), payments: [paidPayment({ amount: money("95.00") })], refunds: [] }
   });
@@ -221,8 +227,9 @@ check("an order with no tax at all states none and asks nothing", () => {
 
 check("tax eBay states only at order level is still tax, and still has to be asked about (§44)", () => {
   const orderLevel = order({
-    lineItems: [ring({ taxes: [], total: money("95.00") }), band({ taxes: [], total: money("10.00") })]
-    // pricingSummary.tax stays "21.00": eBay said £21 was charged but not who collected it.
+    // Neither array on any line, so no line says who collected it, while
+    // pricingSummary.tax stays "21.00": eBay said £21 was charged and not by whom.
+    lineItems: [ring({ taxes: [], ebayCollectAndRemitTaxes: [], total: money("95.00") }), band({ taxes: [], ebayCollectAndRemitTaxes: [], total: money("10.00") })]
   });
   const env = normalizeEbayOrder(orderLevel, ctx);
   assert.deepStrictEqual(validateEnvelope(env), []);
@@ -285,7 +292,10 @@ check("a cancelled order says cancelled without forgetting what the buyer paid (
   }), ctx);
   assert.deepStrictEqual(validateEnvelope(env), []);
   assert.strictEqual(env.order.platform_status, "cancelled");
-  assert.strictEqual(env.order.cancelled_at, "2026-09-02T12:00:00.000Z");
+  // The date the cancellation COMPLETED, not the date it was asked for: a
+  // request that sits pending for days would otherwise stamp the cancellation
+  // into a period the order was still live in.
+  assert.strictEqual(env.order.cancelled_at, "2026-09-02T12:05:00.000Z");
   assert.strictEqual(env.order.grand_total, "116.00");
   assert.strictEqual(env.source.provider_metadata.cancel_state, "CANCELED");
   // "cancelled" is not a payment status, and losing the real one to "unknown"
@@ -354,7 +364,7 @@ check("every fixture in this file produces an applicable envelope", () => {
     noTax: order({ lineItems: [ring({ taxes: [], total: money("95.00") }), band({ taxes: [], total: money("10.00") })], pricingSummary: { priceSubtotal: money("100.00"), priceDiscount: money("10.00"), deliveryCost: money("5.00"), total: money("95.00") } }),
     partiallyPaid: order({ orderPaymentStatus: "PENDING", paymentSummary: { totalDueSeller: money("101.20"), payments: [paidPayment({ amount: money("50.00") })], refunds: [] } }),
     refunded: order({ orderPaymentStatus: "FULLY_REFUNDED", paymentSummary: { totalDueSeller: money("0.00"), payments: [paidPayment()], refunds: [{ refundReferenceId: "REF-1", refundStatus: "REFUNDED", refundDate: "2026-09-03T08:00:00.000Z", amount: money("116.00") }] } }),
-    cancelled: order({ cancelStatus: { cancelState: "CANCELED", cancelRequests: [{ cancelRequestedDate: "2026-09-02T12:00:00.000Z" }] } }),
+    cancelled: order({ cancelStatus: { cancelState: "CANCELED", cancelledDate: "2026-09-02T12:05:00.000Z", cancelRequests: [{ cancelRequestedDate: "2026-09-02T12:00:00.000Z" }] } }),
     noBuyerAddress: order({ fulfillmentStartInstructions: [], buyer: { username: "ada_l" } })
   };
   for (const [name, raw] of Object.entries(cases)) {

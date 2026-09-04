@@ -70,6 +70,12 @@ function taxResponsibilityOf(order, items) {
   if (!list.length && orderModel) models.push(orderModel);
   if (!models.length || models.some((m) => !m)) return "unknown";
   if (models.every((m) => m === "marketplacefacilitator")) return "platform";
+  // Amazon does not send this today: Orders v0's TaxCollection.Model carries the
+  // one member, and where Amazon is not the facilitator the block is simply
+  // absent — which is why an absent block is "unknown" above and not "merchant".
+  // The branch stays because the enum is Amazon's to extend, and because an
+  // adapter that silently mapped an unrecognised model onto a liability is the
+  // failure this whole three-state design exists to prevent.
   if (models.every((m) => m === "standard")) return "merchant";
   return "unknown";
 }
@@ -120,7 +126,11 @@ function lineItemsOf(items) {
     const itemTax = amazonMoney(item?.ItemTax);
     const shippingTax = netOf(item?.ShippingTax, item?.ShippingDiscountTax);
     const promotionTax = amazonMoney(item?.PromotionDiscountTax);
-    const taxes = [itemTax, shippingTax].filter((v) => v !== null);
+    // Gift wrap is real money the buyer paid: it is inside the order total, and
+    // leaving it out made the components fall short of the total Amazon states.
+    const giftWrap = amazonMoney(item?.BuyerInfo?.GiftWrapPrice);
+    const giftWrapTax = amazonMoney(item?.BuyerInfo?.GiftWrapTax);
+    const taxes = [itemTax, shippingTax, giftWrapTax].filter((v) => v !== null);
     // A promotion's tax is tax that was not charged.
     if (promotionTax !== null && taxes.length) taxes.push(toDecimalString(-Number(promotionTax)));
     return {
@@ -140,6 +150,7 @@ function lineItemsOf(items) {
       tax_total: taxes.length ? sumDecimal(taxes) : null,
       properties: [
         shipping !== null ? { name: "Shipping", value: shipping } : null,
+        giftWrap !== null ? { name: "Gift wrap", value: giftWrap } : null,
         amazonMoney(item?.PromotionDiscount) !== null ? { name: "Promotion", value: amazonMoney(item.PromotionDiscount) } : null,
         text(item?.ConditionId) ? { name: "Condition", value: text(item.ConditionId, 80) } : null
       ].filter(Boolean)
@@ -156,6 +167,20 @@ function lineItemsOf(items) {
  */
 function paymentsOf() {
   return [];
+}
+
+/**
+ * Whether Amazon told us who bought this, in any of the shapes it uses.
+ *
+ * An application without restricted-data approval gets a BuyerInfo object that
+ * is present and empty, not a missing one; an order older than thirty days is
+ * scrubbed the same way. Either way there is no buyer here, and saying so is
+ * the point — a blank name on the order is a permission, not a mystery.
+ */
+function hasBuyerIdentity(order) {
+  const info = order?.BuyerInfo;
+  if (!info || typeof info !== "object") return false;
+  return Boolean(text(info.BuyerName) || text(info.BuyerEmail));
 }
 
 function shippingAddressOf(order) {
@@ -238,9 +263,14 @@ function normalizeAmazonOrder(order, ctx = {}) {
   if (!lineItems.length) reasons.push("no_line_items");
   if (grandTotal === null) reasons.push("missing_total");
   if (taxResponsibility === "unknown" && taxTotal !== null) reasons.push("tax_responsibility_unknown");
-  // PII approval decides whether a buyer name and address exist at all. Their
+  // PII approval decides whether a buyer name and address exist at all, and so
+  // does age: Amazon scrubs the buyer from an order after thirty days. Their
   // absence is a fact about the application's scope, not a fault in the order.
-  if (order?.BuyerInfo === undefined && !shipping) reasons.push("buyer_data_restricted");
+  //
+  // Deliberately not `BuyerInfo === undefined`: SP-API does not omit the block,
+  // it returns it EMPTY, so testing for its absence never fired on either shape
+  // Amazon actually sends.
+  if (!hasBuyerIdentity(order) && !shipping) reasons.push("buyer_data_restricted");
 
   return buildEnvelope({
     identity: {
