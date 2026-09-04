@@ -176,7 +176,7 @@ Each review confirms:
 
 | Review date | Carried out by | Console policy | Operator accounts audited | Changes made |
 |---|---|---|---|---|
-| 4 September 2026 | Gunes Gocmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **First pass done, NOT passed** — see §8: one password 934 days old, one account with two-factor off, four unverified | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
+| 4 September 2026 | Gunes Gocmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **In progress, NOT passed** — see §8: the owner's password was rotated 4 Sep 2026; still outstanding are Hostinger two-factor, GitHub, Cloudflare and the unidentified second GCP account | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
 | *4 March 2027 (due)* | | | | |
 
 ## 8. Outstanding: the operator account audit
@@ -196,7 +196,7 @@ CLI. Nothing was changed.
 
 | # | Account | System | Privileged access | MFA | 12+ chars | Special char | Age < 365d | Annual rotation | Result |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | Unverified — Google does not show it | Unverified — Google does not show it | **No — last changed 13 February 2024: 934 days, over two and a half years** | **No** | **Rotate the password** |
+| 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | **Attested** — generated in a password manager to the §6 standard on 4 Sep 2026; Google never displays length | **Attested** — same, and not displayable | **Yes — changed 4 September 2026 17:34**, confirmed in the account's own security event log (was 934 days) | **Attested** — first rotation done; the next is due 4 Sep 2027 and is recorded in §7 | Length and character class are attestations, not readings — see the note below |
 | 2 | `eggcraftco@gmail.com` (account holder: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk`; GitHub `eggcraftco` linked | **No — two-factor is off** | n/a — no Hostinger password is set; sign-in is Google social login | n/a | n/a | n/a | **Enable two-factor. Confirm the linked Google account's own security, which is the only factor today** |
 | 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | Unverified — the CLI token lacks the `user` scope and the browser is not signed in | Unverified | Unverified | Unverified | Unverified | **Verify 2FA in the browser** |
 | 4 | Cloudflare account | Cloudflare | Nameservers for `nivadesk.app`; Worker and SaaS routing | Unverified — not signed in; the login page names `contact@eggcraft.co.uk` as last used | Unverified | Unverified | Unverified | Unverified | **Sign in and verify** |
@@ -207,17 +207,27 @@ CLI. Nothing was changed.
 Notes that matter more than the cells:
 
 - **Google never shows a password's length or whether it contains a special
-  character.** Those columns cannot be filled from a browser for any Google
-  account, and they are recorded as unverified rather than assumed. Anything
-  else would be inventing a control.
+  character.** No interface anywhere exposes it, so for a Google account those
+  two columns can never be *read* — only attested. This document distinguishes
+  the two words on purpose: **verified** means an interface was read and said
+  so; **attested** means the account holder performed a stated action on a
+  stated date and recorded it here. Row 1's length and special character are
+  attested. Writing "verified" there would be claiming a reading that does not
+  exist, and the difference is exactly what a reviewer is entitled to know.
+- Rotation has no technical enforcement on any of these systems, so "annual
+  rotation" is a practice with a recorded date rather than a setting that can
+  be inspected. The date is in §7 and the next one is due twelve months after
+  it. A missed rotation shows up as a stale date in this table, which is the
+  only mechanism there is.
 - Row 2 is the finding this audit existed to produce. The account that holds
   production hosting and two of the three domains is in a second person's name,
   has two-factor **off**, has no password of its own, and is linked to the
   GitHub account with admin on the publish repo. Its only factor today is
   whatever protects `eggcraftco@gmail.com` at Google, which is not signed in
   here and therefore not verified.
-- Row 1 fails on age alone. 934 days — over two and a half years — is not
-  within 365 days, and no further verification can change that.
+- Row 1 no longer fails on age. The password was rotated on 4 September 2026 at
+  17:34 and the account's own security event log records the change, which is
+  the closest thing to independent evidence the interface offers.
 - Three Google accounts are signed into the operator's browser:
   `contact@eggcraft.co.uk`, `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com`.
   Each was tested against the Firebase project directly rather than reasoned
