@@ -138,6 +138,35 @@ check("an event with no usable time is ignored rather than dated to now", () => 
 
 // ---- the path -----------------------------------------------------------------
 
+check("the path comes from the goal the wizard already asked for", () => {
+  const { GOAL_PATHS } = require("../../lifecycle/activation");
+  // The workspace has answered this — "what do you mainly want NivaDesk for" is
+  // the first question the wizard asks, and the answer lands on companySettings
+  // as onboardingMainGoal. Measuring activation against anything else holds a
+  // studio to a bar it never chose.
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "connect_store" }), "commerce");
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "finance" }), "finance");
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "inventory" }), "inventory");
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "repairs_service" }), "bespoke_studio");
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "production_deadlines" }), "bespoke_studio");
+  // "Something else" stays general: they told us their goal was not on our
+  // list, and picking one for them is the opposite of listening.
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "other" }), "general");
+  // Every goal the wizard offers has a path, or a workspace falls through the
+  // measurement entirely.
+  const wizardGoals = ["orders_customers", "production_deadlines", "repairs_service", "estimates",
+    "inventory", "files_notes", "finance", "connect_store", "team", "other"];
+  for (const goal of wizardGoals) assert.ok(GOAL_PATHS[goal], `${goal} has no activation path`);
+});
+
+check("somebody who chose to start by connecting a shop came for the shop", () => {
+  assert.strictEqual(activationPathFor({ onboardingStartChoice: "shopify" }), "commerce");
+  assert.strictEqual(activationPathFor({ onboardingStartChoice: "woocommerce" }), "commerce");
+  // But the stated goal outranks the starting point.
+  assert.strictEqual(activationPathFor({ onboardingMainGoal: "finance", onboardingStartChoice: "shopify" }), "finance");
+  assert.strictEqual(activationPathFor({ onboardingStartChoice: "spreadsheet" }), "general");
+});
+
 check("the path comes from what the workspace said, and defaults to general", () => {
   assert.strictEqual(activationPathFor({ activationPath: "finance" }), "finance");
   assert.strictEqual(activationPathFor({ activation_path: "COMMERCE" }), "commerce");

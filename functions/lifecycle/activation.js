@@ -45,6 +45,25 @@ const REQUIREMENTS = Object.freeze({
   general: { any: ["external_order_imported", "order_created", "bank_match_completed", "inventory_consumed_by_order", "grounded_ai_answer"] }
 });
 
+/**
+ * The wizard's ten goals, mapped onto the paths.
+ *
+ * "Something else" deliberately stays general: they told us their goal was not
+ * on our list, and picking one for them is the opposite of listening.
+ */
+const GOAL_PATHS = Object.freeze({
+  connect_store: "commerce",
+  finance: "finance",
+  inventory: "inventory",
+  orders_customers: "bespoke_studio",
+  production_deadlines: "bespoke_studio",
+  repairs_service: "bespoke_studio",
+  estimates: "bespoke_studio",
+  files_notes: "bespoke_studio",
+  team: "bespoke_studio",
+  other: "general"
+});
+
 /** The setup actions that move a workspace off NEW without activating it (§5). */
 const SETUP_EVENTS = Object.freeze([
   "integration_connect_started", "integration_connected",
@@ -96,6 +115,22 @@ function normalizePath(raw) {
 function activationPathFor(profile = {}) {
   const declared = normalizePath(profile.activationPath || profile.activation_path);
   if (declared !== "general") return declared;
+
+  // What the onboarding wizard already asked, in the wizard's own vocabulary.
+  //
+  // The workspace has answered this: "what do you mainly want NivaDesk for" is
+  // the first question it is asked, and the answer is on companySettings as
+  // `onboardingMainGoal`. Measuring activation against a path derived from
+  // anything else — a business-type word nothing writes, or a default — would
+  // hold a studio to a bar it never chose.
+  const goal = String(profile.onboardingMainGoal || profile.mainGoal || "").trim().toLowerCase();
+  if (goal && Object.prototype.hasOwnProperty.call(GOAL_PATHS, goal)) return GOAL_PATHS[goal];
+
+  // Somebody who chose to start by connecting a shop came for the shop, whatever
+  // else they ticked.
+  const start = String(profile.onboardingStartChoice || profile.start || "").trim().toLowerCase();
+  if (start === "shopify" || start === "woocommerce") return "commerce";
+
   const business = String(profile.businessType || profile.business_type || "").trim().toLowerCase();
   if (business === "online_shop" || business === "commerce" || business === "retail") return "commerce";
   if (business === "bespoke" || business === "studio" || business === "workshop" || business === "jeweller") return "bespoke_studio";
@@ -190,7 +225,7 @@ function lifecycleState(input = {}) {
 }
 
 module.exports = {
-  ACTIVATION_PATHS: PATHS, ACTIVATION_REQUIREMENTS: REQUIREMENTS, LIFECYCLE_STATES: STATES,
+  ACTIVATION_PATHS: PATHS, ACTIVATION_REQUIREMENTS: REQUIREMENTS, LIFECYCLE_STATES: STATES, GOAL_PATHS,
   SETUP_EVENTS, DEFAULT_TIMINGS,
   activationPathFor, activationProgress, meaningfulEvents, lifecycleState, eventTimeOf
 };
