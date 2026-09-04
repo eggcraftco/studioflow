@@ -142,6 +142,30 @@ prevent.
    by the retention sweep, without the workspace having to ask — the restricted
    document itself, not merely the fields on the order.
 
+### Open remediation: one identity can read every secret
+
+Every Cloud Function in NivaDesk runs as the project's **default compute
+service account**. No function declares a service account of its own — 39
+secrets are declared across the codebase, and the identity that can read any of
+them is the same identity that runs all of them. Granting a secret to a function
+therefore grants it, in practice, to every function.
+
+This is the normal Firebase Functions default rather than a mistake, and moving
+the whole system to per-function service accounts is not a precondition for
+anything currently shipped. It is written down here because it is a real
+weakening of least privilege, and because there is one place it stops being
+acceptable:
+
+**Before the Amazon connector serves a production seller**, the credentials that
+open Amazon — the LWA client secret and the key that seals each seller's refresh
+token — must be readable only by the Amazon functions themselves, through a
+dedicated service account with no other grants. The default compute service
+account must not hold `secretAccessor` on them. A marketplace's data protection
+obligations do not survive an arrangement where any function in the system can
+read the key to it.
+
+A check in the suite fails if Amazon code ships without that separation.
+
 ## 6. Administrative access to production
 
 Administrative access — the Firebase console, the Google Cloud project,
@@ -194,7 +218,9 @@ Each review confirms:
 - that §4's interface-level list has not silently grown to cover data belonging
   to somebody outside the workspace;
 - that §5's inbound conditions are met by any Amazon code that has shipped, by
-  reading the ingestion path rather than by watching a test go green.
+  reading the ingestion path rather than by watching a test go green;
+- whether the secret-access separation above is still outstanding, and if Amazon
+  has shipped, that it is done.
 
 | Review date | Carried out by | Operator accounts checked | Changes made |
 |---|---|---|---|
