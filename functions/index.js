@@ -11453,6 +11453,10 @@ exports.deleteWorkspaceData = onCall({ region: "europe-west2", timeoutSeconds: 5
 
   const deletedOrders = await deleteWorkspaceCollectionDocuments("siparisler", companyId);
   const deletedCustomers = await deleteWorkspaceCollectionDocuments("musteriler", companyId);
+  // Scan records for this workspace's files. Some hold a download token.
+  await deleteWorkspaceCollectionDocuments("fileScans", companyId).catch((error) => {
+    console.warn("deleteWorkspaceData fileScans cleanup failed:", error?.message || error);
+  });
 
   try {
     const updatedCompanySnap = await companyRef.get();
@@ -31655,7 +31659,7 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
   }
 
   // 2) Own workspace top-level documents (collections keyed by companyId).
-  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets", "supportTickets", "portalLinks", "estimateLinks", "fileShares"]) {
+  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets", "supportTickets", "portalLinks", "estimateLinks", "fileShares", "fileScans"]) {
     try {
       await deleteWorkspaceCollectionDocuments(collection, uid);
     } catch (error) {
@@ -34135,8 +34139,17 @@ const MALWARE_SCAN_BUCKET = (() => {
   return chosen.bucket;
 })();
 
+// concurrency is the number of uploads one instance handles at once, and each
+// one may hold a 25 MiB file in memory twice over (the download, then the
+// request body to the scanner). The default is 80. Eighty times fifty
+// megabytes is not a number that fits in any memory this function is going
+// to be given, and an out-of-memory kill mid-scan is a token that never comes
+// back until the maintenance pass finds it.
 exports.scanUploadedFile = onObjectFinalized(
-  { bucket: MALWARE_SCAN_BUCKET, region: "europe-west2", memory: "512MiB", timeoutSeconds: 540, retry: false },
+  {
+    bucket: MALWARE_SCAN_BUCKET, region: "europe-west2",
+    memory: "1GiB", concurrency: 4, timeoutSeconds: 540, retry: false
+  },
   async (event) => {
     // Redacted on purpose: never the object's own name. See logSafeObjectRef —
     // a customer's filename is usually the name of a person. Computed inside
@@ -34176,6 +34189,19 @@ exports.scanUploadedFile = onObjectFinalized(
       // side, and the record says why.
       console.error(`scanUploadedFile failed for ${ref}:`, String(error?.message || error).slice(0, 300));
     }
+  }
+);
+
+// The maintenance pass for the scanner's records. With scanning on it picks
+// up claims an instance died on and drops settled records past their use;
+// with scanning off it gives back any token still held, which is what makes
+// switching the flag off a rollback rather than a way to strand whatever was
+// mid-scan. It is safe to run with the flag off, and it is meant to.
+exports.maintainFileScans = onSchedule(
+  { schedule: "every 15 minutes", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 540, memory: "1GiB" },
+  async () => {
+    const counts = await malwareScanTrigger.sweep(Date.now());
+    console.log(`maintainFileScans: ${JSON.stringify(counts)}`);
   }
 );
 
