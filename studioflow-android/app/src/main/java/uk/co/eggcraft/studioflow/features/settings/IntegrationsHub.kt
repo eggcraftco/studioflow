@@ -173,6 +173,9 @@ val INTEGRATION_PROVIDERS = listOf(
     IntegrationProvider("squarespace", "Squarespace", "commerce", "webhook",
         "Post orders to NivaDesk from a Squarespace store.", listOf("Orders"), "inbound", "S"),
     IntegrationProvider("amazon", "Amazon", "commerce", "planned", "", emptyList(), "", "A"),
+    // Named beside Amazon because a studio deciding where to list wants to see
+    // both, and a marketplace missing from the grid reads as "never coming".
+    IntegrationProvider("ebay", "eBay", "commerce", "planned", "", emptyList(), "", "E"),
     // Banking is its own section of the app here, not a settings screen, so this
     // card reports its state and sends nobody anywhere.
     IntegrationProvider("openbanking", "Open Banking", "banking", "native",

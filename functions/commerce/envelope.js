@@ -11,7 +11,7 @@ const { toDecimalString, normalizeCurrency } = require("./money");
 const TAX_RESPONSIBILITIES = new Set(["merchant", "platform", "unknown"]);
 
 const SCHEMA_VERSION = 1;
-const PROVIDERS = new Set(["shopify", "etsy", "woocommerce", "inbound", "square"]);
+const PROVIDERS = new Set(["shopify", "etsy", "woocommerce", "inbound", "square", "amazon", "ebay"]);
 const ENTITY_TYPES = new Set(["order"]);
 const EVENT_ORIGINS = new Set(["provider", "import", "reconcile", "retry", "manual"]);
 const PAYMENT_STATUSES = new Set(["unpaid", "pending", "authorized", "paid", "partially_paid", "partially_refunded", "refunded", "voided", "unknown"]);

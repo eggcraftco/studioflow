@@ -104,6 +104,10 @@ struct NivaDeskIntegration: Identifiable {
               capabilities: ["Orders"], manage: "inbound", asset: "", mark: "S"),
         .init(id: "amazon", name: "Amazon", category: "commerce", kind: "planned",
               blurb: "", capabilities: [], manage: "", asset: "", mark: "A"),
+        // Named beside Amazon because a studio deciding where to list wants to
+        // see both, and a marketplace missing from the grid reads as never coming.
+        .init(id: "ebay", name: "eBay", category: "commerce", kind: "planned",
+              blurb: "", capabilities: [], manage: "", asset: "", mark: "E"),
         .init(id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
               blurb: "Read-only bank transaction sync.",
               // Banking is its own section of the app here, not a settings screen,

@@ -100,6 +100,12 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     blurb: "", capabilities: [], manage: "",
   },
   {
+    // Named beside Amazon because a studio deciding where to list wants to see
+    // both, and a marketplace missing from the grid reads as "never coming".
+    id: "ebay", name: "eBay", category: "commerce", kind: "planned", mark: "E",
+    blurb: "", capabilities: [], manage: "",
+  },
+  {
     id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
     logo: "/brand/integrations/openbanking.svg",
     blurb: "Read-only bank transaction sync.",

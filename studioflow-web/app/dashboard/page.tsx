@@ -163,7 +163,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   );
 }
 
-type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "manual";
+type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "ebay" | "manual";
 
 // The store connectors the server stamps orders with, keyed by the exact
 // `Source` label it writes. Four writers, not one: functions/index.js maps
@@ -179,7 +179,9 @@ const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
   { key: "shopify", source: "Shopify" },
   { key: "woocommerce", source: "WooCommerce" },
   { key: "etsy", source: "Etsy" },
-  { key: "square", source: "Square" }
+  { key: "square", source: "Square" },
+  { key: "amazon", source: "Amazon" },
+  { key: "ebay", source: "eBay" }
 ];
 
 // Workspace currency is stored as a display symbol; imported orders carry ISO

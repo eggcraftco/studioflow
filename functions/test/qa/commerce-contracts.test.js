@@ -53,7 +53,11 @@ check("identity is provider + connection + entity + external id, and the same id
 });
 
 check("an envelope that names no provider, connection or id is refused before it can be applied", () => {
-  const bad = buildEnvelope({ identity: { provider: "amazon", connection_id: "", external_id: "" }, order: { grand_total: "9.99" } });
+  // The provider name here has to be one that will never be added. "amazon"
+  // used to stand in for "unknown" and quietly stopped testing anything the day
+  // Amazon became a real adapter — the check went green because the fixture had
+  // become valid, not because the rule still held.
+  const bad = buildEnvelope({ identity: { provider: "not_a_real_provider", connection_id: "", external_id: "" }, order: { grand_total: "9.99" } });
   const problems = validateEnvelope(bad);
   for (const p of ["identity.provider", "identity.connection_id", "identity.external_id", "order.currency"]) assert.ok(problems.includes(p), p);
 });
