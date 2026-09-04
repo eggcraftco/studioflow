@@ -2156,3 +2156,20 @@ sipariş para yazıcıları, muhasebe, Pandle, Apple) + web Round 159.
 #16 aynı mağaza iki workspace · #18 QBO webhook rozeti · #19 banka bağlantısı sessizliği ·
 #20 410 uçları · #21 muhasebe defter yazımı · #28 bağlayıcı denetim kaydı · #29 Woo adres kontrolü ·
 #30 genel webhook motoru · #31 kaldırılmış Shopify rozeti · #7 banka planı sunucu kapısı.
+
+### Denetim kapandı — 31/32 (4 Eylül 2026)
+
+Yukarıdaki "kalan" listesinin tamamı kapandı. Sırasıyla: #4 (eski `openAIKey` günlük süpürmeyle
+taşınıp siliniyor) · #30 (genel kanal artık aynı parmak izi + teslimat anahtarı korumasında) ·
+#15 ve #31 · #7 ve #19 · #16 (Etsy webhook'u Square gibi bütün sahiplere dağıtıyor) · #29 (Woo ana
+makinesi her istekte, çözülen **her** adres için kontrol ediliyor) · ve son dört: #28, #6, #18, #20.
+
+**#20'nin cevabı yazma tarafında değil.** 410 dönen uç hiçbir şey yazmıyor ve öyle kalmalı: kontrol
+edecek jetonu yok, yani yazdığı her şey herkese açık bir URL'den okunan `companyId`'ye güvenmek olur
+ve yabancı biri istediği çalışma alanının kartlarını kırmızıya boyayabilirdi — yani #5'in kapattığı
+delik. Haber verme **okuma tarafına** taşındı: emekli yöntemin jetonunu hâlâ tutan çalışma alanına,
+zaten oturum açmış ve üyeliği kanıtlanmış olan sahibi hub'ı açtığında söyleniyor. Test dosyası bu
+kararı da koruyor — stub'a bir yazıcı eklenirse kırmızıya dönüyor.
+
+**Tek gerçek kalan #21'in ikinci yarısı:** muhasebe bağlayıcılarında defter yazımı. O, QuickBooks ve
+Xero spesifikasyonlarının Faz 3-7'si — kendi dosyaları var, sıradaki iş orası. (#26 rapor yanlıştı.)
