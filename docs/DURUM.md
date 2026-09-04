@@ -2171,5 +2171,20 @@ delik. Haber verme **okuma tarafına** taşındı: emekli yöntemin jetonunu hâ
 zaten oturum açmış ve üyeliği kanıtlanmış olan sahibi hub'ı açtığında söyleniyor. Test dosyası bu
 kararı da koruyor — stub'a bir yazıcı eklenirse kırmızıya dönüyor.
 
+**Canlıya çıkış (4 Eylül 2026).** Kurallar + **52 fonksiyon** (50 güncelleme, 2 yeni:
+`listRetiredIntegrationHolds` ve `scheduledQuickReplyKeySweep`) + web **Round 160**.
+
+Liste körlemesine değil, değişikliğin ulaştığı yerden çıkarıldı: her değişen dosya bir ajana
+haritalandırıldı, her haritaya ayrı bir şüpheci bakıp *kaçırılan* bir isim aradı. Sonuç 52 isim —
+banka akışının 30'u (paylaşılan `requireOwner` değiştiği için hepsi; alt küme deploy etmek planı
+düşmüş bir çalışma alanını kendi akışını kapatamaz hâlde bırakırdı), Etsy 6, Woo/Square/commerce 12,
+index.js 4. Şüpheciler dört isim ekletti (dört bağlayıcının `disconnect`'i, çapraz dilim), bir isim
+bile "her ihtimale karşı" listeye girmedi.
+
+Deploy sırasında bir alan silindi: `integrationStatusPayload`'ın `retired` bayrağı hiçbir zaman
+`true` olamıyordu (okuduğu dokümanda `kind` alanı yok, `retiredMethod`'u kimse yazmıyor, ve emekli
+türlerin jeton okuyucuları zaten cevap vermeden reddediyor). Hiçbir şey söylemeyen ikinci bir sinyal,
+bu denetimin bir hafta boyunca aradığı şeyin ta kendisi.
+
 **Tek gerçek kalan #21'in ikinci yarısı:** muhasebe bağlayıcılarında defter yazımı. O, QuickBooks ve
 Xero spesifikasyonlarının Faz 3-7'si — kendi dosyaları var, sıradaki iş orası. (#26 rapor yanlıştı.)
