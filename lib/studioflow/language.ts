@@ -661,6 +661,32 @@ const WEB_TRANSLATIONS: TranslationTable = {
 
   // Product decision §4: a smaller plan takes a seat, never a person.
   // Product decision §5: invite by email; the link in the email is the credential.
+  "The old webhook address for this shop was retired and no longer accepts orders. Anything still posting to it is being turned away.": {
+    "Türkçe": "Bu mağazanın eski webhook adresi kaldırıldı ve artık sipariş kabul etmiyor. Oraya hâlâ gönderilen her şey geri çevriliyor.",
+    "Deutsch": "Die alte Webhook-Adresse dieses Shops wurde eingestellt und nimmt keine Bestellungen mehr an. Was weiterhin dorthin gesendet wird, wird abgewiesen.",
+    "Français": "L'ancienne adresse webhook de cette boutique a été retirée et n'accepte plus de commandes. Tout ce qui y est encore envoyé est refusé.",
+    "Italiano": "Il vecchio indirizzo webhook di questo negozio è stato ritirato e non accetta più ordini. Tutto ciò che viene ancora inviato lì viene respinto.",
+    "Español (Spanish)": "La antigua dirección de webhook de esta tienda se retiró y ya no acepta pedidos. Todo lo que se siga enviando allí se rechaza.",
+    "Português": "O antigo endereço de webhook desta loja foi descontinuado e já não aceita encomendas. Tudo o que continue a ser enviado para lá é recusado.",
+    "Русский (Russian)": "Старый адрес вебхука этого магазина отключён и больше не принимает заказы. Всё, что туда по-прежнему отправляется, отклоняется.",
+    "日本語 (Japanese)": "このショップの古い Webhook アドレスは廃止され、注文を受け付けません。今も送信されているものはすべて拒否されています。",
+    "中文 (Chinese)": "此店铺的旧 webhook 地址已停用，不再接收订单。仍在发送到该地址的内容都会被拒绝。",
+    "العربية (Arabic)": "تم إيقاف عنوان الويب هوك القديم لهذا المتجر ولم يعد يقبل الطلبات. وكل ما يُرسل إليه الآن يُرفض.",
+    "हिन्दी (Hindi)": "इस दुकान का पुराना webhook पता हटा दिया गया है और अब ऑर्डर नहीं लेता। जो कुछ भी अब भी वहाँ भेजा जा रहा है, वह अस्वीकार हो रहा है."
+  },
+  "Connected · webhook unproven": {
+    "Türkçe": "Bağlı · webhook hiç çalışmadı",
+    "Deutsch": "Verbunden · Webhook nie ausgelöst",
+    "Français": "Connecté · webhook jamais déclenché",
+    "Italiano": "Collegato · webhook mai arrivato",
+    "Español (Spanish)": "Conectado · webhook nunca recibido",
+    "Português": "Ligado · webhook nunca disparou",
+    "Русский (Russian)": "Подключено · вебхук ни разу не сработал",
+    "日本語 (Japanese)": "接続済み · Webhook は未着",
+    "中文 (Chinese)": "已连接 · webhook 从未触发",
+    "العربية (Arabic)": "متصل · لم يصل أي ويب هوك",
+    "हिन्दी (Hindi)": "जुड़ा है · webhook कभी नहीं आया"
+  },
   "Invite Member": {
     "Türkçe": "Üye Davet Et",
     "Deutsch": "Mitglied einladen",

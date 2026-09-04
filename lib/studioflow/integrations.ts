@@ -161,6 +161,15 @@ export type IntegrationLiveState = {
   state: IntegrationState;
   /** A line under the name — the store it is connected to, when we know it. */
   detail?: string;
+  /** Connected, but its real-time half has never once fired. Not a failure —
+   *  the poll covers it — but a plain green badge would say more than we know. */
+  unproven?: boolean;
+  /** The workspace is still holding a token for the old pasted-URL webhook.
+   *  That address answers 410 now and writes nothing anywhere — it cannot say
+   *  so itself without trusting an unauthenticated workspace id — so a shop
+   *  still posting to it goes quiet with nothing to show for it. This is the
+   *  only place that silence gets a voice. */
+  legacyAddress?: boolean;
 };
 
 /**
@@ -178,7 +187,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, accounting, chatgpt] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, accounting, chatgpt, retired] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -193,6 +202,10 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // shows nothing, which is what it showed before.
     httpsCallable<{ companyId: string }, { connections: ChatGPTConnection[] }>(
       functions, "listChatGPTConnections")({ companyId }),
+    // Owner-only, and a rejection is fine: for anybody else the card simply
+    // says what it said before.
+    httpsCallable<{ companyId: string }, { holds: { kind: string }[] }>(
+      functions, "listRetiredIntegrationHolds")({ companyId }),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -225,9 +238,12 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
       : [],
     // Accounting providers (QuickBooks Online, Xero): the owner-readable connection projection.
     accountingConnections: accounting.status === "fulfilled"
-      ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production") }; })
+      ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production"), lastWebhookAtMs: Number(d.lastWebhookAtMs) || 0, linkedAtMs: Number(d.linkedAtMs) || 0 }; })
       : [],
     chatgptConnections: chatgpt.status === "fulfilled" ? (chatgpt.value.data?.connections ?? []) : [],
+    retiredHolds: retired.status === "fulfilled"
+      ? (retired.value.data?.holds ?? []).map((row) => (row.kind === "shopify" ? "shopify" : row.kind))
+      : [],
   };
 }
 
@@ -252,7 +268,7 @@ export async function revokeChatGPTConnection(companyId: string, tokenHash = "")
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
 };
 
 export type IntegrationSignals = {
@@ -270,12 +286,30 @@ export type IntegrationSignals = {
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
-  accountingConnections: { provider: string; status: string; mode: string; companyName: string; syncState: string; environment: string }[];
+  accountingConnections: { provider: string; status: string; mode: string; companyName: string; syncState: string; environment: string; lastWebhookAtMs: number; linkedAtMs: number }[];
   /** Live ChatGPT app grants. Empty for anybody but the owner, and when there are none. */
   chatgptConnections: ChatGPTConnection[];
+  /** Provider ids whose retired pasted-URL webhook token this workspace still holds. */
+  retiredHolds: string[];
 };
 
+/**
+ * Whatever the provider's own rule decides, a workspace still holding the
+ * retired pasted-URL token needs telling — including on a card that is
+ * otherwise green, because the green is about the NEW connector while the old
+ * address is the one the shop may still be posting to. Wrapping the whole rule
+ * rather than editing each of its dozen exits is the point: a branch added
+ * later carries the notice without anyone having to remember it.
+ */
 export function resolveIntegrationState(
+  provider: IntegrationProvider,
+  signals: IntegrationSignals,
+): IntegrationLiveState {
+  const live = resolveProviderState(provider, signals);
+  return signals.retiredHolds.includes(provider.id) ? { ...live, legacyAddress: true } : live;
+}
+
+function resolveProviderState(
   provider: IntegrationProvider,
   signals: IntegrationSignals,
 ): IntegrationLiveState {
@@ -284,9 +318,18 @@ export function resolveIntegrationState(
   if (provider.id === "shopify") {
     const live = signals.shopifyStores.filter((store) => store.status !== "unlinked");
     if (live.length === 0) return { state: "available" };
+    // An uninstalled store keeps its companyId — deliberately, so a re-install
+    // resumes — so the server still hands it to us here, and the reconcile
+    // skips it while its token is blank. Its orders have stopped arriving. Only
+    // "paused" counted as broken, so the card stayed green over a dead store
+    // for as long as the doc lived: a silent outage behind a badge whose whole
+    // job is to say whether orders are coming in. Pausing is somebody's own
+    // decision, so it lowers the card only when every store is paused; an
+    // uninstall is a break, and one of them is enough.
+    const uninstalled = live.filter((store) => store.status === "uninstalled").length;
     const paused = live.filter((store) => store.status === "paused").length;
     return {
-      state: paused === live.length ? "attention" : "connected",
+      state: uninstalled > 0 || paused === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} stores`,
     };
   }
@@ -347,7 +390,24 @@ export function resolveIntegrationState(
     const first = rows[0];
     const mode = first.mode === "primary_write" ? "Primary" : first.mode === "migration_read" ? "Migration" : "Read-only";
     const environment = first.environment === "sandbox" ? " · Sandbox" : first.environment === "demo" ? " · Demo company" : "";
-    return { state: broken === rows.length ? "attention" : "connected", detail: `${first.companyName || provider.name} · ${mode}${environment}` };
+    if (broken === rows.length) {
+      return { state: "attention", detail: `${first.companyName || provider.name} · ${mode}${environment}` };
+    }
+    // Connected, but the webhook has never fired.
+    //
+    // The six-hourly poll covers a missing webhook, which is the design — so
+    // this is not a failure and must not read as one. But a green badge on a
+    // connection whose real-time half has never once worked says more than we
+    // know: the card's whole job is to tell somebody whether their data is
+    // moving. A day's grace, because a fresh connection has not had a chance.
+    const DAY = 24 * 60 * 60 * 1000;
+    const unproven = rows.every((row) => !row.lastWebhookAtMs)
+      && first.linkedAtMs > 0 && Date.now() - first.linkedAtMs > DAY;
+    return {
+      state: "connected",
+      unproven,
+      detail: `${first.companyName || provider.name} · ${mode}${environment}${unproven ? " · webhook unproven" : ""}`
+    };
   }
 
   if (provider.id === "openbanking") {
