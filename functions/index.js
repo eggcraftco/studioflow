@@ -13078,6 +13078,15 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
     const next = cleanBoolean(patch.isDelivered, Boolean(orderData.isDelivered));
     if (next !== Boolean(orderData.isDelivered)) {
       updates.isDelivered = next;
+      // WHEN it was delivered, not just that it was.
+      //
+      // A marketplace lends a buyer's address so the seller can post the thing,
+      // and Amazon's Data Protection Policy ends that loan thirty days after
+      // fulfilment. The clock has to start somewhere, and nothing recorded the
+      // moment — so every order delivered before this line existed can never be
+      // scrubbed on a date we can defend, and is deliberately left alone.
+      // See functions/privacy/retention.js.
+      if (next) updates.deliveredAtMs = Date.now();
       pushHistoryChange(historyEntries, "Delivered changed", orderData.isDelivered ? "Yes" : "No", next ? "Yes" : "No", uid, email);
       changed = true;
     }
@@ -18808,6 +18817,9 @@ exports.registerTracking = onCall({ secrets: [TRACK17_TOKEN, ROYALMAIL_CLIENT_ID
       if (isDeliveredResult(result)) {
         orderTrackingUpdate.isDelivered = true;
         orderTrackingUpdate.isDispatched = true;
+        // Stamped only on the transition, so a courier repeating "delivered"
+        // does not keep pushing the retention clock forward.
+        if (orderOwnerSnap.data()?.isDelivered !== true) orderTrackingUpdate.deliveredAtMs = Date.now();
       } else if (isMovingResult(result)) {
         orderTrackingUpdate.isDispatched = true;
       }
@@ -18938,6 +18950,8 @@ exports.scheduledTrackingRefresh = onSchedule({
         await orderDocRef(orderId).set({
           isDelivered: true,
           isDispatched: true,
+          // The moment the retention clock starts. See functions/privacy/retention.js.
+          deliveredAtMs: Date.now(),
           customFields: buildTrackingCustomFields({
             ...result,
             lastCheckedAt: new Date().toISOString()
