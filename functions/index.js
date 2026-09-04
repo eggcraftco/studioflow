@@ -5190,7 +5190,25 @@ function supportAuthorPayload(request = {}, authorRole = "user") {
 
 function canAccessAppSupportTicket(ticketData = {}, request = {}) {
   const uid = request.auth?.uid || "";
-  if (isSupportAdminRequest(request)) return true;
+  if (isSupportAdminRequest(request)) {
+    // NivaDesk staff reading across tenants. This is the access an outside
+    // reviewer asks about first and the one nothing recorded: three addresses
+    // could open any workspace's ticket thread, and afterwards there was no way
+    // to say which had. Logged against the workspace whose data was read, so
+    // the owner can see it too rather than only us.
+    recordPiiAccess({
+      companyId: String(ticketData.companyId || ""),
+      actorUid: uid,
+      actorEmail: supportUserEmail(request),
+      actorRole: "nivadesk_support",
+      action: "support",
+      source: "server",
+      subject: { kind: "customer", id: String(ticketData.id || ticketData.ticketId || "") },
+      record: ticketData,
+      note: "support ticket thread"
+    }).catch(() => undefined);
+    return true;
+  }
   if (uid && String(ticketData.createdByUid || "") === uid) return true;
   // Assignment is how a support admin hands a ticket (including a website
   // chat, which has no creator uid) to someone else to answer.
@@ -9550,6 +9568,20 @@ exports.mergeOrders = onCall({ region: "europe-west2" }, async (request) => {
 // ---------------------------------------------------------------------------
 const EXPORT_TEMPLATE_IDS = new Set(["orders", "lineItems", "payments", "finance"]);
 
+/**
+ * Which categories of personal data each export template puts in the file.
+ *
+ * A template missing from this table is recorded as carrying a name, which is
+ * the cautious answer rather than the silent one — a new template that nobody
+ * adds here is over-reported, never under-reported.
+ */
+const EXPORT_TEMPLATE_CATEGORIES = Object.freeze({
+  orders: ["name", "email", "phone", "address", "financial"],
+  lineItems: ["name", "financial"],
+  payments: ["name", "financial"],
+  finance: ["name", "financial"]
+});
+
 function exportNumberValue(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -9795,6 +9827,25 @@ exports.exportOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, mem
   }
   const rangeLabel = `${data.from ? String(data.from) : "all"}_${data.to ? String(data.to) : "all"}`;
   const filename = `${exportFilenameSlug(companyData.name)}-${template}-${rangeLabel}.csv`;
+
+  // An export is the moment personal data leaves NivaDesk entirely, which makes
+  // it the most important thing this log records. Not awaited: the file is
+  // already built, and an audit write must never be the reason somebody's
+  // export fails.
+  recordPiiAccess({
+    companyId,
+    actorUid: uid,
+    actorEmail: String(request.auth?.token?.email || ""),
+    action: "export",
+    source: "web",
+    subject: { kind: "order" },
+    // Declared rather than derived: by the time the CSV exists every value is a
+    // string, and a postcode is indistinguishable from a product code.
+    categories: EXPORT_TEMPLATE_CATEGORIES[template] || ["name"],
+    recordCount: rows.length,
+    note: `template=${template}`
+  }).catch(() => undefined);
+
   return {
     ok: true,
     companyId,
@@ -24069,6 +24120,9 @@ function nvMcpAvailableActions() {
   return actions;
 }
 
+/** The MCP actions that hand a workspace's own customer data to an assistant. */
+const MCP_ACTIONS_READING_PII = new Set(["search_orders", "get_order_detail", "list_customers", "get_customer"]);
+
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
   const requested = String(action || "").trim();
   if (requested && !nvMcpAvailableActions().includes(requested)) {
@@ -24077,6 +24131,27 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       `Unknown action. Supported actions: ${nvMcpAvailableActions().join(", ")}.`
     );
   }
+
+  // An assistant reading a workspace's orders is a data access like any other,
+  // and the one most likely to be questioned: the grant lasts thirty days and
+  // the reader is not a person sitting at a screen. Logged before dispatch, so
+  // the record exists whether or not the action then succeeds.
+  if (MCP_ACTIONS_READING_PII.has(requested)) {
+    recordPiiAccess({
+      companyId: String(context?.companyId || ""),
+      actorUid: String(context?.uid || ""),
+      actorEmail: String(context?.email || ""),
+      actorRole: "chatgpt_connection",
+      action: "assistant",
+      source: "mcp",
+      subject: { kind: requested.includes("customer") ? "customer" : "order", id: String(args?.orderId || args?.customerId || "") },
+      // Declared: the dispatcher has not read anything yet, and the categories
+      // are a property of the action rather than of a record it has in hand.
+      categories: ["name", "email", "phone", "address"],
+      note: `action=${requested}`
+    }).catch(() => undefined);
+  }
+
   switch (requested) {
     case "create_order":
       return nvChatGPTCreateOrder(context, args);
@@ -27772,6 +27847,27 @@ exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request)
     { viewCount: Number(link.viewCount || 0) + 1, viewedAtMs: Date.now() },
     { merge: true }
   );
+
+  // A portal link is an unauthenticated bearer token, so this read has no uid
+  // behind it — and that is exactly why it is worth recording. Whoever holds
+  // the link can see the order; the log says when, and for which order.
+  recordPiiAccess({
+    companyId: String(link.companyId || ""),
+    actorUid: "",
+    actorEmail: "",
+    actorRole: "portal_visitor",
+    action: "view",
+    source: "portal",
+    subject: {
+      kind: "order",
+      id: String(link.orderId || ""),
+      provider: String(orderData?.commerce?.provider || ""),
+      externalId: String(orderData?.commerce?.externalId || "")
+    },
+    record: orderData,
+    note: "customer portal link"
+  }).catch(() => undefined);
+
   const settings = await portalWorkspaceSettings(link.companyId);
   const portal = portalPublicView(orderData, settings, link);
   portal.files = (await portalLibraryFilesForOrder(
@@ -29065,6 +29161,30 @@ exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) =
   const checklist = lifecycle.setupChecklist({ profile: settings, events });
   return { ok: true, companyId, ...checklist };
 });
+
+/**
+ * Record that somebody was handed personal data by the server.
+ *
+ * Fire-and-forget on purpose: an audit trail must never be the reason a
+ * customer's export fails or their portal link will not open. A write that does
+ * not land is logged and the request continues — the alternative is a control
+ * that takes the product down with it, which is how audit logging gets removed.
+ *
+ * The entry carries no personal data of its own. See functions/privacy/accessLog.js.
+ */
+async function recordPiiAccess(input) {
+  try {
+    const accessLog = require("./privacy/accessLog");
+    const entry = accessLog.accessEntry({ ...input, atMs: Date.now() });
+    if (!accessLog.worthLogging(entry)) return;
+    await admin.firestore()
+      .collection("companies").doc(entry.companyId)
+      .collection("piiAccessLog")
+      .add(entry);
+  } catch (error) {
+    console.warn("piiAccessLog: entry not written:", String(error?.message || error).slice(0, 200));
+  }
+}
 
 /**
  * The activation funnel, across every workspace.

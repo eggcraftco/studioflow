@@ -682,6 +682,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Who looked at whose personal data.
+    //
+    // Written only by the server and by nobody else — an audit trail a member
+    // can edit is not one. Readable by the workspace owner alone rather than by
+    // every member, because "who opened this customer's record" is a management
+    // question and the answer names colleagues.
+    //
+    // The entries deliberately carry no personal data of their own: a record id
+    // and the categories touched, never a name or an address. An access log
+    // that repeats the data it is logging access to is a second copy of the
+    // problem, in a collection nothing ever deletes.
+    match /companies/{companyId}/piiAccessLog/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -884,6 +900,7 @@ service cloud.firestore {
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
+        && collectionId != 'piiAccessLog'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -941,6 +958,7 @@ service cloud.firestore {
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
+        && collectionId != 'piiAccessLog'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
