@@ -44,8 +44,15 @@
 const crypto = require("node:crypto");
 const { defineSecret } = require("firebase-functions/params");
 
+const { encryptToken, openCredential } = require("./security/tokenBox");
+
 const PANDLE_CLIENT_ID = defineSecret("NIVADESK_PANDLE_CLIENT_ID");
 const PANDLE_CLIENT_SECRET = defineSecret("NIVADESK_PANDLE_CLIENT_SECRET");
+// Pandle holds the workspace's books. Its tokens were stored as plain text until
+// September 2026 — the only other credential in NivaDesk that had been missed
+// when everything else was sealed. Sealed now, with existing rows replaced the
+// next time each workspace talks to Pandle.
+const PANDLE_TOKEN_KEY = defineSecret("NIVADESK_PANDLE_TOKEN_KEY");
 
 const PANDLE_BASE = "https://my.pandle.com";
 const PANDLE_API = `${PANDLE_BASE}/api/v1`;
@@ -171,11 +178,59 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     return json;
   }
 
+  /** The key we seal with now, plus any we still read with. */
+  function pandleTokenKeys() {
+    try { return [String(PANDLE_TOKEN_KEY.value() || "")].filter(Boolean); } catch { return []; }
+  }
+
+  /**
+   * Reads one stored credential, whichever shape it is in.
+   *
+   * A row written before September 2026 holds a plain string; every row written
+   * since holds a sealed box. Returns "" for an absent credential so the callers
+   * below keep their existing "not connected" and "session expired" wording.
+   */
+  function pandleStored(data, field) {
+    const opened = openCredential({
+      box: (data || {})[`${field}Box`],
+      legacy: cleanText((data || {})[field], 4000)
+    }, pandleTokenKeys());
+    if (opened.unreadable) {
+      throw new HttpsError(
+        "failed-precondition",
+        "The Pandle connection cannot be read because the server's token key is not configured."
+      );
+    }
+    return opened.token;
+  }
+
+  /**
+   * Whether the stored pair still needs sealing — plain text, or a retired key.
+   * False when there is no key to seal with; see openCredential.
+   */
+  function pandleNeedsSealing(data) {
+    return openCredential({
+      box: (data || {}).accessTokenBox,
+      legacy: cleanText((data || {}).accessToken, 4000)
+    }, pandleTokenKeys()).needsSealing;
+  }
+
   async function storeTokens(companyId, json) {
     const expiresIn = Number(json.expires_in) || 7200;
+    const keys = pandleTokenKeys();
+    if (!keys.length) {
+      // Refusing is the safe half of the choice: an unstored connection is a
+      // reconnect, a plain-text one is an incident.
+      throw new HttpsError(
+        "failed-precondition",
+        "The Pandle connection could not be stored securely because the server's token key is not configured. Nothing was saved."
+      );
+    }
+    // A plain `set` replaces the document, so any plain-text fields a workspace
+    // still carried leave with this write.
     await tokensRef(companyId).set({
-      accessToken: cleanText(json.access_token, 4000),
-      refreshToken: cleanText(json.refresh_token, 4000),
+      accessTokenBox: encryptToken(cleanText(json.access_token, 4000), keys),
+      refreshTokenBox: encryptToken(cleanText(json.refresh_token, 4000), keys),
       expiresAt: Date.now() + expiresIn * 1000,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -184,13 +239,17 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
   async function accessToken(companyId) {
     const doc = await tokensRef(companyId).get();
     const data = doc.data() || {};
-    if (!data.accessToken) throw new HttpsError("failed-precondition", "Pandle is not connected — connect it first.");
-    if (Number(data.expiresAt) - Date.now() > 60 * 1000) return data.accessToken;
-    if (!data.refreshToken) throw new HttpsError("failed-precondition", "The Pandle session expired — reconnect Pandle.");
+    const storedAccess = pandleStored(data, "accessToken");
+    if (!storedAccess) throw new HttpsError("failed-precondition", "Pandle is not connected — connect it first.");
+    // A live token whose row is still plain text is refreshed early rather than
+    // used as it is: the refresh is what rewrites the row sealed.
+    if (Number(data.expiresAt) - Date.now() > 60 * 1000 && !pandleNeedsSealing(data)) return storedAccess;
+    const storedRefresh = pandleStored(data, "refreshToken");
+    if (!storedRefresh) throw new HttpsError("failed-precondition", "The Pandle session expired — reconnect Pandle.");
     const { clientId, clientSecret } = credentials();
     const json = await oauthToken({
       grant_type: "refresh_token",
-      refresh_token: data.refreshToken,
+      refresh_token: storedRefresh,
       client_id: clientId,
       client_secret: clientSecret
     });
@@ -461,7 +520,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
 
   // ---- Callables ------------------------------------------------------------
 
-  const pandleConnectStart = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET] }, async (request) => {
+  const pandleConnectStart = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET, PANDLE_TOKEN_KEY] }, async (request) => {
     const { uid, companyId } = await requireOwner(request);
     const { clientId } = credentials();
     const state = crypto.randomUUID();
@@ -480,7 +539,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     return { link: `${PANDLE_BASE}/oauth/authorize?${params.toString()}` };
   });
 
-  const pandleConnectFinish = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET], timeoutSeconds: 120 }, async (request) => {
+  const pandleConnectFinish = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET, PANDLE_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const code = cleanText(request.data?.code, 2000);
     const state = cleanText(request.data?.state, 120);
@@ -547,7 +606,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     return { ok: true };
   });
 
-  const pandleRefreshMeta = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET], timeoutSeconds: 120 }, async (request) => {
+  const pandleRefreshMeta = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET, PANDLE_TOKEN_KEY], timeoutSeconds: 120 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const connection = await loadConnection(companyId);
     const meta = await fetchMeta(companyId, connection.pandleCompanyId);
@@ -607,7 +666,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
 
   // Dry run: which NivaDesk-categorised transactions line up with Pandle's
   // unconfirmed queue, and what each would be confirmed as.
-  const pandlePreview = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET], timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  const pandlePreview = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET, PANDLE_TOKEN_KEY], timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
     const { companyId } = await requireOwner(request);
     const connection = await loadConnection(companyId);
     if (!connection.bankAccountId) throw new HttpsError("failed-precondition", "Choose the Pandle bank account first.");
@@ -694,7 +753,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
   // Idempotent: pass a client-generated requestId and a repeat call replays
   // the stored result instead of confirming anything twice (the per-item
   // pandle.status === "confirmed" guard is the second layer).
-  const pandlePush = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET], timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
+  const pandlePush = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET, PANDLE_TOKEN_KEY], timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
     const { companyId } = await requireOwner(request);
     const connection = await loadConnection(companyId);
     if (!connection.bankAccountId) throw new HttpsError("failed-precondition", "Choose the Pandle bank account first.");

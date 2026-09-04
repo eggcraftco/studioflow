@@ -32,9 +32,18 @@
 const crypto = require("node:crypto");
 const { defineSecret } = require("firebase-functions/params");
 
+const { encryptToken, openCredential } = require("./security/tokenBox");
+
 const TL_CLIENT_ID = defineSecret("NIVADESK_TL_CLIENT_ID");
-// PayPal feed: the workspace's own PayPal app secret is stored encrypted (AES-256-GCM, Etsy's box) under this key.
+// PayPal feed: the workspace's own PayPal app secret is stored encrypted
+// (AES-256-GCM) under this key.
 const PAYPAL_TOKEN_KEY = defineSecret("NIVADESK_PAYPAL_TOKEN_KEY");
+// The bank's own consent. A TrueLayer refresh token reads somebody's bank
+// account for as long as the consent lasts, and until September 2026 it was the
+// one credential in NivaDesk stored as plain text — every other connector had
+// been sealed and this one was missed. Sealed now, with the plain-text rows read
+// and replaced the next time each connection is used.
+const TL_TOKEN_KEY = defineSecret("NIVADESK_TL_TOKEN_KEY");
 const TL_CLIENT_SECRET = defineSecret("NIVADESK_TL_CLIENT_SECRET");
 
 const TL_AUTH_BASE = "https://auth.truelayer.com";
@@ -252,9 +261,55 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return row;
   }
 
+  /** The key we seal with now, plus any we still read with. Blank entries drop out. */
+  function tlTokenKeys() {
+    try { return [String(TL_TOKEN_KEY.value() || "")].filter(Boolean); } catch { return []; }
+  }
+
+  /**
+   * Seals a refresh token for storage.
+   *
+   * If no key is configured the token is refused rather than written in the
+   * clear: a bank consent nobody can read is a reconnection, and a bank consent
+   * anybody can read is an incident.
+   */
+  function tlTokenPatch(refreshToken) {
+    const plain = cleanText(refreshToken, 2000);
+    if (!plain) return null;
+    const keys = tlTokenKeys();
+    if (!keys.length) {
+      throw new HttpsError(
+        "failed-precondition",
+        "The bank connection could not be stored securely because the server's token key is not configured. Nothing was saved."
+      );
+    }
+    return { refreshTokenBox: encryptToken(plain, keys) };
+  }
+
+  /**
+   * Reads a stored consent, whichever shape it is in.
+   *
+   * Returns the token and whether it still needs sealing, so the caller can
+   * upgrade the row while it has it open. A row written before September 2026
+   * holds a plain string; every row written since holds a box.
+   */
+  function tlStoredRefreshToken(data) {
+    const opened = openCredential({
+      box: (data || {}).refreshTokenBox,
+      legacy: cleanText((data || {}).refreshToken, 2000)
+    }, tlTokenKeys());
+    if (opened.unreadable) {
+      throw new HttpsError(
+        "failed-precondition",
+        "This bank connection cannot be read because the server's token key is not configured."
+      );
+    }
+    return opened;
+  }
+
   async function accessTokenForConnection(companyId, connectionId) {
     const tokenDoc = await tokensRef(companyId).doc(connectionId).get();
-    const refreshToken = cleanText((tokenDoc.data() || {}).refreshToken, 2000);
+    const { token: refreshToken, needsSealing } = tlStoredRefreshToken(tokenDoc.data() || {});
     if (!refreshToken) throw new HttpsError("failed-precondition", "This bank connection has no stored consent — reconnect the bank.");
     const { clientId, clientSecret } = credentials();
     const token = await tlToken({
@@ -263,9 +318,21 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       client_secret: clientSecret,
       refresh_token: refreshToken
     });
-    // TrueLayer may rotate the refresh token.
-    if (token.refresh_token && token.refresh_token !== refreshToken) {
-      await tokensRef(companyId).doc(connectionId).set({ refreshToken: cleanText(token.refresh_token, 2000) }, { merge: true });
+    // TrueLayer may rotate the refresh token. Either way this is the moment a
+    // row that is still plain text, or still on a retired key, gets sealed
+    // properly — the rotation finishes by itself, one connection at a time.
+    const rotated = token.refresh_token && token.refresh_token !== refreshToken;
+    if (rotated || needsSealing) {
+      const patch = tlTokenPatch(rotated ? token.refresh_token : refreshToken);
+      if (patch) {
+        await tokensRef(companyId).doc(connectionId).set({
+          ...patch,
+          // Clear the plain-text field as we go, so the migration finishes with
+          // the last connection to be used rather than needing a sweep.
+          // FieldValue.delete() is only legal in a merging write, which this is.
+          refreshToken: admin.firestore.FieldValue.delete()
+        }, { merge: true });
+      }
     }
     return token.access_token;
   }
@@ -383,7 +450,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
 
   // Builds the TrueLayer consent link. TrueLayer's own auth dialog contains the
   // bank picker, so no institution list is needed on our side.
-  const bankCreateRequisition = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET] }, async (request) => {
+  const bankCreateRequisition = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, TL_TOKEN_KEY] }, async (request) => {
     const { uid, companyId } = await requireOwner(request);
     const { clientId } = credentials();
 
@@ -411,7 +478,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { requisitionId: state, link: `${TL_AUTH_BASE}/?${params.toString()}` };
   });
 
-  const bankFinalizeRequisition = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 180 }, async (request) => {
+  const bankFinalizeRequisition = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, TL_TOKEN_KEY], timeoutSeconds: 180 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const state = cleanText(request.data?.requisitionId, 120);
     const code = cleanText(request.data?.code, 2000);
@@ -442,8 +509,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }
     const provider = accountsPayload.results[0]?.provider || {};
 
+    const consentPatch = tlTokenPatch(token.refresh_token);
+    if (!consentPatch) throw new HttpsError("internal", "The bank returned no consent to store.");
     await tokensRef(companyId).doc(state).set({
-      refreshToken: cleanText(token.refresh_token, 2000),
+      ...consentPatch,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -745,7 +814,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { synced, skipped, imported };
   }
 
-  const bankSyncTransactions = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, PAYPAL_TOKEN_KEY], timeoutSeconds: 300 }, async (request) => {
+  const bankSyncTransactions = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, TL_TOKEN_KEY, PAYPAL_TOKEN_KEY], timeoutSeconds: 300 }, async (request) => {
     const { companyId } = await requireOwner(request);
     return syncCompanyConnections(companyId, { force: request.data?.force === true });
   });
@@ -758,7 +827,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     schedule: "every 8 hours",
     timeZone: "Europe/London",
     region: REGION,
-    secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, PAYPAL_TOKEN_KEY],
+    secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, TL_TOKEN_KEY, PAYPAL_TOKEN_KEY],
     timeoutSeconds: 540
   }, async () => {
     const companies = await db().collection("companies").where("bankFeedEnabled", "==", true).limit(300).get();
@@ -798,7 +867,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   // nothing already imported is touched. "purge" is the destructive path that
   // also removes every imported transaction of this connection.
   // No plan gate: disconnecting must never need the plan that connected — otherwise a downgrade traps the workspace with a live feed it cannot remove.
-  const bankDeleteConnection = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 180 }, async (request) => {
+  const bankDeleteConnection = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET, TL_TOKEN_KEY], timeoutSeconds: 180 }, async (request) => {
     const { uid, companyId } = await requireOwner(request, { requirePlan: false });
     const connectionId = cleanText(request.data?.requisitionId, 120);
     if (!connectionId) throw new HttpsError("invalid-argument", "requisitionId is required.");

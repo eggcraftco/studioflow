@@ -92,9 +92,19 @@ check("the recovery the plan offers is scheduled, with the retention it states",
 });
 
 check("the key rotation the plan offers is a mechanism, not a sentence", () => {
-  const etsy = fs.readFileSync(path.join(root, "etsy.js"), "utf8");
-  assert.ok(/function tokenKeyId\(/.test(etsy) && /function tokenNeedsRebox\(/.test(etsy),
+  const box = fs.readFileSync(path.join(root, "security", "tokenBox.js"), "utf8");
+  assert.ok(/function tokenKeyId\(/.test(box) && /function tokenNeedsRebox\(/.test(box),
     "the plan says a sealed token is stamped with the key that sealed it; nothing stamps it");
+  // And the stamp has to survive a round trip, not merely exist as a function.
+  const { encryptToken, decryptToken, tokenKeyId, tokenNeedsRebox } = require("../../security/tokenBox");
+  const oldKey = "a".repeat(64);
+  const newKey = "b".repeat(64);
+  const sealed = encryptToken("a refresh token", oldKey);
+  assert.strictEqual(sealed.k, tokenKeyId(oldKey), "the box does not say which key sealed it");
+  assert.strictEqual(decryptToken(sealed, [newKey, oldKey]), "a refresh token",
+    "a box sealed with the retired key cannot be read during a rotation");
+  assert.strictEqual(tokenNeedsRebox(sealed, [newKey, oldKey]), true,
+    "nothing notices that this box is still on the old key, so a rotation never finishes");
 });
 
 for (const { name, run } of checks) {
