@@ -70,16 +70,55 @@ check("the policy document says what is enforced where", () => {
   assert.ok(doc, "no password and MFA policy document");
   assert.ok(new RegExp(`${policy.MIN_LENGTH} characters`).test(doc),
     "the document and the code disagree about the minimum length");
-  // The honest limit of a client-side rule, and the console setting that fixes
-  // it, must both stay in the document.
   assert.ok(/Firebase console/.test(doc), "the document no longer names where the server-side policy is set");
   assert.ok(/two-factor/i.test(doc), "the document no longer covers multi-factor authentication");
+  // The server-side floor, as read from the console. If somebody changes the
+  // console back to Notify, this page stops being true — and the honest
+  // consequence is that the page has to change too, deliberately.
+  assert.ok(/\| Enforcement mode \| \*\*Require\*\*/.test(doc),
+    "the document no longer records the server-side enforcement mode");
+  assert.ok(new RegExp(`\\| Minimum password length \\| \\*\\*${policy.MIN_LENGTH}\\*\\*`).test(doc),
+    "the console minimum recorded in the document no longer matches the code");
+  // The gap the console cannot close, kept where somebody has to read it.
+  assert.ok(/cannot express "a letter"/.test(doc),
+    "the document stopped admitting that the letter requirement is client-side only");
   // Operator accounts reach every workspace, so they carry the stricter rules —
   // and these particular numbers are what a marketplace's security
   // questionnaire asks for. Softening any of them changes a truthful Yes into
   // an untruthful one.
   for (const requirement of [/at least \*\*12 characters\*\*/, /special character/, /rotated at least every 365 days/]) {
     assert.ok(requirement.test(doc), `the operator account rules lost: ${requirement}`);
+  }
+});
+
+check("the operator audit is not marked done before it is done", () => {
+  // The failure this guards against is the easy one: a written policy read as a
+  // completed control. Until every operator account has actually been checked
+  // against §6, the questionnaire answer is No, and the document has to keep
+  // saying so where somebody filling in that questionnaire will see it.
+  const doc = read("docs", "security", "password-and-mfa-policy.md");
+  assert.ok(/## 8\. Outstanding: the operator account audit/.test(doc),
+    "the operator account audit section is gone");
+  assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
+    "the document no longer states that the answer stays No until the audit is done");
+  // §7 and §8 have to agree. While the review table says the audit has not
+  // happened, §8 must still say the answer is No — the two drifting apart is
+  // precisely how a document comes to claim a control nobody performed.
+  const notYetAudited = /Operator accounts audited/.test(doc) && /\*\*Not yet\*\*/.test(doc);
+  if (notYetAudited) {
+    assert.ok(/NivaDesk answers\s+\*\*No\*\*/.test(doc),
+      "the review table says the operator audit has not happened, but §8 no longer answers No");
+  } else {
+    // Audit recorded as done: then every row must carry a result, or the record
+    // is ahead of the work.
+    const rows = doc.slice(doc.indexOf("| # | Account")).split("\n")
+      .filter((line) => /^\| \d+ \|/.test(line));
+    assert.ok(rows.length > 0, "the audit table lost its rows");
+    for (const row of rows) {
+      const cells = row.split("|").map((c) => c.trim());
+      assert.ok(cells[cells.length - 2],
+        `the review table says the audit is done, but this row has no result: ${cells[2] || row}`);
+    }
   }
 });
 

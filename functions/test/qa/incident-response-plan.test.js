@@ -87,8 +87,19 @@ check("the recovery the plan offers is scheduled, with the retention it states",
     "the plan offers a daily Auth snapshot that no longer runs");
   const retention = source.match(/const AUTH_BACKUP_RETENTION_DAYS = (\d+);/);
   assert.ok(retention, "the Auth backup retention is no longer stated in code");
-  assert.ok(plan.includes(`kept for ${retention[1]} days`),
+  assert.ok(new RegExp(`kept for \\*\\*${retention[1]} days\\*\\*`).test(plan),
     `the plan and the code disagree about Auth backup retention (code says ${retention[1]} days)`);
+  // The other recovery numbers are read from the Firestore Admin API, not from
+  // anybody's recollection, and the plan must keep saying which is which.
+  assert.ok(/read from the Firestore Admin API/.test(plan),
+    "the plan no longer says where its recovery numbers came from");
+  assert.ok(/version retention period of\s+\*\*7 days\*\*/.test(plan), "the point-in-time recovery window is gone");
+  assert.ok(/\*\*Daily backup schedule\*\*, retention \*\*14 days\*\*/.test(plan), "the backup schedule is gone");
+  // The uncomfortable one. Recovery is worth nothing if the database itself can
+  // be deleted, and the plan says so until somebody turns it on.
+  assert.ok(/Delete protection on the database is currently DISABLED/.test(plan)
+    || /Delete protection.*ENABLED/.test(plan),
+    "the plan stopped saying anything about delete protection");
 });
 
 check("the key rotation the plan offers is a mechanism, not a sentence", () => {

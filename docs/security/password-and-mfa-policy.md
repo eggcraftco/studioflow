@@ -53,14 +53,41 @@ they drift apart. Until September 2026 they *had* drifted: Android checked only
 that the two boxes matched, so an account refused in a browser could be created
 from a phone. That is fixed, and the test is why it stays fixed.
 
-**The honest limit.** These are client-side checks. They stop a person choosing a
-weak password, which is what they are for. They do not stop a caller who talks to
-the Firebase Authentication REST API directly. The control that does is the
-project's own password policy in the **Firebase console**
-(Authentication → Settings → Password policy), which enforces a minimum length
-and required character types server-side, for every client and every direct API
-call. Confirming that this is enabled, and that its settings match §3, is a
-standing item at each review of this document (§7).
+**Enforced server-side as well.** Client-side checks stop a person choosing a
+weak password, which is what they are for, but they do nothing about a caller who
+talks to the Firebase Authentication REST API directly. The project's own
+password policy is the control that does, and until 4 September 2026 it was not
+doing it: enforcement mode was **Notify** — sign-up allowed to proceed with a
+non-compliant password — every character requirement was unchecked, and the
+minimum length was **6**. In other words the server was weaker than all four
+clients, and the client rule was advisory to anyone willing to skip the client.
+
+Read from the Firebase console on 4 September 2026, and set there the same day:
+
+| Setting | Value |
+|---|---|
+| Enforcement mode | **Require** — a non-compliant sign-up fails |
+| Minimum password length | **8** |
+| Maximum password length | 4096 |
+| Require numeric character | **Yes** |
+| Require uppercase / lowercase / special character | No |
+| Force upgrade on sign-in | **No** |
+
+Two of those are deliberate and worth saying out loud.
+
+*Force upgrade on sign-in is off.* Turning it on would make every existing
+customer change their password the next time they sign in — a decision about
+people's Monday morning, not a security setting to flip while tidying a policy.
+The new rules apply to new passwords and password changes.
+
+*The console cannot express "a letter".* Firebase offers uppercase, lowercase,
+numeric and special; there is no plain letter option, and requiring lowercase
+would reject `ABCD1234`, which §3 accepts. So the server floor is 8 characters
+and a digit, and the letter requirement stays with the clients — which are
+stricter, never looser, so nobody meets a rule in the app that the server then
+disagrees with. The residual gap is an all-digit eight-character password created
+by calling the REST API directly, and it is written down here rather than rounded
+off.
 
 ## 4. Account protection beyond the password
 
@@ -84,8 +111,10 @@ Apple, through those providers, and NivaDesk honours it: an account protected by
 Google's second factor is protected by it when signing in to NivaDesk.
 
 For email-and-password accounts, NivaDesk does not yet offer a second factor of
-its own. Adding it means enabling Google Cloud Identity Platform on the project
-and building the enrolment and challenge flow into four clients. It is on the
+its own. What stands in the way is smaller than it was assumed to be: the project
+already runs **Authentication with Identity Platform** (confirmed in the Firebase
+console, 4 September 2026), so the platform-side capability is present and the
+remaining work is the enrolment and challenge flow in four clients. It is on the
 roadmap and is not claimed here as present.
 
 Until it is offered, the position stated to customers is plain: an account that
@@ -136,7 +165,8 @@ Each review confirms:
 
 1. That the four mirrors of §3 still agree — the suite proves this on every run,
    and the review confirms the suite still contains the check.
-2. That the Firebase console password policy is enabled and matches §3.
+2. That the Firebase console password policy still matches the table in §3 —
+   read from the console, not from this page.
 3. That every account listed in §6 still has two-factor authentication, and that
    each password meets §6's length, character and age requirements — checked
    account by account rather than assumed. An account whose password is older
@@ -144,7 +174,41 @@ Each review confirms:
 4. Whether Identity Platform and a second factor for email accounts (§5) are
    still deferred, and why.
 
-| Review date | Carried out by | Console policy confirmed | Operator 2FA confirmed | Operator passwords rotated | Changes made |
-|---|---|---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | Pending — to confirm in the Firebase console | Yes | Pending — first rotation due at this review | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements |
+| Review date | Carried out by | Console policy | Operator accounts audited | Changes made |
+|---|---|---|---|---|
+| 4 September 2026 | Görkem Öçmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **Not yet** — see §8 | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
+| *4 March 2027 (due)* | | | | |
+
+## 8. Outstanding: the operator account audit
+
+§6 states what operator accounts must do. Nobody has yet checked, account by
+account, that they do it — and a policy nobody has audited is a claim, not a
+control. Until the audit below is complete and recorded here, NivaDesk answers
+**No** to any questionnaire asking whether it enforces a 12-character,
+special-character, MFA-protected, annually-rotated password policy. The document
+existing is not the same as the accounts complying, and answering Yes on the
+strength of the document would be the exact failure this policy is meant to
+prevent.
+
+The audit covers every account that can reach production or Amazon Information:
+
+| # | Account | 12+ chars | Special char | Unique to service | MFA on | Age < 365 days | Result |
+|---|---|---|---|---|---|---|---|
+| 1 | Google account on the Firebase / Google Cloud project (`contact@eggcraft.co.uk`) | | | | | | |
+| 2 | Any additional Google account with IAM access to the project | | | | | | |
+| 3 | Source repository account with write access (`eggcraftco/studioflow`) | | | | | | |
+| 4 | Domain registrar and DNS account | | | | | | |
+| 5 | Hostinger deployment account | | | | | | |
+| 6 | Any account holding Secret Manager access separately from #1 | | | | | | |
+
+Rules for filling it in:
+
+- An account that fails any column is **fixed before the row is marked**, not
+  noted as an exception. Rotating a password takes minutes.
+- An account nobody can account for is **removed**, not investigated.
+- Row #2 requires actually listing project IAM members rather than assuming
+  there is only one — the point of an audit is to find the account nobody
+  remembered.
+- The result is recorded in the §7 table, and only then does the questionnaire
+  answer change.
 | *4 March 2027 (due)* | | | | |

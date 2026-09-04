@@ -156,10 +156,22 @@ Each of these is a real mechanism in the running service, not an aspiration.
 - **Cut off a person**: suspend the workspace member, revoke their session, and
   delete their push tokens. For a compromised administrator, reset the account
   credential first and the sessions second.
-- **Restore data**: Firebase Authentication users are snapshotted daily to
-  private storage and kept for 30 days. Firestore point-in-time recovery and
-  scheduled backups are enabled on the project; their exact retention windows are
-  confirmed at each review of this document and recorded in §11.
+- **Restore data**. Every value below was read from the Firestore Admin API on
+  4 September 2026, not from anybody's recollection:
+  - Firestore database `(default)`, edition STANDARD, located in
+    **europe-west2** (London) — the same region as the Cloud Functions.
+  - **Point-in-time recovery: enabled**, with a version retention period of
+    **7 days** (604800s). Any moment inside that window can be recovered to.
+  - **Daily backup schedule**, retention **14 days** (1209600s).
+  - Firebase Authentication users are snapshotted daily to private storage and
+    kept for **30 days**.
+  - **Delete protection on the database is currently DISABLED.** It is recorded
+    here rather than quietly omitted: with it off, the database itself can be
+    deleted, and no amount of point-in-time recovery survives that. Enabling it
+    is an outstanding action, tracked in §11.
+
+  These are re-read at each review of this document, from the API rather than
+  from this page, and §11 records the date they were last confirmed.
 
 **Preserve before you clean.** Before deleting or rotating anything, export the
 relevant Cloud Functions logs, the PII access log entries, and the state of the
@@ -205,13 +217,22 @@ This plan is reviewed **every six months**, and additionally:
 - when a new category of data is taken in, or a new marketplace is connected;
 - when responsibility for any role in §3 changes hands.
 
-A review confirms every role holder in §3, re-confirms the backup and recovery
-retention windows in §8, runs the exercise in §10, and records the result below.
+A review confirms every role holder in §3, re-reads the backup and recovery
+values in §8 from the Firestore Admin API, runs the exercise in §10, and records
+the result below.
 
-| Review date | Carried out by | Roles confirmed | Exercise run | Changes made |
-|---|---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | Yes — single-operator limitation recorded | Plan authored; first exercise due at next review | Initial version |
-| *4 March 2027 (due)* | | | | |
+| Review date | Carried out by | Roles confirmed | §8 values re-read | Exercise run | Changes made |
+|---|---|---|---|---|---|
+| 4 September 2026 | Görkem Öçmen | Yes — single-operator limitation recorded | Yes — PITR 7 days, daily backup 14 days, Auth snapshot 30 days, all read from the API | Plan authored; first exercise due at next review | Initial version |
+| *4 March 2027 (due)* | | | | | |
+
+### Outstanding actions
+
+| Action | Raised | Owner | Status |
+|---|---|---|---|
+| Enable delete protection on the Firestore `(default)` database | 4 September 2026 | Incident Lead | Open — see §8 |
+| Appoint a second person as Deputy Incident Lead | 4 September 2026 | Incident Lead | Open — see §3 |
+| Run the first tabletop exercise (§10) | 4 September 2026 | Incident Lead | Due at the March 2027 review |
 
 ## 12. Contacts
 
