@@ -19688,7 +19688,10 @@ function retiredWebhookResponse(res, kind) {
   //
   // The signal is on the READ side instead: a workspace that still holds a
   // legacy webhook token is told, on the Integrations screen, that the method
-  // it is holding was retired. See integrationStatusPayload's `retired` flag.
+  // it is holding was retired. That is listRetiredIntegrationHolds, and it is
+  // the only place the telling happens — the token getters for these two kinds
+  // refuse before they answer at all, so a flag on their payload would have
+  // been a second signal that could never fire.
   res.status(410).json({ ok: false, error: "integration_retired", kind, message: RETIRED_INTEGRATION_MESSAGE });
 }
 
@@ -19868,12 +19871,7 @@ function integrationStatusPayload(data = {}) {
     // somebody's Zap looks the same, which is why they are still shown at all.
     lastRejectedAtMs: integrationMillis(data.lastRejectedAt),
     lastRejectedError: String(data.lastRejectedError || ""),
-    rejectedCount: Number(data.rejectedCount) || 0,
-    // The workspace is still holding a token for a delivery address that now
-    // answers 410. Nothing it posts arrives, and nothing tells it so — the
-    // endpoint cannot say anything without trusting an unauthenticated
-    // workspace id, so the screen says it instead.
-    retired: RETIRED_INTEGRATION_KINDS.has(String(data.kind || "")) || Boolean(data.retiredMethod)
+    rejectedCount: Number(data.rejectedCount) || 0
   };
 }
 
