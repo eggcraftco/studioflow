@@ -141,33 +141,115 @@ function tokenKeyBytes(rawKey) {
   return key;
 }
 
+/**
+ * A short, non-secret fingerprint of a key, so a box can say which key wrote it.
+ *
+ * Eight hex characters of a SHA-256 over the key bytes. It identifies the key
+ * without being usable to find it: the box already sits beside data the key
+ * protects, so the identifier must not be a hint about the key itself.
+ */
+function tokenKeyId(rawKey) {
+  return crypto.createHash("sha256").update(tokenKeyBytes(rawKey)).digest("hex").slice(0, 8);
+}
+
+/**
+ * Every key a caller is willing to READ with, newest first.
+ *
+ * Accepts what callers have always passed — one key as a string — and also a
+ * list, which is what makes rotation survivable. Blank entries are dropped so a
+ * caller can pass `[primary, previous]` where previous is simply unset.
+ */
+function tokenKeyList(keyOrKeys) {
+  const list = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
+  const seen = new Set();
+  const out = [];
+  for (const entry of list) {
+    const raw = String(entry || "").trim();
+    if (!raw || seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out;
+}
+
 function encryptToken(plain, rawKey) {
   const text = String(plain || "");
   if (!text) return null;
+  // The key a caller writes with is always the first one it offers.
+  const key = tokenKeyList(rawKey)[0];
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", tokenKeyBytes(rawKey), iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", tokenKeyBytes(key), iv);
   const data = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
   return {
     v: 1,
     iv: iv.toString("base64"),
     tag: cipher.getAuthTag().toString("base64"),
-    data: data.toString("base64")
+    data: data.toString("base64"),
+    // Which key wrote this. Without it a rotation is a guess: every box has to
+    // be tried against every key, and a box that fails under all of them cannot
+    // be told apart from one whose key has simply been retired.
+    k: tokenKeyId(key)
   };
 }
 
-function decryptToken(box, rawKey) {
+/**
+ * Reads a box under any key offered, newest first.
+ *
+ * Rotation used to be destructive: one key per connector, no key identifier in
+ * the box, and no second key to fall back on — so changing a key made every
+ * stored credential permanently unreadable and every seller had to reconnect.
+ * Nothing announced that; the connections simply started failing.
+ *
+ * Now a caller passes the keys it is willing to read with. A box that names its
+ * key is tried against that key first; anything else is tried in order. The
+ * throw from the last attempt is the one that surfaces, so a genuinely corrupt
+ * box still fails loudly rather than silently returning "".
+ */
+function decryptToken(box, keyOrKeys) {
   if (!box || typeof box !== "object" || !box.data) return "";
-  const decipher = crypto.createDecipheriv(
-    "aes-256-gcm",
-    tokenKeyBytes(rawKey),
-    Buffer.from(String(box.iv || ""), "base64")
-  );
-  decipher.setAuthTag(Buffer.from(String(box.tag || ""), "base64"));
-  const out = Buffer.concat([
-    decipher.update(Buffer.from(String(box.data || ""), "base64")),
-    decipher.final()
-  ]);
-  return out.toString("utf8");
+  const keys = tokenKeyList(keyOrKeys);
+  if (!keys.length) throw new Error("No decryption key was offered.");
+
+  // The named key first, when the box names one it was given.
+  const named = String(box.k || "");
+  const ordered = named
+    ? [...keys.filter((k) => { try { return tokenKeyId(k) === named; } catch { return false; } }),
+       ...keys.filter((k) => { try { return tokenKeyId(k) !== named; } catch { return true; } })]
+    : keys;
+
+  let lastError = null;
+  for (const key of ordered) {
+    try {
+      const decipher = crypto.createDecipheriv(
+        "aes-256-gcm",
+        tokenKeyBytes(key),
+        Buffer.from(String(box.iv || ""), "base64")
+      );
+      decipher.setAuthTag(Buffer.from(String(box.tag || ""), "base64"));
+      const out = Buffer.concat([
+        decipher.update(Buffer.from(String(box.data || ""), "base64")),
+        decipher.final()
+      ]);
+      return out.toString("utf8");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("The stored credential could not be read with any offered key.");
+}
+
+/**
+ * Whether a box was written by the key a caller would write with now.
+ *
+ * A caller that re-boxes when this is false turns rotation into something that
+ * finishes by itself: each credential moves to the new key the next time it is
+ * used, and the old key can be retired once nothing answers to it.
+ */
+function tokenNeedsRebox(box, keyOrKeys) {
+  if (!box || typeof box !== "object" || !box.data) return false;
+  const primary = tokenKeyList(keyOrKeys)[0];
+  if (!primary) return false;
+  try { return String(box.k || "") !== tokenKeyId(primary); } catch { return false; }
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,3 +1111,6 @@ function diagnoseWebhookSignature({ rawBody, webhookId, webhookTimestamp, webhoo
 }
 
 module.exports.diagnoseWebhookSignature = diagnoseWebhookSignature;
+module.exports.tokenKeyId = tokenKeyId;
+module.exports.tokenKeyList = tokenKeyList;
+module.exports.tokenNeedsRebox = tokenNeedsRebox;
