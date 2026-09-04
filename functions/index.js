@@ -55,6 +55,7 @@ function nvMailTransport(options) {
 const { defineSecret } = require("firebase-functions/params");
 const { createClamavScanner } = require("./security/clamavClient");
 const { createMalwareScanTrigger } = require("./malwareScanTrigger");
+const malwareScanRules = require("./security/malwareScan");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
 // admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
@@ -34113,18 +34114,36 @@ const malwareScanTrigger = createMalwareScanTrigger({
   scannerName: "clamav"
 });
 
-// Named, not defaulted. The SDK's default bucket resolves to <project>.appspot.com,
-// which does not exist here — every upload the app makes goes to the
-// firebasestorage.app bucket instead, and a trigger on the wrong bucket is a
-// scanner that silently never runs.
-const MALWARE_SCAN_BUCKET = String(
-  process.env.NIVADESK_SCAN_BUCKET || "eggcraft-studio.firebasestorage.app"
-).trim();
+// Named, not defaulted. Today the SDK's default bucket (from FIREBASE_CONFIG,
+// which this code does not control) resolves to the same firebasestorage.app
+// bucket every upload goes to — but "resolves to the same thing today" is not
+// a property worth building a security control on. A trigger that follows the
+// default would follow it wherever it moved, and a trigger on the wrong bucket
+// is a scanner that silently never runs.
+//
+// Validated at load because onObjectFinalized throws on a malformed bucket
+// name, and a throw here at module load breaks discovery for every function
+// in this file — one bad env var would take the next deploy of anything down
+// with it. An invalid override is ignored, loudly, not obeyed.
+const MALWARE_SCAN_BUCKET = (() => {
+  const chosen = malwareScanRules.scanBucketName(
+    process.env.NIVADESK_SCAN_BUCKET, "eggcraft-studio.firebasestorage.app"
+  );
+  if (chosen.rejected) {
+    console.warn(`NIVADESK_SCAN_BUCKET "${chosen.rejected}" is not a valid bucket name; using ${chosen.bucket}`);
+  }
+  return chosen.bucket;
+})();
 
 exports.scanUploadedFile = onObjectFinalized(
   { bucket: MALWARE_SCAN_BUCKET, region: "europe-west2", memory: "512MiB", timeoutSeconds: 540, retry: false },
   async (event) => {
+    // Redacted on purpose: never the object's own name. See logSafeObjectRef —
+    // a customer's filename is usually the name of a person. Computed inside
+    // the try so that nothing about this handler can throw past its own net.
+    let ref = "(unnamed)";
     try {
+      ref = malwareScanRules.logSafeObjectRef(event.data.name);
       const result = await malwareScanTrigger.handleFinalizedObject({
         bucket: event.data.bucket,
         name: event.data.name,
@@ -34133,15 +34152,29 @@ exports.scanUploadedFile = onObjectFinalized(
         generation: event.data.generation,
         metadata: event.data.metadata || {}
       });
-      if (result && result.handled) {
-        console.log(`scanUploadedFile: ${event.data.name} -> ${result.verdict || result.reason}`);
-      }
+      // Logged whether or not anything was done, because during the soak the
+      // interesting fact is that the event arrived at all and was declined for
+      // the reason we expect. `handled:false` is the quiet, correct state while
+      // the flag is off, and a silent function is indistinguishable from a
+      // function that is not receiving events.
+      const outcome = result && result.handled
+        ? `handled:${result.verdict || result.reason}`
+        : `skipped:${(result && result.reason) || "unknown"}`;
+      // contentType is whatever the uploader said it was. Stripped to a MIME
+      // alphabet before it goes anywhere near a log line, so it cannot carry a
+      // delimiter that dresses up as the outcome; strip first, then cut, so a
+      // cut can never leave a half-escaped tail.
+      const contentType = String(event.data.contentType || "").replace(/[^A-Za-z0-9._+/-]/g, "").slice(0, 60);
+      console.log(
+        `scanUploadedFile: ${ref} bucket=${event.data.bucket} gen=${event.data.generation} ` +
+        `size=${Number(event.data.size) || 0} type=${contentType} -> ${outcome}`
+      );
     } catch (error) {
       // A throw here would make Cloud Storage redeliver the event, and the
       // claim already recorded means the retry finds it "already scanned" and
       // does nothing. Swallow it: the token stays withheld, which is the safe
       // side, and the record says why.
-      console.error("scanUploadedFile failed:", String(error?.message || error).slice(0, 300));
+      console.error(`scanUploadedFile failed for ${ref}:`, String(error?.message || error).slice(0, 300));
     }
   }
 );
