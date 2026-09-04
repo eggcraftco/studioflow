@@ -211,6 +211,9 @@ CLI. Nothing was changed.
 
 Notes that matter more than the cells:
 
+- The account holder attested on 4 September 2026 that every password in this
+  table meets the §6 length and character requirements. That attestation covers
+  all four accounts and is the evidence the cells marked *attested* rest on.
 - **Google never shows a password's length or whether it contains a special
   character.** No interface anywhere exposes it, so for a Google account those
   two columns can never be *read* — only attested. This document distinguishes
