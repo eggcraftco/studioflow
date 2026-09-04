@@ -167,31 +167,24 @@ after a second refusal.
 
 ## 7. Sequence
 
-Nothing in the new project is built. The order matters more than the list, and
-each of the last four steps needs sign-off before it runs.
+Superseded on 5 September 2026 by two documents: the criteria for the four
+controls, in Amazon's own words, are in `amazon-readiness-criteria.md`; the
+design of the Amazon project and its sign-off gates are in
+`amazon-hardened-project-design.md` §12. Two decisions changed the list below
+and are recorded there:
 
-1. **Web hardening on the main application** — done 4 September 2026: HSTS,
-   `nosniff`, frame protection, referrer and permissions policy, cross-origin
-   opener and resource policies, and the framework banner removed. Not yet
-   deployed. The Content-Security-Policy follows separately — see §7a, which is
-   the brief for it.
-2. **Storage malware scanning** — the decision layer is built and tested
-   (`functions/security/malwareScan.js`). The enforcement point is the open
-   question; see §7b, which found a bypass that would have made this control
-   theatre.
-3. **EDR on the production devices**, with the update cadence recorded.
-4. **Design the Amazon project** — services, service accounts, perimeter shape,
-   ingress and egress rules, the bridge contract. → *show before creating.*
-5. **Create the project**, Cloud Run gen2 from the first deploy. → *show first.*
-6. **SCC Premium**, project-level pay-as-you-go, on the trial. → *show the
-   estimated cost first.*
-7. **Load balancer + Cloud Armor**, ingress closed on day one.
-8. **VPC Service Controls**: dry-run, analyse every violation, then enforce.
-   → *show the dry-run findings before enforcing.*
-9. **App Check** monitor → enforce on the main application, after every client
-   path is tested.
-10. Evidence pack for all four controls.
-11. Only then: change the Developer Profile answer and submit a new application.
+- **Option 3 is not an Amazon blocker.** The zone that holds Amazon Information
+  stores no files, and Amazon's anti-malware criterion is scoped to servers and
+  endpoints that access SP-API data. Option 3 continues as a separate
+  product-security remediation.
+- **The anti-malware criterion is the endpoint one:** managed, non-disableable,
+  current EDR on the devices with production access, updated at least
+  monthly, under MDM — plus the serverless shared-responsibility note and the
+  upload scanner, which is live since 4 September 2026.
+
+What was done from the original list: 1 (web hardening, live), 2 (upload
+malware scanning, live with the flag on). Step 3 (EDR) is the user's and can
+start now. Steps 4–11 are the design document's sequence.
 
 ## 7a. The Content-Security-Policy brief
 
@@ -321,10 +314,13 @@ Two things follow from that, and neither is optional:
 - `scanUploadedFile` is wired into `functions/index.js` with both switches off
   and has **not been deployed**. Turning it on is the user's call, twice over:
   once to deploy with the flag off, once to set the flag.
-- **The anti-malware answer stays No.** Option 3 is not built, the
-  `getDownloadURL` race above is still open, and nothing here is in production.
-  Staging passing is not the same as the control existing, which is precisely
-  what §8 says.
+- **The anti-malware answer, for Amazon, is now decided by the endpoint
+  half.** On 5 September 2026 the user removed Option 3 from the Amazon blocker
+  list: the criterion is scoped to servers and endpoints that access SP-API
+  data, and the Amazon zone stores no files. Option 1 went live on 4 September
+  (flag on, first clean upload and an EICAR deletion watched live —
+  `malware-scanning-staging-report.md` §14). Option 3 continues as product
+  security remediation, tracked in `amazon-readiness-criteria.md`.
 
 ## 8. The rule this document exists to enforce
 
