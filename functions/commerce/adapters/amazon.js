@@ -24,6 +24,7 @@
 // _Integration_AI_Spec.md §12-§18, §28, §36, §38, §44.
 const { buildEnvelope } = require("../envelope");
 const { toDecimalString, sumDecimal } = require("../money");
+const { amazonMarketplace } = require("../marketplaces");
 
 const text = (v, max = 500) => (v === undefined || v === null ? "" : String(v).trim().slice(0, max));
 
@@ -198,16 +199,6 @@ function fulfillmentStatusOf(order) {
   return "unknown";
 }
 
-/** The Amazon seller-central host for the marketplace the order came from. */
-const SELLER_CENTRAL_HOSTS = {
-  A1F83G8C2ARO7P: "sellercentral.amazon.co.uk",
-  A1PA6795UKMFR9: "sellercentral.amazon.de",
-  A13V1IB3VIYZZH: "sellercentral.amazon.fr",
-  APJ6JRA9NG5V4: "sellercentral.amazon.it",
-  A1RKKUPIHCS9HS: "sellercentral.amazon.es",
-  ATVPDKIKX0DER: "sellercentral.amazon.com",
-  A2EUQ1WTGCTBG2: "sellercentral.amazon.ca"
-};
 
 /**
  * @param {object} order  an SP-API Order
@@ -306,8 +297,8 @@ function normalizeAmazonOrder(order, ctx = {}) {
     source: {
       provider_display_name: "Amazon",
       connection_display_name: text(ctx.accountName, 200) || "Amazon",
-      external_admin_url: externalId && marketplaceId && SELLER_CENTRAL_HOSTS[marketplaceId]
-        ? `https://${SELLER_CENTRAL_HOSTS[marketplaceId]}/orders-v3/order/${encodeURIComponent(externalId)}`
+      external_admin_url: externalId && amazonMarketplace(marketplaceId)
+        ? `https://${amazonMarketplace(marketplaceId).host}/orders-v3/order/${encodeURIComponent(externalId)}`
         : null,
       provider_metadata: {
         version: 1, schema_version: 1,
@@ -362,4 +353,4 @@ function normalizeAmazonOrder(order, ctx = {}) {
   });
 }
 
-module.exports = { normalizeAmazonOrder, amazonMoney, taxResponsibilityOf, fulfilmentSourceOf, SELLER_CENTRAL_HOSTS };
+module.exports = { normalizeAmazonOrder, amazonMoney, taxResponsibilityOf, fulfilmentSourceOf, unitPriceOf, netOf };

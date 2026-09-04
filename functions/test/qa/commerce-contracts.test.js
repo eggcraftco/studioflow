@@ -201,7 +201,7 @@ check("a log line never carries a token or an address, and the idempotency key i
 });
 
 check("capabilities are declared per provider, and WooCommerce now declares the connector it has become", () => {
-  assert.deepStrictEqual(listProviders(), ["shopify", "etsy", "woocommerce", "square", "inbound"]);
+  assert.deepStrictEqual(listProviders(), ["shopify", "etsy", "woocommerce", "square", "amazon", "ebay", "inbound"]);
   const shopify = getCapabilities("shopify");
   assert.strictEqual(shopify.orders.reconcile, true); assert.strictEqual(shopify.webhooks.coverage, "full");
   assert.strictEqual(getCapabilities("etsy").webhooks.coverage, "partial");
@@ -209,7 +209,15 @@ check("capabilities are declared per provider, and WooCommerce now declares the 
   assert.strictEqual(woo.orders.read, true); assert.strictEqual(woo.orders.reconcile, true);
   assert.strictEqual(woo.webhooks.signature, "hmac_sha256_raw_body"); assert.strictEqual(woo.connection_model, "wc_auth");
   assert.strictEqual(getCapabilities("inbound").customers.read, "partial");
-  assert.strictEqual(getCapabilities("amazon"), null);
+  // Amazon and eBay are declared now, and both say what a marketplace is:
+  // the tax may not be the seller's to declare, and the buyer is not theirs.
+  const amazon = getCapabilities("amazon");
+  assert.strictEqual(amazon.marketplace, true);
+  assert.strictEqual(amazon.tax_responsibility.per_order, true);
+  assert.strictEqual(amazon.customers.read, "restricted");
+  assert.strictEqual(amazon.inventory.write, "merchant_fulfilled_only", "FBA stock is Amazon's and is never written");
+  assert.strictEqual(getCapabilities("ebay").products.write, "managed_listing_only");
+  assert.strictEqual(getCapabilities("not_a_provider"), null);
   shopify.orders.read = false; assert.strictEqual(getCapabilities("shopify").orders.read, true, "the registry cannot be mutated through a copy");
 });
 

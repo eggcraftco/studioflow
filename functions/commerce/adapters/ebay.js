@@ -20,6 +20,7 @@
 // _Integration_AI_Spec.md §19-§24, §36, §39, §44.
 const { buildEnvelope } = require("../envelope");
 const { toDecimalString, sumDecimal } = require("../money");
+const { ebayMarketplace } = require("../marketplaces");
 
 const text = (v, max = 500) => (v === undefined || v === null ? "" : String(v).trim().slice(0, max));
 
@@ -324,7 +325,11 @@ function normalizeEbayOrder(order, ctx = {}) {
     source: {
       provider_display_name: "eBay",
       connection_display_name: text(ctx.accountName, 200) || "eBay",
-      external_admin_url: externalId ? `https://www.ebay.co.uk/mesh/ord/details?orderid=${encodeURIComponent(externalId)}` : null,
+      // The seller's own site, not always ebay.co.uk: a German seller opening
+      // a UK link lands on a page that cannot find their order.
+      external_admin_url: externalId
+        ? `https://${(ebayMarketplace(ctx.marketplaceId) || { host: "www.ebay.co.uk" }).host}/mesh/ord/details?orderid=${encodeURIComponent(externalId)}`
+        : null,
       provider_metadata: {
         version: 1, schema_version: 1,
         order_number: externalId,
