@@ -74,6 +74,13 @@ check("the policy document says what is enforced where", () => {
   // it, must both stay in the document.
   assert.ok(/Firebase console/.test(doc), "the document no longer names where the server-side policy is set");
   assert.ok(/two-factor/i.test(doc), "the document no longer covers multi-factor authentication");
+  // Operator accounts reach every workspace, so they carry the stricter rules —
+  // and these particular numbers are what a marketplace's security
+  // questionnaire asks for. Softening any of them changes a truthful Yes into
+  // an untruthful one.
+  for (const requirement of [/at least \*\*12 characters\*\*/, /special character/, /rotated at least every 365 days/]) {
+    assert.ok(requirement.test(doc), `the operator account rules lost: ${requirement}`);
+  }
 });
 
 for (const { name, run } of checks) {

@@ -96,6 +96,23 @@ available today.
 
 **Mandatory, without exception.**
 
+The requirements below are stricter than §3 on purpose. §3 governs a jeweller
+signing in to their own workspace; this governs an account that can reach every
+workspace, and the two should not carry the same rules.
+
+Every operator account — the Firebase and Google Cloud projects, Secret Manager,
+the source repository, the domain registrar and DNS — must use a password that
+is:
+
+- at least **12 characters** long;
+- contains at least one **special character**;
+- **unique to that service**, never reused from another account;
+- generated and held in a password manager rather than remembered;
+- **rotated at least every 365 days**, and immediately on any suspicion of
+  compromise or when anyone with access leaves.
+
+And:
+
 - Every Google account with access to the Firebase project, the Google Cloud
   project, or Secret Manager must have two-factor authentication enabled.
 - Every account with write access to the source repository must have two-factor
@@ -120,12 +137,14 @@ Each review confirms:
 1. That the four mirrors of §3 still agree — the suite proves this on every run,
    and the review confirms the suite still contains the check.
 2. That the Firebase console password policy is enabled and matches §3.
-3. That every account listed in §6 still has two-factor authentication, checked
-   account by account rather than assumed.
+3. That every account listed in §6 still has two-factor authentication, and that
+   each password meets §6's length, character and age requirements — checked
+   account by account rather than assumed. An account whose password is older
+   than 365 days is rotated during the review, not noted for later.
 4. Whether Identity Platform and a second factor for email accounts (§5) are
    still deferred, and why.
 
-| Review date | Carried out by | Console policy confirmed | Operator 2FA confirmed | Changes made |
-|---|---|---|---|---|
-| 4 September 2026 | Görkem Öçmen | Pending — to confirm in the Firebase console | Yes | Initial version; Android brought into line with the other three clients |
+| Review date | Carried out by | Console policy confirmed | Operator 2FA confirmed | Operator passwords rotated | Changes made |
+|---|---|---|---|---|---|
+| 4 September 2026 | Görkem Öçmen | Pending — to confirm in the Firebase console | Yes | Pending — first rotation due at this review | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements |
 | *4 March 2027 (due)* | | | | |
