@@ -74,6 +74,7 @@ fun LoginScreen(
     var localError by rememberSaveable { mutableStateOf("") }
     var showEmailForm by rememberSaveable { mutableStateOf(false) }
     val passwordsMismatchText = t("Passwords do not match.")
+    val passwordTooWeakText = t("Password must be at least 8 characters and include a letter and a number.")
     // Item 8: the reset-password dialog, opened from under the password field.
     var resetDialogOpen by rememberSaveable { mutableStateOf(false) }
     var resetEmail by rememberSaveable { mutableStateOf("") }
@@ -262,6 +263,13 @@ fun LoginScreen(
                             onSignIn(email, password)
                         } else if (password != confirmPassword) {
                             localError = passwordsMismatchText
+                        } else if (!passwordIsAcceptable(password)) {
+                            // Web and the Apple apps have asked for this since
+                            // signup existed; Android only checked that the two
+                            // boxes matched, so the same account could be made
+                            // with a six-character password from a phone and
+                            // refused from a browser.
+                            localError = passwordTooWeakText
                         } else {
                             localError = ""
                             onRegister(fullName, studioName, email, password)
@@ -476,6 +484,20 @@ fun EmailVerifyScreen(onVerified: () -> Unit, onSignOut: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Mirrors functions/security/passwordPolicy.js. Keep the three numbers and the
+ * two character classes identical across web, Apple and Android — a test reads
+ * all four files and fails if they drift.
+ */
+private const val PASSWORD_MIN_LENGTH = 8
+
+internal fun passwordIsAcceptable(password: String): Boolean {
+    if (password.length < PASSWORD_MIN_LENGTH) return false
+    if (password.none { it.isLetter() }) return false
+    if (password.none { it.isDigit() }) return false
+    return true
 }
 
 // True while an email/password account is unverified but still inside the pre-gate
