@@ -698,6 +698,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // A marketplace buyer's name and address, kept out of the order document on
+    // purpose. One document per order, id = the order id.
+    //
+    // No client reads this, not even the workspace owner. That is stricter than
+    // it needs to be for the database and exactly right for the obligation: an
+    // access log cannot see a read that goes straight from a phone to Firestore,
+    // so a directly-readable collection would make "every access to this data is
+    // recorded" true only because nothing was recorded. Reads go through a
+    // callable that checks the member's grant and writes the access down.
+    //
+    // Named in both wildcard deny-lists below as well. Those rules OR with this
+    // one, so a subcollection missing from either list is open to every member
+    // whatever this block says.
+    match /companies/{companyId}/restrictedCustomer/{orderId} {
+      allow read, write: if false;
+    }
+
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -901,6 +918,7 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
+        && collectionId != 'restrictedCustomer'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -959,6 +977,7 @@ service cloud.firestore {
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
+        && collectionId != 'restrictedCustomer'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'

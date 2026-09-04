@@ -108,21 +108,39 @@ export. A provider with no policy entry is denied by default, so a connector
 added without a decision fails closed. Every block is recorded in the PII access
 log with the reason.
 
-**Inbound** — the following applies from the moment the Amazon connector writes
-its first order, and is a condition of that connector shipping:
+**Inbound** — the rules below are deployed. The connector is built on top of
+them, and shipping it without them would be shipping the thing they exist to
+prevent.
 
-1. Amazon buyer personal data is **not** written into the order document. It is
-   written to a restricted subcollection with a rule of its own, named in both
-   wildcard deny-lists, readable by the workspace owner and by members the owner
-   has explicitly granted it, and never readable by a Workflow Only or Assigned
-   Projects Only member for an order that is not theirs.
-2. Because the data is not in the order document, withholding it becomes a
-   database rule rather than a hidden card — §4's gap does not apply to it.
-3. Every server-side read of it is written to the PII access log, along with
-   Restricted Data Token requests and restricted-resource accesses, so the trail
-   shows what was fetched and on whose behalf.
-4. It is deleted 30 days after the order no longer needs it, by the retention
-   sweep, without the workspace having to ask.
+1. Amazon buyer personal data is **not** written into the order document. It goes
+   to `companies/{companyId}/restrictedCustomer/{orderId}`, which has a rule of
+   its own and is named in **both** wildcard deny-lists. Those wildcards OR with
+   the specific rule, so a collection missing from either list is readable by
+   every member no matter what its own block says.
+2. **No client reads it. Not even the workspace owner.** The rule is
+   `allow read, write: if false`. This is stricter than the database needs and
+   exactly right for the obligation in point 3: a read that goes straight from a
+   phone to Firestore is invisible to the access log, so a directly-readable
+   collection would make "every access is recorded" true only in the sense that
+   nothing was recorded. Reads go through a callable, which checks the caller's
+   grant and writes the access down before returning anything.
+3. That callable enforces what §4's per-card capabilities cannot: the workspace
+   owner, or a member holding an explicit grant, and never a Workflow Only
+   member, and never an Assigned Projects Only member on an order that is not
+   theirs. Because the check is server-side and the data is unreachable
+   otherwise, this is a real restriction rather than a hidden card — §4's gap
+   does not apply to it.
+4. Every read is written to the PII access log as
+   `restricted_resource_accessed`, and every Restricted Data Token request as
+   `rdt_requested`, so the trail shows what was fetched and on whose behalf.
+   Entries carry the order id, the provider and the categories touched — never a
+   name, an address or any other value.
+5. A Restricted Data Token is never stored. It is short-lived by design, and
+   persisting one turns a grant measured in minutes into a row that outlives its
+   purpose.
+6. The buyer's details are deleted 30 days after the order no longer needs them,
+   by the retention sweep, without the workspace having to ask — the restricted
+   document itself, not merely the fields on the order.
 
 ## 6. Administrative access to production
 
@@ -175,7 +193,8 @@ Each review confirms:
 - that §3 still describes the rules as deployed, by reading them;
 - that §4's interface-level list has not silently grown to cover data belonging
   to somebody outside the workspace;
-- that §5's inbound conditions are met by any Amazon code that has shipped.
+- that §5's inbound conditions are met by any Amazon code that has shipped, by
+  reading the ingestion path rather than by watching a test go green.
 
 | Review date | Carried out by | Operator accounts checked | Changes made |
 |---|---|---|---|

@@ -73,32 +73,80 @@ check("the access log stays owner-read and client-unwritable", () => {
 
 // ---- the trip-wire ------------------------------------------------------------
 
-check("if the Amazon connector has shipped, its buyer data is rules-protected", () => {
-  // Detected by use, not by intention: the adapter is a pure module today, and
-  // the day something other than a test requires it, Amazon orders can exist.
-  const wiredBy = [];
-  const walk = dir => {
+// Where a marketplace buyer's details are allowed to be written, and the rules
+// that have to exist first. Kept as constants so the message can name them.
+const RESTRICTED = "restrictedCustomer";
+const RESTRICTED_MATCH = `match /companies/{companyId}/${RESTRICTED}/{orderId}`;
+
+/** Every non-test JavaScript file under functions/ that pulls in the Amazon adapter. */
+function amazonAdapterCallers() {
+  const found = [];
+  // Any way of naming the module: require, require with .js, dynamic import,
+  // ESM import, a re-export. The first version of this looked only for a bare
+  // require() and would have watched an ESM import ship past it.
+  const references = /(?:require\s*\(|import\s*\(|from\s*)["'][^"']*adapters\/amazon(?:\.js)?["']/;
+  const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.name === "node_modules" || entry.name === "test" || entry.name.startsWith(".")) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(full); continue; }
-      if (!entry.name.endsWith(".js")) continue;
-      const body = fs.readFileSync(full, "utf8");
-      if (/require\(["'][^"']*adapters\/amazon["']\)/.test(body)) wiredBy.push(path.relative(root, full));
+      if (!/\.(js|mjs|cjs)$/.test(entry.name)) continue;
+      if (references.test(fs.readFileSync(full, "utf8"))) found.push(path.relative(root, full));
     }
   };
   walk(root);
+  return found;
+}
 
-  if (!wiredBy.length) {
-    // Nothing ingests Amazon orders, so there is nothing yet to protect. The
-    // outbound denial still stands on its own and is tested separately.
+check("the rules for a marketplace buyer's details are correct whether or not they exist yet", () => {
+  // Checked unconditionally. A trip-wire that only looks once the connector has
+  // shipped is a trip-wire nobody has ever seen work, and this one was wrong in
+  // three ways before anybody read it closely.
+  const at = rules.indexOf(RESTRICTED_MATCH);
+  if (at < 0) {
+    // Not built yet is a legitimate state — but then nothing may reference the
+    // collection either, or something is writing where no rule protects it.
+    assert.ok(!new RegExp(`['"\`]${RESTRICTED}['"\`]`).test(rules),
+      `${RESTRICTED} is named in the rules but has no match block of its own`);
     return;
   }
-  assert.ok(/match \/companies\/\{companyId\}\/siparisler\/\{orderId\}\/restrictedCustomer/.test(rules)
-    || /restrictedCustomer/.test(rules),
-    `the Amazon adapter is wired in by ${wiredBy.join(", ")}, and the access control policy §5 requires ` +
-    "Amazon buyer personal data to live in a rules-protected subcollection rather than in the order " +
-    "document. Add that rule — and name the subcollection in BOTH wildcard deny-lists — before shipping.");
+  const block = rules.slice(at, at + 300);
+  assert.ok(/allow read, write: if false;/.test(block),
+    "the restricted collection is reachable from a client. Reads must go through a callable that " +
+    "records the access — a read straight from a phone to Firestore is invisible to the access log.");
+  // The wildcard rules OR with this one: absent from either list, every member
+  // can read it whatever the block above says.
+  const denials = rules.match(new RegExp(`collectionId != '${RESTRICTED}'`, "g")) || [];
+  assert.strictEqual(denials.length, 2,
+    `${RESTRICTED} must be excluded from BOTH wildcard deny-lists; found ${denials.length}`);
+});
+
+check("if the Amazon connector has shipped, the buyer never reaches the order document", () => {
+  const wiredBy = amazonAdapterCallers();
+  if (!wiredBy.length) {
+    // Nothing ingests Amazon orders yet, so there is nothing to protect. The
+    // outbound denial stands on its own and is tested separately.
+    return;
+  }
+  const where = wiredBy.join(", ");
+  assert.ok(rules.includes(RESTRICTED_MATCH),
+    `the Amazon adapter is wired in by ${where}, and access control policy §5 requires the buyer's ` +
+    `details to live in a rules-protected collection. Add "${RESTRICTED_MATCH}" — and name ` +
+    `${RESTRICTED} in BOTH wildcard deny-lists — before shipping.`);
+
+  // The rules being right is not the same as the code obeying them. The shared
+  // engine writes shopOwnedFields — customerName, emailAddress, shippingName,
+  // the street address — straight onto the order, so an Amazon path that
+  // follows the Square and Woo pattern faithfully breaks §5 on its first order
+  // and nothing in the engine complains.
+  const diverted = wiredBy.some((rel) => {
+    const body = fs.readFileSync(path.join(root, rel), "utf8");
+    return new RegExp(`["'\`]${RESTRICTED}["'\`]`).test(body);
+  });
+  assert.ok(diverted,
+    `${where} pulls in the Amazon adapter but never mentions ${RESTRICTED}. The adapter fills in the ` +
+    "buyer's name, email, phone and both addresses, and the shared engine writes those onto the order " +
+    "document. The ingestion path has to divert them before the engine sees them.");
 });
 
 // ---- the document keeps itself current ----------------------------------------
