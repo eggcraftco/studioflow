@@ -176,7 +176,7 @@ Each review confirms:
 
 | Review date | Carried out by | Console policy | Operator accounts audited | Changes made |
 |---|---|---|---|---|
-| 4 September 2026 | Gunes Gocmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **First pass done, NOT passed** — see §8: one account 19 months overdue, one with two-factor off, four unverified | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
+| 4 September 2026 | Gunes Gocmen | **Confirmed and corrected** — was Notify / no requirements / minimum 6; now Require / numeric / minimum 8 | **First pass done, NOT passed** — see §8: one password 934 days old, one account with two-factor off, four unverified | Initial version; Android brought into line with the other three clients; §6 given explicit length, character and rotation requirements; server-side policy enabled |
 | *4 March 2027 (due)* | | | | |
 
 ## 8. Outstanding: the operator account audit
@@ -196,12 +196,13 @@ CLI. Nothing was changed.
 
 | # | Account | System | Privileged access | MFA | 12+ chars | Special char | Age < 365d | Annual rotation | Result |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | Unverified — Google does not show it | Unverified — Google does not show it | **No — last changed 13 February 2024 (19 months)** | **No** | **Rotate the password** |
+| 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | Unverified — Google does not show it | Unverified — Google does not show it | **No — last changed 13 February 2024: 934 days, over two and a half years** | **No** | **Rotate the password** |
 | 2 | `eggcraftco@gmail.com` (account holder: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk`; GitHub `eggcraftco` linked | **No — two-factor is off** | n/a — no Hostinger password is set; sign-in is Google social login | n/a | n/a | n/a | **Enable two-factor. Confirm the linked Google account's own security, which is the only factor today** |
 | 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | Unverified — the CLI token lacks the `user` scope and the browser is not signed in | Unverified | Unverified | Unverified | Unverified | **Verify 2FA in the browser** |
 | 4 | Cloudflare account | Cloudflare | Nameservers for `nivadesk.app`; Worker and SaaS routing | Unverified — not signed in; the login page names `contact@eggcraft.co.uk` as last used | Unverified | Unverified | Unverified | Unverified | **Sign in and verify** |
-| 5 | The second GCP human account | Google Cloud IAM | Unknown — Firebase reports "1 additional user has access to Firebase and/or Google Cloud resources" | Unverified | Unverified | Unverified | Unverified | Unverified | **Identify it. The Cloud console requires a passkey that only the account holder can present** |
-| 6 | `gunes.gocmen@gmail.com` | Google | No project access observed; it is the browser's default account | Yes — 2SV since 18 Apr 2023, 1 passkey | Unverified | Unverified | Unverified — password last changed 25 January, year not shown | Unverified | **Confirm whether it holds any production access at all** |
+| 5 | The second GCP human account | Google Cloud IAM | Unknown — Firebase reports "1 additional user has access to Firebase and/or Google Cloud resources" | Unverified | Unverified | Unverified | Unverified | Unverified | **Identify it.** It is none of the three Google accounts signed into this browser: `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com` were both tested against the project and refused, and `contact@eggcraft.co.uk` is the one Firebase already lists. Only the Cloud console IAM screen can name it, and that screen requires a passkey only the account holder can present |
+| 6 | `gunes.gocmen@gmail.com` | Google | **None found.** Refused by the Firebase project; not the GitHub account (`eggcraftco`); not the Hostinger account (`eggcraftco@gmail.com`) | Yes — 2SV since 18 Apr 2023, 1 passkey | n/a | n/a | n/a | n/a | **Not privileged / Out of scope** — revisit only if it turns out to hold Cloudflare access, which is still unverified |
+| 7 | `ecem.okm@gmail.com` (Ecem Okumus) | Google | **None found on GCP** — refused by the Firebase project. The same person holds row 2's Hostinger account under a different address (`eggcraftco@gmail.com`), and that access is real | Unverified | n/a | n/a | n/a | n/a | **Out of scope as a Google account.** The privilege sits on row 2, not here |
 
 Notes that matter more than the cells:
 
@@ -215,8 +216,13 @@ Notes that matter more than the cells:
   GitHub account with admin on the publish repo. Its only factor today is
   whatever protects `eggcraftco@gmail.com` at Google, which is not signed in
   here and therefore not verified.
-- Row 1 fails on age alone. Nineteen months is not within 365 days, and no
-  further verification can change that.
+- Row 1 fails on age alone. 934 days — over two and a half years — is not
+  within 365 days, and no further verification can change that.
+- Three Google accounts are signed into the operator's browser:
+  `contact@eggcraft.co.uk`, `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com`.
+  Each was tested against the Firebase project directly rather than reasoned
+  about: only the first has access. That is how rows 6 and 7 were settled, and
+  it is also what proves the second GCP account is somebody not signed in here.
 - There is no password expiry mechanism on any of these systems. "Annual
   rotation" is therefore a practice to perform and record, not a setting to
   read — which is why the column asks for evidence of rotation rather than for
