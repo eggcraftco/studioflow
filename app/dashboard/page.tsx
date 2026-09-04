@@ -8,7 +8,8 @@ import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle"
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
@@ -80,6 +81,15 @@ type BankTx = {
 // owner looks first, and an empty KPI wall says nothing. Five small steps with
 // live ticks where the data can prove them (orders, customers) and click-ticks
 // for the rest. Dismissal is a per-workspace device convenience.
+/**
+ * The list to show when the server has not answered yet, or cannot.
+ *
+ * It is the same five steps for everybody, which is why it is only the
+ * fallback: a jeweller who came to manage bespoke commissions has no online
+ * store to connect, and being told to connect one is the product ignoring the
+ * answer it asked for two screens earlier. The real list comes from
+ * getSetupChecklist, built from the goal they chose.
+ */
 const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?: "orders" | "customers" }[] = [
   { id: "order", labelKey: "Create your first order", href: "/orders", auto: "orders" },
   { id: "customer", labelKey: "Add your first customer", href: "/customers", auto: "customers" },
@@ -87,6 +97,19 @@ const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?
   { id: "store", labelKey: "Connect your online store", href: "/settings?section=integrations&category=commerce&intent=connect-shop" },
   { id: "domain", labelKey: "Put customer links on your name", href: "/settings?section=client-domain" }
 ];
+
+/** Where each server-named step sends somebody. */
+const SETUP_STEP_HREFS: Record<string, string> = {
+  integrations: "/settings?section=integrations&category=commerce&intent=connect-shop",
+  new_order: "/orders",
+  new_customer: "/customers",
+  bank: "/bank",
+  inventory: "/inventory",
+  assistant: "/chatgpt"
+};
+
+type SetupChecklistStep = { key: string; title: string; detail: string; action: string; done: boolean };
+type SetupChecklist = { ok: boolean; path: string; complete: boolean; steps: SetupChecklistStep[]; doneCount: number; headline: string };
 
 function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   workspaceId: string;
@@ -99,6 +122,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   const clickedKey = `nivadesk-getting-started-clicked:${workspaceId}`;
   const [dismissed, setDismissed] = useState(true);
   const [clicked, setClicked] = useState<string[]>([]);
+  const [server, setServer] = useState<SetupChecklist | null>(null);
 
   useEffect(() => {
     try {
@@ -109,20 +133,46 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
     }
   }, [dismissKey, clickedKey]);
 
-  const doneFor = (step: (typeof GETTING_STARTED_STEPS)[number]) => {
-    if (step.auto === "orders") return orderCount > 0;
-    if (step.auto === "customers") return customerCount > 0;
-    return clicked.includes(step.id);
-  };
-  const doneCount = GETTING_STARTED_STEPS.filter(doneFor).length;
-  if (dismissed || doneCount >= GETTING_STARTED_STEPS.length) return null;
+  // The steps this workspace actually came for. Silent on failure: somebody
+  // whose checklist will not load should see the dashboard they opened, and the
+  // five-step fallback below is still better than an error about a card.
+  useEffect(() => {
+    let cancelled = false;
+    httpsCallable<Record<string, never>, SetupChecklist>(functions, "getSetupChecklist")({})
+      .then(result => { if (!cancelled) setServer(result.data); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+
+  // A ticked step is one the workspace has DONE, never one somebody clicked
+  // through — the old list counted opening a page as progress, which made the
+  // card congratulate people for looking at it.
+  const steps = server
+    ? server.steps.map(step => ({
+        id: step.key,
+        labelKey: step.title,
+        href: SETUP_STEP_HREFS[step.action] || "",
+        done: step.done
+      }))
+    : GETTING_STARTED_STEPS.map(step => ({
+        id: step.id,
+        labelKey: step.labelKey,
+        href: step.href,
+        done: step.auto === "orders" ? orderCount > 0 : step.auto === "customers" ? customerCount > 0 : clicked.includes(step.id)
+      }));
+
+  const doneCount = steps.filter(step => step.done).length;
+  // Gone once the workspace has been served, rather than once every box on a
+  // fixed list has been ticked.
+  const finished = server ? server.complete : doneCount >= steps.length;
+  if (dismissed || finished) return null;
 
   return (
     <section className="card app-card getting-started-card">
       <div className="getting-started-head">
-        <CardTitle icon="checklist" eyebrow={t("Getting started")} title={t("Set up your workspace in five small steps.")} />
+        <CardTitle icon="checklist" eyebrow={t("Getting started")} title={t(server ? server.headline : "Set up your workspace in five small steps.")} />
         <div className="getting-started-meta">
-          <span className="studio-pill">{doneCount}/{GETTING_STARTED_STEPS.length}</span>
+          <span className="studio-pill">{doneCount}/{steps.length}</span>
           <button
             type="button"
             className="getting-started-hide"
@@ -136,14 +186,16 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
         </div>
       </div>
       <ol className="getting-started-steps">
-        {GETTING_STARTED_STEPS.map(step => {
-          const done = doneFor(step);
+        {steps.map(step => {
+          const done = step.done;
           return (
             <li key={step.id} data-done={done ? "true" : "false"}>
               <button
                 type="button"
+                disabled={!step.href}
                 onClick={() => {
-                  if (!step.auto && !clicked.includes(step.id)) {
+                  if (!step.href) return;
+                  if (!server && !clicked.includes(step.id)) {
                     const next = [...clicked, step.id];
                     setClicked(next);
                     try { window.localStorage.setItem(clickedKey, JSON.stringify(next)); } catch { /* storage unavailable */ }
@@ -163,7 +215,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   );
 }
 
-type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "manual";
+type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "ebay" | "manual";
 
 // The store connectors the server stamps orders with, keyed by the exact
 // `Source` label it writes. Four writers, not one: functions/index.js maps
@@ -179,7 +231,9 @@ const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
   { key: "shopify", source: "Shopify" },
   { key: "woocommerce", source: "WooCommerce" },
   { key: "etsy", source: "Etsy" },
-  { key: "square", source: "Square" }
+  { key: "square", source: "Square" },
+  { key: "amazon", source: "Amazon" },
+  { key: "ebay", source: "eBay" }
 ];
 
 // Workspace currency is stored as a display symbol; imported orders carry ISO
