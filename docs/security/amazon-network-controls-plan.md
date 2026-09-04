@@ -175,8 +175,10 @@ each of the last four steps needs sign-off before it runs.
    opener and resource policies, and the framework banner removed. Not yet
    deployed. The Content-Security-Policy follows separately — see §7a, which is
    the brief for it.
-2. **Storage malware scanning** — built and tested in staging, fail-closed: a
-   file that has not been scanned clean is not usable.
+2. **Storage malware scanning** — the decision layer is built and tested
+   (`functions/security/malwareScan.js`). The enforcement point is the open
+   question; see §7b, which found a bypass that would have made this control
+   theatre.
 3. **EDR on the production devices**, with the update cadence recorded.
 4. **Design the Amazon project** — services, service accounts, perimeter shape,
    ingress and egress rules, the bridge contract. → *show before creating.*
@@ -226,6 +228,49 @@ The inventory below was taken from the source on 4 September 2026.
 
 **Sequence:** report-only → collect violations from real traffic → fix what the
 reports show → enforce. Never the other way round.
+
+## 7b. Malware scanning: the bypass that decides whether this is real
+
+Files enter through eleven prefixes under `companies/{id}/` from three clients —
+client files, design images, inventory photos, the files library, message
+attachments, support attachments, note images, bank receipts and the rest. A
+Cloud Storage finalize trigger sees all of them, whichever client uploaded, so
+there is one place to scan rather than eleven.
+
+The decision layer is built and tested. It is fail-closed by construction:
+a clean scan is the only verdict that makes a file usable, an unrecognised
+verdict is unusable rather than assumed safe, a file with no scan metadata at
+all — the state every upload is in for its first seconds — is unusable, and only
+an infection deletes anything, because throwing away a customer's file because
+our scanner was busy is a different kind of harm.
+
+**And none of that enforces anything yet, because of how files are served.**
+
+The app calls `getDownloadURL()` in twenty places and never reads a file with
+`getBlob`. A Firebase download URL carries a token, and **a token URL bypasses
+Storage security rules completely**. So the obvious enforcement —
+`allow read: if resource.metadata.nvScanStatus == "clean"` — would look like a
+control and stop nothing. Anyone with the URL still gets the file.
+
+Three ways to make it real, in increasing order of honesty and cost:
+
+1. **Strip and restore the download token.** On finalize, record the object's
+   token and remove it; the URL 403s for everybody. On a clean verdict, put the
+   same token back and the stored URL works again. This closes the common case
+   and needs no client change. It does not close the race where a client calls
+   `getDownloadURL()` after the token was stripped and mints a fresh one.
+2. **Serve through the proxy that already exists.** `app/f/[...slug]/route.ts`
+   already fetches files server-side and streams them, so a scan check belongs
+   there — but that route only serves shared links, not in-app viewing.
+3. **Stop using token URLs.** Read files through authenticated calls so Storage
+   rules apply, and the metadata check becomes the enforcement. Twenty call
+   sites, four clients, and the only option that is fully fail-closed.
+
+**This control is not "implemented" until one of these is in production.** The
+rule in §8 applies to it: a scanner that runs while the file is already
+downloadable is evidence of activity, not a control. Which of the three to
+build is a decision, and it should be taken before the scanner is wired up
+rather than after.
 
 ## 8. The rule this document exists to enforce
 
