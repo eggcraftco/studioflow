@@ -9,8 +9,10 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadQuickReplySettings,
   loadWorkspaceContext,
+  loadWorkspaceOrderOptions,
   loadWorkspaceSettingsOverview,
   workspaceAccessAllows,
+  type OrderOptionItem,
   type QuickReplySettings,
   type QuickReplyTemplateItem,
   type WorkspaceContext,
@@ -83,6 +85,11 @@ export default function QuickReplyPage() {
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [customerMessage, setCustomerMessage] = useState("");
   const [customerName, setCustomerName] = useState("");
+  // The order this reply is about. Picking one is what lets the server apply a
+  // marketplace's own conditions to the customer's details — a name typed here
+  // leaves the server nothing to check, because it cannot tell whose data it is.
+  const [orderOptions, setOrderOptions] = useState<OrderOptionItem[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("Price & Info");
   const [politeness, setPoliteness] = useState("Warm");
@@ -123,10 +130,13 @@ export default function QuickReplyPage() {
           router.replace("/orders");
           return;
         }
-        const [loadedSettings, loadedPersonalSettings, loadedWorkspaceSettings] = await Promise.all([
+        const [loadedSettings, loadedPersonalSettings, loadedWorkspaceSettings, loadedOrders] = await Promise.all([
           loadQuickReplySettings(loadedWorkspace.id),
           loadQuickReplyPersonalSettings(loadedWorkspace),
-          loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
+          loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null),
+          // A failure here costs the order picker, not the screen: a workshop
+          // whose orders will not load can still write a reply by hand.
+          loadWorkspaceOrderOptions(loadedWorkspace.id, loadedWorkspace, uid).catch(() => [])
         ]);
         const activeSettings: QuickReplySettings = {
           ...loadedSettings,
@@ -140,6 +150,7 @@ export default function QuickReplyPage() {
         setWorkspace(loadedWorkspace);
         setSettings(activeSettings);
         setWorkspaceSettings(loadedWorkspaceSettings);
+        setOrderOptions(loadedOrders.slice(0, 300));
         setPoliteness(activeSettings.quickReplyPoliteness);
         setReplyLength(activeSettings.quickReplyLength);
         setSelectedProductId(activeSettings.products[0]?.id || "");
@@ -200,7 +211,12 @@ export default function QuickReplyPage() {
 
   function generateOfflineReply() {
     const reply = buildOfflineReply({
-      customerName,
+      // The offline template is built here and sent nowhere, so the picked
+      // order's name may be used as-is: the outbound policy governs what leaves
+      // for a third party, and nothing leaves.
+      customerName: selectedOrderId
+        ? (orderOptions.find(option => option.id === selectedOrderId)?.customerName || "")
+        : customerName,
       politeness,
       length: replyLength,
       product: selectedProduct,
@@ -231,6 +247,8 @@ export default function QuickReplyPage() {
       const result = await generateQuickReply(workspace, {
         mode: replyMode,
         customerMessage,
+        // Sent instead of the name whenever the reply is about a real order.
+        orderId: selectedOrderId,
         politeness,
         length: replyLength
       });
@@ -329,9 +347,30 @@ export default function QuickReplyPage() {
                   <CardTitle icon="customer" eyebrow={t("Offline Template")} title={t("Customer Info")} />
                   <div className="quick-reply-form">
                     <label>
-                      {t("Customer Name")}
-                      <input className="input" value={customerName} onChange={event => setCustomerName(event.target.value)} placeholder={t("e.g. John")} />
+                      {t("Which order is this about?")}
+                      <select
+                        className="input"
+                        value={selectedOrderId}
+                        onChange={event => setSelectedOrderId(event.target.value)}
+                      >
+                        <option value="">{t("Not about a specific order")}</option>
+                        {orderOptions.map(option => (
+                          <option key={option.id} value={option.id}>
+                            {option.customerName} · {option.designName}
+                          </option>
+                        ))}
+                      </select>
                     </label>
+                    {/* Picking the order is what lets NivaDesk apply a
+                        marketplace's own rules to the customer's details. With
+                        an order chosen the name comes from it, so the box below
+                        is only for a reply that has no order behind it. */}
+                    {selectedOrderId ? null : (
+                      <label>
+                        {t("Customer Name")}
+                        <input className="input" value={customerName} onChange={event => setCustomerName(event.target.value)} placeholder={t("e.g. John")} />
+                      </label>
+                    )}
                     <label>
                       {t("Product / Service")}
                       <select className="input" value={selectedProductId} onChange={event => setSelectedProductId(event.target.value)}>
