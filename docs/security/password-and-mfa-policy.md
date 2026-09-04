@@ -198,8 +198,8 @@ CLI. Nothing was changed.
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | `contact@eggcraft.co.uk` | Google / Firebase / GCP | Owner on `eggcraft-studio` + 2 more roles | **Yes** — 2SV since 3 Jun, 2 passkeys, recovery phone and email set | **Attested** — generated in a password manager to the §6 standard on 4 Sep 2026; Google never displays length | **Attested** — same, and not displayable | **Yes — changed 4 September 2026 17:34**, confirmed in the account's own security event log (was 934 days) | **Attested** — first rotation done; the next is due 4 Sep 2027 and is recorded in §7 | Length and character class are attestations, not readings — see the note below |
 | 2 | `contact@eggcraft.co.uk` (billing name: Ecem Okumus) | Hostinger | Production web hosting; DNS for `nivadesk.co.uk` and `eggcraft.co.uk` | **Yes** — enabled 4 Sep 2026, reads back as "Etkin" | **Attested** — generated in a password manager to the §6 standard on 4 Sep 2026; Hostinger never displays length | **Attested** — same, and not displayable | **Yes — password set 4 Sep 2026** (the account had none before) | **Attested** — first rotation is this one; next due 4 Sep 2027 | Rebuilt on 4 Sep 2026: account email moved from `eggcraftco@gmail.com` to the company address, a password of its own was set, a recovery email was added, and the Google login was disconnected. Length and character class are attestations, not readings — the same limit as row 1 |
-| 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | **No — "Two-factor authentication is not enabled yet"**, and no passkey is registered | Unverified | Unverified | Unverified | Unverified | **Enable two-factor.** A password IS configured, so the connected Google account is an extra way in, not the only one: anybody holding that password reaches an admin of the publish repository with no second factor |
-| 4 | `contact@eggcraft.co.uk` | Cloudflare | Nameservers for `nivadesk.app`; Workers; the SaaS custom-domain routing. Sole member | **No — Two-Factor Authentication is "Inactive"**; no security key, no TOTP app, no email authentication | Unverified | Unverified | Unverified | Unverified | **Enable two-factor.** A password exists, so the production domain's DNS is one password away with nothing behind it |
+| 3 | `eggcraftco` | GitHub | Admin on `eggcraftco/studioflow` (the production publish repo); sole collaborator; no organisation | **Yes** — enabled 4 Sep 2026: authenticator app Configured and set as the preferred method | Pending attestation | Pending attestation | **Unverified** — GitHub does not display when a password was last changed | Pending | **Password is the last open cell.** It was already configured before this audit and its age cannot be read; if it predates the audit or was not generated in a password manager, reset it |
+| 4 | `contact@eggcraft.co.uk` | Cloudflare | Nameservers for `nivadesk.app`; Workers; the SaaS custom-domain routing. Sole member | **Yes** — enabled 4 Sep 2026: "Mobile two-factor authentication is active", TOTP configured, backup codes generated | **Attested** — the password was reset on 4 Sep 2026 from a password manager to the §6 standard; Cloudflare never displays length | **Attested** — same | **Yes — reset 4 September 2026** | **Attested** — first rotation is this one | Closed. The reset was necessary for its own sake: the account had a password nobody had ever used, so it could not be confirmed to meet any standard |
 | 5 | The second GCP human account | Google Cloud IAM | Unknown — Firebase reports "1 additional user has access to Firebase and/or Google Cloud resources" | Unverified | Unverified | Unverified | Unverified | Unverified | **Identify it.** It is none of the three Google accounts signed into this browser: `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com` were both tested against the project and refused, and `contact@eggcraft.co.uk` is the one Firebase already lists. Only the Cloud console IAM screen can name it, and that screen requires a passkey only the account holder can present |
 | 6 | `gunes.gocmen@gmail.com` | Google | **None found.** Refused by the Firebase project; not the GitHub account (`eggcraftco`); not the Hostinger account (`eggcraftco@gmail.com`) | Yes — 2SV since 18 Apr 2023, 1 passkey | n/a | n/a | n/a | n/a | **Not privileged / Out of scope** — revisit only if it turns out to hold Cloudflare access, which is still unverified |
 | 8 | `eggcraftco@gmail.com` | Google | **None any more.** It was the sole credential behind row 2 until 4 Sep 2026, when the Google login was disconnected from the Hostinger account and replaced with a password of its own | n/a | n/a | n/a | n/a | n/a | **Out of scope** — it no longer opens anything in production. It stays in this table as the record of a dependency that was removed rather than verified |
@@ -237,12 +237,17 @@ Notes that matter more than the cells:
   17:34 and the account's own security event log records the change, which is
   the closest thing to independent evidence the interface offers.
 - Rows 3 and 4 are the reason "we sign in with Google" is not an answer on its
-  own. Both accounts have a password of their own **as well as** the Google
-  connection, and neither has a second factor. Google's two-step verification
-  and passkeys protect the Google door; they do nothing for the password door
-  standing open beside it. The only way to know which case a service is in is
+  own. Both accounts had a password of their own **as well as** the Google
+  connection, and neither had a second factor. Google's two-step verification
+  and passkeys protect the Google door; they did nothing for the password door
+  standing open beside it. The only way to know which case a service is in was
   to read its own security page — Hostinger genuinely had no password, and
-  these two do.
+  these two did. Both now have a second factor.
+- Cloudflare's password had to be reset rather than merely accepted, because
+  the account holder had never used it: sign-in was always through Google, so
+  the password existed, was unknown, and could not be attested to any standard.
+  An unknown password is not a verified one. GitHub's is in that same position
+  and is the last open cell in this table.
 - Three Google accounts are signed into the operator's browser:
   `contact@eggcraft.co.uk`, `gunes.gocmen@gmail.com` and `ecem.okm@gmail.com`.
   Each was tested against the Firebase project directly rather than reasoned
