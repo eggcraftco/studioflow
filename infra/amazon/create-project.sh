@@ -40,17 +40,36 @@ fi
 ACCOUNT=$(gcloud config get-value account 2>/dev/null || true)
 echo "  operator: ${ACCOUNT:-<none>}   project: $PROJECT   region: $REGION"
 
-echo "══ 1. Project ══"
+echo "══ 0.5. Folder, and its Logging defaults — BEFORE the project exists ══"
+# A project's _Required log bucket is created at project creation, in the
+# location the parent's Logging settings name, and can never be moved. So the
+# folder comes first, its default storage location is set to europe-west2,
+# and its _Default sink is disabled for new projects: every log line then
+# lands in the regional 400-day amazon-audit bucket (our own sink, no filter)
+# and in the regional _Required bucket, and nothing in a global bucket.
+FOLDER_NAME="amazon-boundary"
+FOLDER_ID=$( [ "$DRY_RUN" = "1" ] && echo "<folder>" || gcloud resource-manager folders list --organization="$ORG_ID" --filter="displayName=$FOLDER_NAME" --format='value(name)' | sed 's|folders/||' | head -1)
+if [ -z "$FOLDER_ID" ] || [ "$FOLDER_ID" = "<folder>" ]; then
+  run gcloud resource-manager folders create --display-name="$FOLDER_NAME" --organization="$ORG_ID"
+  [ "$DRY_RUN" = "1" ] || FOLDER_ID=$(gcloud resource-manager folders list --organization="$ORG_ID" --filter="displayName=$FOLDER_NAME" --format='value(name)' | sed 's|folders/||' | head -1)
+fi
+echo "  folder: $FOLDER_NAME ($FOLDER_ID)"
+run gcloud logging settings update --folder="$FOLDER_ID" --storage-location="$REGION" --disable-default-sink
+
+echo "══ 1. Project (inside the folder) ══"
 if exists gcloud projects describe "$PROJECT"; then
   echo "  project exists"
 else
-  run gcloud projects create "$PROJECT" --organization="$ORG_ID" --name="NivaDesk Amazon" \
+  run gcloud projects create "$PROJECT" --folder="$FOLDER_ID" --name="NivaDesk Amazon" \
     --labels=boundary=amazon,data=amazon-information
 fi
 run gcloud billing projects link "$PROJECT" --billing-account="$BILLING"
 PROJECT_NUMBER=$( [ "$DRY_RUN" = "1" ] && echo "<number>" || gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 
-echo "══ 2. Organisation policies on the project (§2) ══"
+echo "══ 1.5. Core APIs the policy step itself needs ══"
+run gcloud services enable --project="$PROJECT" serviceusage.googleapis.com cloudresourcemanager.googleapis.com orgpolicy.googleapis.com
+
+echo "══ 2. Organisation policies on the project (§2) — before compute is enabled, so no default network and no Editor grant ever exist ══"
 # Each policy is written as a small YAML and set with the v2 org-policy API.
 policy() {
   local constraint="$1" body="$2" file
@@ -62,6 +81,11 @@ policy() {
   rm -f "$file"
 }
 policy run.allowedIngress                               $'  - values:\n      allowedValues:\n        - internal-and-cloud-load-balancing'
+# Every Cloud Run revision must send ALL traffic through the VPC: a revision
+# on private-ranges-only would reach the internet directly and bypass the
+# NAT, the firewall, the flow logs and the static address. deploy.sh also
+# checks that VPC egress is configured at all, which a policy cannot.
+policy run.allowedVPCEgress                             $'  - values:\n      allowedValues:\n        - all-traffic'
 policy iam.disableServiceAccountKeyCreation             $'  - enforce: true'
 policy iam.automaticIamGrantsForDefaultServiceAccounts  $'  - enforce: true'
 policy compute.vmExternalIpAccess                       $'  - denyAll: true'
@@ -75,8 +99,7 @@ run gcloud services enable --project="$PROJECT" \
   compute.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   firestore.googleapis.com secretmanager.googleapis.com cloudscheduler.googleapis.com \
   logging.googleapis.com monitoring.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
-  cloudresourcemanager.googleapis.com orgpolicy.googleapis.com serviceusage.googleapis.com \
-  pubsub.googleapis.com firebase.googleapis.com
+  dns.googleapis.com pubsub.googleapis.com firebase.googleapis.com
 # Not enabled here, on purpose: securitycenter.googleapis.com (step 6),
 # accesscontextmanager.googleapis.com (steps 7–8).
 
@@ -136,7 +159,11 @@ exists gcloud firestore databases describe --database='(default)' --project="$PR
 run firebase projects:addfirebase "$PROJECT" --non-interactive
 # Rules: deny everything to every client. Deployed from functions-amazon/deploy/firestore.rules.
 
-echo "══ 7. Secret Manager: the two shared secrets, created EMPTY ══"
+echo "══ 7. Secret Manager: the two shared secrets, created EMPTY, user-managed in $REGION only ══"
+# Never automatic replication: with gcp.resourceLocations = europe-west2 a
+# globally replicated secret is refused, and it would put the material in
+# regions the design does not name. The per-connection refresh-token secrets
+# (functions-amazon/src/connections.js) are created the same way.
 for secret in lwa-client-secret intent-hmac-key; do
   exists gcloud secrets describe "$secret" --project="$PROJECT" \
     || run gcloud secrets create "$secret" --project="$PROJECT" --replication-policy=user-managed --locations="$REGION"
@@ -151,10 +178,11 @@ echo "══ 9. Logging: 400-day audit bucket, sink, data-access audit logs (§8
 exists gcloud logging buckets describe amazon-audit --location="$REGION" --project="$PROJECT" \
   || run gcloud logging buckets create amazon-audit --project="$PROJECT" --location="$REGION" --retention-days=400 \
        --description="Amazon zone: audit, Cloud Armor, NAT, flow logs — 400 days"
+# No filter: with the _Default sink disabled at the folder, this sink is the
+# one place every log line of the project goes — regional, 400 days.
 exists gcloud logging sinks describe amazon-audit-sink --project="$PROJECT" \
   || run gcloud logging sinks create amazon-audit-sink "logging.googleapis.com/projects/$PROJECT/locations/$REGION/buckets/amazon-audit" \
-       --project="$PROJECT" \
-       --log-filter='logName:"cloudaudit.googleapis.com" OR resource.type="http_load_balancer" OR resource.type="nat_gateway" OR resource.type="gce_subnetwork" OR resource.type="cloud_run_revision"'
+       --project="$PROJECT" --description="everything, regional, 400 days"
 AUDIT_FILE=$(mktemp)
 cat > "$AUDIT_FILE" <<'YAML'
 auditConfigs:
@@ -186,6 +214,23 @@ rm -f "$AUDIT_FILE"
 echo "══ 10. Pub/Sub topic for SCC findings (empty until step 6) ══"
 exists gcloud pubsub topics describe scc-findings --project="$PROJECT" \
   || run gcloud pubsub topics create scc-findings --project="$PROJECT"
+
+echo "══ 10.5. Verify what cannot be fixed later: every log bucket is regional ══"
+if [ "$DRY_RUN" != "1" ]; then
+  bad=0
+  while IFS=$'\t' read -r name location; do
+    printf '  %s → %s\n' "$name" "$location"
+    [ "$location" = "$REGION" ] || bad=1
+  done < <(gcloud logging buckets list --project="$PROJECT" --format='value(name,location)')
+  if [ "$bad" = "1" ]; then
+    echo "  ❌ a log bucket is outside $REGION. _Required cannot be moved: delete the project now, fix the folder's Logging settings, recreate."
+    exit 1
+  fi
+  echo "  ✓ _Required, _Default and amazon-audit are all in $REGION"
+  echo "  run.allowedVPCEgress reads back as: $(gcloud org-policies describe run.allowedVPCEgress --project="$PROJECT" --format='value(spec.rules[0].values.allowedValues)')"
+else
+  echo "  [dry-run] gcloud logging buckets list --project=$PROJECT  → every location must be $REGION, else the script exits 1"
+fi
 
 echo "══ 11. Cross-project: the bridge caller in the MAIN project (no grant yet) ══"
 echo "  amazon-caller@eggcraft-studio is created in the main project by infra/amazon/main-project-side.sh,"

@@ -9,12 +9,15 @@
 // refresh tokens are not environment at all; connections.js reads them from
 // Secret Manager at use.
 
-const ROLES = Object.freeze(["oauth", "admin", "sync"]);
+const ROLES = Object.freeze(["oauth", "admin", "sync", "diag"]);
 
 const REQUIRED = Object.freeze({
   oauth: ["SP_API_APPLICATION_ID", "LWA_CLIENT_ID", "LWA_CLIENT_SECRET", "INTENT_HMAC_KEY", "OAUTH_REDIRECT_URI", "MAIN_APP_RETURN_URL"],
   admin: ["ADMIN_CALLER_EMAIL", "ADMIN_AUDIENCE"],
-  sync: ["LWA_CLIENT_ID", "LWA_CLIENT_SECRET", "BRIDGE_URL", "SYNC_CALLER_EMAIL", "SYNC_AUDIENCE"]
+  sync: ["LWA_CLIENT_ID", "LWA_CLIENT_SECRET", "BRIDGE_URL", "SYNC_CALLER_EMAIL", "SYNC_AUDIENCE"],
+  // The diagnostic job: no secrets, no routes, no ingress. Resolves the Google
+  // API hostnames and reports which addresses answered, then exits.
+  diag: []
 });
 
 function loadConfig(env = process.env) {

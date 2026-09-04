@@ -48,6 +48,21 @@ for role in oauth admin sync; do
   echo "  amazon-$role  $url  ingress=$ingress"
 done
 
+echo "══ 3.5. Proof: every service sends ALL traffic through the VPC (direct VPC egress, all-traffic) ══"
+# The org policy run.allowedVPCEgress forbids private-ranges-only; it cannot
+# forbid "no VPC egress at all". This can. A service without the network
+# annotation would reach the internet directly and bypass NAT, firewall, flow
+# logs and the static address — so the deploy fails here rather than ships.
+for role in oauth admin sync; do
+  egress=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(spec.template.metadata.annotations."run.googleapis.com/vpc-access-egress")')
+  nics=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(spec.template.metadata.annotations."run.googleapis.com/network-interfaces")')
+  if [ "$egress" != "all-traffic" ] || [ -z "$nics" ] || ! echo "$nics" | grep -q '"network":"amazon-vpc"' || ! echo "$nics" | grep -q '"subnetwork":"amazon-subnet"'; then
+    echo "  ❌ amazon-$role: vpc-access-egress='$egress' network-interfaces='$nics' — not routed through amazon-vpc with all-traffic. Deploy aborted."
+    exit 1
+  fi
+  echo "  amazon-$role: direct VPC egress amazon-vpc/amazon-subnet, all-traffic ✓"
+done
+
 echo "══ 4. Proof: the run.app addresses answer 403 to an unauthenticated request from the internet ══"
 echo "   (Cloud Scheduler's authenticated call from inside the project is admitted — that is the sync's path)"
 for role in oauth admin sync; do

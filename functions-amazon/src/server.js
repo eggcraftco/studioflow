@@ -125,6 +125,36 @@ function start() {
   return server;
 }
 
-if (require.main === module) start();
+/**
+ * ROLE=diag — a Cloud Run JOB, not a service: proves that inside the VPC the
+ * Google API hostnames resolve to the restricted VIP (199.36.153.4/30) and
+ * answer over it, so Firestore, Secret Manager and Logging traffic does not
+ * depend on public Google API resolution. Prints one line per host and exits
+ * non-zero if any resolves outside the VIP. Nothing about Amazon is touched.
+ */
+async function diag() {
+  const dns = require("dns").promises;
+  const HOSTS = ["firestore.googleapis.com", "secretmanager.googleapis.com", "logging.googleapis.com", "restricted.googleapis.com"];
+  const inVip = (ip) => /^199\.36\.153\.(4|5|6|7)$/.test(ip);
+  let bad = 0;
+  for (const host of HOSTS) {
+    let addresses = [];
+    try { addresses = await dns.resolve4(host); } catch (error) { console.log(`diag ${host}: resolve failed (${error.code || error.message})`); bad += 1; continue; }
+    const ok = addresses.length > 0 && addresses.every(inVip);
+    let status = "unreached";
+    try {
+      const response = await fetch(`https://${host}/`, { method: "GET", signal: AbortSignal.timeout(8000) });
+      status = String(response.status);
+    } catch (error) { status = `error:${error.code || error.name}`; }
+    console.log(`diag ${host}: ${addresses.join(",")} ${ok ? "IN restricted VIP" : "NOT in restricted VIP"} https=${status}`);
+    if (!ok) bad += 1;
+  }
+  console.log(bad ? `diag FAIL: ${bad} host(s) outside 199.36.153.4/30` : "diag OK: every Google API host resolves to the restricted VIP");
+  process.exit(bad ? 1 : 0);
+}
 
-module.exports = { build, start };
+if (require.main === module) {
+  if (String(process.env.ROLE) === "diag") diag(); else start();
+}
+
+module.exports = { build, start, diag };

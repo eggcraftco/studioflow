@@ -1,6 +1,6 @@
 # The Amazon project — design (revision 3)
 
-**Date:** 5 September 2026 (revision 3 — three corrections after review: no LB health check on serverless NEGs; `run.app` is closed to the internet, not to the project; Cloud Armor Standard's basic Adaptive Protection only)
+**Date:** 5 September 2026 (revision 4 — after revision 3's three corrections: `run.allowedVPCEgress` = all-traffic with a deploy-time check; secrets user-managed in europe-west2 only; folder-level Logging defaults so `_Required`/`_Default` are regional and `_Default` sink disabled; Private Google Access through `restricted.googleapis.com` with a diag-job proof before enforcement)
 **Status:** design only. **Nothing has been created.** The user has approved
 the direction and the start of the `functions-amazon/` codebase. No cloud
 resource is created before the four items in §14 have been shown, and four
@@ -110,6 +110,7 @@ marketplace, timestamps; no buyer, no recipient, no gift message.
 | Billing account | `01789B-AD5731-2C3C72` |
 | Region | `europe-west2` (London) — everything regional; the LB is global by nature |
 | Firebase | Enabled for Firestore only (native mode, rules `allow read, write: if false`). **No Firebase Auth users, no client SDKs, no Storage.** The zone stores no files |
+| Parent | folder `amazon-boundary` under the organisation, created first, whose Cloud Logging defaults are set to **storage location `europe-west2`** and **`_Default` sink disabled** *before* the project exists — a project's `_Required` bucket is created at creation in the parent's default location and can never be moved |
 | Labels | `boundary=amazon`, `data=amazon-information` |
 
 **Why Cloud Run rather than Firebase Functions here.** The rest of NivaDesk is
@@ -128,6 +129,7 @@ structural rather than a matter of remembering):
 | Constraint | Value | Why |
 |---|---|---|
 | `run.allowedIngress` | `internal-and-cloud-load-balancing` | no service is reachable from the internet at its `run.app` address; internal authenticated callers (Cloud Scheduler, same project) still are |
+| `run.allowedVPCEgress` | `all-traffic` only | no revision can be deployed with `private-ranges-only`, which would send internet traffic around the NAT, the firewall, the flow logs and the static address; `deploy.sh` separately refuses a service with no VPC egress at all, which a policy cannot express |
 | `iam.disableServiceAccountKeyCreation` | enforced | no downloadable keys; identities exist only inside Google's runtime |
 | `iam.automaticIamGrantsForDefaultServiceAccounts` | enforced | the default compute account is created with no role at all |
 | `compute.vmExternalIpAccess` | deny all | there are no VMs; this keeps it that way |
@@ -262,6 +264,23 @@ Perimeter `amazon-information`, regular type, enforced only after dry-run:
 - SP-API and LWA are not Google APIs; VPC-SC does not see them. They are
   governed by §6.
 
+**Private Google Access through `restricted.googleapis.com`** (required
+before the perimeter is enforced). Firestore, Secret Manager and Logging
+traffic from the services must not depend on public Google API resolution.
+Inside `amazon-vpc`: a Cloud DNS **private zone** for `googleapis.com` with
+`*.googleapis.com CNAME restricted.googleapis.com` and `restricted.googleapis.com`
+A records `199.36.153.4–7`; a route for `199.36.153.4/30` to the default
+internet gateway; an explicit firewall rule allowing egress to that /30 on
+TCP/443 ahead of the general rule; DNS query logging on the zone. Cloud Run
+with direct VPC egress resolves through the VPC's Cloud DNS, so every Google
+API call from the services lands on the restricted VIP, which serves only
+VPC-SC-supported APIs and honours the perimeter. The proof is a Cloud Run
+**job** (`ROLE=diag`, same image, no ingress) that resolves each hostname,
+reports the addresses, and exits non-zero if any is outside the /30 — run
+before enforcement and kept in the evidence pack. The bridge host in the main
+project (`cloudfunctions.net`) is not a Google API and stays on the public
+path through NAT, governed by the VPC-SC egress rule.
+
 Rollout: create in **dry-run**, run the whole system for a week under it,
 read every violation, resolve or codify each one, **show the report**, then
 enforce. Enforcement is a sign-off step.
@@ -281,11 +300,16 @@ enforce. Enforcement is a sign-off step.
 - **Prevention** is Cloud Armor Standard (WAF rules, rate limits): blocked
   at the edge, not merely reported. Adaptive Protection contributes basic
   layer-7 DDoS *alerts* in this tier — detection, not mitigation.
-- **Logs:** bucket `amazon-audit`, **400-day** retention, receiving Admin
-  Activity and Data Access audit logs for Firestore and Secret Manager, Cloud
-  Armor logs, Cloud NAT logs, VPC Flow Logs, and the services' own logs.
-  Amazon's "at least 12 months" is answered by this bucket, not by the
-  30-day default one.
+- **Logs:** bucket `amazon-audit`, created explicitly in `europe-west2`,
+  **400-day** retention, fed by an unfiltered sink — every log line of the
+  project: Admin Activity and Data Access audit logs for Firestore and Secret
+  Manager, Cloud Armor, Cloud NAT, VPC Flow Logs, Cloud DNS, the services'
+  own logs. The folder's Logging defaults make the project's `_Required`
+  bucket regional too and disable the `_Default` sink, so no log line lands
+  in a global bucket; `create-project.sh` reads every bucket's location back
+  after creation and exits non-zero if any is not `europe-west2`, because
+  `_Required` cannot be fixed afterwards. Amazon's "at least 12 months" is
+  answered by `amazon-audit`.
 - **Detection test for the evidence pack:** Google publishes benign triggers
   for Event Threat Detection and Cloud Run Threat Detection; run one, capture
   the finding and its delivery.
@@ -352,6 +376,7 @@ workload assumption is 5 connected sellers syncing every 30 minutes.
 | Firestore, Secret Manager, Scheduler | | ~$1 |
 | Logging 400-day bucket (beyond the free 50 GiB, retention charge) | | ~$1 |
 | Artifact Registry + Cloud Build (few builds) | | ~$1 |
+| Cloud DNS private zone (`googleapis.com` → restricted VIP) | $0.20 + queries | < $1 |
 | VPC Service Controls | | $0 |
 | Direct VPC egress | no connector instances | $0 |
 | **Infrastructure subtotal** | | **~$42 / month (~£33)** |
@@ -383,7 +408,11 @@ presented.
    `amazon.nivadesk.app` → LB address, DNS-only at Cloudflare. *Shown first.*
 6. ⛔ **SCC Premium** on the project; detectors; notification path.
    *Estimated cost shown first.*
-7. VPC-SC perimeter in **dry-run**; a week of real traffic (a test seller
+7. **Private Google Access via `restricted.googleapis.com`**
+   (`infra/amazon/private-google-access.sh`): private DNS zone, route,
+   firewall; then the `diag` job proves every Google API host resolves inside
+   `199.36.153.4/30` and answers. Its output goes into the evidence pack.
+7b. VPC-SC perimeter in **dry-run**; a week of real traffic (a test seller
    account, or EGGcraft's own if the user chooses); violation report.
 8. ⛔ **Enforce the perimeter.** *Report and dispositions shown first.*
 9. Evidence pack from the live configuration.
@@ -406,22 +435,23 @@ also what `infra/amazon/create-project.sh` does, in this order, idempotently:
 (`securitycenter`) and Access Context Manager (`accesscontextmanager`) —
 those are the ⛔ steps 6 and 8, run separately.
 
-*Org policies on the project:* the eight in §2.
+*Org policies on the project:* the nine in §2 (`run.allowedVPCEgress` = `all-traffic` added in revision 4).
 
 *Resources:*
 
 | Kind | Name |
 |---|---|
-| Project | `nivadesk-amazon` in org 378239481010, billing `01789B-AD5731-2C3C72` |
+| Folder | `amazon-boundary` in org 378239481010; Logging defaults `--storage-location=europe-west2 --disable-default-sink`, set before the project |
+| Project | `nivadesk-amazon` in that folder, billing `01789B-AD5731-2C3C72` |
 | Service accounts | `amazon-oauth`, `amazon-admin`, `amazon-sync`, `amazon-deploy` |
 | IAM | the bindings in §4, project-scoped; secret-level bindings added when the secrets exist |
 | VPC | `amazon-vpc` (custom mode), subnet `amazon-subnet` 10.60.0.0/24 europe-west2, Private Google Access on, flow logs on |
 | Firewall | `amazon-deny-all-egress` (65000, egress deny all), `amazon-allow-https-egress` (1000, egress tcp:443) |
 | Router / NAT | `amazon-router`, `amazon-nat` (manual NAT IPs, logging ALL), static IP `amazon-egress` |
 | Firestore | native database `(default)` in europe-west2; rules deny-all |
-| Secret Manager | `lwa-client-secret`, `intent-hmac-key` (created empty — **the user pastes the values in the console**; secrets never pass through chat) |
+| Secret Manager | `lwa-client-secret`, `intent-hmac-key`, user-managed replication in `europe-west2` only (created empty — **the user pastes the values in the console**; secrets never pass through chat); per-connection `amazon-refresh-*` secrets are created the same way at consent |
 | Artifact Registry | `amazon` (docker, europe-west2) |
-| Logging | bucket `amazon-audit`, 400-day retention, sink routing audit + Armor + NAT + flow logs into it |
+| Logging | bucket `amazon-audit` in `europe-west2`, 400-day retention, unfiltered sink; `_Required`/`_Default` regional by the folder default; `_Default` sink disabled |
 | Audit config | Data Access logs on for Firestore and Secret Manager |
 | Pub/Sub | topic `scc-findings` (empty until step 6) |
 

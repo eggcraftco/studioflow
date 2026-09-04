@@ -30,14 +30,15 @@ function harness() {
     return { docs: hits.map(([k, d]) => ({ id: k, data: () => d, ref: { async delete() { docs.delete(k); } } })) };
   } }) }) }) }) };
   const secretStore = new Map();
+  const created = [];
   const secrets = {
-    async createSecret({ secretId }) { if (secretStore.has(secretId)) { const e = new Error("already exists"); e.code = 6; throw e; } secretStore.set(secretId, []); },
+    async createSecret({ secretId, secret }) { created.push({ secretId, secret }); if (secretStore.has(secretId)) { const e = new Error("already exists"); e.code = 6; throw e; } secretStore.set(secretId, []); },
     async addSecretVersion({ parent, payload }) { const id = parent.split("/").pop(); (secretStore.get(id) || secretStore.set(id, []).get(id)).push(Buffer.from(payload.data).toString("utf8")); },
     async accessSecretVersion({ name }) { const id = name.split("/secrets/")[1].split("/")[0]; const versions = secretStore.get(id) || []; return [{ payload: { data: Buffer.from(versions[versions.length - 1] || "") } }]; },
     async deleteSecret({ name }) { const id = name.split("/").pop(); if (!secretStore.delete(id)) { const e = new Error("not found"); e.code = 5; throw e; } }
   };
-  const conns = createConnections({ admin, secrets, projectId: "nivadesk-amazon", now: () => T0 });
-  return { conns, docs, secretStore };
+  const conns = createConnections({ admin, secrets, projectId: "nivadesk-amazon", region: "europe-west2", now: () => T0 });
+  return { conns, docs, secretStore, created };
 }
 
 check("a nonce is claimed once; the second claim loses", () => {
@@ -63,6 +64,20 @@ check("activating stores the refresh token in Secret Manager and NOT on the docu
     assert.strictEqual(doc.status, "active");
     assert.strictEqual([...h.docs.keys()].filter((k) => k.startsWith("pendingConnections/")).length, 0, "the pending document survived activation");
     return h.conns.refreshTokenFor(id).then((t) => assert.strictEqual(t, "Atzr|secret"));
+  });
+});
+
+check("a refresh-token secret is user-managed in europe-west2 only — never automatic replication", () => {
+  // gcp.resourceLocations = europe-west2 refuses a globally replicated secret,
+  // and a refresh token replicated to regions the design does not name would
+  // be Amazon Information stored outside the boundary's stated location.
+  const h = harness();
+  return h.conns.activate({ companyId: "co", ownerUid: "u", marketplaces: [], refreshToken: "r" }).then(() => {
+    assert.strictEqual(h.created.length, 1);
+    const rep = h.created[0].secret && h.created[0].secret.replication;
+    assert.ok(rep && rep.userManaged, `automatic replication: ${JSON.stringify(h.created[0].secret)}`);
+    assert.ok(!rep.automatic, "automatic replication was requested");
+    assert.deepStrictEqual(rep.userManaged.replicas, [{ location: "europe-west2" }]);
   });
 });
 
