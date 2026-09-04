@@ -2188,3 +2188,40 @@ bu denetimin bir hafta boyunca aradığı şeyin ta kendisi.
 
 **Tek gerçek kalan #21'in ikinci yarısı:** muhasebe bağlayıcılarında defter yazımı. O, QuickBooks ve
 Xero spesifikasyonlarının Faz 3-7'si — kendi dosyaları var, sıradaki iş orası. (#26 rapor yanlıştı.)
+
+---
+
+## Gece bloğu — motor 4, iki pazaryeri, ve aktivasyonun ölçülmesi (4 Eylül 2026)
+
+**Finance Engine v4.** Kanal siparişlerinde KDV £0 görünüyordu: her mapper `taxRate: 0` yazıyor (hiçbir
+mağaza API'si oran döndürmüyor) ve motor KDV'yi orana bağlıyordu, gerçek tutar `taxAmount`'ta okunmadan
+duruyordu. Tutara inanmak ters yönde yanlış olurdu — pazaryeri toplayıp kendi beyan ediyorsa o KDV
+işletmenin değil. Kullanıcı kararı: **sipariş bazında** `merchant | platform | unknown`. Kendi mağazaları
+(Shopify/Woo/Square) merchant; Etsy `unknown` çünkü bazı ülkelerde Etsy topluyor bazılarında satıcı
+sorumlu. Aynı sürümde kalemsiz siparişte **iade iki kez** düşülüyordu (her yazıcı hem `paidAmount`'ı
+düşürüp hem `refundedAmount`'ı yükselttiği için) — düzeltildi. 36 altın vektör, dört uygulama hemfikir.
+İnceleme üç sessiz ayrışma daha buldu: bilinen komisyonun iki platformda yuvarlanıp ikisinde
+yuvarlanmaması, boş `vatMethod`'un sunucuda düşüp Swift/Kotlin'de düşmemesi, ve yer tutucu sıfır oranın
+marj şemasını sıfırlaması. **Vektör koşucuları da kusurluydu**: ikisi parayı yalnız JSON sayısı olarak
+okuyordu, biri metin `lineTotal`'lı kalemi düşürüyordu, biri `1`'i boolean sayıyordu, Kotlin'in 15'lik
+tabanı 17 vektörün sessizce atlanmasına izin verirdi.
+
+**Amazon + eBay bağlayıcılarının saf yarısı.** Hesap/OAuth gerekmeyen her şey: iki adaptör, pazaryeri
+tabloları (id → ülke/kur/bölge/uç nokta), iki katmanlı capability kaydı, dashboard kanalları, üç
+platformda eBay kartı. Testleri adaptörleri görmemiş biri **spesifikasyondan** yazdı ve **on** kusur
+buldu; dört düşmanca geçiş **altı** tane daha, beşi para. Sonra API-sadakat geçişi en önemlisini buldu:
+**eBay'de `collectedBy` diye bir alan yok** — cevap `ebayCollectAndRemitTaxes[]` dizisinin varlığında.
+Yani ilk vergi kuralı hiç var olmayan bir alanı okuyordu ve testler de aynı kurguyu doğruluyordu; ikisi
+de yeşildi.
+
+**Aktivasyon ölçümü (Native Onboarding Faz 1).** Ürün yalnız iki durumu ayırt edebiliyordu: kaydoldu ve
+kullanıyor. 37 dış çalışma alanı kaydoldu, hiçbiri müşteri kaydı oluşturmadı. Artık: bildirilmiş anlamlı
+olay kaydı (bildirilmemiş olay hiçbir şey saymaz), yedi aktivasyon yolu (bir jeweller'ın Etsy bağlaması
+ile bir stüdyonun ilk işini yazması aynı tanıma sığmaz), ve "bağlamak aktivasyon değildir" kuralı —
+mutabakatı yapılmamış banka akışı değer değil, çekilmemiş stok bir tablo, açılmış AI ekranı bir soru
+değil. Mesaj bastırma kuralları da: **"İlk mağazanı bağla" mesajı mağazasını bağlayan birine gitmez** —
+şartnamenin zorunlu kıldığı kural, ve ürünün dinlemediğini gösteren tek mesaj öncesindeki her iyi mesajı
+siler.
+
+**Sonraki:** QBO/Xero Faz 3 defter yazımı (denetimin kalan tek maddesi), Amazon/eBay için hesap +
+OAuth (kullanıcıyla), Native Onboarding'in geri kalanı.
