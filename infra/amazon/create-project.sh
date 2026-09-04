@@ -85,7 +85,13 @@ else
   run gcloud projects create "$PROJECT" --folder="$FOLDER_ID" --name="NivaDesk Amazon" \
     --labels=boundary=amazon,data=amazon-information
 fi
-run gcloud billing projects link "$PROJECT" --billing-account="$BILLING"
+# Linking an already-linked project to the same account is refused, so check first.
+LINKED=$( [ "$DRY_RUN" = "1" ] && echo "" || gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>/dev/null | sed 's|billingAccounts/||')
+if [ "$LINKED" = "$BILLING" ]; then
+  echo "  billing already linked to $BILLING"
+else
+  run gcloud billing projects link "$PROJECT" --billing-account="$BILLING"
+fi
 PROJECT_NUMBER=$( [ "$DRY_RUN" = "1" ] && echo "<number>" || gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 
 echo "══ 1.5. Core APIs the policy step itself needs ══"
@@ -178,7 +184,11 @@ echo "══ 6. Firestore (native, London) and Firebase ══"
 exists gcloud firestore databases describe --database='(default)' --project="$PROJECT" \
   || run gcloud firestore databases create --project="$PROJECT" --location="$REGION" --type=firestore-native \
        --delete-protection
-run firebase projects:addfirebase "$PROJECT" --non-interactive
+if firebase projects:list --json 2>/dev/null | grep -q "\"projectId\": \"$PROJECT\""; then
+  echo "  Firebase already added"
+else
+  run firebase projects:addfirebase "$PROJECT" --non-interactive
+fi
 # Rules: deny everything to every client. Deployed from functions-amazon/deploy/firestore.rules.
 
 echo "══ 7. Secret Manager: the two shared secrets, created EMPTY, user-managed in $REGION only ══"
@@ -208,7 +218,7 @@ exists gcloud logging sinks describe amazon-audit-sink --project="$PROJECT" \
 AUDIT_FILE=$(mktemp)
 cat > "$AUDIT_FILE" <<'YAML'
 auditConfigs:
-- service: firestore.googleapis.com
+- service: datastore.googleapis.com
   auditLogConfigs:
   - logType: DATA_READ
   - logType: DATA_WRITE
@@ -224,7 +234,7 @@ if [ "$DRY_RUN" != "1" ]; then
 import json, sys
 p = json.load(open(sys.argv[1]))
 p["auditConfigs"] = [
-  {"service": "firestore.googleapis.com", "auditLogConfigs": [{"logType": "DATA_READ"}, {"logType": "DATA_WRITE"}]},
+  {"service": "datastore.googleapis.com", "auditLogConfigs": [{"logType": "DATA_READ"}, {"logType": "DATA_WRITE"}]},
   {"service": "secretmanager.googleapis.com", "auditLogConfigs": [{"logType": "DATA_READ"}, {"logType": "DATA_WRITE"}]},
 ]
 json.dump(p, open(sys.argv[1], "w"), indent=2)
@@ -240,10 +250,14 @@ exists gcloud pubsub topics describe scc-findings --project="$PROJECT" \
 echo "══ 10.5. Verify what cannot be fixed later: every log bucket is regional ══"
 if [ "$DRY_RUN" != "1" ]; then
   bad=0
-  while IFS=$'\t' read -r name location; do
-    printf '  %s → %s\n' "$name" "$location"
+  while IFS=$'\t' read -r short location; do
+    printf '  %s → %s\n' "$short" "$location"
     [ "$location" = "$REGION" ] || bad=1
-  done < <(gcloud logging buckets list --project="$PROJECT" --format='value(name,location)')
+  done < <(gcloud logging buckets list --project="$PROJECT" --format=json | python3 -c "
+import json,sys,re
+for b in json.load(sys.stdin):
+    m=re.search(r'/locations/([^/]+)/buckets/([^/]+)$', b.get('name',''))
+    print((m.group(2) if m else '?') + '\t' + (m.group(1) if m else ''))")
   if [ "$bad" = "1" ]; then
     echo "  ❌ a log bucket is outside $REGION. _Required cannot be moved: delete the project now, fix the folder's Logging settings, recreate."
     exit 1

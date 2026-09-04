@@ -189,6 +189,28 @@ but holds no role.
 Main project: `amazon-caller@eggcraft-studio` gets `run.invoker` on
 `amazon-admin` only. Nothing else in either project can see the other.
 
+### 4a. Bootstrap permissions — temporary, recorded 5 September 2026
+
+Creating the folder, the project and the folder's Logging defaults needed
+three roles on the **organisation** that Organization Administrator does not
+include. The operator granted them to `contact@eggcraft.co.uk` on
+5 September 2026 for the bootstrap, and the user's instruction is explicit:
+they are **temporary**, nothing about them changes without the user's
+approval, and a reduction plan is owed once the bootstrap is done.
+
+| Role (organisation) | Needed for | After the bootstrap |
+|---|---|---|
+| `roles/resourcemanager.folderCreator` | creating `amazon-boundary` | **remove entirely** — the folder exists; nothing else creates folders |
+| `roles/resourcemanager.projectCreator` | creating `nivadesk-amazon` | **remove entirely** — the project exists; a future project is a new decision and a new one-off grant |
+| `roles/logging.admin` | `gcloud logging settings update --folder` | **reduce**: remove at the organisation; if the folder's Logging defaults ever need changing, grant `roles/logging.admin` on the **folder** `amazon-boundary` (758048022614) for that change only. Day-to-day log reading and sink management inside the project come with the operator's project Owner role |
+
+Nothing in the run rate of the zone depends on any of the three: deploys use
+`amazon-deploy@` by impersonation (`serviceAccountTokenCreator` on that
+account, project-scoped, already granted), and every later step — services,
+edge, SCC, perimeter — acts on the project or on Access Context Manager, not
+on folder or project creation. **The reduction is not applied until the user
+approves it.**
+
 ## 5. Ingress — the firewall/ACL answer, inbound
 
 **One global external HTTPS load balancer**, managed certificate for
