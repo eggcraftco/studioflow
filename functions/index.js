@@ -28973,6 +28973,75 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
 });
 
 /**
+ * The three or four steps between signing up and NivaDesk being useful, for the
+ * workspace asking.
+ *
+ * Deliberately built from `limit(1)` probes rather than from the full
+ * derivation the admin funnel uses: a checklist only needs to know WHETHER a
+ * workspace has an order, not how many, and a dashboard card that read eight
+ * hundred documents on every load would be a card nobody could afford to show.
+ *
+ * Any member may ask — this is the workspace's own progress, not billing or
+ * admin data, and hiding it from everyone but the owner would hide it from the
+ * people doing the work.
+ */
+exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const lifecycle = require("./lifecycle/checklist");
+  const db = admin.firestore();
+
+  const [settingsSnap, anyOrder, anyCustomer, anyBank, anyAccounting, anyInventory, shopifySnap] = await Promise.all([
+    db.collection("companySettings").doc(companyId).get(),
+    db.collection("siparisler").where("companyId", "==", companyId).limit(1).get(),
+    db.collection("musteriler").where("companyId", "==", companyId).limit(1).get(),
+    db.collection("companies").doc(companyId).collection("bankConnections").limit(1).get(),
+    db.collection("companies").doc(companyId).collection("accountingConnections").limit(1).get(),
+    db.collection("companies").doc(companyId).collection("inventoryItems").limit(1).get().catch(() => ({ empty: true, docs: [] })),
+    db.collection("shopifyStores").where("companyId", "==", companyId).limit(1).get().catch(() => ({ empty: true, docs: [] }))
+  ]);
+
+  const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
+  const nowMs = Date.now();
+  const events = [];
+  const mark = (name, present) => { if (present) events.push({ name, atMs: nowMs }); };
+
+  mark("onboarding_completed", settings.businessOnboardingCompleted === true);
+
+  // An order that came from a shop and one somebody typed are different steps.
+  // The proof is the commerce identity written for every imported order — one
+  // equality on companyId, which Firestore indexes on its own. Querying the
+  // orders by `commerce.provider` would have needed a composite index, and a
+  // missing index there fails as "no imported orders", which is the shape of
+  // wrongness that tells somebody to do a thing they have already done.
+  const imported = await db.collection("externalEntities")
+    .where("companyId", "==", companyId)
+    .limit(1).get()
+    .catch(() => ({ empty: true }));
+  mark("external_order_imported", !imported.empty);
+  mark("order_created", !anyOrder.empty);
+  mark("customer_created", !anyCustomer.empty);
+  mark("integration_connected", !shopifySnap.empty || !imported.empty);
+  mark("bank_connected", !anyBank.empty);
+  mark("accounting_connected", !anyAccounting.empty);
+  mark("inventory_item_created", !anyInventory.empty);
+
+  // The two that need a real match rather than a connection.
+  if (!anyBank.empty) {
+    const matched = await db.collection("companies").doc(companyId).collection("bankTransactions")
+      .where("linkedOrderId", "!=", "").limit(1).get().catch(() => ({ empty: true }));
+    mark("bank_match_completed", !matched.empty);
+  }
+  if (!anyInventory.empty) {
+    const consumed = await db.collection("companies").doc(companyId).collection("inventoryItems")
+      .where("consumedQuantity", ">", 0).limit(1).get().catch(() => ({ empty: true }));
+    mark("inventory_consumed_by_order", !consumed.empty);
+  }
+
+  const checklist = lifecycle.setupChecklist({ profile: settings, events });
+  return { ok: true, companyId, ...checklist };
+});
+
+/**
  * The activation funnel, across every workspace.
  *
  * Thirty-seven workspaces outside this studio have signed up and not one has
