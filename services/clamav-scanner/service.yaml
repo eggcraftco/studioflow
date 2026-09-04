@@ -1,0 +1,66 @@
+# The scanner's Cloud Run service, written out rather than assembled from
+# flags, because two of these settings are the difference between a control and
+# a decoration and they should be reviewable in one place.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: clamav-scanner
+  labels:
+    cloud.googleapis.com/location: europe-west2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scaled to zero on purpose. The trigger holds the file's download token
+        # before it calls here, so a cold start costs patience, not safety —
+        # and keeping ClamAV warm would cost roughly $75 a month for uploads
+        # that arrive a few times a day.
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      # A scan of a 32 MiB file has to finish inside this, cold start included.
+      timeoutSeconds: 300
+      containers:
+        - image: IMAGE_PLACEHOLDER
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              # ClamAV's in-memory signature database is around 2 GiB; the scan
+              # needs headroom above it. This is a floor, not generosity.
+              memory: 4Gi
+              cpu: "2"
+          env:
+            - name: MAX_SCAN_BYTES
+              value: "33554432"
+          # THE important setting. Cloud Run's default startup probe is a TCP
+          # connect, which succeeds the moment the HTTP server binds its port —
+          # and this server binds long before clamd has loaded its signatures.
+          # An instance marked ready at that moment would answer scans with an
+          # empty database, find nothing, and call every file clean.
+          #
+          # So the probe is an HTTP GET on /healthz, which returns 503 until
+          # clamd answers a PING. failureThreshold x periodSeconds gives the
+          # database five minutes to load before the instance is given up on.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30
+          # After startup, a liveness check on the same endpoint so an instance
+          # whose clamd has died is replaced rather than left answering 503s.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 60
+            failureThreshold: 3
+  traffic:
+    - percent: 100
+      latestRevision: true

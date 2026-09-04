@@ -8,7 +8,7 @@
 //
 // What is never retried is a scanner that answers. "Infected" is the answer.
 const assert = require("assert");
-const { createClamavScanner, verdictFromResponse, isTransient, backoffMs } = require("../../security/clamavClient");
+const { createClamavScanner, verdictFromResponse, isTransient, backoffMs, createIdentityTokenSource } = require("../../security/clamavClient");
 
 let failures = 0;
 const checks = [];
@@ -31,6 +31,7 @@ function scanner(responses, options = {}) {
   const scan = createClamavScanner({
     endpoint: "https://scanner.invalid/scan",
     fetchImpl,
+    identityToken: options.identityToken ?? (async () => "id-token"),
     attempts: options.attempts ?? 4,
     baseDelayMs: 1,
     sleep: async (ms) => { waits.push(ms); },
@@ -127,6 +128,82 @@ check("the retry rule knows what is worth another go", () => {
     assert.strictEqual(isTransient(status, null), false, `${status} should not be retried`);
   }
   assert.strictEqual(isTransient(0, new Error("refused")), true);
+});
+
+check("every call to the private scanner carries an identity token", () => {
+  // The scanner is deployed with --no-allow-unauthenticated because it accepts
+  // arbitrary bytes. An unauthenticated call would 403 — and a 403 is not
+  // transient, so it would burn the whole attempt budget on a misconfiguration
+  // and report "error" without ever saying why.
+  let seen = null;
+  const scan = createClamavScanner({
+    endpoint: "https://scanner.invalid/scan",
+    identityToken: async () => "id-token-abc",
+    fetchImpl: async (_url, init) => {
+      seen = init.headers;
+      return { ok: true, status: 200, json: async () => ({ status: "clean" }) };
+    },
+    logger: { log: () => {}, warn: () => {} }
+  });
+  return scan(Buffer.from("x"), {}).then(() => {
+    assert.strictEqual(seen.Authorization, "Bearer id-token-abc",
+      "the scan was sent to a private service without an identity token");
+  });
+});
+
+check("no identity token means no scan, and no scan is not a pass", () => {
+  let called = false;
+  const scan = createClamavScanner({
+    endpoint: "https://scanner.invalid/scan",
+    identityToken: async () => { throw new Error("metadata server unreachable"); },
+    fetchImpl: async () => { called = true; return { ok: true, status: 200, json: async () => ({ status: "clean" }) }; },
+    logger: { log: () => {}, warn: () => {} }
+  });
+  return scan(Buffer.from("x"), {}).then((verdict) => {
+    assert.strictEqual(verdict, "error", "a file was released when we could not even authenticate");
+    assert.strictEqual(called, false, "the bytes were sent without a token");
+  });
+});
+
+check("the identity token is reused rather than minted per upload", () => {
+  let mints = 0;
+  const source = createIdentityTokenSource({
+    audience: "https://scanner.invalid/scan",
+    now: () => 1_000_000,
+    fetchImpl: async () => { mints += 1; return { ok: true, status: 200, text: async () => "tok" }; }
+  });
+  return source().then(() => source()).then(() => source()).then((token) => {
+    assert.strictEqual(token, "tok");
+    assert.strictEqual(mints, 1, `the token was minted ${mints} times for three calls`);
+  });
+});
+
+check("an expired identity token is minted again", () => {
+  let mints = 0;
+  let clock = 1_000_000;
+  const source = createIdentityTokenSource({
+    audience: "https://scanner.invalid/scan",
+    now: () => clock,
+    fetchImpl: async () => { mints += 1; return { ok: true, status: 200, text: async () => `tok-${mints}` }; }
+  });
+  return source().then(() => {
+    clock += 60 * 60 * 1000;          // an hour later
+    return source();
+  }).then((token) => {
+    assert.strictEqual(mints, 2, "a stale token was reused");
+    assert.strictEqual(token, "tok-2");
+  });
+});
+
+check("an empty token from the metadata server is refused", () => {
+  const source = createIdentityTokenSource({
+    audience: "https://scanner.invalid/scan",
+    fetchImpl: async () => ({ ok: true, status: 200, text: async () => "   " })
+  });
+  return source().then(
+    () => { throw new Error("an empty identity token was accepted"); },
+    (error) => assert.ok(/empty/.test(error.message))
+  );
 });
 
 check("backoff grows and is capped", () => {

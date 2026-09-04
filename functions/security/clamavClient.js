@@ -16,9 +16,39 @@
 // What is NOT retried is a scanner that answers. If it says "infected", that is
 // the answer. The only thing worth trying again is silence.
 
+// Where a Google-managed runtime hands out an identity token for itself.
+const METADATA_IDENTITY_URL =
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity";
+
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_ATTEMPTS = 4;
 const DEFAULT_BASE_DELAY_MS = 2000;
+
+/**
+ * An identity token for the scanner, from the runtime's own metadata server.
+ *
+ * The scanner is deployed private — it accepts arbitrary bytes and must never
+ * be an open endpoint — so every call carries a token whose audience is the
+ * scanner's URL. The calling service account holds `run.invoker` on that one
+ * service and nothing else.
+ *
+ * Cached until shortly before it expires, because minting one per upload is a
+ * round trip to the metadata server for no benefit.
+ */
+function createIdentityTokenSource({ audience, fetchImpl = globalThis.fetch, now = () => Date.now() }) {
+  let cached = { token: "", expiresAtMs: 0 };
+  return async function identityToken() {
+    if (cached.token && cached.expiresAtMs > now() + 60000) return cached.token;
+    const url = `${METADATA_IDENTITY_URL}?audience=${encodeURIComponent(audience)}`;
+    const response = await fetchImpl(url, { headers: { "Metadata-Flavor": "Google" } });
+    if (!response.ok) throw new Error(`identity_token_http_${response.status}`);
+    const token = (await response.text()).trim();
+    if (!token) throw new Error("identity_token_empty");
+    // Google's identity tokens last an hour; hold it for slightly less.
+    cached = { token, expiresAtMs: now() + 50 * 60 * 1000 };
+    return token;
+  };
+}
 
 /** Errors worth another go: the scanner is not there yet, or not there now. */
 function isTransient(status, error) {
@@ -61,12 +91,26 @@ function createClamavScanner({
   baseDelayMs = DEFAULT_BASE_DELAY_MS,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   random = Math.random,
-  logger = console
+  logger = console,
+  // Overridable so the suite can drive this without a metadata server.
+  identityToken = null
 } = {}) {
   if (!endpoint) return null;   // no endpoint means no scanner, and the trigger stays off
+  const tokenFor = identityToken || createIdentityTokenSource({ audience: endpoint, fetchImpl });
 
   return async function scanBuffer(bytes, meta = {}) {
     let lastReason = "never_attempted";
+
+    // No token, no call. Sending the bytes unauthenticated would fail with a
+    // 403 anyway, but failing here says why — and a 403 is not transient, so it
+    // would otherwise burn the attempt budget on a misconfiguration.
+    let bearer = "";
+    try {
+      bearer = await tokenFor();
+    } catch (error) {
+      logger.warn?.(`malwareScan: could not obtain an identity token (${String(error?.message || error).slice(0, 120)})`);
+      return "error";
+    }
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       const controller = new AbortController();
@@ -77,6 +121,7 @@ function createClamavScanner({
         response = await fetchImpl(endpoint, {
           method: "POST",
           headers: {
+            Authorization: `Bearer ${bearer}`,
             "Content-Type": "application/octet-stream",
             "X-File-Name": encodeURIComponent(String(meta.name || "").slice(0, 300)),
             "X-Content-Type": String(meta.contentType || "").slice(0, 120)
@@ -114,4 +159,7 @@ function createClamavScanner({
   };
 }
 
-module.exports = { createClamavScanner, verdictFromResponse, isTransient, backoffMs };
+module.exports = {
+  createClamavScanner, verdictFromResponse, isTransient, backoffMs,
+  createIdentityTokenSource, METADATA_IDENTITY_URL
+};

@@ -26,23 +26,61 @@ start, it costs pennies.
 
 ## Deploying (staging first)
 
+Two settings here are the difference between a control and a decoration, so the
+service is defined in `service.yaml` rather than assembled from flags, and
+deployed in two steps.
+
+**1. Build the image**
+
 ```bash
-gcloud run deploy clamav-scanner \
-  --source services/clamav-scanner \
-  --region europe-west2 \
-  --memory 4Gi --cpu 2 \
-  --min-instances 0 --max-instances 3 \
-  --timeout 300 \
-  --no-allow-unauthenticated \
-  --project <staging project>
+gcloud builds submit services/clamav-scanner \
+  --tag europe-west2-docker.pkg.dev/<project>/nivadesk/clamav-scanner:v1 \
+  --project <project>
 ```
 
-`--no-allow-unauthenticated` matters: the scanner takes arbitrary bytes and must
-not be an open endpoint. The trigger calls it with the function's service
-account identity.
+**2. Deploy the service from the spec**
 
-4 GiB is not generosity — ClamAV's in-memory signature database is around 2 GiB
-and the scan needs headroom above it.
+```bash
+sed 's|IMAGE_PLACEHOLDER|europe-west2-docker.pkg.dev/<project>/nivadesk/clamav-scanner:v1|' \
+  services/clamav-scanner/service.yaml > /tmp/clamav-service.yaml
+
+gcloud run services replace /tmp/clamav-service.yaml \
+  --region europe-west2 --project <project>
+```
+
+`service.yaml` carries the setting that matters most: an **HTTP startup probe on
+`/healthz`**, not Cloud Run's default TCP probe. The default succeeds the moment
+this server binds its port — which happens long before clamd has loaded its
+signatures. An instance marked ready at that moment would scan with an empty
+database, find nothing, and call every file clean. The HTTP probe returns 503
+until clamd answers a PING, and `failureThreshold: 30` at `periodSeconds: 10`
+gives the database five minutes to load.
+
+**3. Keep it private, and grant the invoker role narrowly**
+
+```bash
+# No public access. Ever. This service accepts arbitrary bytes.
+gcloud run services remove-iam-policy-binding clamav-scanner \
+  --region europe-west2 --member=allUsers --role=roles/run.invoker \
+  --project <project> 2>/dev/null || true
+
+# Only the identity that runs the scan trigger, and only on THIS service.
+gcloud run services add-iam-policy-binding clamav-scanner \
+  --region europe-west2 \
+  --member="serviceAccount:<functions service account>" \
+  --role=roles/run.invoker \
+  --project <project>
+```
+
+The binding is on the service, not the project: `roles/run.invoker` at project
+level would let that identity invoke every Cloud Run service there is.
+
+**4. Confirm it is not open**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST <service url> --data-binary 'x'
+# 401 or 403. Anything else means the previous step did not take.
+```
 
 ## Verifying before enabling anything
 
