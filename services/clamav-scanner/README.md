@@ -88,33 +88,53 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST <service url> --data-binary 'x'
 SCANNER_URL=<the Cloud Run URL> ./staging-check.sh
 ```
 
-It checks four things, and the fourth is the one that gets skipped: a clean file
+It checks four things against the bytes route, and the fourth is the one that gets skipped: a clean file
 comes back clean, EICAR comes back infected, an oversized file comes back
 `too_large` rather than clean, and an unreachable scanner does not produce a
 pass. The EICAR string is assembled at runtime so this repository never contains
 it — checking it in would have every scanner on every developer machine
 quarantine the checkout.
 
-## The size cap has to stay under Cloud Run's
+## Scanning is by reference, so the cap is the rules' cap
 
-`MAX_SCAN_BYTES` is **25 MiB**, and three places have to agree on it: this
-service's env, `server.js`'s fallback, and `maxScanBytes` in
-`functions/malwareScanTrigger.js` (which is the one that matters, because it
-decides before downloading anything).
+The trigger does not send bytes. It POSTs `{bucket, name, generation}` to
+`/scan`, and the scanner fetches the object from Cloud Storage itself — with
+the runtime service account's own credentials (it already holds
+`storage.objectAdmin` on the bucket) — and streams it into clamd. Nothing
+about the file's size passes through a Cloud Run request body, so the old
+32 MiB ceiling is gone, and nothing passes through the function's memory, so
+the function runs in 512 MiB whatever the file weighs.
 
-It must stay strictly below Cloud Run's 32 MiB request limit. When ours was also
-32 MiB, Cloud Run's front door rejected oversized requests with an HTML `413`
-that never reached this server — so the verdict came from Google's proxy instead
-of us, and `too_large` was unreachable code. It failed closed, but it reported
-"scanner broken" for a file that was merely too big.
+That is why the cap is **210 MiB**: the largest upload `storage.rules`
+accepts. A file the rules allow but the scanner refuses is a held file for
+ever, and holding every large upload is an outage, not a control. Four places
+have to agree, and `functions/test/qa/malware-scan-trigger.test.js` pins all
+four:
 
-`functions/test/qa/malware-scan-trigger.test.js` pins all three and fails if any
-of them drifts.
+- `maxScanBytes` in `functions/malwareScanTrigger.js` (checked before the
+  scanner is called; must be ≥ the rules' largest size)
+- `MAX_SCAN_BYTES` in `service.yaml` and the fallback in `server.js`
+- clamd's own `StreamMaxLength` / `MaxFileSize` in the Dockerfile, which sit
+  *above* the cap so clamd is never the one refusing a permitted file
+
+The scanner counts inflated bytes as they stream — Cloud Storage decompresses
+a gzip-encoded object on the way out — so a small object that inflates past
+the cap is `too_large`, not an out-of-memory kill.
+
+`POST /` with raw bytes still works and is what `staging-check.sh` uses to
+prove the scanner without a bucket. `/scan` answers `gone` for a generation
+that no longer exists, `too_large` past the cap, and never logs the object's
+name: a customer's filename is usually the name of a person.
+
+Capacity: `containerConcurrency` × `maxScale` in `service.yaml` is the most
+scans in flight; the trigger's `concurrency` × `maxInstances` must not exceed
+it (the test checks), and clamd's `MaxThreads` must cover
+`containerConcurrency`.
 
 One related trap, since it cost an afternoon: do **not** call `req.destroy()`
-when the cap is exceeded. That closes the socket the response has to travel on,
-and the caller sees a dropped connection instead of the verdict. Stop buffering,
-answer, and hang up afterwards.
+when a request body exceeds a cap. That closes the socket the response has to
+travel on, and the caller sees a dropped connection instead of the verdict.
+Stop buffering, answer, and hang up afterwards.
 
 ## Only then
 

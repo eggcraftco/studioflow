@@ -28046,15 +28046,21 @@ async function rotatePortalFileTokens(orderData = {}, companyId = "", orderId = 
   let rotated = 0;
   let failed = 0;
 
+  // Through the token service, not straight onto the object: a file the upload
+  // scanner is holding must stay tokenless, and the replacement token goes into
+  // the scan record instead, so the file is released with the NEW token and
+  // every copied URL is dead the moment it becomes reachable again.
+  const tokens = require("./security/downloadTokens").createDownloadTokenService({ admin });
   const rotate = async (path) => {
     if (!path) { failed += 1; return false; }
     try {
-      await bucket.file(path).setMetadata({ metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() } });
+      const result = await tokens.rotate(path);
+      if (!result.rotated) { failed += 1; return false; }
       rotated += 1;
       return true;
     } catch (error) {
       failed += 1;
-      console.warn("portal token rotation failed", path, error?.message || error);
+      console.warn("portal token rotation failed", malwareScanRules.logSafeObjectRef(path), String(error?.message || error).slice(0, 160));
       return false;
     }
   };
@@ -34113,7 +34119,7 @@ const malwareScanner = createClamavScanner({
 
 const malwareScanTrigger = createMalwareScanTrigger({
   admin,
-  scanBuffer: malwareScanner,
+  scanner: malwareScanner,
   enabled: String(process.env.NIVADESK_MALWARE_SCAN || "") === "1",
   scannerName: "clamav"
 });
@@ -34139,16 +34145,22 @@ const MALWARE_SCAN_BUCKET = (() => {
   return chosen.bucket;
 })();
 
-// concurrency is the number of uploads one instance handles at once, and each
-// one may hold a 25 MiB file in memory twice over (the download, then the
-// request body to the scanner). The default is 80. Eighty times fifty
-// megabytes is not a number that fits in any memory this function is going
-// to be given, and an out-of-memory kill mid-scan is a token that never comes
-// back until the maintenance pass finds it.
+// The bytes never come through here — the scanner fetches the object itself
+// — so memory is not the constraint. Concurrency × maxInstances is: it is the
+// most scans in flight at once, and it must not exceed what the scanner can
+// take (service.yaml: maxScale × containerConcurrency). Beyond that the
+// scanner answers 429/503, the client retries with backoff, and a burst simply
+// takes longer; nothing is dropped.
+//
+// retry is ON. The one throw this handler lets out is a claim that Firestore
+// would not accept after retries, marked `retryable`; Eventarc redelivers it
+// later, and the claim's create() makes redelivery safe — a duplicate finds
+// the record and does nothing. Every other failure is swallowed here and left
+// to the maintenance pass, so a persistent bug cannot turn into a retry storm.
 exports.scanUploadedFile = onObjectFinalized(
   {
     bucket: MALWARE_SCAN_BUCKET, region: "europe-west2",
-    memory: "1GiB", concurrency: 4, timeoutSeconds: 540, retry: false
+    memory: "512MiB", concurrency: 6, maxInstances: 4, timeoutSeconds: 540, retry: true
   },
   async (event) => {
     // Redacted on purpose: never the object's own name. See logSafeObjectRef —
@@ -34183,11 +34195,12 @@ exports.scanUploadedFile = onObjectFinalized(
         `size=${Number(event.data.size) || 0} type=${contentType} -> ${outcome}`
       );
     } catch (error) {
-      // A throw here would make Cloud Storage redeliver the event, and the
-      // claim already recorded means the retry finds it "already scanned" and
-      // does nothing. Swallow it: the token stays withheld, which is the safe
-      // side, and the record says why.
-      console.error(`scanUploadedFile failed for ${ref}:`, String(error?.message || error).slice(0, 300));
+      // Only a claim Firestore refused is worth redelivering — see the note on
+      // the options above. Anything else stays swallowed: the token, if it was
+      // taken, stays withheld, the record says why, and the maintenance pass
+      // comes back for it.
+      if (error && error.retryable) throw error;
+      console.error(`scanUploadedFile failed for ${ref}:`, String(error?.message || error).replace(/[^\x20-\x7e]/g, "").slice(0, 300));
     }
   }
 );

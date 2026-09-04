@@ -244,11 +244,41 @@ service firebase.storage {
       return request.resource != null && request.resource.size <= 210 * 1024 * 1024;
     }
 
+    // The upload scanner records its verdict in the object's custom metadata
+    // under nvScan*. Custom metadata is otherwise whatever the uploader says it
+    // is, so a client must not be allowed to write those keys at all — an
+    // upload claiming nvScanStatus "clean" would be a scan that never ran.
+    function scanMetadataUntouched() {
+      return request.resource == null
+        || request.resource.metadata == null
+        || (!("nvScanStatus" in request.resource.metadata)
+            && !("nvScanVerdict" in request.resource.metadata)
+            && !("nvScanReason" in request.resource.metadata)
+            && !("nvScannedAtMs" in request.resource.metadata)
+            && !("nvScanner" in request.resource.metadata)
+            && !("nvScanDetail" in request.resource.metadata));
+    }
+
+    // A file the scanner settled as anything but clean is unreadable through
+    // the SDK. getDownloadURL() is an SDK read, and it mints a fresh download
+    // token onto the object — which would put a token straight back on a file
+    // the scanner just took one off. Files with no verdict yet, or a verdict
+    // still pending, read exactly as before; so does everything uploaded
+    // before scanning existed.
+    function notQuarantined() {
+      return resource == null
+        || resource.metadata == null
+        || !("nvScanVerdict" in resource.metadata)
+        || resource.metadata.nvScanVerdict in ["clean", "pending"];
+    }
+
     match /companies/{companyId}/client_files/{orderId}/{fileName} {
-      allow read: if canReadClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId);
-      allow create, update: if canWriteClientFiles(companyId, orderId)
+      allow read: if (canReadClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId))
+        && notQuarantined();
+      allow create, update: if (canWriteClientFiles(companyId, orderId)
         && clientFilesPlanAllowed(companyId)
-        && safeUploadSize();
+        && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canWriteClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId);
     }
 
@@ -258,32 +288,40 @@ service firebase.storage {
     // update or delete. Access mirrors client_files (same roles, same plan
     // gate); the "library" literal reuses those helpers' role logic.
     match /companies/{companyId}/library/{fileName} {
-      allow read: if canReadClientFiles(companyId, 'library') && clientFilesPlanAllowed(companyId);
-      allow create: if canWriteClientFiles(companyId, 'library')
+      allow read: if (canReadClientFiles(companyId, 'library') && clientFilesPlanAllowed(companyId))
+        && notQuarantined();
+      allow create: if (canWriteClientFiles(companyId, 'library')
         && clientFilesPlanAllowed(companyId)
-        && safeUploadSize();
+        && safeUploadSize())
+        && scanMetadataUntouched();
     }
 
     match /companies/{companyId}/design_images/{fileName} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow read: if (canReadWorkspace(companyId))
+        && notQuarantined();
+      allow create, update: if (canEditWorkspaceFiles(companyId) && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
 
     match /companies/{companyId}/message_files/{threadId}/{fileName} {
-      allow read: if canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
-      allow create, update: if canWriteMessageFiles(companyId, threadId)
+      allow read: if (canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId))
+        && notQuarantined();
+      allow create, update: if (canWriteMessageFiles(companyId, threadId)
         && messageFilesPlanAllowed(companyId)
-        && safeUploadSize();
+        && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canWriteMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
     }
 
     match /companies/{companyId}/message_files/{threadId}/{subPath=**} {
-      allow read: if canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
-      allow create, update: if canWriteMessageFiles(companyId, threadId)
+      allow read: if (canReadMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId))
+        && notQuarantined();
+      allow create, update: if (canWriteMessageFiles(companyId, threadId)
         && messageFilesPlanAllowed(companyId)
-        && safeUploadSize();
+        && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canWriteMessageFiles(companyId, threadId) && messageFilesPlanAllowed(companyId);
     }
 
@@ -299,14 +337,18 @@ service firebase.storage {
     // document to learn who raised it, which is a firestore.get per object —
     // designed separately rather than guessed at from the path.
     match /companies/{companyId}/support_files/{ticketId}/{fileName} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow read: if (canReadWorkspace(companyId))
+        && notQuarantined();
+      allow create, update: if (canEditWorkspaceFiles(companyId) && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
     match /companies/{companyId}/support_files/{ticketId}/{subPath=**} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();
+      allow read: if (canReadWorkspace(companyId))
+        && notQuarantined();
+      allow create, update: if (canEditWorkspaceFiles(companyId) && safeUploadSize())
+        && scanMetadataUntouched();
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
@@ -316,12 +358,14 @@ service firebase.storage {
     // document's `photos` field stores these paths; the paths are permanent
     // where a download URL is not. 25MB covers phone photos.
     match /companies/{companyId}/inventory_photos/{itemId}/{fileName} {
-      allow read: if canReadWorkspace(companyId);
-      allow create, update: if signedIn()
+      allow read: if (canReadWorkspace(companyId))
+        && notQuarantined();
+      allow create, update: if (signedIn()
         && companyExists(companyId)
         && (isOwner(companyId)
             || membersMap(companyId)[request.auth.uid].role in ["owner", "admin", "member"])
-        && request.resource != null && request.resource.size <= 25 * 1024 * 1024;
+        && request.resource != null && request.resource.size <= 25 * 1024 * 1024)
+        && scanMetadataUntouched();
       allow delete: if signedIn()
         && companyExists(companyId)
         && (isOwner(companyId)
@@ -331,9 +375,11 @@ service firebase.storage {
     // Receipts/invoices attached to bank transactions — owner-only, like the
     // bank feed itself. 25MB covers photographed invoices and PDFs.
     match /companies/{companyId}/bank_receipts/{transactionId}/{fileName} {
-      allow read: if isOwner(companyId);
-      allow create, update: if isOwner(companyId)
-        && request.resource != null && request.resource.size <= 25 * 1024 * 1024;
+      allow read: if (isOwner(companyId))
+        && notQuarantined();
+      allow create, update: if (isOwner(companyId)
+        && request.resource != null && request.resource.size <= 25 * 1024 * 1024)
+        && scanMetadataUntouched();
       allow delete: if isOwner(companyId);
     }
 
@@ -343,7 +389,8 @@ service firebase.storage {
     // whose read is plan-gated: a workspace must always be able to see what its
     // own customer signed.
     match /companies/{companyId}/signatures/{orderId}/{fileName} {
-      allow read: if canReadWorkspace(companyId);
+      allow read: if (canReadWorkspace(companyId))
+        && notQuarantined();
       allow write: if false;
     }
 

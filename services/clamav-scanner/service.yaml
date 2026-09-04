@@ -27,7 +27,8 @@ spec:
         run.googleapis.com/cpu-throttling: "false"
     spec:
       # A scan of a 32 MiB file has to finish inside this, cold start included.
-      timeoutSeconds: 300
+      containerConcurrency: 8
+      timeoutSeconds: 600
       containers:
         - image: IMAGE_PLACEHOLDER
           ports:
@@ -41,7 +42,7 @@ spec:
               cpu: "2"
           env:
             - name: MAX_SCAN_BYTES
-              value: "26214400"
+              value: "220200960"
           # THE important setting. Cloud Run's default startup probe is a TCP
           # connect, which succeeds the moment the HTTP server binds its port —
           # and this server binds long before clamd has loaded its signatures.

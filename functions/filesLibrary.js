@@ -42,21 +42,17 @@ const LINK_CAP = 24;
 
 // A portal visitor has no Firebase session, so a portal-shared file needs a
 // token URL — the same mechanism the estimate signature uses. The token is
-// minted (or reused) on the object's metadata; failure degrades to "" and the
-// share itself still succeeds.
+// minted (or reused) through the download-token service, which consults the
+// upload scanner's record first: a file still being held gets its token in the
+// record, and the URL handed out here starts working when the scan is clean.
+// Failure degrades to "" and the share itself still succeeds.
 async function ensurePortalUrl(admin, storagePath) {
   const path = String(storagePath || "").trim();
   if (!path) return "";
   try {
-    const bucket = admin.storage().bucket();
-    const file = bucket.file(path);
-    const [meta] = await file.getMetadata();
-    let token = String(((meta || {}).metadata || {}).firebaseStorageDownloadTokens || "").split(",")[0].trim();
-    if (!token) {
-      token = crypto.randomUUID();
-      await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
-    }
-    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+    const { createDownloadTokenService } = require("./security/downloadTokens");
+    const result = await createDownloadTokenService({ admin }).ensureToken(path);
+    return result.url || "";
   } catch {
     return "";
   }

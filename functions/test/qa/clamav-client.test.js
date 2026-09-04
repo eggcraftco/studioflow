@@ -8,11 +8,14 @@
 //
 // What is never retried is a scanner that answers. "Infected" is the answer.
 const assert = require("assert");
-const { createClamavScanner, verdictFromResponse, isTransient, backoffMs, createIdentityTokenSource } = require("../../security/clamavClient");
+const { createClamavScanner, verdictFromResponse, isTransient, backoffMs, createIdentityTokenSource, scanRoute } = require("../../security/clamavClient");
 
 let failures = 0;
 const checks = [];
 const check = (name, run) => checks.push({ name, run });
+
+// What the trigger hands over: a reference, never bytes.
+const REF = { bucket: "eggcraft-studio.firebasestorage.app", name: "companies/c1/client_files/o1/Jane_Doe_passport.pdf", generation: "1755000001", sizeBytes: 1000, contentType: "application/pdf" };
 
 function scanner(responses, options = {}) {
   const calls = [];
@@ -48,7 +51,7 @@ check("no endpoint means no scanner, which means the trigger stays off", () => {
 
 check("a clean answer is a clean answer", () => {
   const s = scanner([{ status: 200, body: { status: "clean" } }]);
-  return s.scan(Buffer.from("x"), {}).then((v) => {
+  return s.scan(REF).then((v) => {
     assert.strictEqual(v, "clean");
     assert.strictEqual(s.calls.length, 1, "a successful scan was retried");
   });
@@ -61,7 +64,7 @@ check("a cold start is retried, and then succeeds", () => {
     { status: 503, body: { status: "starting" } },
     { status: 200, body: { status: "clean" } }
   ]);
-  return s.scan(Buffer.from("x"), {}).then((v) => {
+  return s.scan(REF).then((v) => {
     assert.strictEqual(v, "clean");
     assert.strictEqual(s.calls.length, 3);
     assert.strictEqual(s.waits.length, 2, "it waited a different number of times than it retried");
@@ -72,7 +75,7 @@ check("a cold start is retried, and then succeeds", () => {
 
 check("a scanner that never comes up is an error, not a pass", () => {
   const s = scanner([{ status: 503, body: {} }]);
-  return s.scan(Buffer.from("x"), {}).then((v) => {
+  return s.scan(REF).then((v) => {
     assert.strictEqual(v, "error", "an unavailable scanner released the file");
     assert.strictEqual(s.calls.length, 4, "it gave up without using its attempts");
   });
@@ -82,11 +85,11 @@ check("a network that refuses is retried; a timeout is reported as one", () => {
   const refused = scanner([Object.assign(new Error("ECONNREFUSED"), { name: "Error" })]);
   const timedOut = scanner([Object.assign(new Error("aborted"), { name: "AbortError" })]);
   return Promise.all([
-    refused.scan(Buffer.from("x"), {}).then((v) => {
+    refused.scan(REF).then((v) => {
       assert.strictEqual(v, "error");
       assert.strictEqual(refused.calls.length, 4);
     }),
-    timedOut.scan(Buffer.from("x"), {}).then((v) => {
+    timedOut.scan(REF).then((v) => {
       assert.strictEqual(v, "timeout", "a timeout is worth telling apart from a refusal");
     })
   ]);
@@ -95,7 +98,7 @@ check("a network that refuses is retried; a timeout is reported as one", () => {
 check("an answer that retrying cannot fix is not retried", () => {
   // A 400 means we sent something wrong. Trying again sends the same thing.
   const s = scanner([{ status: 400, body: {} }]);
-  return s.scan(Buffer.from("x"), {}).then((v) => {
+  return s.scan(REF).then((v) => {
     assert.strictEqual(v, "error");
     assert.strictEqual(s.calls.length, 1, "a permanent failure was retried");
   });
@@ -103,7 +106,7 @@ check("an answer that retrying cannot fix is not retried", () => {
 
 check("an infection is never retried away", () => {
   const s = scanner([{ status: 200, body: { status: "infected", signature: "Eicar-Test-Signature" } }]);
-  return s.scan(Buffer.from("x"), {}).then((v) => {
+  return s.scan(REF).then((v) => {
     assert.strictEqual(v, "infected");
     assert.strictEqual(s.calls.length, 1);
   });
@@ -145,7 +148,7 @@ check("every call to the private scanner carries an identity token", () => {
     },
     logger: { log: () => {}, warn: () => {} }
   });
-  return scan(Buffer.from("x"), {}).then(() => {
+  return scan(REF).then(() => {
     assert.strictEqual(seen.Authorization, "Bearer id-token-abc",
       "the scan was sent to a private service without an identity token");
   });
@@ -159,7 +162,7 @@ check("no identity token means no scan, and no scan is not a pass", () => {
     fetchImpl: async () => { called = true; return { ok: true, status: 200, json: async () => ({ status: "clean" }) }; },
     logger: { log: () => {}, warn: () => {} }
   });
-  return scan(Buffer.from("x"), {}).then((verdict) => {
+  return scan(REF).then((verdict) => {
     assert.strictEqual(verdict, "error", "a file was released when we could not even authenticate");
     assert.strictEqual(called, false, "the bytes were sent without a token");
   });
@@ -214,6 +217,59 @@ check("backoff grows and is capped", () => {
   assert.ok(delays[delays.length - 1] <= 30500, "the backoff is unbounded");
   // Jitter, so a burst of uploads does not retry in lockstep.
   assert.notStrictEqual(backoffMs(1, 2000, () => 0), backoffMs(1, 2000, () => 0.9));
+});
+
+check("the scanner is asked by reference: the /scan route, a JSON body, nothing else about the file", () => {
+  // The bytes never travel. The request names the object and nothing more —
+  // not the content type, not a display name: the scanner never reads them,
+  // and a customer's filename has no business in a second service's logs.
+  let seen = null;
+  const scan = createClamavScanner({
+    endpoint: "https://scanner.invalid",
+    identityToken: async () => "id-token-abc",
+    fetchImpl: async (url, init) => {
+      seen = { url, init };
+      return { ok: true, status: 200, json: async () => ({ status: "clean" }) };
+    },
+    logger: { log: () => {}, warn: () => {} }
+  });
+  return scan(REF).then((verdict) => {
+    assert.strictEqual(verdict, "clean");
+    assert.strictEqual(seen.url, "https://scanner.invalid/scan", `wrong route: ${seen.url}`);
+    assert.strictEqual(seen.init.headers["Content-Type"], "application/json");
+    const body = JSON.parse(seen.init.body);
+    assert.deepStrictEqual(Object.keys(body).sort(), ["bucket", "generation", "name"], `the body carries more than the reference: ${seen.init.body}`);
+    assert.strictEqual(body.bucket, REF.bucket);
+    assert.strictEqual(body.name, REF.name);
+    assert.strictEqual(body.generation, REF.generation);
+    for (const header of Object.keys(seen.init.headers)) {
+      assert.ok(!/file-name|content-type-of|x-file/i.test(header) || header === "Content-Type", `a header names the file: ${header}`);
+    }
+    assert.ok(!("X-File-Name" in seen.init.headers), "the object's name is sent in a header");
+  });
+});
+
+check("a trailing slash on the endpoint does not double up the route", () => {
+  assert.strictEqual(scanRoute("https://scanner.invalid/"), "https://scanner.invalid/scan");
+  assert.strictEqual(scanRoute("https://scanner.invalid"), "https://scanner.invalid/scan");
+});
+
+check("an object that is no longer there is 'gone', which is neither a pass nor a failure", () => {
+  assert.strictEqual(verdictFromResponse({ status: "gone" }).verdict, "gone");
+  const s = scanner([{ status: 200, body: { status: "gone" } }]);
+  return s.scan(REF).then((v) => {
+    assert.strictEqual(v, "gone");
+    assert.strictEqual(s.calls.length, 1, "a gone object was retried");
+  });
+});
+
+check("a scanner that could not fetch the object is retried, then an error", () => {
+  // fetch_failed is a 503: the scanner is up but could not reach Storage.
+  const s = scanner([{ status: 503, body: { status: "fetch_failed", detail: "fetch403" } }]);
+  return s.scan(REF).then((v) => {
+    assert.strictEqual(v, "error");
+    assert.strictEqual(s.calls.length, 4);
+  });
 });
 
 (async () => {

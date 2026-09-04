@@ -22,6 +22,13 @@ ENV CLAMAV_NO_CLAMD=false
 ENV CLAMAV_NO_FRESHCLAMD=false
 
 RUN apk add --no-cache nodejs
+# clamd's own limits, set above the scanner's 210 MiB cap so that clamd is
+# never the one refusing a file storage.rules allowed. The image ships a
+# clamd.conf; duplicate options are an error, so the defaults are removed
+# before ours are appended. MaxThreads bounds concurrent INSTREAMs and must
+# cover service.yaml's containerConcurrency with room to spare.
+RUN sed -i '/^StreamMaxLength\|^MaxFileSize\|^MaxScanSize\|^MaxThreads\|^MaxRecursion/d' /etc/clamav/clamd.conf \
+ && printf 'StreamMaxLength 220M\nMaxFileSize 220M\nMaxScanSize 500M\nMaxThreads 12\nMaxRecursion 16\n' >> /etc/clamav/clamd.conf
 
 WORKDIR /srv
 COPY server.js /srv/server.js
