@@ -1246,6 +1246,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // What a scanner said about each uploaded file, and — while a file is
+    // still being withheld — the download token being held back from it. A
+    // client that could read this collection could read the token out of it
+    // and reach a file that has not been cleared, which is the whole thing the
+    // scan exists to prevent. Server-only, both directions.
+    match /fileScans/{document=**} {
+      allow read, write: if false;
+    }
+
     // How far each retention pass has got. One timestamp per retention period,
     // no personal data — but it decides which orders the sweep looks at, and
     // anybody who could push it forward would stop buyer details ever being

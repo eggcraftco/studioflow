@@ -252,6 +252,11 @@ Storage security rules completely**. So the obvious enforcement —
 `allow read: if resource.metadata.nvScanStatus == "clean"` — would look like a
 control and stop nothing. Anyone with the URL still gets the file.
 
+**Decision, 4 September 2026:** option 1 now, option 3 before the second Amazon
+application. Option 1 closes the common case today without touching a client;
+option 3 is the only fully fail-closed answer and it deserves its own plan
+because it changes twenty call sites across four clients.
+
 Three ways to make it real, in increasing order of honesty and cost:
 
 1. **Strip and restore the download token.** On finalize, record the object's
@@ -265,6 +270,36 @@ Three ways to make it real, in increasing order of honesty and cost:
 3. **Stop using token URLs.** Read files through authenticated calls so Storage
    rules apply, and the metadata check becomes the enforcement. Twenty call
    sites, four clients, and the only option that is fully fail-closed.
+
+### What option 1 looks like, and what it does not close
+
+Built and tested on 4 September 2026, not deployed:
+
+- A finalize trigger sees every upload from every client, because they all land
+  as objects in one bucket.
+- **The token comes off before the scanner is asked anything.** That ordering is
+  the control: scanning first and holding afterwards leaves the file
+  downloadable for exactly as long as the scan takes, which is the window that
+  matters. The test asserts the order, not the end state.
+- On a clean verdict the **same** token goes back. A fresh one would be a
+  different URL, and the old URL is already written into a Firestore document
+  nobody is going to revisit.
+- Every other verdict leaves the token off. A scanner that throws, times out, or
+  returns a word we do not recognise is a withheld file, not a released one.
+- Only an infection deletes anything.
+- If the token cannot be removed at all, the trigger stops and does nothing
+  else — the file is still reachable, so scanning it would record a result for a
+  control that did not run.
+- The whole mechanism is **off unless a scanner is configured**, and off means
+  doing nothing rather than half of it. Turning it on without a scanner would
+  strip every token and make every upload permanently unreachable: fail-closed
+  applied to the wrong thing.
+- The held tokens live in a server-only `fileScans` collection. A client that
+  could read it could take the token and fetch the file being withheld.
+
+**What option 1 does not close:** a client that calls `getDownloadURL()` after
+the token was stripped mints a fresh one, and the file becomes reachable while
+still unscanned. That race is why option 3 exists.
 
 **This control is not "implemented" until one of these is in production.** The
 rule in §8 applies to it: a scanner that runs while the file is already
