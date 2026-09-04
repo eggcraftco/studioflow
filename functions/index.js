@@ -21339,19 +21339,30 @@ exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) 
       return;
     }
 
-    // Authenticate with a shared token when configured. Backward compatible: if
-    // TRACK17_WEBHOOK_TOKEN is unset the request is allowed (with a warning). Once set,
-    // add ?token=<value> to the 17TRACK webhook URL; requests without it are rejected.
+    // A shared token, and no way past it.
+    //
+    // This used to fail OPEN: with TRACK17_WEBHOOK_TOKEN unset, every request was
+    // accepted and a warning was written to the log. The token has been configured
+    // all along, so nothing was ever unauthenticated in practice — but the branch
+    // meant one missing environment variable, a rename or a deploy that dropped the
+    // env file would have silently turned a tracking endpoint into an open one that
+    // writes to orders. A control that disappears when its configuration does is not
+    // a control, and nothing on the request would have looked wrong.
+    //
+    // Now an absent token refuses the request. 503 rather than 401, because the
+    // fault is ours and not the sender's: 17TRACK should retry rather than treat the
+    // delivery as rejected.
     const expectedToken = String(process.env.TRACK17_WEBHOOK_TOKEN || "").trim();
-    if (expectedToken) {
-      const provided = String(req.query?.token || req.headers["x-studioflow-token"] || "");
-      if (!nvTimingSafeEqual(provided, expectedToken)) {
-        console.warn("track17Webhook: rejected request with invalid token.");
-        res.status(401).json({ ok: false, error: "invalid_token" });
-        return;
-      }
-    } else {
-      console.warn("track17Webhook: TRACK17_WEBHOOK_TOKEN not set — request not authenticated.");
+    if (!expectedToken) {
+      console.error("track17Webhook: TRACK17_WEBHOOK_TOKEN is not set — refusing every request until it is.");
+      res.status(503).json({ ok: false, error: "not_configured" });
+      return;
+    }
+    const provided = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+    if (!nvTimingSafeEqual(provided, expectedToken)) {
+      console.warn("track17Webhook: rejected request with invalid token.");
+      res.status(401).json({ ok: false, error: "invalid_token" });
+      return;
     }
 
     const payload = req.body || {};
@@ -31528,18 +31539,23 @@ function shopifyStoreRef(shop) {
   return admin.firestore().collection("shopifyStores").doc(shop);
 }
 
-// SHOP-004 — the offline token at rest.
+// SHOP-004 — the offline token at rest. Phase B.
 //
-// Written as an AES-256-GCM box under SHOPIFY_TOKEN_KEY (the Etsy scheme with
-// its own key) and read back only through shopifyStoreAccessToken. While
-// SHOPIFY_TOKEN_DUAL_WRITE is on — the app is in Shopify's review, planned
-// until 16 Sep 2026 — the plaintext field is still written and still serves as
-// the fallback, so a store whose box will not decrypt keeps syncing rather than
-// failing in front of a reviewer. Phase B turns the flag off, blanks the
-// plaintext everywhere and makes a box that will not decrypt an error. A store
-// that still carries only the plaintext is given its box the first time its
-// token is read.
-const SHOPIFY_TOKEN_DUAL_WRITE = true;
+// The token is an AES-256-GCM box under SHOPIFY_TOKEN_KEY, read back only
+// through shopifyStoreAccessToken. Phase A wrote a plaintext copy beside it so
+// that a store whose box would not decrypt kept syncing rather than failing in
+// front of a Shopify reviewer. That copy is the thing this phase removes: a
+// plaintext OAuth token sitting in the database is exactly what an encryption
+// control exists to prevent, and "we encrypt our tokens" is not true while one
+// is there.
+//
+// Phase B is done WITHOUT a migration and without a date. New tokens are
+// written boxed only. An old store still carrying plaintext keeps working, and
+// the first time its token is read it is boxed in place — and the plaintext is
+// cleared only after the new box has been decrypted back and checked against
+// what went in. So no store loses its token to a key that turns out to be
+// wrong, and no store is left behind by a sweep that did not reach it.
+const SHOPIFY_TOKEN_DUAL_WRITE = false;
 const shopifyTokenMigrationsInFlight = new Set();
 
 function shopifyTokenKey() {
@@ -31580,12 +31596,27 @@ function migrateShopifyStoreToken(shop, plaintext) {
   if (shopifyTokenMigrationsInFlight.has(shop)) return;
   const box = shopifyEncryptToken(plaintext);
   if (!box) return;   // no key in this function: a function that has one will do it
+
+  // The box is decrypted back and compared before the plaintext is dropped.
+  // Writing a box and deleting the original in one step trusts a key that has
+  // never been proved to read what it just wrote — and the failure would be
+  // silent and total: a store whose token is gone cannot be recovered, only
+  // reinstalled. This costs one decrypt and removes that whole class of loss.
+  let verified = "";
+  try { verified = etsyModule.decryptToken(box, shopifyTokenKey()); } catch { verified = ""; }
+  if (verified !== plaintext) {
+    console.warn("shopify token: box did not read back for", shop, "— keeping the plaintext");
+    return;
+  }
+
   shopifyTokenMigrationsInFlight.add(shop);
   shopifyStoreRef(shop).set({
     accessTokenEncrypted: box,
-    tokenEncryptedAt: admin.firestore.FieldValue.serverTimestamp()
+    tokenEncryptedAt: admin.firestore.FieldValue.serverTimestamp(),
+    // Phase B: the plaintext goes, now that the box is known to read back.
+    accessToken: admin.firestore.FieldValue.delete()
   }, { merge: true })
-    .then(() => console.log("shopify token: boxed in place for", shop))
+    .then(() => console.log("shopify token: boxed in place and plaintext cleared for", shop))
     .catch((error) => {
       shopifyTokenMigrationsInFlight.delete(shop);
       console.warn("shopify token: in-place boxing failed for", shop, error?.message || error);
@@ -31690,7 +31721,9 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
         } else {
           console.warn("shopify token: SHOPIFY_TOKEN_KEY unavailable, plaintext only for", shop);
         }
-        // Phase A keeps the plaintext beside the box; Phase B writes "" here.
+        // Phase B: the plaintext is written only when there is no box to write —
+        // which means no key in this function, and losing the token entirely
+        // would be worse than storing it.
         update.accessToken = SHOPIFY_TOKEN_DUAL_WRITE || !box ? accessToken : "";
       }
       for (const [key, limit] of [["shopName", 120], ["email", 160], ["scopes", 400], ["apiVersion", 20], ["currencyCode", 8]]) {
