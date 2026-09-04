@@ -1,6 +1,6 @@
-# The Amazon project — design (revision 2)
+# The Amazon project — design (revision 3)
 
-**Date:** 5 September 2026 (revision 2 — Secure Web Proxy removed)
+**Date:** 5 September 2026 (revision 3 — three corrections after review: no LB health check on serverless NEGs; `run.app` is closed to the internet, not to the project; Cloud Armor Standard's basic Adaptive Protection only)
 **Status:** design only. **Nothing has been created.** The user has approved
 the direction and the start of the `functions-amazon/` codebase. No cloud
 resource is created before the four items in §14 have been shown, and four
@@ -36,6 +36,24 @@ out, and egress is answered in layers that cost almost nothing:
 The proxy comes back only if a review of Amazon's or Google's documentation
 produces a concrete requirement for it. None found so far.
 
+**Revision 3** corrects three claims the user caught:
+
+1. **No load-balancer health check on `/healthz`.** Classic health checks are
+   not supported on serverless NEG backends; the earlier design listed one.
+   Cloud Run's own startup probe (in each `service-*.yaml`) is what gates
+   readiness. `/healthz` stays as a smoke and monitoring endpoint only.
+2. **`run.app` is closed to the internet, not to the project.** Under
+   `internal-and-cloud-load-balancing`, an authenticated call from Cloud
+   Scheduler in the same project is internal and is admitted — that is how
+   the sync tick reaches `amazon-sync`, which has no load-balancer path. What
+   the setting and the org policy guarantee is that the internet cannot reach
+   any service at its `run.app` address; the proof in `deploy.sh` is
+   exactly that: an unauthenticated request from outside answers 403/404.
+3. **Cloud Armor Standard, and only what Standard has.** Adaptive Protection
+   in the Standard tier is *basic alerting*: layer-7 DDoS attack alerts.
+   Attack signatures, suggested mitigation rules and auto-deploy are Cloud
+   Armor Enterprise features, are not in the cost table, and are not claimed.
+
 ## 1. Architecture — the final picture
 
 ```
@@ -46,15 +64,15 @@ produces a concrete requirement for it. None found so far.
  ┌────────────────────────── nivadesk-amazon  ·  VPC Service Controls perimeter ┼──────────────────────────────┐
  │                                                                              │                               │
  │  amazon.nivadesk.app  ──►  External HTTPS LB (managed cert)                  │                               │
- │                            └─► Cloud Armor "amazon-edge": WAF · rate limits · default DENY · Adaptive Prot. │
+ │                            └─► Cloud Armor "amazon-edge" (Standard): WAF · rate limits · default DENY        │
  │                                     │  serverless NEGs                       │                               │
  │        org policy run.allowedIngress = internal-and-cloud-load-balancing     │                               │
- │        (no service is reachable at its run.app address)                      │                               │
+ │        (run.app: closed to the internet; internal authenticated callers only) │                               │
  │                                     ▼                                        │                               │
  │   Cloud Run (gen2), one service per role, each its own service account:      │                               │
  │     amazon-oauth   /oauth/start  /oauth/callback                             │                               │
  │     amazon-admin   /admin/*   (OIDC: amazon-caller@eggcraft-studio only)     │                               │
- │     amazon-sync    (Cloud Scheduler, OIDC, every 30 min; no LB path)          │                               │
+ │     amazon-sync    (Cloud Scheduler → run.app, OIDC, every 30 min; no LB path) │                               │
  │        every outbound call ──► egress.js hostname allowlist + log ───────────┘                               │
  │                                     │  direct VPC egress (all traffic)                                       │
  │   VPC amazon-vpc / subnet 10.60.0.0/24 (flow logs ON)                                                        │
@@ -109,7 +127,7 @@ structural rather than a matter of remembering):
 
 | Constraint | Value | Why |
 |---|---|---|
-| `run.allowedIngress` | `internal-and-cloud-load-balancing` | no service can ever be reachable at its `run.app` address |
+| `run.allowedIngress` | `internal-and-cloud-load-balancing` | no service is reachable from the internet at its `run.app` address; internal authenticated callers (Cloud Scheduler, same project) still are |
 | `iam.disableServiceAccountKeyCreation` | enforced | no downloadable keys; identities exist only inside Google's runtime |
 | `iam.automaticIamGrantsForDefaultServiceAccounts` | enforced | the default compute account is created with no role at all |
 | `compute.vmExternalIpAccess` | deny all | there are no VMs; this keeps it that way |
@@ -131,8 +149,8 @@ Second-generation execution environment (Cloud Run Threat Detection needs it),
 | `amazon-oauth` | LB | `/oauth/start` | `amazon-oauth@` | Verifies a **connect intent** signed by the main project (HMAC, company id, owner uid, 10-minute expiry, single use), records the pending connection, redirects the browser to Login with Amazon with a `state` bound to the intent |
 | | LB | `/oauth/callback` | | Checks `state`, exchanges the LWA code, stores the refresh token as **one Secret Manager secret per connection**, writes the connection document, discovers marketplaces (`getMarketplaceParticipations`), redirects back to the main app with a status — never with a token |
 | `amazon-admin` | LB | `/admin/*` | `amazon-admin@` | Connection status, disconnect (deletes the refresh-token secret and marks the document), sync-now. Requires an OIDC token from `amazon-caller@eggcraft-studio`, verified against that exact identity and audience |
-| `amazon-sync` | Cloud Scheduler (OIDC, every 30 min) | — (no LB path) | `amazon-sync@` | For each connection: access token from the refresh token; Orders API **v2026-01-01**, `includedData` without BUYER, RECIPIENT or TAX; `sanitize.js` split; safe envelope → bridge |
-| `/healthz` | LB (startup probe uses it internally) | `/healthz` | — | readiness |
+| `amazon-sync` | Cloud Scheduler → its `run.app` address (OIDC, every 30 min; internal to the project) | — (no LB path) | `amazon-sync@` | For each connection: access token from the refresh token; Orders API **v2026-01-01**, `includedData` without BUYER, RECIPIENT or TAX; `sanitize.js` split; safe envelope → bridge |
+| `/healthz` | smoke tests and monitoring only | `/healthz` | — | Cloud Run's own startup probe uses it; the load balancer does **not** (classic health checks are not supported on serverless NEGs) |
 
 The bridge is not a separate service. **One identity per service** is
 cleaner than per-call impersonation, so `bridge.js` runs inside
@@ -180,18 +198,23 @@ Main project: `amazon-caller@eggcraft-studio` gets `run.invoker` on
 | 1000 | preconfigured WAF: `sqli-v33-stable`, `xss-v33-stable`, `lfi-v33-stable`, `rfi-v33-stable`, `rce-v33-stable`, `protocolattack-v33-stable`, `scannerdetection-v33-stable` (sensitivity 1) | deny 403 |
 | 2000 | rate limit `/oauth/*`: 30 req/min per client IP, ban 10 min on breach | throttle → deny 429 |
 | 2100 | rate limit `/admin/*`: 120 req/min per client IP | throttle |
-| 3000 | allow `/oauth/start`, `/oauth/callback`, `/admin/`, `/healthz` (exact / prefix) | allow |
+| 3000 | allow `/oauth/start`, `/oauth/callback`, `/admin/` (exact / prefix); `/healthz` only for smoke tests, from the operator's address | allow |
 | 2147483647 | everything else | **deny 403** |
 
-Adaptive Protection on (layer-7 DDoS). Logging on every rule, verbose.
-`amazon.nivadesk.app` is **DNS-only** at Cloudflare (not proxied), so Cloud
-Armor sees real client addresses and there is one edge, not two.
+Cloud Armor **Standard** tier. Adaptive Protection in Standard is basic
+alerting — layer-7 DDoS attack alerts, no attack signatures, no suggested
+rules, no auto-deploy; those are Enterprise and are not claimed. Logging on
+every rule, verbose. No load-balancer health check: serverless NEG backends
+do not support classic health checks; readiness is Cloud Run's own startup
+probe. `amazon.nivadesk.app` is **DNS-only** at Cloudflare (not proxied), so
+Cloud Armor sees real client addresses and there is one edge, not two.
 
 Beyond the edge, every service verifies identity itself: the intent
 signature on `/oauth/start`, the LWA `state` on `/oauth/callback`, an OIDC
 token from one named account on `/admin/*`, Cloud Scheduler's OIDC token on
-the sync service. And the org policy means the `run.app` addresses answer 403
-to the world.
+the sync service. The org policy means the `run.app` addresses answer 403 to
+the internet; Cloud Scheduler's authenticated call from inside the project is
+internal and is the sync's only path.
 
 ## 6. Egress — the firewall/ACL answer, outbound
 
@@ -255,8 +278,9 @@ enforce. Enforcement is a sign-off step.
 - **Notification:** findings of severity HIGH and CRITICAL → Pub/Sub → a
   small notifier → email to `contact@eggcraft.co.uk`. Cloud Armor
   blocked-request logs → log-based alert above a threshold.
-- **Prevention** is Cloud Armor (WAF rules, rate limits, Adaptive
-  Protection): blocked at the edge, not merely reported.
+- **Prevention** is Cloud Armor Standard (WAF rules, rate limits): blocked
+  at the edge, not merely reported. Adaptive Protection contributes basic
+  layer-7 DDoS *alerts* in this tier — detection, not mitigation.
 - **Logs:** bucket `amazon-audit`, **400-day** retention, receiving Admin
   Activity and Data Access audit logs for Firestore and Secret Manager, Cloud
   Armor logs, Cloud NAT logs, VPC Flow Logs, and the services' own logs.
@@ -302,8 +326,8 @@ refresh token anywhere but Secret Manager; an access token stored anywhere.
 | Control | Artifacts |
 |---|---|
 | Segmentation | perimeter and access-policy JSON; the org policies; dry-run report with dispositions; a recorded denied cross-project Firestore read; §1's diagram |
-| Firewall/ACL | Cloud Armor policy JSON and LB/NEG configuration; every service's ingress setting; the `run.allowedIngress` policy; VPC firewall rules; NAT and static-IP configuration; `egress.js` and its tests; log entries for one WAF block, one rate-limit block, one refused egress from the wrapper, one NAT translation; the `run.app` 403 |
-| IDS/IPS | SCC enablement and detector configuration; notification config; one delivered finding (test trigger); the log bucket's 400-day retention; Cloud Armor Adaptive Protection status |
+| Firewall/ACL | Cloud Armor policy JSON and LB/NEG configuration; every service's ingress setting; the `run.allowedIngress` policy; VPC firewall rules; NAT and static-IP configuration; `egress.js` and its tests; log entries for one WAF block, one rate-limit block, one refused egress from the wrapper, one NAT translation; the `run.app` 403 from the internet and the 200 from Cloud Scheduler |
+| IDS/IPS | SCC enablement and detector configuration; notification config; one delivered finding (test trigger); the log bucket's 400-day retention; Cloud Armor Standard's Adaptive Protection basic-alert setting |
 | Anti-malware | EDR console (devices, status, definition date, tamper protection); MDM policy export; device inventory; shared-responsibility note; the upload scanner's production report for the main product |
 
 Each artifact is a file under `docs/security/evidence/amazon/` with the
@@ -319,7 +343,7 @@ workload assumption is 5 connected sellers syncing every 30 minutes.
 |---|---|---|
 | External HTTPS LB forwarding rule | $0.025/h | ~$18 |
 | LB data processing | ~5 GiB | < $1 |
-| Cloud Armor policy + 6 rules + Adaptive Protection | $5 + 6 × $1 + requests | ~$12 |
+| Cloud Armor **Standard** policy + 6 rules (basic Adaptive Protection alerts included; Enterprise not used) | $5 + 6 × $1 + requests | ~$12 |
 | Cloud NAT gateway | $0.0014/h per instance in use, scale-to-zero services | ~$1–3 |
 | NAT data processing | $0.045/GiB, ~2 GiB | < $1 |
 | Static external IP (in use) | ~$0.005/h | ~$4 |
@@ -352,9 +376,9 @@ presented.
    not run): org policies, APIs, service accounts and IAM, VPC + subnet +
    firewall + router + NAT + static IP + flow logs, log bucket, Firestore,
    Artifact Registry.
-4. Build and deploy the three services from their YAML; verify `run.app`
-   answers 403 for each, and that an egress to a non-allowlisted host is
-   refused and logged.
+4. Build and deploy the three services from their YAML; verify each
+   `run.app` answers 403 to an unauthenticated request from the internet, and
+   that an egress to a non-allowlisted host is refused and logged.
 5. Load balancer, managed certificate, Cloud Armor `amazon-edge`. ⛔ **DNS**
    `amazon.nivadesk.app` → LB address, DNS-only at Cloudflare. *Shown first.*
 6. ⛔ **SCC Premium** on the project; detectors; notification path.
@@ -406,16 +430,15 @@ LB + certificate + Cloud Armor (step 5), SCC (6), perimeter (7–8).
 
 **14.4 Expected ingress and egress paths**
 
-Ingress (only these; everything else is denied at Cloud Armor and unreachable
-at `run.app`):
+Ingress (only these; everything else is denied at Cloud Armor, and `run.app`
+refuses the internet):
 
 | From | To | Through | Authenticated by |
 |---|---|---|---|
 | seller's browser | `amazon-oauth` `/oauth/start` | LB + Armor | signed connect intent (HMAC, 10 min, single use) |
 | Amazon (browser redirect) | `amazon-oauth` `/oauth/callback` | LB + Armor | `state` bound to the intent |
 | main project `amazonStatus` | `amazon-admin` `/admin/*` | LB + Armor | OIDC token, `amazon-caller@eggcraft-studio` only |
-| Cloud Scheduler | `amazon-sync` | internal (no LB) | OIDC token, scheduler service agent |
-| LB health check | `/healthz` | LB | — |
+| Cloud Scheduler (same project) | `amazon-sync` at its `run.app` address | internal — admitted by `internal-and-cloud-load-balancing` | OIDC token for `amazon-sync@`, audience = the service URL |
 | operator | console / gcloud | Google APIs | VPC-SC ingress rule on the audited identity |
 
 Egress (only these; the VPC firewall allows nothing but tcp:443, and the

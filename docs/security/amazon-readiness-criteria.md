@@ -105,12 +105,14 @@ not explicitly authorised.
 
 **Implementation.** All inbound HTTP enters through one external HTTPS load
 balancer with a **Cloud Armor** policy: a default-deny rule, allow rules for
-the four enumerated path prefixes, preconfigured WAF rule sets (SQLi, XSS,
-LFI, RFI, RCE, protocol attacks, scanner detection), per-client rate limits,
-and Adaptive Protection. Cloud Run ingress is `internal-and-cloud-load-balancing`
-on every service, enforced by the **`run.allowedIngress` organisation policy
-on the project**, so the default `run.app` address is not a way round the
-firewall. Every service authenticates callers (OIDC) on top of that. Outbound
+the enumerated path prefixes, preconfigured WAF rule sets (SQLi, XSS, LFI,
+RFI, RCE, protocol attacks, scanner detection), per-client rate limits, and
+— Standard tier — Adaptive Protection's basic layer-7 DDoS alerts (attack
+signatures and suggested mitigation are Enterprise features and are not
+claimed). Cloud Run ingress is `internal-and-cloud-load-balancing` on every
+service, enforced by the **`run.allowedIngress` organisation policy on the
+project**, so the default `run.app` address is closed to the internet; the
+only internal caller is Cloud Scheduler, authenticated, in the same project. Every service authenticates callers (OIDC) on top of that. Outbound
 traffic leaves by **direct VPC egress** through Cloud NAT with one static
 address; VPC firewall rules deny all egress except TCP/443; an
 **application-layer hostname allowlist** in the connector refuses any
@@ -121,10 +123,11 @@ not adopted: ~$900/month, and not required by Amazon's guidance —
 `amazon-hardened-project-design.md` §0.)
 
 **Passes when** an unauthenticated request to any path is refused at the
-edge, a request to a non-enumerated path is refused, the `run.app` address
-answers 403 for every service, an egress attempt to a host outside the
-allowlist is refused by the wrapper and logged, and a non-443 egress attempt
-is dropped by the VPC firewall.
+edge, a request to a non-enumerated path is refused, every `run.app` address
+answers 403 to an unauthenticated request from the internet while Cloud
+Scheduler's authenticated call still lands, an egress attempt to a host
+outside the allowlist is refused by the wrapper and logged, and a non-443
+egress attempt is dropped by the VPC firewall.
 
 **Evidence.** Cloud Armor policy (JSON) and LB configuration; the org policy;
 each service's ingress setting; VPC firewall rules, NAT and static-IP
@@ -156,7 +159,7 @@ and the log bucket's retention reads 400 days.
 **Evidence.** SCC service enablement (console and `gcloud scc`); detector
 configuration; the notification config; one real or test finding and its
 delivery; the log bucket retention setting; Cloud Armor's blocked-request log
-entries.
+entries and its Standard-tier Adaptive Protection alert setting.
 
 ### 4. Anti-malware on privileged endpoints and servers
 

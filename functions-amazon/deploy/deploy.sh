@@ -48,11 +48,12 @@ for role in oauth admin sync; do
   echo "  amazon-$role  $url  ingress=$ingress"
 done
 
-echo "══ 4. Proof: the run.app addresses answer 403 to the world ══"
+echo "══ 4. Proof: the run.app addresses answer 403 to an unauthenticated request from the internet ══"
+echo "   (Cloud Scheduler's authenticated call from inside the project is admitted — that is the sync's path)"
 for role in oauth admin sync; do
   url=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(status.url)')
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$url/healthz" || echo "000")
-  echo "  $url/healthz → $code $([ "$code" = "403" ] || [ "$code" = "404" ] && echo "✓ unreachable" || echo "❌ REACHABLE")"
+  echo "  $url/healthz → $code $([ "$code" = "403" ] || [ "$code" = "404" ] && echo "✓ closed to the internet" || echo "❌ REACHABLE FROM THE INTERNET")"
 done
 
 echo "══ done. Next: deploy/secrets.sh (secret IAM), deploy/scheduler.sh (the sync tick), infra/amazon/create-edge.sh (LB + Armor; DNS is a gate) ══"

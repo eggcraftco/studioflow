@@ -1,0 +1,42 @@
+# VPC-SC ingress rules for the amazon-information perimeter.
+# Rendered by perimeter.sh: PROJECT_NUMBER, MAIN_PROJECT_NUMBER, OPERATOR_EMAIL, PROJECT_ID.
+#
+# 1. The operator, from anywhere, to every restricted service: console and
+#    gcloud work from the audited human account and from nothing else.
+- ingressFrom:
+    identities:
+      - user:OPERATOR_EMAIL
+    sources:
+      - accessLevel: "*"
+  ingressTo:
+    operations:
+      - serviceName: "*"
+    resources:
+      - "*"
+# 2. The main project's caller account, to Cloud Run only: /admin/* through
+#    the load balancer is a Cloud Run invocation.
+- ingressFrom:
+    identities:
+      - serviceAccount:amazon-caller@eggcraft-studio.iam.gserviceaccount.com
+    sources:
+      - resource: projects/MAIN_PROJECT_NUMBER
+  ingressTo:
+    operations:
+      - serviceName: run.googleapis.com
+        methodSelectors:
+          - method: "*"
+    resources:
+      - projects/PROJECT_NUMBER
+# 3. Cloud Scheduler's service agent, to Cloud Run: the sync tick.
+- ingressFrom:
+    identities:
+      - serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudscheduler.iam.gserviceaccount.com
+    sources:
+      - accessLevel: "*"
+  ingressTo:
+    operations:
+      - serviceName: run.googleapis.com
+        methodSelectors:
+          - method: "*"
+    resources:
+      - projects/PROJECT_NUMBER

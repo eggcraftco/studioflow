@@ -16,6 +16,9 @@
 # Requires: gcloud authenticated as the audited operator account, with
 # Organization Policy Administrator and Project Creator on the organisation.
 set -euo pipefail
+# gcloud must never wait on a prompt ("enable the API?", "install component?"):
+# a script that blocks on stdin in a non-interactive run looks like a hang.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 ORG_ID="378239481010"                      # eggcraft.co.uk
 BILLING="01789B-AD5731-2C3C72"
@@ -53,6 +56,8 @@ policy() {
   local constraint="$1" body="$2" file
   file=$(mktemp)
   printf 'name: projects/%s/policies/%s\nspec:\n  rules:\n%s\n' "$PROJECT" "$constraint" "$body" > "$file"
+  # The dry run shows the policy itself, not a temp-file path.
+  [ "$DRY_RUN" = "1" ] && printf '  [dry-run] org-policy %s ← %s\n' "$constraint" "$(printf '%s' "$body" | tr -d '\n' | sed 's/  */ /g')"
   run gcloud org-policies set-policy "$file" --project="$PROJECT"
   rm -f "$file"
 }

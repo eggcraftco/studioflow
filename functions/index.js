@@ -5975,7 +5975,9 @@ const commerce = {
   capabilities: require("./commerce/capabilities"),
   shopify: require("./commerce/adapters/shopify"),
   cursors: require("./commerce/cursors"),
-  health: require("./commerce/health")
+  health: require("./commerce/health"),
+  // The Amazon adapter: SP-API order (already sanitized upstream) → canonical envelope.
+  amazon: require("./commerce/adapters/amazon")
 };
 const { createEtsyConnectFunctions } = require("./etsyConnect");
 // Etsy's callback URL is registered with Etsy itself and cannot drift: it is
@@ -34215,6 +34217,109 @@ exports.maintainFileScans = onSchedule(
   async () => {
     const counts = await malwareScanTrigger.sweep(Date.now());
     console.log(`maintainFileScans: ${JSON.stringify(counts)}`);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// The Amazon bridge — the main project's half. Amazon Information lives in
+// the nivadesk-amazon project (docs/security/amazon-hardened-project-design.md);
+// what arrives here is a sanitized, allowlisted envelope, and what leaves is a
+// signed connect intent or an admin call. Logic in commerce/amazon/ingest.js;
+// this is wiring.
+const AMAZON_INTENT_HMAC_KEY = defineSecret("AMAZON_INTENT_HMAC_KEY");
+const AMAZON_CALLER_SA = "amazon-caller@eggcraft-studio.iam.gserviceaccount.com";
+const AMAZON_INGEST_AUDIENCE = "https://europe-west2-eggcraft-studio.cloudfunctions.net/ingestAmazonEnvelope";
+const amazonIngestModule = require("./commerce/amazon/ingest");
+
+function amazonOrderDocId(companyId, amazonOrderId) {
+  return `amazon_${wooSafeDocPart(companyId)}_${wooSafeDocPart(amazonOrderId)}`;
+}
+
+// Engine context for a workspace: the same fields the other connectors give
+// the engine, resolved from the workspace's settings.
+async function amazonContextFor(companyId) {
+  const companySnap = await admin.firestore().collection("companies").doc(String(companyId)).get();
+  if (!companySnap.exists) return null;
+  const settingsSnap = await companySettingsDocRef(companyId).get();
+  return {
+    orderIdFor: (envelope) => amazonOrderDocId(companyId, envelope.identity.external_id),
+    defaultDeliveryTime: resolveDefaultDeliveryTime(settingsSnap.data()),
+    defaultStatus: "new",
+    syncCancellations: true,
+    reconcileLineItems
+  };
+}
+
+let amazonIngestSingleton = null;
+function amazonIngest() {
+  if (!amazonIngestSingleton) {
+    const { OAuth2Client } = require("google-auth-library");
+    const oidc = new OAuth2Client();
+    amazonIngestSingleton = amazonIngestModule.createAmazonIngest({
+      db: admin.firestore(),
+      applyEnvelope: (db, envelope, ctx) => commerce.engine.applyEnvelope(db, envelope, ctx),
+      normalize: (order, ctx) => commerce.amazon.normalizeAmazonOrder(order, ctx),
+      contextFor: amazonContextFor,
+      verifyIdToken: async (idToken) => (await oidc.verifyIdToken({ idToken, audience: AMAZON_INGEST_AUDIENCE })).getPayload(),
+      audience: AMAZON_INGEST_AUDIENCE
+    });
+  }
+  return amazonIngestSingleton;
+}
+
+// Inbound: amazon-sync@nivadesk-amazon only, OIDC-verified, allowlist-validated.
+exports.ingestAmazonEnvelope = onRequest(
+  { region: "europe-west2", memory: "256MiB", timeoutSeconds: 60, invoker: "private" },
+  async (req, res) => {
+    if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return; }
+    const out = await amazonIngest().ingest(req.body, req.headers);
+    res.status(out.status).json(out.body);
+  }
+);
+
+// Outbound: the owner's connect intent. Runs as amazon-caller@, which holds
+// the signing key and nothing else.
+exports.amazonConnectStart = onCall(
+  { region: "europe-west2", secrets: [AMAZON_INTENT_HMAC_KEY], serviceAccount: AMAZON_CALLER_SA },
+  async (request) => {
+    const { uid, companyId } = await requireWorkspaceForBilling(request, true);
+    const connect = amazonIngestModule.createAmazonConnect({ hmacKeyHex: AMAZON_INTENT_HMAC_KEY.value() });
+    return { url: connect.startUrlFor({ companyId, ownerUid: uid }) };
+  }
+);
+
+function amazonAdminClient() {
+  const { GoogleAuth } = require("google-auth-library");
+  const auth = new GoogleAuth();
+  return amazonIngestModule.createAmazonAdminClient({
+    identityToken: async () => {
+      const client = await auth.getIdTokenClient(amazonIngestModule.ADMIN_BASE_URL);
+      const headers = await client.getRequestHeaders();
+      return String(headers.Authorization || headers.authorization || "").replace(/^Bearer\s+/i, "");
+    }
+  });
+}
+
+exports.amazonStatus = onCall(
+  { region: "europe-west2", serviceAccount: AMAZON_CALLER_SA },
+  async (request) => {
+    const { companyId } = await requireWorkspaceForBilling(request, false);
+    const r = await amazonAdminClient().status(companyId);
+    if (r.status !== 200) throw new HttpsError("unavailable", "Amazon connection status is not available right now.");
+    return r.data;
+  }
+);
+
+exports.amazonDisconnect = onCall(
+  { region: "europe-west2", serviceAccount: AMAZON_CALLER_SA },
+  async (request) => {
+    const { companyId } = await requireWorkspaceForBilling(request, true);
+    const connectionId = String(request.data?.connectionId || "").trim();
+    if (!connectionId) throw new HttpsError("invalid-argument", "connectionId is required.");
+    const r = await amazonAdminClient().disconnect(companyId, connectionId);
+    if (r.status === 404) throw new HttpsError("not-found", "No such Amazon connection.");
+    if (r.status !== 200) throw new HttpsError("unavailable", "Amazon could not be disconnected right now.");
+    return { ok: true };
   }
 );
 
