@@ -186,6 +186,40 @@ check("both adapters write the address keys the order document reads", () => {
   assert.strictEqual(ebay.customer.shipping_address.state, "Greater London");
 });
 
+// ---- the whole point: what reaches the Finance Engine ------------------------
+
+check("a marketplace-collected tax reaches the order as the studio's to show, not to declare", () => {
+  const { shopOwnedFields } = require("../../commerce/envelopeToOrder");
+  const { computeOrderFinance } = require("../../finance/engine");
+  const env = normalizeAmazonOrder(amazonOrder(), amazonCtx([amazonItem()]));
+  const fields = shopOwnedFields(env, { companyId: "co1" });
+  assert.strictEqual(fields.customFields.Source, "Amazon", "the sale would be filed as a manual order");
+  assert.strictEqual(fields.customFields["Amazon Currency"], "GBP", "the dashboard reads the currency from this key");
+  assert.strictEqual(fields.taxAmountKnown, true);
+  assert.strictEqual(fields.taxResponsibility, "platform");
+  assert.strictEqual(fields.taxAmount, 20);
+  assert.strictEqual(fields.shippingPostalCode, "N1 1AA");
+
+  const block = computeOrderFinance({ ...fields, paidAmount: 120, remainingAmount: 0 }, { vatRegistered: true, pricesIncludeVat: true, defaultTaxRate: 20, feePercentage: 0 });
+  assert.strictEqual(block.vatDue, 0, "Amazon's own tax was added to the studio's VAT return");
+  assert.strictEqual(block.platformCollectedTax, 20, "and then it vanished, so the order no longer adds up");
+  assert.strictEqual(block.taxNeedsReview, false, "Amazon said plainly who collected it; nothing to ask");
+});
+
+check("a seller-collected eBay tax is the studio's VAT, and reaches it", () => {
+  const { shopOwnedFields } = require("../../commerce/envelopeToOrder");
+  const { computeOrderFinance } = require("../../finance/engine");
+  const env = normalizeEbayOrder(ebayOrder({
+    lineItems: [{ lineItemId: "L1", title: "Signet ring", quantity: 1, lineItemCost: money("100.00"), taxes: [{ amount: money("20.00"), collectedBy: "seller" }] }],
+    pricingSummary: { priceSubtotal: money("100.00"), total: money("120.00") }
+  }), { connectionId: "con_ebay_1" });
+  const fields = shopOwnedFields(env, { companyId: "co1" });
+  assert.strictEqual(fields.taxResponsibility, "merchant");
+  const block = computeOrderFinance({ ...fields, paidAmount: 120, remainingAmount: 0 }, { vatRegistered: true, pricesIncludeVat: true, defaultTaxRate: 20, feePercentage: 0 });
+  assert.strictEqual(block.vatDue, 20, "the studio's own VAT went missing");
+  assert.strictEqual(block.platformCollectedTax, 0);
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }
