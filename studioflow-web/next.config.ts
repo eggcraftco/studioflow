@@ -27,9 +27,20 @@ const SECURITY_HEADERS = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
   },
-  // Cross-origin isolation for the document itself: a window opened from here
-  // cannot reach back into it, and another origin cannot embed our resources.
-  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // NOT "same-origin", and the difference is a working sign-in button.
+  //
+  // Firebase Auth's signInWithPopup opens Google's or Apple's page in a popup
+  // and reads the credential back through window.opener. "same-origin" puts the
+  // popup in a different browsing context group and severs that reference, so
+  // the popup completes and the app never hears about it — the button spins
+  // forever. Three paths depend on it: Google and Apple sign-in
+  // (components/AuthProviders.tsx), the ChatGPT connect page, and unlocking a
+  // locked session with reauthenticateWithPopup.
+  //
+  // "same-origin-allow-popups" keeps the protection that matters — a document
+  // that opens US cannot reach into this one — while letting popups we open
+  // ourselves keep talking back.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" }
 ];
 

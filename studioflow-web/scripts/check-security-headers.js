@@ -7,7 +7,7 @@ const REQUIRED = {
   "x-frame-options": /DENY/,
   "referrer-policy": /strict-origin-when-cross-origin/,
   "permissions-policy": /camera=\(\)/,
-  "cross-origin-opener-policy": /same-origin/,
+  "cross-origin-opener-policy": /^same-origin-allow-popups$/,
   "cross-origin-resource-policy": /same-origin/
 };
 const server = spawn("npx", ["next", "start", "-p", "3311"], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: "production" } });

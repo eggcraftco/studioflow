@@ -32,7 +32,8 @@ const REQUIRED = [
     "a full URL leaking to a third party can carry an order id"],
   ["Permissions-Policy", /camera=\(\)/,
     "capabilities this app does not use should not be available to anything running on the page"],
-  ["Cross-Origin-Opener-Policy", /same-origin/, "a window opened from here must not reach back into it"],
+  ["Cross-Origin-Opener-Policy", /"same-origin-allow-popups"/,
+    "sign-in must keep working"],
   ["Cross-Origin-Resource-Policy", /same-origin/, "another origin must not embed our resources"]
 ];
 
@@ -59,6 +60,31 @@ check("HSTS is not preloaded", () => {
   assert.ok(!/preload/.test(config.slice(at, at + 200)),
     "HSTS preload was added. It cannot be undone on the browsers' timetable — if this is deliberate, " +
     "change this test and say why in the commit.");
+});
+
+check("the opener policy allows the popups sign-in depends on", () => {
+  // This one was wrong when it shipped, and the runtime check did not catch it
+  // because it verified the header was PRESENT, not that the feature it governs
+  // still worked. "same-origin" severs window.opener, and Firebase Auth reads
+  // the credential back through window.opener — so Google sign-in, Apple
+  // sign-in and unlocking a locked session would all spin forever while the
+  // header sat there looking correct.
+  const at = config.indexOf('"Cross-Origin-Opener-Policy"');
+  assert.ok(at > 0, "the opener policy is gone");
+  const line = config.slice(at, at + 160);
+  assert.ok(/same-origin-allow-popups/.test(line),
+    'Cross-Origin-Opener-Policy must be "same-origin-allow-popups". Plain "same-origin" breaks ' +
+    "signInWithPopup and reauthenticateWithPopup — the Google and Apple buttons and the session unlock.");
+
+  // And the reason has to still be true: if popup auth is ever removed, this
+  // can be tightened, but not before.
+  const web = path.join(__dirname, "..", "..", "..", "studioflow-web");
+  const usesPopup = ["components/AuthProviders.tsx", "components/SessionAutoLock.tsx"]
+    .filter((rel) => fs.existsSync(path.join(web, rel)))
+    .some((rel) => /(signInWithPopup|reauthenticateWithPopup)/.test(fs.readFileSync(path.join(web, rel), "utf8")));
+  assert.ok(usesPopup,
+    "no popup sign-in is left in the app — the opener policy can be tightened to same-origin now, " +
+    "deliberately, and this check updated to say so");
 });
 
 check("the framework version is not announced", () => {

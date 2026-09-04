@@ -171,9 +171,10 @@ Nothing in the new project is built. The order matters more than the list, and
 each of the last four steps needs sign-off before it runs.
 
 1. **Web hardening on the main application** — done 4 September 2026: HSTS,
-   `nosniff`, frame protection, referrer and permissions policy, and the
-   framework banner removed. A Content-Security-Policy follows, in report-only
-   first, once the origin inventory is complete.
+   `nosniff`, frame protection, referrer and permissions policy, cross-origin
+   opener and resource policies, and the framework banner removed. Not yet
+   deployed. The Content-Security-Policy follows separately — see §7a, which is
+   the brief for it.
 2. **Storage malware scanning** — built and tested in staging, fail-closed: a
    file that has not been scanned clean is not usable.
 3. **EDR on the production devices**, with the update cadence recorded.
@@ -189,6 +190,42 @@ each of the last four steps needs sign-off before it runs.
    path is tested.
 10. Evidence pack for all four controls.
 11. Only then: change the Developer Profile answer and submit a new application.
+
+## 7a. The Content-Security-Policy brief
+
+A CSP is the one header here that can break the site, so it is written from an
+inventory rather than from a template, and it goes out **report-only** first.
+The inventory below was taken from the source on 4 September 2026.
+
+**Origins that must be allowed**
+
+| Directive | Origin | Why |
+|---|---|---|
+| `script-src` | `'self'` | every app chunk |
+| `script-src` | `https://www.google.com` | reCAPTCHA loader, injected by App Check on **every** page |
+| `script-src` | `https://www.gstatic.com` | reCAPTCHA's real bundle, and `importScripts` in the FCM service worker |
+| `script-src` | `https://apis.google.com` | the gapi iframe bootstrap that `signInWithPopup` initialises |
+| `script-src` | `https://www.googletagmanager.com` | Google Ads gtag, public marketing pages and `/signup` only |
+| `script-src` | `https://www.googleadservices.com`, `https://googleads.g.doubleclick.net` | **unproven from source.** gtag for an `AW-` property normally pulls these. Confirm on a live network trace before enforcing, or ad conversions stop recording silently |
+| `connect-src` | Firestore, Storage, Identity Toolkit, Functions, App Check endpoints | the SDKs |
+| `frame-src` | the Storage download origin | `app/f/[...slug]/route.ts:150` renders the shared file inside an iframe |
+| `font-src` | `'self'` | fonts are self-hosted by `next/font` — no `fonts.gstatic.com` |
+
+**Two things a strict policy cannot have here**
+
+- `style-src` needs `'unsafe-inline'`. There are ~2,256 React `style={{…}}`
+  attributes, three styled-jsx runtime injections, and hand-written print
+  documents with `<style>` blocks. styled-jsx only reads a nonce from a
+  `<meta property="csp-nonce">` tag this app does not render.
+- `script-src` needs a **nonce**, threaded from middleware, because Next's App
+  Router emits an inline flight bootstrap on every response. Three of our own
+  inline scripts can take that nonce; one cannot — the print script that
+  `app/inventory/ItemLabelModal.tsx:71` writes into an `about:blank` popup with
+  `document.write`. Either hash it, allow `'unsafe-inline'`, or move the
+  `print()` call to the opener the way the order and invoice popups already do.
+
+**Sequence:** report-only → collect violations from real traffic → fix what the
+reports show → enforce. Never the other way round.
 
 ## 8. The rule this document exists to enforce
 
