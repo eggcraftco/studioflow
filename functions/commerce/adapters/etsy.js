@@ -91,6 +91,14 @@ function normalizeEtsyReceipt(receipt, ctx = {}) {
     order: {
       order_source: "etsy", sales_channel: "etsy", currency,
       subtotal: subtotal, discount_total: moneyOf(receipt?.discount_amt), tax_total: sumDecimal([moneyOf(receipt?.total_tax_cost), moneyOf(receipt?.total_vat_cost)]),
+      // Deliberately not answered here. Etsy collects and remits the tax itself
+      // in some jurisdictions and leaves the seller responsible in others, and
+      // the receipt does not say which — total_tax_cost and total_vat_cost are
+      // amounts, not an assignment of liability. Calling every Etsy sale
+      // marketplace-collected would quietly wipe VAT the studio really owes;
+      // calling it merchant would invent VAT it does not. So the amount is
+      // recorded, kept out of the VAT total, and the order asks.
+      tax_responsibility: "unknown", tax_included_in_price: true,
       shipping_total: moneyOf(receipt?.total_shipping_cost), grand_total: grand,
       platform_status: isCancelled ? "cancelled" : (status || null),
       payment_status: isRefunded ? "refunded" : (isPaid ? "paid" : "unpaid"),

@@ -196,6 +196,10 @@ function normalizeSquareOrder(order, ctx = {}) {
       currency: order?.total_money?.currency || null,
       subtotal: sumDecimal(lineItems.map((li) => li.line_total)),
       discount_total: squareMoneyToDecimal(order?.total_discount_money), tax_total: squareMoneyToDecimal(order?.total_tax_money),
+      // Square is the studio's own till and payment rail, not a marketplace —
+      // the tax it works out is the studio's to declare. total_money, which
+      // becomes grand_total below, already has the tax in it.
+      tax_responsibility: "merchant", tax_included_in_price: true,
       shipping_total: serviceCharge, grand_total: squareMoneyToDecimal(order?.total_money),
       platform_status: platformStatus,
       payment_status: paymentStatusOf(order, tenders, refunds),

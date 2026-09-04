@@ -1,5 +1,5 @@
 {
-  "engineVersion": 3,
+  "engineVersion": 4,
   "note": "Golden vectors for the Finance Engine. The server test runs these against functions/finance/engine.js; every platform's mirror must run the same file and produce the same numbers. Adding a case here is how a rule becomes real. Spec: docs/finance-engine.md.",
   "cases": [
     {
@@ -127,13 +127,13 @@
     },
     {
       "name": "a refund reduces the profit",
-      "why": "The decision lists refunds and adjustments as a deduction. No platform deducted refundedAmount.",
+      "why": "The decision lists refunds as a deduction. The fixture matters as much as the rule: every writer of refundedAmount — the bank link, and the Woo, Shopify, Etsy and envelope mappers — ALSO lowers paidAmount by the same money, and the field is read-only on every screen. So the shape below is what production writes, and the £1,000 the sale was worth has to be reconstructed before the refund is taken off it once.",
       "settings": {
         "feePercentage": 0,
         "taxCalculationType": "Revenue"
       },
       "order": {
-        "paidAmount": 1000,
+        "paidAmount": 800,
         "remainingAmount": 0,
         "refundedAmount": 200,
         "taxRate": 0
@@ -480,6 +480,311 @@
         "revenue": 125,
         "platformFee": 8.25,
         "netProfit": 116.75
+      }
+    },
+    {
+      "name": "a shop's own tax is the VAT due, not a rate the shop never sent",
+      "why": "Every channel mapper writes taxRate 0 because no shop API returns a rate. The engine used to gate VAT on the rate, so a real £120 of tax on a £1,000 sale reported as no VAT at all.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "taxAmount": 120,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant",
+        "taxIncludedInPrice": true
+      },
+      "expect": {
+        "revenue": 1000,
+        "vatDue": 120,
+        "platformCollectedTax": 0,
+        "taxNeedsReview": false,
+        "customerTotal": 1000,
+        "netProfit": 880
+      }
+    },
+    {
+      "name": "tax a marketplace collects and remits is not the studio's VAT",
+      "why": "Etsy collects and remits in some jurisdictions. Counting it as the studio's output VAT overstates a return that cannot be recovered from the number alone.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "taxAmount": 120,
+        "taxAmountKnown": true,
+        "taxResponsibility": "platform",
+        "taxIncludedInPrice": true
+      },
+      "expect": {
+        "revenue": 1000,
+        "vatDue": 0,
+        "platformCollectedTax": 120,
+        "taxNeedsReview": false,
+        "netProfit": 1000
+      }
+    },
+    {
+      "name": "a tax nobody has claimed is shown, left out of VAT, and flagged",
+      "why": "Guessing wrong overstates a VAT return in one direction and understates it in the other. The engine refuses both and asks.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "taxAmount": 120,
+        "taxAmountKnown": true
+      },
+      "expect": {
+        "revenue": 1000,
+        "vatDue": 0,
+        "platformCollectedTax": 120,
+        "taxNeedsReview": true
+      }
+    },
+    {
+      "name": "a shop that charged no tax is believed, and the workspace rate does not fill in",
+      "why": "taxAmountKnown is what tells a real zero apart from a field nobody filled in — the same distinction platformFeeKnown makes for the commission.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "taxAmount": 0,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant"
+      },
+      "expect": {
+        "revenue": 1000,
+        "vatDue": 0,
+        "platformCollectedTax": 0,
+        "taxNeedsReview": false,
+        "netProfit": 1000
+      }
+    },
+    {
+      "name": "without the flag nothing changes: the rate still rules",
+      "why": "A manual order carries NivaDesk's own taxAmount, computed from the rate. Reading it as a shop's figure would replace the engine with a stale copy of itself.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1200,
+        "remainingAmount": 0,
+        "taxAmount": 999
+      },
+      "expect": {
+        "revenue": 1200,
+        "vatDue": 200,
+        "platformCollectedTax": 0,
+        "taxNeedsReview": false
+      }
+    },
+    {
+      "name": "tax added on top of the price raises what the customer pays",
+      "why": "A shop knows per order whether tax sits inside the price or is added to it; the workspace setting is only the fallback.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxAmount": 200,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant",
+        "taxIncludedInPrice": false
+      },
+      "expect": {
+        "revenue": 1000,
+        "vatDue": 200,
+        "customerTotal": 1200
+      }
+    },
+    {
+      "name": "a shop's tax figure does not reach a workspace that is not VAT registered",
+      "why": "Registration is the workspace's own fact and outranks anything a shop says.",
+      "settings": {
+        "vatRegistered": false,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxAmount": 120,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant"
+      },
+      "expect": {
+        "vatDue": 0,
+        "platformCollectedTax": 0
+      }
+    },
+    {
+      "name": "a refund on an order that carries lines is unchanged",
+      "why": "An order with lines is worth what its lines say, so the refund was never inside the revenue and is subtracted once as before.",
+      "settings": {
+        "vatRegistered": false,
+        "feePercentage": 0
+      },
+      "order": {
+        "lineItems": [
+          {
+            "id": "1",
+            "name": "Ring",
+            "quantity": 1,
+            "unitPrice": 1000,
+            "lineTotal": 1000
+          }
+        ],
+        "paidAmount": 800,
+        "remainingAmount": 0,
+        "refundedAmount": 200
+      },
+      "expect": {
+        "revenue": 1000,
+        "refunded": 200,
+        "netProfit": 800
+      }
+    },
+    {
+      "name": "the margin scheme ignores a shop's tax figure",
+      "why": "The margin scheme's VAT is computed from the buying and selling price, which no shop knows. Using its figure would apply the wrong scheme's answer.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0,
+        "vatMethod": "margin"
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "watchPurchasePrice": 400,
+        "taxAmount": 120,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant"
+      },
+      "expect": {
+        "revenue": 1000,
+        "grossMargin": 600,
+        "vatBase": 600,
+        "vatDue": 100
+      }
+    },
+    {
+      "name": "a known fee is rounded once, on every platform",
+      "why": "Two mirrors rounded a known fee and two did not, and netProfit subtracts it — so the four implementations sat a penny apart on a fee with three decimals. The engine rounds it where it is computed.",
+      "settings": {
+        "feePercentage": 3,
+        "vatRegistered": false
+      },
+      "order": {
+        "paidAmount": 100,
+        "remainingAmount": 0,
+        "paymentFee": 8.255,
+        "platformFeeKnown": true
+      },
+      "expect": {
+        "platformFee": 8.26,
+        "netProfit": 91.74
+      }
+    },
+    {
+      "name": "an empty vatMethod falls through to the setting the workspace has always stored",
+      "why": "The server's || treats an empty string as absent; Swift's ?? and Kotlin's ?: fire on null only, so a workspace with vatMethod \"\" beside taxCalculationType Profit took the standard scheme on two platforms and the margin scheme on the others.",
+      "settings": {
+        "vatMethod": "",
+        "taxCalculationType": "Profit",
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "watchPurchasePrice": 400
+      },
+      "expect": {
+        "method": "margin",
+        "vatBase": 600,
+        "vatDue": 100
+      }
+    },
+    {
+      "name": "a placeholder rate of zero does not zero the margin scheme",
+      "why": "Channel mappers write taxRate 0 because no shop API returns a rate. With the amount known that zero holds no information, so the workspace's own rate has to stand for the one calculation a shop cannot do.",
+      "settings": {
+        "vatRegistered": true,
+        "pricesIncludeVat": true,
+        "defaultTaxRate": 20,
+        "feePercentage": 0,
+        "vatMethod": "margin"
+      },
+      "order": {
+        "paidAmount": 1000,
+        "remainingAmount": 0,
+        "taxRate": 0,
+        "watchPurchasePrice": 400,
+        "taxAmount": 120,
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant"
+      },
+      "expect": {
+        "taxRate": 20,
+        "vatBase": 600,
+        "vatDue": 100
+      }
+    },
+    {
+      "name": "money stored as text is read, not treated as nothing",
+      "why": "Order fields have been text on this platform for years. A runner that reads only JSON numbers reports zero and stays green while the mirror is right — so the vector carries strings on purpose.",
+      "settings": {
+        "feePercentage": 0,
+        "vatRegistered": false
+      },
+      "order": {
+        "paidAmount": "1,250.50",
+        "remainingAmount": "0",
+        "watchPurchasePrice": "250.50",
+        "taxAmount": "100",
+        "taxAmountKnown": true,
+        "taxResponsibility": "merchant"
+      },
+      "expect": {
+        "revenue": 1250.5,
+        "directCost": 250.5,
+        "grossMargin": 1000,
+        "netProfit": 1000
       }
     }
   ]

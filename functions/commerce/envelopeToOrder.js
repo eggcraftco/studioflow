@@ -142,6 +142,19 @@ function shopOwnedFields(envelope, ctx = {}) {
     shippingPhone: ship.phone || phone,
     deliveryCost: toLegacyNumber(envelope.order.shipping_total) ?? 0,
     taxAmount: toLegacyNumber(envelope.order.tax_total) ?? 0,
+    // The shop's own tax figure, and whose it is.
+    //
+    // Every channel writes `taxRate: 0` below because no shop API returns a
+    // rate, and the Finance Engine gated VAT on the rate — so a sale that
+    // charged £120 of tax reported no VAT at all while this number sat beside
+    // it. `taxAmountKnown` is what lets the engine use the amount instead, and
+    // what tells a shop that charged nothing apart from a field nobody filled
+    // in. `taxResponsibility` decides whether it joins the studio's VAT due or
+    // is shown as tax the marketplace collected; `unknown` asks rather than
+    // guesses. See functions/finance/engine.js.
+    taxAmountKnown: true,
+    taxResponsibility: envelope.order.tax_responsibility || "unknown",
+    taxIncludedInPrice: envelope.order.tax_included_in_price !== false,
     customFields: providerCustomFields(envelope)
     // No top-level `source`/`orderSource`: neither live mapper writes them; the
     // order's provider identity lives in its `commerce` map.

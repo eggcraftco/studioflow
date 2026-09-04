@@ -8,6 +8,8 @@
 const crypto = require("crypto");
 const { toDecimalString, normalizeCurrency } = require("./money");
 
+const TAX_RESPONSIBILITIES = new Set(["merchant", "platform", "unknown"]);
+
 const SCHEMA_VERSION = 1;
 const PROVIDERS = new Set(["shopify", "etsy", "woocommerce", "inbound", "square"]);
 const ENTITY_TYPES = new Set(["order"]);
@@ -70,6 +72,17 @@ function buildEnvelope(input) {
       subtotal: toDecimalString(order.subtotal),
       discount_total: toDecimalString(order.discount_total),
       tax_total: toDecimalString(order.tax_total),
+      // Whose tax that is. A shop tells us what it charged; it does not tell us
+      // whether the studio declares it, and those are different questions. Own
+      // shops (Shopify, WooCommerce, Square, a website) calculate the tax and
+      // leave the remitting to the merchant. A marketplace may collect and remit
+      // it itself, and Etsy does so in some jurisdictions and not others — so
+      // "it is an Etsy order" is not an answer, and the adapter says `unknown`
+      // rather than guessing. See TAX_MERCHANT/TAX_PLATFORM/TAX_UNKNOWN in
+      // functions/finance/engine.js.
+      tax_responsibility: TAX_RESPONSIBILITIES.has(order.tax_responsibility) ? order.tax_responsibility : "unknown",
+      // Whether the tax sits inside grand_total or was added on top of it.
+      tax_included_in_price: typeof order.tax_included_in_price === "boolean" ? order.tax_included_in_price : null,
       shipping_total: toDecimalString(order.shipping_total),
       grand_total: toDecimalString(order.grand_total),
       platform_status: order.platform_status ? String(order.platform_status) : null,

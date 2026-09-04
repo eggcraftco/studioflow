@@ -95,6 +95,13 @@ function normalizeShopifyOrder(order, ctx = {}) {
       subtotal: order?.subtotal_price,
       discount_total: order?.total_discounts,
       tax_total: order?.total_tax,
+      // The studio's own storefront. Shopify helps calculate the tax and does
+      // not remit it for the merchant, so this is the studio's VAT to declare.
+      tax_responsibility: "merchant",
+      // True for every channel, whatever the shop's own pricing model: the
+      // total NivaDesk stores is the amount the customer was charged, and that
+      // figure always has the tax inside it.
+      tax_included_in_price: true,
       shipping_total: shippingTotal(order),
       grand_total: order?.total_price,
       platform_status: order?.cancelled_at ? "cancelled" : (financial || null),

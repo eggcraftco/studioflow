@@ -103,6 +103,9 @@ function normalizeWooOrder(order, ctx = {}) {
       currency: order?.currency,
       subtotal: sumDecimal(lineItems.map((li) => li?.subtotal)),
       discount_total: order?.discount_total, tax_total: order?.total_tax, shipping_total: order?.shipping_total, grand_total: order?.total,
+      // The studio's own WordPress shop: it calculates the tax, the studio
+      // declares it. The total is what the customer paid, tax included.
+      tax_responsibility: "merchant", tax_included_in_price: true,
       platform_status: status || null,
       payment_status: PAYMENT_STATUS[status] || (order?.date_paid ? "paid" : "unknown"),
       fulfillment_status: shipments.length ? "fulfilled" : (status === "completed" ? "fulfilled" : "unfulfilled"),

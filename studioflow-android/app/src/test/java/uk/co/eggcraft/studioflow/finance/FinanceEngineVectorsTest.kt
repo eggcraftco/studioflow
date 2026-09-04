@@ -107,6 +107,23 @@ class FinanceEngineVectorsTest {
 
     private fun double(value: Any?): Double? = (value as? Double)
 
+    /**
+     * Money the way the engine reads it.
+     *
+     * A vector may store an amount as a JSON number OR as text, because order
+     * fields on this platform have been text for years and `readAmount` is part
+     * of the engine's contract. A runner that understood only numbers read 0 for
+     * a string and stayed green while the mirror was right — a green suite that
+     * proves nothing is worse than a red one. Strings go through the mirror's
+     * own readAmount, which is what the app does with a Firestore string.
+     */
+    private fun money(value: Any?): Double = when (value) {
+        is Double -> value
+        is Number -> value.toDouble()
+        is String -> FinanceEngine.readAmount(value)
+        else -> 0.0
+    }
+
     private fun inputFrom(order: Map<String, Any?>): FinanceEngine.Input {
         val custom = asMap(order["customFields"]).mapValues { (_, raw) ->
             when (raw) {
@@ -115,19 +132,44 @@ class FinanceEngineVectorsTest {
                 else -> raw?.toString().orEmpty()
             }
         }
-        val lineItems = (order["lineItems"] as? List<*>).orEmpty().mapNotNull { item ->
-            double(asMap(item)["lineTotal"])
+        // Every object counts, even one whose lineTotal is missing or text — the
+        // server counts the ITEM and reads its total with readAmount, so a
+        // runner that dropped such a line would disagree about `fromLineItems`
+        // and therefore about which revenue rule applies.
+        val lineItems = (order["lineItems"] as? List<*>).orEmpty().map { item ->
+            money(asMap(item)["lineTotal"])
         }
         return FinanceEngine.Input(
-            paidAmount = double(order["paidAmount"]) ?: 0.0,
-            remainingAmount = double(order["remainingAmount"]) ?: 0.0,
-            watchPurchasePrice = double(order["watchPurchasePrice"]) ?: 0.0,
-            deliveryCost = double(order["deliveryCost"]) ?: 0.0,
-            refundedAmount = double(order["refundedAmount"]) ?: 0.0,
-            paymentFee = double(order["paymentFee"]) ?: 0.0,
+            paidAmount = money(order["paidAmount"]),
+            remainingAmount = money(order["remainingAmount"]),
+            watchPurchasePrice = money(order["watchPurchasePrice"]),
+            deliveryCost = money(order["deliveryCost"]),
+            refundedAmount = money(order["refundedAmount"]),
+            paymentFee = money(order["paymentFee"]),
             platformFeeKnown = order["platformFeeKnown"] == true,
-            taxRate = if (order.containsKey("taxRate")) double(order["taxRate"]) else null,
+            taxRate = if (order.containsKey("taxRate")) money(order["taxRate"]) else null,
             taxType = order["taxType"] as? String ?: "",
+            // The tax a shop actually charged, and whose it is.
+            //
+            // A vector input that is not read here is not tested: the mirror
+            // would compute the case with the field missing, quietly agree with
+            // itself, and the suite would stay green while a real Etsy order
+            // came out wrong. `taxAmountKnown` is the whole gate — a stored
+            // `taxAmount` on a manual order is NivaDesk's own figure, so
+            // without the flag the rate still rules and this must carry the
+            // flag through exactly as the vectors write it.
+            taxAmountKnown = order["taxAmountKnown"] == true,
+            taxAmount = money(order["taxAmount"]),
+            // Left as the raw string the shop sent — "seller", "marketplace"
+            // and the rest are the engine's to normalise, not this runner's. A
+            // synonym translated here would test the translation instead of the
+            // mirror.
+            taxResponsibility = order["taxResponsibility"] as? String ?: "",
+            // Nullable on purpose. Absent means the shop did not say, which is
+            // not the same as "no": it falls back to the workspace's own
+            // pricesIncludeVat. A plain Boolean defaulting to false would answer
+            // for the shop and make every silent order look tax-exclusive.
+            taxIncludedInPrice = order["taxIncludedInPrice"] as? Boolean,
             lineItemTotals = lineItems,
             customFields = custom
         )
@@ -144,6 +186,16 @@ class FinanceEngineVectorsTest {
         taxMilestoneDateSeconds = double(settings["taxMilestoneDate"])
     )
 
+    /**
+     * Resolves an expected key to the figure the mirror produced.
+     *
+     * Every key a vector expects has to appear here, and the `else` throws for
+     * exactly that reason: a key nobody mapped would otherwise be skipped, the
+     * case would count as passed, and the suite would stay green over a figure
+     * no one ever compared. The vectors are the only thing holding four
+     * implementations to the same arithmetic, so a missing branch is a hole in
+     * the net rather than an omission.
+     */
     private fun figure(block: FinanceEngine.Block, field: String): Any? = when (field) {
         "revenue" -> block.revenue
         "receivablesTotal" -> block.receivablesTotal
@@ -163,6 +215,16 @@ class FinanceEngineVectorsTest {
         "pricesIncludeVat" -> block.pricesIncludeVat
         "fromLineItems" -> block.fromLineItems
         "platformFeeKnown" -> block.platformFeeKnown
+        // Where the tax figure came from and whose it is. `platformCollectedTax`
+        // is money the customer paid that the studio never declares, and
+        // `taxNeedsReview` is the engine refusing to guess when nobody has said
+        // — both are reported beside VAT due rather than folded into it, so a
+        // mirror could get vatDue right and still be wrong about the return.
+        "taxAmountKnown" -> block.taxAmountKnown
+        "taxResponsibility" -> block.taxResponsibility
+        "taxIncludedInPrice" -> block.taxIncludedInPrice
+        "platformCollectedTax" -> block.platformCollectedTax
+        "taxNeedsReview" -> block.taxNeedsReview
         "orphanKeys" -> block.orphanKeys
         else -> throw IllegalArgumentException("the vectors expect a figure the mirror does not expose: $field")
     }
@@ -180,7 +242,10 @@ class FinanceEngineVectorsTest {
         )
 
         val cases = (root["cases"] as? List<*>).orEmpty()
-        assertTrue("no vectors were read", cases.size >= 15)
+        // The floor is the real count, not a number set when the file was
+        // smaller: at 15 a parser fault could silently skip seventeen vectors
+        // and the suite would still call itself green.
+        assertTrue("expected every vector to be read, got ${cases.size}", cases.size >= 36)
 
         val failures = mutableListOf<String>()
         for (raw in cases) {
@@ -216,6 +281,22 @@ class FinanceEngineVectorsTest {
         val settings = FinanceEngine.Settings(feePercentage = 3.0, taxCalculationType = "Profit")
         assertEquals(FinanceEngine.compute(order, settings), FinanceEngine.compute(order, settings))
         assertEquals(400.0, FinanceEngine.compute(order, settings).directCost, 0.005)
+    }
+
+    @Test
+    fun `an expected key the runner cannot resolve fails loudly instead of passing quietly`() {
+        // The one failure this file cannot survive. When the engine gains a
+        // field and the vectors start expecting it, a runner that shrugged at
+        // the unknown name would report a green suite over a figure it never
+        // compared — the worst possible answer, because it is indistinguishable
+        // from agreement. So the net is checked here rather than trusted.
+        val block = FinanceEngine.compute(FinanceEngine.Input(paidAmount = 100.0), FinanceEngine.Settings())
+        try {
+            figure(block, "aFieldTheEngineHasNotGrownYet")
+            throw AssertionError("the runner accepted an expected key it cannot resolve")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("aFieldTheEngineHasNotGrownYet"))
+        }
     }
 
     @Test

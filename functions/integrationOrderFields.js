@@ -29,6 +29,15 @@ const INTEGRATION_SHOP_OWNED_FIELDS = new Set([
   // it — the first delivery would carry the refund and the second would take
   // it away again.
   "refundedAmount",
+  // The tax the shop charged, whether it said so at all, whose tax it is, and
+  // whether it sits inside the price. All four travel together: a resync that
+  // carried the amount without the flag would leave the engine reading a stale
+  // rate, and one that carried the amount without the responsibility would put
+  // a marketplace's tax into the studio's VAT return.
+  "taxAmount",
+  "taxAmountKnown",
+  "taxResponsibility",
+  "taxIncludedInPrice",
   // The commission the platform actually took, and the flag that says the
   // number is theirs rather than the workspace's percentage estimate. They
   // travel together and must both survive a resync, or the finance engine goes

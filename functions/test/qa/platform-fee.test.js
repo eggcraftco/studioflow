@@ -108,8 +108,18 @@ check("a person who types a fee by hand still wins", () => {
 
 check("the engine version moved, so the sweep re-stamps every order", () => {
   // The stored finance block on every existing order was computed by the old
-  // rule. Raising the version is what makes the sweep walk them again.
-  assert.strictEqual(engine.ENGINE_VERSION, 3);
+  // rule. Raising the version is what makes the sweep walk them again, so the
+  // number is pinned here: changing the arithmetic without changing it leaves
+  // every existing order carrying the old answer for ever, and this test is
+  // the thing that makes that an edit somebody had to mean.
+  //
+  // 3 added the platform's own commission. 4 added the shop's own tax figure,
+  // whose tax it is, and the refund that was subtracted twice.
+  assert.strictEqual(engine.ENGINE_VERSION, 4);
+  // And the vectors must be describing the same engine, or four platforms are
+  // being held to a version that no longer exists.
+  const vectors = require("../../finance/vectors.json");
+  assert.strictEqual(vectors.engineVersion, engine.ENGINE_VERSION);
 });
 
 (async () => {

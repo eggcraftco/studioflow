@@ -30,23 +30,87 @@ func stringMap(_ raw: Any?) -> [String: String] {
     return out
 }
 
+
+/// Money the way the engine reads it.
+///
+/// A vector may store an amount as a JSON number OR as text, because order
+/// fields on this platform have been text for years and `readAmount` is part of
+/// the engine's contract. A runner that understood only numbers reported 0 for
+/// a string and stayed green while the mirror was right — a green suite that
+/// proves nothing is worse than a red one. Strings go through the mirror's own
+/// `readAmount`, which is what the app does with a Firestore string.
+func money(_ raw: Any?) -> Double {
+    if let number = raw as? NSNumber, !(number is NSNull) {
+        // CFBoolean also bridges to NSNumber; a boolean is not an amount.
+        if CFGetTypeID(number) == CFBooleanGetTypeID() { return 0 }
+        return number.doubleValue
+    }
+    if let text = raw as? String { return NDFinanceEngine.readAmount(text) }
+    return 0
+}
+
+/// Strictly a JSON boolean. The server demands `=== true`, so a 1 is not a yes.
+func flag(_ raw: Any?) -> Bool? {
+    guard let number = raw as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+    return number.boolValue
+}
+
 func inputFrom(_ order: [String: Any]) -> NDFinanceEngine.Input {
     var input = NDFinanceEngine.Input()
-    input.paidAmount = (order["paidAmount"] as? NSNumber)?.doubleValue ?? 0
-    input.remainingAmount = (order["remainingAmount"] as? NSNumber)?.doubleValue ?? 0
-    input.watchPurchasePrice = (order["watchPurchasePrice"] as? NSNumber)?.doubleValue ?? 0
-    input.deliveryCost = (order["deliveryCost"] as? NSNumber)?.doubleValue ?? 0
-    input.refundedAmount = (order["refundedAmount"] as? NSNumber)?.doubleValue ?? 0
-    input.paymentFee = (order["paymentFee"] as? NSNumber)?.doubleValue ?? 0
-    input.platformFeeKnown = (order["platformFeeKnown"] as? NSNumber)?.boolValue ?? false
-    input.taxRate = order.keys.contains("taxRate") ? (order["taxRate"] as? NSNumber)?.doubleValue : nil
+    input.paidAmount = money(order["paidAmount"])
+    input.remainingAmount = money(order["remainingAmount"])
+    input.watchPurchasePrice = money(order["watchPurchasePrice"])
+    input.deliveryCost = money(order["deliveryCost"])
+    input.refundedAmount = money(order["refundedAmount"])
+    input.paymentFee = money(order["paymentFee"])
+    input.platformFeeKnown = flag(order["platformFeeKnown"]) ?? false
+    input.taxRate = order.keys.contains("taxRate") ? money(order["taxRate"]) : nil
     input.taxType = order["taxType"] as? String ?? ""
+    // What the shop said about the tax it charged. `taxAmountKnown` is the gate:
+    // without it a `taxAmount` is NivaDesk's own figure, computed from the rate,
+    // and reading it back as a shop's answer would replace the engine with a
+    // stale copy of itself. `taxIncludedInPrice` is read the same way `taxRate`
+    // is — absent means the order does not say, and the workspace setting
+    // stands, which is not the same thing as the order saying `false`.
+    input.taxAmountKnown = flag(order["taxAmountKnown"]) ?? false
+    input.taxAmount = money(order["taxAmount"])
+    input.taxResponsibility = order["taxResponsibility"] as? String
+    input.taxIncludedInPrice = order.keys.contains("taxIncludedInPrice")
+        ? flag(order["taxIncludedInPrice"])
+        : nil
     input.customFields = stringMap(order["customFields"])
     if let items = order["lineItems"] as? [[String: Any]] {
-        input.lineItemTotals = items.compactMap { ($0["lineTotal"] as? NSNumber)?.doubleValue }
+        // Every object counts, even one whose lineTotal is missing or text —
+        // the server counts the ITEM and reads its total with readAmount, so a
+        // runner that dropped such a line would disagree about `fromLineItems`
+        // and about which revenue rule applies.
+        input.lineItemTotals = items.map { money($0["lineTotal"]) }
     }
     return input
 }
+
+// The other half of the same trap. A new EXPECTED key with no case in `figure`
+// is caught below, loudly. A new INPUT key that nothing above reads is not
+// caught by anything: the mirror computes the order as if the field were never
+// there, agrees with itself, and prints PASS while disagreeing with the server.
+// So the reader states what it reads, and a vector carrying anything else is a
+// failure rather than a quiet omission.
+let readOrderKeys: Set<String> = [
+    "paidAmount", "remainingAmount", "watchPurchasePrice", "deliveryCost", "refundedAmount",
+    "paymentFee", "platformFeeKnown", "taxRate", "taxType", "taxAmountKnown", "taxAmount",
+    "taxResponsibility", "taxIncludedInPrice", "customFields", "lineItems"
+]
+
+let readSettingsKeys: Set<String> = [
+    "feePercentage", "defaultTaxRate", "vatRegistered", "pricesIncludeVat", "vatMethod",
+    "taxCalculationType", "taxMilestoneEnabled", "taxMilestoneDate"
+]
+
+// Fields a vector carries ON PURPOSE for the engine to ignore. Hiding the Base
+// Cost in the card settings used to remove it from the profit; two vectors set
+// the flag to prove it no longer does, so "nothing reads it" is the correct
+// answer here and not an omission.
+let ignoredSettingsKeys: Set<String> = ["financialShowBaseCost"]
 
 func settingsFrom(_ raw: [String: Any]) -> NDFinanceEngine.Settings {
     var settings = NDFinanceEngine.Settings()
@@ -81,7 +145,17 @@ func figure(_ block: NDFinanceEngine.Block, _ field: String) -> Any? {
     case "pricesIncludeVat": return block.pricesIncludeVat
     case "fromLineItems": return block.fromLineItems
     case "platformFeeKnown": return block.platformFeeKnown
+    case "taxAmountKnown": return block.taxAmountKnown
+    case "taxResponsibility": return block.taxResponsibility
+    case "taxIncludedInPrice": return block.taxIncludedInPrice
+    case "platformCollectedTax": return block.platformCollectedTax
+    case "taxNeedsReview": return block.taxNeedsReview
     case "orphanKeys": return block.orphanKeys
+    // Every key a vector can expect needs a case here. A missing one is not a
+    // compile error and not a failure — the guard below turns it into a loud
+    // "the mirror does not expose this figure", which is the whole point: a key
+    // that silently fell through would let the mirror disagree with the server
+    // and still print PASS.
     default: return nil
     }
 }
@@ -91,12 +165,20 @@ let cases = root["cases"] as? [[String: Any]] ?? []
 for testCase in cases {
     let name = testCase["name"] as? String ?? "?"
     let paymentDateMs = ((testCase["options"] as? [String: Any])?["paymentDateMs"] as? NSNumber)?.doubleValue
+    let order = testCase["order"] as? [String: Any] ?? [:]
+    let settings = testCase["settings"] as? [String: Any] ?? [:]
     let block = NDFinanceEngine.compute(
-        order: inputFrom(testCase["order"] as? [String: Any] ?? [:]),
-        settings: settingsFrom(testCase["settings"] as? [String: Any] ?? [:]),
+        order: inputFrom(order),
+        settings: settingsFrom(settings),
         paymentDateMs: paymentDateMs
     )
     var wrong: [String] = []
+    for key in order.keys.sorted() where !readOrderKeys.contains(key) {
+        wrong.append("order.\(key): the vector sets this field and the runner never reads it")
+    }
+    for key in settings.keys.sorted() where !readSettingsKeys.contains(key) && !ignoredSettingsKeys.contains(key) {
+        wrong.append("settings.\(key): the vector sets this field and the runner never reads it")
+    }
     for (field, expected) in (testCase["expect"] as? [String: Any] ?? [:]) {
         guard let actual = figure(block, field) else {
             wrong.append("\(field): the mirror does not expose this figure")

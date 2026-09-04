@@ -13,12 +13,33 @@
 // Do not "improve" a formula here. Change functions/finance/engine.js, add a
 // vector, then port it across. Spec: docs/finance-engine.md.
 
-export const FINANCE_ENGINE_VERSION = 3;
+export const FINANCE_ENGINE_VERSION = 4;
 
 export const REMAINING_PREFIX = "financialRemaining::";
 export const EXPENSE_PREFIX = "financialExpense::";
 
 export type VatMethod = "standard" | "margin" | "none";
+
+/**
+ * Whose tax is it. A shop tells us what tax it charged; it does not tell us
+ * whether that tax is the studio's to declare, and conflating the two gets the
+ * VAT return wrong in one direction or the other.
+ *
+ *   merchant  the studio charged it and the studio declares it — a Shopify,
+ *             WooCommerce or Square sale is normally this.
+ *   platform  the marketplace collected it and remits it itself, so it belongs
+ *             on the order but NOT in the studio's VAT due.
+ *   unknown   nobody has said, and the engine refuses to guess: the amount is
+ *             shown, left out of VAT due, and the order is marked for review.
+ *
+ * Per order, not per channel — Etsy remits in some jurisdictions and leaves the
+ * seller responsible in others, so "it is an Etsy order" is not an answer.
+ */
+export type TaxResponsibility = "merchant" | "platform" | "unknown";
+
+export const TAX_MERCHANT = "merchant";
+export const TAX_PLATFORM = "platform";
+export const TAX_UNKNOWN = "unknown";
 
 export type FinanceBlock = {
   engineVersion: number;
@@ -26,6 +47,16 @@ export type FinanceBlock = {
   taxRate: number;
   pricesIncludeVat: boolean;
   vatRegistered: boolean;
+  /** Whether the shop told us the tax it charged, rather than a rate to derive it from. */
+  taxAmountKnown: boolean;
+  /** Whose tax it is. Only consulted when `taxAmountKnown`; otherwise "merchant". */
+  taxResponsibility: TaxResponsibility;
+  /** Whether that tax sits inside the price or is added on top of it. */
+  taxIncludedInPrice: boolean;
+  /** Tax a marketplace collected and remits itself — real money, never the studio's VAT. */
+  platformCollectedTax: number;
+  /** A known tax amount nobody has claimed. Shown, left out of VAT due, flagged for a human. */
+  taxNeedsReview: boolean;
   revenue: number;
   receivablesTotal: number;
   directCost: number;
@@ -62,6 +93,14 @@ export type FinanceEngineOrder = {
   paymentFee?: unknown;
   /** Set only by a connector that was told the platform's real commission. */
   platformFeeKnown?: unknown;
+  /** Set only by a connector that was told the tax the shop actually charged. */
+  taxAmountKnown?: unknown;
+  /** The shop's own tax figure. Read only when `taxAmountKnown`. */
+  taxAmount?: unknown;
+  /** merchant | platform | unknown — only consulted when `taxAmountKnown`. */
+  taxResponsibility?: unknown;
+  /** Whether that tax sits inside the price. Falls back to the workspace setting. */
+  taxIncludedInPrice?: unknown;
   taxRate?: unknown;
   taxType?: unknown;
   lineItems?: Array<{ lineTotal?: unknown } | null | undefined> | null;
@@ -144,6 +183,22 @@ function readPercentage(raw: unknown, fallback: number): number {
 
 function readBoolean(raw: unknown, fallback: boolean): boolean {
   return typeof raw === "boolean" ? raw : fallback;
+}
+
+/**
+ * `seller` and `self` are the merchant; `marketplace` and `facilitator` are the
+ * platform. An empty value is the caller's fallback — nobody has said — and
+ * anything we do not recognise is `unknown` rather than a guess.
+ */
+export function normalizeTaxResponsibility(
+  raw: unknown,
+  fallback: TaxResponsibility = "unknown"
+): TaxResponsibility {
+  const text = String(raw == null ? "" : raw).trim().toLowerCase();
+  if (!text) return fallback;
+  if (text === "merchant" || text === "seller" || text === "self") return "merchant";
+  if (text === "platform" || text === "marketplace" || text === "facilitator") return "platform";
+  return "unknown";
 }
 
 /** `Revenue` is the standard scheme and `Profit` is the margin scheme. */
@@ -263,14 +318,23 @@ export function computeOrderFinance(
   const expenses = customLineTotal(customFields, EXPENSE_PREFIX, "orderExpenseItemsJSON");
   const items = lineItemsTotal(source);
 
+  const refunded = readAmount(source.refundedAmount);
+
+  // An order with invoice lines is worth what its lines say. Without lines the
+  // sale is measured from the money, and that is where a refund used to be
+  // counted twice: every writer of `refundedAmount` also lowers `paidAmount` by
+  // the same money, so the sale shrank by the refund and then the profit line
+  // subtracted it again — a £1,000 sale refunded £200 came out £200 short.
+  // Adding it back restores what the sale was WORTH, which is what a line-item
+  // order already reports and what the single subtraction below then takes off
+  // exactly once.
   const revenue = items.count > 0
     ? items.total
-    : readAmount(source.paidAmount) + readAmount(source.remainingAmount) + receivables.total;
+    : readAmount(source.paidAmount) + readAmount(source.remainingAmount) + receivables.total + refunded;
 
   const directCost = readAmount(source.watchPurchasePrice);
   const otherExpenses = expenses.total;
   const deliveryCost = readAmount(source.deliveryCost);
-  const refunded = readAmount(source.refundedAmount);
 
   const grossMargin = revenue - directCost;
   // What the sale actually cost to take, when the shop told us. The percentage
@@ -280,23 +344,72 @@ export function computeOrderFinance(
   // from a field nobody filled in — every existing writer of `paymentFee` puts
   // the estimate there, so a number alone proves nothing.
   const platformFee = source.platformFeeKnown === true
-    ? Math.abs(readAmount(source.paymentFee))
+    ? round2(Math.abs(readAmount(source.paymentFee)))
     : round2((revenue * settings.feePercentage) / 100);
 
   const method = resolveVatMethod(source, settings, paymentDateMs);
-  const rate = Object.prototype.hasOwnProperty.call(source, "taxRate") && source.taxRate !== null && source.taxRate !== ""
+  const storedRate = Object.prototype.hasOwnProperty.call(source, "taxRate") && source.taxRate !== null && source.taxRate !== ""
     ? readPercentage(source.taxRate, settings.defaultTaxRate)
     : settings.defaultTaxRate;
+  // A channel order carries `taxRate: 0` as a placeholder, not as an answer:
+  // no shop API returns a rate, so the mappers write zero and send the real
+  // figure in `taxAmount` instead. Once the amount is known that zero holds no
+  // information, and reading it as "zero-rated" would zero the margin scheme's
+  // VAT too — a calculation no shop can do for us.
+  const rate = source.taxAmountKnown === true && storedRate === 0 ? settings.defaultTaxRate : storedRate;
 
   let vatBase = 0;
   if (method === "standard") vatBase = revenue;
   else if (method === "margin") vatBase = Math.max(grossMargin, 0);
 
+  // The tax the shop itself charged, when it told us. Every channel mapper
+  // writes `taxRate: 0` because no shop API returns a rate, and the gate below
+  // is on the rate — so a Shopify, WooCommerce, Etsy, Square or website sale
+  // reported no VAT at all while `taxAmount` held the real figure the customer
+  // paid. Re-deriving a rate from the amount would be worse than useless on a
+  // mixed basket, so a known amount is simply used as the amount.
+  // `taxAmountKnown` tells a shop that said "no tax" apart from a field nobody
+  // filled in — the same distinction `platformFeeKnown` makes for the fee.
+  const taxAmountKnown = source.taxAmountKnown === true;
+  const knownTaxAmount = taxAmountKnown ? Math.abs(readAmount(source.taxAmount)) : 0;
+  const taxResponsibility: TaxResponsibility = taxAmountKnown
+    ? normalizeTaxResponsibility(source.taxResponsibility)
+    : "merchant";
+
+  // Whether the tax sits inside the price or is added to it. A shop knows this
+  // per order and says so; without a shop's answer the workspace's own setting
+  // stands, which is how every order behaved before.
+  const taxInsidePrice = taxAmountKnown && typeof source.taxIncludedInPrice === "boolean"
+    ? source.taxIncludedInPrice
+    : settings.pricesIncludeVat;
+
+  // Tax a marketplace collected and remits itself is real money the customer
+  // paid, so it belongs on the order — but it is not the studio's to declare,
+  // so it is reported beside VAT due rather than inside it. An unknown
+  // responsibility is treated the same way and flagged, because guessing wrong
+  // overstates a VAT return in one direction or understates it in the other and
+  // neither is recoverable from the number alone.
+  const merchantOwnsTax = taxResponsibility === "merchant";
+  const platformCollectedTax = taxAmountKnown && !merchantOwnsTax ? round2(knownTaxAmount) : 0;
+  const taxNeedsReview = taxAmountKnown && taxResponsibility === "unknown";
+
   let vatDue = 0;
-  if (settings.vatRegistered && method !== "none" && rate > 0 && vatBase > 0) {
-    vatDue = settings.pricesIncludeVat
-      ? round2((vatBase * rate) / (100 + rate))
-      : round2((vatBase * rate) / 100);
+  if (settings.vatRegistered && method !== "none") {
+    if (taxAmountKnown) {
+      // The shop's own figure, never re-derived. Only the studio's own share of
+      // it reaches VAT due; the margin scheme is a NivaDesk-side calculation
+      // that a shop knows nothing about, so a known amount does not apply there.
+      if (merchantOwnsTax && method === "standard") vatDue = round2(knownTaxAmount);
+      else if (merchantOwnsTax && vatBase > 0 && rate > 0) {
+        vatDue = taxInsidePrice
+          ? round2((vatBase * rate) / (100 + rate))
+          : round2((vatBase * rate) / 100);
+      }
+    } else if (rate > 0 && vatBase > 0) {
+      vatDue = settings.pricesIncludeVat
+        ? round2((vatBase * rate) / (100 + rate))
+        : round2((vatBase * rate) / 100);
+    }
   }
 
   const netProfit = revenue - vatDue - directCost - platformFee - deliveryCost - otherExpenses - refunded;
@@ -307,6 +420,14 @@ export function computeOrderFinance(
     taxRate: rate,
     pricesIncludeVat: settings.pricesIncludeVat,
     vatRegistered: settings.vatRegistered,
+    // Where the tax figure came from and whose it is, so a screen can say
+    // "Platform collected tax" rather than showing a VAT total that quietly
+    // disagrees with what the customer paid.
+    taxAmountKnown,
+    taxResponsibility,
+    taxIncludedInPrice: taxInsidePrice,
+    platformCollectedTax,
+    taxNeedsReview,
 
     revenue: round2(revenue),
     receivablesTotal: round2(receivables.total),
@@ -320,7 +441,11 @@ export function computeOrderFinance(
     vatBase: round2(vatBase),
     vatDue,
     netProfit: round2(netProfit),
-    customerTotal: round2(settings.pricesIncludeVat ? revenue : revenue + vatDue),
+    // What the customer is asked to pay. Identical to revenue when the price
+    // already includes the tax. Tax the marketplace collected is money the
+    // customer paid too, so it counts here even though it never reaches the
+    // studio's VAT return.
+    customerTotal: round2(taxInsidePrice ? revenue : revenue + vatDue + platformCollectedTax),
 
     fromLineItems: items.count > 0,
     receivableLines: receivables.lines,

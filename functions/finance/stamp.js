@@ -75,6 +75,14 @@ function createFinanceStamp({
   // write on every pass, for ever.
   const COMPARED = [
     "engineVersion", "method", "taxRate", "pricesIncludeVat", "vatRegistered",
+    // Where the fee and the tax figures came from, and whose the tax is. A
+    // screen that shows "Platform fee £30" or a VAT total has to be able to say
+    // whether that is the shop's own number or NivaDesk's estimate, and a
+    // marketplace's tax has to be visible without joining the studio's VAT.
+    // `platformFeeKnown` was computed from version 3 and never stored, so no
+    // client could tell the two apart even though the engine could.
+    "platformFeeKnown", "taxAmountKnown", "taxResponsibility", "taxIncludedInPrice",
+    "platformCollectedTax", "taxNeedsReview",
     "revenue", "receivablesTotal", "directCost", "grossMargin", "platformFee", "deliveryCost",
     "otherExpenses", "refunded", "vatBase", "vatDue", "netProfit",
     "customerTotal", "fromLineItems"

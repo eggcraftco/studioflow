@@ -18,7 +18,7 @@ package uk.co.eggcraft.studioflow.finance
  */
 object FinanceEngine {
 
-    const val VERSION = 3
+    const val VERSION = 4
 
     const val REMAINING_PREFIX = "financialRemaining::"
     const val EXPENSE_PREFIX = "financialExpense::"
@@ -26,6 +26,26 @@ object FinanceEngine {
     const val METHOD_STANDARD = "standard"
     const val METHOD_MARGIN = "margin"
     const val METHOD_NONE = "none"
+
+    // Whose tax is it. A shop tells us what tax it charged; it does not tell us
+    // whether that tax is the studio's to declare, and conflating the two gets
+    // the VAT return wrong in one direction or the other.
+    //
+    //   merchant  the studio charged it and the studio declares it. Shopify,
+    //             WooCommerce and Square sales are normally this — those
+    //             platforms help calculate the tax, they do not remit it.
+    //   platform  the marketplace collected it and remits it itself. It belongs
+    //             on the order so the totals add up, and NOT in the VAT due.
+    //   unknown   nobody has said. The engine refuses to guess: the amount is
+    //             shown, left out of VAT due, and the order is marked for
+    //             review.
+    //
+    // Deliberately per order, not per channel — Etsy collects and remits in some
+    // jurisdictions and leaves the seller responsible in others, so "it is an
+    // Etsy order" is not an answer.
+    const val TAX_MERCHANT = "merchant"
+    const val TAX_PLATFORM = "platform"
+    const val TAX_UNKNOWN = "unknown"
 
     data class Line(val title: String, val amount: Double)
 
@@ -35,6 +55,20 @@ object FinanceEngine {
         val taxRate: Double,
         val pricesIncludeVat: Boolean,
         val vatRegistered: Boolean,
+        /** Whether the tax figure is the shop's own or nobody filled it in. */
+        val taxAmountKnown: Boolean,
+        /** merchant, platform or unknown — see the constants above. */
+        val taxResponsibility: String,
+        /** Whether the tax sits inside the price or was added on top of it. */
+        val taxIncludedInPrice: Boolean,
+        /**
+         * Tax a marketplace collected and remits itself. Real money the customer
+         * paid, so it counts towards what they were asked for, but never the
+         * studio's to declare — a screen shows it beside VAT due, not inside it.
+         */
+        val platformCollectedTax: Double,
+        /** A shop sent a tax figure and nobody has said whose it is. */
+        val taxNeedsReview: Boolean,
         val revenue: Double,
         val receivablesTotal: Double,
         val directCost: Double,
@@ -66,6 +100,19 @@ object FinanceEngine {
         val platformFeeKnown: Boolean = false,
         val taxRate: Double? = null,
         val taxType: String = "",
+        /**
+         * Set only when the shop told us the tax it charged. Every channel
+         * mapper writes `taxRate: 0` because no shop API returns a rate, so this
+         * is what tells a shop that charged nothing apart from a field nobody
+         * filled in — the same distinction [platformFeeKnown] makes for the fee.
+         */
+        val taxAmountKnown: Boolean = false,
+        /** The shop's own figure, read as an absolute amount, never a rate. */
+        val taxAmount: Double = 0.0,
+        /** merchant, seller, self, platform, marketplace, facilitator — or blank. */
+        val taxResponsibility: String = "",
+        /** null when the shop did not say, and the workspace's setting stands. */
+        val taxIncludedInPrice: Boolean? = null,
         val lineItemTotals: List<Double> = emptyList(),
         val customFields: Map<String, String> = emptyMap()
     )
@@ -167,6 +214,26 @@ object FinanceEngine {
         return fallback
     }
 
+    // ----------------------------------------------------------------------
+    // Whose tax is it
+    // ----------------------------------------------------------------------
+
+    /**
+     * Reads what a shop called the party responsible for the tax. Each platform
+     * has its own word for the same two answers — a seller is a merchant and a
+     * marketplace facilitator is a platform — and anything the engine does not
+     * recognise becomes [TAX_UNKNOWN] rather than a guess, because guessing
+     * wrong overstates a VAT return in one direction and understates it in the
+     * other and neither is recoverable from the number alone.
+     */
+    fun normalizeTaxResponsibility(raw: String?, fallback: String = TAX_UNKNOWN): String {
+        val text = raw?.trim()?.lowercase().orEmpty()
+        if (text.isEmpty()) return fallback
+        if (text == TAX_MERCHANT || text == "seller" || text == "self") return TAX_MERCHANT
+        if (text == TAX_PLATFORM || text == "marketplace" || text == "facilitator") return TAX_PLATFORM
+        return TAX_UNKNOWN
+    }
+
     private data class Resolved(
         val feePercentage: Double,
         val defaultTaxRate: Double,
@@ -182,7 +249,11 @@ object FinanceEngine {
         defaultTaxRate = percentage(settings.defaultTaxRate, 20.0),
         vatRegistered = settings.vatRegistered ?: true,
         pricesIncludeVat = settings.pricesIncludeVat ?: true,
-        defaultVatMethod = normalizeVatMethod(settings.vatMethod ?: settings.taxCalculationType, METHOD_STANDARD),
+        // `?:` fires on null only; the server's `||` also falls through on an
+        // empty string, and a workspace that stored `vatMethod: ""` beside a
+        // real `taxCalculationType` would otherwise take the standard scheme
+        // here and the margin scheme on the server.
+        defaultVatMethod = normalizeVatMethod(settings.vatMethod?.ifEmpty { null } ?: settings.taxCalculationType, METHOD_STANDARD),
         taxMilestoneEnabled = settings.taxMilestoneEnabled ?: false,
         taxMilestoneDateSeconds = settings.taxMilestoneDateSeconds ?: 0.0
     )
@@ -250,10 +321,20 @@ object FinanceEngine {
             customLineTotal(order.customFields, EXPENSE_PREFIX, "orderExpenseItemsJSON")
 
         val fromLineItems = order.lineItemTotals.isNotEmpty()
+        // An order that carries invoice lines is worth what its lines say — the
+        // rule the invoice renderers on every platform already follow.
+        //
+        // Without lines the sale is measured from the money instead, and that is
+        // where a refund used to be counted twice. Linking a bank refund to an
+        // order lowers `paidAmount` AND raises `refundedAmount`, so the sale
+        // shrank by the refund and then the profit line subtracted it again: a
+        // £1,000 sale refunded £200 came out £200 short. Adding the refund back
+        // restores what the sale was WORTH — which is what an invoice-line order
+        // reports, and what the single subtraction below reduces exactly once.
         val revenue = if (fromLineItems) {
             order.lineItemTotals.sum()
         } else {
-            order.paidAmount + order.remainingAmount + receivablesTotal
+            order.paidAmount + order.remainingAmount + receivablesTotal + order.refundedAmount
         }
 
         val directCost = order.watchPurchasePrice
@@ -266,7 +347,7 @@ object FinanceEngine {
         // existing writer of `paymentFee` puts the estimate there, so a number
         // alone proves nothing.
         val platformFee = if (order.platformFeeKnown) {
-            Math.abs(round2(order.paymentFee))
+            round2(Math.abs(order.paymentFee))
         } else {
             round2(revenue * resolved.feePercentage / 100.0)
         }
@@ -279,7 +360,13 @@ object FinanceEngine {
             else -> resolved.defaultVatMethod
         }
 
-        val rate = order.taxRate?.let { percentage(it, resolved.defaultTaxRate) } ?: resolved.defaultTaxRate
+        val storedRate = order.taxRate?.let { percentage(it, resolved.defaultTaxRate) } ?: resolved.defaultTaxRate
+        // A channel order carries `taxRate: 0` as a placeholder, not as an
+        // answer: no shop API returns a rate, so the mappers write zero and send
+        // the real figure in `taxAmount` instead. Once the amount is known that
+        // zero holds no information, and reading it as "zero-rated" would zero
+        // the margin scheme's VAT too — a calculation no shop can do for us.
+        val rate = if (order.taxAmountKnown && storedRate == 0.0) resolved.defaultTaxRate else storedRate
 
         // The margin scheme's base is the selling price less the purchase price
         // and nothing else — not the fee, not the shipping, not the expenses.
@@ -289,10 +376,58 @@ object FinanceEngine {
             else -> 0.0
         }
 
-        val vatDue = if (resolved.vatRegistered && method != METHOD_NONE && rate > 0 && vatBase > 0) {
-            if (resolved.pricesIncludeVat) round2(vatBase * rate / (100.0 + rate))
-            else round2(vatBase * rate / 100.0)
-        } else 0.0
+        // The tax the shop itself charged, when it told us.
+        //
+        // Every channel mapper writes `taxRate: 0` because no shop API returns a
+        // rate, and the gate below used to be on the rate — so a Shopify,
+        // WooCommerce, Etsy, Square or website sale reported no VAT at all while
+        // `taxAmount` held the real figure the customer paid. Re-deriving a rate
+        // from the amount would be worse than useless on a mixed basket, so a
+        // known amount is simply used as the amount.
+        val taxAmountKnown = order.taxAmountKnown
+        val knownTaxAmount = if (taxAmountKnown) Math.abs(order.taxAmount) else 0.0
+        val taxResponsibility = if (taxAmountKnown) {
+            normalizeTaxResponsibility(order.taxResponsibility)
+        } else {
+            TAX_MERCHANT
+        }
+
+        // Whether the tax sits inside the price or is added to it. A shop knows
+        // this per order and says so; without a shop's answer the workspace's own
+        // setting stands, which is how every order behaved before.
+        val shopSaidTaxIsInside = order.taxIncludedInPrice
+        val taxInsidePrice = if (taxAmountKnown && shopSaidTaxIsInside != null) {
+            shopSaidTaxIsInside
+        } else {
+            resolved.pricesIncludeVat
+        }
+
+        // Tax a marketplace collected and remits itself is real money the
+        // customer paid and it belongs on the order, but it is not the studio's
+        // to declare, so it is reported beside VAT due rather than inside it. An
+        // unknown responsibility is treated the same way and flagged.
+        val merchantOwnsTax = taxResponsibility == TAX_MERCHANT
+        val platformCollectedTax = if (taxAmountKnown && !merchantOwnsTax) round2(knownTaxAmount) else 0.0
+        val taxNeedsReview = taxAmountKnown && taxResponsibility == TAX_UNKNOWN
+
+        var vatDue = 0.0
+        if (resolved.vatRegistered && method != METHOD_NONE) {
+            if (taxAmountKnown) {
+                // The shop's own figure, never re-derived. Only the studio's own
+                // share of it reaches VAT due; the margin scheme is a
+                // NivaDesk-side calculation that a shop knows nothing about, so
+                // a known amount does not apply there.
+                if (merchantOwnsTax && method == METHOD_STANDARD) {
+                    vatDue = round2(knownTaxAmount)
+                } else if (merchantOwnsTax && vatBase > 0 && rate > 0) {
+                    vatDue = if (taxInsidePrice) round2(vatBase * rate / (100.0 + rate))
+                    else round2(vatBase * rate / 100.0)
+                }
+            } else if (rate > 0 && vatBase > 0) {
+                vatDue = if (resolved.pricesIncludeVat) round2(vatBase * rate / (100.0 + rate))
+                else round2(vatBase * rate / 100.0)
+            }
+        }
 
         val netProfit = revenue - vatDue - directCost - platformFee - order.deliveryCost - expensesTotal - order.refundedAmount
 
@@ -302,6 +437,14 @@ object FinanceEngine {
             taxRate = rate,
             pricesIncludeVat = resolved.pricesIncludeVat,
             vatRegistered = resolved.vatRegistered,
+            // Where the tax figure came from and whose it is, so a screen can
+            // say "Platform collected tax" rather than showing a VAT total that
+            // quietly disagrees with what the customer paid.
+            taxAmountKnown = taxAmountKnown,
+            taxResponsibility = taxResponsibility,
+            taxIncludedInPrice = taxInsidePrice,
+            platformCollectedTax = platformCollectedTax,
+            taxNeedsReview = taxNeedsReview,
             revenue = round2(revenue),
             receivablesTotal = round2(receivablesTotal),
             directCost = round2(directCost),
@@ -314,7 +457,11 @@ object FinanceEngine {
             vatBase = round2(vatBase),
             vatDue = vatDue,
             netProfit = round2(netProfit),
-            customerTotal = round2(if (resolved.pricesIncludeVat) revenue else revenue + vatDue),
+            // What the customer is asked to pay. Identical to revenue when the
+            // price already includes the tax. Tax the marketplace collected is
+            // money the customer paid too, so it counts here even though it
+            // never reaches the studio's VAT return.
+            customerTotal = round2(if (taxInsidePrice) revenue else revenue + vatDue + platformCollectedTax),
             fromLineItems = fromLineItems,
             orphanKeys = receivableOrphans.map { REMAINING_PREFIX + it } + expenseOrphans.map { EXPENSE_PREFIX + it },
             receivableLines = receivableLines,
