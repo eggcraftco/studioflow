@@ -39,6 +39,28 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 ACCOUNT=$(gcloud config get-value account 2>/dev/null || true)
 echo "  operator: ${ACCOUNT:-<none>}   project: $PROJECT   region: $REGION"
+# The roles this run needs on the ORGANISATION, and why. Organization
+# Administrator alone grants none of them — the first real run stopped at the
+# folder with PERMISSION_DENIED. Checked up front so the failure is one clear
+# line, not a half-created hierarchy.
+NEEDED_ORG_ROLES="roles/resourcemanager.folderCreator roles/resourcemanager.projectCreator roles/logging.admin"
+if [ -n "$ACCOUNT" ]; then
+  HELD=$(gcloud organizations get-iam-policy "$ORG_ID" --format=json 2>/dev/null | python3 -c "
+import json,sys
+try: p=json.load(sys.stdin)
+except Exception: p={}
+print(' '.join(b['role'] for b in p.get('bindings',[]) if 'user:$ACCOUNT' in b.get('members',[])))" 2>/dev/null || echo "")
+  missing=""
+  for r in $NEEDED_ORG_ROLES; do echo " $HELD " | grep -q " $r " || missing="$missing $r"; done
+  if [ -n "$missing" ]; then
+    echo "  ⚠ organisation roles missing for $ACCOUNT:$missing"
+    echo "    grant (as Organization Administrator), then re-run:"
+    for r in $missing; do echo "      gcloud organizations add-iam-policy-binding $ORG_ID --member=user:$ACCOUNT --role=$r"; done
+    [ "$DRY_RUN" = "1" ] || { echo "  aborting before anything is created."; exit 1; }
+  else
+    echo "  organisation roles: folderCreator, projectCreator, logging.admin ✓"
+  fi
+fi
 
 echo "══ 0.5. Folder, and its Logging defaults — BEFORE the project exists ══"
 # A project's _Required log bucket is created at project creation, in the
