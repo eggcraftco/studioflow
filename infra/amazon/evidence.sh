@@ -234,7 +234,7 @@ capture idsips scc-notification.json gcloud scc notifications describe amazon-fi
 capture idsips scc-findings-sample.txt scc_findings
 capture idsips scc-agents.txt scc_agents
 capture idsips scc-alerting.txt bash -c "gcloud alpha monitoring policies list --project=$PROJECT --filter='displayName=\"Amazon zone: SCC finding published\"' --format='yaml(displayName,enabled,notificationChannels,conditions[0].conditionThreshold.filter)'; gcloud beta monitoring channels list --project=$PROJECT --filter='displayName=\"amazon-security-email\"' --format='value(displayName,type,labels.email_address)'; gcloud pubsub subscriptions describe scc-findings-evidence --project=$PROJECT --format='value(name,topic,messageRetentionDuration)'"
-for f in scc-activation-2026-09-05.md scc-test-2026-09-05.txt scc-crtd-test-2026-09-05.txt; do
+for f in scc-activation-2026-09-05.md scc-finding-2026-09-05.md scc-test-2026-09-05.txt scc-crtd-test-2026-09-05.txt; do
   if [ -s "$OUT/$f" ]; then printf '| idsips | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"; else printf '| idsips | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
 done
 capture idsips log-bucket-retention.txt gcloud logging buckets describe amazon-audit --location="$REGION" --project="$PROJECT" --format='value(name,retentionDays,locked)'
