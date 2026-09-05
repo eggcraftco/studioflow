@@ -94,14 +94,15 @@ rm -f "$POLICY"
 echo "══ 4. Findings → Pub/Sub (project-level notification config; needs the tier) ══"
 exists gcloud pubsub topics describe scc-findings --project="$PROJECT" \
   || run gcloud pubsub topics create scc-findings --project="$PROJECT"
-# This is the one step that needs the tier: before Standard/Premium is active on
+# v1 of the notifications API is gone ("use API V2"): v2 configs live under
+# locations/global. This is the one step that needs the tier: before Standard/Premium is active on
 # the project the API answers "Security Command Center Legacy has been
 # permanently disabled" — meaning "activate a tier first", not a legacy install.
-if exists gcloud scc notifications describe amazon-findings --project="$PROJECT"; then
+if exists gcloud scc notifications describe amazon-findings --project="$PROJECT" --location=global --api-version=v2; then
   echo "  notification config amazon-findings exists"
 elif [ "$DRY_RUN" = "1" ]; then
-  run gcloud scc notifications create amazon-findings --project="$PROJECT" --pubsub-topic="projects/$PROJECT/topics/scc-findings" --filter='state = "ACTIVE"'
-elif gcloud scc notifications create amazon-findings --project="$PROJECT" \
+  run gcloud scc notifications create amazon-findings --project="$PROJECT" --location=global --api-version=v2enabled --pubsub-topic="projects/$PROJECT/topics/scc-findings" --filter='state = "ACTIVE"'
+elif gcloud scc notifications create amazon-findings --project="$PROJECT" --location=global --api-version=v2enabled \
        --pubsub-topic="projects/$PROJECT/topics/scc-findings" \
        --filter='state = "ACTIVE"' \
        --description="Amazon zone: every active finding (a dedicated project: volume is small, and every finding should reach a person)" >/dev/null 2>"$TMPERR"; then
