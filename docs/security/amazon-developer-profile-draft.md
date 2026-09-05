@@ -54,10 +54,7 @@ every active finding is published to a Pub/Sub topic and raises an email
 alert to the operator (`scc-notification.json`, `scc-alerting.txt`). The
 prevention half is Cloud Armor (above). Audit and data-access logs for
 Firestore and Secret Manager are kept 400 days in a regional log bucket
-(`log-bucket-retention.txt`). **Open**: the two detection tests (Google's
-documented "Malware: Bad Domain" and "Base64 ELF File Command Line" triggers)
-have been executed; the findings and their delivery are awaited
-(`scc-test-2026-09-05.txt`, `scc-crtd-test-2026-09-05.txt`). Security Health
+(`log-bucket-retention.txt`). **Open**: Google's documented detection tests ("Malware: Bad Domain" — Cloud Run resolver and the official VM procedure — and "Base64 ELF File Command Line") were executed on 5 September and produced no finding within Google's stated latency (`scc-test-2026-09-05.txt`, `scc-crtd-test-2026-09-05.txt`); the cause is being investigated before any claim is made. The delivery chain from the topic onward (subscription, alert, email) is shown working with one synthetic message (`scc-activation-2026-09-05.md`). Security Health
 Analytics is retired for new activations by Google; Compliance Manager is
 enabled in its place (`scc-activation-2026-09-05.md`).
 

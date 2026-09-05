@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # One benign detection for the evidence pack, from Google's own test guidance
-# for Event Threat Detection: resolving the test domain
+# for Event Threat Detection. NOTE (2026-09-05): Google's documented procedure
+# uses a VM (scc-etd-vm-test.sh); this Cloud Run resolver variant is kept as
+# the lighter first attempt only. Neither produced a finding on 2026-09-05.
+# resolving the test domain
 # etd-malware-trigger.goog from inside a VPC whose Cloud DNS server policy
 # logs queries raises "Malware: Bad Domain". Nothing is contacted — the
 # resolution is the event; the egress firewall would drop the connection
