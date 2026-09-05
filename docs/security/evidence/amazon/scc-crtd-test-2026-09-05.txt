@@ -1,0 +1,7 @@
+# 2026-09-05T03:01:32Z — Cloud Run Threat Detection test: Google's documented harmless trigger (Defense Evasion: Base64 ELF File Command Line)
+# Cloud Run job amazon-crtd-test, image europe-west2-docker.pkg.dev/nivadesk-amazon/amazon/nivadesk-amazon:6ee4d01f (gen2), as amazon-sync@; command: sleep 60; base64 -d f0VMRgIB; sleep 10; execution amazon-crtd-test-895jz (exit 0)
+# live config: cloud-run-threat-detection ENABLED ENABLED
+
+finding: NOT seen within 30 minutes (category "Defense Evasion: Base64 ELF File Command Line")
+
+== delivery: messages kept on subscription scc-findings-evidence (pulled, not acked)

@@ -1,10 +1,156 @@
-# 2026-09-05T01:39:08Z
-# gcloud access-context-manager perimeters describe amazon-information --policy= --format=json
+# 2026-09-05T04:02:29Z
+# gcloud access-context-manager perimeters describe amazon_information --policy=444937440696 --format=json
 
-ERROR: (gcloud.access-context-manager.perimeters.describe) Error parsing [perimeter].
-The [perimeter] resource is not properly specified.
-Failed to find attribute [policy]. The attribute can be set in the following ways: 
-- provide the argument `perimeter` on the command line with a fully specified name
-- provide the argument `--policy` on the command line
-- set the property `access_context_manager/policy`
-- automatically, if the current account belongs to an organization with exactly one access policy.
+{
+  "etag": "bbb3fb75e1d61717",
+  "name": "accessPolicies/444937440696/servicePerimeters/amazon_information",
+  "spec": {
+    "egressPolicies": [
+      {
+        "egressFrom": {
+          "identities": [
+            "serviceAccount:amazon-sync@nivadesk-amazon.iam.gserviceaccount.com"
+          ]
+        },
+        "egressTo": {
+          "operations": [
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "run.googleapis.com"
+            }
+          ],
+          "resources": [
+            "projects/477037475099"
+          ]
+        }
+      },
+      {
+        "egressFrom": {
+          "identities": [
+            "serviceAccount:amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com"
+          ]
+        },
+        "egressTo": {
+          "operations": [
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "artifactregistry.googleapis.com"
+            },
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "storage.googleapis.com"
+            }
+          ],
+          "resources": [
+            "projects/145308107004"
+          ]
+        }
+      }
+    ],
+    "ingressPolicies": [
+      {
+        "ingressFrom": {
+          "identities": [
+            "user:contact@eggcraft.co.uk"
+          ],
+          "sources": [
+            {
+              "accessLevel": "*"
+            }
+          ]
+        },
+        "ingressTo": {
+          "operations": [
+            {
+              "serviceName": "*"
+            }
+          ],
+          "resources": [
+            "*"
+          ]
+        }
+      },
+      {
+        "ingressFrom": {
+          "identityType": "ANY_IDENTITY",
+          "sources": [
+            {
+              "accessLevel": "*"
+            }
+          ]
+        },
+        "ingressTo": {
+          "operations": [
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "run.googleapis.com"
+            }
+          ],
+          "resources": [
+            "projects/145308107004"
+          ]
+        }
+      },
+      {
+        "ingressFrom": {
+          "identities": [
+            "serviceAccount:service-org-378239481010@gcp-sa-scc-notification.iam.gserviceaccount.com"
+          ],
+          "sources": [
+            {
+              "accessLevel": "*"
+            }
+          ]
+        },
+        "ingressTo": {
+          "operations": [
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "pubsub.googleapis.com"
+            }
+          ],
+          "resources": [
+            "projects/145308107004"
+          ]
+        }
+      }
+    ],
+    "resources": [
+      "projects/145308107004"
+    ],
+    "restrictedServices": [
+      "firestore.googleapis.com",
+      "secretmanager.googleapis.com",
+      "run.googleapis.com",
+      "cloudscheduler.googleapis.com",
+      "logging.googleapis.com",
+      "monitoring.googleapis.com",
+      "artifactregistry.googleapis.com",
+      "cloudbuild.googleapis.com",
+      "storage.googleapis.com",
+      "pubsub.googleapis.com"
+    ]
+  },
+  "title": "Amazon Information",
+  "useExplicitDryRunSpec": true
+}

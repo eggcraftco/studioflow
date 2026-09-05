@@ -1,28 +1,21 @@
-# 2026-09-05T01:39:08Z
-# bash -c gcloud scc settings services describe --project=nivadesk-amazon --service=EVENT_THREAT_DETECTION --format=yaml 2>&1 | head -20; gcloud scc settings services describe --project=nivadesk-amazon --service=CONTAINER_THREAT_DETECTION --format=yaml 2>&1 | head -5
+# 2026-09-05T04:02:29Z
+# gcloud scc manage services list --project=nivadesk-amazon --format=table(name.basename(),intendedEnablementState,effectiveEnablementState)
 
-ERROR: (gcloud.scc) Invalid choice: 'settings'.
-Maybe you meant:
-  gcloud run services describe
-  gcloud run services get-iam-policy
-  gcloud alpha scc settings services describe
-  gcloud alpha scc settings services modules describe
-  gcloud alpha scc settings services describe-explicit
-  gcloud alpha scc settings services modules describe-explicit
-  gcloud scc manage services describe
-  gcloud run services add-iam-policy-binding
-  gcloud run services delete
-  gcloud run services list
-  gcloud scc assets
-  gcloud scc bqexports
-  gcloud scc custom-modules
-  gcloud scc findings
-  gcloud scc iac-validation-reports
-  gcloud scc muteconfigs
-  gcloud scc notifications
-  gcloud scc operations
-ERROR: (gcloud.scc) Invalid choice: 'settings'.
-Maybe you meant:
-  gcloud run services describe
-  gcloud run services get-iam-policy
-  gcloud alpha scc settings services describe
+NAME                            INTENDED_ENABLEMENT_STATE  EFFECTIVE_ENABLEMENT_STATE
+CONTAINER_THREAT_DETECTION                                 ENABLED
+SECURITY_HEALTH_ANALYTICS       INHERITED                  DISABLED
+VM_THREAT_DETECTION             INHERITED                  ENABLED
+GCE_VULNERABILITY_ASSESSMENT    INHERITED                  ENABLED
+ARTIFACT_ANALYSIS               INHERITED                  ENABLED
+EVENT_THREAT_DETECTION          ENABLED                    ENABLED
+AGENT_ENGINE_THREAT_DETECTION   INHERITED                  ENABLED
+VM_MANAGER                      INHERITED                  DISABLED
+VM_THREAT_DETECTION_AWS         INHERITED                  DISABLED
+AZURE_VULNERABILITY_ASSESSMENT  INHERITED                  DISABLED
+CLOUD_RUN_THREAT_DETECTION      ENABLED                    ENABLED
+NOTEBOOK_SECURITY_SCANNER       INHERITED                  DISABLED
+EXTERNAL_EXPOSURE               ENABLED                    ENABLED
+WEB_SECURITY_SCANNER            INHERITED                  ENABLED
+EC2_VULNERABILITY_ASSESSMENT    INHERITED                  DISABLED
+AGENT_ENGINE_VULN_ASSESSMENT    INHERITED                  ENABLED
+ARTIFACT_GUARD                  INHERITED                  DISABLED

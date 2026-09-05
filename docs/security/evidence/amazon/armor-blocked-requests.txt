@@ -1,24 +1,24 @@
-# 2026-09-05T01:39:08Z
+# 2026-09-05T04:02:29Z
 # gcloud logging read resource.type="http_load_balancer" AND jsonPayload.enforcedSecurityPolicy.outcome="DENY" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=20 --format=table(timestamp,httpRequest.remoteIp,httpRequest.requestUrl,jsonPayload.enforcedSecurityPolicy.priority,jsonPayload.enforcedSecurityPolicy.configuredAction)
 
-TIMESTAMP                    REMOTE_IP        REQUEST_URL                              PRIORITY    CONFIGURED_ACTION
-2026-09-05T01:33:18.304451Z  81.33.75.166     https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:33:17.991446Z  81.33.75.166     https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:31:58.510424Z  154.30.105.195   https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:31:36.961652Z  185.18.222.147   https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:30:44.710223Z  148.135.208.193  https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:30:24.398939Z  185.98.171.7     https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:30:23.810493Z  185.98.171.7     https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:30:16.178490Z  91.231.89.56     https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:26:46.917292Z  192.241.139.209  https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:26:46.522806Z  192.241.139.209  https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:26:33.861332Z  158.69.55.148    https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:26:24.970387Z  159.69.72.167    https://amazon.nivadesk.app/robots.txt   2147483647  DENY
-2026-09-05T01:25:52.508915Z  193.200.104.30   https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:25:51.997980Z  193.200.104.30   https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:25:41.059688Z  195.210.28.10    https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:25:34.249509Z  119.13.219.36    https://amazon.nivadesk.app/favicon.ico  2147483647  DENY
-2026-09-05T01:25:33.808229Z  119.13.219.36    https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:25:08.706075Z  158.69.117.45    https://amazon.nivadesk.app/             2147483647  DENY
-2026-09-05T01:24:32.896744Z  130.12.182.254   https://amazon.nivadesk.app/.git/HEAD    1000        DENY
-2026-09-05T01:24:32.714326Z  130.12.182.254   https://amazon.nivadesk.app/.env         1000        DENY
+TIMESTAMP                    REMOTE_IP        REQUEST_URL                                                 PRIORITY    CONFIGURED_ACTION
+2026-09-05T03:56:26.704891Z  34.34.246.93     https://amazon.nivadesk.app/healthz                         2147483647  DENY
+2026-09-05T03:56:26.569304Z  34.34.246.93     https://amazon.nivadesk.app/oauth/start                     2147483647  DENY
+2026-09-05T03:56:26.430630Z  34.34.246.93     https://amazon.nivadesk.app/foo                             2147483647  DENY
+2026-09-05T03:51:04.619830Z  34.34.246.250    https://amazon.nivadesk.app/healthz                         2147483647  DENY
+2026-09-05T03:51:04.475071Z  34.34.246.250    https://amazon.nivadesk.app/oauth/start                     2147483647  DENY
+2026-09-05T03:51:04.328184Z  34.34.246.250    https://amazon.nivadesk.app/foo                             2147483647  DENY
+2026-09-05T03:30:48.183016Z  148.135.208.193  https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T03:22:15.136180Z  205.169.39.35    https://136.68.239.143/favicon.ico                          2147483647  DENY
+2026-09-05T03:22:14.847724Z  205.169.39.35    https://136.68.239.143/                                     2147483647  DENY
+2026-09-05T03:19:02.341804Z  109.123.250.0    https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T03:18:28.633920Z  202.78.167.217   https://amazon.nivadesk.app/api/gateway/heartbeat           2147483647  DENY
+2026-09-05T03:18:28.633568Z  202.78.167.217   https://amazon.nivadesk.app/open/                           2147483647  DENY
+2026-09-05T03:18:28.632863Z  202.78.167.217   https://amazon.nivadesk.app/open/visitors/info/gets?uuid=1  2147483647  DENY
+2026-09-05T03:18:28.276061Z  202.78.167.217   https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T03:07:00.543385Z  34.219.122.228   https://amazon.nivadesk.app/favicon.ico                     2147483647  DENY
+2026-09-05T03:06:59.453676Z  34.219.122.228   https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T03:06:51.532821Z  34.219.122.228   https://amazon.nivadesk.app/favicon.ico                     2147483647  DENY
+2026-09-05T03:06:50.824281Z  34.219.122.228   https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T02:53:13.959325Z  34.210.60.152    https://amazon.nivadesk.app/                                2147483647  DENY
+2026-09-05T02:53:13.958487Z  34.210.60.152    https://amazon.nivadesk.app/                                2147483647  DENY

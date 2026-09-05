@@ -1,0 +1,11 @@
+# 2026-09-05T04:02:29Z
+# scc_agents
+
+== service agents Security Command Center needs on the project (granted 2026-09-05 through scc-agents.sh)
+  roles/cloudsecuritycompliance.serviceAgent -> serviceAccount:service-project-145308107004@gcp-sa-csc-hpsa.iam.gserviceaccount.com
+  roles/containerthreatdetection.serviceAgent -> serviceAccount:service-project-145308107004@gcp-sa-ktd-hpsa.iam.gserviceaccount.com
+  roles/dspm.serviceAgent -> serviceAccount:service-project-145308107004@gcp-sa-dspm-hpsa.iam.gserviceaccount.com
+  roles/securitycenter.serviceAgent -> serviceAccount:service-project-145308107004@security-center-api.iam.gserviceaccount.com
+== domain-restricted sharing on the project (must be the organisation value, not allowAll)
+C01ygiscq	
+  no project-level override

@@ -1,4 +1,4 @@
-# 2026-09-05T01:39:08Z
+# 2026-09-05T04:02:29Z
 # bash -c for s in amazon-oauth amazon-admin amazon-sync; do u=$(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(status.url)' 2>/dev/null); if [ -n "$u" ]; then echo "$s $u/healthz → $(curl -s -o /dev/null -w '%{http_code}' -m 15 $u/healthz) (403/404 = closed)"; else echo "$s: (not deployed)"; fi; done
 
 amazon-oauth: (not deployed)

@@ -1,4 +1,4 @@
-# 2026-09-05T01:39:08Z
+# 2026-09-05T04:02:29Z
 # bash -c sed -n '/^## 1\. Architecture/,/^## 2\. Project/p' "infra/amazon/../../docs/security/amazon-hardened-project-design.md"
 
 ## 1. Architecture — the final picture
@@ -42,6 +42,17 @@
  │   restrictedCustomer    stays EMPTY by construction — A1 never asks for BUYER / RECIPIENT                    │
  └────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**As built, 5 September 2026 (differences from the picture):** the bridge
+identity is `amazon-sync@` (the diagram's `amazon-bridge@`); only
+`amazon-admin` is deployed — `amazon-oauth` and `amazon-sync` wait for
+Amazon's credentials, so the load balancer routes `/admin/*` only and Cloud
+Armor has no `/oauth/*` rule; `amazon-admin` declares the custom audience
+`https://amazon.nivadesk.app`; Security Health Analytics is retired for new
+activations and Compliance Manager stands in its place; the VPC Service
+Controls perimeter (`amazon_information`) is **dry-run**, not enforced; the
+Google API traffic is proven to use `restricted.googleapis.com`. Readiness per
+control: `amazon-readiness-criteria.md`.
 
 Amazon Information — order records as Amazon returns them, connection
 documents, refresh tokens — never leaves the top box. What crosses the line is

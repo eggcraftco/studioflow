@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T01:39:08Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T04:02:29Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -12,7 +12,7 @@ Generated 2026-09-05T01:39:08Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `admin-iam.txt` | captured |
 | segmentation | `secret-iam.txt` | captured |
 | segmentation | `bridge-test-latest.txt` | captured |
-| segmentation | `deploy-identity.txt` | **errors inside** — resource missing or refused |
+| segmentation | `deploy-identity.txt` | captured |
 | segmentation | `deploy-identity-2026-09-05.md` | present (record of 2026-09-05) |
 | segmentation | `bridge-test-2026-09-05.md` | present (record of 2026-09-05) |
 | segmentation | `pga-diag-before.txt` | present (record of 2026-09-05) |
@@ -20,9 +20,9 @@ Generated 2026-09-05T01:39:08Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `bootstrap-iam-reduction.md` | present (record of 2026-09-05) |
 | segmentation | `bootstrap-iam-org-policy-before.json` | present (record of 2026-09-05) |
 | segmentation | `bootstrap-iam-org-policy-after.json` | present (record of 2026-09-05) |
-| segmentation | `perimeter.json` | **missing** (exit 1) |
+| segmentation | `perimeter.json` | captured |
 | segmentation | `org-policies.txt` | captured |
-| segmentation | `vpcsc-dryrun-report.txt` | **empty** — nothing to show yet |
+| segmentation | `vpcsc-dryrun-report.txt` | captured |
 | segmentation | `cross-project-read-denied.txt` | **errors inside** — resource missing or refused |
 | firewall | `cloud-armor-policy.json` | captured |
 | firewall | `lb-backend-services.json` | captured |
@@ -38,9 +38,13 @@ Generated 2026-09-05T01:39:08Z by infra/amazon/evidence.sh. Each file lists the 
 | firewall | `armor-blocked-requests.txt` | captured |
 | firewall | `egress-refused.txt` | **empty** — nothing to show yet |
 | firewall | `nat-translations.txt` | **empty** — nothing to show yet |
-| idsips | `scc-services.txt` | **errors inside** — resource missing or refused |
-| idsips | `scc-notification.json` | **missing** (exit 1) |
-| idsips | `scc-findings-sample.txt` | **missing** (exit 1) |
+| idsips | `scc-services.txt` | captured |
+| idsips | `scc-notification.json` | captured |
+| idsips | `scc-findings-sample.txt` | captured |
+| idsips | `scc-agents.txt` | captured |
+| idsips | `scc-alerting.txt` | captured |
+| idsips | `scc-activation-2026-09-05.md` | present (record of 2026-09-05) |
+| idsips | `scc-test-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `log-bucket-retention.txt` | captured |
 | idsips | `armor-adaptive-protection.txt` | captured |
 | anti-malware | `edr-console-devices.png` | **missing** — user provides from the EDR/MDM console |

@@ -1,0 +1,22 @@
+# 2026-09-05T02:41:06Z — Event Threat Detection test: Google's documented benign trigger (Malware: Bad Domain)
+# Cloud Run job amazon-etd-test (image europe-west2-docker.pkg.dev/nivadesk-amazon/amazon/nivadesk-amazon:6ee4d01f, amazon-vpc, as amazon-sync@) resolves etd-malware-trigger.goog; execution amazon-etd-test-ndtgq (exit 0)
+
+== the job's own line
+etdtest resolved 216.239.32.29
+== the DNS query as Cloud DNS logged it
+2026-09-05T02:41:21.068192072Z	etd-malware-trigger.goog.		NOERROR
+
+finding: NOT seen within 30 minutes (category "Malware: Bad Domain")
+
+== delivery: messages kept on subscription scc-findings-evidence (pulled, not acked)
+
+== alert policy that emails the operator
+Amazon zone: SCC finding published True projects/nivadesk-amazon/notificationChannels/2982888627322689100
+# 2026-09-05T03:13:03Z — Event Threat Detection test, Google's documented VM procedure (Malware: Bad Domain): e2-micro amazon-etd-vm-test in amazon-subnet (no external address, no service account), startup script curl/getent etd-malware-trigger.goog
+== the DNS queries as Cloud DNS logged them
+2026-09-05T03:14:38.517692621Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T03:14:38.509049743Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T03:14:08.492948606Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T03:14:08.491603219Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T03:13:38.492295377Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
+finding: NOT seen within 30 minutes (category "Malware: Bad Domain")

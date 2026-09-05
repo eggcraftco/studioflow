@@ -1,9 +1,9 @@
-# 2026-09-05T01:39:08Z
+# 2026-09-05T04:02:29Z
 # pga_diag_latest
 
-execution: amazon-diag-wzdb9
+execution: amazon-diag-ngqgx
 diag OK: every Google API host resolves to the restricted VIP
-diag firestore.googleapis.com: 199.36.153.7,199.36.153.5,199.36.153.6,199.36.153.4 IN restricted VIP https=404
-diag logging.googleapis.com: 199.36.153.5,199.36.153.6,199.36.153.4,199.36.153.7 IN restricted VIP https=404
-diag restricted.googleapis.com: 199.36.153.5,199.36.153.4,199.36.153.7,199.36.153.6 IN restricted VIP https=404
-diag secretmanager.googleapis.com: 199.36.153.7,199.36.153.4,199.36.153.6,199.36.153.5 IN restricted VIP https=404
+diag firestore.googleapis.com: 199.36.153.6,199.36.153.5,199.36.153.7,199.36.153.4 IN restricted VIP https=404
+diag logging.googleapis.com: 199.36.153.4,199.36.153.5,199.36.153.7,199.36.153.6 IN restricted VIP https=404
+diag restricted.googleapis.com: 199.36.153.4,199.36.153.5,199.36.153.6,199.36.153.7 IN restricted VIP https=404
+diag secretmanager.googleapis.com: 199.36.153.7,199.36.153.6,199.36.153.4,199.36.153.5 IN restricted VIP https=404
