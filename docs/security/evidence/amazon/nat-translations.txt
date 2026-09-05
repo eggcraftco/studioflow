@@ -1,3 +1,3 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # gcloud logging read resource.type="nat_gateway" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=7d --limit=10 --format=value(timestamp,jsonPayload.connection.dest_ip,jsonPayload.connection.dest_port,jsonPayload.allocation_status)
 

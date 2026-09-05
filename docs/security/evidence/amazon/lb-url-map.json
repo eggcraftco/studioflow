@@ -1,6 +1,34 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # gcloud compute url-maps describe amazon-edge-map --project=nivadesk-amazon --global --format=json
 
-ERROR: (gcloud.compute.url-maps.describe) Could not fetch resource:
- - The resource 'projects/nivadesk-amazon/global/urlMaps/amazon-edge-map' was not found
-
+{
+  "creationTimestamp": "2026-09-04T18:04:33.932-07:00",
+  "defaultService": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/backendServices/amazon-admin-backend",
+  "fingerprint": "3nA0HnQYCeY=",
+  "hostRules": [
+    {
+      "hosts": [
+        "amazon.nivadesk.app"
+      ],
+      "pathMatcher": "amazon-paths"
+    }
+  ],
+  "id": "5439604997127328847",
+  "kind": "compute#urlMap",
+  "name": "amazon-edge-map",
+  "pathMatchers": [
+    {
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/backendServices/amazon-admin-backend",
+      "name": "amazon-paths",
+      "pathRules": [
+        {
+          "paths": [
+            "/admin/*"
+          ],
+          "service": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/backendServices/amazon-admin-backend"
+        }
+      ]
+    }
+  ],
+  "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/urlMaps/amazon-edge-map"
+}

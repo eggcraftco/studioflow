@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T00:51:33Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T01:23:52Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -22,23 +22,25 @@ Generated 2026-09-05T00:51:33Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `org-policies.txt` | captured |
 | segmentation | `vpcsc-dryrun-report.txt` | **empty** — nothing to show yet |
 | segmentation | `cross-project-read-denied.txt` | **errors inside** — resource missing or refused |
-| firewall | `cloud-armor-policy.json` | **missing** (exit 1) |
-| firewall | `lb-backend-services.json` | **empty** — nothing to show yet |
-| firewall | `lb-url-map.json` | **missing** (exit 1) |
-| firewall | `lb-forwarding-rules.json` | **empty** — nothing to show yet |
+| firewall | `cloud-armor-policy.json` | captured |
+| firewall | `lb-backend-services.json` | captured |
+| firewall | `lb-url-map.json` | captured |
+| firewall | `lb-forwarding-rules.json` | captured |
+| firewall | `lb-certificate-and-address.txt` | captured |
+| firewall | `edge-smoke-2026-09-05.md` | present (record of 2026-09-05) |
 | firewall | `run-ingress.txt` | **errors inside** — resource missing or refused |
 | firewall | `vpc-firewall-rules.json` | captured |
 | firewall | `nat-and-static-ip.txt` | captured |
 | firewall | `subnet-flow-logs.txt` | captured |
 | firewall | `run-app-closed-to-internet.txt` | **errors inside** — resource missing or refused |
-| firewall | `armor-blocked-requests.txt` | **empty** — nothing to show yet |
+| firewall | `armor-blocked-requests.txt` | captured |
 | firewall | `egress-refused.txt` | **empty** — nothing to show yet |
 | firewall | `nat-translations.txt` | **empty** — nothing to show yet |
 | idsips | `scc-services.txt` | **errors inside** — resource missing or refused |
 | idsips | `scc-notification.json` | **missing** (exit 1) |
 | idsips | `scc-findings-sample.txt` | **missing** (exit 1) |
 | idsips | `log-bucket-retention.txt` | captured |
-| idsips | `armor-adaptive-protection.txt` | **missing** (exit 1) |
+| idsips | `armor-adaptive-protection.txt` | captured |
 | anti-malware | `edr-console-devices.png` | **missing** — user provides from the EDR/MDM console |
 | anti-malware | `edr-definitions-date.png` | **missing** — user provides from the EDR/MDM console |
 | anti-malware | `edr-tamper-protection.png` | **missing** — user provides from the EDR/MDM console |

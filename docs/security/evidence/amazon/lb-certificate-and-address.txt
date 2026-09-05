@@ -1,0 +1,18 @@
+# 2026-09-05T01:23:52Z
+# bash -c gcloud compute ssl-certificates describe amazon-edge-cert --global --project=nivadesk-amazon --format='yaml(managed,type,subjectAlternativeNames,expireTime)'; echo; gcloud compute addresses describe amazon-edge-ip --global --project=nivadesk-amazon --format='value(address,status)'; echo; echo 'DNS:'; dig +short amazon.nivadesk.app @1.1.1.1
+
+expireTime: '2026-12-03T17:04:46.000-08:00'
+managed:
+  domainStatus:
+    amazon.nivadesk.app: ACTIVE
+  domains:
+  - amazon.nivadesk.app
+  status: ACTIVE
+subjectAlternativeNames:
+- amazon.nivadesk.app
+type: MANAGED
+
+136.68.239.143	IN_USE
+
+DNS:
+136.68.239.143

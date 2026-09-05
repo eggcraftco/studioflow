@@ -1,4 +1,4 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # bash -c gcloud scc settings services describe --project=nivadesk-amazon --service=EVENT_THREAT_DETECTION --format=yaml 2>&1 | head -20; gcloud scc settings services describe --project=nivadesk-amazon --service=CONTAINER_THREAT_DETECTION --format=yaml 2>&1 | head -5
 
 ERROR: (gcloud.scc) Invalid choice: 'settings'.

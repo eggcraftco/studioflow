@@ -1,4 +1,4 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # admin_iam
 
 == amazon-admin invoker policy
@@ -9,5 +9,6 @@ bindings:
 etag: BwZasXergwI=
 version: 1
 == amazon-admin ingress: internal-and-cloud-load-balancing
+== amazon-admin custom audiences (the only audience Cloud Run accepts for the public hostname): ["https://amazon.nivadesk.app"]
 == amazon-diag job policy
 etag: ACAB

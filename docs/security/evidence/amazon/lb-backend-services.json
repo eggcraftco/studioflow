@@ -1,4 +1,43 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # gcloud compute backend-services list --project=nivadesk-amazon --global --format=json
 
-[]
+[
+  {
+    "affinityCookieTtlSec": 0,
+    "backends": [
+      {
+        "balancingMode": "UTILIZATION",
+        "capacityScaler": 1,
+        "group": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/regions/europe-west2/networkEndpointGroups/amazon-admin-neg"
+      }
+    ],
+    "connectionDraining": {
+      "drainingTimeoutSec": 0
+    },
+    "creationTimestamp": "2026-09-04T18:01:25.563-07:00",
+    "description": "",
+    "enableCDN": false,
+    "fingerprint": "r5h6S_EC4Uc=",
+    "id": "8740061861140420362",
+    "kind": "compute#backendService",
+    "loadBalancingScheme": "EXTERNAL_MANAGED",
+    "logConfig": {
+      "enable": true,
+      "optionalMode": "EXCLUDE_ALL_OPTIONAL",
+      "sampleRate": 1
+    },
+    "name": "amazon-admin-backend",
+    "port": 80,
+    "portName": "http",
+    "protocol": "HTTP",
+    "securityPolicy": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/securityPolicies/amazon-edge",
+    "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/backendServices/amazon-admin-backend",
+    "sessionAffinity": "NONE",
+    "timeoutSec": 30,
+    "usedBy": [
+      {
+        "reference": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/urlMaps/amazon-edge-map"
+      }
+    ]
+  }
+]

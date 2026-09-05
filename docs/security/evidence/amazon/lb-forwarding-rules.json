@@ -1,4 +1,23 @@
-# 2026-09-05T00:51:33Z
+# 2026-09-05T01:23:52Z
 # gcloud compute forwarding-rules list --project=nivadesk-amazon --global --format=json
 
-[]
+[
+  {
+    "IPAddress": "136.68.239.143",
+    "IPProtocol": "TCP",
+    "attachedExtensions": [],
+    "creationTimestamp": "2026-09-04T18:05:02.300-07:00",
+    "description": "",
+    "fingerprint": "SJyX9TSnn-0=",
+    "id": "4698855067077760081",
+    "kind": "compute#forwardingRule",
+    "labelFingerprint": "42WmSpB8rSM=",
+    "loadBalancingScheme": "EXTERNAL_MANAGED",
+    "name": "amazon-edge-https",
+    "networkTier": "PREMIUM",
+    "portRange": "443-443",
+    "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/forwardingRules/amazon-edge-https",
+    "selfLinkWithId": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/forwardingRules/4698855067077760081",
+    "target": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/targetHttpsProxies/amazon-edge-proxy"
+  }
+]
