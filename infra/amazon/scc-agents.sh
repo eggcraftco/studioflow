@@ -47,12 +47,26 @@ echo "══ 1. lift the constraint on $PROJECT (project-level override, seconds
 POL=$(mktemp); printf 'name: projects/%s/policies/%s\nspec:\n  rules:\n  - allowAll: true\n' "$PROJECT" "$CONSTRAINT" > "$POL"
 trap restore EXIT
 gcloud org-policies set-policy "$POL" >/dev/null; rm -f "$POL"
-sleep 20   # policy propagation
+T0=$(date +%s)
 
-echo "══ 2. grant the service agents their roles ══"
-echo "$WANT" | while read -r role member; do
-  gcloud projects add-iam-policy-binding "$PROJECT" --member="$member" --role="$role" --condition=None --quiet >/dev/null && echo "  + $role → ${member#serviceAccount:}"
-done
+echo "══ 2. grant the service agents their roles (retrying while the override propagates; up to 6 min) ══"
+# Org Policy changes are stored at once but enforced with a delay (2026-09-05:
+# 20 s was not enough — every grant still hit "not a permitted customer").
+# Each grant is retried while that exact error persists; anything else aborts.
+ERR=$(mktemp)
+grant() {
+  local role="$1" member="$2" i
+  for i in $(seq 1 18); do
+    if gcloud projects add-iam-policy-binding "$PROJECT" --member="$member" --role="$role" --condition=None --quiet >/dev/null 2>"$ERR"; then
+      echo "  + $role → ${member#serviceAccount:} (after $(( $(date +%s) - T0 )) s)"; return 0
+    fi
+    if grep -q "permitted customer" "$ERR"; then [ "$i" = 1 ] && echo "  (constraint still enforced — waiting for the override to propagate)"; sleep 20; continue; fi
+    cat "$ERR"; return 1
+  done
+  echo "  ❌ the override never took effect for $member"; return 1
+}
+while read -r role member; do grant "$role" "$member" || exit 1; done <<< "$WANT"
+rm -f "$ERR"
 echo "══ 3. Security Health Analytics (its precondition was the missing agent role) ══"
 gcloud scc manage services update security-health-analytics --project="$PROJECT" --enablement-state=enabled --format='value(name.basename(),effectiveEnablementState)' 2>&1 | tail -1 | sed 's/^/  /'
 
