@@ -40,3 +40,19 @@
           - method: "*"
     resources:
       - projects/PROJECT_NUMBER
+# 4. Security Command Center's notification service agent (organisation-level,
+#    Google-managed) publishes each finding into the project's scc-findings
+#    topic — a Pub/Sub call from outside the perimeter. Without this rule the
+#    finding exists but never reaches the operator.
+- ingressFrom:
+    identities:
+      - serviceAccount:service-org-378239481010@gcp-sa-scc-notification.iam.gserviceaccount.com
+    sources:
+      - accessLevel: "*"
+  ingressTo:
+    operations:
+      - serviceName: pubsub.googleapis.com
+        methodSelectors:
+          - method: "*"
+    resources:
+      - projects/PROJECT_NUMBER

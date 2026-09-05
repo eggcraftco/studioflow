@@ -77,7 +77,7 @@ control below ends with an evidence list.
 |---|---|---|---|
 | 1. Network segmentation | **In progress** | project/folder/org-policy read-back (`org-policies.txt`), private zone + route + firewall and the diag proof (`pga-*`), bootstrap IAM record, bridge test | VPC-SC perimeter: dry-run first, then a week of traffic, then the enforce gate |
 | 2. Firewall and network ACLs | **Passed** (5 Sep 2026) | `cloud-armor-policy.json`, `lb-*.json`, `lb-certificate-and-address.txt`, `run-ingress.txt`, `run-app-closed-to-internet.txt`, `vpc-firewall-rules.json`, `nat-and-static-ip.txt`, `subnet-flow-logs.txt`, `armor-blocked-requests.txt` (real scanners denied by the WAF and the default rule within minutes of go-live), `edge-smoke-2026-09-05.md` (8/8), `egress.js` tests | two log-based items are captured from configuration and unit tests today and will be re-captured from live traffic once the connector runs: a refused egress in the wrapper's log, a NAT translation |
-| 3. IDS / IPS / threat detection | **Activated 5 Sep 2026 — test finding pending** | Premium (30-day trial, then pay-as-you-go) on the project, Standard on the organisation; Event Threat Detection + Cloud Run Threat Detection + Web Security Scanner effective; findings → Pub/Sub → email alert; 400-day log retention; Cloud Armor prevention half live (`scc-activation-2026-09-05.md`, `scc-services.txt`, `scc-notification.json`, `scc-agents.txt`, `scc-alerting.txt`) | the benign "Malware: Bad Domain" test finding and its delivery (`scc-test-2026-09-05.txt`); Security Health Analytics cannot be enabled at project level (`FAILED_PRECONDITION`, open with Google) |
+| 3. IDS / IPS / threat detection | **Activated 5 Sep 2026 — test finding pending** | Premium (30-day trial, then pay-as-you-go) on the project, Standard on the organisation; Event Threat Detection + Cloud Run Threat Detection + Web Security Scanner effective; findings → Pub/Sub → email alert; 400-day log retention; Cloud Armor prevention half live (`scc-activation-2026-09-05.md`, `scc-services.txt`, `scc-notification.json`, `scc-agents.txt`, `scc-alerting.txt`) | the benign "Malware: Bad Domain" test finding and its delivery (`scc-test-2026-09-05.txt`); Security Health Analytics is retired for new activations per Google (Compliance Manager replaces it and is enabled) — posture remediation item, not an IDS/IPS blocker; `Passed` only once the ETD finding, the Cloud Run Threat Detection finding and their delivery are all in the pack |
 | 4. Anti-malware on privileged endpoints | **Blocked — EDR/MDM not in place** | upload scanner production report; shared-responsibility note for the serverless layer | the operator's devices are not yet enrolled in an MDM with a managed, tamper-protected EDR; until the console screenshots, the MDM policy export and the device inventory exist, this control is a stated blocker for the application |
 
 ## The four controls, redefined
@@ -204,6 +204,54 @@ operator's to do; it is not code.
 date, tamper protection); MDM policy export; the device inventory; the
 shared-responsibility note for the serverless layer; the upload scanner's
 production report.
+
+### 4a. Endpoint policy and device scope (added 2026-09-05)
+
+**Devices in scope** — every device from which a person can reach Amazon
+Information or the controls around it. Today that is one operator; the
+inventory is kept in `access-control-policy.md` and re-confirmed quarterly.
+
+| Device | Why it is in scope | Status |
+|---|---|---|
+| The operator's MacBook Pro (`Guness-MacBook-Pro`) | signed-in `gcloud` as the project owner, the Google Cloud console, the repository and its deploy keys; can read `nivadesk-amazon` Firestore and Secret Manager | **not enrolled** |
+| The operator's Mac Studio (second workstation; the repository branch history shows it) | same access if `gcloud`/console sessions exist there — to be confirmed by the operator; if it never signs in to the Amazon project it is out of scope and documented as such | **to confirm, then enrol or exclude** |
+| The operator's phone | Google account sessions (console app, 2-step verification) and NivaDesk's own mobile app; cannot read Amazon Information directly (the `restrictedCustomer` collection is unreadable to clients) but holds the sign-in that could | **not enrolled** |
+| Amazon zone servers | serverless (Cloud Run gen2); host anti-malware is Google's under the shared-responsibility model; runtime detection is Cloud Run Threat Detection (control 3) | covered by control 3 |
+
+**Minimum policy for an in-scope device** (Amazon: current anti-malware that
+the user cannot disable, updated at least monthly, on-access plus scheduled
+scans, under management):
+
+1. **Managed EDR / anti-malware** deployed and enrolled by the MDM, not
+   installed by hand — the product must report to a console the operator does
+   not control from the device itself.
+2. **Tamper protection on**: the device user cannot uninstall, stop, or
+   disable the agent or its real-time protection; the MDM profile blocks
+   removal of the management profile.
+3. **Automatic updates**: engine and signature updates automatic (daily),
+   with the criterion of "no older than 30 days" alarmed in the console; OS
+   updates enforced by the MDM within 14 days of release.
+4. **Weekly full scan** scheduled by policy, in addition to on-access
+   (real-time) scanning; results retained in the console.
+5. **Device compliance evidence**: disk encryption (FileVault / device
+   encryption) on, screen lock ≤ 5 minutes, firewall on, compliance state
+   reported to the MDM; a non-compliant device loses access (conditional
+   access on the Google account, or at minimum the operator's documented
+   procedure to revoke sessions).
+6. **Evidence kept for the pack** (files named in `evidence.sh`):
+   `edr-console-devices.png` (every in-scope device, protected), `edr-definitions-date.png`
+   (definitions within 30 days), `edr-tamper-protection.png` (setting on),
+   `mdm-policy-export.pdf` (the enforced profile), `device-inventory.md`
+   (the table above with serials, last scan date, agent version). Screenshots
+   are taken from the consoles, not from the device, and re-captured within
+   the 30 days before the application.
+
+**Candidate products** (any one satisfies the policy; the choice is the
+operator's and is not a security decision): Microsoft Intune + Defender for
+Business (Microsoft 365 Business Premium), Jamf Now/Pro + Jamf Protect, or
+Kandji with its built-in EDR — all three support macOS and iOS, tamper
+protection, scheduled scans and exportable compliance reports. Until one is
+enrolled and its evidence is in the pack this control stays **Blocked**.
 
 ## Explicitly not a blocker
 
