@@ -1,4 +1,4 @@
-# 2026-09-05T05:33:50Z
+# 2026-09-05T13:01:12Z
 # bash -c gcloud compute ssl-certificates describe amazon-edge-cert --global --project=nivadesk-amazon --format='yaml(managed,type,subjectAlternativeNames,expireTime)'; echo; gcloud compute addresses describe amazon-edge-ip --global --project=nivadesk-amazon --format='value(address,status)'; echo; echo 'DNS:'; dig +short amazon.nivadesk.app @1.1.1.1
 
 expireTime: '2026-12-03T17:04:46.000-08:00'

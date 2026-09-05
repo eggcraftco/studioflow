@@ -20,3 +20,19 @@ Amazon zone: SCC finding published True projects/nivadesk-amazon/notificationCha
 2026-09-05T03:14:08.491603219Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
 2026-09-05T03:13:38.492295377Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR
 finding: NOT seen within 30 minutes (category "Malware: Bad Domain")
+# 2026-09-05T12:26:55Z — Event Threat Detection test, Google's documented VM procedure (Malware: Bad Domain): e2-micro amazon-etd-vm-test in amazon-subnet (no external address, no service account), startup script curl/getent etd-malware-trigger.goog
+== the DNS queries as Cloud DNS logged them
+2026-09-05T12:28:27.756078492Z	etd-malware-trigger.goog.	10.60.0.3	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T12:28:27.724600663Z	etd-malware-trigger.goog.	10.60.0.3	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T12:27:57.702501610Z	etd-malware-trigger.goog.	10.60.0.3	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T12:27:57.696499088Z	etd-malware-trigger.goog.	10.60.0.3	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T12:27:27.693134780Z	etd-malware-trigger.goog.	10.60.0.3	145308107004.amazon-etd-vm-test	NOERROR
+finding: NOT seen within 30 minutes (category "Malware: Bad Domain")
+# 2026-09-05T13:04:42Z — Event Threat Detection test, Google's documented VM procedure (Malware: Bad Domain): e2-micro amazon-etd-vm-test in amazon-subnet (no external address, no service account), startup script curl/getent etd-malware-trigger.goog
+== the DNS queries as Cloud DNS logged them
+2026-09-05T13:06:28.844161719Z	etd-malware-trigger.goog.	10.60.0.4	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T13:06:28.763985876Z	etd-malware-trigger.goog.	10.60.0.4	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T13:05:58.752143124Z	etd-malware-trigger.goog.	10.60.0.4	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T13:05:58.737088014Z	etd-malware-trigger.goog.	10.60.0.4	145308107004.amazon-etd-vm-test	NOERROR
+2026-09-05T13:05:28.731042752Z	etd-malware-trigger.goog.	10.60.0.4	145308107004.amazon-etd-vm-test	NOERROR
+finding: NOT seen within 30 minutes (category "Malware: Bad Domain")

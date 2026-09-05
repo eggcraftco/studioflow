@@ -1,4 +1,4 @@
-# 2026-09-05T05:33:50Z
+# 2026-09-05T13:01:12Z
 # gcloud logging buckets describe amazon-audit --location=europe-west2 --project=nivadesk-amazon --format=value(name,retentionDays,locked)
 
 projects/nivadesk-amazon/locations/europe-west2/buckets/amazon-audit	400	

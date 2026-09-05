@@ -1,4 +1,4 @@
-# 2026-09-05T05:33:50Z
+# 2026-09-05T13:01:12Z
 # bash -c sed -n '/^## 1\. Architecture/,/^## 2\. Project/p' "infra/amazon/../../docs/security/amazon-hardened-project-design.md"
 
 ## 1. Architecture — the final picture

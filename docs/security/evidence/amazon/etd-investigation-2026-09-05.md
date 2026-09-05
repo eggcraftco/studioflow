@@ -1,4 +1,4 @@
-# Event Threat Detection — investigation record (prepared 2026-09-05, completed after the third official VM test)
+# Event Threat Detection — investigation record (2026-09-05): Google support / ETD investigation required
 
 ## Configuration read live at 2026-09-05T13:06:14Z
 
@@ -23,7 +23,7 @@ log bucket amazon-audit:  400
 |---|---|---|---|---|
 | 1 — 03:13 UTC | amazon-etd-vm-test, 10.60.0.2 | 5 entries 03:13:38–03:14:38, vmInstanceName 145308107004.amazon-etd-vm-test, NOERROR | disabled (design) | none |
 | 2 — 12:26 UTC (operator) | amazon-etd-vm-test, 10.60.0.3 | 5 entries 12:27:27–12:28:27, same identity, NOERROR | **enabled** for the test, then disabled again | none |
-| 3 — 13:05 UTC | amazon-etd-vm-test | (filled in after the run) | disabled | (filled in after the run) |
+| 3 — 13:05 UTC | amazon-etd-vm-test, 10.60.0.4 | 5 entries 13:05:28–13:06:28, same identity, NOERROR | disabled (unchanged) | none by 13:38 |
 
 Earlier, non-official attempt: Cloud Run job resolver 02:41 UTC (no VM identity in the DNS log) — none.
 
@@ -43,3 +43,22 @@ Earlier, non-official attempt: Cloud Run job resolver 02:41 UTC (no VM identity 
 2026-09-05T03:14:38.517692621Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR	projects/nivadesk-amazon/logs/dns.googleapis.com%2Fdns_queries
 2026-09-05T03:14:38.509049743Z	etd-malware-trigger.goog.	10.60.0.2	145308107004.amazon-etd-vm-test	NOERROR	projects/nivadesk-amazon/logs/dns.googleapis.com%2Fdns_queries
 ```
+
+## Conclusion (13:38 UTC)
+
+Three runs of Google's documented "Malware: Bad Domain" procedure — the last
+two on a VM exactly as documented, with the Cloud DNS query logged under the
+VM's identity, once with the `_Default` sink enabled and once with it
+disabled — produced no finding, against a documented detection latency of
+"generally less than 15 minutes". The detector service and the
+`MALWARE_BAD_DOMAIN` module read effective ENABLED, the project's Security
+Command Center service agent holds its role, the Event Threat Detection
+source is registered for the project, and the only findings on the project
+come from Cloud Armor and Compliance Manager. No further experiments: the
+question goes to Google with this record (support case or the Premium
+support channel). Suggested wording: *"Project-level Premium activation on
+2026-09-05; Event Threat Detection effective ENABLED; Cloud DNS logging on
+the VPC; the documented etd-malware-trigger.goog VM test run three times
+(timestamps in this record) with the DNS queries visible in the project's
+logs; no Malware: Bad Domain finding at project or organisation level. Is
+the detector consuming this project's Cloud DNS logs, and if not, why?"*

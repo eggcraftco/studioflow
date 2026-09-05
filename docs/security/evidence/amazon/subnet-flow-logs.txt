@@ -1,4 +1,4 @@
-# 2026-09-05T05:33:50Z
+# 2026-09-05T13:01:12Z
 # gcloud compute networks subnets describe amazon-subnet --region=europe-west2 --project=nivadesk-amazon --format=yaml(enableFlowLogs,logConfig,privateIpGoogleAccess,ipCidrRange)
 
 enableFlowLogs: true
