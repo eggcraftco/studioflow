@@ -1,4 +1,4 @@
-# 2026-09-05T04:09:22Z
+# 2026-09-05T05:33:50Z
 # bash -c gcloud functions describe scanUploadedFile --region=europe-west2 --project=eggcraft-studio --gen2 --format='value(state,serviceConfig.environmentVariables.NIVADESK_MALWARE_SCAN)'; gcloud run services describe clamav-scanner --region=europe-west2 --project=eggcraft-studio --format='value(status.latestReadyRevisionName)'
 
 ACTIVE	1

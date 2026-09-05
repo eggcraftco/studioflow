@@ -1,24 +1,24 @@
-# 2026-09-05T04:09:22Z
+# 2026-09-05T05:33:50Z
 # gcloud logging read resource.type="http_load_balancer" AND jsonPayload.enforcedSecurityPolicy.outcome="DENY" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=20 --format=table(timestamp,httpRequest.remoteIp,httpRequest.requestUrl,jsonPayload.enforcedSecurityPolicy.priority,jsonPayload.enforcedSecurityPolicy.configuredAction)
 
-TIMESTAMP                    REMOTE_IP        REQUEST_URL                                                 PRIORITY    CONFIGURED_ACTION
-2026-09-05T04:07:59.484552Z  157.97.124.235   https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T03:56:26.704891Z  34.34.246.93     https://amazon.nivadesk.app/healthz                         2147483647  DENY
-2026-09-05T03:56:26.569304Z  34.34.246.93     https://amazon.nivadesk.app/oauth/start                     2147483647  DENY
-2026-09-05T03:56:26.430630Z  34.34.246.93     https://amazon.nivadesk.app/foo                             2147483647  DENY
-2026-09-05T03:51:04.619830Z  34.34.246.250    https://amazon.nivadesk.app/healthz                         2147483647  DENY
-2026-09-05T03:51:04.475071Z  34.34.246.250    https://amazon.nivadesk.app/oauth/start                     2147483647  DENY
-2026-09-05T03:51:04.328184Z  34.34.246.250    https://amazon.nivadesk.app/foo                             2147483647  DENY
-2026-09-05T03:30:48.183016Z  148.135.208.193  https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T03:22:15.136180Z  205.169.39.35    https://136.68.239.143/favicon.ico                          2147483647  DENY
-2026-09-05T03:22:14.847724Z  205.169.39.35    https://136.68.239.143/                                     2147483647  DENY
-2026-09-05T03:19:02.341804Z  109.123.250.0    https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T03:18:28.633920Z  202.78.167.217   https://amazon.nivadesk.app/api/gateway/heartbeat           2147483647  DENY
-2026-09-05T03:18:28.633568Z  202.78.167.217   https://amazon.nivadesk.app/open/                           2147483647  DENY
-2026-09-05T03:18:28.632863Z  202.78.167.217   https://amazon.nivadesk.app/open/visitors/info/gets?uuid=1  2147483647  DENY
-2026-09-05T03:18:28.276061Z  202.78.167.217   https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T03:07:00.543385Z  34.219.122.228   https://amazon.nivadesk.app/favicon.ico                     2147483647  DENY
-2026-09-05T03:06:59.453676Z  34.219.122.228   https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T03:06:51.532821Z  34.219.122.228   https://amazon.nivadesk.app/favicon.ico                     2147483647  DENY
-2026-09-05T03:06:50.824281Z  34.219.122.228   https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T02:53:13.959325Z  34.210.60.152    https://amazon.nivadesk.app/                                2147483647  DENY
+TIMESTAMP                    REMOTE_IP        REQUEST_URL                                                               PRIORITY    CONFIGURED_ACTION
+2026-09-05T05:29:09.551705Z  161.118.241.246  https://136.68.239.143/v2/width=device-width,%20initial-scale=1           2147483647  DENY
+2026-09-05T05:29:09.551345Z  161.118.241.246  https://136.68.239.143/.docker/width=device-width,%20initial-scale=1      1000        DENY
+2026-09-05T05:29:09.142715Z  161.118.241.246  https://136.68.239.143/api/width=device-width,%20initial-scale=1          2147483647  DENY
+2026-09-05T05:29:09.142590Z  161.118.241.246  https://136.68.239.143/actuator/width=device-width,%20initial-scale=1     2147483647  DENY
+2026-09-05T05:29:09.142447Z  161.118.241.246  https://136.68.239.143/swagger/v1/width=device-width,%20initial-scale=1   2147483647  DENY
+2026-09-05T05:29:09.142398Z  161.118.241.246  https://136.68.239.143/.well-known/width=device-width,%20initial-scale=1  2147483647  DENY
+2026-09-05T05:29:09.142382Z  161.118.241.246  https://136.68.239.143/.aws/width=device-width,%20initial-scale=1         2147483647  DENY
+2026-09-05T05:29:08.635234Z  161.118.241.246  https://136.68.239.143/redoc                                              2147483647  DENY
+2026-09-05T05:29:08.634899Z  161.118.241.246  https://136.68.239.143/api/openapi.json                                   2147483647  DENY
+2026-09-05T05:29:08.634611Z  161.118.241.246  https://136.68.239.143/docs                                               2147483647  DENY
+2026-09-05T05:29:08.634576Z  161.118.241.246  https://136.68.239.143/.git/width=device-width,%20initial-scale=1         1000        DENY
+2026-09-05T05:29:08.226059Z  161.118.241.246  https://136.68.239.143/telescope                                          2147483647  DENY
+2026-09-05T05:29:08.225830Z  161.118.241.246  https://136.68.239.143/v2/api-docs                                        2147483647  DENY
+2026-09-05T05:29:08.225774Z  161.118.241.246  https://136.68.239.143/console                                            2147483647  DENY
+2026-09-05T05:29:08.225692Z  161.118.241.246  https://136.68.239.143/_profiler                                          2147483647  DENY
+2026-09-05T05:29:08.225535Z  161.118.241.246  https://136.68.239.143/debug                                              2147483647  DENY
+2026-09-05T05:29:07.817371Z  161.118.241.246  https://136.68.239.143/composer.json                                      1000        DENY
+2026-09-05T05:29:07.817190Z  161.118.241.246  https://136.68.239.143/Gemfile                                            2147483647  DENY
+2026-09-05T05:29:07.817140Z  161.118.241.246  https://136.68.239.143/requirements.txt                                   2147483647  DENY
+2026-09-05T05:29:07.817049Z  161.118.241.246  https://136.68.239.143/package.json                                       1000        DENY

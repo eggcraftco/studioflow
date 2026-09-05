@@ -1,4 +1,4 @@
-# 2026-09-05T04:09:22Z
+# 2026-09-05T05:33:50Z
 # bash -c for s in amazon-oauth amazon-admin amazon-sync; do if gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 >/dev/null 2>&1; then echo "$s: $(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(metadata.annotations."run.googleapis.com/ingress",spec.template.spec.serviceAccountName,metadata.annotations."run.googleapis.com/custom-audiences")')"; else echo "$s: (not deployed)"; fi; done
 
 amazon-oauth: (not deployed)

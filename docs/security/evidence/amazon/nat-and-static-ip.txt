@@ -1,4 +1,4 @@
-# 2026-09-05T04:09:22Z
+# 2026-09-05T05:33:50Z
 # bash -c gcloud compute routers nats describe amazon-nat --router=amazon-router --region=europe-west2 --project=nivadesk-amazon --format=yaml; gcloud compute addresses describe amazon-egress --region=europe-west2 --project=nivadesk-amazon --format='value(address,status)'
 
 effectiveTcpTimeWaitTimeoutSec: 30
