@@ -34289,7 +34289,7 @@ function amazonAdminClient() {
   const auth = new GoogleAuth();
   return amazonIngestModule.createAmazonAdminClient({
     identityToken: async () => {
-      const client = await auth.getIdTokenClient(amazonIngestModule.ADMIN_BASE_URL);
+      const client = await auth.getIdTokenClient(amazonIngestModule.ADMIN_AUDIENCE);
       const headers = await client.getRequestHeaders();
       return String(headers.Authorization || headers.authorization || "").replace(/^Bearer\s+/i, "");
     }

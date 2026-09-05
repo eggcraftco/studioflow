@@ -12,6 +12,9 @@ metadata:
   annotations:
     run.googleapis.com/ingress: internal-and-cloud-load-balancing
     run.googleapis.com/launch-stage: GA
+    # Tokens for the public hostname are accepted by Cloud Run's own IAM check
+    # (custom audience); the service checks the same value again (ADMIN_AUDIENCE).
+    run.googleapis.com/custom-audiences: '["https://amazon.nivadesk.app"]'
 spec:
   template:
     metadata:
@@ -44,11 +47,11 @@ spec:
             - name: REGION
               value: europe-west2
             # The only identity that may call /admin/*, and the audience its
-            # token must carry (the public path through the load balancer).
+            # token must carry: the public hostname, same as the custom audience above.
             - name: ADMIN_CALLER_EMAIL
               value: amazon-caller@eggcraft-studio.iam.gserviceaccount.com
             - name: ADMIN_AUDIENCE
-              value: https://amazon.nivadesk.app/admin
+              value: https://amazon.nivadesk.app
           startupProbe:
             httpGet:
               path: /healthz

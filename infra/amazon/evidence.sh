@@ -70,6 +70,7 @@ SCAN
 admin_iam() {
   echo "== amazon-admin invoker policy"; gcloud run services get-iam-policy amazon-admin --region="$REGION" --project="$PROJECT" --format=yaml
   echo "== amazon-admin ingress: $(gcloud run services describe amazon-admin --region="$REGION" --project="$PROJECT" --format='value(metadata.annotations."run.googleapis.com/ingress")')"
+  echo "== amazon-admin custom audiences (the only audience Cloud Run accepts for the public hostname): $(gcloud run services describe amazon-admin --region="$REGION" --project="$PROJECT" --format='value(metadata.annotations."run.googleapis.com/custom-audiences")')"
   echo "== amazon-diag job policy"; gcloud run jobs get-iam-policy amazon-diag --region="$REGION" --project="$PROJECT" --format=yaml
 }
 secret_iam() {
@@ -161,6 +162,8 @@ capture firewall cloud-armor-policy.json gcloud compute security-policies descri
 capture firewall lb-backend-services.json gcloud compute backend-services list --project="$PROJECT" --global --format=json
 capture firewall lb-url-map.json gcloud compute url-maps describe amazon-edge-map --project="$PROJECT" --global --format=json
 capture firewall lb-forwarding-rules.json gcloud compute forwarding-rules list --project="$PROJECT" --global --format=json
+capture firewall lb-certificate-and-address.txt bash -c "gcloud compute ssl-certificates describe amazon-edge-cert --global --project=$PROJECT --format='yaml(managed,type,subjectAlternativeNames,expireTime)'; echo; gcloud compute addresses describe amazon-edge-ip --global --project=$PROJECT --format='value(address,status)'; echo; echo 'DNS:'; dig +short amazon.nivadesk.app @1.1.1.1"
+if [ -s "$OUT/edge-smoke-2026-09-05.md" ]; then printf '| firewall | `edge-smoke-2026-09-05.md` | present (record of 2026-09-05) |\n' >> "$MANIFEST"; fi
 capture firewall run-ingress.txt bash -c "for s in amazon-oauth amazon-admin amazon-sync; do echo \"\$s: \$(gcloud run services describe \$s --project=$PROJECT --region=$REGION --format='value(metadata.annotations.\"run.googleapis.com/ingress\",spec.template.spec.serviceAccountName)')\"; done"
 capture firewall vpc-firewall-rules.json gcloud compute firewall-rules list --project="$PROJECT" --format=json
 capture firewall nat-and-static-ip.txt bash -c "gcloud compute routers nats describe amazon-nat --router=amazon-router --region=$REGION --project=$PROJECT --format=yaml; gcloud compute addresses describe amazon-egress --region=$REGION --project=$PROJECT --format='value(address,status)'"

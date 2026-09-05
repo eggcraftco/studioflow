@@ -26,6 +26,11 @@ const { idempotencyKey } = require("../events");
 const SYNC_IDENTITY = "amazon-sync@nivadesk-amazon.iam.gserviceaccount.com";
 const OAUTH_START_URL = "https://amazon.nivadesk.app/oauth/start";
 const ADMIN_BASE_URL = "https://amazon.nivadesk.app/admin";
+// The audience amazon-caller@'s identity tokens carry for /admin/*: the
+// zone's public hostname, declared on the Cloud Run service as a custom
+// audience and checked again by the service itself (ADMIN_AUDIENCE). One
+// value on both sides; a token for any other audience is refused twice.
+const ADMIN_AUDIENCE = "https://amazon.nivadesk.app";
 
 function json(status, body) { return { status, body }; }
 
@@ -158,4 +163,4 @@ function createAmazonAdminClient({ identityToken, fetchImpl = globalThis.fetch, 
   };
 }
 
-module.exports = { createAmazonIngest, createAmazonConnect, createAmazonAdminClient, SYNC_IDENTITY, OAUTH_START_URL, ADMIN_BASE_URL };
+module.exports = { createAmazonIngest, createAmazonConnect, createAmazonAdminClient, SYNC_IDENTITY, OAUTH_START_URL, ADMIN_BASE_URL, ADMIN_AUDIENCE };
