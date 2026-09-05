@@ -71,6 +71,15 @@ to what touches Amazon Information — not to every NivaDesk file path. And
 Amazon asks for **documentation and diagrams as evidence**, which is why each
 control below ends with an evidence list.
 
+## Status board (internal readiness, updated 2026-09-05)
+
+| Control | Status | Evidence (docs/security/evidence/amazon/) | What is still open |
+|---|---|---|---|
+| 1. Network segmentation | **In progress** | project/folder/org-policy read-back (`org-policies.txt`), private zone + route + firewall and the diag proof (`pga-*`), bootstrap IAM record, bridge test | VPC-SC perimeter: dry-run first, then a week of traffic, then the enforce gate |
+| 2. Firewall and network ACLs | **Passed** (5 Sep 2026) | `cloud-armor-policy.json`, `lb-*.json`, `lb-certificate-and-address.txt`, `run-ingress.txt`, `run-app-closed-to-internet.txt`, `vpc-firewall-rules.json`, `nat-and-static-ip.txt`, `subnet-flow-logs.txt`, `armor-blocked-requests.txt` (real scanners denied by the WAF and the default rule within minutes of go-live), `edge-smoke-2026-09-05.md` (8/8), `egress.js` tests | two log-based items are captured from configuration and unit tests today and will be re-captured from live traffic once the connector runs: a refused egress in the wrapper's log, a NAT translation |
+| 3. IDS / IPS / threat detection | **Gate pending** | the prevention half is live (Cloud Armor, above); log bucket retention 400 days (`log-bucket-retention.txt`) | SCC Premium project-level activation (its own approval gate; cost shown first), then a test finding delivered to the operator |
+| 4. Anti-malware on privileged endpoints | **Blocked — EDR/MDM not in place** | upload scanner production report; shared-responsibility note for the serverless layer | the operator's devices are not yet enrolled in an MDM with a managed, tamper-protected EDR; until the console screenshots, the MDM policy export and the device inventory exist, this control is a stated blocker for the application |
+
 ## The four controls, redefined
 
 ### 1. Network segmentation

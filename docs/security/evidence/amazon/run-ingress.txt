@@ -1,8 +1,6 @@
-# 2026-09-05T01:23:52Z
-# bash -c for s in amazon-oauth amazon-admin amazon-sync; do echo "$s: $(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(metadata.annotations."run.googleapis.com/ingress",spec.template.spec.serviceAccountName)')"; done
+# 2026-09-05T01:39:08Z
+# bash -c for s in amazon-oauth amazon-admin amazon-sync; do if gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 >/dev/null 2>&1; then echo "$s: $(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(metadata.annotations."run.googleapis.com/ingress",spec.template.spec.serviceAccountName,metadata.annotations."run.googleapis.com/custom-audiences")')"; else echo "$s: (not deployed)"; fi; done
 
-ERROR: (gcloud.run.services.describe) Cannot find service [amazon-oauth]
-amazon-oauth: 
-amazon-admin: internal-and-cloud-load-balancing	amazon-admin@nivadesk-amazon.iam.gserviceaccount.com
-ERROR: (gcloud.run.services.describe) Cannot find service [amazon-sync]
-amazon-sync: 
+amazon-oauth: (not deployed)
+amazon-admin: internal-and-cloud-load-balancing	amazon-admin@nivadesk-amazon.iam.gserviceaccount.com	["https://amazon.nivadesk.app"]
+amazon-sync: (not deployed)

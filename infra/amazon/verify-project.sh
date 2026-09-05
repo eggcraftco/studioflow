@@ -108,6 +108,14 @@ SAS=$(gcloud iam service-accounts list --project="$PROJECT" --format='value(emai
 for sa in amazon-oauth amazon-admin amazon-sync amazon-deploy; do echo "$SAS" | grep -q "$sa@" && ok "$sa@" || fail "$sa@ missing"; done
 KEYS=$(gcloud iam service-accounts keys list --iam-account="amazon-sync@$PROJECT.iam.gserviceaccount.com" --managed-by=user --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')
 [ "$KEYS" = "0" ] && ok "no user-managed keys on amazon-sync@" || fail "$KEYS user-managed key(s)"
+DEPLOY_ROLES=$(gcloud projects get-iam-policy "$PROJECT" --format=json 2>/dev/null | python3 -c "
+import json,sys; p=json.load(sys.stdin)
+print(' '.join(sorted(b['role'] for b in p.get('bindings',[]) if 'serviceAccount:amazon-deploy@' in ' '.join(b.get('members',[])))))")
+echo "$DEPLOY_ROLES" | grep -q "roles/amazonDeployer" && ! echo "$DEPLOY_ROLES" | grep -qE 'roles/run\.(admin|developer|invoker)' \
+  && ok "amazon-deploy@ holds the custom deployer role and no predefined Cloud Run role" || fail "amazon-deploy@ roles: $DEPLOY_ROLES"
+DEPLOY_PERMS=$(gcloud iam roles describe amazonDeployer --project="$PROJECT" --format='value(includedPermissions)' 2>/dev/null)
+[ -n "$DEPLOY_PERMS" ] && ! echo "$DEPLOY_PERMS" | grep -qE 'invoke|jobs\.run|setIamPolicy|\.delete' \
+  && ok "amazonDeployer has no invoke, IAM or delete permission" || fail "amazonDeployer permissions: '$DEPLOY_PERMS'"
 DEFAULT_SA_ROLES=$(gcloud projects get-iam-policy "$PROJECT" --format=json 2>/dev/null | python3 -c "
 import json,sys; p=json.load(sys.stdin)
 print(' '.join(b['role'] for b in p.get('bindings',[]) if any(m.endswith('-compute@developer.gserviceaccount.com') for m in b.get('members',[]))))")

@@ -15,6 +15,10 @@ set -euo pipefail
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 ORG_ID="378239481010"
 PROJECT="${AMAZON_PROJECT_ID:-nivadesk-amazon}"
+# Organisation-level Access Context Manager calls are quota-attributed to
+# gcloud's core project; make that the Amazon project (where step 1 enables
+# the API) rather than whatever the shell defaults to.
+export CLOUDSDK_CORE_PROJECT="$PROJECT"
 MAIN_PROJECT_NUMBER="477037475099"
 OPERATOR="${OPERATOR_EMAIL:-contact@eggcraft.co.uk}"
 DRY_RUN="${DRY_RUN:-1}"
@@ -53,10 +57,11 @@ case "$MODE" in
     echo "  protoPayload.metadata.dryRun=true with VPC_SERVICE_CONTROLS in the status. Then: perimeter.sh report"
     ;;
   report)
+    # The project's _Default sink is disabled by design: the read names the amazon-audit bucket view.
     echo "══ Dry-run violations, last 7 days ══"
     gcloud logging read \
       'protoPayload.metadata.@type="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata" AND protoPayload.metadata.dryRun=true' \
-      --project="$PROJECT" --freshness=7d --limit=500 \
+      --project="$PROJECT" --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=7d --limit=500 \
       --format='table(timestamp,protoPayload.authenticationInfo.principalEmail,protoPayload.serviceName,protoPayload.methodName,protoPayload.metadata.violationReason)' \
       | tee "$HERE/../../docs/security/evidence/amazon/vpcsc-dryrun-report.txt" 2>/dev/null || true
     echo "  Each row is either resolved (a rule added) or explained, in the report shown at the gate."

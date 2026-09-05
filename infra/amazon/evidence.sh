@@ -39,6 +39,26 @@ capture() {   # capture <control> <file> <command...>
 
 PN=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)' 2>/dev/null || echo "")
 
+# The deploy identity: its custom role's permissions, its project roles, and a
+# live probe — its own token for the declared audience must die at Cloud Run's
+# IAM layer (the body says "does not have permission"), never reach /admin/*.
+deploy_identity() {
+  echo "== custom role amazonDeployer permissions"
+  gcloud iam roles describe amazonDeployer --project="$PROJECT" --format='value(includedPermissions)' | tr ';' '\n' | sed 's/^/  /'
+  echo "== project roles of amazon-deploy@"
+  gcloud projects get-iam-policy "$PROJECT" --format=json | python3 -c '
+import json,sys; p=json.load(sys.stdin)
+for b in p["bindings"]:
+    if any("amazon-deploy@" in m for m in b["members"]): print("  " + b["role"])'
+  echo "== live probe: amazon-deploy@ token for https://amazon.nivadesk.app → GET /admin/status"
+  local t; t=$(gcloud auth print-identity-token --impersonate-service-account="amazon-deploy@$PROJECT.iam.gserviceaccount.com" --audiences="https://amazon.nivadesk.app" 2>/dev/null || true)
+  [ -n "$t" ] || { echo "  (could not mint a token as amazon-deploy@)"; return 1; }
+  local body; body=$(mktemp); local code; code=$(curl -s -o "$body" -w '%{http_code}' -m 20 -H "Authorization: Bearer $t" "https://amazon.nivadesk.app/admin/status?companyId=zz-deploy-probe")
+  echo "  HTTP $code — $(tr -d '\n' < "$body" | sed 's/<[^>]*>/ /g' | tr -s ' ' | cut -c1-90)"
+  if [ "$code" = "403" ] && grep -q "does not have permission" "$body"; then echo "  refused by Cloud Run IAM (expected)"; rm -f "$body"; return 0; fi
+  rm -f "$body"; echo "  NOT refused at the IAM layer"; return 1
+}
+
 # The bridge: who may invoke ingestAmazonEnvelope, and — across every Cloud
 # Run service of the main project — whether any Amazon identity holds
 # anything else. The scan takes about a minute; it is the point.
@@ -142,6 +162,8 @@ capture segmentation bridge-iam.txt bridge_iam
 capture segmentation admin-iam.txt admin_iam
 capture segmentation secret-iam.txt secret_iam
 capture segmentation bridge-test-latest.txt bridge_test_latest
+capture segmentation deploy-identity.txt deploy_identity
+if [ -s "$OUT/deploy-identity-2026-09-05.md" ]; then printf '| segmentation | `deploy-identity-2026-09-05.md` | present (record of 2026-09-05) |\n' >> "$MANIFEST"; fi
 if [ -s "$OUT/bridge-test-2026-09-05.md" ]; then printf '| segmentation | `bridge-test-2026-09-05.md` | present (record of 2026-09-05) |\n' >> "$MANIFEST"; fi
 for f in pga-diag-before.txt pga-diag-after.txt; do
   if [ -s "$OUT/$f" ]; then printf '| segmentation | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"

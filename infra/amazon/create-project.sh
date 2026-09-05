@@ -144,7 +144,11 @@ for sa in amazon-oauth amazon-admin amazon-sync; do
   grant "$sa" roles/datastore.user
   grant "$sa" roles/logging.logWriter
 done
-grant amazon-deploy roles/run.admin
+# Cloud Run: a custom role (infra/amazon/deploy-role.sh creates/updates it) — the
+# predefined run.admin/run.developer both include run.routes.invoke, which would
+# make the deploy identity a caller of every service in the zone.
+[ "$DRY_RUN" = "1" ] || bash "$(dirname "$0")/deploy-role.sh" >/dev/null
+grant amazon-deploy "projects/$PROJECT/roles/amazonDeployer"
 grant amazon-deploy roles/cloudbuild.builds.editor
 grant amazon-deploy roles/artifactregistry.writer
 grant amazon-deploy roles/logging.logWriter   # it is also the Cloud Build identity (build logs → Cloud Logging)

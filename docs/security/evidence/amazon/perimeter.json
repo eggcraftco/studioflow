@@ -1,4 +1,4 @@
-# 2026-09-05T01:23:52Z
+# 2026-09-05T01:39:08Z
 # gcloud access-context-manager perimeters describe amazon-information --policy= --format=json
 
 ERROR: (gcloud.access-context-manager.perimeters.describe) Error parsing [perimeter].

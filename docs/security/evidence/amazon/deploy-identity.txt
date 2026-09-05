@@ -1,0 +1,33 @@
+# 2026-09-05T01:39:08Z
+# deploy_identity
+
+== custom role amazonDeployer permissions
+  run.configurations.get
+  run.configurations.list
+  run.executions.get
+  run.executions.list
+  run.jobs.create
+  run.jobs.get
+  run.jobs.list
+  run.jobs.update
+  run.locations.list
+  run.operations.get
+  run.operations.list
+  run.revisions.get
+  run.revisions.list
+  run.routes.get
+  run.routes.list
+  run.services.create
+  run.services.get
+  run.services.list
+  run.services.update
+  run.tasks.get
+  run.tasks.list
+== project roles of amazon-deploy@
+  projects/nivadesk-amazon/roles/amazonDeployer
+  roles/artifactregistry.writer
+  roles/cloudbuild.builds.editor
+  roles/logging.logWriter
+== live probe: amazon-deploy@ token for https://amazon.nivadesk.app → GET /admin/status
+  HTTP 403 —  403 Forbidden Error: Forbidden Your client does not have permission to get URL /admin/sta
+  refused by Cloud Run IAM (expected)

@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T01:23:52Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T01:39:08Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -12,6 +12,8 @@ Generated 2026-09-05T01:23:52Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `admin-iam.txt` | captured |
 | segmentation | `secret-iam.txt` | captured |
 | segmentation | `bridge-test-latest.txt` | captured |
+| segmentation | `deploy-identity.txt` | **errors inside** — resource missing or refused |
+| segmentation | `deploy-identity-2026-09-05.md` | present (record of 2026-09-05) |
 | segmentation | `bridge-test-2026-09-05.md` | present (record of 2026-09-05) |
 | segmentation | `pga-diag-before.txt` | present (record of 2026-09-05) |
 | segmentation | `pga-diag-after.txt` | present (record of 2026-09-05) |
@@ -28,11 +30,11 @@ Generated 2026-09-05T01:23:52Z by infra/amazon/evidence.sh. Each file lists the 
 | firewall | `lb-forwarding-rules.json` | captured |
 | firewall | `lb-certificate-and-address.txt` | captured |
 | firewall | `edge-smoke-2026-09-05.md` | present (record of 2026-09-05) |
-| firewall | `run-ingress.txt` | **errors inside** — resource missing or refused |
+| firewall | `run-ingress.txt` | captured |
 | firewall | `vpc-firewall-rules.json` | captured |
 | firewall | `nat-and-static-ip.txt` | captured |
 | firewall | `subnet-flow-logs.txt` | captured |
-| firewall | `run-app-closed-to-internet.txt` | **errors inside** — resource missing or refused |
+| firewall | `run-app-closed-to-internet.txt` | captured |
 | firewall | `armor-blocked-requests.txt` | captured |
 | firewall | `egress-refused.txt` | **empty** — nothing to show yet |
 | firewall | `nat-translations.txt` | **empty** — nothing to show yet |

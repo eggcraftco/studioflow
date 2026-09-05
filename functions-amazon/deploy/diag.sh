@@ -27,6 +27,8 @@ gcloud run jobs "$verb" amazon-diag --project="$PROJECT" --region="$REGION" --im
   --service-account="amazon-sync@$PROJECT.iam.gserviceaccount.com" --max-retries=0 --task-timeout=120s \
   --impersonate-service-account="$DEPLOY_SA" >/dev/null || { echo "could not $verb the job"; exit 2; }
 
+# Creating/updating the job impersonates amazon-deploy@; running it is the
+# operator's own act — the deploy identity holds no run.jobs.run on purpose.
 echo "running amazon-diag…"
 out=$(mktemp)
 if gcloud run jobs execute amazon-diag --project="$PROJECT" --region="$REGION" --wait >"$out" 2>&1; then RESULT="OK"; else RESULT="FAIL"; fi
