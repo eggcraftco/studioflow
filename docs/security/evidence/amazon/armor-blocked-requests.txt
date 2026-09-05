@@ -1,7 +1,8 @@
-# 2026-09-05T04:02:29Z
+# 2026-09-05T04:09:22Z
 # gcloud logging read resource.type="http_load_balancer" AND jsonPayload.enforcedSecurityPolicy.outcome="DENY" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=20 --format=table(timestamp,httpRequest.remoteIp,httpRequest.requestUrl,jsonPayload.enforcedSecurityPolicy.priority,jsonPayload.enforcedSecurityPolicy.configuredAction)
 
 TIMESTAMP                    REMOTE_IP        REQUEST_URL                                                 PRIORITY    CONFIGURED_ACTION
+2026-09-05T04:07:59.484552Z  157.97.124.235   https://amazon.nivadesk.app/                                2147483647  DENY
 2026-09-05T03:56:26.704891Z  34.34.246.93     https://amazon.nivadesk.app/healthz                         2147483647  DENY
 2026-09-05T03:56:26.569304Z  34.34.246.93     https://amazon.nivadesk.app/oauth/start                     2147483647  DENY
 2026-09-05T03:56:26.430630Z  34.34.246.93     https://amazon.nivadesk.app/foo                             2147483647  DENY
@@ -21,4 +22,3 @@ TIMESTAMP                    REMOTE_IP        REQUEST_URL                       
 2026-09-05T03:06:51.532821Z  34.219.122.228   https://amazon.nivadesk.app/favicon.ico                     2147483647  DENY
 2026-09-05T03:06:50.824281Z  34.219.122.228   https://amazon.nivadesk.app/                                2147483647  DENY
 2026-09-05T02:53:13.959325Z  34.210.60.152    https://amazon.nivadesk.app/                                2147483647  DENY
-2026-09-05T02:53:13.958487Z  34.210.60.152    https://amazon.nivadesk.app/                                2147483647  DENY

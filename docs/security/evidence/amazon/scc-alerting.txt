@@ -1,4 +1,4 @@
-# 2026-09-05T04:02:29Z
+# 2026-09-05T04:09:22Z
 # bash -c gcloud alpha monitoring policies list --project=nivadesk-amazon --filter='displayName="Amazon zone: SCC finding published"' --format='yaml(displayName,enabled,notificationChannels,conditions[0].conditionThreshold.filter)'; gcloud beta monitoring channels list --project=nivadesk-amazon --filter='displayName="amazon-security-email"' --format='value(displayName,type,labels.email_address)'; gcloud pubsub subscriptions describe scc-findings-evidence --project=nivadesk-amazon --format='value(name,topic,messageRetentionDuration)'
 
 ---

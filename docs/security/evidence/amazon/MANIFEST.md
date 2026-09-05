@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T04:02:29Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T04:09:22Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -23,7 +23,8 @@ Generated 2026-09-05T04:02:29Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `perimeter.json` | captured |
 | segmentation | `org-policies.txt` | captured |
 | segmentation | `vpcsc-dryrun-report.txt` | captured |
-| segmentation | `cross-project-read-denied.txt` | **errors inside** — resource missing or refused |
+| segmentation | `cross-project-read-2026-09-05.txt` | present (record of 2026-09-05) |
+| segmentation | `cross-project-read-denied.txt` | captured |
 | firewall | `cloud-armor-policy.json` | captured |
 | firewall | `lb-backend-services.json` | captured |
 | firewall | `lb-url-map.json` | captured |
@@ -45,6 +46,7 @@ Generated 2026-09-05T04:02:29Z by infra/amazon/evidence.sh. Each file lists the 
 | idsips | `scc-alerting.txt` | captured |
 | idsips | `scc-activation-2026-09-05.md` | present (record of 2026-09-05) |
 | idsips | `scc-test-2026-09-05.txt` | present (record of 2026-09-05) |
+| idsips | `scc-crtd-test-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `log-bucket-retention.txt` | captured |
 | idsips | `armor-adaptive-protection.txt` | captured |
 | anti-malware | `edr-console-devices.png` | **missing** — user provides from the EDR/MDM console |
