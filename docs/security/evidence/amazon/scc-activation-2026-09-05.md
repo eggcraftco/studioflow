@@ -55,3 +55,27 @@ This proves Pub/Sub → subscription → alert → email. It does not prove that
 Security Command Center publishes into the topic; that needs a real finding
 (the notification config and the notification agent's role on the topic are
 read live in `scc-notification.json`).
+
+## Why the two detection tests showed nothing on 5 September — what Google documents
+
+- Cloud Run Threat Detection: *"activation … up to 3.5 hours for newly
+  onboarded projects or organizations"*, then *"detection latency of minutes"*
+  ([when to expect findings](https://docs.cloud.google.com/security-command-center/docs/concepts-scan-latency-overview)).
+  The detector was switched on at 02:21 UTC and the documented test job ran
+  at 03:01 UTC — inside that window. A job's process activity is observed at
+  execution time, so the 03:01 execution cannot be detected retroactively:
+  the official test has to run **once more after ~05:50 UTC** (a morning
+  decision, not done overnight).
+- Event Threat Detection: *"activation occurs within seconds"*, *"detection
+  latencies are generally less than 15 minutes from the time a log is
+  written"*. The VM procedure's DNS queries were logged at 03:13–03:14 UTC
+  under the VM's name; no finding by 04:20 UTC. That is not latency.
+  "Malware: Bad Domain" is not among the rules Google lists as
+  organisation-only ([project-level limitations](https://docs.cloud.google.com/security-command-center/docs/activate-scc-project-level-limitations)),
+  and the module `MALWARE_BAD_DOMAIN` reads effective ENABLED. The remaining
+  hypothesis is the project's Logging routing: the `_Default` sink is
+  disabled by design (every log goes to the regional `amazon-audit` bucket
+  instead), and Google does not document whether Event Threat Detection reads
+  the log stream before or after that sink. Testing it means re-enabling the
+  `_Default` sink temporarily (regional bucket, 30-day retention, no security
+  relaxation) and running the VM procedure once — a morning decision.
