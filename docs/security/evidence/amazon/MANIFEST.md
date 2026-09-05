@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T13:01:12Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T13:39:37Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -48,6 +48,9 @@ Generated 2026-09-05T13:01:12Z by infra/amazon/evidence.sh. Each file lists the 
 | idsips | `scc-finding-2026-09-05.md` | present (record of 2026-09-05) |
 | idsips | `scc-test-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `scc-crtd-test-2026-09-05.txt` | present (record of 2026-09-05) |
+| idsips | `etd-investigation-2026-09-05.md` | present (record of 2026-09-05) |
+| idsips | `crtd-investigation-2026-09-05.md` | present (record of 2026-09-05) |
+| idsips | `test-artifacts-cleanup-2026-09-05.md` | present (record of 2026-09-05) |
 | idsips | `log-bucket-retention.txt` | captured |
 | idsips | `armor-adaptive-protection.txt` | captured |
 | anti-malware | `edr-console-devices.png` | **missing** — user provides from the EDR/MDM console |
