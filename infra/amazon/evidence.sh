@@ -30,7 +30,7 @@ capture() {   # capture <control> <file> <command...>
   local body; body=$(tail -n +4 "$path" | grep -v '^\s*$' | grep -v '^\[\]$' || true)
   # The bridge test's own lines legitimately say PERMISSION_DENIED / NOT_FOUND
   # (they are the expected refusals); they are not errors of the capture.
-  local errscan; errscan=$(echo "$body" | grep -v '^bridgetest ' || true)
+  local errscan; errscan=$(echo "$body" | grep -v '^bridgetest ' | grep -v '(expected' || true)
   if [ $rc -ne 0 ]; then printf '| %s | `%s` | **missing** (exit %s) |\n' "$control" "$file" "$rc" >> "$MANIFEST"
   elif [ -z "$body" ]; then printf '| %s | `%s` | **empty** — nothing to show yet |\n' "$control" "$file" >> "$MANIFEST"
   elif echo "$errscan" | grep -qi 'ERROR:\|NOT_FOUND\|could not be found\|does not exist\|PERMISSION_DENIED'; then printf '| %s | `%s` | **errors inside** — resource missing or refused |\n' "$control" "$file" >> "$MANIFEST"
@@ -54,7 +54,7 @@ for b in p["bindings"]:
   local t; t=$(gcloud auth print-identity-token --impersonate-service-account="amazon-deploy@$PROJECT.iam.gserviceaccount.com" --audiences="https://amazon.nivadesk.app" 2>/dev/null || true)
   [ -n "$t" ] || { echo "  (could not mint a token as amazon-deploy@)"; return 1; }
   local body; body=$(mktemp); local code; code=$(curl -s -o "$body" -w '%{http_code}' -m 20 -H "Authorization: Bearer $t" "https://amazon.nivadesk.app/admin/status?companyId=zz-deploy-probe")
-  echo "  HTTP $code — $(tr -d '\n' < "$body" | sed 's/<[^>]*>/ /g' | tr -s ' ' | cut -c1-90)"
+  echo "  HTTP $code (expected refusal) — $(tr -d '\n' < "$body" | sed 's/<[^>]*>/ /g' | tr -s ' ' | cut -c1-90)"
   if [ "$code" = "403" ] && grep -q "does not have permission" "$body"; then echo "  refused by Cloud Run IAM (expected)"; rm -f "$body"; return 0; fi
   rm -f "$body"; echo "  NOT refused at the IAM layer"; return 1
 }

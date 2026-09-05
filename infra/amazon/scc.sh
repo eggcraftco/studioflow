@@ -14,37 +14,36 @@ set -euo pipefail
 # a script that blocks on stdin in a non-interactive run looks like a hang.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 PROJECT="${AMAZON_PROJECT_ID:-nivadesk-amazon}"
+# scc/monitoring calls are quota-attributed to gcloud's core project; make it
+# this one (where step 1 enables the API), not whatever the shell defaults to.
+export CLOUDSDK_CORE_PROJECT="$PROJECT"
 REGION="europe-west2"
 EMAIL="${ALERT_EMAIL:-contact@eggcraft.co.uk}"
 DRY_RUN="${DRY_RUN:-1}"
 run() { if [ "$DRY_RUN" = "1" ]; then printf '  [dry-run] %s\n' "$*"; else printf '  → %s\n' "$*"; "$@"; fi; }
 exists() { "$@" >/dev/null 2>&1; }
 [ "$DRY_RUN" = "1" ] && echo "DRY_RUN=1: nothing will be created."
+TMPERR=$(mktemp); NOTIF_PENDING=0
+trap 'rm -f "$TMPERR"' EXIT
 
 echo "══ 1. API ══"
 run gcloud services enable securitycenter.googleapis.com --project="$PROJECT"
 
-echo "══ 2. Tier — in the console, after the cost is shown ══"
+echo "══ 2. Tier — console only (Google documents no gcloud/API path for project-level Premium) ══"
 cat <<EOF
-  Console → Security Command Center → project $PROJECT → Premium, pay-as-you-go, project-level.
-  Read the displayed monthly estimate (it is a percentage of this project's own spend).
-  Enable: Event Threat Detection (all rules), Cloud Run Threat Detection, Security Health Analytics,
-  Web Security Scanner (target https://amazon.nivadesk.app once DNS resolves).
-  Confirm Cloud Run Threat Detection is available at project level in $REGION; if it is not,
-  that is a reason to revisit the tier, not to skip the detector.
+  https://console.cloud.google.com/security/command-center/overview?project=$PROJECT
+  as the operator (needs securitycenter.admin + iam.securityAdmin on the project; Owner has them):
+  "Start a Premium free trial" → Activate. The trial is 30 days and then transitions to
+  Premium pay-as-you-go by itself (project-level pricing: usage-based — Cloud Run vCPU-hours at
+  \$0.0071 from 1 Jan 2026, Artifact Analysis \$0.20 per image scan, Storage operations; no minimum).
+  Premium enables Event Threat Detection, Security Health Analytics, Web Security Scanner and the
+  VM/container detectors by default; Cloud Run Threat Detection is switched on afterwards under
+  Settings → Services (or gcloud scc manage services).
 EOF
 
-echo "══ 3. Findings → Pub/Sub (project-level notification config) ══"
-exists gcloud pubsub topics describe scc-findings --project="$PROJECT" \
-  || run gcloud pubsub topics create scc-findings --project="$PROJECT"
-exists gcloud scc notifications describe amazon-findings --project="$PROJECT" \
-  || run gcloud scc notifications create amazon-findings --project="$PROJECT" \
-       --pubsub-topic="projects/$PROJECT/topics/scc-findings" \
-       --filter='state = "ACTIVE" AND (severity = "HIGH" OR severity = "CRITICAL")' \
-       --description="Amazon zone: high and critical findings"
-
-echo "══ 4. A finding pages a person: email channel + alert on the topic ══"
-CHANNEL=$( [ "$DRY_RUN" = "1" ] && echo "<channel-id>" || gcloud beta monitoring channels list --project="$PROJECT" --filter="displayName='amazon-security-email'" --format='value(name)' | head -1)
+echo "══ 3. A finding pages a person: email channel + alert on the topic ══"
+# (the filter needs the value double-quoted; single quotes silently match nothing)
+CHANNEL=$( [ "$DRY_RUN" = "1" ] && echo "<channel-id>" || gcloud beta monitoring channels list --project="$PROJECT" --filter='displayName="amazon-security-email"' --format='value(name)' | head -1)
 if [ -z "$CHANNEL" ] || [ "$CHANNEL" = "<channel-id>" ]; then
   run gcloud beta monitoring channels create --project="$PROJECT" --display-name="amazon-security-email" \
       --type=email --channel-labels="email_address=$EMAIL"
@@ -68,10 +67,46 @@ alertStrategy:
 YAML
 echo "  alert policy prepared at $POLICY (created with the email channel when DRY_RUN=0)"
 if [ "$DRY_RUN" != "1" ]; then
-  CHANNEL=$(gcloud beta monitoring channels list --project="$PROJECT" --filter="displayName='amazon-security-email'" --format='value(name)' | head -1)
-  gcloud alpha monitoring policies create --project="$PROJECT" --policy-from-file="$POLICY" --notification-channels="$CHANNEL" >/dev/null
+  CHANNEL=$(gcloud beta monitoring channels list --project="$PROJECT" --filter='displayName="amazon-security-email"' --format='value(name)' | head -1)
+  EXISTING=$(gcloud alpha monitoring policies list --project="$PROJECT" --filter='displayName="Amazon zone: SCC finding published"' --format='value(name)' | head -1)
+  if [ -z "$EXISTING" ]; then
+    gcloud alpha monitoring policies create --project="$PROJECT" --policy-from-file="$POLICY" --notification-channels="$CHANNEL" >/dev/null
+    echo "  alert policy created → $CHANNEL"
+  else
+    gcloud alpha monitoring policies update "$EXISTING" --project="$PROJECT" --add-notification-channels="$CHANNEL" >/dev/null 2>&1 || true
+    echo "  alert policy exists → $CHANNEL"
+  fi
 fi
 rm -f "$POLICY"
+
+echo "══ 4. Findings → Pub/Sub (project-level notification config; needs the tier) ══"
+exists gcloud pubsub topics describe scc-findings --project="$PROJECT" \
+  || run gcloud pubsub topics create scc-findings --project="$PROJECT"
+# This is the one step that needs the tier: before Standard/Premium is active on
+# the project the API answers "Security Command Center Legacy has been
+# permanently disabled" — meaning "activate a tier first", not a legacy install.
+if exists gcloud scc notifications describe amazon-findings --project="$PROJECT"; then
+  echo "  notification config amazon-findings exists"
+elif [ "$DRY_RUN" = "1" ]; then
+  run gcloud scc notifications create amazon-findings --project="$PROJECT" --pubsub-topic="projects/$PROJECT/topics/scc-findings" --filter='state = "ACTIVE"'
+elif gcloud scc notifications create amazon-findings --project="$PROJECT" \
+       --pubsub-topic="projects/$PROJECT/topics/scc-findings" \
+       --filter='state = "ACTIVE"' \
+       --description="Amazon zone: every active finding (a dedicated project: volume is small, and every finding should reach a person)" >/dev/null 2>"$TMPERR"; then
+  echo "  notification config amazon-findings created (every ACTIVE finding → scc-findings)"
+elif grep -q "Legacy has been permanently disabled" "$TMPERR"; then
+  echo "  ⏸ notification config not created: no Security Command Center tier is active on $PROJECT yet."
+  echo "    Activate Premium in the console (step 2), then re-run this script."
+  NOTIF_PENDING=1
+else
+  cat "$TMPERR"; exit 1
+fi
+
+# A pull subscription keeps every published finding for the evidence pack
+# (without a subscriber, Pub/Sub drops messages on the floor).
+exists gcloud pubsub subscriptions describe scc-findings-evidence --project="$PROJECT" \
+  || run gcloud pubsub subscriptions create scc-findings-evidence --project="$PROJECT" --topic=scc-findings \
+       --message-retention-duration=7d --expiration-period=never
 
 echo "══ 5. Detection test for the evidence pack (run after activation) ══"
 cat <<'EOF'
@@ -80,4 +115,4 @@ cat <<'EOF'
   Run one, capture the finding (gcloud scc findings list --project=... --filter=...) and the email —
   both go into docs/security/evidence/amazon/ via infra/amazon/evidence.sh.
 EOF
-echo "══ done ══"
+[ "$NOTIF_PENDING" = "1" ] && echo "══ done — except the notification config: activate the tier, re-run ══" || echo "══ done ══"
