@@ -53,18 +53,52 @@ Secret access probes as `amazon-sync@` (HTTP status only; no value is ever print
 | `lwa-client-secret` | 404 NOT_FOUND | correct — access allowed, no version yet |
 | `amazon-refresh-conditiontest` (test secret, dummy value) | 403 PERMISSION_DENIED | **defect**: the conditional grant does not match — see below |
 
-## Finding: the `amazon-refresh-*` conditions never match
+## Finding, then fix: the `amazon-refresh-*` conditions never matched
 
-`secrets.sh` wrote three conditional bindings with
+The first `secrets.sh` wrote three conditional bindings with
 `resource.name.startsWith("projects/nivadesk-amazon/secrets/amazon-refresh-")`.
 Secret Manager resource names carry the project **number**
 (`projects/145308107004/secrets/…`, as `gcloud secrets describe` shows), so the
-condition is never true. Effect: no widening — the grants are dead, which
-fails closed. It would have broken the OAuth consent (oauth cannot add a
-refresh-token version), the sync (cannot read one) and disconnect (admin
-cannot delete one). `secrets.sh` now builds the condition from the project
-number and removes the dead bindings; the probe above is re-run after it.
+condition was never true. Effect: no widening — the grants were dead, which
+fails closed — but consent (oauth adding a refresh-token version), sync
+(reading one) and disconnect (admin deleting one) would all have failed.
 
-Test artifacts: Cloud Run job `amazon-bridge-test` (no ingress, runs only when
-executed) and secret `amazon-refresh-conditiontest` (dummy value) — both to be
-deleted once the corrected `secrets.sh` has been verified.
+Fix, applied by the operator the same day by re-running the corrected
+`secrets.sh`: conditions built from the project number, the id-form bindings
+removed, and admin's condition-scoped `roles/secretmanager.admin` replaced by
+the custom role `amazonRefreshTokenRemover` (`secretmanager.secrets.delete`
+only — the one call `connections.js` makes on disconnect). Read back after
+the fix: 0 id-form conditions, 0 `secretmanager.admin` bindings,
+`amazonSecretCreator` = `secrets.create`, `amazonRefreshTokenRemover` =
+`secrets.delete`.
+
+### Runtime proof after the fix (Cloud Run job `amazon-secret-probe`, one execution per identity, from inside `amazon-vpc`; HTTP status only, no value ever printed)
+
+Controls: `amazon-refresh-conditiontest` (dummy, created by the operator) and
+`zz-probe-outside-prefix` (dummy, outside the prefix, created by the operator).
+
+| Identity | Call | Result | Expected |
+|---|---|---|---|
+| `amazon-oauth@` | create `amazon-refresh-probe` | 200 | allowed (custom role, `secrets.create`) |
+| `amazon-oauth@` | addVersion `amazon-refresh-probe` | 200 | allowed (condition matches) |
+| `amazon-oauth@` | addVersion `zz-probe-outside-prefix` | 403 | refused (outside the prefix) |
+| `amazon-oauth@` | access `amazon-refresh-probe` | 403 | refused (oauth writes refresh tokens, never reads them) |
+| `amazon-sync@` | access `amazon-refresh-conditiontest` | 200 | allowed |
+| `amazon-sync@` | access `amazon-refresh-probe` | 200 | allowed |
+| `amazon-sync@` | access `zz-probe-outside-prefix` | 403 | refused |
+| `amazon-sync@` | access `intent-hmac-key` | 403 | refused (sync must not hold the signing key) |
+| `amazon-sync@` | access `lwa-client-secret` | 404 NOT_FOUND | allowed by IAM; no version yet |
+| `amazon-admin@` | access `amazon-refresh-conditiontest` | 403 | refused (admin deletes, never reads) |
+| `amazon-admin@` | delete `zz-probe-outside-prefix` | 403 | refused |
+| `amazon-admin@` | delete `lwa-client-secret` | 403 | refused (a real secret outside the prefix) |
+| `amazon-admin@` | delete `amazon-refresh-conditiontest` | 200 | allowed — and the test secret is gone |
+| `amazon-admin@` | delete `amazon-refresh-probe` | 200 | allowed |
+
+Executions: `amazon-secret-probe-shmhw` (oauth), `-vk8wj` (sync), `-47jnd`
+(admin). 14 of 14 as expected. Afterwards no secret with the `amazon-refresh-`
+prefix remained; the operator deleted `zz-probe-outside-prefix` and the
+one-off probe job.
+
+Artifacts kept: Cloud Run job `amazon-bridge-test` (no ingress, no schedule,
+costs nothing; re-runnable, and `evidence.sh` reads its newest execution) and
+`amazon-diag`.

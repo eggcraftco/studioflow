@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T00:41:59Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T00:51:33Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
