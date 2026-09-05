@@ -27,7 +27,7 @@ the Mac Studio or the phone is onboarded, the same assignments cover them.
 | System security | Require a password to unlock | Required |
 | | Simple passwords | Block |
 | | Minimum password length | 8 |
-| | Maximum minutes of inactivity before password is required | 5 |
+| | Maximum minutes of inactivity before password is required | **15** (was 5 until 2026-09-05 23:05 UTC; changed by the operator for usability — the value macOS applies as the screen-saver ceiling; CIS macOS Benchmark allows ≤ 20) |
 | | Require encryption of data storage (FileVault) | Required |
 | | Firewall | Enabled; block all incoming = not required; stealth mode = Enabled |
 | | Gatekeeper | Mac App Store and identified developers |
@@ -43,7 +43,7 @@ the Mac Studio or the phone is onboarded, the same assignments cover them.
 | 3.1 | `macOS – FileVault` (Settings catalog › Full Disk Encryption › FileVault) | Enable = On; Defer = true (enable at next logout if ever off); Show recovery key = false; Personal recovery key escrow → Intune; Use recovery key = true; Defer force at user login max bypass attempts = 0 | **created 2026-09-05** (one profile `macOS - Amazon device hardening` holds 3.1–3.5) |
 | 3.2 | `macOS – Firewall` (Settings catalog › Networking › Firewall) | EnableFirewall = true; EnableStealthMode = true; BlockAllIncoming = false; AllowSigned = true | pending |
 | 3.3 | `macOS – Software updates` (Settings catalog › System Configuration › Software Update) | Automatic check = true; Automatic download = true; Automatically install macOS updates = true; Config data (XProtect) install = true; Critical update install = true; Restrict software update require admin = true | pending |
-| 3.4 | `macOS – Screen lock` (Settings catalog › User Experience › Screensaver + Login Window) | Login window idle time = 300 s; user screensaver idle time = 300 s; ask for password = true; ask for password delay = 0 | pending |
+| 3.4 | `macOS – Screen lock` (Settings catalog › User Experience › Screensaver + Login Window) | Login window idle time = 300 s; user screensaver idle time = 300 s; ask for password = true; ask for password delay = 0 | pending Note 2026-09-05 23:10 UTC: the login-window idle time (300 s) is unchanged; the user-session screen-saver ceiling comes from the compliance policy's inactivity setting, now 15 min |
 | 3.5 | `macOS – Defender system extensions` (Templates › Extensions) | allowed team identifier `UBF8T346G9`; allowed system extensions `com.microsoft.wdav.epsext`, `com.microsoft.wdav.netext` | pending |
 | 3.6 | `macOS – Defender full disk access` (Custom, Microsoft template `fulldisk.mobileconfig`) | PPPC SystemPolicyAllFiles for `com.microsoft.wdav` and `com.microsoft.wdav.epsext` | created 2026-09-05 as `macOS - Defender full disk access` (custom, device channel, All devices) |
 | 3.7 | `macOS – Defender network filter` (Custom, `netfilter.mobileconfig`) | content filter provider `com.microsoft.wdav.netext`, socket filter, MDM-approved | created 2026-09-05 as `macOS - Defender network filter` (custom, device channel, All devices) |

@@ -237,7 +237,7 @@ scans, under management):
 4. **Weekly full scan** scheduled by policy, in addition to on-access
    (real-time) scanning; results retained in the console.
 5. **Device compliance evidence**: disk encryption (FileVault / device
-   encryption) on, screen lock ≤ 5 minutes, firewall on, compliance state
+   encryption) on, screen lock ≤ 15 minutes (operator decision 2026-09-05 23:05 UTC; within the CIS macOS Benchmark ceiling of 20 minutes — it was 5 minutes on 5 September), firewall on, compliance state
    reported to the MDM; a non-compliant device loses access (conditional
    access on the Google account, or at minimum the operator's documented
    procedure to revoke sessions).
