@@ -318,6 +318,34 @@ Rollout: create in **dry-run**, run the whole system for a week under it,
 read every violation, resolve or codify each one, **show the report**, then
 enforce. Enforcement is a sign-off step.
 
+### 7a. The Cloud Run ingress exception, as built (dry-run, 5 September 2026)
+
+The perimeter's dry-run recorded the load-balancer path into `amazon-admin`
+as `run.googleapis.com/HttpIngress` with **no principal**: for HTTP requests
+Cloud Run's VPC Service Controls check does not carry the caller's IAM
+identity, and Google's documentation states that ingress rules naming
+principals are unsupported there — only `ANY_IDENTITY`. The API also refuses
+a method selector for `HttpIngress` and a permission selector, so the
+narrowest rule the perimeter accepts is `ANY_IDENTITY → run.googleapis.com`
+on this project. The perimeter is therefore **not** the authorization layer
+for `/admin/*`; it never was meant to be. The layers that are, each shown
+working live:
+
+| Layer | What it refuses | Evidence |
+|---|---|---|
+| Cloud Armor `amazon-edge` | every path but `/admin/*` (and `/healthz` from one address); WAF signatures; per-address rate | `edge-smoke-2026-09-05.md` cases E/F/G, WAF probe; `armor-blocked-requests.txt` (real scanners); `cloud-armor-policy.json` |
+| Cloud Run IAM (`run.invoker` = `amazon-caller@` only) | no token, a token for another audience, any other identity | `edge-smoke-2026-09-05.md` cases B/C/D, the wrong-account case; `admin-iam.txt`; `deploy-identity-2026-09-05.md` |
+| Cloud Run custom audience `https://amazon.nivadesk.app` | tokens minted for any other audience, including the old `/admin` form | `edge-smoke-2026-09-05.md` cases B/C; `admin-iam.txt` |
+| The service's own OIDC check (`ADMIN_CALLER_EMAIL`, `ADMIN_AUDIENCE`) | any identity but `amazon-caller@`, any other audience | `functions-amazon/src/oidc.js`, its tests; `edge-smoke-2026-09-05.md` |
+| Cloud Run ingress `internal-and-cloud-load-balancing` (organisation policy) | the `run.app` address from the internet, even with a valid token | `edge-smoke-2026-09-05.md` case H; `run-app-closed-to-internet.txt`; `org-policies.txt` |
+
+What the perimeter *does* add for this project is the other direction and
+the data services: Firestore, Secret Manager, Logging, Pub/Sub and the rest
+of the restricted list are unreachable from outside except through the
+enumerated ingress rules — the deliberate cross-project read is the proof
+(`cross-project-read-2026-09-05.txt`: refused by IAM today, marked by the
+dry-run as what enforcement will refuse).
+
 ## 8. IDS / IPS / threat detection
 
 - **Security Command Center Premium**, project-level, pay-as-you-go, on the

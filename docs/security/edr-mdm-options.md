@@ -46,3 +46,48 @@ Sources: [Microsoft 365 Business Premium](https://www.microsoft.com/en-us/micros
 [Jamf pricing 2026](https://superops.com/blog/jamf-pro-pricing),
 [Kandji pricing 2026](https://superops.com/blog/kandji-pricing),
 [Mosyle pricing 2026](https://costbench.com/software/mdm/mosyle/).
+
+## Decision and setup plan (2026-09-05, decision: Microsoft 365 Business Premium)
+
+**Who and what is in scope** — every person and device that can reach
+Amazon Information, SP-API credentials, or the administration of the zone:
+
+| Principal / device | Access | Scope |
+|---|---|---|
+| `contact@eggcraft.co.uk` (the operator; the only human) | Owner of `nivadesk-amazon`, organisation admin, Amazon Seller Central / SP-API application owner | in scope |
+| MacBook Pro `Guness-MacBook-Pro` | signed-in `gcloud`, Google Cloud console sessions, the repository, deploys | **in scope** |
+| Mac Studio | second workstation. Rule: if it holds any of the above — a `gcloud` login, a console session, the repository with deploy access, Seller Central — it is **in scope**; if it holds none, it is documented as **out of scope** with that statement. Until the operator confirms, it is treated as in scope (fail closed). | to confirm |
+| Operator's phone | Google account sessions (console app, 2-step verification), Seller Central app if installed | in scope |
+| Any future person or device | added here before being given access | — |
+
+**Steps** — `[operator]` marks what only the operator can do (purchase,
+sign-in, enrolment, consent); everything else is preparation the assistant
+can draft.
+
+1. `[operator]` Buy one Microsoft 365 Business Premium licence; create the
+   tenant with the work identity; keep Google Workspace as the identity
+   provider (the Microsoft tenant is for device management only).
+2. `[operator]` Apple Business Manager: create/confirm the organisation
+   account; add the Mac(s) and the phone (Apple Configurator or manual
+   enrolment for existing devices).
+3. `[operator]` Intune: link Apple Business Manager (MDM push certificate,
+   automated device enrolment token); enrol the devices.
+4. Intune policies — the assistant drafts the exact settings, the operator
+   applies them: compliance (FileVault/encryption on, screen lock ≤ 5 min,
+   firewall on, minimum OS version, jailbreak/root = non-compliant);
+   Defender for Business onboarding profile; **tamper protection on**;
+   real-time protection on; **weekly full scan** (scheduled); cloud-delivered
+   protection and automatic definition updates; definitions older than
+   **7 days → non-compliant**; a compliance-based action that blocks a
+   non-compliant device's Microsoft sign-in (and the documented manual step of
+   revoking Google sessions for such a device).
+5. `[operator]` After one week: export the Defender device list and health,
+   the tamper-protection setting, the definitions date and last scan, and the
+   Intune compliance report; take the five screenshots/exports named in
+   `amazon-readiness-criteria.md` §4a into `docs/security/evidence/amazon/`.
+6. Update `access-control-policy.md`'s device inventory (serials, agent
+   version, last scan) and set control 4 to `Passed` only once those files
+   exist.
+
+Estimated cost: $22/month (annual) for the one licence; no additional device
+fees for up to 5 Macs/PCs and 5 phones.

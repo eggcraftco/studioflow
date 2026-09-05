@@ -246,8 +246,9 @@ scans, under management):
    are taken from the consoles, not from the device, and re-captured within
    the 30 days before the application.
 
-**Candidate products** (any one satisfies the policy; the choice is the
-operator's and is not a security decision): Microsoft Intune + Defender for
+**Decision (2026-09-05): Microsoft 365 Business Premium** — setup plan and
+scope table in `edr-mdm-options.md`. **Candidate products** considered (any
+one satisfies the policy): Microsoft Intune + Defender for
 Business (Microsoft 365 Business Premium), Jamf Now/Pro + Jamf Protect, or
 Kandji with its built-in EDR — all three support macOS and iOS, tamper
 protection, scheduled scans and exportable compliance reports. Until one is

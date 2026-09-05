@@ -59,3 +59,22 @@ reappears.
 - `domain:eggcraft.co.uk` holds `roles/resourcemanager.projectCreator` and
   `roles/billing.creator` at the organisation (Google Workspace organisation
   defaults). Not part of this change; noted as a hardening candidate.
+
+## Second reduction — 2026-09-05, after Security Command Center and the perimeter dry-run were set up
+
+Two more organisation-level roles had been granted on 5 September for those
+two tasks: `roles/securitycenter.admin` (organisation-level Standard
+activation) and — earlier — `roles/orgpolicy.policyAdmin` (the nine project
+organisation policies). Both were removed by the operator the same day; the
+Security Command Center role was re-granted at **project** level only, where
+the Premium activation lives.
+
+| | Organisation-level roles of `user:contact@eggcraft.co.uk` |
+|---|---|
+| Before (read 05:35 UTC) | `roles/accesscontextmanager.policyAdmin`, `roles/orgpolicy.policyAdmin`, `roles/resourcemanager.organizationAdmin`, `roles/securitycenter.admin` |
+| After (read 13:04 UTC) | `roles/accesscontextmanager.policyAdmin`, `roles/resourcemanager.organizationAdmin` |
+| Project `nivadesk-amazon` after | `roles/owner` (bootstrap, separate plan), `roles/securitycenter.admin` (new, project-scoped) |
+
+`roles/accesscontextmanager.policyAdmin` stays until the perimeter enforce
+decision, then goes. `roles/resourcemanager.organizationAdmin` is unchanged.
+`operator-org-roles.txt` re-reads the organisation policy on every pack.
