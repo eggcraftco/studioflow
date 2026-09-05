@@ -34,3 +34,24 @@
 
 Lesson recorded in `scc.sh`: never enable the Security Command Center API by
 hand ahead of the console activation.
+
+## Delivery chain — synthetic check, 2026-09-05 04:05 UTC
+
+With no Security Command Center finding yet to carry, the part of the chain
+that is ours was exercised once with a synthetic message published to the
+`scc-findings` topic (`{"test":"delivery-chain-check", "finding":{"category":
+"TEST: delivery chain check (synthetic, not a Security Command Center
+finding)"}}`, messageId 21472771944709115):
+
+- the evidence subscription `scc-findings-evidence` received and retains it
+  (pulled without acknowledgement, category shown above);
+- the Cloud Monitoring alert "Amazon zone: SCC finding published" watches the
+  topic's publish count and emails `amazon-security-email`
+  (contact@eggcraft.co.uk) — the email is the last link and lands in the
+  operator's inbox; the incident closes on its own once the count returns to
+  zero, so a later real finding raises a fresh alert.
+
+This proves Pub/Sub → subscription → alert → email. It does not prove that
+Security Command Center publishes into the topic; that needs a real finding
+(the notification config and the notification agent's role on the topic are
+read live in `scc-notification.json`).
