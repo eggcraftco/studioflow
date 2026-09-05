@@ -1,0 +1,12 @@
+# 2026-09-05T00:19Z — negative control, BEFORE infra/amazon/private-google-access.sh
+# IMAGE=europe-west2-docker.pkg.dev/nivadesk-amazon/amazon/nivadesk-amazon:a406ed94 functions-amazon/deploy/diag.sh
+# Cloud Run job amazon-diag (ROLE=diag, amazon-vpc/amazon-subnet, all-traffic, as amazon-sync@), execution amazon-diag-7bvlj
+# Expected: FAIL — without the private googleapis.com zone the Google API hostnames resolve to public addresses.
+
+execution: amazon-diag-7bvlj → FAIL
+diag FAIL: 3 host(s) outside 199.36.153.4/30
+diag firestore.googleapis.com: 142.250.151.95 NOT in restricted VIP https=error:TypeError
+diag logging.googleapis.com: 216.239.38.174,216.239.32.174,216.239.34.174,216.239.36.174 NOT in restricted VIP https=404
+diag restricted.googleapis.com: 199.36.153.7,199.36.153.6,199.36.153.5,199.36.153.4 IN restricted VIP https=404
+diag secretmanager.googleapis.com: 142.250.151.95,142.250.129.95,142.250.140.95,142.250.117.95,192.178.223.95,142.251.29.95,142.251.30.95 NOT in restricted VIP https=404
+amazon-diag: FAIL

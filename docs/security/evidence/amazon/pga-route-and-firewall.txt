@@ -1,0 +1,16 @@
+# 2026-09-05T00:26:19Z
+# pga_route_firewall
+
+destRange: 199.36.153.4/30
+nextHopGateway: https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/gateways/default-internet-gateway
+priority: 900
+allowed:
+- IPProtocol: tcp
+  ports:
+  - '443'
+destinationRanges:
+- 199.36.153.4/30
+direction: EGRESS
+logConfig:
+  enable: true
+priority: 900

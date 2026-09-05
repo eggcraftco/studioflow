@@ -31,8 +31,12 @@ echo "══ 1. Private DNS zone for googleapis.com, visible only to amazon-vpc 
 run gcloud services enable dns.googleapis.com --project="$PROJECT"
 exists gcloud dns managed-zones describe googleapis-restricted --project="$PROJECT" \
   || run gcloud dns managed-zones create googleapis-restricted --project="$PROJECT" --dns-name="googleapis.com." \
-       --visibility=private --networks=amazon-vpc --description="*.googleapis.com → restricted.googleapis.com (VPC-SC VIP)" \
-       --log-dns-queries
+       --visibility=private --networks=amazon-vpc --description="*.googleapis.com → restricted.googleapis.com (VPC-SC VIP)"
+# Query logging for a PRIVATE zone is not a zone flag (the API refuses it); it
+# is a DNS server policy on the network. One policy per network.
+exists gcloud dns policies describe amazon-dns-logging --project="$PROJECT" \
+  || run gcloud dns policies create amazon-dns-logging --project="$PROJECT" --networks=amazon-vpc --enable-logging \
+       --description="Log every DNS query from amazon-vpc (evidence: which names the services resolve)"
 # restricted.googleapis.com → the four VIP addresses; everything else under googleapis.com → CNAME to it.
 if ! gcloud dns record-sets describe restricted.googleapis.com. --type=A --zone=googleapis-restricted --project="$PROJECT" >/dev/null 2>&1; then
   run gcloud dns record-sets create restricted.googleapis.com. --project="$PROJECT" --zone=googleapis-restricted --type=A --ttl=300 \

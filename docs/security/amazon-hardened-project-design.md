@@ -293,7 +293,7 @@ Inside `amazon-vpc`: a Cloud DNS **private zone** for `googleapis.com` with
 `*.googleapis.com CNAME restricted.googleapis.com` and `restricted.googleapis.com`
 A records `199.36.153.4–7`; a route for `199.36.153.4/30` to the default
 internet gateway; an explicit firewall rule allowing egress to that /30 on
-TCP/443 ahead of the general rule; DNS query logging on the zone. Cloud Run
+TCP/443 ahead of the general rule; DNS query logging through a DNS server policy bound to `amazon-vpc` (a private zone cannot log on its own; the API refuses `--log-dns-queries` for private visibility). Cloud Run
 with direct VPC egress resolves through the VPC's Cloud DNS, so every Google
 API call from the services lands on the restricted VIP, which serves only
 VPC-SC-supported APIs and honours the perimeter. The proof is a Cloud Run

@@ -1,10 +1,15 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T00:09:12Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T00:26:19Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
 | segmentation | `operator-org-roles.txt` | captured |
+| segmentation | `pga-private-zone.txt` | captured |
+| segmentation | `pga-route-and-firewall.txt` | captured |
+| segmentation | `pga-diag-latest.txt` | captured |
+| segmentation | `pga-diag-before.txt` | present (record of 2026-09-05) |
+| segmentation | `pga-diag-after.txt` | present (record of 2026-09-05) |
 | segmentation | `bootstrap-iam-reduction.md` | present (record of 2026-09-05) |
 | segmentation | `bootstrap-iam-org-policy-before.json` | present (record of 2026-09-05) |
 | segmentation | `bootstrap-iam-org-policy-after.json` | present (record of 2026-09-05) |

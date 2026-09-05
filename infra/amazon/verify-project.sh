@@ -22,9 +22,20 @@ BILLING=$(gcloud billing projects describe "$PROJECT" --format='value(billingEna
 
 echo "══ folder logging defaults ══"
 if [ -n "$FOLDER" ]; then
-  SETTINGS=$(gcloud logging settings describe --folder="$FOLDER" --format='value(storageLocation,disableDefaultSink)' 2>/dev/null | tr '\t' ' ')
-  echo "$SETTINGS" | grep -q "$REGION" && ok "folder storage location $REGION" || fail "folder storage location: $SETTINGS"
-  echo "$SETTINGS" | grep -qi "true" && ok "folder _Default sink disabled for new projects" || fail "folder _Default sink not disabled: $SETTINGS"
+  SETTINGS_ERR=$(mktemp)
+  SETTINGS=$(gcloud logging settings describe --folder="$FOLDER" --format='value(storageLocation,disableDefaultSink)' 2>"$SETTINGS_ERR" | tr '\t' ' ')
+  if [ -z "$SETTINGS" ] && grep -q "logging.settings.get' denied" "$SETTINGS_ERR"; then
+    # The operator's organisation-level logging.admin was a temporary bootstrap
+    # role, removed 2026-09-05 (docs/security/evidence/amazon/bootstrap-iam-reduction.md);
+    # without it the folder's settings cannot be read. They were read and
+    # recorded before the removal, and for THIS project the bucket locations
+    # checked below are the effective proof. A warning, not a mismatch.
+    printf '  ⚠ folder settings not readable with current roles (logging.settings.get denied; logging.admin removed 2026-09-05) — the project-level bucket checks below are the effective proof\n'
+  else
+    echo "$SETTINGS" | grep -q "$REGION" && ok "folder storage location $REGION" || fail "folder storage location: $SETTINGS"
+    echo "$SETTINGS" | grep -qi "true" && ok "folder _Default sink disabled for new projects" || fail "folder _Default sink not disabled: $SETTINGS"
+  fi
+  rm -f "$SETTINGS_ERR"
 fi
 
 echo "══ org policies on the project ══"
@@ -78,6 +89,19 @@ NAT=$(gcloud compute routers nats describe amazon-nat --router=amazon-router --r
 [ "$NAT" = "MANUAL_ONLY True ALL" ] && ok "NAT manual IPs, logging ALL" || fail "NAT: '$NAT'"
 IP=$(gcloud compute addresses describe amazon-egress --region="$REGION" --project="$PROJECT" --format='value(address,status)' 2>/dev/null | tr '\t' ' ')
 [ -n "$IP" ] && ok "static egress IP $IP" || fail "static egress IP missing"
+
+echo "══ private google access (restricted.googleapis.com) ══"
+Z=$(gcloud dns managed-zones describe googleapis-restricted --project="$PROJECT" --format='value(visibility,privateVisibilityConfig.networks[0].networkUrl.basename())' 2>/dev/null | tr '\t' ' ')
+[ "$Z" = "private amazon-vpc" ] && ok "private zone googleapis.com bound to amazon-vpc only" || fail "private zone: '$Z'"
+CN=$(gcloud dns record-sets describe '*.googleapis.com.' --type=CNAME --zone=googleapis-restricted --project="$PROJECT" --format='value(rrdatas[0])' 2>/dev/null)
+[ "$CN" = "restricted.googleapis.com." ] && ok "*.googleapis.com → restricted.googleapis.com" || fail "wildcard CNAME: '$CN'"
+RA=$(gcloud dns record-sets describe restricted.googleapis.com. --type=A --zone=googleapis-restricted --project="$PROJECT" --format='value(rrdatas.list())' 2>/dev/null)
+[ "$RA" = "199.36.153.4,199.36.153.5,199.36.153.6,199.36.153.7" ] && ok "restricted.googleapis.com A = 199.36.153.4-7" || fail "restricted A: '$RA'"
+PL=$(gcloud dns policies describe amazon-dns-logging --project="$PROJECT" --format='value(enableLogging,networks[0].networkUrl.basename())' 2>/dev/null | tr '\t' ' ')
+[ "$PL" = "True amazon-vpc" ] && ok "DNS query logging policy on amazon-vpc" || fail "dns logging policy: '$PL'"
+RT=$(gcloud compute routes describe amazon-restricted-vip --project="$PROJECT" --format='value(destRange,priority,nextHopGateway.basename())' 2>/dev/null | tr '\t' ' ')
+[ "$RT" = "199.36.153.4/30 900 default-internet-gateway" ] && ok "route 199.36.153.4/30 → default-internet-gateway @900" || fail "route: '$RT'"
+echo "$RULES" | grep -q "amazon-allow-restricted-vip.*EGRESS.*900" && ok "egress allow tcp:443 to the restricted VIP @900" || fail "restricted-vip firewall rule missing"
 
 echo "══ identities ══"
 SAS=$(gcloud iam service-accounts list --project="$PROJECT" --format='value(email)' 2>/dev/null | sort | tr '\n' ' ')

@@ -1,0 +1,12 @@
+# 2026-09-05T00:23Z — AFTER infra/amazon/private-google-access.sh (private zone googleapis.com → restricted.googleapis.com, route 199.36.153.4/30, firewall 900)
+# IMAGE=europe-west2-docker.pkg.dev/nivadesk-amazon/amazon/nivadesk-amazon:a406ed94 functions-amazon/deploy/diag.sh
+# Cloud Run job amazon-diag (ROLE=diag, amazon-vpc/amazon-subnet, all-traffic, as amazon-sync@), execution amazon-diag-kpm7r
+# Expected: OK — every Google API hostname resolves to the restricted VIP and answers over HTTPS there.
+
+execution: amazon-diag-kpm7r → OK
+diag OK: every Google API host resolves to the restricted VIP
+diag firestore.googleapis.com: 199.36.153.7,199.36.153.4,199.36.153.6,199.36.153.5 IN restricted VIP https=404
+diag logging.googleapis.com: 199.36.153.5,199.36.153.7,199.36.153.4,199.36.153.6 IN restricted VIP https=404
+diag restricted.googleapis.com: 199.36.153.6,199.36.153.4,199.36.153.7,199.36.153.5 IN restricted VIP https=404
+diag secretmanager.googleapis.com: 199.36.153.5,199.36.153.4,199.36.153.7,199.36.153.6 IN restricted VIP https=404
+amazon-diag: OK

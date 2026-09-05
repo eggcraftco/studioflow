@@ -1,0 +1,19 @@
+# 2026-09-05T00:26:19Z
+# pga_zone
+
+dnsName: googleapis.com.
+privateVisibilityConfig:
+  kind: dns#managedZonePrivateVisibilityConfig
+  networks:
+  - kind: dns#managedZonePrivateVisibilityConfigNetwork
+    networkUrl: https://compute.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc
+visibility: private
+NAME                        TYPE   TTL    RRDATAS
+googleapis.com.             NS     21600  ns-gcp-private.googleapis.com.
+googleapis.com.             SOA    21600  ns-gcp-private.googleapis.com. cloud-dns-hostmaster.google.com. 1 21600 3600 259200 300
+*.googleapis.com.           CNAME  300    restricted.googleapis.com.
+restricted.googleapis.com.  A      300    199.36.153.4,199.36.153.5,199.36.153.6,199.36.153.7
+enableLogging: true
+networks:
+- kind: dns#policyNetwork
+  networkUrl: https://compute.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc

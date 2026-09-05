@@ -1,4 +1,4 @@
-# 2026-09-05T00:09:12Z
+# 2026-09-05T00:26:19Z
 # bash -c for c in run.allowedIngress iam.disableServiceAccountKeyCreation iam.automaticIamGrantsForDefaultServiceAccounts compute.vmExternalIpAccess compute.restrictVpcPeering compute.skipDefaultNetworkCreation gcp.resourceLocations storage.uniformBucketLevelAccess; do echo "== $c"; gcloud org-policies describe $c --project=nivadesk-amazon --format=yaml; done
 
 == run.allowedIngress

@@ -1,9 +1,8 @@
-# 2026-09-05T00:09:12Z
+# 2026-09-05T00:26:19Z
 # bash -c for s in amazon-oauth amazon-admin amazon-sync; do echo "$s: $(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(metadata.annotations."run.googleapis.com/ingress",spec.template.spec.serviceAccountName)')"; done
 
 ERROR: (gcloud.run.services.describe) Cannot find service [amazon-oauth]
 amazon-oauth: 
-ERROR: (gcloud.run.services.describe) Cannot find service [amazon-admin]
-amazon-admin: 
+amazon-admin: internal-and-cloud-load-balancing	amazon-admin@nivadesk-amazon.iam.gserviceaccount.com
 ERROR: (gcloud.run.services.describe) Cannot find service [amazon-sync]
 amazon-sync: 

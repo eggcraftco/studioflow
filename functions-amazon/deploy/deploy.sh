@@ -15,13 +15,21 @@ DEPLOY_SA="amazon-deploy@$PROJECT.iam.gserviceaccount.com"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$(cd "$HERE/.." && pwd)"
 
+# Which services to (re)deploy: all three by default. SERVICES=admin deploys
+# only the admin surface — the one service that needs no Amazon credential —
+# which is all that can exist until Amazon issues the application's
+# credentials; oauth and sync need lwa-client-secret to have a version.
+SERVICES="${SERVICES:-oauth admin sync}"
 # Values that are not secrets but are per-application, read from the
-# environment so they are not committed either.
-: "${SP_API_APPLICATION_ID:?set SP_API_APPLICATION_ID (from Seller Central → Develop Apps)}"
-: "${LWA_CLIENT_ID:?set LWA_CLIENT_ID (the LWA client id; the secret goes into Secret Manager by hand)}"
+# environment so they are not committed either. Only oauth and sync use them.
+SP_API_APPLICATION_ID="${SP_API_APPLICATION_ID:-}"; LWA_CLIENT_ID="${LWA_CLIENT_ID:-}"
+if echo " $SERVICES " | grep -q " oauth \| sync "; then
+  : "${SP_API_APPLICATION_ID:?set SP_API_APPLICATION_ID (from Seller Central → Develop Apps)}"
+  : "${LWA_CLIENT_ID:?set LWA_CLIENT_ID (the LWA client id; the secret goes into Secret Manager by hand)}"
+fi
 
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
-echo "project=$PROJECT ($PROJECT_NUMBER) image=$IMAGE"
+echo "project=$PROJECT ($PROJECT_NUMBER) image=$IMAGE services=$SERVICES"
 
 echo "══ 1. Build (Cloud Build, inside the project) ══"
 IMAGE=$(IMAGE_TAG="$TAG" AMAZON_PROJECT_ID="$PROJECT" "$HERE/build.sh")
@@ -33,7 +41,7 @@ firebase deploy --only firestore:rules --project="$PROJECT" --config "$HERE/fire
 echo "  rules released"
 
 echo "══ 3. Services ══"
-for role in oauth admin sync; do
+for role in $SERVICES; do
   spec=$(mktemp)
   sed -e "s|PROJECT_ID|$PROJECT|g" -e "s|PROJECT_NUMBER|$PROJECT_NUMBER|g" -e "s|IMAGE|$IMAGE|g" \
       -e "s|\"SP_API_APPLICATION_ID\"|\"$SP_API_APPLICATION_ID\"|g" -e "s|\"LWA_CLIENT_ID\"|\"$LWA_CLIENT_ID\"|g" \
@@ -51,7 +59,7 @@ echo "══ 3.5. Proof: every service sends ALL traffic through the VPC (direct
 # forbid "no VPC egress at all". This can. A service without the network
 # annotation would reach the internet directly and bypass NAT, firewall, flow
 # logs and the static address — so the deploy fails here rather than ships.
-for role in oauth admin sync; do
+for role in $SERVICES; do
   egress=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(spec.template.metadata.annotations."run.googleapis.com/vpc-access-egress")')
   nics=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(spec.template.metadata.annotations."run.googleapis.com/network-interfaces")')
   if [ "$egress" != "all-traffic" ] || [ -z "$nics" ] || ! echo "$nics" | grep -q '"network":"amazon-vpc"' || ! echo "$nics" | grep -q '"subnetwork":"amazon-subnet"'; then
@@ -63,7 +71,7 @@ done
 
 echo "══ 4. Proof: the run.app addresses answer 403 to an unauthenticated request from the internet ══"
 echo "   (Cloud Scheduler's authenticated call from inside the project is admitted — that is the sync's path)"
-for role in oauth admin sync; do
+for role in $SERVICES; do
   url=$(gcloud run services describe "amazon-$role" --project="$PROJECT" --region="$REGION" --format='value(status.url)')
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$url/healthz" || echo "000")
   echo "  $url/healthz → $code $([ "$code" = "403" ] || [ "$code" = "404" ] && echo "✓ closed to the internet" || echo "❌ REACHABLE FROM THE INTERNET")"

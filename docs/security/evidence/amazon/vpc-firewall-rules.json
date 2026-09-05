@@ -1,4 +1,4 @@
-# 2026-09-05T00:09:12Z
+# 2026-09-05T00:26:19Z
 # gcloud compute firewall-rules list --project=nivadesk-amazon --format=json
 
 [
@@ -27,6 +27,32 @@
     "network": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc",
     "priority": 1000,
     "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/firewalls/amazon-allow-https-egress"
+  },
+  {
+    "allowed": [
+      {
+        "IPProtocol": "tcp",
+        "ports": [
+          "443"
+        ]
+      }
+    ],
+    "creationTimestamp": "2026-09-04T17:20:10.207-07:00",
+    "description": "Google APIs via restricted.googleapis.com",
+    "destinationRanges": [
+      "199.36.153.4/30"
+    ],
+    "direction": "EGRESS",
+    "disabled": false,
+    "id": "5538324279260012245",
+    "kind": "compute#firewall",
+    "logConfig": {
+      "enable": true
+    },
+    "name": "amazon-allow-restricted-vip",
+    "network": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc",
+    "priority": 900,
+    "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/firewalls/amazon-allow-restricted-vip"
   },
   {
     "creationTimestamp": "2026-09-04T16:34:55.653-07:00",

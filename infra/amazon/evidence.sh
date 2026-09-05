@@ -36,6 +36,26 @@ capture() {   # capture <control> <file> <command...>
 
 PN=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)' 2>/dev/null || echo "")
 
+# Private Google Access: the zone, its records, the query-logging policy, the
+# route and the firewall rule — and the newest amazon-diag execution's own
+# lines (read from the amazon-audit bucket view).
+pga_zone() {
+  gcloud dns managed-zones describe googleapis-restricted --project="$PROJECT" --format='yaml(dnsName,visibility,privateVisibilityConfig)'
+  gcloud dns record-sets list --zone=googleapis-restricted --project="$PROJECT" --format='table(name,type,ttl,rrdatas.list())'
+  gcloud dns policies describe amazon-dns-logging --project="$PROJECT" --format='yaml(enableLogging,networks)'
+}
+pga_route_firewall() {
+  gcloud compute routes describe amazon-restricted-vip --project="$PROJECT" --format='yaml(destRange,nextHopGateway,priority)'
+  gcloud compute firewall-rules describe amazon-allow-restricted-vip --project="$PROJECT" --format='yaml(direction,priority,allowed,destinationRanges,logConfig)'
+}
+pga_diag_latest() {
+  local exec; exec=$(gcloud run jobs executions list --job=amazon-diag --project="$PROJECT" --region="$REGION" --sort-by=~metadata.creationTimestamp --limit=1 --format='value(metadata.name)' 2>/dev/null)
+  [ -n "$exec" ] || { echo "no amazon-diag execution yet"; return 1; }
+  echo "execution: $exec"
+  gcloud logging read "resource.type=\"cloud_run_job\" AND labels.\"run.googleapis.com/execution_name\"=\"$exec\" AND textPayload:\"diag \"" \
+    --project="$PROJECT" --bucket=amazon-audit --location="$REGION" --view=_AllLogs --freshness=30d --limit=20 --format='value(textPayload)' | sort
+}
+
 # The operator's organisation-level roles, read live. The three temporary
 # bootstrap roles (folderCreator, projectCreator, logging.admin) were removed
 # on 2026-09-05 (bootstrap-iam-reduction.md); this fails if any is back.
@@ -57,6 +77,13 @@ sys.exit(1 if left else 0)'
 # would return nothing and look like "no events".
 echo "══ Segmentation ══"
 capture segmentation operator-org-roles.txt operator_org_roles
+capture segmentation pga-private-zone.txt pga_zone
+capture segmentation pga-route-and-firewall.txt pga_route_firewall
+capture segmentation pga-diag-latest.txt pga_diag_latest
+for f in pga-diag-before.txt pga-diag-after.txt; do
+  if [ -s "$OUT/$f" ]; then printf '| segmentation | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"
+  else printf '| segmentation | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
+done
 for f in bootstrap-iam-reduction.md bootstrap-iam-org-policy-before.json bootstrap-iam-org-policy-after.json; do
   if [ -s "$OUT/$f" ]; then printf '| segmentation | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"
   else printf '| segmentation | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
