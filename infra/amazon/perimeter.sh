@@ -36,7 +36,8 @@ EGRESS="$HERE/perimeter-egress.yaml"
 # Perimeter short names allow letters, digits and underscores only (the API
 # refuses a hyphen with "Invalid perimeter name").
 # Rule files are rendered with the real numbers and the operator identity.
-render() { sed -e "s|PROJECT_NUMBER|$PROJECT_NUMBER|g" -e "s|MAIN_PROJECT_NUMBER|$MAIN_PROJECT_NUMBER|g" -e "s|OPERATOR_EMAIL|$OPERATOR|g" -e "s|PROJECT_ID|$PROJECT|g" "$1"; }
+# MAIN_PROJECT_NUMBER must be replaced before PROJECT_NUMBER, which is its suffix.
+render() { sed -e "s|MAIN_PROJECT_NUMBER|$MAIN_PROJECT_NUMBER|g" -e "s|PROJECT_NUMBER|$PROJECT_NUMBER|g" -e "s|OPERATOR_EMAIL|$OPERATOR|g" -e "s|PROJECT_ID|$PROJECT|g" "$1"; }
 
 case "$MODE" in
   dry-run)
