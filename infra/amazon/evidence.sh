@@ -197,9 +197,37 @@ capture firewall egress-refused.txt gcloud logging read 'resource.type="cloud_ru
 capture firewall nat-translations.txt gcloud logging read 'resource.type="nat_gateway"' --project="$PROJECT" --bucket=amazon-audit --location="$REGION" --view=_AllLogs --freshness=7d --limit=10 --format='value(timestamp,jsonPayload.connection.dest_ip,jsonPayload.connection.dest_port,jsonPayload.allocation_status)'
 
 echo "══ IDS / IPS ══"
-capture idsips scc-services.txt bash -c "gcloud scc settings services describe --project=$PROJECT --service=EVENT_THREAT_DETECTION --format=yaml 2>&1 | head -20; gcloud scc settings services describe --project=$PROJECT --service=CONTAINER_THREAT_DETECTION --format=yaml 2>&1 | head -5"
-capture idsips scc-notification.json gcloud scc notifications describe amazon-findings --project="$PROJECT" --format=json
-capture idsips scc-findings-sample.txt gcloud scc findings list --project="$PROJECT" --filter='state="ACTIVE"' --page-size=10 --format='table(finding.category,finding.severity,finding.eventTime,finding.resourceName)'
+# Security Command Center: tier is console-only (recorded in scc-activation-2026-09-05.md);
+# what gcloud can read live: detector states, the v2 notification config, the
+# service agents' roles, and the findings themselves through the v2 REST API.
+scc_findings() {
+  local t; t=$(gcloud auth print-access-token)
+  curl -s -H "Authorization: Bearer $t" -H "x-goog-user-project: $PROJECT" "https://securitycenter.googleapis.com/v2/projects/$PN/sources/-/locations/global/findings?pageSize=20" | python3 -c '
+import json,sys; d=json.load(sys.stdin)
+if "error" in d: print("error: " + d["error"].get("message","")); sys.exit(1)
+rows=d.get("listFindingsResults",[]); print("findings on the project:", d.get("totalSize", len(rows)))
+for r in rows:
+    f=r.get("finding",{}); print("  " + str(f.get("eventTime")) + " | " + str(f.get("category")) + " | " + str(f.get("severity")) + " | " + str(f.get("state")) + " | " + str(f.get("resourceName")))'
+}
+scc_agents() {
+  echo "== service agents Security Command Center needs on the project (granted 2026-09-05 through scc-agents.sh)"
+  gcloud projects get-iam-policy "$PROJECT" --format=json | python3 -c '
+import json,sys; p=json.load(sys.stdin)
+for b in p["bindings"]:
+    for m in b["members"]:
+        if "security-center-api" in m or "hpsa" in m: print("  " + b["role"] + " -> " + m)'
+  echo "== domain-restricted sharing on the project (must be the organisation value, not allowAll)"
+  gcloud org-policies describe iam.allowedPolicyMemberDomains --project="$PROJECT" --effective --format='value(spec.rules[0].values.allowedValues,spec.rules[0].allowAll)'
+  gcloud org-policies describe iam.allowedPolicyMemberDomains --project="$PROJECT" >/dev/null 2>&1 && echo "  project-level override PRESENT — should not be" || echo "  no project-level override"
+}
+capture idsips scc-services.txt gcloud scc manage services list --project="$PROJECT" --format='table(name.basename(),intendedEnablementState,effectiveEnablementState)'
+capture idsips scc-notification.json gcloud scc notifications describe amazon-findings --project="$PROJECT" --location=global --api-version=v2enabled --format=json
+capture idsips scc-findings-sample.txt scc_findings
+capture idsips scc-agents.txt scc_agents
+capture idsips scc-alerting.txt bash -c "gcloud alpha monitoring policies list --project=$PROJECT --filter='displayName=\"Amazon zone: SCC finding published\"' --format='yaml(displayName,enabled,notificationChannels,conditions[0].conditionThreshold.filter)'; gcloud beta monitoring channels list --project=$PROJECT --filter='displayName=\"amazon-security-email\"' --format='value(displayName,type,labels.email_address)'; gcloud pubsub subscriptions describe scc-findings-evidence --project=$PROJECT --format='value(name,topic,messageRetentionDuration)'"
+for f in scc-activation-2026-09-05.md scc-test-2026-09-05.txt; do
+  if [ -s "$OUT/$f" ]; then printf '| idsips | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"; else printf '| idsips | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
+done
 capture idsips log-bucket-retention.txt gcloud logging buckets describe amazon-audit --location="$REGION" --project="$PROJECT" --format='value(name,retentionDays,locked)'
 capture idsips armor-adaptive-protection.txt gcloud compute security-policies describe amazon-edge --project="$PROJECT" --format='yaml(adaptiveProtectionConfig)'
 
