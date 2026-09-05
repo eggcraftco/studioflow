@@ -1,4 +1,4 @@
-# VPC-SC ingress rules for the amazon-information perimeter.
+# VPC-SC ingress rules for the amazon_information perimeter.
 # Rendered by perimeter.sh: PROJECT_NUMBER, MAIN_PROJECT_NUMBER, OPERATOR_EMAIL, PROJECT_ID.
 #
 # 1. The operator, from anywhere, to every restricted service: console and
@@ -13,34 +13,27 @@
       - serviceName: "*"
     resources:
       - "*"
-# 2. The main project's caller account, to Cloud Run only: /admin/* through
-#    the load balancer is a Cloud Run invocation.
+# 2. HTTP invocations of the project's Cloud Run services — /admin/* through
+#    the load balancer from amazon-caller@, and Cloud Scheduler's tick. VPC-SC
+#    evaluates these as run.googleapis.com/HttpIngress WITHOUT the caller's IAM
+#    identity (Cloud Run docs: "ingress policy rules that use IAM principals are
+#    not supported. Only the ANY_IDENTITY identity type is supported"), so the
+#    rule cannot name the caller; it admits the HTTP path only — not the
+#    management API — and the callers are still checked by Cloud Armor, Cloud
+#    Run IAM (run.invoker) and the services' own OIDC verification.
+#    Seen in dry-run 2026-09-05 03:51 as NO_MATCHING_ACCESS_LEVEL before this rule.
 - ingressFrom:
-    identities:
-      - serviceAccount:amazon-caller@eggcraft-studio.iam.gserviceaccount.com
-    sources:
-      - resource: projects/MAIN_PROJECT_NUMBER
-  ingressTo:
-    operations:
-      - serviceName: run.googleapis.com
-        methodSelectors:
-          - method: "*"
-    resources:
-      - projects/PROJECT_NUMBER
-# 3. Cloud Scheduler's service agent, to Cloud Run: the sync tick.
-- ingressFrom:
-    identities:
-      - serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudscheduler.iam.gserviceaccount.com
+    identityType: ANY_IDENTITY
     sources:
       - accessLevel: "*"
   ingressTo:
     operations:
       - serviceName: run.googleapis.com
         methodSelectors:
-          - method: "*"
+          - method: "HttpIngress"
     resources:
       - projects/PROJECT_NUMBER
-# 4. Security Command Center's notification service agent (organisation-level,
+# 3. Security Command Center's notification service agent (organisation-level,
 #    Google-managed) publishes each finding into the project's scc-findings
 #    topic — a Pub/Sub call from outside the perimeter. Without this rule the
 #    finding exists but never reaches the operator.
