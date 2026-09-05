@@ -1,4 +1,4 @@
-# 2026-09-05T00:39:41Z
+# 2026-09-05T00:41:59Z
 # gcloud scc findings list --project=nivadesk-amazon --filter=state="ACTIVE" --page-size=10 --format=table(finding.category,finding.severity,finding.eventTime,finding.resourceName)
 
 ERROR: (gcloud.scc.findings.list) Parent must match either [0-9]+, organizations/[0-9]+, projects/.* or folders/.*.

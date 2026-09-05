@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T00:39:41Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T00:41:59Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -11,7 +11,7 @@ Generated 2026-09-05T00:39:41Z by infra/amazon/evidence.sh. Each file lists the 
 | segmentation | `bridge-iam.txt` | captured |
 | segmentation | `admin-iam.txt` | captured |
 | segmentation | `secret-iam.txt` | captured |
-| segmentation | `bridge-test-latest.txt` | **errors inside** — resource missing or refused |
+| segmentation | `bridge-test-latest.txt` | captured |
 | segmentation | `bridge-test-2026-09-05.md` | present (record of 2026-09-05) |
 | segmentation | `pga-diag-before.txt` | present (record of 2026-09-05) |
 | segmentation | `pga-diag-after.txt` | present (record of 2026-09-05) |

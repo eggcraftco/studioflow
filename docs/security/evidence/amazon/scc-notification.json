@@ -1,4 +1,4 @@
-# 2026-09-05T00:39:41Z
+# 2026-09-05T00:41:59Z
 # gcloud scc notifications describe amazon-findings --project=nivadesk-amazon --format=json
 
 ERROR: (gcloud.scc.notifications.describe) PERMISSION_DENIED: Security Command Center API has not been used in project eggcraft-studio before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/securitycenter.googleapis.com/overview?project=eggcraft-studio then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry. This command is authenticated as contact@eggcraft.co.uk which is the active account specified by the [core/account] property.

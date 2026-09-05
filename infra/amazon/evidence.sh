@@ -28,9 +28,12 @@ capture() {   # capture <control> <file> <command...>
   # Presence is not correctness: a file whose body is empty, or is only an
   # error message from a resource that does not exist yet, is not evidence.
   local body; body=$(tail -n +4 "$path" | grep -v '^\s*$' | grep -v '^\[\]$' || true)
+  # The bridge test's own lines legitimately say PERMISSION_DENIED / NOT_FOUND
+  # (they are the expected refusals); they are not errors of the capture.
+  local errscan; errscan=$(echo "$body" | grep -v '^bridgetest ' || true)
   if [ $rc -ne 0 ]; then printf '| %s | `%s` | **missing** (exit %s) |\n' "$control" "$file" "$rc" >> "$MANIFEST"
   elif [ -z "$body" ]; then printf '| %s | `%s` | **empty** — nothing to show yet |\n' "$control" "$file" >> "$MANIFEST"
-  elif echo "$body" | grep -qi 'ERROR:\|NOT_FOUND\|could not be found\|does not exist\|PERMISSION_DENIED'; then printf '| %s | `%s` | **errors inside** — resource missing or refused |\n' "$control" "$file" >> "$MANIFEST"
+  elif echo "$errscan" | grep -qi 'ERROR:\|NOT_FOUND\|could not be found\|does not exist\|PERMISSION_DENIED'; then printf '| %s | `%s` | **errors inside** — resource missing or refused |\n' "$control" "$file" >> "$MANIFEST"
   else printf '| %s | `%s` | captured |\n' "$control" "$file" >> "$MANIFEST"; fi
 }
 
