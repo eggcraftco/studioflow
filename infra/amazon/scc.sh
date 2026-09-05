@@ -3,6 +3,18 @@
 # gate: the estimated cost is read from the console and shown to the user
 # before anything here runs with DRY_RUN=0.
 #
+# 2026-09-05: the project-level console activation is stuck — the console
+# first calls SecurityCenterManagement.GenerateServiceAccounts, which answers
+# FAILED_PRECONDITION "project is already onboarded" (the securitycenter API
+# had been enabled by this script before the console flow ran), and the
+# console refuses to activate without it; disabling both SCC APIs does not
+# clear the backend state. Way forward: activate Standard at the ORGANISATION
+# (free; console → select the organisation → Get Standard; needs
+# roles/securitycenter.admin on the organisation) and then set this project's
+# tier to Premium under Settings → Tier details → Manage project tier — or a
+# Google support case for the stuck project. Lesson: never enable
+# securitycenter.googleapis.com by hand before the console activation.
+#
 # Two halves. The first is what gcloud can do: the API, the findings → Pub/Sub
 # notification, and an alert that emails the operator whenever a finding lands.
 # The second — activating the Premium tier at PROJECT level, pay-as-you-go —
@@ -26,8 +38,8 @@ exists() { "$@" >/dev/null 2>&1; }
 TMPERR=$(mktemp); NOTIF_PENDING=0
 trap 'rm -f "$TMPERR"' EXIT
 
-echo "══ 1. API ══"
-run gcloud services enable securitycenter.googleapis.com --project="$PROJECT"
+echo "══ 1. API — enabled by the console activation itself; NOT here (see the note above) ══"
+gcloud services list --enabled --project="$PROJECT" --format='value(config.name)' | grep -q '^securitycenter.googleapis.com$' && echo "  securitycenter API is enabled" || echo "  securitycenter API not enabled yet: activate the tier in the console first"
 
 echo "══ 2. Tier — console only (Google documents no gcloud/API path for project-level Premium) ══"
 cat <<EOF
