@@ -1,0 +1,30 @@
+{
+  "bindings": [
+    {
+      "members": [
+        "domain:eggcraft.co.uk"
+      ],
+      "role": "roles/billing.creator"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/orgpolicy.policyAdmin"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/resourcemanager.organizationAdmin"
+    },
+    {
+      "members": [
+        "domain:eggcraft.co.uk"
+      ],
+      "role": "roles/resourcemanager.projectCreator"
+    }
+  ],
+  "etag": "BwZasQbrkMo=",
+  "version": 1
+}

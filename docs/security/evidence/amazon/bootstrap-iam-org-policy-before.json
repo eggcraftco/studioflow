@@ -1,0 +1,43 @@
+{
+  "bindings": [
+    {
+      "members": [
+        "domain:eggcraft.co.uk"
+      ],
+      "role": "roles/billing.creator"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/logging.admin"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/orgpolicy.policyAdmin"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/resourcemanager.folderCreator"
+    },
+    {
+      "members": [
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/resourcemanager.organizationAdmin"
+    },
+    {
+      "members": [
+        "domain:eggcraft.co.uk",
+        "user:contact@eggcraft.co.uk"
+      ],
+      "role": "roles/resourcemanager.projectCreator"
+    }
+  ],
+  "etag": "BwZasKvjecc=",
+  "version": 1
+}

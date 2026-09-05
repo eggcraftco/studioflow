@@ -1,0 +1,71 @@
+# 2026-09-05T00:09:12Z
+# bash -c for c in run.allowedIngress iam.disableServiceAccountKeyCreation iam.automaticIamGrantsForDefaultServiceAccounts compute.vmExternalIpAccess compute.restrictVpcPeering compute.skipDefaultNetworkCreation gcp.resourceLocations storage.uniformBucketLevelAccess; do echo "== $c"; gcloud org-policies describe $c --project=nivadesk-amazon --format=yaml; done
+
+== run.allowedIngress
+etag: CKet7dQGENDEkaMD-
+name: projects/145308107004/policies/run.allowedIngress
+spec:
+  etag: CKet7dQGENDEkaMD
+  rules:
+  - values:
+      allowedValues:
+      - internal-and-cloud-load-balancing
+  updateTime: '2026-09-04T23:39:19.878994Z'
+== iam.disableServiceAccountKeyCreation
+etag: CKut7dQGEMCA8yY=-
+name: projects/145308107004/policies/iam.disableServiceAccountKeyCreation
+spec:
+  etag: CKut7dQGEMCA8yY=
+  rules:
+  - enforce: true
+  updateTime: '2026-09-04T23:39:23.081576Z'
+== iam.automaticIamGrantsForDefaultServiceAccounts
+etag: CKyt7dQGEKjs4uMB-
+name: projects/145308107004/policies/iam.automaticIamGrantsForDefaultServiceAccounts
+spec:
+  etag: CKyt7dQGEKjs4uMB
+  rules:
+  - enforce: true
+  updateTime: '2026-09-04T23:39:24.477673Z'
+== compute.vmExternalIpAccess
+etag: CK2t7dQGEMih5qID-
+name: projects/145308107004/policies/compute.vmExternalIpAccess
+spec:
+  etag: CK2t7dQGEMih5qID
+  rules:
+  - denyAll: true
+  updateTime: '2026-09-04T23:39:25.878285Z'
+== compute.restrictVpcPeering
+etag: CK+t7dQGELjH1YUB-
+name: projects/145308107004/policies/compute.restrictVpcPeering
+spec:
+  etag: CK+t7dQGELjH1YUB
+  rules:
+  - denyAll: true
+  updateTime: '2026-09-04T23:39:27.280323Z'
+== compute.skipDefaultNetworkCreation
+etag: CLCt7dQGEKjho5UC-
+name: projects/145308107004/policies/compute.skipDefaultNetworkCreation
+spec:
+  etag: CLCt7dQGEKjho5UC
+  rules:
+  - enforce: true
+  updateTime: '2026-09-04T23:39:28.581497Z'
+== gcp.resourceLocations
+etag: CLGt7dQGEKCT6tID-
+name: projects/145308107004/policies/gcp.resourceLocations
+spec:
+  etag: CLGt7dQGEKCT6tID
+  rules:
+  - values:
+      allowedValues:
+      - in:europe-west2-locations
+  updateTime: '2026-09-04T23:39:29.979012Z'
+== storage.uniformBucketLevelAccess
+etag: CLOt7dQGEKiH1OUB-
+name: projects/145308107004/policies/storage.uniformBucketLevelAccess
+spec:
+  etag: CLOt7dQGEKiH1OUB
+  rules:
+  - enforce: true
+  updateTime: '2026-09-04T23:39:31.481625Z'

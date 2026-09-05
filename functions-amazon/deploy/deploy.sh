@@ -24,10 +24,8 @@ PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumb
 echo "project=$PROJECT ($PROJECT_NUMBER) image=$IMAGE"
 
 echo "══ 1. Build (Cloud Build, inside the project) ══"
-gcloud builds submit "$SRC" --project="$PROJECT" --region="$REGION" \
-  --tag="$IMAGE" --impersonate-service-account="$DEPLOY_SA" \
-  --ignore-file="$HERE/.gcloudignore" >/dev/null
-echo "  built"
+IMAGE=$(IMAGE_TAG="$TAG" AMAZON_PROJECT_ID="$PROJECT" "$HERE/build.sh")
+echo "  built $IMAGE"
 
 echo "══ 2. Firestore rules: deny all ══"
 gcloud firestore databases update --project="$PROJECT" --database='(default)' >/dev/null 2>&1 || true

@@ -1,0 +1,54 @@
+# 2026-09-05T00:09:12Z
+# gcloud compute firewall-rules list --project=nivadesk-amazon --format=json
+
+[
+  {
+    "allowed": [
+      {
+        "IPProtocol": "tcp",
+        "ports": [
+          "443"
+        ]
+      }
+    ],
+    "creationTimestamp": "2026-09-04T16:35:02.874-07:00",
+    "description": "",
+    "destinationRanges": [
+      "0.0.0.0/0"
+    ],
+    "direction": "EGRESS",
+    "disabled": false,
+    "id": "6144109934389160777",
+    "kind": "compute#firewall",
+    "logConfig": {
+      "enable": true
+    },
+    "name": "amazon-allow-https-egress",
+    "network": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc",
+    "priority": 1000,
+    "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/firewalls/amazon-allow-https-egress"
+  },
+  {
+    "creationTimestamp": "2026-09-04T16:34:55.653-07:00",
+    "denied": [
+      {
+        "IPProtocol": "all"
+      }
+    ],
+    "description": "",
+    "destinationRanges": [
+      "0.0.0.0/0"
+    ],
+    "direction": "EGRESS",
+    "disabled": false,
+    "id": "3211932561659325296",
+    "kind": "compute#firewall",
+    "logConfig": {
+      "enable": true
+    },
+    "name": "amazon-deny-all-egress",
+    "network": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/networks/amazon-vpc",
+    "priority": 65000,
+    "selfLink": "https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/global/firewalls/amazon-deny-all-egress"
+  }
+]

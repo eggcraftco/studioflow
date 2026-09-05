@@ -1,0 +1,10 @@
+# 2026-09-05T00:09:12Z
+# gcloud access-context-manager perimeters describe amazon-information --policy= --format=json
+
+ERROR: (gcloud.access-context-manager.perimeters.describe) Error parsing [perimeter].
+The [perimeter] resource is not properly specified.
+Failed to find attribute [policy]. The attribute can be set in the following ways: 
+- provide the argument `perimeter` on the command line with a fully specified name
+- provide the argument `--policy` on the command line
+- set the property `access_context_manager/policy`
+- automatically, if the current account belongs to an organization with exactly one access policy.

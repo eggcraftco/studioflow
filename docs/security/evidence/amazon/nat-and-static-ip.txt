@@ -1,0 +1,21 @@
+# 2026-09-05T00:09:12Z
+# bash -c gcloud compute routers nats describe amazon-nat --router=amazon-router --region=europe-west2 --project=nivadesk-amazon --format=yaml; gcloud compute addresses describe amazon-egress --region=europe-west2 --project=nivadesk-amazon --format='value(address,status)'
+
+effectiveTcpTimeWaitTimeoutSec: 30
+enableEndpointIndependentMapping: false
+endpointTypes:
+- ENDPOINT_TYPE_VM
+logConfig:
+  enable: true
+  filter: ALL
+name: amazon-nat
+natIpAllocateOption: MANUAL_ONLY
+natIps:
+- https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/regions/europe-west2/addresses/amazon-egress
+sourceSubnetworkIpRangesToNat: LIST_OF_SUBNETWORKS
+subnetworks:
+- name: https://www.googleapis.com/compute/v1/projects/nivadesk-amazon/regions/europe-west2/subnetworks/amazon-subnet
+  sourceIpRangesToNat:
+  - PRIMARY_IP_RANGE
+type: PUBLIC
+34.153.170.14	IN_USE

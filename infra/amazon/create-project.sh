@@ -147,6 +147,7 @@ done
 grant amazon-deploy roles/run.admin
 grant amazon-deploy roles/cloudbuild.builds.editor
 grant amazon-deploy roles/artifactregistry.writer
+grant amazon-deploy roles/logging.logWriter   # it is also the Cloud Build identity (build logs → Cloud Logging)
 for sa in amazon-oauth amazon-admin amazon-sync; do
   run gcloud iam service-accounts add-iam-policy-binding "$sa@$PROJECT.iam.gserviceaccount.com" --project="$PROJECT" \
     --member="serviceAccount:amazon-deploy@$PROJECT.iam.gserviceaccount.com" --role=roles/iam.serviceAccountUser --quiet

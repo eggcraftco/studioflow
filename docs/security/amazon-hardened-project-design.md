@@ -184,7 +184,7 @@ but holds no role.
 | `amazon-oauth@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret`, `intent-hmac-key`; creator/adder on secrets named `amazon-refresh-*` (IAM condition on resource name prefix) | — |
 | `amazon-admin@` | `datastore.user`, `logging.logWriter` | destroyer on `amazon-refresh-*` (disconnect) | — |
 | `amazon-sync@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret` and `amazon-refresh-*` | `run.invoker` on `ingestAmazonEnvelope` in the main project; the only identity with a VPC-SC egress rule |
-| `amazon-deploy@` | `run.admin`, `cloudbuild.builds.editor`, `iam.serviceAccountUser` on the three runtime accounts | — | used only by the operator through impersonation for deploys |
+| `amazon-deploy@` | `run.admin`, `cloudbuild.builds.editor`, `artifactregistry.writer`, `logging.logWriter`, `iam.serviceAccountUser` on the three runtime accounts; `storage.objectViewer` on the build staging bucket only | — | used only by the operator through impersonation for deploys; also the Cloud Build identity (the compute default account holds no role, and Cloud Build refuses the legacy build account as an explicit choice) |
 
 Main project: `amazon-caller@eggcraft-studio` gets `run.invoker` on
 `amazon-admin` only. Nothing else in either project can see the other.

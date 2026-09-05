@@ -1,0 +1,11 @@
+# Build config for the one image (deploy/build.sh). Not `--tag` because the
+# Dockerfile lives under deploy/, and because the default build would create a
+# US multi-region logs bucket that gcp.resourceLocations (europe-west2 only)
+# refuses: logs go to Cloud Logging instead, and the source is staged in the
+# regional bucket build.sh creates.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+options:
+  logging: CLOUD_LOGGING_ONLY

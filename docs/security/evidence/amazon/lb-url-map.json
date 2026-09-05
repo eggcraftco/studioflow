@@ -1,0 +1,6 @@
+# 2026-09-05T00:09:12Z
+# gcloud compute url-maps describe amazon-edge-map --project=nivadesk-amazon --global --format=json
+
+ERROR: (gcloud.compute.url-maps.describe) Could not fetch resource:
+ - The resource 'projects/nivadesk-amazon/global/urlMaps/amazon-edge-map' was not found
+

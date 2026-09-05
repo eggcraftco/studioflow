@@ -1,0 +1,6 @@
+# 2026-09-05T00:09:12Z
+# gcloud compute security-policies describe amazon-edge --project=nivadesk-amazon --format=yaml(adaptiveProtectionConfig)
+
+ERROR: (gcloud.compute.security-policies.describe) Could not fetch resource:
+ - The resource 'projects/nivadesk-amazon/global/securityPolicies/amazon-edge' was not found
+
