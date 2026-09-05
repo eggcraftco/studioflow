@@ -181,9 +181,9 @@ but holds no role.
 
 | Account | Project roles | Secret access | Cross-project |
 |---|---|---|---|
-| `amazon-oauth@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret`, `intent-hmac-key`; creator/adder on secrets named `amazon-refresh-*` (IAM condition on resource name prefix) | — |
-| `amazon-admin@` | `datastore.user`, `logging.logWriter` | destroyer on `amazon-refresh-*` (disconnect) | — |
-| `amazon-sync@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret` and `amazon-refresh-*` | `run.invoker` on `ingestAmazonEnvelope` in the main project; the only identity with a VPC-SC egress rule |
+| `amazon-oauth@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret`, `intent-hmac-key`; custom role `amazonSecretCreator` (`secrets.create` only, project-wide because the resource does not exist yet); `secretVersionAdder` under an IAM condition on the resource-name prefix `projects/<project NUMBER>/secrets/amazon-refresh-` (the id form never matches — found and fixed 2026-09-05) | — |
+| `amazon-admin@` | `datastore.user`, `logging.logWriter` | custom role `amazonRefreshTokenRemover` (`secrets.delete` only) under the same `amazon-refresh-` condition (disconnect); not `secretmanager.admin` | — |
+| `amazon-sync@` | `datastore.user`, `logging.logWriter` | accessor on `lwa-client-secret`; `secretAccessor` under the `amazon-refresh-` condition; **not** on `intent-hmac-key` | `run.invoker` on `ingestAmazonEnvelope` in the main project; the only identity with a VPC-SC egress rule |
 | `amazon-deploy@` | `run.admin`, `cloudbuild.builds.editor`, `artifactregistry.writer`, `logging.logWriter`, `iam.serviceAccountUser` on the three runtime accounts; `storage.objectViewer` on the build staging bucket only | — | used only by the operator through impersonation for deploys; also the Cloud Build identity (the compute default account holds no role, and Cloud Build refuses the legacy build account as an explicit choice) |
 
 Main project: `amazon-caller@eggcraft-studio` gets `run.invoker` on

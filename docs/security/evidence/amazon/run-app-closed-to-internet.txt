@@ -1,4 +1,4 @@
-# 2026-09-05T00:26:19Z
+# 2026-09-05T00:39:41Z
 # bash -c for s in amazon-oauth amazon-admin amazon-sync; do u=$(gcloud run services describe $s --project=nivadesk-amazon --region=europe-west2 --format='value(status.url)'); echo "$u/healthz → $(curl -s -o /dev/null -w '%{http_code}' -m 15 $u/healthz)"; done
 
 ERROR: (gcloud.run.services.describe) Cannot find service [amazon-oauth]

@@ -1,28 +1,28 @@
-# 2026-09-05T00:26:19Z
+# 2026-09-05T00:39:41Z
 # bash -c gcloud scc settings services describe --project=nivadesk-amazon --service=EVENT_THREAT_DETECTION --format=yaml 2>&1 | head -20; gcloud scc settings services describe --project=nivadesk-amazon --service=CONTAINER_THREAT_DETECTION --format=yaml 2>&1 | head -5
 
 ERROR: (gcloud.scc) Invalid choice: 'settings'.
 Maybe you meant:
-  gcloud alpha scc
+  gcloud run services describe
+  gcloud run services get-iam-policy
+  gcloud alpha scc settings services describe
+  gcloud alpha scc settings services modules describe
+  gcloud alpha scc settings services describe-explicit
+  gcloud alpha scc settings services modules describe-explicit
+  gcloud scc manage services describe
+  gcloud run services add-iam-policy-binding
+  gcloud run services delete
+  gcloud run services list
   gcloud scc assets
   gcloud scc bqexports
+  gcloud scc custom-modules
+  gcloud scc findings
   gcloud scc iac-validation-reports
-  gcloud scc manage
   gcloud scc muteconfigs
   gcloud scc notifications
   gcloud scc operations
-  gcloud scc posture-deployments
-  gcloud scc posture-operations
-  gcloud scc custom-modules
-  gcloud scc findings
-  gcloud scc posture-templates
-  gcloud scc postures
-  gcloud scc sources
-
-To search the help text of gcloud commands, run:
-  gcloud help -- SEARCH_TERMS
 ERROR: (gcloud.scc) Invalid choice: 'settings'.
 Maybe you meant:
-  gcloud alpha scc
-  gcloud scc assets
-  gcloud scc bqexports
+  gcloud run services describe
+  gcloud run services get-iam-policy
+  gcloud alpha scc settings services describe

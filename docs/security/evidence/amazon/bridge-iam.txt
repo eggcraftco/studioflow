@@ -1,0 +1,16 @@
+# 2026-09-05T00:39:41Z
+# bridge_iam
+
+== ingestAmazonEnvelope (eggcraft-studio) invoker policy
+bindings:
+- members:
+  - serviceAccount:amazon-sync@nivadesk-amazon.iam.gserviceaccount.com
+  role: roles/run.invoker
+etag: BwZasXeJk80=
+version: 1
+== eggcraft-studio project-level bindings naming an Amazon identity
+  roles/datastore.user -> serviceAccount:amazon-caller@eggcraft-studio.iam.gserviceaccount.com
+  roles/logging.logWriter -> serviceAccount:amazon-caller@eggcraft-studio.iam.gserviceaccount.com
+== every Cloud Run service in eggcraft-studio with a binding for an Amazon identity
+ingestamazonenvelope (europe-west2): roles/run.invoker -> serviceAccount:amazon-sync@nivadesk-amazon.iam.gserviceaccount.com
+  (421 services scanned)

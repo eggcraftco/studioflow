@@ -36,6 +36,60 @@ capture() {   # capture <control> <file> <command...>
 
 PN=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)' 2>/dev/null || echo "")
 
+# The bridge: who may invoke ingestAmazonEnvelope, and — across every Cloud
+# Run service of the main project — whether any Amazon identity holds
+# anything else. The scan takes about a minute; it is the point.
+bridge_iam() {
+  echo "== ingestAmazonEnvelope (eggcraft-studio) invoker policy"
+  gcloud run services get-iam-policy ingestamazonenvelope --region="$REGION" --project=eggcraft-studio --format=yaml
+  echo "== eggcraft-studio project-level bindings naming an Amazon identity"
+  gcloud projects get-iam-policy eggcraft-studio --format=json | python3 -c '
+import json,sys; p=json.load(sys.stdin)
+for b in p["bindings"]:
+    for m in b["members"]:
+        if "nivadesk-amazon" in m or "amazon-caller" in m: print("  " + b["role"] + " -> " + m)'
+  echo "== every Cloud Run service in eggcraft-studio with a binding for an Amazon identity"
+  local list scan; list=$(mktemp); scan=$(mktemp)
+  gcloud run services list --project=eggcraft-studio --format='value(metadata.name,metadata.labels."cloud.googleapis.com/location")' | tr '\t' ' ' > "$list"
+  cat > "$scan" <<'SCAN'
+#!/bin/bash
+gcloud run services get-iam-policy "$1" --region="$2" --project=eggcraft-studio --format=json 2>/dev/null | python3 -c "
+import json,sys
+try: p=json.load(sys.stdin)
+except Exception: print('$1 ($2): UNREADABLE'); sys.exit(0)
+for b in p.get('bindings',[]):
+    for m in b.get('members',[]):
+        if 'nivadesk-amazon' in m or 'amazon-caller' in m or m in ('allUsers','allAuthenticatedUsers') and '$1'=='ingestamazonenvelope': print('$1 ($2): '+b['role']+' -> '+m)"
+SCAN
+  chmod +x "$scan"; xargs -P 8 -L 1 "$scan" < "$list" | sort
+  echo "  ($(wc -l < "$list" | tr -d ' ') services scanned)"; rm -f "$list" "$scan"
+}
+admin_iam() {
+  echo "== amazon-admin invoker policy"; gcloud run services get-iam-policy amazon-admin --region="$REGION" --project="$PROJECT" --format=yaml
+  echo "== amazon-admin ingress: $(gcloud run services describe amazon-admin --region="$REGION" --project="$PROJECT" --format='value(metadata.annotations."run.googleapis.com/ingress")')"
+  echo "== amazon-diag job policy"; gcloud run jobs get-iam-policy amazon-diag --region="$REGION" --project="$PROJECT" --format=yaml
+}
+secret_iam() {
+  for s in lwa-client-secret intent-hmac-key; do
+    echo "== $s ($(gcloud secrets versions list "$s" --project="$PROJECT" --format='value(name)' 2>/dev/null | wc -l | tr -d ' ') version(s))"
+    gcloud secrets get-iam-policy "$s" --project="$PROJECT" --format=yaml
+  done
+  echo "== project-level Secret Manager and custom-role bindings, with their conditions"
+  gcloud projects get-iam-policy "$PROJECT" --format=json | python3 -c '
+import json,sys; p=json.load(sys.stdin)
+for b in p["bindings"]:
+    if "secretmanager" in b["role"] or "/roles/" in b["role"]:
+        print("  " + b["role"] + " -> " + ", ".join(b["members"]) + " | condition: " + b.get("condition",{}).get("expression","(none)"))'
+  echo "== custom role amazonSecretCreator: $(gcloud iam roles describe amazonSecretCreator --project="$PROJECT" --format='value(includedPermissions)' 2>/dev/null)"
+}
+bridge_test_latest() {
+  local exec; exec=$(gcloud run jobs executions list --job=amazon-bridge-test --project="$PROJECT" --region="$REGION" --sort-by=~metadata.creationTimestamp --limit=1 --format='value(metadata.name)' 2>/dev/null)
+  [ -n "$exec" ] || { echo "no amazon-bridge-test execution"; return 1; }
+  echo "execution: $exec"
+  gcloud logging read "resource.type=\"cloud_run_job\" AND labels.\"run.googleapis.com/execution_name\"=\"$exec\" AND textPayload:\"bridgetest\"" \
+    --project="$PROJECT" --bucket=amazon-audit --location="$REGION" --view=_AllLogs --freshness=30d --limit=30 --order=asc --format='value(textPayload)'
+}
+
 # Private Google Access: the zone, its records, the query-logging policy, the
 # route and the firewall rule — and the newest amazon-diag execution's own
 # lines (read from the amazon-audit bucket view).
@@ -80,6 +134,11 @@ capture segmentation operator-org-roles.txt operator_org_roles
 capture segmentation pga-private-zone.txt pga_zone
 capture segmentation pga-route-and-firewall.txt pga_route_firewall
 capture segmentation pga-diag-latest.txt pga_diag_latest
+capture segmentation bridge-iam.txt bridge_iam
+capture segmentation admin-iam.txt admin_iam
+capture segmentation secret-iam.txt secret_iam
+capture segmentation bridge-test-latest.txt bridge_test_latest
+if [ -s "$OUT/bridge-test-2026-09-05.md" ]; then printf '| segmentation | `bridge-test-2026-09-05.md` | present (record of 2026-09-05) |\n' >> "$MANIFEST"; fi
 for f in pga-diag-before.txt pga-diag-after.txt; do
   if [ -s "$OUT/$f" ]; then printf '| segmentation | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"
   else printf '| segmentation | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi

@@ -1,0 +1,13 @@
+# 2026-09-05T00:39:41Z
+# bridge_test_latest
+
+execution: amazon-bridge-test-l6t75
+bridgetest A-valid-sanitized-unknown-workspace: status=404 body={"error":"unknown_workspace"}
+bridgetest B-pii-key-in-order: status=422 body={"error":"unsafe_envelope","violations":["order.BuyerEmail: not in the allowlist"]}
+bridgetest C-schema-violation: status=422 body={"error":"unsafe_envelope","violations":["foo: not in the allowlist","taxKnown: required boolean"]}
+bridgetest D-token-for-another-audience: status=401 body=401 Unauthorized Error: Unauthorized Your client does not have permission to the requested URL /ingestAmazonEnvelope .
+bridgetest E-no-token: status=403 body=403 Forbidden Error: Forbidden Your client does not have permission to get URL /ingestAmazonEnvelope from this server.
+bridgetest secret amazon-refresh-conditiontest: http=403 PERMISSION_DENIED (value never printed)
+bridgetest secret intent-hmac-key: http=403 PERMISSION_DENIED (value never printed)
+bridgetest secret lwa-client-secret: http=404 NOT_FOUND (value never printed)
+bridgetest done

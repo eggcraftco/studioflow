@@ -1,0 +1,13 @@
+# 2026-09-05T00:39:41Z
+# admin_iam
+
+== amazon-admin invoker policy
+bindings:
+- members:
+  - serviceAccount:amazon-caller@eggcraft-studio.iam.gserviceaccount.com
+  role: roles/run.invoker
+etag: BwZasXergwI=
+version: 1
+== amazon-admin ingress: internal-and-cloud-load-balancing
+== amazon-diag job policy
+etag: ACAB
