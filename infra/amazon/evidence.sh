@@ -11,6 +11,9 @@ set -uo pipefail
 # gcloud must never wait on a prompt ("enable the API?", "install component?"):
 # a script that blocks on stdin in a non-interactive run looks like a hang.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+# Organisation-level Access Context Manager calls are quota-attributed to
+# gcloud's core project; make it the Amazon project, where that API is enabled.
+export CLOUDSDK_CORE_PROJECT="${AMAZON_PROJECT_ID:-nivadesk-amazon}"
 PROJECT="${AMAZON_PROJECT_ID:-nivadesk-amazon}"
 REGION="europe-west2"
 ORG_ID="378239481010"
