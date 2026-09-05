@@ -68,8 +68,11 @@ are named; nothing is claimed until they exist.
 ## Identity and access (supporting answers)
 
 - One human identity holds access; organisation-level bootstrap roles were
-  removed after project creation and re-checked on every pack
-  (`bootstrap-iam-reduction.md`, `operator-org-roles.txt`).
+  removed after project creation, and the two later organisation-level roles
+  (Security Command Center, organisation policy) were removed again the same
+  day — Security Command Center administration is project-scoped; both
+  reductions are re-checked on every pack (`bootstrap-iam-reduction.md`,
+  `operator-org-roles.txt`).
 - Each workload runs as its own service account with the permissions of its
   one job: the deploy identity cannot invoke services (`deploy-identity-2026-09-05.md`),
   the sync identity may read only refresh tokens, the admin identity may only
