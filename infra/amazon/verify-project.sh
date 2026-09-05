@@ -142,8 +142,8 @@ ENABLED=$(gcloud services list --enabled --project="$PROJECT" --format='value(co
 echo "$ENABLED" | grep -q securitycenter.googleapis.com && ok "securitycenter API enabled (Premium active since 2026-09-05)" || fail "securitycenter API not enabled — SCC should be active"
 if echo "$ENABLED" | grep -q accesscontextmanager.googleapis.com; then
   POL=$(gcloud access-context-manager policies list --organization="$ORG_ID" --format='value(name)' 2>/dev/null | head -1)
-  PER=$( [ -n "$POL" ] && gcloud access-context-manager perimeters describe amazon-information --policy="$POL" --format='value(name)' 2>/dev/null || true)
-  [ -n "$PER" ] && ok "accesscontextmanager API enabled and perimeter amazon-information exists ($(gcloud access-context-manager perimeters describe amazon-information --policy="$POL" --format='value(status.resources[0])' 2>/dev/null | grep -q . && echo ENFORCED || echo dry-run))" || fail "accesscontextmanager API enabled but no perimeter — enabled early"
+  PER=$( [ -n "$POL" ] && gcloud access-context-manager perimeters describe amazon_information --policy="$POL" --format='value(name)' 2>/dev/null || true)
+  [ -n "$PER" ] && ok "accesscontextmanager API enabled and perimeter amazon_information exists ($(gcloud access-context-manager perimeters describe amazon_information --policy="$POL" --format='value(status.resources[0])' 2>/dev/null | grep -q . && echo ENFORCED || echo dry-run))" || fail "accesscontextmanager API enabled but no perimeter — enabled early"
 else
   ok "accesscontextmanager API not enabled (perimeter not started yet)"
 fi

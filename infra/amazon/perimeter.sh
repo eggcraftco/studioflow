@@ -24,6 +24,7 @@ OPERATOR="${OPERATOR_EMAIL:-contact@eggcraft.co.uk}"
 DRY_RUN="${DRY_RUN:-1}"
 MODE="${1:-dry-run}"
 run() { if [ "$DRY_RUN" = "1" ]; then printf '  [dry-run] %s\n' "$*"; else printf '  → %s\n' "$*"; "$@"; fi; }
+exists() { "$@" >/dev/null 2>&1; }
 [ "$DRY_RUN" = "1" ] && echo "DRY_RUN=1: nothing will be created or changed."
 
 PROJECT_NUMBER=$( [ "$DRY_RUN" = "1" ] && echo "<number>" || gcloud projects describe "$PROJECT" --format='value(projectNumber)')
@@ -32,6 +33,8 @@ RESTRICTED="firestore.googleapis.com,secretmanager.googleapis.com,run.googleapis
 HERE="$(cd "$(dirname "$0")" && pwd)"
 INGRESS="$HERE/perimeter-ingress.yaml"
 EGRESS="$HERE/perimeter-egress.yaml"
+# Perimeter short names allow letters, digits and underscores only (the API
+# refuses a hyphen with "Invalid perimeter name").
 # Rule files are rendered with the real numbers and the operator identity.
 render() { sed -e "s|PROJECT_NUMBER|$PROJECT_NUMBER|g" -e "s|MAIN_PROJECT_NUMBER|$MAIN_PROJECT_NUMBER|g" -e "s|OPERATOR_EMAIL|$OPERATOR|g" -e "s|PROJECT_ID|$PROJECT|g" "$1"; }
 
@@ -43,15 +46,23 @@ case "$MODE" in
     POLICY=$( [ "$DRY_RUN" = "1" ] && echo "<policy>" || gcloud access-context-manager policies list --organization="$ORG_ID" --format='value(name)' | head -1)
     if [ -z "$POLICY" ] || [ "$POLICY" = "<policy>" ]; then
       run gcloud access-context-manager policies create --organization="$ORG_ID" --title="eggcraft-access-policy"
-      POLICY="<policy>"
+      POLICY=$( [ "$DRY_RUN" = "1" ] && echo "<policy>" || gcloud access-context-manager policies list --organization="$ORG_ID" --format='value(name)' | head -1)
     fi
     echo "  policy: $POLICY"
-    echo "══ 3. Perimeter amazon-information, DRY-RUN configuration ══"
+    echo "══ 3. Perimeter amazon_information, DRY-RUN configuration ══"
     I=$(mktemp); E=$(mktemp); render "$INGRESS" > "$I"; render "$EGRESS" > "$E"
-    run gcloud access-context-manager perimeters dry-run create amazon-information --policy="$POLICY" \
-        --title="Amazon Information" --perimeter-type=regular \
-        --resources="projects/$PROJECT_NUMBER" --restricted-services="$RESTRICTED" \
-        --ingress-policies="$I" --egress-policies="$E"
+    # The dry-run subcommand prefixes every perimeter flag with --perimeter-.
+    if exists gcloud access-context-manager perimeters describe amazon_information --policy="$POLICY"; then
+      echo "  perimeter amazon_information exists — updating its dry-run configuration"
+      run gcloud access-context-manager perimeters dry-run update "accessPolicies/$POLICY/servicePerimeters/amazon_information" \
+          --set-resources="projects/$PROJECT_NUMBER" --set-restricted-services="$RESTRICTED" \
+          --set-ingress-policies="$I" --set-egress-policies="$E"
+    else
+      run gcloud access-context-manager perimeters dry-run create "accessPolicies/$POLICY/servicePerimeters/amazon_information" \
+          --perimeter-title="Amazon Information" --perimeter-type=regular \
+          --perimeter-resources="projects/$PROJECT_NUMBER" --perimeter-restricted-services="$RESTRICTED" \
+          --perimeter-ingress-policies="$I" --perimeter-egress-policies="$E"
+    fi
     rm -f "$I" "$E"
     echo "  Now: a week of real traffic. Violations appear in Cloud Logging as"
     echo "  protoPayload.metadata.dryRun=true with VPC_SERVICE_CONTROLS in the status. Then: perimeter.sh report"
@@ -69,7 +80,7 @@ case "$MODE" in
   enforce)
     echo "══ ⛔ Enforce: promotes the dry-run config to enforced ══"
     POLICY=$( [ "$DRY_RUN" = "1" ] && echo "<policy>" || gcloud access-context-manager policies list --organization="$ORG_ID" --format='value(name)' | head -1)
-    run gcloud access-context-manager perimeters dry-run enforce amazon-information --policy="$POLICY"
+    run gcloud access-context-manager perimeters dry-run enforce amazon_information --policy="$POLICY"
     echo "  Proof for the evidence pack: a Firestore read of the Amazon project from the main project's identity must now fail with VPC_SERVICE_CONTROLS."
     ;;
   *) echo "usage: perimeter.sh dry-run|report|enforce"; exit 2 ;;
