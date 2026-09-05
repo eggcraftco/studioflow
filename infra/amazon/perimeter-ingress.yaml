@@ -57,7 +57,11 @@
 #    the perimeter sees that as ingress. Dry-run 2026-09-05 12:38:54:
 #    artifactregistry.googleapis.com/DockerRead by amazon-deploy@,
 #    NO_MATCHING_ACCESS_LEVEL. Enforcing without this rule would break every
-#    deploy. One identity, two services, this project only.
+#    deploy. Cloud Build's worker also writes the build log to Cloud Logging
+#    as this identity from Google's network (dry-run 13:47 UTC:
+#    logging.googleapis.com WriteLogEntries, NETWORK_NOT_IN_SAME_SERVICE_PERIMETER);
+#    build logs are not Amazon Information. One identity, three services,
+#    this project only.
 - ingressFrom:
     identities:
       - serviceAccount:amazon-deploy@PROJECT_ID.iam.gserviceaccount.com
@@ -69,6 +73,9 @@
         methodSelectors:
           - method: "*"
       - serviceName: storage.googleapis.com
+        methodSelectors:
+          - method: "*"
+      - serviceName: logging.googleapis.com
         methodSelectors:
           - method: "*"
     resources:

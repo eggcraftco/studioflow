@@ -12,6 +12,7 @@ observed. Perimeter: `accessPolicies/444937440696/servicePerimeters/amazon_infor
 | 05 Sep 03:51:04 | `run.googleapis.com/HttpIngress` | (none — LB request) | **Resolved** by ingress rule 2 (`ANY_IDENTITY → run.googleapis.com`, this project); the identity is checked by Cloud Run IAM, the custom audience, Cloud Armor and the service (design §7a). Re-driven after the rule: no violation |
 | 05 Sep 04:08:17 | `firestore.googleapis.com` GetOrListDocuments | `amazon-caller@eggcraft-studio` | **Expected refusal** — the deliberate cross-project read (`cross-project-read-2026-09-05.txt`); no rule; enforcement will refuse it, which is the segmentation proof |
 | 05 Sep 12:38:54 | `artifactregistry.googleapis.com/DockerRead` | `amazon-deploy@nivadesk-amazon` | **Resolved** by ingress rule 4 (`amazon-deploy@ → artifactregistry + storage`, this project): Cloud Run and Cloud Build read the registry and the staging bucket from Google-managed infrastructure on the deploy identity; the mis-shaped egress rule was removed |
+| 05 Sep 13:47:08–13:47:33 (18 entries) | `logging.googleapis.com` WriteLogEntries | `amazon-deploy@nivadesk-amazon` | **Resolved** by adding `logging.googleapis.com` to ingress rule 4: Cloud Build's worker writes the build log from Google's network as the deploy identity (`NETWORK_NOT_IN_SAME_SERVICE_PERIMETER`); build logs carry no Amazon Information. The registry push and the staging-bucket read of the same build produced no violation — rule 4 works for them |
 
 ## Paths exercised under dry-run so far
 
@@ -23,7 +24,7 @@ observed. Perimeter: `accessPolicies/444937440696/servicePerimeters/amazon_infor
 | Google API traffic from the VPC over the restricted VIP (diag job) | 03:50 | no violation |
 | Cross-project Firestore read from the main project | 04:08 | expected violation, recorded |
 | Deploy path: `run jobs create/update`, image reads | 12:38 | violation before rule 4 |
-| Cloud Build (`build.sh`: source staging bucket + Artifact Registry push) | to observe after rule 4 | — |
+| Cloud Build (`build.sh`: source staging bucket + Artifact Registry push + build log) | 13:47 UTC, after rule 4 | registry and bucket: no violation; build log write: violation → logging added to rule 4 |
 | Security Command Center notification publish (rule 3) | 05:29 real finding published | no violation |
 | Cloud Scheduler → `amazon-sync` | not deployable yet (no Amazon credentials) | — |
 | `amazon-oauth` consent flow | not deployable yet | — |
