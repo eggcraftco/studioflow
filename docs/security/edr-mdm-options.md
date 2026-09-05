@@ -91,3 +91,79 @@ can draft.
 
 Estimated cost: $22/month (annual) for the one licence; no additional device
 fees for up to 5 Macs/PCs and 5 phones.
+
+## Operator runbook — Microsoft 365 Business Premium onboarding (ready to execute)
+
+Everything below is done by the operator, in this order; the assistant
+prepares texts and checks results but changes nothing on a device. Expect
+about half a day end to end, spread over a week for the evidence.
+
+**A. Tenant and licence (30 min)**
+1. Sign up for Microsoft 365 Business Premium at microsoft.com with the work
+   address; choose annual billing ($22/user/month); 1 licence.
+2. Create the tenant admin account (a dedicated `admin@…onmicrosoft.com`
+   identity, not the daily account); assign the Business Premium licence to
+   the operator's user.
+3. Turn on **multi-factor authentication** for both accounts (Microsoft
+   Authenticator); write the recovery codes into the password manager.
+4. Decline anything not needed (Exchange mailboxes, Teams rollout) — Google
+   Workspace stays the identity and mail provider; nothing changes there.
+
+**B. Apple Business Manager (ABM) (30–60 min; Apple may take a day to verify)**
+5. Enrol at business.apple.com with the company's D-U-N-S; verification by
+   Apple.
+6. Add existing devices: the Mac(s) with Apple Configurator for iPhone
+   (adds a Mac to ABM during a fresh setup) — or, for devices that will not be
+   wiped, profile-based enrolment through Intune Company Portal in step 9.
+7. In ABM → Preferences → MDM servers: add Intune (upload the public key
+   Intune gives you in step 8, download the server token).
+
+**C. Intune (Microsoft Intune admin center) (45 min)**
+8. Devices → Enrollment → Apple: create the **Apple MDM push certificate**
+   (Apple ID: a company one, not personal), then add the **Automated Device
+   Enrollment** token from step 7.
+9. Enrol the MacBook Pro (and the Mac Studio while it is in scope): install
+   **Company Portal** on the Mac, sign in with the licensed user, approve the
+   management profile in System Settings → Privacy & Security → Profiles.
+10. Enrol the phone: Company Portal from the App Store, sign in, allow the
+    management profile.
+
+**D. Defender for Business onboarding and policies (45 min)**
+11. Intune → Endpoint security → Endpoint detection and response: create the
+    macOS **Defender onboarding** profile (Intune-managed) and assign it to
+    all devices. Add the four required macOS configuration profiles Microsoft
+    documents for Defender: **system extension** approval, **full disk
+    access**, **network filter** (network protection), **background service**
+    — without these macOS blocks the agent silently.
+12. On each Mac after the profiles arrive: open System Settings → Privacy &
+    Security and confirm the Defender extension and full-disk access are
+    **approved by MDM** (no manual toggles should remain).
+13. Endpoint security → Antivirus (macOS): real-time protection on,
+    cloud-delivered protection on, automatic sample submission off,
+    **tamper protection on**, definitions/engine automatic updates,
+    **weekly full scan** (scheduled), threat severity actions = block.
+14. Devices → Compliance policies (macOS and iOS): FileVault/encryption on,
+    password with 6+ characters and screen lock ≤ 5 min, firewall on,
+    minimum OS version (current − 1), jailbroken/rooted = non-compliant,
+    Defender machine risk score ≤ medium; action for non-compliance: mark
+    non-compliant immediately and email the operator.
+15. Devices → Configuration: OS update policy (install within 14 days),
+    FileVault enforcement with escrowed recovery key.
+
+**E. Evidence (after one week of running)**
+16. Defender portal (security.microsoft.com) → Assets → Devices: screenshot
+    the device list with health, sensor, and definition state
+    (`edr-console-devices.png`); open one device → screenshot the
+    definitions/engine date (`edr-definitions-date.png`); Endpoint security →
+    Antivirus → screenshot tamper protection = on (`edr-tamper-protection.png`).
+17. Intune → Reports → Device compliance: export (`mdm-policy-export.pdf`,
+    together with the assigned profiles list).
+18. Fill `device-inventory.md` (device, serial, user, enrolment date, agent
+    version, last full scan, compliance state) and copy the five files into
+    `docs/security/evidence/amazon/`; then re-run `infra/amazon/evidence.sh`
+    and set control 4 to `Passed`.
+
+Mac Studio: **In Scope** until the operator confirms it holds no gcloud
+login, console session, repository with deploy access or Seller Central
+session; if confirmed, it is recorded as out of scope with that statement
+and skipped in steps 9 and 12.
