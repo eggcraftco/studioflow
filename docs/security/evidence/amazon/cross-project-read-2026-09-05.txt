@@ -1,0 +1,4 @@
+# 2026-09-05T04:08:03Z — cross-project read attempt: amazon-caller@eggcraft-studio → Firestore of nivadesk-amazon (Cloud Run job amazon-xproj-read, execution amazon-xproj-read-dd4c8)
+xproj firestore read as amazon-caller@eggcraft-studio.iam.gserviceaccount.com: status=403 reason=PERMISSION_DENIED detail=
+== what the perimeter recorded for it (dry-run entries are 'would have been refused'; enforced entries are refusals)
+2026-09-05T04:08:17.219854030Z	True	amazon-caller@eggcraft-studio.iam.gserviceaccount.com	google.firestore.v1.Firestore.GetOrListDocuments	NO_MATCHING_ACCESS_LEVEL

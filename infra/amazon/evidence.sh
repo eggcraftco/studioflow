@@ -180,7 +180,13 @@ POLICY=$(gcloud access-context-manager policies list --organization="$ORG_ID" --
 capture segmentation perimeter.json gcloud access-context-manager perimeters describe amazon_information --policy="$POLICY" --format=json
 capture segmentation org-policies.txt bash -c "for c in run.allowedIngress iam.disableServiceAccountKeyCreation iam.automaticIamGrantsForDefaultServiceAccounts compute.vmExternalIpAccess compute.restrictVpcPeering compute.skipDefaultNetworkCreation gcp.resourceLocations storage.uniformBucketLevelAccess; do echo \"== \$c\"; gcloud org-policies describe \$c --project=$PROJECT --format=yaml; done"
 capture segmentation vpcsc-dryrun-report.txt gcloud logging read 'protoPayload.metadata.@type="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata"' --project="$PROJECT" --bucket=amazon-audit --location="$REGION" --view=_AllLogs --freshness=30d --limit=500 --format='table(timestamp,protoPayload.authenticationInfo.principalEmail,protoPayload.serviceName,protoPayload.methodName,protoPayload.metadata.dryRun,protoPayload.metadata.violationReason)'
-capture segmentation cross-project-read-denied.txt bash -c "gcloud firestore databases describe --database='(default)' --project=$PROJECT --impersonate-service-account=amazon-caller@eggcraft-studio.iam.gserviceaccount.com 2>&1 | head -5; echo '(expected: VPC_SERVICE_CONTROLS / PERMISSION_DENIED)'"
+# The cross-project read is exercised by infra/amazon/cross-project-read-test.sh
+# (a main-project identity reading the Amazon project's Firestore); its record
+# is listed here, and the perimeter's own log of that attempt is captured live.
+for f in cross-project-read-2026-09-05.txt; do
+  if [ -s "$OUT/$f" ]; then printf '| segmentation | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"; else printf '| segmentation | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
+done
+capture segmentation cross-project-read-denied.txt gcloud logging read 'protoPayload.metadata.@type="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata" AND protoPayload.serviceName="firestore.googleapis.com" AND protoPayload.authenticationInfo.principalEmail="amazon-caller@eggcraft-studio.iam.gserviceaccount.com"' --project="$PROJECT" --bucket=amazon-audit --location="$REGION" --view=_AllLogs --freshness=30d --limit=5 --format='table(timestamp,protoPayload.metadata.dryRun,protoPayload.methodName,protoPayload.metadata.violationReason)'
 
 echo "══ Firewall / ACL ══"
 capture firewall cloud-armor-policy.json gcloud compute security-policies describe amazon-edge --project="$PROJECT" --format=json
