@@ -18,9 +18,11 @@
 #    evaluates these as run.googleapis.com/HttpIngress WITHOUT the caller's IAM
 #    identity (Cloud Run docs: "ingress policy rules that use IAM principals are
 #    not supported. Only the ANY_IDENTITY identity type is supported"), so the
-#    rule cannot name the caller; it admits the HTTP path only — not the
-#    management API — and the callers are still checked by Cloud Armor, Cloud
-#    Run IAM (run.invoker) and the services' own OIDC verification.
+#    rule cannot name the caller. The API accepts neither a method selector
+#    "HttpIngress" nor a permission selector for run.googleapis.com, so the
+#    selector is "*": VPC-SC admits any identity to the run API of this
+#    project; every call is still checked by Cloud Run IAM (invoker and
+#    management roles), Cloud Armor and the services' own OIDC verification.
 #    Seen in dry-run 2026-09-05 03:51 as NO_MATCHING_ACCESS_LEVEL before this rule.
 - ingressFrom:
     identityType: ANY_IDENTITY
@@ -30,7 +32,7 @@
     operations:
       - serviceName: run.googleapis.com
         methodSelectors:
-          - method: "HttpIngress"
+          - method: "*"
     resources:
       - projects/PROJECT_NUMBER
 # 3. Security Command Center's notification service agent (organisation-level,
