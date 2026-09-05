@@ -129,6 +129,75 @@ buying the plan and sending the case are the operator's actions. The free
 alternative remains the public issue tracker (below) with the identities
 removed from the text.
 
+## Purchase attempt 2026-09-05 22:00 UTC — stopped at an IAM prerequisite
+
+The operator approved Standard Support ($29/month minimum). The console
+purchase flow (`support/registration_cc;supportTier=STANDARD`) was opened as
+`contact@eggcraft.co.uk` (the console had been signed in as the personal
+Google account, which has no organisation; switching required the account's
+passkey). Step 1 accepted organisation `eggcraft.co.uk`, then stopped:
+*"You must be assigned Support > Support Account Administrator
+(`roles/cloudsupport.admin`) for the organization in IAM to continue."*
+Read-back of the organisation IAM policy at 22:04 UTC: the operator holds
+`roles/resourcemanager.organizationAdmin` and
+`roles/accesscontextmanager.policyAdmin` at the organisation; no principal
+holds any `cloudsupport` role. Granting the role is an organisation-level IAM
+change and therefore the operator's decision (it also changes
+`operator-org-roles.txt` in the pack and must be recorded in
+`bootstrap-iam-reduction.md`). Command prepared, **not run**:
+
+```
+gcloud organizations add-iam-policy-binding 378239481010 \
+  --member=user:contact@eggcraft.co.uk --role=roles/cloudsupport.admin
+```
+
+After the purchase the role can stay (it is what manages the plan and its
+cases) or be reduced to `roles/cloudsupport.techSupportEditor` on the project
+for case work only; either way the pack records it.
+
+**22:09 UTC — the operator ran the command themselves** (organisation IAM
+read-back: `roles/cloudsupport.admin` → `user:contact@eggcraft.co.uk`, the
+only `cloudsupport` binding). The purchase flow then accepted step 1, and
+step 2 offered exactly one billing account, `My Billing Account
+(01789B-AD5731-2C3C72)`, which was selected. The flow stopped at the
+operator's two clicks: the *"I agree to the terms of service"* checkbox and
+*"Complete purchase"* (Standard Support: the greater of $29/month or 3% of
+monthly Cloud charges, monthly auto-renewing subscription). The assistant did
+not tick or click either. **22:15 UTC: the operator completed the purchase**
+("Thanks. Your support purchase is complete."); Support › Cases for
+`nivadesk-amazon` now offers case creation (the Standard plan's flow starts
+with Google's AI support agent, which collects the issue and hands off to a
+human engineer as a case).
+
+## Filed — Google Cloud support case **75151719** (2026-09-05 22:31:45 UTC)
+
+Submitted from the console (Support › Cases › Get help, project
+`nivadesk-amazon`, signed in as `contact@eggcraft.co.uk`) under the new
+Standard Support plan, after Google's AI support agent was asked to hand off
+to a human engineer. Form values: title "Event Threat Detection and Cloud Run
+Threat Detection produce no findings for Google's documented test procedures
+on a project-level Premium activation" (truncated by the 140-character limit);
+category Other Google Cloud Products › Security Command Center › Configure ::
+Security Command Center services; Cloud Security Command Center issue
+category "Reporting false positive/negative finding"; priority **P3 – Medium
+impact**; business impact "Non-Production System impaired"; issue start
+2026-09-05 03:00 (UK time), ongoing; observed error message "none"; finding
+category "Expected, none produced: Malware: Bad Domain; Defense Evasion:
+Base64 ELF File Command Line"; language English (email); time zone GMT+01:00
+United Kingdom. The "Provide more details" field carries the full text of the
+sections above (summary, enablement read-back, the three ETD runs, the two
+CRTD executions, the findings that do exist, expected behaviour, the three
+questions). Attachments could not be added through the assistant's browser
+tooling (the form's file input sits in an isolated frame); the case text says
+the records are available on request — add them from the case page if Google
+asks. Confirmation screen: *"Case 75151719 created. Your support case has
+been created and will be reviewed shortly."*
+
+| Event | When (UTC) | Note |
+|---|---|---|
+| Case created | 2026-09-05 22:31:45 | console: "Created by EGGcraft Team for nivadesk-amazon on Sep 5, 2026, 11:31:45 PM" (UK time); status New, P3 – Medium; case page `console.cloud.google.com/support/cases/detail/v2/75151719?project=nivadesk-amazon` |
+| First response from Google | — | to be recorded here with the summary of the answer |
+
 ## Where to file
 
 - With a paid support plan (Standard or above): Google Cloud console → Support → Cases →

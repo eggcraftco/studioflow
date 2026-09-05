@@ -130,7 +130,7 @@ Only two items block the submission (operator decision 2026-09-05).
 | # | Blocker | Owner | What closes it | Earliest |
 |---|---|---|---|---|
 | B1 | VPC Service Controls perimeter not enforced (control 1 stays In Progress) | operator approval, then the enforce command (`amazon-vpcsc-enforce-readiness.md` Go/No-Go) | clean daily dry-run reports on 6 and 7 Sep (the deploy path is already Observed / Clean); the operator says "enforce" explicitly; post-enforcement report and the denied cross-project read in the pack | 8 Sep 2026 |
-| B2 | No Event Threat Detection or Cloud Run Threat Detection finding, investigation open with Google (control 3 stays In Progress) | operator opens the support case (paid plan or issue tracker — the assistant stops at the plan/price screen); Google answers | either a detector finding delivered through the proven chain, or a written answer from Google folded into the control-3 wording; the single support package `google-support-case-scc-detectors.md` is final; no further self-triggered tests | when Google answers |
+| B2 | No Event Threat Detection or Cloud Run Threat Detection finding, investigation open with Google (control 3 stays In Progress) | Google answers case **75151719** (filed 5 Sep 2026 22:31 UTC on the Standard Support plan bought the same evening) | either a detector finding delivered through the proven chain, or a written answer from Google folded into the control-3 wording; the single support package `google-support-case-scc-detectors.md` was submitted as the case text; no further self-triggered tests | when Google answers |
 
 **Supplementary evidence — not blockers** (attached when available, the
 control-4 verdict does not depend on them): the Defender Antivirus-health

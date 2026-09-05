@@ -78,3 +78,18 @@ the Premium activation lives.
 `roles/accesscontextmanager.policyAdmin` stays until the perimeter enforce
 decision, then goes. `roles/resourcemanager.organizationAdmin` is unchanged.
 `operator-org-roles.txt` re-reads the organisation policy on every pack.
+
+
+## Addendum 2026-09-05 22:09 UTC — one organisation-level role added on purpose
+
+`roles/cloudsupport.admin` (Support Account Administrator) was granted at the
+organisation to `user:contact@eggcraft.co.uk` by the operator, because Google
+Cloud Customer Care (Standard Support) can only be purchased and administered
+by a principal holding that role at the organisation. It is the third
+organisation-level role the operator holds (with
+`resourcemanager.organizationAdmin` and `accesscontextmanager.policyAdmin`);
+`operator-org-roles.txt` captures it on every pack. Purpose: the support case
+for the Security Command Center detector investigation (control 3). Review
+point: once the case is closed, decide whether the role stays for plan
+management or is reduced to `roles/cloudsupport.techSupportEditor` on
+`nivadesk-amazon`.
