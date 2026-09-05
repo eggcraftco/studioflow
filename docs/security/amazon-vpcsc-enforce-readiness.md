@@ -14,6 +14,14 @@ observed. Perimeter: `accessPolicies/444937440696/servicePerimeters/amazon_infor
 | 05 Sep 12:38:54 | `artifactregistry.googleapis.com/DockerRead` | `amazon-deploy@nivadesk-amazon` | **Resolved** by ingress rule 4 (`amazon-deploy@ → artifactregistry + storage`, this project): Cloud Run and Cloud Build read the registry and the staging bucket from Google-managed infrastructure on the deploy identity; the mis-shaped egress rule was removed |
 | 05 Sep 13:47:08–13:47:33 (18 entries) | `logging.googleapis.com` WriteLogEntries | `amazon-deploy@nivadesk-amazon` | **Resolved** by adding `logging.googleapis.com` to ingress rule 4: Cloud Build's worker writes the build log from Google's network as the deploy identity (`NETWORK_NOT_IN_SAME_SERVICE_PERIMETER`); build logs carry no Amazon Information. The registry push and the staging-bucket read of the same build produced no violation — rule 4 works for them |
 
+## Daily dry-run reports
+
+| Report (UTC) | Window | New violations since the previous report | Action |
+|---|---|---|---|
+| 05 Sep 14:00 | since creation 03:47 | the four groups above (HttpIngress, cross-project Firestore, DockerRead, Cloud Build log writes) | rules 2 and 4 added; ledger opened |
+| 05 Sep 16:55 | last 7 days | **none** — `perimeter.sh report` returns exactly the 21 rows already dispositioned above (18 log writes at 13:47, DockerRead 12:38, Firestore 04:08, HttpIngress 03:51); nothing after 13:47:33 | no rule change; "a build and a service deploy after rule 4" is still unobserved (no deploy was needed today) |
+| 05 Sep 21:04 | last 7 days | **none** — the same 21 rows, nothing after 13:47:33 | no rule change; the post-rule-4 build/deploy observation is still outstanding |
+
 ## Paths exercised under dry-run so far
 
 | Path | Exercised | Result |

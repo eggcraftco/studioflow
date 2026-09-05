@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T13:49:12Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T21:17:07Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -55,10 +55,15 @@ Generated 2026-09-05T13:49:12Z by infra/amazon/evidence.sh. Each file lists the 
 | idsips | `os-login-finding-disposition-2026-09-05.md` | present (record of 2026-09-05) |
 | idsips | `log-bucket-retention.txt` | captured |
 | idsips | `armor-adaptive-protection.txt` | captured |
-| anti-malware | `edr-console-devices.png` | **missing** — user provides from the EDR/MDM console |
+| anti-malware | `edr-console-devices.png` | present (user-provided) |
 | anti-malware | `edr-definitions-date.png` | **missing** — user provides from the EDR/MDM console |
-| anti-malware | `edr-tamper-protection.png` | **missing** — user provides from the EDR/MDM console |
-| anti-malware | `mdm-policy-export.pdf` | **missing** — user provides from the EDR/MDM console |
-| anti-malware | `device-inventory.md` | **missing** — user provides from the EDR/MDM console |
+| anti-malware | `edr-tamper-protection.png` | present (user-provided) |
+| anti-malware | `mdm-policy-export.pdf` | present (user-provided) |
+| anti-malware | `device-inventory.md` | present (user-provided) |
+| anti-malware | `intune-compliance.png` | present (user-provided) |
+| anti-malware | `intune-device-configuration.png` | present (user-provided) |
+| anti-malware | `edr-incident-1-active.png` | present (user-provided) |
+| anti-malware | `edr-incident-1-resolved.png` | present (user-provided) |
+| anti-malware | `edr-onboarding-2026-09-05.md` | present (record of 2026-09-05) |
 | anti-malware | `upload-scanner-production.txt` | captured |
 | diagram | `architecture.md` | captured |

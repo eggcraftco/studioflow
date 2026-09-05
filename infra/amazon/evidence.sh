@@ -243,9 +243,14 @@ capture idsips armor-adaptive-protection.txt gcloud compute security-policies de
 echo "══ Anti-malware ══"
 # The endpoint half is screenshots the user takes from the EDR/MDM consoles;
 # they are listed here as expected files so their absence is visible.
-for f in edr-console-devices.png edr-definitions-date.png edr-tamper-protection.png mdm-policy-export.pdf device-inventory.md; do
+for f in edr-console-devices.png edr-definitions-date.png edr-tamper-protection.png mdm-policy-export.pdf device-inventory.md intune-compliance.png intune-device-configuration.png edr-incident-1-active.png edr-incident-1-resolved.png; do
   if [ -s "$OUT/$f" ]; then printf '| anti-malware | `%s` | present (user-provided) |\n' "$f" >> "$MANIFEST"
   else printf '| anti-malware | `%s` | **missing** — user provides from the EDR/MDM console |\n' "$f" >> "$MANIFEST"; fi
+done
+# The onboarding record (purchase steps, device baseline, ESET absence) is a
+# hand-written record like the SCC ones: listed, not captured.
+for f in edr-onboarding-2026-09-05.md; do
+  if [ -s "$OUT/$f" ]; then printf '| anti-malware | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"; else printf '| anti-malware | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
 done
 capture anti-malware upload-scanner-production.txt bash -c "gcloud functions describe scanUploadedFile --region=europe-west2 --project=eggcraft-studio --gen2 --format='value(state,serviceConfig.environmentVariables.NIVADESK_MALWARE_SCAN)'; gcloud run services describe clamav-scanner --region=europe-west2 --project=eggcraft-studio --format='value(status.latestReadyRevisionName)'"
 

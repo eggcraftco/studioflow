@@ -78,7 +78,7 @@ control below ends with an evidence list.
 | 1. Network segmentation | **In progress — perimeter in dry-run since 5 Sep 2026** | project/folder/org-policy read-back (`org-policies.txt`), private zone + route + firewall and the diag proof (`pga-*`), bootstrap IAM record, bridge test; VPC Service Controls perimeter `amazon_information` (access policy `eggcraft-access-policy`, dry-run spec only: 10 restricted services, 4 ingress + 2 egress rules — `perimeter.json`) | a few days of observed admin/bridge/PGA traffic under dry-run and the violation report with dispositions (`vpcsc-dryrun-report.txt`; so far: the load-balancer path, resolved by the ANY_IDENTITY Cloud Run rule, and the deliberate cross-project Firestore read, which the perimeter marks as what it will refuse — `cross-project-read-2026-09-05.txt`), then the enforce gate (separate approval) |
 | 2. Firewall and network ACLs | **Passed** (5 Sep 2026) | `cloud-armor-policy.json`, `lb-*.json`, `lb-certificate-and-address.txt`, `run-ingress.txt`, `run-app-closed-to-internet.txt`, `vpc-firewall-rules.json`, `nat-and-static-ip.txt`, `subnet-flow-logs.txt`, `armor-blocked-requests.txt` (real scanners denied by the WAF and the default rule within minutes of go-live), `edge-smoke-2026-09-05.md` (8/8), `egress.js` tests | two log-based items are captured from configuration and unit tests today and will be re-captured from live traffic once the connector runs: a refused egress in the wrapper's log, a NAT translation |
 | 3. IDS / IPS / threat detection | **In Progress — Google support / detector investigation required** | Premium (30-day trial, then pay-as-you-go) on the project, Standard on the organisation; Event Threat Detection and Cloud Run Threat Detection effective (`scc-services.txt`); service agents bound (`scc-agents.txt`); findings → Pub/Sub → email alert built and **proven with a real finding** (Cloud Armor "Increasing Deny Ratio", `scc-finding-2026-09-05.md`); 400-day log retention; Cloud Armor prevention half live | Google's documented detection tests were run and did not fire: ETD three times (last two on a VM exactly as documented, DNS queries logged under the VM identity, with the `_Default` sink both enabled and disabled — `etd-investigation-2026-09-05.md`), CRTD twice (the second 10 h after enablement, past the documented 3.5-hour activation window — `crtd-investigation-2026-09-05.md`). No further experiments; the two records go to Google. `Passed` only when an ETD finding and a CRTD finding, each delivered, are in the pack |
-| 4. Anti-malware on privileged endpoints | **Blocked — EDR/MDM not in place** | upload scanner production report; shared-responsibility note for the serverless layer | the operator's devices are not yet enrolled in an MDM with a managed, tamper-protected EDR; until the console screenshots, the MDM policy export and the device inventory exist, this control is a stated blocker for the application |
+| 4. Anti-malware on privileged endpoints | **Passed — 5 Sep 2026 (final evaluation in §4b; two time-gated attachments follow)** | upload scanner production report; shared-responsibility note for the serverless layer; Microsoft 365 Business Premium (no Teams, 1 user) bought, tenant `eggcraft.onmicrosoft.com`, Apple MDM push certificate active, Intune compliance policy + hardening profile + Defender AV (tamper protection block, RTP, cloud protection, weekly full scan) + EDR onboarding + Defender app + four Defender permission profiles all assigned to All devices, Defender ↔ Intune connector on (`edr-onboarding-2026-09-05.md`, `intune-profiles/`) | the MacBook Pro is enrolled (user-approved MDM, corporate), Intune = Compliant, Defender onboarded and `mdatp health` fully green (RTP, tamper protection block, cloud, definitions current, weekly full + daily quick scan, MAU auto-update) — §4 of `edr-onboarding-2026-09-05.md`; `device-inventory.md` written. Present: `edr-console-devices.png`, `edr-tamper-protection.png`, `mdm-policy-export.pdf`, `device-inventory.md`, plus `intune-compliance.png` / `intune-device-configuration.png`; the EDR pipeline was proven by a real incident (ID 1, the assistant's own capture tooling, disposition in the record). Scope decided 5 Sep: Mac Studio and phone out of scope (`access-control-policy.md` §6.1). To append when available (verdict unchanged): `edr-definitions-date.png` from the Defender Antivirus-health report once it lists the device, and the first policy-scheduled full scan (Sunday 7 Sep 03:00) |
 
 ## The four controls, redefined
 
@@ -185,13 +185,16 @@ MDM/UEM-enforced policy — and an inventory of those devices is kept.
   `malware-scanning-staging-report.md`) covers every file a customer puts
   into NivaDesk, and Cloud Run Threat Detection covers the runtime. No Amazon
   Information is ever written to Cloud Storage.
-- *Endpoints:* the devices with production access — today, one operator's
-  Mac and phone — are enrolled in an **MDM** (Apple Business Manager plus a
-  managed MDM), which enforces a **managed EDR/anti-malware product** with
-  tamper protection (the user cannot uninstall or disable it), automatic
-  signature updates (daily; the criterion is monthly), and a weekly scheduled
-  full scan in addition to on-access scanning. The MDM also enforces disk
-  encryption, screen lock, and OS updates.
+- *Endpoints:* the devices with production access — after the scope decision
+  of 2026-09-05, exactly one: the operator's MacBook Pro — are enrolled in an
+  **MDM** (Microsoft Intune, user-approved enrolment without Apple Business
+  Manager), which enforces a **managed EDR/anti-malware product** (Microsoft
+  Defender for Endpoint via Defender for Business) with tamper protection (the
+  user cannot uninstall or disable it), automatic signature updates (daily; the
+  criterion is monthly), and a weekly scheduled full scan plus a daily quick
+  scan in addition to on-access scanning. The MDM also enforces disk
+  encryption, screen lock, firewall, and OS updates. The Mac Studio and the
+  phone are out of scope by decision (`access-control-policy.md` §6.1).
 - *Inventory:* a quarterly inventory of devices, systems, and applications
   that handle Amazon Information, kept in `access-control-policy.md`.
 
@@ -213,9 +216,9 @@ inventory is kept in `access-control-policy.md` and re-confirmed quarterly.
 
 | Device | Why it is in scope | Status |
 |---|---|---|
-| The operator's MacBook Pro (`Guness-MacBook-Pro`) | signed-in `gcloud` as the project owner, the Google Cloud console, the repository and its deploy keys; can read `nivadesk-amazon` Firestore and Secret Manager | **not enrolled** |
-| The operator's Mac Studio (second workstation; the repository branch history shows it) | same access if `gcloud`/console sessions exist there — to be confirmed by the operator; if it never signs in to the Amazon project it is out of scope and documented as such | **to confirm, then enrol or exclude** |
-| The operator's phone | Google account sessions (console app, 2-step verification) and NivaDesk's own mobile app; cannot read Amazon Information directly (the `restrictedCustomer` collection is unreadable to clients) but holds the sign-in that could | **not enrolled** |
+| The operator's MacBook Pro (`Guness-MacBook-Pro`) | signed-in `gcloud` as the project owner, the Google Cloud console, the repository and its deploy keys; can read `nivadesk-amazon` Firestore and Secret Manager | **enrolled and onboarded 5 Sep 2026** (Intune Compliant, Defender healthy — `evidence/amazon/device-inventory.md`) |
+| The operator's Mac Studio (second workstation; the repository branch history shows it) | **excluded by decision (2026-09-05)**: not used for Amazon SP-API administrative systems, `nivadesk-amazon`, Seller Central or Amazon Information from this date; enrolment under the same baseline is a precondition if that ever changes (`access-control-policy.md` §6.1) | **out of scope** |
+| The operator's phone | authentication only (Microsoft MFA, Google 2-step verification); no Amazon, SP-API or administrative data access from it; NivaDesk's mobile app cannot read the restricted collection in any case | **out of scope — authentication only (decision 2026-09-05)** |
 | Amazon zone servers | serverless (Cloud Run gen2); host anti-malware is Google's under the shared-responsibility model; runtime detection is Cloud Run Threat Detection (control 3) | covered by control 3 |
 
 **Minimum policy for an in-scope device** (Amazon: current anti-malware that
@@ -251,8 +254,34 @@ scope table in `edr-mdm-options.md`. **Candidate products** considered (any
 one satisfies the policy): Microsoft Intune + Defender for
 Business (Microsoft 365 Business Premium), Jamf Now/Pro + Jamf Protect, or
 Kandji with its built-in EDR — all three support macOS and iOS, tamper
-protection, scheduled scans and exportable compliance reports. Until one is
-enrolled and its evidence is in the pack this control stays **Blocked**.
+protection, scheduled scans and exportable compliance reports. Microsoft 365
+Business Premium was bought, configured and enrolled the same day (§4b).
+
+### 4b. Final readiness evaluation — 2026-09-05 21:20 UTC
+
+Performed after the operator's conditions were met: first successful quick
+scan, current definitions and the managed policies verified on the live device
+and in the consoles. Record: `evidence/amazon/edr-onboarding-2026-09-05.md`;
+inventory: `evidence/amazon/device-inventory.md`; scope: `access-control-policy.md` §6.1.
+
+| "Passes when" element | Evidence | Result |
+|---|---|---|
+| The EDR console lists every privileged device as protected | Defender › Device inventory: 1 device (`Guness-MacBook-Pro`), sensor health **Active**, onboarding **Onboarded**, Not onboarded 0 — `edr-console-devices.png`; the device is the only in-scope endpoint (Mac Studio and phone out of scope by decision) | **met** |
+| Tamper protection on | Intune AV policy `macOS - Defender AV baseline`: tamper protection enforcement **block** — `edr-tamper-protection.png`; device readback `tamper_protection: "block" [managed]` | **met** |
+| Definitions dated within 30 days | device readback 2026-09-05: definitions 1.459.66.0, `up_to_date`, updated 19:41 UTC, automatic updates on (`mdatp health` in `mdm-policy-export.pdf` §2); Defender › Reports › Device health › Antivirus health still "No data" for Mac devices on the day of onboarding (report lag) — `edr-definitions-date.png` is attached from that report as soon as it lists the device | **met on the device; console capture pending (report lag)** |
+| Last scheduled scan within 7 days | policy-scheduled scans enforced `[managed]`: weekly **full** Sunday 03:00 + daily **quick** 12:00 (Intune AV policy, device readback); on-demand quick scan 2026-09-05 20:43 UTC: 7,789 files, 0 threats. First scheduled runs: quick 2026-09-06 12:00, full 2026-09-07 03:00 — the assigned policy stands as the evidence (operator decision) and the first full scan is appended to the record after Sunday | **met by policy; first full-scan record to be appended** |
+| The MDM shows the policy enforced | Intune › device › Device configuration: 8 profiles **Succeeded**; compliance **Compliant** — `intune-device-configuration.png`, `intune-compliance.png`, `mdm-policy-export.pdf` | **met** |
+| Inventory kept | `device-inventory.md` + `access-control-policy.md` §6.1 (scope decision 2026-09-05) | **met** |
+| Detection pipeline works (not a formal element, recorded because it happened) | Defender incident ID 1 — the assistant's own capture tooling on the device produced 10 EDR alerts within minutes, correlated into one incident, triaged and resolved as *Informational, expected activity / Security testing* with a written justification — `edr-incident-1-active.png`, `edr-incident-1-resolved.png` | **demonstrated** |
+
+**Verdict: control 4 = Passed** (2026-09-05). Two time-gated attachments are
+still to be added to the pack and do not change the verdict: the Defender
+Antivirus-health report capture (`edr-definitions-date.png`) once the report
+lists the device, and the record of the first policy-scheduled full scan
+(Sunday 2026-09-07 03:00). Both are captured within the 30 days before the
+application in any case (§4 evidence rule). The separate approval gates —
+VPC Service Controls enforce, connector activation, Amazon OAuth / order sync —
+are unchanged by this verdict and remain closed.
 
 ## Explicitly not a blocker
 

@@ -1,0 +1,123 @@
+# EDR / MDM onboarding — running record (started 2026-09-05)
+
+Decision (operator, 2026-09-05): Microsoft 365 Business Premium **(no Teams)**,
+**1 user**, no Copilot/Teams/other add-ons, organisation name `EGGcraft Ltd`.
+The existing `eggcraft.co.uk` mail (Google Workspace) is **not** touched: no MX,
+DNS or domain verification in this phase; the tenant lives on `*.onmicrosoft.com`.
+Device management: Intune **without Apple Business Manager** (user-approved
+enrolment through Company Portal); Defender for Business on macOS with the
+local onboarding package. Only this MacBook Pro is onboarded in this phase.
+
+Everything the assistant did was read-only or navigation up to the account
+step; credentials, verification codes, card details and the final order
+button are the operator's alone and are never seen, saved or logged.
+
+## 1. Purchase flow (assistant-driven up to the account step)
+
+| Time (UTC) | Step | Result |
+|---|---|---|
+| 2026-09-05 ~15:00 | `microsoft.com/en-gb/…/microsoft-365-business-premium` opened; cookie banner: **Reject** (non-essential declined) | page shows With/Without Teams toggle, £16.90 / £14.40 user/month annual, ex VAT |
+| ~15:02 | "Buy now: Microsoft 365 Business Premium (no Teams)" | new tab on `signup.microsoft.com` (official Microsoft domain), product = Business Premium (no Teams), `term=P1Y`, `country=gb` |
+| ~15:03 | Step 1 "Subscription & account details" read back | **Quantity 1**, "Pay Yearly, 1-year subscription", £172.80 user/year, payment due today £172.80 (tax not included); billing settings expose length {1 year, 1 month} × frequency {Yearly, Monthly}; no add-on offered on this step |
+| ~15:04 | "Next" → Step 2 "Sign-in details": *Enter your work or school email address* | **STOP — handed to the operator** (account creation, phone verification, password, MFA, payment, final order are operator-only) |
+| ~15:20 | Operator completed account creation, phone verification, sign-in name and password, payment and the final order (assistant advised `eggcraft` as the tenant name; no values seen or stored) | **Order confirmed** — order `74122a040365`, tenant `eggcraft.onmicrosoft.com`, organisation shown as EGGCRAFT LIMITED; confirmation mailed to the operator; the post-order Copilot upsell was not taken |
+| ~15:28 | Admin center › Billing › Licenses read back | Microsoft 365 Business Premium (no Teams): **1 assigned of 1**, 0 available; account type Organization |
+| ~15:30 | Defender portal (security.microsoft.com) first open | tenant shows "preparing new spaces for your data" (XDR provisioning, minutes to hours); Settings › Endpoints › Onboarding already lists macOS with *Local Script* and package downloads |
+| ~15:34 | Intune admin center first open | available immediately; Devices › Enrollment › Apple › **Apple MDM push certificate: not set** — operator step (consent, CSR, Apple ID at identity.apple.com, upload) |
+
+Values the operator uses when asked (no secrets here): company `EGGcraft Ltd`,
+company size 1, country United Kingdom, tenant domain `<chosen>.onmicrosoft.com`,
+quantity 1, **no** Copilot / Teams / Defender-Purview suite / Teams Phone add-on.
+
+## 2. Device baseline before onboarding (read-only, 2026-09-05 15:07 UTC)
+
+| Control | State before | Target |
+|---|---|---|
+| Device | MacBook Pro `Mac17,8` (Apple M5 Pro), serial `****GVXK`, macOS **26.6.2 (25G83)** | inventory row in `access-control-policy.md` |
+| FileVault | **On** | on, key escrowed to Intune |
+| macOS firewall | **Off** (stealth off) | on (Intune config profile) |
+| Automatic updates | check/download/install macOS updates **on**, XProtect/config data **on**, critical updates **on**, App Store auto-update **on** | keep on + Intune software-update policy |
+| Screen lock | password required **immediately** after sleep/screensaver; display sleep 20 min; no screensaver idle time set | idle lock ≤ 5 min (Intune compliance) |
+| MDM | **not enrolled** (`profiles status`: DEP No, MDM No) | Intune-managed, Compliant |
+| EDR / antivirus | **none installed** — `mdatp` absent; no Defender.app | Defender for Business: RTP on, cloud protection on, tamper protection on, scheduled scan |
+| **ESET** | **not present on this Mac** — no app in /Applications, no package receipts (`pkgutil`), no LaunchDaemons/Agents, no system extension, no process; the only "eset" hits on disk are two invoice image files | nothing to remove on this device (see note) |
+| Other system extensions | Tailscale network extension, Surfshark WireGuard packet tunnel (both activated) — recorded because Defender adds its own network content filter alongside them | coexist; noted in evidence |
+| Gatekeeper / SIP | assessments enabled / SIP enabled | unchanged |
+| Local account | operator account is a local admin | unchanged for now (Defender tamper protection covers the agent) |
+
+Note on ESET: the plan's "do not remove ESET before Defender is verified"
+rule cannot apply here because ESET is not installed on this device. If ESET
+is on the Mac Studio, that rule applies there when that device is onboarded.
+The built-in XProtect is the only anti-malware active on this Mac today, so
+Defender will not be a second real-time engine.
+
+## 3. Tenant configuration (assistant-driven, operator watching) — 2026-09-05 15:40–16:35 UTC
+
+| Time (UTC) | Object | Result |
+|---|---|---|
+| 15:35 | Apple MDM push certificate (operator: consent, CSR, Apple ID sign-in, upload) | **Active**, expires 05/09/2027 (365 days), topic `com.apple.mgmt.External.0495d71d-…`; Apple ID used is recorded in the operator's password manager, not here |
+| 15:38 | Intune › Enrollment › Corporate device identifiers | serial of this MacBook Pro added (type: serial number) so it enrols as corporate-owned |
+| 15:40 | Defender for Business setup wizard (security.microsoft.com) | permissions step skipped (single admin), e-mail notifications to the operator address for **incidents & vulnerabilities**, Windows onboarding skipped, default MDB policies **not** created ("manage endpoint security policies in Intune") |
+| 15:52 | Intune ↔ Defender for Endpoint connector | status Available, last sync 15:52:33; "allow the connector to enforce Endpoint Security configurations" = On (no macOS compliance toggle exists in this connector, so the compliance policy has no risk-score rule) |
+| 15:58 | Compliance policy `macOS - Amazon endpoint baseline` (id 86627f40-58dd-4a58-b826-fe5a645d258d) | SIP required; min OS 26.0; password required, simple blocked, min 8, **5 min** inactivity; FileVault required; firewall enabled + stealth; Gatekeeper App Store + identified developers; noncompliant immediately; assigned All devices + All users (e-mail action deferred: needs a notification template first) |
+| 16:15 | Settings-catalog profile `macOS - Amazon device hardening` | Firewall on + stealth + signed apps allowed; DDM software update: download/install OS updates/install security responses = AlwaysOn, background security improvements on with rollback, notifications on; screensaver: ask for password = true, delay 0, login-window idle 300 s, user idle 300 s (module name Flurry, a required field); system extensions: allowed team `UBF8T346G9`, allowed + non-removable `com.microsoft.wdav.epsext`, `com.microsoft.wdav.netext`; FileVault: enable, defer, max bypass 0, use recovery key, show key off, escrow location "Intune (EGGcraft Ltd)"; assigned All devices |
+| 16:26 | Endpoint security › Antivirus `macOS - Defender AV baseline` (Microsoft Defender Antivirus template, 26 settings) | tamper protection **block**; network protection block; real-time protection on, passive off, enforcement real_time; PUA block; scan archives; scan after definition update; file-hash computation; cloud-delivered protection on, sample submission **off**, diagnostic level required, automatic security-intelligence updates on; behavior monitoring on; scheduled scan feature on; **weekly full scan Sunday 03:00**, daily quick scan 12:00, definitions check before scan, low priority, not idle-only; assigned All devices |
+| 16:30 | Endpoint security › EDR `macOS - Defender EDR onboarding` | onboarding through the connector, device tag `amazon-scope`; assigned All devices |
+| 16:32 | Apps › macOS › `Uç Nokta için Microsoft Defender (macOS)` (built-in app type, id 006fe391-938d-4312-9bb5-6c29418e243b) | Required → All devices |
+
+| 16:37–16:50 | Four custom macOS profiles from Microsoft's official templates (operator approved the download at 16:34): `macOS - Defender full disk access`, `macOS - Defender network filter`, `macOS - Defender background services`, `macOS - Defender notifications` | device channel, assigned All devices; unmodified template copies and SHA-256 in `intune-profiles/README.md`; Intune › Configuration now lists **7** macOS policies |
+| 16:35 | Company Portal installer downloaded to the operator's Downloads folder (operator approved) | `CompanyPortal-Installer.pkg`, 85,659,163 bytes, Developer ID Installer: Microsoft Corporation (UBF8T346G9), notarised; SHA-256 in `intune-profiles/README.md`. **Not installed**: the installer needs the operator's administrator password |
+| 20:38–20:42 | Settings-catalog profile `macOS - Microsoft AutoUpdate (MAU)` (id 83329c43-a576-44a4-a591-18ac835debe6) | Microsoft AutoUpdate: enable AutoUpdate (HowToCheck) = True (automatic download and install), update channel = Current, update check every 720 min, check-for-updates enabled; assigned All devices (the settings-catalog wizard kept the assignment — readback *Tüm cihazlar Etkin*). Device Sync triggered 20:42. Closes spec row 4.4 |
+
+## 4. Device enrolment and verification (operator enrolled 2026-09-05 ~19:40 UTC)
+
+| Time (UTC) | Check | Result |
+|---|---|---|
+| 19:45 | `profiles status -type enrollment` | **MDM enrollment: Yes (User Approved)**, server `i.manage.microsoft.com` (Intune); DEP: No (by design) |
+| 19:45 | Intune › All devices | one device, managed by Intune, ownership **Corporate** (serial matched the corporate identifier), compliance **Compliant**, macOS 26.6.2 |
+| 19:45 | Defender app | installed by Intune (app 101.26062.0012, engine 1.1.26060.12000), `managed_by: MDM`, definitions up to date, AV policy values read back `[managed]` and identical to §3: RTP on, passive off, enforcement real_time, cloud on, sample submission off, PUA block, network protection block, tamper protection block, weekly full scan Sunday 03:00 + daily quick 12:00, tag `amazon-scope` |
+| 19:48 | Managed preferences on the device | firewall on + stealth, screensaver 300 s / ask for password / delay 0, FileVault + escrow, Gatekeeper, the compliance password payload (min 8, no simple, change at next auth if weaker) |
+| 19:55 | Four Defender permission profiles | delivered after their assignment was repaired (the Custom-profile wizard had dropped the "All devices" assignment; re-added and saved for all four): TCC full disk access → `full_disk_access_enabled: true`, web content filter, managed login items, notifications |
+| 20:10 | System extensions | were `activated waiting for user` because the operator had dismissed the macOS password prompt during installation; an Intune *Extensions* template profile (team `UBF8T346G9`, user overrides blocked) was added and assigned; at 20:19 both `com.microsoft.wdav.epsext` and `com.microsoft.wdav.netext` are **activated enabled** and `real_time_protection_available: true` |
+| 20:20 | Defender licence / onboarding | **not yet**: `licensed: false`, `org_id` empty — the Intune EDR onboarding profile has not reached the device (Intune's endpoint-security reports also lag: the AV policy shows 0 devices although its settings are on the device). Tamper protection reports `disabled` until the device is onboarded. Fallback prepared: the Defender portal's MDM/Intune onboarding package (Settings › Endpoints › Onboarding › macOS › Mobile Device Management / Microsoft Intune) uploaded to Intune as a custom profile — needs the operator's download approval, no password |
+| 20:22–20:32 | Fallback executed (operator approved the download at ~20:20) | Defender portal onboarding package `GatewayWindowsDefenderATPOnboardingPackage.zip` (15,907 bytes, SHA-256 `73a28c89bd1fe46a36905ffe1809327fa203f928bb7715b69e0ac4689f6a073a`) → `intune/WindowsDefenderATPOnboarding.xml` (9,597 bytes, `plutil` valid, SHA-256 `755a6cb90aaa205ce5fcf755580284556e1e78413c9f4766e60f9c1da6f922fc`, payload `com.microsoft.wdav.atp`, display name "WDATP settings") uploaded as custom profile **`macOS - Defender onboarding (portal package)`** (id 9f922a86-874a-437c-927b-731c260d0023, device channel). The wizard dropped the "All devices" assignment again; re-added via Assignments › Edit and saved (readback: *tüm aygıtlar — Etkin*). Intune › Configuration now lists **9** macOS policies. Device Sync triggered 20:31 (Intune shows check-ins in local time, UTC+1). The onboarding blob itself is **not** stored in the repository (it is a tenant credential) — only its hash |
+| 20:31 | Delivery | 45 s after the Sync: `/Library/Managed Preferences/com.microsoft.wdav.atp.plist` present (keys OrgId, OnboardingInfo, AllowUserOverrides) and `licensed: true` |
+| 20:32 | `mdatp health` (full readback) | **healthy true, health_issues [], licensed true**, org_id `92b27c7b-6c5c-4b81-a503-62e31be1d4cd`, app 101.26062.0012, engine 1.1.26060.12000, release ring Production, `managed_by: MDM`; cloud on / sample submission consent none / diagnostic off `[managed]`; passive off, behavior monitoring on, **real-time protection on** (subsystem endpoint_security_extension), network events via network_filter_extension; **tamper_protection block `[managed]`**; automatic definition updates on; definitions 1.459.66.0, `up_to_date`, updated 19:41 UTC; EDR tag GROUP=amazon-scope `[managed]`, machine id `919af725…`; **network_protection started, enforcement block**; full_disk_access true; conflicting applications none |
+| 20:32 | `mdatp connectivity test` | every endpoint OK (UK data location: `mdav.uk…`, `edr-uks.uk…`, `edr-ukw.uk…`, `uk-v20.events…`); no proxy |
+| 20:32 | Device posture (same readback as 19:48) | FileVault On; firewall on + stealth (managed); Gatekeeper assessments enabled; screensaver managed (askForPassword 1, delay 0, idle 300 s); SoftwareUpdate AutomaticDownload/AutomaticallyInstallMacOSUpdates/ConfigDataInstall/CriticalUpdateInstall = 1; macOS 26.6.2 (25G83); MDM Yes (User Approved) |
+| 20:35 | Defender portal › Assets › Device inventory | **1 device**, `Guness-MacBook-Pro`, tag `amazon-scope`, Not onboarded 0, High risk 0, sensor health state Active, macOS Tahoe 26.6; device page "Device health status" and Reports › Device health (sensor + antivirus) still "No data" — those views fill in over the first hours after onboarding; the console captures are taken once they show the device |
+| 20:37 | Intune › device overview | Compliance **Uyumlu (Compliant)**, ownership Kurumsal (Corporate), last check-in 20:31 UTC, Intune › Configuration lists **10** macOS policies |
+| 20:42:51–20:43:10 | On-demand `mdatp scan quick` (engine proof, in addition to the policy-scheduled scans) | **7,789 files scanned, 0 threats**; `mdatp threat list` → No threats |
+| 20:43 | MAU profile delivery | 15 s after the Sync: `/Library/Managed Preferences/com.microsoft.autoupdate2.plist` = ChannelName Current, HowToCheck **AutomaticDownload**, UpdateCheckFrequency 720, EnableCheckForUpdatesButton 1 (spec row 4.4 verified on the device) |
+| 20:47–20:59 | Console captures (window captures of the admin consoles from this Mac, browser UI cropped off; the Chrome extension's screenshot-to-disk does not save, so `screencapture -o -l<window>` + a small CoreGraphics crop tool were used) | `edr-console-devices.png` (Defender › Device inventory: 1 device, sensor Active, Onboarded, Not onboarded 0; IP column removed) SHA-256 `561694fe…95075`; `edr-tamper-protection.png` (Intune AV policy: tamper protection = block, network protection = block, real_time) `76b9589b…7f6b`; `intune-compliance.png` (both compliance policies Compliant) `e7132560…1344`; `intune-device-configuration.png` (8 profiles Succeeded) `00383cfc…169a`; `mdm-policy-export.pdf` (9 pages: the four captures, the full `mdatp health` + posture readback, the policy specification) `ec379fde…d045`. `edr-definitions-date.png` **not yet**: the Defender health reports (Reports › Device health › Microsoft Defender Antivirus health) still show "No data found" for Mac devices ~30 min after onboarding; captured once the report lists the device |
+| 21:12–21:15 | Incident evidence captures (taken through the browser extension's own tab capture, exported as single-frame GIF and converted to PNG — no `screencapture`, so no further alert; the alert list was reduced to columns without user identity) | `edr-incident-1-active.png` (10 alerts, all EDR, High/Medium/Low, status Active before the change) SHA-256 `28ab1fdf…fb0c`; `edr-incident-1-resolved.png` (header: Resolved · Benign Positive, last update 21:14) `b3ca0358…ef89`. **These two files are additional evidence that the Defender EDR detection pipeline is live**: sensor events from the device were correlated into an incident within minutes of onboarding, and the incident was triaged, classified and closed in the console with a written justification |
+| 21:11 | Defender onboarding package | Verified no longer needed: the package's payload is stored in Intune as profile `macOS - Defender onboarding (portal package)` (id 9f922a86-…) and reported *Succeeded* on the device; `com.microsoft.wdav.atp.plist` is present in Managed Preferences; `licensed: true`, org id set. `~/Downloads/GatewayWindowsDefenderATPOnboardingPackage.zip` **deleted** (operator instruction); no other copy remains in Downloads or the session scratchpad. Re-download from the Defender portal (Settings › Endpoints › Onboarding) if a second device ever needs it |
+| 20:47–20:55 (detected), incident created 20:52 | **Unplanned EDR detection test — Defender incident ID 1** "Multi-stage incident involving Execution & Collection on one endpoint", severity High, 9 alerts, all source EDR, all on this device / this user | The alerts are exactly the assistant's evidence-capture tooling run from the session scratchpad under `/private/tmp` (a world-writable directory): 4 × "A screenshot was taken" (High; the `screencapture` calls at 20:47, 20:50, 20:51, 20:52), 2 × "Suspicious execution after compilation" (Medium; `swiftc` building `winlist` at 20:48 and `crop` at 20:51, then running them), "Suspicious process launched from a world-writable directory" (Medium; `cap.sh`/`crop` under `/private/tmp`), "Suspicious file dropped and launched" (Low; the freshly compiled binary executed), "Executable permission added to file or directory" (Low; `chmod +x cap.sh`). No malware, nothing quarantined (`mdatp threat list` → No threats). **Disposition (operator decision 2026-09-05 21:10 UTC, applied by the assistant at 21:14 UTC): Status Resolved, Classification *Informational, expected activity*, Determination *Security testing* (the portal header shows this as "Benign Positive"), with the comment: "Expected security-testing activity generated during NivaDesk Amazon SP-API endpoint-security evidence collection. The detected screencapture, temporary Swift binaries and chmod execution were created intentionally by the authorized operator. No malware was present and no quarantine action was required."** The 10th alert (20:53, the inventory-page capture) joined the incident before it was resolved. What it proves for the pack: the EDR sensor reports behaviour within minutes of onboarding, the portal correlates it into an incident, and the incident notification e-mail configured in §3 (15:40) goes to the operator |
+
+## 5. Still to do (in order)
+
+1. ~~Purchase~~ done. ~~Licence~~ done. ~~MFA on the admin account~~ verified 21:25 UTC (Authenticator + passkey).
+2. ~~Push certificate, compliance, hardening profile, AV, EDR, app~~ done.
+3. ~~Defender prerequisite profiles~~ done (4 custom profiles).
+4. ~~This Mac: Company Portal, sign-in, profile approval~~ done by the operator
+   ~19:40 UTC; Defender onboarded 20:31 UTC via the portal package profile.
+5. ~~Verify on the live device~~ done 20:32 UTC (§4). Evidence files: four of five
+   present + `device-inventory.md` + `mdm-policy-export.pdf`; **still missing
+   `edr-definitions-date.png`** (Defender health report lags) — capture when the
+   report lists the Mac, then set control 4 to Passed.
+6. ~~Incident ID 1~~ resolved 21:14 UTC as Informational, expected activity /
+   Security testing (operator decision). ~~Onboarding zip~~ deleted 21:11 UTC.
+   ~~Endpoint scope~~ decided 2026-09-05: MacBook Pro in scope; Mac Studio and
+   phone out of scope (`access-control-policy.md` §6.1). **MFA on the admin account:** opening
+   `aka.ms/mfasetup` (21:22 UTC) produced an *Approve sign-in request* prompt
+   with number matching for the Microsoft Authenticator app — so an
+   Authenticator method is already registered on the admin account. The
+   operator approved the prompt at 21:25 UTC; the Security info page then
+   read back **three methods**: password (changed the same day), **Microsoft
+   Authenticator push MFA** (registered to the operator's iPhone) and a
+   **synced passkey** (Google Password Manager); default sign-in method =
+   Authenticator notification; the page states the most advisable method is
+   in use. **MFA on the tenant admin account: verified, nothing to add.**
+7. First policy-scheduled scans: daily quick 2026-09-06 12:00, weekly full
+   2026-09-07 03:00 — confirm in the console afterwards (criterion: last
+   scheduled scan within 7 days).

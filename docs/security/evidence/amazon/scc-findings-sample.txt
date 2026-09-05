@@ -1,6 +1,6 @@
-# 2026-09-05T13:49:12Z
+# 2026-09-05T21:17:07Z
 # scc_findings
 
 findings on the project: 2
-  2026-09-05T06:47:10.031Z | Increasing Deny Ratio | MEDIUM | ACTIVE | //compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362
+  2026-09-05T16:32:20.034Z | Increasing Deny Ratio | MEDIUM | ACTIVE | //compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362
   2026-09-05T11:39:18Z | OS_LOGIN_DISABLED | MEDIUM | ACTIVE | //compute.googleapis.com/projects/nivadesk-amazon

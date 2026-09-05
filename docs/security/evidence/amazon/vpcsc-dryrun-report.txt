@@ -1,4 +1,4 @@
-# 2026-09-05T13:49:12Z
+# 2026-09-05T21:17:07Z
 # gcloud logging read protoPayload.metadata.@type="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=500 --format=table(timestamp,protoPayload.authenticationInfo.principalEmail,protoPayload.serviceName,protoPayload.methodName,protoPayload.metadata.dryRun,protoPayload.metadata.violationReason)
 
 TIMESTAMP                       PRINCIPAL_EMAIL                                        SERVICE_NAME                     METHOD_NAME                                         DRY_RUN  VIOLATION_REASON

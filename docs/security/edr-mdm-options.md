@@ -167,3 +167,23 @@ Mac Studio: **In Scope** until the operator confirms it holds no gcloud
 login, console session, repository with deploy access or Seller Central
 session; if confirmed, it is recorded as out of scope with that statement
 and skipped in steps 9 and 12.
+
+## Decision update (2026-09-05, operator)
+
+- **Plan**: Microsoft 365 Business Premium **(no Teams)**, 1 user, annual term,
+  no Copilot/Teams/other add-ons. Organisation name `EGGcraft Ltd`. Tenant on
+  `*.onmicrosoft.com`; the `eggcraft.co.uk` mail/DNS/MX stays with Google
+  Workspace and is not touched in this phase.
+- **No Apple Business Manager.** Section B above is superseded: the MacBook Pro
+  is enrolled with **Company Portal user-approved enrolment** (Intune still
+  needs the Apple MDM push certificate — operator's Apple ID at
+  identity.apple.com) and Defender for Business is installed with the
+  **local onboarding package**; the Intune enrolment is verified afterwards so
+  the device shows as Intune-managed and Compliant.
+- **Scope of this phase**: only this MacBook Pro. Mac Studio stays In Scope
+  (fail closed) and is onboarded separately; the phone later.
+- **ESET**: not installed on this MacBook Pro (checked 2026-09-05: no app,
+  package receipt, daemon, extension or process). The "keep ESET until
+  Defender is verified, then ask before removal" rule applies to any device
+  where ESET actually exists (Mac Studio, to check).
+- Running record: `docs/security/evidence/amazon/edr-onboarding-2026-09-05.md`.

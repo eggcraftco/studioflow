@@ -1,24 +1,24 @@
-# 2026-09-05T13:49:12Z
+# 2026-09-05T21:17:07Z
 # gcloud logging read resource.type="http_load_balancer" AND jsonPayload.enforcedSecurityPolicy.outcome="DENY" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=20 --format=table(timestamp,httpRequest.remoteIp,httpRequest.requestUrl,jsonPayload.enforcedSecurityPolicy.priority,jsonPayload.enforcedSecurityPolicy.configuredAction)
 
-TIMESTAMP                    REMOTE_IP     REQUEST_URL                                                           PRIORITY    CONFIGURED_ACTION
-2026-09-05T13:39:36.664446Z  94.154.43.7   https://136.68.239.143/api/config                                     2147483647  DENY
-2026-09-05T13:08:18.977707Z  71.6.134.229  https://136.68.239.143/favicon.ico                                    2147483647  DENY
-2026-09-05T13:05:08.853817Z  71.6.134.229  https://136.68.239.143/                                               2147483647  DENY
-2026-09-05T12:42:49.425765Z  65.49.20.67   https://136.68.239.143/geoserver/web/                                 2147483647  DENY
-2026-09-05T12:40:34.013068Z  65.49.20.67   https://136.68.239.143/migadmin/lang/legacy/legacy/filechecksum       2147483647  DENY
-2026-09-05T12:40:32.512555Z  65.49.20.67   https://amazon.nivadesk.app/migadmin/lang/legacy/legacy/filechecksum  2147483647  DENY
-2026-09-05T12:40:25.866701Z  65.49.20.67   https://amazon.nivadesk.app/lang/legacy/filechecksum                  2147483647  DENY
-2026-09-05T12:40:14.252838Z  65.49.20.67   https://136.68.239.143/lang/legacy/filechecksum                       2147483647  DENY
-2026-09-05T12:39:45.658031Z  65.49.20.67   https://amazon.nivadesk.app/static/lang//custom/sbin/init             2147483647  DENY
-2026-09-05T12:39:39.011033Z  65.49.20.67   https://136.68.239.143/static/lang//custom/sbin/init                  2147483647  DENY
-2026-09-05T12:39:17.874930Z  65.49.20.67   https://136.68.239.143/static/lang/custom/sbin/init                   2147483647  DENY
-2026-09-05T12:38:53.292468Z  65.49.20.67   https://amazon.nivadesk.app/lang//custom/sbin/init                    2147483647  DENY
-2026-09-05T12:38:41.165786Z  65.49.20.67   https://136.68.239.143/lang//custom/sbin/init                         2147483647  DENY
-2026-09-05T12:38:29.197200Z  65.49.20.67   https://136.68.239.143/lang/custom/sbin/init                          2147483647  DENY
-2026-09-05T12:38:14.318010Z  65.49.20.67   https://amazon.nivadesk.app/lang/custom/sbin/init                     2147483647  DENY
-2026-09-05T12:36:33.351107Z  65.49.20.67   https://136.68.239.143/login?redir=/ng                                2147483647  DENY
-2026-09-05T12:36:21.840781Z  65.49.20.67   https://amazon.nivadesk.app/login?redir=/ng                           2147483647  DENY
-2026-09-05T12:35:07.292226Z  65.49.20.67   https://136.68.239.143/fonts/ftnt-icons.woff                          2147483647  DENY
-2026-09-05T12:34:50.227963Z  65.49.20.67   https://amazon.nivadesk.app/fonts/ftnt-icons.woff                     2147483647  DENY
-2026-09-05T12:34:43.494878Z  65.49.20.67   https://amazon.nivadesk.app/remote/logincheck                         2147483647  DENY
+TIMESTAMP                    REMOTE_IP        REQUEST_URL                                             PRIORITY    CONFIGURED_ACTION
+2026-09-05T20:57:48.470201Z  109.123.250.0    https://amazon.nivadesk.app/                            2147483647  DENY
+2026-09-05T20:44:30.203672Z  64.227.115.180   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:44:29.547248Z  167.71.57.227    https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:44:29.543653Z  139.59.147.177   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:44:29.335222Z  164.92.140.138   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:44:29.206426Z  164.92.140.138   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:44:29.070065Z  164.92.140.138   https://136.68.239.143/evox/about                       2147483647  DENY
+2026-09-05T20:44:29.063372Z  164.92.140.138   https://136.68.239.143/HNAP1                            2147483647  DENY
+2026-09-05T20:44:28.930504Z  164.92.140.138   https://136.68.239.143/sdk                              2147483647  DENY
+2026-09-05T20:44:28.928143Z  164.92.140.138   https://136.68.239.143/odinhttpcall1788641068           2147483647  DENY
+2026-09-05T20:43:41.898142Z  164.92.140.138   https://136.68.239.143/nice%20ports%2C/Trinity.txt.bak  2147483647  DENY
+2026-09-05T20:43:41.763989Z  164.92.140.138   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:43:35.590309Z  164.92.140.138   https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T20:19:38.233807Z  185.12.59.118    https://136.68.239.143/Dr0v                             2147483647  DENY
+2026-09-05T20:15:02.202980Z  129.159.56.14    https://amazon.nivadesk.app/.env                        1000        DENY
+2026-09-05T20:10:19.093625Z  172.94.9.34      https://136.68.239.143/RDWeb                            2147483647  DENY
+2026-09-05T20:08:27.914226Z  205.210.31.15    https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T18:57:47.307134Z  109.123.250.0    https://amazon.nivadesk.app/                            2147483647  DENY
+2026-09-05T17:30:05.006356Z  192.248.150.180  https://136.68.239.143/                                 2147483647  DENY
+2026-09-05T17:13:49.529887Z  205.169.39.18    https://amazon.nivadesk.app/favicon.ico                 2147483647  DENY

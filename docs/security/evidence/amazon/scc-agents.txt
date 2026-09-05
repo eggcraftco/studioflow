@@ -1,4 +1,4 @@
-# 2026-09-05T13:49:12Z
+# 2026-09-05T21:17:07Z
 # scc_agents
 
 == service agents Security Command Center needs on the project (granted 2026-09-05 through scc-agents.sh)

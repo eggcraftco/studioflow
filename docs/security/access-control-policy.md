@@ -190,6 +190,26 @@ Rules for that access:
 - **Every production change is a commit.** "What changed just before this
   started" must always be answerable.
 
+### 6.1 Privileged endpoints — scope decision (2026-09-05)
+
+A privileged endpoint is any device from which a person can reach Amazon
+Information or the controls around it: signed-in `gcloud`, the Google Cloud
+console for `nivadesk-amazon`, Seller Central / the SP-API developer profile,
+the repository with its deploy keys, or the Intune / Defender consoles that
+protect those devices. The rule is simple: **a device is either enrolled and
+under the managed EDR baseline, or it is not used for any of that.**
+
+| Device | Decision | What it means |
+|---|---|---|
+| The operator's MacBook Pro (`Guness-MacBook-Pro`, serial in `evidence/amazon/device-inventory.md`) | **In scope — enrolled** | Intune-managed (user-approved MDM, corporate), Defender for Endpoint onboarded, compliance baseline enforced (FileVault, firewall, screen lock, tamper-protected real-time protection, scheduled scans, automatic updates). The only device on which Amazon SP-API administrative work happens |
+| The operator's Mac Studio | **Out of scope — excluded by decision** | From 2026-09-05 it is **not used** for Amazon SP-API administrative systems, the `nivadesk-amazon` project (console or `gcloud`), Seller Central, or any access to Amazon Information. If that ever changes it is enrolled under the same baseline **before** first use; using it without enrolment is a policy violation |
+| The operator's phone | **Out of scope — authentication only** | Used only as a second factor / authenticator (Microsoft MFA, Google 2-step verification). No Amazon, SP-API, Seller Central or administrative data access from the phone; the NivaDesk mobile app cannot read the restricted Amazon collection in any case (§5.2) |
+
+This table is the authoritative endpoint inventory for control 4 of the Amazon
+readiness criteria; the operational detail (agent versions, definitions, scans)
+lives in `evidence/amazon/device-inventory.md`. Re-confirmed at every quarterly
+review (§8) and whenever a device is added or replaced.
+
 ## 7. Granting, changing and removing access
 
 - **Members** are added by the workspace owner, by invitation to a specific email
