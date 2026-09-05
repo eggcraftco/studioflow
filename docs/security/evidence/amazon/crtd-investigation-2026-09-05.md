@@ -30,3 +30,14 @@ The container log line `base64: f0VMRgIB: No such file or directory` is the expe
 ```
 
 No Cloud Run Threat Detection finding of any category exists. What to ask Google (Premium support or a case): whether Cloud Run Threat Detection is serving europe-west2 for this project-level activation, whether the watcher attached to executions of a job created after enablement, and where the detector's own logs (resource type threat_detector) should appear — none exist in the project's log bucket.
+
+## Final status (2026-09-05 21:45 UTC) — record closed
+
+No Cloud Run Threat Detection finding of any category has appeared up to
+21:30 UTC. Operator decision: **no further test triggering**; this record is
+final and is the second attachment for the support case in
+`google-support-case-scc-detectors.md`. The test job was deleted after the
+second execution (`test-artifacts-cleanup-2026-09-05.md`); the detector stays
+enabled on the project, and the real workloads (`amazon-admin`, later
+`amazon-sync`/`amazon-oauth`) remain gen2 with the watcher expected to attach
+to them.

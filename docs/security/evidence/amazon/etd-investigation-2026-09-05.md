@@ -62,3 +62,15 @@ the VPC; the documented etd-malware-trigger.goog VM test run three times
 (timestamps in this record) with the DNS queries visible in the project's
 logs; no Malware: Bad Domain finding at project or organisation level. Is
 the detector consuming this project's Cloud DNS logs, and if not, why?"*
+
+## Final status (2026-09-05 21:45 UTC) — record closed
+
+No "Malware: Bad Domain" finding has appeared at project or organisation
+level up to 21:30 UTC (v2 findings list on the project: only the Cloud Armor
+and Compliance Evaluation Service findings exist). Operator decision: **no
+further test triggering**; this record is final and is the attachment for
+the support case in `google-support-case-scc-detectors.md`. The test VM was
+deleted after run 3 (`test-artifacts-cleanup-2026-09-05.md`); the DNS logging
+policy and the detector configuration stay as they are, so a finding that
+arrives later is delivered through the same notification config → Pub/Sub →
+e-mail chain proven in `scc-finding-2026-09-05.md`.

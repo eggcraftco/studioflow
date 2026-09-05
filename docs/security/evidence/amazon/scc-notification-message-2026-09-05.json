@@ -1,0 +1,564 @@
+[
+ {
+  "_note": "pulled 2026-09-05T21:33:22Z from subscription scc-findings-evidence WITHOUT ack, six pulls merged by messageId (7-day retention; captured before expiry). Proof that Security Command Center findings on nivadesk-amazon are published to Pub/Sub topic scc-findings by notification config amazon-findings; the Cloud Monitoring alert on the topic publish count e-mails the operator (scc-alerting.txt)."
+ },
+ {
+  "messageId": "21472771944709115",
+  "publishTime": "2026-09-05T04:05:16.002Z",
+  "data": {
+   "test": "delivery-chain-check",
+   "publishedAt": "2026-09-05T04:05:15Z",
+   "finding": {
+    "category": "TEST: delivery chain check (synthetic, not a Security Command Center finding)",
+    "severity": "LOW",
+    "state": "ACTIVE"
+   }
+  }
+ },
+ {
+  "messageId": "21472576914499299",
+  "publishTime": "2026-09-05T05:29:33.012Z",
+  "data": {
+   "notificationConfigName": "projects/145308107004/locations/global/notificationConfigs/amazon-findings",
+   "finding": {
+    "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "canonicalName": "projects/145308107004/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "parent": "organizations/378239481010/sources/17655521329292880633/locations/global",
+    "resourceName": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "state": "ACTIVE",
+    "category": "Increasing Deny Ratio",
+    "sourceProperties": {
+     "Security_Policy": "amazon-edge",
+     "Long_Term_Denied_RPS": 3.0,
+     "Long_Term_Incoming_RPS": 3.0,
+     "Backend_Service": "amazon-admin-backend"
+    },
+    "securityMarks": {
+     "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6/securityMarks"
+    },
+    "eventTime": "2026-09-05T05:29:30.046257728Z",
+    "createTime": "2026-09-05T05:29:30.347Z",
+    "severity": "MEDIUM",
+    "mute": "UNDEFINED",
+    "findingClass": "THREAT",
+    "vulnerability": {
+     "cve": {
+      "references": [
+       {
+        "source": "Logs",
+        "uri": "https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon"
+       }
+      ],
+      "cvssv3": {
+       "attackVector": "ATTACK_VECTOR_NETWORK"
+      },
+      "exploitReleaseDate": "1970-01-01T00:00:00Z",
+      "firstExploitationDate": "1970-01-01T00:00:00Z"
+     },
+     "offendingPackage": {},
+     "fixedPackage": {},
+     "securityBulletin": {
+      "submissionTime": "1970-01-01T00:00:00Z"
+     }
+    },
+    "muteUpdateTime": "1970-01-01T00:00:00Z",
+    "parentDisplayName": "Cloud Armor",
+    "nextSteps": "1. Review your request logging ([link to logs](https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon), [docs](https://cloud.google.com/armor/docs/request-logging)) - consider enabling verbose logging\n2. Check your current security policies([link to policies page](https://console.cloud.google.com/net-security/securitypolicies/details/amazon-edge?project=nivadesk-amazon&tab=rules))",
+    "cloudArmor": {
+     "securityPolicy": {
+      "name": "amazon-edge",
+      "type": "backend security policy"
+     },
+     "requests": {
+      "ratio": 0.95312497089617,
+      "longTermAllowed": 3,
+      "longTermDenied": 3
+     },
+     "adaptiveProtection": {},
+     "attack": {},
+     "threatVector": "L_7",
+     "duration": "0s"
+    },
+    "muteInfo": {
+     "staticMute": {
+      "state": "UNDEFINED",
+      "applyTime": "1970-01-01T00:00:00Z"
+     }
+    }
+   },
+   "resource": {
+    "name": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "displayName": "amazon-admin-backend",
+    "type": "google.compute.BackendService",
+    "cloudProvider": "GOOGLE_CLOUD_PLATFORM",
+    "service": "compute.googleapis.com",
+    "location": "global",
+    "gcpMetadata": {
+     "project": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "projectDisplayName": "nivadesk-amazon",
+     "parent": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "parentDisplayName": "nivadesk-amazon",
+     "folders": [
+      {
+       "resourceFolder": "//cloudresourcemanager.googleapis.com/folders/758048022614",
+       "resourceFolderDisplayName": "amazon-boundary"
+      }
+     ],
+     "organization": "organizations/378239481010"
+    },
+    "resourcePath": {
+     "nodes": [
+      {
+       "nodeType": "GCP_PROJECT",
+       "id": "projects/145308107004",
+       "displayName": "nivadesk-amazon"
+      },
+      {
+       "nodeType": "GCP_FOLDER",
+       "id": "folders/758048022614",
+       "displayName": "amazon-boundary"
+      },
+      {
+       "nodeType": "GCP_ORGANIZATION",
+       "id": "organizations/378239481010"
+      }
+     ]
+    },
+    "resourcePathString": "organizations/378239481010/folders/758048022614/projects/145308107004"
+   }
+  }
+ },
+ {
+  "messageId": "21474433740280917",
+  "publishTime": "2026-09-05T05:52:33.747Z",
+  "data": {
+   "notificationConfigName": "projects/145308107004/locations/global/notificationConfigs/amazon-findings",
+   "finding": {
+    "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "canonicalName": "projects/145308107004/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "parent": "organizations/378239481010/sources/17655521329292880633/locations/global",
+    "resourceName": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "state": "ACTIVE",
+    "category": "Increasing Deny Ratio",
+    "sourceProperties": {
+     "Security_Policy": "amazon-edge",
+     "Long_Term_Denied_RPS": 2.0,
+     "Long_Term_Incoming_RPS": 2.0,
+     "Backend_Service": "amazon-admin-backend"
+    },
+    "securityMarks": {
+     "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6/securityMarks"
+    },
+    "eventTime": "2026-09-05T05:52:30.033846375Z",
+    "createTime": "2026-09-05T05:29:30.347Z",
+    "severity": "MEDIUM",
+    "mute": "UNDEFINED",
+    "findingClass": "THREAT",
+    "vulnerability": {
+     "cve": {
+      "references": [
+       {
+        "source": "Logs",
+        "uri": "https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon"
+       }
+      ],
+      "cvssv3": {
+       "attackVector": "ATTACK_VECTOR_NETWORK"
+      },
+      "exploitReleaseDate": "1970-01-01T00:00:00Z",
+      "firstExploitationDate": "1970-01-01T00:00:00Z"
+     },
+     "offendingPackage": {},
+     "fixedPackage": {},
+     "securityBulletin": {
+      "submissionTime": "1970-01-01T00:00:00Z"
+     }
+    },
+    "muteUpdateTime": "1970-01-01T00:00:00Z",
+    "parentDisplayName": "Cloud Armor",
+    "nextSteps": "1. Review your request logging ([link to logs](https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon), [docs](https://cloud.google.com/armor/docs/request-logging)) - consider enabling verbose logging\n2. Check your current security policies([link to policies page](https://console.cloud.google.com/net-security/securitypolicies/details/amazon-edge?project=nivadesk-amazon&tab=rules))",
+    "cloudArmor": {
+     "securityPolicy": {
+      "name": "amazon-edge",
+      "type": "backend security policy"
+     },
+     "requests": {
+      "ratio": 1.0,
+      "longTermAllowed": 2,
+      "longTermDenied": 2
+     },
+     "adaptiveProtection": {},
+     "attack": {},
+     "threatVector": "L_7",
+     "duration": "0s"
+    },
+    "muteInfo": {
+     "staticMute": {
+      "state": "UNDEFINED",
+      "applyTime": "1970-01-01T00:00:00Z"
+     }
+    }
+   },
+   "resource": {
+    "name": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "displayName": "amazon-admin-backend",
+    "type": "google.compute.BackendService",
+    "cloudProvider": "GOOGLE_CLOUD_PLATFORM",
+    "service": "compute.googleapis.com",
+    "location": "global",
+    "gcpMetadata": {
+     "project": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "projectDisplayName": "nivadesk-amazon",
+     "parent": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "parentDisplayName": "nivadesk-amazon",
+     "folders": [
+      {
+       "resourceFolder": "//cloudresourcemanager.googleapis.com/folders/758048022614",
+       "resourceFolderDisplayName": "amazon-boundary"
+      }
+     ],
+     "organization": "organizations/378239481010"
+    },
+    "resourcePath": {
+     "nodes": [
+      {
+       "nodeType": "GCP_PROJECT",
+       "id": "projects/145308107004",
+       "displayName": "nivadesk-amazon"
+      },
+      {
+       "nodeType": "GCP_FOLDER",
+       "id": "folders/758048022614",
+       "displayName": "amazon-boundary"
+      },
+      {
+       "nodeType": "GCP_ORGANIZATION",
+       "id": "organizations/378239481010"
+      }
+     ]
+    },
+    "resourcePathString": "organizations/378239481010/folders/758048022614/projects/145308107004"
+   }
+  }
+ },
+ {
+  "messageId": "21473785894040243",
+  "publishTime": "2026-09-05T06:47:13.215Z",
+  "data": {
+   "notificationConfigName": "projects/145308107004/locations/global/notificationConfigs/amazon-findings",
+   "finding": {
+    "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "canonicalName": "projects/145308107004/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "parent": "organizations/378239481010/sources/17655521329292880633/locations/global",
+    "resourceName": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "state": "ACTIVE",
+    "category": "Increasing Deny Ratio",
+    "sourceProperties": {
+     "Backend_Service": "amazon-admin-backend",
+     "Long_Term_Denied_RPS": 18.0,
+     "Security_Policy": "amazon-edge",
+     "Long_Term_Incoming_RPS": 18.0
+    },
+    "securityMarks": {
+     "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6/securityMarks"
+    },
+    "eventTime": "2026-09-05T06:47:10.031705510Z",
+    "createTime": "2026-09-05T05:29:30.347Z",
+    "severity": "MEDIUM",
+    "mute": "UNDEFINED",
+    "findingClass": "THREAT",
+    "vulnerability": {
+     "cve": {
+      "references": [
+       {
+        "source": "Logs",
+        "uri": "https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon"
+       }
+      ],
+      "cvssv3": {
+       "attackVector": "ATTACK_VECTOR_NETWORK"
+      },
+      "exploitReleaseDate": "1970-01-01T00:00:00Z",
+      "firstExploitationDate": "1970-01-01T00:00:00Z"
+     },
+     "offendingPackage": {},
+     "fixedPackage": {},
+     "securityBulletin": {
+      "submissionTime": "1970-01-01T00:00:00Z"
+     }
+    },
+    "muteUpdateTime": "1970-01-01T00:00:00Z",
+    "parentDisplayName": "Cloud Armor",
+    "nextSteps": "1. Review your request logging ([link to logs](https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon), [docs](https://cloud.google.com/armor/docs/request-logging)) - consider enabling verbose logging\n2. Check your current security policies([link to policies page](https://console.cloud.google.com/net-security/securitypolicies/details/amazon-edge?project=nivadesk-amazon&tab=rules))",
+    "cloudArmor": {
+     "securityPolicy": {
+      "name": "amazon-edge",
+      "type": "backend security policy"
+     },
+     "requests": {
+      "ratio": 1.0,
+      "longTermAllowed": 18,
+      "longTermDenied": 18
+     },
+     "adaptiveProtection": {},
+     "attack": {},
+     "threatVector": "L_7",
+     "duration": "0s"
+    },
+    "muteInfo": {
+     "staticMute": {
+      "state": "UNDEFINED",
+      "applyTime": "1970-01-01T00:00:00Z"
+     }
+    }
+   },
+   "resource": {
+    "name": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "displayName": "amazon-admin-backend",
+    "type": "google.compute.BackendService",
+    "cloudProvider": "GOOGLE_CLOUD_PLATFORM",
+    "service": "compute.googleapis.com",
+    "location": "global",
+    "gcpMetadata": {
+     "project": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "projectDisplayName": "nivadesk-amazon",
+     "parent": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "parentDisplayName": "nivadesk-amazon",
+     "folders": [
+      {
+       "resourceFolder": "//cloudresourcemanager.googleapis.com/folders/758048022614",
+       "resourceFolderDisplayName": "amazon-boundary"
+      }
+     ],
+     "organization": "organizations/378239481010"
+    },
+    "resourcePath": {
+     "nodes": [
+      {
+       "nodeType": "GCP_PROJECT",
+       "id": "projects/145308107004",
+       "displayName": "nivadesk-amazon"
+      },
+      {
+       "nodeType": "GCP_FOLDER",
+       "id": "folders/758048022614",
+       "displayName": "amazon-boundary"
+      },
+      {
+       "nodeType": "GCP_ORGANIZATION",
+       "id": "organizations/378239481010"
+      }
+     ]
+    },
+    "resourcePathString": "organizations/378239481010/folders/758048022614/projects/145308107004"
+   }
+  }
+ },
+ {
+  "messageId": "21472658763636767",
+  "publishTime": "2026-09-05T11:39:33.025Z",
+  "data": {
+   "notificationConfigName": "projects/145308107004/locations/global/notificationConfigs/amazon-findings",
+   "finding": {
+    "name": "organizations/378239481010/sources/6125901641658125865/locations/global/findings/IAGILUVIEWLT2POCFDRWLQMCEA",
+    "canonicalName": "projects/145308107004/sources/6125901641658125865/locations/global/findings/IAGILUVIEWLT2POCFDRWLQMCEA",
+    "parent": "organizations/378239481010/sources/6125901641658125865/locations/global",
+    "resourceName": "//compute.googleapis.com/projects/nivadesk-amazon",
+    "state": "ACTIVE",
+    "category": "OS_LOGIN_DISABLED",
+    "securityMarks": {
+     "name": "organizations/378239481010/sources/6125901641658125865/locations/global/findings/IAGILUVIEWLT2POCFDRWLQMCEA/securityMarks"
+    },
+    "eventTime": "2026-09-05T11:39:18Z",
+    "createTime": "2026-09-05T11:39:19.978Z",
+    "severity": "MEDIUM",
+    "mute": "UNDEFINED",
+    "findingClass": "MISCONFIGURATION",
+    "muteUpdateTime": "1970-01-01T00:00:00Z",
+    "parentDisplayName": "Compliance Evaluation Service",
+    "description": "Enable OS Login to centralize SSH key management with Identity and Access Management (IAM).",
+    "nextSteps": "Enable OS Login for the project.  On the **Metadata** page in the Google Cloud console, add the key **enable-oslogin** and value **TRUE**.  For more information, see [Enable OS Login for all VMs in a project](https://cloud.google.com/compute/docs/oslogin/set-up-oslogin#enable_os_login_for_all_vms_in_a_project).",
+    "muteInfo": {
+     "staticMute": {
+      "state": "UNDEFINED",
+      "applyTime": "1970-01-01T00:00:00Z"
+     }
+    },
+    "complianceDetails": {
+     "frameworks": [
+      {
+       "name": "organizations/378239481010/locations/global/frameworks/builtin-security-essentials",
+       "displayName": "Security Essentials",
+       "category": [
+        "GOOGLE_BEST_PRACTICES"
+       ],
+       "type": "FRAMEWORK_TYPE_BUILT_IN"
+      }
+     ],
+     "cloudControl": {
+      "cloudControlName": "organizations/378239481010/locations/global/cloudControls/builtin-enable-os-login-all-instances-project-level",
+      "type": "BUILT_IN",
+      "policyType": "CES rule",
+      "version": 1
+     },
+     "cloudControlDeploymentNames": [
+      "organizations/378239481010/locations/global/cloudControlDeployments/b6719003-4bbb-494b-8f88-15964142053c"
+     ]
+    }
+   },
+   "resource": {
+    "name": "//compute.googleapis.com/projects/nivadesk-amazon",
+    "displayName": "nivadesk-amazon",
+    "type": "google.compute.Project",
+    "cloudProvider": "GOOGLE_CLOUD_PLATFORM",
+    "service": "compute.googleapis.com",
+    "location": "global",
+    "gcpMetadata": {
+     "project": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "projectDisplayName": "nivadesk-amazon",
+     "parent": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "parentDisplayName": "nivadesk-amazon",
+     "folders": [
+      {
+       "resourceFolder": "//cloudresourcemanager.googleapis.com/folders/758048022614",
+       "resourceFolderDisplayName": "amazon-boundary"
+      }
+     ],
+     "organization": "organizations/378239481010"
+    },
+    "resourcePath": {
+     "nodes": [
+      {
+       "nodeType": "GCP_PROJECT",
+       "id": "projects/145308107004",
+       "displayName": "nivadesk-amazon"
+      },
+      {
+       "nodeType": "GCP_FOLDER",
+       "id": "folders/758048022614",
+       "displayName": "amazon-boundary"
+      },
+      {
+       "nodeType": "GCP_ORGANIZATION",
+       "id": "organizations/378239481010"
+      }
+     ]
+    },
+    "resourcePathString": "organizations/378239481010/folders/758048022614/projects/145308107004"
+   }
+  }
+ },
+ {
+  "messageId": "21472934724567613",
+  "publishTime": "2026-09-05T16:32:26.302Z",
+  "data": {
+   "notificationConfigName": "projects/145308107004/locations/global/notificationConfigs/amazon-findings",
+   "finding": {
+    "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "canonicalName": "projects/145308107004/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6",
+    "parent": "organizations/378239481010/sources/17655521329292880633/locations/global",
+    "resourceName": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "state": "ACTIVE",
+    "category": "Increasing Deny Ratio",
+    "sourceProperties": {
+     "Long_Term_Incoming_RPS": 3.0,
+     "Security_Policy": "amazon-edge",
+     "Long_Term_Denied_RPS": 3.0,
+     "Backend_Service": "amazon-admin-backend"
+    },
+    "securityMarks": {
+     "name": "organizations/378239481010/sources/17655521329292880633/locations/global/findings/66f4b5ac3b691cb6/securityMarks"
+    },
+    "eventTime": "2026-09-05T16:32:20.034689079Z",
+    "createTime": "2026-09-05T05:29:30.347Z",
+    "severity": "MEDIUM",
+    "mute": "UNDEFINED",
+    "findingClass": "THREAT",
+    "vulnerability": {
+     "cve": {
+      "references": [
+       {
+        "source": "Logs",
+        "uri": "https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon"
+       }
+      ],
+      "cvssv3": {
+       "attackVector": "ATTACK_VECTOR_NETWORK"
+      },
+      "exploitReleaseDate": "1970-01-01T00:00:00Z",
+      "firstExploitationDate": "1970-01-01T00:00:00Z"
+     },
+     "offendingPackage": {},
+     "fixedPackage": {},
+     "securityBulletin": {
+      "submissionTime": "1970-01-01T00:00:00Z"
+     }
+    },
+    "muteUpdateTime": "1970-01-01T00:00:00Z",
+    "parentDisplayName": "Cloud Armor",
+    "nextSteps": "1. Review your request logging ([link to logs](https://console.cloud.google.com/logs/query;query=resource.type=%22http_load_balancer%22%20AND%20jsonPayload.enforcedSecurityPolicy.name=%22amazon-edge%22?project=nivadesk-amazon), [docs](https://cloud.google.com/armor/docs/request-logging)) - consider enabling verbose logging\n2. Check your current security policies([link to policies page](https://console.cloud.google.com/net-security/securitypolicies/details/amazon-edge?project=nivadesk-amazon&tab=rules))",
+    "cloudArmor": {
+     "securityPolicy": {
+      "name": "amazon-edge",
+      "type": "backend security policy"
+     },
+     "requests": {
+      "ratio": 1.0,
+      "longTermAllowed": 3,
+      "longTermDenied": 3
+     },
+     "adaptiveProtection": {},
+     "attack": {},
+     "threatVector": "L_7",
+     "duration": "0s"
+    },
+    "muteInfo": {
+     "staticMute": {
+      "state": "UNDEFINED",
+      "applyTime": "1970-01-01T00:00:00Z"
+     }
+    }
+   },
+   "resource": {
+    "name": "//compute.googleapis.com/projects/nivadesk-amazon/global/backendServices/8740061861140420362",
+    "displayName": "amazon-admin-backend",
+    "type": "google.compute.BackendService",
+    "cloudProvider": "GOOGLE_CLOUD_PLATFORM",
+    "service": "compute.googleapis.com",
+    "location": "global",
+    "gcpMetadata": {
+     "project": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "projectDisplayName": "nivadesk-amazon",
+     "parent": "//cloudresourcemanager.googleapis.com/projects/145308107004",
+     "parentDisplayName": "nivadesk-amazon",
+     "folders": [
+      {
+       "resourceFolder": "//cloudresourcemanager.googleapis.com/folders/758048022614",
+       "resourceFolderDisplayName": "amazon-boundary"
+      }
+     ],
+     "organization": "organizations/378239481010"
+    },
+    "resourcePath": {
+     "nodes": [
+      {
+       "nodeType": "GCP_PROJECT",
+       "id": "projects/145308107004",
+       "displayName": "nivadesk-amazon"
+      },
+      {
+       "nodeType": "GCP_FOLDER",
+       "id": "folders/758048022614",
+       "displayName": "amazon-boundary"
+      },
+      {
+       "nodeType": "GCP_ORGANIZATION",
+       "id": "organizations/378239481010"
+      }
+     ]
+    },
+    "resourcePathString": "organizations/378239481010/folders/758048022614/projects/145308107004"
+   }
+  }
+ }
+]

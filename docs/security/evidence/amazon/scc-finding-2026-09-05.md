@@ -18,3 +18,24 @@ subscription → alert → operator. It is not an Event Threat Detection or Clou
 Run Threat Detection finding; those two remain required for the control to
 be `Passed` (see `scc-activation-2026-09-05.md` for why neither has fired
 yet).
+
+## Delivery chain re-verified end of day (2026-09-05 21:31 UTC)
+
+- `scc-notification-message-2026-09-05.json` — all **six** messages retained
+  by the evidence subscription, pulled without acknowledgement and decoded:
+  the synthetic delivery-chain check (04:05), the Cloud Armor *Increasing
+  Deny Ratio* finding published at 05:29:33 and re-published on each update
+  (05:52, 06:47, 16:32 — the internet scanners never stopped and the WAF kept
+  refusing them), and the Compliance Evaluation *OS_LOGIN_DISABLED* finding
+  (11:39). Every message carries the full finding payload as Security Command
+  Center published it.
+- `scc-topic-publishes-2026-09-05.txt` — the Cloud Monitoring metric the
+  e-mail alert is built on (`pubsub.googleapis.com/topic/send_message_operation_count`
+  on `scc-findings`): six non-zero 10-minute buckets at 04:09, 05:39, 05:59,
+  06:49, 11:49 and 16:39 UTC, one per message — the alert condition
+  (publish count > 0) was true each time and the channel is the operator's
+  e-mail (`scc-alerting.txt`).
+
+Together with `scc-finding-2026-09-05.md` above this is the standing proof
+that a finding of **any** source on the project reaches the operator; the
+detector findings still missing for control 3 would travel the same path.

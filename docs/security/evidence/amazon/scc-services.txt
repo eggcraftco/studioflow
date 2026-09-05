@@ -1,21 +1,21 @@
-# 2026-09-05T21:17:07Z
+# 2026-09-05T21:42:00Z
 # gcloud scc manage services list --project=nivadesk-amazon --format=table(name.basename(),intendedEnablementState,effectiveEnablementState)
 
 NAME                            INTENDED_ENABLEMENT_STATE  EFFECTIVE_ENABLEMENT_STATE
-WEB_SECURITY_SCANNER            INHERITED                  ENABLED
-VM_THREAT_DETECTION             INHERITED                  ENABLED
-ARTIFACT_GUARD                  INHERITED                  DISABLED
-VM_MANAGER                      INHERITED                  DISABLED
-NOTEBOOK_SECURITY_SCANNER       INHERITED                  DISABLED
-CONTAINER_THREAT_DETECTION                                 ENABLED
-AZURE_VULNERABILITY_ASSESSMENT  INHERITED                  DISABLED
-EXTERNAL_EXPOSURE               ENABLED                    ENABLED
-AGENT_ENGINE_VULN_ASSESSMENT    INHERITED                  ENABLED
-VM_THREAT_DETECTION_AWS         INHERITED                  DISABLED
 ARTIFACT_ANALYSIS               INHERITED                  ENABLED
-EVENT_THREAT_DETECTION          ENABLED                    ENABLED
+GCE_VULNERABILITY_ASSESSMENT    INHERITED                  ENABLED
+VM_THREAT_DETECTION_AWS         INHERITED                  DISABLED
 EC2_VULNERABILITY_ASSESSMENT    INHERITED                  DISABLED
-CLOUD_RUN_THREAT_DETECTION      ENABLED                    ENABLED
 AGENT_ENGINE_THREAT_DETECTION   INHERITED                  ENABLED
 SECURITY_HEALTH_ANALYTICS       INHERITED                  DISABLED
-GCE_VULNERABILITY_ASSESSMENT    INHERITED                  ENABLED
+WEB_SECURITY_SCANNER            INHERITED                  ENABLED
+EVENT_THREAT_DETECTION          ENABLED                    ENABLED
+EXTERNAL_EXPOSURE               ENABLED                    ENABLED
+ARTIFACT_GUARD                  INHERITED                  DISABLED
+CLOUD_RUN_THREAT_DETECTION      ENABLED                    ENABLED
+VM_MANAGER                      INHERITED                  DISABLED
+CONTAINER_THREAT_DETECTION                                 ENABLED
+NOTEBOOK_SECURITY_SCANNER       INHERITED                  DISABLED
+AZURE_VULNERABILITY_ASSESSMENT  INHERITED                  DISABLED
+VM_THREAT_DETECTION             INHERITED                  ENABLED
+AGENT_ENGINE_VULN_ASSESSMENT    INHERITED                  ENABLED

@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T21:17:07Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T21:42:00Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -46,6 +46,8 @@ Generated 2026-09-05T21:17:07Z by infra/amazon/evidence.sh. Each file lists the 
 | idsips | `scc-alerting.txt` | captured |
 | idsips | `scc-activation-2026-09-05.md` | present (record of 2026-09-05) |
 | idsips | `scc-finding-2026-09-05.md` | present (record of 2026-09-05) |
+| idsips | `scc-notification-message-2026-09-05.json` | present (record of 2026-09-05) |
+| idsips | `scc-topic-publishes-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `scc-test-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `scc-crtd-test-2026-09-05.txt` | present (record of 2026-09-05) |
 | idsips | `etd-investigation-2026-09-05.md` | present (record of 2026-09-05) |

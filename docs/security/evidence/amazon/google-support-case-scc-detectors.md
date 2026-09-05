@@ -1,8 +1,12 @@
 # Google Cloud support case — Security Command Center detectors silent on a project-level Premium activation
 
-Prepared 2026-09-05 for the operator to file (the assistant does not create
-or send cases from the operator's account). One case covering both
-detectors; the second detector can be split out if support asks.
+**Status 2026-09-05 21:50 UTC: accepted by the operator as ready to open — not yet sent.** The assistant prepares the console up to the support plan / price screen and stops; buying a plan or sending the case is the operator's click. Filing
+is the operator's decision (it needs a paid support plan or the public issue
+tracker, see "Where to file"). Prepared for the operator to file (the
+assistant does not create or send cases from the operator's account). One case
+covering both detectors; the second detector can be split out if support asks.
+Nothing in the environment has changed since the tests, so the case text
+below is current; the two investigation records are closed and attached.
 
 ## Case header
 
@@ -110,6 +114,20 @@ detector's activation window.
 Attachments to include: `etd-investigation-2026-09-05.md`, `crtd-investigation-2026-09-05.md`,
 `scc-activation-2026-09-05.md`, `scc-services.txt`, `scc-agents.txt` (all under
 `docs/security/evidence/amazon/`).
+
+## Plan / price screen reached (2026-09-05 22:20 UTC) — operator decision pending
+
+The console's Support section for this organisation has no in-console plan
+page (`/support/plans` redirects to the overview; "Get Support" launches the
+Customer Care portal). The public Customer Care page
+(`cloud.google.com/support`, "The Customer Care portfolio") was opened in
+Chrome and left on the plan table: **Standard Support — minimum $29.00 per
+month or 3% of monthly Cloud charges, whichever is higher; P2 first response
+4 h, 8/5 for high-impact; "Sign up" button.** Enhanced ($100 minimum / tiered
+%) and Premium ($15,000 minimum) are not proportionate. Nothing was clicked:
+buying the plan and sending the case are the operator's actions. The free
+alternative remains the public issue tracker (below) with the identities
+removed from the text.
 
 ## Where to file
 
