@@ -51,3 +51,25 @@
           - method: "*"
     resources:
       - projects/PROJECT_NUMBER
+# 4. Deploys and builds. `gcloud run … replace/create` and Cloud Build read
+#    this project's Artifact Registry (image manifests, pushes) and the build
+#    staging bucket from Google-managed infrastructure, as amazon-deploy@ —
+#    the perimeter sees that as ingress. Dry-run 2026-09-05 12:38:54:
+#    artifactregistry.googleapis.com/DockerRead by amazon-deploy@,
+#    NO_MATCHING_ACCESS_LEVEL. Enforcing without this rule would break every
+#    deploy. One identity, two services, this project only.
+- ingressFrom:
+    identities:
+      - serviceAccount:amazon-deploy@PROJECT_ID.iam.gserviceaccount.com
+    sources:
+      - accessLevel: "*"
+  ingressTo:
+    operations:
+      - serviceName: artifactregistry.googleapis.com
+        methodSelectors:
+          - method: "*"
+      - serviceName: storage.googleapis.com
+        methodSelectors:
+          - method: "*"
+    resources:
+      - projects/PROJECT_NUMBER

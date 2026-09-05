@@ -1,4 +1,4 @@
-# VPC-SC egress rules for the amazon-information perimeter.
+# VPC-SC egress rules for the amazon_information perimeter.
 # Rendered by perimeter.sh: PROJECT_NUMBER, MAIN_PROJECT_NUMBER, PROJECT_ID.
 #
 # 1. The one door out: amazon-sync@ may invoke Cloud Run in the main project —
@@ -13,18 +13,7 @@
           - method: "*"
     resources:
       - projects/MAIN_PROJECT_NUMBER
-# 2. Cloud Build inside the project may push to Artifact Registry inside the
-#    project. Listed so the dry-run report does not fill with deploy noise.
-- egressFrom:
-    identities:
-      - serviceAccount:amazon-deploy@PROJECT_ID.iam.gserviceaccount.com
-  egressTo:
-    operations:
-      - serviceName: artifactregistry.googleapis.com
-        methodSelectors:
-          - method: "*"
-      - serviceName: storage.googleapis.com
-        methodSelectors:
-          - method: "*"
-    resources:
-      - projects/PROJECT_NUMBER
+# (The earlier "amazon-deploy@ → Artifact Registry / Storage inside the
+#  project" rule was mis-shaped: a build or a deploy reading this project's
+#  registry from Google's side is INGRESS, and the dry-run showed it as such
+#  on 2026-09-05 — see rule 4 of perimeter-ingress.yaml.)
