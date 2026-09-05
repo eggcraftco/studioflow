@@ -1,7 +1,25 @@
-# 2026-09-05T13:39:37Z
+# 2026-09-05T13:49:12Z
 # gcloud logging read protoPayload.metadata.@type="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata" --project=nivadesk-amazon --bucket=amazon-audit --location=europe-west2 --view=_AllLogs --freshness=30d --limit=500 --format=table(timestamp,protoPayload.authenticationInfo.principalEmail,protoPayload.serviceName,protoPayload.methodName,protoPayload.metadata.dryRun,protoPayload.metadata.violationReason)
 
-TIMESTAMP                       PRINCIPAL_EMAIL                                        SERVICE_NAME                     METHOD_NAME                                       DRY_RUN  VIOLATION_REASON
-2026-09-05T12:38:54.490951565Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  artifactregistry.googleapis.com  artifactregistry.googleapis.com/DockerRead        True     NO_MATCHING_ACCESS_LEVEL
-2026-09-05T04:08:17.219854030Z  amazon-caller@eggcraft-studio.iam.gserviceaccount.com  firestore.googleapis.com         google.firestore.v1.Firestore.GetOrListDocuments  True     NO_MATCHING_ACCESS_LEVEL
-2026-09-05T03:51:04.768692385Z                                                         run.googleapis.com               run.googleapis.com/HttpIngress                    True     NO_MATCHING_ACCESS_LEVEL
+TIMESTAMP                       PRINCIPAL_EMAIL                                        SERVICE_NAME                     METHOD_NAME                                         DRY_RUN  VIOLATION_REASON
+2026-09-05T13:47:33.778746791Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:32.782864864Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:28.775809317Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:27.781010281Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:26.779991139Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:25.777691020Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:23.778193472Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:21.782384542Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:18.780692370Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:17.784410240Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:16.790954296Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:14.790341938Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:13.785422653Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:12.787600148Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:11.791507274Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:10.787924249Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:09.787417636Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T13:47:08.852315025Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  logging.googleapis.com           google.logging.v2.LoggingServiceV2.WriteLogEntries  True     NETWORK_NOT_IN_SAME_SERVICE_PERIMETER
+2026-09-05T12:38:54.490951565Z  amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com  artifactregistry.googleapis.com  artifactregistry.googleapis.com/DockerRead          True     NO_MATCHING_ACCESS_LEVEL
+2026-09-05T04:08:17.219854030Z  amazon-caller@eggcraft-studio.iam.gserviceaccount.com  firestore.googleapis.com         google.firestore.v1.Firestore.GetOrListDocuments    True     NO_MATCHING_ACCESS_LEVEL
+2026-09-05T03:51:04.768692385Z                                                         run.googleapis.com               run.googleapis.com/HttpIngress                      True     NO_MATCHING_ACCESS_LEVEL

@@ -1,4 +1,4 @@
-# 2026-09-05T13:39:37Z
+# 2026-09-05T13:49:12Z
 # gcloud compute security-policies describe amazon-edge --project=nivadesk-amazon --format=yaml(adaptiveProtectionConfig)
 
 ---

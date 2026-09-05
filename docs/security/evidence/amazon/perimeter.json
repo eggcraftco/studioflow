@@ -1,8 +1,8 @@
-# 2026-09-05T13:39:37Z
+# 2026-09-05T13:49:12Z
 # gcloud access-context-manager perimeters describe amazon_information --policy=444937440696 --format=json
 
 {
-  "etag": "bbb3fb75e1d61717",
+  "etag": "ff83de16acba69cc",
   "name": "accessPolicies/444937440696/servicePerimeters/amazon_information",
   "spec": {
     "egressPolicies": [
@@ -25,36 +25,6 @@
           ],
           "resources": [
             "projects/477037475099"
-          ]
-        }
-      },
-      {
-        "egressFrom": {
-          "identities": [
-            "serviceAccount:amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com"
-          ]
-        },
-        "egressTo": {
-          "operations": [
-            {
-              "methodSelectors": [
-                {
-                  "method": "*"
-                }
-              ],
-              "serviceName": "artifactregistry.googleapis.com"
-            },
-            {
-              "methodSelectors": [
-                {
-                  "method": "*"
-                }
-              ],
-              "serviceName": "storage.googleapis.com"
-            }
-          ],
-          "resources": [
-            "projects/145308107004"
           ]
         }
       }
@@ -127,6 +97,49 @@
                 }
               ],
               "serviceName": "pubsub.googleapis.com"
+            }
+          ],
+          "resources": [
+            "projects/145308107004"
+          ]
+        }
+      },
+      {
+        "ingressFrom": {
+          "identities": [
+            "serviceAccount:amazon-deploy@nivadesk-amazon.iam.gserviceaccount.com"
+          ],
+          "sources": [
+            {
+              "accessLevel": "*"
+            }
+          ]
+        },
+        "ingressTo": {
+          "operations": [
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "artifactregistry.googleapis.com"
+            },
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "storage.googleapis.com"
+            },
+            {
+              "methodSelectors": [
+                {
+                  "method": "*"
+                }
+              ],
+              "serviceName": "logging.googleapis.com"
             }
           ],
           "resources": [
