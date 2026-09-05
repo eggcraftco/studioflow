@@ -96,6 +96,17 @@ produces a concrete requirement for it. None found so far.
  └────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+**As built, 5 September 2026 (differences from the picture):** the bridge
+identity is `amazon-sync@` (the diagram's `amazon-bridge@`); only
+`amazon-admin` is deployed — `amazon-oauth` and `amazon-sync` wait for
+Amazon's credentials, so the load balancer routes `/admin/*` only and Cloud
+Armor has no `/oauth/*` rule; `amazon-admin` declares the custom audience
+`https://amazon.nivadesk.app`; Security Health Analytics is retired for new
+activations and Compliance Manager stands in its place; the VPC Service
+Controls perimeter (`amazon_information`) is **dry-run**, not enforced; the
+Google API traffic is proven to use `restricted.googleapis.com`. Readiness per
+control: `amazon-readiness-criteria.md`.
+
 Amazon Information — order records as Amazon returns them, connection
 documents, refresh tokens — never leaves the top box. What crosses the line is
 the output of `sanitize.js`: order id, status, totals, line items,
@@ -414,27 +425,30 @@ connector (~$12) are gone; Flow Logs and NAT logging are added.
 what the step will do. Nothing in the cloud is created before §14 has been
 presented.
 
-1. **Endpoint EDR + MDM** on the operator's devices — the user's task, can
-   start today.
-2. `functions-amazon/` codebase — **in progress.** Runtime around the three
+1. **Endpoint EDR + MDM** on the operator's devices — the user's task; options
+   compared and one recommended in `edr-mdm-options.md` (5 Sep). **Open.**
+2. `functions-amazon/` codebase — **done** (9 test files, emulator-free). Runtime around the three
    existing modules; `deploy/*.yaml`; tests; emulator run. Also the main
    project's three functions and the shared envelope schema.
-3. ⛔ **Create the project** with `infra/amazon/create-project.sh` (written,
-   not run): org policies, APIs, service accounts and IAM, VPC + subnet +
+3. ✅ **Created 5 Sep** with `infra/amazon/create-project.sh` and verified by
+   `verify-project.sh`: org policies, APIs, service accounts and IAM, VPC + subnet +
    firewall + router + NAT + static IP + flow logs, log bucket, Firestore,
    Artifact Registry.
-4. Build and deploy the three services from their YAML; verify each
+4. ✅ (admin only, 5 Sep) Build and deploy the services from their YAML —
+   `amazon-admin` live; oauth/sync wait for Amazon's credentials; verify each
    `run.app` answers 403 to an unauthenticated request from the internet, and
    that an egress to a non-allowlisted host is refused and logged.
-5. Load balancer, managed certificate, Cloud Armor `amazon-edge`. ⛔ **DNS**
-   `amazon.nivadesk.app` → LB address, DNS-only at Cloudflare. *Shown first.*
-6. ⛔ **SCC Premium** on the project; detectors; notification path.
-   *Estimated cost shown first.*
-7. **Private Google Access via `restricted.googleapis.com`**
+5. ✅ (5 Sep) Load balancer, managed certificate, Cloud Armor `amazon-edge`;
+   DNS `amazon.nivadesk.app` → 136.68.239.143, DNS-only at Cloudflare; eight
+   smoke cases in `edge-smoke-2026-09-05.md`.
+6. ✅ (5 Sep) **SCC Premium** on the project (30-day trial, then pay-as-you-go);
+   ETD + Cloud Run Threat Detection effective; notification path built. The
+   two detection findings are still awaited — control 3 is not `Passed` yet.
+7. ✅ (5 Sep) **Private Google Access via `restricted.googleapis.com`**
    (`infra/amazon/private-google-access.sh`): private DNS zone, route,
    firewall; then the `diag` job proves every Google API host resolves inside
    `199.36.153.4/30` and answers. Its output goes into the evidence pack.
-7b. VPC-SC perimeter in **dry-run**; a week of real traffic (a test seller
+7b. ✅ started 5 Sep: VPC-SC perimeter `amazon_information` in **dry-run**; a week of real traffic (a test seller
    account, or EGGcraft's own if the user chooses); violation report.
 8. ⛔ **Enforce the perimeter.** *Report and dispositions shown first.*
 9. Evidence pack from the live configuration.
