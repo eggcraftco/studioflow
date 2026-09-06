@@ -100,7 +100,9 @@ marker, the switch and the flag (§9); the challenge GET is always answered.
    Without the marker `EBAY_SECRET_PARAMS = []`, `EBAY_RUNTIME = {}` (no `serviceAccount` either — a
    function that names a service account that does not exist yet fails to deploy), and the Firebase CLI
    keeps deploying every other function. The marker is committed only after the owner has created the
-   four secrets **and** the service account (§15; not this task; no gcloud).
+   **five** secrets — `EBAY_CALLBACK_KEY` included since §5.4 — **and** the service account (§15; not
+   this task; no gcloud). A deploy with the marker absent mounts nothing, which for the callback means
+   401 on every request and `reason=unavailable` for every seller (§5.4, *Rollout*).
    ```js
    const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || fs.existsSync(path.join(__dirname, ".ebay-secrets-ready"));
    const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY
@@ -185,7 +187,7 @@ All `region: "europe-west2"`. Wrappers inject the runtime bundle exactly as Squa
 |---|---|---|---|---|---|
 | `beginEbayConnect` | onCall | owner | connector on + configured; refuses `failed-precondition` otherwise | 60 | `{ ok, authorizeUrl, state, nonce, scopes, environment }` — browser only ever gets a URL and a nonce (§5) |
 | `claimEbayConnectState` | onCall `{state}` | the **uid that began the flow** (`stateData.uid === request.auth.uid`, else `permission-denied`) | connector on | 60 | `{ ok, authorizeUrl, nonce }` for the native start page (§5.2); single use per state (`claimedAtMs`) |
-| `ebayOAuthCallback` | onRequest **POST only** (GET → 405) | HMAC over the body under `EBAY_CALLBACK_KEY`; the state binds company+uid+browser nonce | connector on | 120 | JSON `{ ok, outcome, reason?, rid }` to the web route, which performs the seller-facing redirect (**§5.4**) |
+| `ebayOAuthCallback` | onRequest **POST only** (GET → 405), `maxInstances: 10` | HMAC over `req.rawBody` under `EBAY_CALLBACK_KEY` (unconfigured key → 401, never a distinguishable status); the state binds company+uid+browser nonce | connector on, **after** the signature | 120 | JSON `{ ok, outcome, reason?, rid }` to the web route, which performs the seller-facing redirect (**§5.4**) |
 | `getEbayConnections` | onCall | member | never gated | 60 | `{ ok, connections:[publicView], configured, environment }` |
 | `verifyEbayConnection` | onCall `{connectionId}` | member | never gated; charged to the connection's share (§7.4) | 60 | `{ ok:true, healthy, reason }` — never throws for a provider failure |
 | `updateEbayConnectionSettings` | onCall `{connectionId, settings}` | owner | — | 60 | `{ ok, settings }` after `settingsOf`/`marketplacesOf` coercion (§4.11) |
@@ -421,9 +423,12 @@ The nonce itself is never stored — its hash is enough to check, and the nonce 
 holds (§5). Consumed inside `runTransaction`: `!exists || used === true || expiresAt < now()` → null →
 `reason=state`; `stateData.environment !== environment()` → `reason=environment`;
 `sha256hex(body.nonce) !== stateData.nonceHash` → `reason=browser` (the state is **also** burned,
-so a second attempt with the right nonce cannot follow a wrong one). Since **§5.4** a callback with no
-nonce cookie at all is refused on the web side and never reaches this transaction, so it burns
-nothing; the burn rule describes a value *mismatch*.
+so a second attempt with the right nonce cannot follow a wrong one). This holds for an **empty** nonce
+exactly as for a wrong one: **§5.4** forwards an absent cookie as `nonce: ""` precisely so that the burn
+still happens, and the burn is the whole of §5's defence. `state` must match
+`/^[A-Za-z0-9_-]{20,120}$/` **before** it is passed to `states().doc(state)` — Firestore's own argument
+error embeds the rejected path in its message, so an unvalidated path-shaped state plus any logged error
+message writes the state into Cloud Logging (§5.4, *Logging*).
 
 ### 4.6 `ebayBuyers/{companyId__usernameHash}` — the account-deletion index
 
@@ -536,7 +541,7 @@ six) and on `restrictedCustomer`.
 Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{state} { nonceHash } ──▶ { authorizeUrl, nonce }
    ──▶ [web] section sets cookie nv_ebay_nonce=<nonce> (Secure; SameSite=Lax; Path=/ebay/callback; Max-Age=600) ──▶ location = authorizeUrl
    ──▶ seller consents on auth[.sandbox].ebay.com ──▶ RuName "accepted URL" https://nivadesk.app/ebay/callback?code&state&expires_in
-   ──▶ app/ebay/callback/route.ts checks the cookie, then SIGNED POST { code, state, nonce } ──▶ ebayOAuthCallback   (§5.4 — never a query string)
+   ──▶ app/ebay/callback/route.ts READS the cookie (absent → nonce:""), then SIGNED POST { v, rid, code, state, nonce } ──▶ ebayOAuthCallback   (§5.4 — never a query string)
    ──▶ consume state (tx: used/expiry/environment/nonceHash) ──▶ exchange code (server, Basic auth) ──▶ identity API ──▶ box tokens ──▶ upsert connection
    ──▶ touchHealth success ──▶ syncLog connected ──▶ catchUpDueFromMs (reconnect) ──▶ 200 { ok, outcome } ──▶ the WEB route redirects: /settings?section=ebay&ebay=connected
 ```
@@ -545,16 +550,18 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
   of workspace B could mint an `authorizeUrl` and phish a foreign seller into consenting; the seller's
   account, orders and buyer addresses would land in B. Server-side binding to `companyId+uid` does not
   stop that because the *attacker* is that uid. The nonce lives only in the browser that called
-  `beginEbayConnect`; a phished browser has no cookie, the callback carries no nonce, the state is
-  burned with `reason=browser`. PKCE would not help (verifier server-held) and eBay offers none.
+  `beginEbayConnect`; a phished browser has no cookie, the callback carries an empty nonce, the state is
+  burned with `reason=browser` — and it is burned **at the moment of consent**, which is why the web
+  route forwards an absent cookie instead of refusing it (§5.4, *The burn*). PKCE would not help (verifier server-held) and eBay offers none.
 - `beginEbayConnect`: refuse `failed-precondition "eBay is not configured on this server yet."` when
   the client id is blank; refuse when the connector flag is off. Mint `nonce = base64url(randomBytes(24))`,
   write the state doc (§4.5) with `nonceHash` and `origin` (`"web"` by default, `"native"` when
   `request.data.origin === "native"`). Return `{ ok, authorizeUrl, state, nonce, scopes, environment }`.
   `scope` in the URL is the `%20`-joined list (§1); `state` is opaque to eBay and echoed back.
-- `ebayOAuthCallback` (**POST since §5.4**; the reason words below are unchanged, they now travel in JSON): `error` param → `ebay=cancelled` (eBay's declined URL normally lands on the
-  settings page directly, so this is defence only); missing `state`/`code` → `reason=missing_code`;
-  missing `nonce` or hash mismatch → `reason=browser` (state burned); connector off → `reason=disabled`;
+- `ebayOAuthCallback` (**POST since §5.4**; the reason words below are unchanged, they now travel in JSON;
+  the decline is **not** among them — `ebay=cancelled` is produced by the web route alone, because the POST
+  body has no `error` field, and the function's own decline branch is deleted): missing `state`/`code` → `reason=missing_code`;
+  empty `nonce` (no cookie) or hash mismatch → `reason=browser` (**state burned in both cases**); connector off → `reason=disabled`;
   state replay/expiry → `reason=state`; environment mismatch → `reason=environment`. Exchange the code
   server-side with `redirect_uri=<RuName>`; then **ask eBay who it is** (`fetchIdentity`, which returns
   only `{ userId, username, accountType, registrationMarketplaceId }` — the seller's own name, email
@@ -575,17 +582,21 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
   settings + `previewEbayImport` / `runEbayImport`; there is no separate wizard screen.
 - Multiple connections: a second seller account in the same workspace is a second row (different
   `sellerUserId`); the same seller cannot exist twice (deterministic id) — reconnect updates.
-- Redirect helper: `connectRedirect(res, params)` = `new URL(appReturnUrl())`, `section=ebay`, then each
-  param, `res.redirect(302, url)`.
+- Redirect helper: **deleted with the GET path** (§5.4). The callback was `connectRedirect`'s only
+  caller; the seller-facing redirect is now built by the web route from a module constant.
 
 ### 5.1 Web
 `EbayIntegrationSection` calls `beginEbayConnect`, writes `document.cookie =
 "nv_ebay_nonce=<nonce>; Secure; SameSite=Lax; Path=/ebay/callback; Max-Age=600"` and then sets
-`window.location.href = authorizeUrl`. `app/ebay/callback/route.ts` reads `nv_ebay_nonce` from `request.cookies`, refuses the visit on our own
-domain when there is no cookie, and otherwise sends `code`, `state` and `nonce` to the function in a
-**signed POST body** — never a URL (**§5.4**, which supersedes the forwarding this paragraph used to
-describe). It expires the cookie on every response. The cookie is first-party to `nivadesk.app`, `SameSite=Lax` survives the top-level
-GET redirect from eBay, and it is scoped to the callback path so no other page can read it.
+`window.location.href = authorizeUrl`. `app/ebay/callback/route.ts` reads `nv_ebay_nonce` from `request.cookies` and sends `code`, `state` and
+that nonce — the empty string when there is no cookie — to the function in a **signed POST body**, never
+a URL (**§5.4**, which supersedes the forwarding this paragraph used to describe). An absent cookie is
+**not** refused on the web side: the request must reach the function so the state is burned at the moment
+of consent (§5.4, *The burn*). It expires the cookie on every response. The cookie is first-party to
+`nivadesk.app` and `SameSite=Lax` survives the top-level GET redirect from eBay. It is scoped to the
+callback path, which is a request-matching rule and **not** a security boundary: it is written from
+client JavaScript, so it cannot be `HttpOnly`, and any script running on `nivadesk.app` can read it
+(§5.4, residual 2).
 
 ### 5.2 Native (Mac / iPhone / Android)
 A native app cannot set a cookie in the system browser, so it does not receive the nonce. It calls
@@ -610,8 +621,10 @@ adversarial list (§14.3) claims exactly: cross-workspace state, state replay, e
 ### 5.4 The callback transport — the code and the nonce never travel in a backend URL
 
 **Supersedes** the last two lines of the §5 diagram, the forwarding paragraph in §5.1, the
-`ebayOAuthCallback` row in §3 (GET → POST) and the "state is also burned" sentence in §4.5 for the
-*absent-cookie* case only. Everything else in §5, §5.1, §5.2 and §5.3 stands.
+`ebayOAuthCallback` row in §3 (GET → POST) and the `connectRedirect` bullet at the end of §5.
+§4.5 is **not** superseded: its single-use transaction, including "the state is **also** burned" on an
+absent or wrong nonce, stands word for word and is load-bearing here (see *The burn* below).
+Everything else in §5, §5.1, §5.2 and §5.3 stands.
 
 #### Why this section exists
 
@@ -627,44 +640,53 @@ mint a state, has the whole of the defence §5 is built on.
 
 Nothing here is theoretical and nothing here is fixed by redacting our own logging, so the transport
 changes instead: **eBay still lands on nivadesk.app in a browser, and everything after that is a
-signed server-to-server POST.** This must be in place before the first real sandbox OAuth
-connection, because that is the first moment a genuine code and a genuine nonce exist.
+signed server-to-server POST.** This must be in place before the first real sandbox OAuth connection,
+because that is the first moment a genuine code and a genuine nonce exist.
+
+**What this section deliberately does not do is weaken any check.** The transport moves; the decisions
+do not. Every refusal the GET flow made, the POST flow still makes, in the same place, with the same
+side effect on the state document. Where an earlier draft of this section proposed refusing an absent
+nonce cookie on the web side "to save an invocation", that draft was wrong and is corrected below.
 
 #### The hop, after this change
 
 ```
 … seller consents on auth[.sandbox].ebay.com
    ──▶ RuName accepted URL  GET https://nivadesk.app/ebay/callback?code&state&expires_in   (browser, unchanged)
-   ──▶ app/ebay/callback/route.ts:  decline? cookie present? code+state shaped?   ← decided here, on our own domain
+   ──▶ app/ebay/callback/route.ts:  decline? code+state shaped? key present?   ← decided here, on our own domain
+         (the nonce cookie is READ, never gated on: absent means nonce:"" in the body)
    ──▶ POST https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback
          x-nivadesk-timestamp / x-nivadesk-signature, JSON body { v, rid, code, state, nonce }   ← no query string, ever
-   ──▶ ebayOAuthCallback: method ▸ secret ▸ signature ▸ body ▸ gate ▸ state tx (burn) ▸ exchange ▸ identity ▸ upsert
+   ──▶ ebayOAuthCallback: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ shapes ▸ gate ▸ state tx (burn) ▸ exchange ▸ identity ▸ upsert
    ──▶ 200 { ok, outcome, reason?, rid }                                                  ← JSON, not a 302
    ──▶ the WEB route redirects the seller: 302 /settings?section=ebay&ebay=…&reason=…
 ```
 
-The function no longer redirects anything and no longer reads `req.query`. The browser never meets
-the function host at all: it meets `nivadesk.app` twice and eBay once.
+The function no longer redirects anything and no longer reads `req.query`. The browser never meets the
+function host at all: it meets `nivadesk.app` twice and eBay once.
 
 #### The two names
 
 | Where | Name | What it is |
 |---|---|---|
-| Secret Manager, mounted on the eBay functions | **`EBAY_CALLBACK_KEY`** | The fifth eBay secret, added to `EBAY_SECRET_PARAMS` beside `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_TOKEN_KEY`, `EBAY_HASH_KEY`, and therefore mounted only through `EBAY_RUNTIME` on the `ebay-connector` service account (§3.2). Read at call time as `callbackKey: () => ebaySecretValue("EBAY_CALLBACK_KEY")`. |
-| Hostinger environment, read by the web server | **`NIVADESK_EBAY_CALLBACK_KEY`** | Read inside the route handler as `process.env.NIVADESK_EBAY_CALLBACK_KEY`, never at module scope. **Never prefixed `NEXT_PUBLIC_`** — that prefix compiles a value into the browser bundle, which for this value would publish the credential to every visitor. |
+| Secret Manager, mounted on the eBay functions | **`EBAY_CALLBACK_KEY`** | The **fifth** eBay secret, added to `EBAY_SECRET_PARAMS` beside `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_TOKEN_KEY`, `EBAY_HASH_KEY`, and therefore mounted only through `EBAY_RUNTIME` on the `ebay-connector` service account (§3.2). Read at call time as `callbackKey: () => ebaySecretValue("EBAY_CALLBACK_KEY")`. **`EBAY_SECRET_PARAMS` is built only when `EBAY_SECRETS_READY` is true** (`functions/index.js`: `NIVADESK_EBAY_SECRETS_READY=1` or the committed marker `functions/.ebay-secrets-ready`), so the fifth name must be added to that array *and* the marker committed, or nothing is mounted at all — see *Rollout*. |
+| Hostinger environment, read by the web server | **`NIVADESK_EBAY_CALLBACK_KEY`** | Read inside the route handler as `process.env.NIVADESK_EBAY_CALLBACK_KEY`, never at module scope. **Never prefixed `NEXT_PUBLIC_`** — that prefix compiles a value into the browser bundle, which for this value would publish the credential to every visitor. This is the **first server-only environment value the web tree has ever read**: a grep of `studioflow-web/{app,lib,components}` for `process.env.` minus `NEXT_PUBLIC_` and `NODE_ENV` returns zero matches today, so Hostinger's ability to deliver it *at runtime* is unproven and is verified explicitly in *Rollout* step 2a before anything depends on it. |
 
 Both hold the same value: 32 random bytes as hex. The operator mints it (`openssl rand -hex 32`) and
 enters it in the two places above; it appears in no file, no commit and no log. It is rotated by
-writing a new Secret Manager version, setting the same value in Hostinger and restarting the web
-process — the window in between costs failed connect attempts, not data, because an unmatched key is
-refused (below). Neither the design, the code nor any test contains the value.
+writing a new Secret Manager version, setting the same value in Hostinger and **restarting the web
+process — a rebuild is *not* required, because the route reads `process.env` per request rather than
+at module scope**; if Hostinger turns out to inject only at build time (step 2a decides this), a
+rotation is a rebuild and this sentence is corrected in the same commit that records the answer. The
+window in between costs failed connect attempts, not data, because an unmatched key is refused
+(below). Neither the design, the code nor any test contains the value.
 
-The key is **not** sent on the wire. The web route signs; the function verifies. A bearer-style
-header carrying the secret itself would be simpler and would be adequately protected by TLS and by
-Cloud Run not logging request headers — but a signature costs one function call more and gives two
-things a bearer cannot: the secret survives any future header dump, error reporter or proxy that
-learns to record headers, and the authentication is bound to *this body*, so a captured request
-cannot be re-pointed at a different code.
+The key is **not** sent on the wire. The web route signs; the function verifies. A bearer-style header
+carrying the secret itself would be simpler and would be adequately protected by TLS and by Cloud Run
+not logging request headers — but a signature costs one function call more and gives two things a
+bearer cannot: the secret survives any future header dump, error reporter or proxy that learns to
+record headers, and the authentication is bound to *this body*, so a captured request cannot be
+re-pointed at a different code.
 
 #### The request
 
@@ -676,19 +698,32 @@ x-nivadesk-timestamp: 1757160000123          (unix milliseconds, decimal, no pad
 x-nivadesk-signature: v1=<64 lowercase hex>
 ```
 ```json
-{ "v": 1, "rid": "9f2c4ad1b0e37c56", "code": "<eBay's code, verbatim>", "state": "<the state>", "nonce": "<the cookie value>" }
+{ "v": 1, "rid": "9f2c4ad1b0e37c56", "code": "<eBay's code, verbatim>", "state": "<the state>", "nonce": "<the cookie value, or \"\">" }
 ```
 
-- **Signature.** `HMAC-SHA256(key, "v1." + timestamp + "." + rawBody)`, hex. `rawBody` is the exact
-  byte string sent. The route serialises **once** (`const raw = JSON.stringify({ v: 1, rid, code, state, nonce })`)
-  and passes that same string as the body, so the bytes signed and the bytes sent cannot drift.
-- **`rid`** is 8 random bytes as hex, derived from nothing and meaningful to nobody: it exists so a
-  failed attempt can be traced across two logs without either log holding a value that matters.
-- **No query string, no cookies, no redirect following** (`redirect: "error"`). The route sends no
-  header it was given: the seller's `User-Agent`, `Referer`, IP and cookies stay on the first hop.
-- The route builds the body itself from the query and the cookie. It is not a relay for a caller's
-  body, and there is nothing an outsider can post *to the web route* — `/ebay/callback` exports only
-  `GET`; a POST to it gets Next's own 405.
+- **Signature.** `HMAC-SHA256(key, "v1." + timestamp + "." + rawBody)`, hex. `rawBody` is the exact byte
+  string sent. The route serialises **once** (`const raw = JSON.stringify({ v: 1, rid, code, state, nonce })`)
+  and passes that same string as the body, so the bytes signed and the bytes sent cannot drift. The
+  function verifies over `req.rawBody` — the bytes Cloud Run received — and **never** over a
+  re-serialisation of `req.body` (see *Order of checks*, step 3).
+- **`rid`** is 8 random bytes as hex — exactly 16 lowercase hex characters, `/^[0-9a-f]{16}$/`. It is
+  minted by the web route, is derived from nothing and is meaningful to nobody: it exists so a failed
+  attempt can be traced across two logs without either log holding a value that matters. Because it
+  arrives in the body, it is **caller-controlled**: a party who can sign could otherwise set it to the
+  code, the state or the nonce and have the function write that value into Cloud Logging under a field
+  this design has pre-approved for logging — defeating the "never log the code" rule with the very
+  mechanism added to make logging safe, and defeating the response pin as well, since the value would
+  then be echoed back. The function therefore **validates the shape before the rid is logged, echoed or
+  used in any way** (step 7) and refuses anything else with 400. The 16-hex shape also removes the
+  log-injection surface — no newline, no quote, no JSON fragment can survive it.
+- **`nonce`** is the cookie value the browser presented, or the empty string when there was no cookie.
+  It is always present as a key; its absence as a *value* is the signal, and the function decides what
+  that means.
+- **No query string, no cookies, no redirect following** (`redirect: "error"`). The route sends no header
+  it was given: the seller's `User-Agent`, `Referer`, IP and cookies stay on the first hop.
+- The route builds the body itself from the query and the cookie. It is not a relay for a caller's body,
+  and there is nothing an outsider can post *to the web route* — `/ebay/callback` exports only `GET`;
+  a POST to it gets Next's own 405.
 
 #### The response
 
@@ -698,270 +733,506 @@ Always `content-type: application/json`, always `cache-control: no-store`.
 |---|---|---|
 | 200 | `{"ok":true,"outcome":"connected","rid":"…"}` | Connected or reconnected. |
 | 200 | `{"ok":false,"outcome":"error","reason":"<word>","rid":"…"}` | A decided refusal. `reason` ∈ `disabled`, `missing_code`, `state`, `browser`, `environment`, `no_seller`, `token`, `exchange` — the same eight words the 302 used to carry. |
-| 400 | `{"ok":false}` | A query string was present, the body was not a JSON object, or it exceeded 8 KB. |
-| 401 | `{"ok":false}` | Missing, malformed, stale or wrong signature. **No detail, ever** — not which of the four it was, not whether the state exists, not whether the connector is on. |
+| 400 | `{"ok":false,"rid":"…"}` | A **validated** rid exists (step 10 field shapes failed): malformed `state`, over-long `code`, over-long `nonce`. |
+| 400 | `{"ok":false}` | No validated rid exists yet: a query string, a body over 8 KB, a body that is not a JSON object, `v !== 1`, or a `rid` that is not 16 lowercase hex. |
+| 401 | `{"ok":false}` | `req.rawBody` absent; `EBAY_CALLBACK_KEY` unconfigured or under 32 characters; missing, malformed, stale or wrong signature. **No detail, ever** — not which of them it was, not whether the state exists, not whether the connector is on, **and not whether the secret is configured**. |
 | 405 | `{"ok":false}` | Any method other than POST, **GET included**. |
-| 503 | `{"ok":false}` | `EBAY_CALLBACK_KEY` is absent or shorter than 32 characters. An unconfigured function refuses; it never accepts. |
+
+There is deliberately **no 503**. An earlier draft answered 503 for an unconfigured `EBAY_CALLBACK_KEY`,
+which made the status code an unauthenticated oracle for whether the secret exists — the more useful
+signal to an attacker choosing when to probe, and a direct contradiction of the care taken to keep the
+connector flag behind the signature. An unconfigured key answers **401**, identically to a wrong one;
+the distinction lives only in the ops log. The seller-facing outcome is `unavailable` either way, so
+nothing is lost.
+
+Two statuses do remain distinguishable without a key, and that is accepted rather than overlooked:
+405 and the rid-less 400. Both report **fixed properties of the endpoint** — it takes POST only, it
+takes no query string, it caps bodies at 8 KB — identical in every deployment, revealing nothing about
+configuration, state or whether any seller exists. That is a different class of fact from "the secret
+is set" or "the connector is on", both of which stay behind the 401 wall.
 
 A decided refusal is an answer, not a transport failure, so it is 200 with `ok:false`. The web route
-distinguishes exactly on that: 200 + a parseable body + a known outcome is obeyed; **anything else**
-— 400, 401, 405, 503, a 5xx, unparseable JSON, an unknown reason word, a network error, a timeout —
-becomes one seller-facing outcome, `reason=unavailable`.
+distinguishes exactly on that: 200 + a parseable body + a known outcome is obeyed; **anything else** —
+400, 401, 405, a 5xx, unparseable JSON, an unknown reason word, a network error, a timeout — becomes
+one seller-facing outcome, `reason=unavailable`.
 
 #### Order of checks, and which side is authoritative
 
 **Web route, `GET /ebay/callback`** — in this order, stopping at the first that fires. Every branch
-clears the nonce cookie on its response and redirects to a module constant with only `section`,
-`ebay` and `reason` set from a fixed vocabulary; no value from the query ever reaches
-`NextResponse.redirect`.
+clears the nonce cookie on its response and redirects to a module constant with only `section`, `ebay`
+and `reason` set from a fixed vocabulary; no value from the query ever reaches `NextResponse.redirect`.
 
-1. `error` present → `?ebay=cancelled`. **No backend call.** eBay's declined URL points straight at
-   the settings page, so this is defence in depth; either way a decline never reaches the connector.
-2. `code` and `state` both present and shaped (`state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code`
-   is 1–4096 characters, `nonce` cookie ≤ 200) → else `?ebay=error&reason=missing_code`. **No call.**
-3. Nonce cookie present and non-empty → else `?ebay=error&reason=browser`. **No call.** This is the
-   operator's rule: no cookie, no forward.
-4. `NIVADESK_EBAY_CALLBACK_KEY` present → else `?ebay=error&reason=unavailable`. **No call**, plus
-   one ops log line naming the variable and nothing else. A web build that was deployed without the
-   key cannot silently post unsigned.
-5. POST, with a 20-second abort.
+1. `error` present → `?ebay=cancelled`. **No backend call.** eBay's declined URL points straight at the
+   settings page, so this is defence in depth; either way a decline never reaches the connector. This is
+   the **only** place `cancelled` is produced: the function's POST body has no `error` field and the
+   word is not in its vocabulary.
+2. `code` and `state` both present and shaped (`state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code` is
+   1–4096 characters) → else `?ebay=error&reason=missing_code`. **No call.**
+3. Read the `nv_ebay_nonce` cookie and `decodeURIComponent` it — the mirror of `setEbayNonceCookie`'s
+   `encodeURIComponent`, which is the identity for a base64url nonce and is pinned as such. Absent,
+   empty or longer than 200 characters → the body carries `nonce: ""`. **This is not a refusal and never
+   was one:** an absent cookie must reach the function so the state is burned. See *The burn*.
+4. `NIVADESK_EBAY_CALLBACK_KEY` present **and at least 32 characters** → else
+   `?ebay=error&reason=unavailable`. **No call**, plus one ops log line naming the variable and which
+   check failed by name (`not configured` / `shorter than 32 characters`) and nothing else. The length
+   floor is the same one the function applies; without it a truncated paste on Hostinger produces a
+   signed POST that dies as an opaque 401 with no ops line naming a cause.
+5. Mint `rid`, serialise once, sign, POST, with a 20-second abort.
 6. 200 + JSON + a known `outcome`/`reason` → redirect accordingly. Anything else →
-   `?ebay=error&reason=unavailable`.
+   `?ebay=error&reason=unavailable`, plus **one ops log line for every non-200 outcome**, not only the
+   transport failures: `ebay callback relay rid=<rid> status=<n>`, `… unreachable`, `… timeout`. An
+   operator debugging a key mismatch is looking at exactly this line, and the web side always has the
+   rid because the web side minted it.
 
-**Function, `POST ebayOAuthCallback`** — in this order:
+**Function, `POST ebayOAuthCallback`** — in this order. The whole handler body sits inside one
+outermost `try`; see *Logging*.
 
 1. `req.method !== "POST"` → 405. The body is not read, the state collection is not touched.
-2. Any query string at all → 400 before the body is read. Nothing in this contract puts a value in a
-   URL, so a query string means a caller from the old world, or someone probing — and refusing it
-   makes the hole impossible to reopen by accident.
-3. `callbackKey()` blank or under 32 characters → 503, and one ops line: `ebay callback: EBAY_CALLBACK_KEY not configured`.
-4. Signature: header present and `v1=`-shaped, `x-nivadesk-timestamp` a number within **±5 minutes**
-   of now, `crypto.timingSafeEqual` over the two hex digests (length-guarded first, because
-   `timingSafeEqual` throws on unequal lengths) → else 401 `{"ok":false}`.
-5. Body: `req.rawBody` ≤ 8 KB, parses to a plain object, `v === 1` → else 400.
-6. `connectorOn()` → else 200 `reason=disabled`. **After** the signature, deliberately: an
+2. A query string is present → 400 before the body is read. Nothing in this contract puts a value in a
+   URL, so a query string means a caller from the old world, or someone probing — and refusing it makes
+   the hole impossible to reopen by accident. **The mechanism is stated, not left to the implementer:**
+   `String(req.originalUrl || req.url || "").includes("?")`. It is deliberately *not*
+   `Object.keys(req.query).length` — Firebase's Express layer always populates `req.query`, and reading
+   it would contradict source pin **#28**, which forbids a `req.query` read anywhere in this handler.
+3. `req.rawBody` is a Buffer → else **401**. `req.rawBody.length > 8192` → 400. **Never** the fallback
+   pattern at `functions/index.js:32833` (`req.rawBody || Buffer.from(JSON.stringify(req.body || {}))`):
+   a re-serialisation silently breaks an exact-bytes HMAC, and the absence of raw bytes is a request
+   that cannot be authenticated, not one to guess at. This step is before the HMAC on purpose — the cap
+   is a guard on the work the signature check does, and a cap applied after the HMAC would guard nothing.
+4. `callbackKey()` blank or under 32 characters → **401**, and one ops line:
+   `ebay callback: EBAY_CALLBACK_KEY not configured`. An unconfigured function refuses; it never accepts.
+5. Signature: header present and `v1=`-shaped, `x-nivadesk-timestamp` a number within **±5 minutes** of
+   now in **both** directions, `crypto.timingSafeEqual` over the two hex digests (length-guarded first,
+   because `timingSafeEqual` throws on unequal lengths) → else 401 `{"ok":false}`.
+6. `JSON.parse(req.rawBody.toString("utf8"))` → a plain object (not an array, not `null`) with `v === 1`
+   → else 400.
+7. `rid` matches `/^[0-9a-f]{16}$/` → else 400 `{"ok":false}` with no rid. Nothing has been logged with a
+   rid before this point, and nothing is.
+8. `connectorOn()` → else 200 `reason=disabled`. **After** the signature, deliberately: an
    unauthenticated caller must not be able to learn whether the connector is switched on.
-7. `code` and `state` non-empty → else 200 `reason=missing_code`.
-8. The state transaction, **unchanged from today** (§4.5): unknown / `used` / expired → `state`;
-   otherwise burn it (`used: true, usedAt`) inside the same transaction, then compare
-   `sha256hex(nonce)` with `nonceHash` → mismatch or absent → `browser`; then
-   `row.environment !== environment()` → `environment`.
-9. Exchange the code server-side, ask the Identity API who the seller is, box the tokens, upsert the
-   connection, write `syncLog` and health — all unchanged — then 200 `outcome:"connected"`.
-   Identity 403 → `no_seller`; auth-class throw → `token`; anything else → `exchange`.
+9. `code` and `state` both non-empty → else 200 `reason=missing_code`. Absence is a seller-facing
+   outcome, and stays one.
+10. Field shapes: `state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code` ≤ 4096 characters, `nonce` a string
+    ≤ 200 characters (empty allowed) → else 400 `{"ok":false,"rid":"…"}`. Malformation, unlike absence,
+    is a protocol error and not a seller. **The `state` shape check is a security control, not tidiness,
+    and it must be here, before `states().doc(state)`:** Firestore's own argument validation embeds the
+    rejected path *in the error message* — verified against this repo's `firebase-admin`,
+    `states().doc("abc/def")` throws `Value for argument "documentPath" must point to a document, but was
+    "abc/def"…` — so a path-shaped state reaching `.doc()` and then a logged `error.message` would write
+    the state verbatim into Cloud Logging, which is the exact exposure this whole section exists to
+    close. A Firestore document id may be up to 1500 bytes (a 1600-character id does not throw at
+    `.doc()`), so length alone is no filter either. §4.5's regex is the filter, applied on **this** side:
+    the function must not depend on a caller having applied it.
+11. The state transaction, **unchanged from §4.5**: unknown / `used` / expired → `state`; otherwise burn
+    it (`used: true, usedAt`) inside the same transaction, then compare `sha256hex(nonce)` with
+    `nonceHash` → mismatch **or empty nonce** → `browser`; then `row.environment !== environment()` →
+    `environment`.
+12. Exchange the code server-side, ask the Identity API who the seller is, box the tokens, upsert the
+    connection, write `syncLog` and health — all unchanged — then 200 `outcome:"connected"`.
+    Identity 403 → `no_seller`; auth-class throw → `token`; anything else → `exchange`.
 
 | Question | Authoritative side | Why it can only be there |
 |---|---|---|
 | Did eBay decline? | **Web** | The `error` parameter exists only on the browser hop. |
 | Is a `code` and a `state` present at all? | **Web** refuses early; **function** re-checks and is authoritative | The web check is an economy (it saves an invocation and keeps a scan off the connector); the function must not depend on a caller having done it. |
-| Was a nonce cookie present in this browser? | **Web** | The function cannot see cookies. It proves *a cookie existed*, nothing more. |
+| Was a nonce cookie present in this browser? | **Web reports, function decides** | The function cannot see cookies, so the web is the only thing that can *observe* the cookie — but it merely copies what it saw into `nonce` (a value or `""`). The refusal, and the state burn that goes with it, are the function's. |
 | Is the nonce the right one? | **Function** | Only the state document holds `nonceHash`; the web side never sees a hash and never compares. The cryptographic half stays server-side. |
 | Is the state real, unused, unexpired, this environment? | **Function** | It is a Firestore transaction; there is no other candidate. |
 | Is the caller allowed to speak to the connector? | **Function** | The HMAC is verified where the secret lives. |
 | Is the connector switched on? | **Function** | `NIVADESK_EBAY_CONNECTOR` is a server switch. |
 | What does the seller see? | **Web** | The function answers JSON now; the redirect is the route's. |
 
-Two consequences worth saying out loud, because they are the whole point:
+#### The burn — why an absent cookie still costs one invocation
 
-- **A missing cookie no longer burns the state.** Today an absent nonce reaches the function and the
-  state is burned with `reason=browser`. Under this contract that request never leaves nivadesk.app,
-  so the state is left to expire on its own ten-minute clock. That is safe: the code was never
-  presented to the connector, the state is still single-use, and the only party holding the nonce is
-  the party who began the flow — who can simply start again. A *wrong* nonce, which is the only case
-  that can actually be a comparison, still reaches the function and **is still burned exactly as
-  today**. §4.5's "the state is **also** burned" therefore describes a value mismatch, not an absent
-  cookie.
-- **Replay is still stopped by the state, not by the signature.** A captured POST replayed inside the
-  five-minute skew window verifies, reaches the transaction, finds `used: true` and answers
-  `reason=state`. The signature is authentication, not a replay defence; the single-use state is the
-  replay defence, and it is unchanged.
+This is the part of §5 that the transport change must not touch, so it is written out rather than
+implied.
+
+§5's threat model: attacker B is a legitimate owner of workspace B. B calls `beginEbayConnect`, keeps
+`state_B` and `nonce_B`, and phishes seller S into consenting. eBay sends S's browser to
+`nivadesk.app/ebay/callback?code=X&state=state_B`. **S has no cookie.**
+
+- **What must happen, and does:** the request reaches the function, the transaction burns `state_B`
+  (`used: true`) and answers `browser`. `state_B` is dead. Even if B later obtains code `X` — from
+  Hostinger's access log, from S's browser history, from S's address bar — the state is used, the answer
+  is `state`, and the attack is over **at the moment of consent, unconditionally**.
+- **What an absent-cookie web-side refusal would have done:** the route would refuse at its step 3,
+  never call, and `state_B` would sit `used: false` for the rest of its ten-minute TTL. B would then
+  need only code `X`, which this very section concedes is still written in cleartext to Hostinger's
+  access log — and B, unlike S, *does* hold `nonce_B` in B's own browser. B replays
+  `nivadesk.app/ebay/callback?code=X&state=state_B` from B's browser, the state is unused, the nonce
+  matches, the environment is right, and S's eBay account, orders and buyer addresses land in workspace
+  B. The whole flow's safety would have collapsed onto "can B learn code X", which today does not matter
+  at all.
+
+The "economy" was one function invocation. It is not an economy; it is the removal of the defence.
+The rule is therefore: **a shaped callback always POSTs**, cookie or no cookie, and the state is
+consumed at first presentation exactly as §4.5 says. The stated justification of the earlier draft —
+"the only party holding the nonce is the party who began the flow, who can simply start again" —
+describes the attacker in this threat model, not the victim.
+
+The cost of the rule is bounded: a scan can only reach the function with a `code` and a `state` that
+pass the web route's shape checks, and an invented state answers `reason=state` after one transaction
+read.
+
+Replay is likewise still stopped by the state, not by the signature. A captured POST replayed inside
+the five-minute skew window verifies, reaches the transaction, finds `used: true` and answers
+`reason=state`. The signature is authentication; the single-use state is the replay defence, and it is
+unchanged. Note also that the nonce comparison inside the transaction is a plain string compare, not
+constant-time — which is safe **only** because the state is burned before the comparison happens. That
+is one more reason the burn cannot be traded away.
+
+#### What a leaked shared key buys, and what stands in front of this endpoint
+
+A key holder **cannot complete a connection.** They still need a genuine `code`, a live unused state
+and the matching nonce; `nonceHash` is only ever compared server-side, and the state is 32 random bytes.
+The exchange also needs `EBAY_CLIENT_SECRET`, which is not on Hostinger at all.
+
+What a key holder does get, stated so nobody has to rediscover it:
+
+- **A state oracle.** A signed probe distinguishes `state` (absent, used or expired) from `browser`
+  (exists, unused, unexpired, wrong nonce). States are unguessable, so this is only useful against a
+  state the attacker has already observed — realistically from Hostinger's access log, the residual at
+  the end of this section.
+- **Targeted denial.** Every probe that *hits* a live state burns it, so an attacker holding both the
+  key and an observed state can stop that seller's connection from completing. The seller's remedy is
+  to press Connect again; the damage is nuisance, not data.
+- Everything else is a 401, a 400, or a `reason=state`.
+
+**Ingress: the shared key is knowingly the sole control, and this is a decision, not an omission.**
+`ebayOAuthCallback` is a public unauthenticated Cloud Function. `ingress-internal-and-cloud-load-balancing`
+is not available to us, because the only legitimate caller is Hostinger's egress on the public internet;
+an IAM-authenticated caller would require a long-lived Google service-account credential to live on that
+same shared host, which trades a scoped HMAC key for a Google identity and is worse. Hostinger's egress
+address is not stable enough to allowlist. What the design does add is a spend bound: the function is
+declared with **`maxInstances: 10`** — far above any real OAuth rate, and enough that an unkeyed flood
+costs a bounded number of invocations rather than an unbounded bill. The trade is stated plainly: a
+sustained flood would also make legitimate connects fail with `reason=unavailable` for its duration,
+which is the correct failure direction for a connector. An attacker with no key is refused with 401
+before anything stateful is touched — no Firestore read, no state, no eBay call.
+
+The timing question is clean and is left alone: `timingSafeEqual` with a length guard leaks only the
+digest length, which is public.
 
 #### Every failure, what the seller sees, what is logged
 
-`Seller sees` is the sentence `ebayReasonText()` already produces (§10, §11.5); a technical code
-never reaches the screen.
+`Seller sees` is the sentence `ebayReasonText()` already produces (§10, §11.5); a technical code never
+reaches the screen.
 
 | Case | Where decided | Wire result | Seller sees | What is logged |
 |---|---|---|---|---|
 | eBay decline (`error=…`) | Web | 302 `ebay=cancelled`, no call | "eBay connection cancelled. Nothing was changed." | nothing by us |
 | Not a callback (no `code`, no `error`) | Web | 302 `reason=missing_code`, no call | "eBay did not complete the connection. Try again." | nothing by us |
 | Malformed `code`/`state` | Web | 302 `reason=missing_code`, no call | same | nothing by us |
-| No nonce cookie | Web | 302 `reason=browser`, no call, **state untouched** | "Finish connecting eBay in the same browser you started from." | nothing by us |
-| `NIVADESK_EBAY_CALLBACK_KEY` unset | Web | 302 `reason=unavailable`, no call | "eBay did not complete the connection. Try again." | `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` |
-| Unauthenticated / wrongly signed / stale timestamp POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no reason for the rejection |
-| `EBAY_CALLBACK_KEY` unset on the function | Function | **503** `{"ok":false}` | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured` |
+| **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned** | "Finish connecting eBay in the same browser you started from." | nothing |
+| Nonce mismatch | Function | 200 `reason=browser`, **state burned** | same | nothing |
+| `NIVADESK_EBAY_CALLBACK_KEY` unset or under 32 chars | Web | 302 `reason=unavailable`, no call | "eBay did not complete the connection. Try again." | `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` / `… shorter than 32 characters` |
+| Unauthenticated / wrongly signed / stale timestamp / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection |
+| `EBAY_CALLBACK_KEY` unset on the function | Function | **401** `{"ok":false}` (indistinguishable from a wrong key) | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured` |
 | GET (or any non-POST) on the function | Function | **405** `{"ok":false}` | — | nothing |
 | Query string on the function | Function | **400** `{"ok":false}` | — | `ebay callback: query string refused` (the string itself is **not** logged) |
-| Oversized / non-JSON body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length |
+| Oversized (> 8 KB) body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length |
+| Non-JSON / array / `v !== 1` body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length (**never** the `JSON.parse` message — see *Logging*) |
+| `rid` not 16 lowercase hex | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: rid refused` (the value is **not** logged) |
+| Malformed `state` / over-long `code` or `nonce` | Function | **400** `{"ok":false,"rid"}` | `reason=unavailable` | `ebay callback: field shape refused rid=<rid>` + which field name |
 | Connector off | Function | 200 `reason=disabled` | "eBay is not set up on this server yet. Contact support and we will enable it." | nothing |
-| Unknown state | Function | 200 `reason=state` | "The eBay sign-in link has expired or was already used. Start again." | nothing (a transaction throw logs `ebayOAuthCallback state failed:` + the error message only) |
-| Replayed state (`used:true`) | Function | 200 `reason=state` | same | nothing |
-| Expired state | Function | 200 `reason=state` | same | nothing |
-| Nonce mismatch | Function | 200 `reason=browser`, **state burned** | "Finish connecting eBay in the same browser you started from." | nothing |
+| Unknown / replayed / expired state | Function | 200 `reason=state` | "The eBay sign-in link has expired or was already used. Start again." | nothing (a transaction throw logs `ebay callback: state transaction failed rid=<rid> code=<n>` — a fixed string, the validated rid and the numeric gRPC status, **never** `error.message`) |
 | Environment mismatch | Function | 200 `reason=environment`, state burned | "This eBay account belongs to a different environment." | nothing |
 | Identity 403 / no seller | Function | 200 `reason=no_seller` | "eBay did not tell us which seller account this is. Reconnect and approve every permission." | nothing |
 | Exchange refused (auth class) | Function | 200 `reason=token` | "eBay did not complete the connection. Try again." | `ebayOAuthCallback failed:` + the truncated `EbayOAuthError` message, which §14.1 pins to be built from eBay's `error` / `error_description` only |
 | Exchange failed (anything else) | Function | 200 `reason=exchange` | same | as above |
+| Unexpected throw anywhere in steps 1–10 | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: refused` — a fixed string and nothing else (see *Logging*) |
 | Function unreachable (DNS, TLS, refused) | Web | no HTTP result | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback relay rid=<rid> unreachable` |
+| Function answered non-200 | Web | — | same | `ebay callback relay rid=<rid> status=<n>` |
 | Function slow (web aborts at 20 s) | Web | aborted | same | `ebay callback relay rid=<rid> timeout` |
 | Connected | Function | 200 `outcome:"connected"` | "eBay account connected." | the existing `syncLog` row (`connected` / `reconnected`) and health touch |
 
+#### Logging — the rules, and the two traps that defeat them
+
 **The field names that must never appear in any log line, on either side, in any form:** `code`,
 `state`, `nonce`, `nonceHash`, `x-nivadesk-signature`, `x-nivadesk-timestamp`, `access_token`,
-`refresh_token`, and the request body itself — `req.body`, `req.rawBody` and `req.query` must never
-be stringified into a log argument, whole or sliced. The only values either side may log are: a
-`rid`, a `reason` word, an HTTP status number, a byte length, an environment-variable *name*, and a
-truncated error message from `commerce/ebay/oauth.js`. Two log pins in §14.1 enforce this rather
-than trusting it.
+`refresh_token`, and the request body itself — `req.body`, `req.rawBody` and `req.query` must never be
+stringified into a log argument, whole or sliced. The only values either side may log are: a **validated**
+`rid`, a `reason` word, an HTTP status number, a numeric gRPC status code, a byte length, an
+environment-variable *name*, a field *name*, and a truncated error message from `commerce/ebay/oauth.js`.
 
-What the platform still records for the POST, and why none of it matters: method, `requestUrl` —
-now the bare function URL with **no query string** — status, latency, `serverIp`, `userAgent` (the
-web server's), and `remoteIp`, which is now Hostinger's egress address rather than the seller's.
-Cloud Run does not record request headers or bodies, so the signature and the three values inside
-the body are outside its reach entirely.
+Two traps make that rule fail silently unless they are named, and both were found by reading real
+behaviour rather than the code:
+
+1. **A caught error's `message` can carry the value that threw.** `JSON.parse` on a non-JSON body echoes
+   the body's first ten characters — verified on this repo's Node v22.22.3,
+   `JSON.parse("AUTHCODE_v4x_SECRET_…")` throws `Unexpected token 'A', "AUTHCODE_v"... is not valid JSON`.
+   Firestore's `.doc()` embeds the whole rejected path (step 10 above). Therefore: **no caught error's
+   `message`, `stack` or object may be passed to a log function anywhere in `ebayConnector.js`.** The one
+   exception is the truncated `EbayOAuthError` from `commerce/ebay/oauth.js`, which §14.1 already pins to
+   be built from eBay's own `error`/`error_description` fields. Everywhere else the log line is a fixed
+   string plus values from the allowed list. The existing
+   `console.error("ebayOAuthCallback state failed:", error?.message || error)` at
+   `functions/ebayConnector.js:417` is **rewritten**, not kept.
+2. **An uncaught throw is logged by the platform, with the stack and the message.** Steps 1–10 contain no
+   try/catch today, so any throw in them — a Buffer method on an unexpected type, a malformed header, a
+   Firestore argument error — produces exactly the exposure this section exists to prevent, through a
+   channel our own log rules do not govern. The whole handler body therefore sits inside **one outermost
+   `try`** whose `catch` answers 400 `{"ok":false}` and logs the fixed string `ebay callback: refused`
+   with no arguments at all. It is a backstop, not a control: every expected condition is already
+   answered above it.
+
+What the platform still records for the POST, and why none of it matters: method, `requestUrl` — now the
+bare function URL with **no query string** — status, latency, `serverIp`, `userAgent` (the web server's),
+and `remoteIp`, which is now Hostinger's egress address rather than the seller's. Cloud Run does not
+record request headers or bodies, so the signature and the `code`, `state` and `nonce` inside the body
+are outside its reach entirely.
 
 #### Timeouts, and why the function keeps its long budget
 
-The web route aborts at **20 seconds**. The function keeps `timeoutSeconds: 120` — do **not** shorten
-it to match. The state is burned inside the transaction *before* the exchange, so cutting the
-function short is precisely the thing that would leave a burned state with no connection. Letting it
-finish means a slow eBay still produces a connection row even after the seller's browser has been
-sent somewhere controlled.
+The web route aborts at **20 seconds**. The function keeps `timeoutSeconds: 120` — do **not** shorten it
+to match. The state is burned inside the transaction *before* the exchange, so cutting the function short
+is precisely the thing that would leave a burned state with no connection. Letting it finish means a slow
+eBay still produces a connection row even after the seller's browser has been sent somewhere controlled.
 
 There is no half-consumed condition to leave behind: the state document has exactly two conditions,
 unused and used, and it moves between them in one transaction. An abandoned `fetch` on the web side
-changes nothing about it. What is genuinely ambiguous is the *screen*, not the data — and that is
-handled: `EbayIntegrationSection` already calls `refresh(true)` on any `ebay=` parameter, so a
-connection that did land appears a moment after the error banner, and pressing Connect again is a
-reconnect onto the same deterministic row (`companyId__sellerUserId`, `set(merge)`), which costs
-nothing. A separate `ebay=pending` outcome was considered and rejected: it would buy a slightly
-better sentence at the price of a new outcome word, a new string and twelve translations, for a case
-the refresh already resolves.
+changes nothing about it. What is genuinely ambiguous is the *screen*, not the data — and that is handled:
+`EbayIntegrationSection` already calls `refresh(true)` on any `ebay=` parameter, so a connection that did
+land appears a moment after the error banner, and pressing Connect again is a reconnect onto the same
+deterministic row (`companyId__sellerUserId`, `set(merge)`), which costs nothing. A separate
+`ebay=pending` outcome was considered and rejected: it would buy a slightly better sentence at the price
+of a new outcome word, a new string and twelve translations, for a case the refresh already resolves.
 
 `unavailable` is the one new reason word. It maps to the English sentence
 `"eBay did not complete the connection. Try again."` — which `ebayReasonText` already returns as its
-fallback and which already exists in all eleven other languages — so it is added to `REASON_TEXT`
-pointing at that same string and needs **no** new translation. It is produced only by the web route
-and is never returned by the function.
+fallback and which already exists in all eleven other languages — so it is added to `REASON_TEXT` pointing
+at that same string and needs **no** new translation. It is produced only by the web route and is never
+returned by the function.
 
 #### What does not change
 
 - `beginEbayConnect`, `claimEbayConnectState`, `/ebay/start` and the whole native hand-off (§5.2) are
-  **unchanged**, line for line. They never touched the function's URL query; a native flow still ends
-  at the same web callback, which now posts like any other.
-- The nonce cookie is unchanged: `nv_ebay_nonce`, `Secure`, `SameSite=Lax`, `Path=/ebay/callback`,
-  `Max-Age=600`, written by `setEbayNonceCookie`, cleared on every callback response.
+  **unchanged**, line for line. They never touched the function's URL query; a native flow still ends at
+  the same web callback, which now posts like any other.
 - `ebayConnectStates/{state}` (§4.5) is unchanged: same fields, same TTL, same `nonceHash`, same
-  single-use transaction, same burn on a value mismatch.
+  single-use transaction, same burn — on an absent nonce and on a wrong one alike.
 - The eight reason words, the sentences behind them, and §10's table are unchanged apart from the
   `unavailable` row.
-- The accepted URL registered in the eBay portal is unchanged. eBay is not told anything new and is
-  not contacted about this.
+- The accepted URL registered in the eBay portal is unchanged. eBay is not told anything new and is not
+  contacted about this.
+- The nonce cookie's transport attributes are unchanged: `nv_ebay_nonce`, `Secure`, `SameSite=Lax`,
+  `Path=/ebay/callback`, `Max-Age=600`, written by `setEbayNonceCookie`, cleared on every callback
+  response. **`HttpOnly` is absent from that list because the cookie structurally cannot have it**, not
+  because it was forgotten — see the residuals below. The claim "scoped to the callback path so no other
+  page can read it", which appears in §5.1, in `setEbayNonceCookie`'s JSDoc at
+  `studioflow-web/lib/studioflow/ebay.ts:236-241` and in the deploy plan's stated-property paragraph, is
+  **wrong and is removed in all three**: `Path` is a request-matching rule, not a security
+  boundary, and same-origin script under a matching path reads the cookie freely.
 
-Removed, not kept as a fallback: **the GET path**. `ebayOAuthCallback` is not deployed in production,
-so there is no live caller to keep working, and a GET fallback would reopen the exact hole this
-section closes — a query string that Cloud Run logs. GET answers 405. `connectRedirect()` goes with
-it (the callback was its only caller); `appReturnUrl()` stays, because `beginEbayConnect` derives the
-native `startUrl` from it, and the settings URL becomes a module constant in the web route.
+Removed, not kept as a fallback:
 
-#### Rollout order (the secret must exist before the function does)
+- **The GET path.** `ebayOAuthCallback` is not deployed in production, so there is no live caller to keep
+  working, and a GET fallback would reopen the exact hole this section closes — a query string that Cloud
+  Run logs. GET answers 405.
+- **`connectRedirect()`**, whose only caller was this handler. `appReturnUrl()` stays, because
+  `beginEbayConnect` derives the native `startUrl` from it, and the settings URL becomes a module constant
+  in the web route. The §5 bullet describing `connectRedirect` is deleted.
+- **The function's decline branch**, `if (String(req.query?.error || "")) { … ebay: "cancelled" … }` at
+  `functions/ebayConnector.js:400`. The POST body has no `error` field, so the branch is unreachable; it
+  is **deleted**, not left as dead code, and `cancelled` is not in the function's response vocabulary. The
+  qa case at `ebay-connect.test.js:71-72` that asserts it against the function is **deleted with it** and
+  replaced by a source assertion in `check-ebay-relay-vectors.mjs` (below): the *route* contains the
+  decline branch and the *function's* source contains no `"cancelled"` literal. §5's `ebayOAuthCallback`
+  bullet is corrected in the same commit to stop attributing the decline to the function.
 
-1. Operator mints the value and sets **`EBAY_CALLBACK_KEY`** in Secret Manager and
-   **`NIVADESK_EBAY_CALLBACK_KEY`** in Hostinger, in that order.
-2. Web deploy of the new route. Until step 3 it posts to a function that does not exist and every
-   attempt lands on `reason=unavailable` — which is the correct behaviour for a connector that is
-   not there, and is the same thing the old route achieved by redirecting into a Google 404.
-3. `firebase deploy` of the eBay functions with the fifth secret mounted.
-4. Only then the first sandbox OAuth attempt, under its own approval.
+#### Rollout order (the marker gates the mount, and the web runtime is verified before it is trusted)
+
+1. Operator mints the value and sets **`EBAY_CALLBACK_KEY`** in Secret Manager (granted to
+   `ebay-connector@` only) and **`NIVADESK_EBAY_CALLBACK_KEY`** in Hostinger, in that order.
+2. Web deploy of the new route. Until step 4 it posts to a function that does not exist and every attempt
+   lands on `reason=unavailable` — which is the correct behaviour for a connector that is not there, and
+   is the same thing the old route achieved by redirecting into a Google 404.
+   **2a. Prove the runtime environment before anything depends on it.** This value is the first
+   server-only env var the web tree has ever read, and this project's precedent is against us: the
+   web-push VAPID key had to go into Hostinger's *build* environment. So, immediately after step 2 and
+   before any state exists: request `https://nivadesk.app/ebay/callback?code=probe&state=<20+ chars of
+   [A-Za-z0-9_-]>` and confirm the Hostinger log does **not** contain
+   `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` — it should contain
+   `ebay callback relay rid=<rid> unreachable` instead, because the function is not deployed yet. If the
+   key line appears, Hostinger injects at build time only: rebuild with the value in the build
+   environment, record that fact, and correct the rotation sentence in *The two names* in the same commit.
+   Without this step a build that never sees the key fails silently and permanently, with one log line as
+   the only diagnostic.
+3. **Commit `functions/.ebay-secrets-ready` with `EBAY_SECRET_PARAMS` naming all five secrets.** This is
+   the step both earlier lists omitted and it is the one that actually controls the mount:
+   `functions/index.js` builds `EBAY_SECRET_PARAMS` and `EBAY_RUNTIME` **only** when `EBAY_SECRETS_READY`
+   is true (`NIVADESK_EBAY_SECRETS_READY=1` or that marker file). Deploy without it and `EBAY_RUNTIME` is
+   `{}`, no secret is mounted, `ebaySecretValue("EBAY_CALLBACK_KEY")` returns `""`, check 4 fires, and
+   **every** POST answers 401 → every seller sees `reason=unavailable`, permanently, with no OAuth ever
+   completing. §15's owner-action step 3 is the canonical list and now names five secrets; this step and
+   that one must not drift apart again.
+4. `firebase deploy` of the eBay functions. Confirm the mount before trusting it: a signed probe with an
+   invented state must answer 200 `reason=state`, not 401.
+5. Only then the first sandbox OAuth attempt, under its own approval.
 
 If the two values ever disagree, every connect attempt ends at `reason=unavailable` and no state is
 consumed: the failure mode of a rotation mistake is downtime, never an open door. If either side is
-unconfigured, the same is true — 503 on the function, no call from the web.
+unconfigured, the same is true — 401 on the function, no call from the web.
 
 #### Test matrix
 
-**qa — `ebay-connect.test.js` (extended; the harness's `fakeRes` already records `status`/`json`), all
-against the fake Firestore:**
+**qa — `ebay-connect.test.js` (extended) — but first, the harness, which is the single largest piece of
+work in this change.** `functions/test/qa/helpers/ebayHarness.js` is **not** ready and the claim that
+"the `fakeRes` already records `status`/`json`" covers only a fraction of it:
+
+- `buildEbay` passes **no `callbackKey` dep at all** (lines 60–99). It gains
+  `callbackKey: () => TEST_CALLBACK_KEY`, a 64-hex constant local to the harness with no production
+  meaning, plus a `switches.callbackKey` override so tests 4 and 5 can blank or truncate it.
+- `connect()` (lines 112–116) invokes `fns.ebayOAuthCallback({ method: "GET", query: {…} }, res)`. Under
+  this contract that is a 405 followed by a 400. It is rewritten to POST, and every one of the **16**
+  `await connect(` sites in `ebay-connect.test.js` and the **1** in `ebay-sync.test.js` rides on that one
+  rewrite (the signature of `connect()` does not change).
+- **The fake request must carry `rawBody`, and `body` must be derived from it, never the reverse.** A new
+  helper `signedCallback(fns, fields, { key, timestampMs })` builds
+  `const raw = JSON.stringify(fields)`, signs `"v1." + ts + "." + raw`, and calls the handler with
+  `{ method: "POST", originalUrl: "/ebayOAuthCallback", headers: {…}, rawBody: Buffer.from(raw, "utf8"),
+  body: JSON.parse(raw) }`. If `body` were the literal and `rawBody` derived from it, test 9 (body swap)
+  would go green while proving nothing about the Cloud Run path, where key order, unicode escaping and
+  whitespace can differ from any re-serialisation — this repo's own recurring "tests that assert the bug"
+  failure, applied across a process boundary.
+- The **15** `res.redirectedTo` assertions in `ebay-connect.test.js` and the **7** in the e2e file assert a
+  302 the function will no longer emit; they become `statusCode` / `payload` assertions.
+- The e2e helpers `callback()` / `connect()` at
+  `commerce-ebay-connector-emulator.test.js:113-114` (5 + 2 call sites) have the same GET+query shape and
+  get the same rewrite, with `process.env.EBAY_CALLBACK_KEY` set beside the other four before
+  `require("../../index.js")`.
 
 | # | Case | Asserts |
 |---|---|---|
 | 1 | `GET` on the function | 405, `{"ok":false}`, and the state document is untouched |
 | 2 | `PUT`, `DELETE`, `OPTIONS` | 405 |
-| 3 | A POST carrying a query string | 400, body never parsed |
-| 4 | `callbackKey()` returns `""` | 503 even with an otherwise perfect signed request; state untouched |
-| 5 | `callbackKey()` returns a 31-character value | 503 (the length floor is enforced, not assumed) |
+| 3 | A POST carrying a query string (`originalUrl` ends `?x=1`) | 400, body never parsed |
+| 4 | `callbackKey()` returns `""` | **401** even with an otherwise perfect signed request; state untouched; and the answer is byte-identical to case 8's, so the status cannot be used as a configuration oracle |
+| 5 | `callbackKey()` returns a 31-character value | 401 (the length floor is enforced, not assumed) |
 | 6 | Correctly signed POST | 200 `{"ok":true,"outcome":"connected"}`, connection row written exactly as the GET flow wrote it |
-| 7 | No signature header | 401, body is exactly `{"ok":false}` — no `error`, no `reason` key |
+| 7 | No signature header | 401, body is exactly `{"ok":false}` — no `error`, no `reason`, no `rid` |
 | 8 | Signature computed with a different key | 401 |
 | 9 | Signature valid, then `code` changed in the body before sending | 401 (the body is bound) |
-| 10 | Timestamp 6 minutes old | 401; **4 minutes old → accepted** (the skew window is real in both directions) |
+| 10 | Timestamp 6 minutes old → 401; **6 minutes in the future → 401**; 4 minutes old → accepted; 4 minutes in the future → accepted | the skew window is real in **both** directions |
 | 11 | Timestamp missing / non-numeric / negative | 401 |
-| 12 | The same signed POST sent twice | first 200 connected, second 200 `reason=state` — replay is stopped by the state, not the signature |
-| 13 | Unknown state / expired state | 200 `reason=state` |
-| 14 | Wrong nonce value in the body | 200 `reason=browser` **and** `used === true` on the state document |
-| 15 | No `nonce` field in the body | 200 `reason=browser`, state burned (the function still checks; the web route normally prevents this reaching it) |
-| 16 | Environment mismatch | 200 `reason=environment` |
-| 17 | Connector off, **unsigned** POST | 401, not `disabled` — the gate must not be readable without the key |
-| 18 | Connector off, signed POST | 200 `reason=disabled` |
-| 19 | Body 9 KB / non-JSON / a JSON array / `v: 2` | 400 |
-| 20 | Identity 403 → `no_seller`; auth-class exchange throw → `token`; other throw → `exchange` | the three words survive the transport change |
-| 21 | **Log pin** | `console.log/warn/error` captured across the whole suite; assert no captured line contains the code, the state, the nonce or the signature of any case above |
-| 22 | **Response pin** | `JSON.stringify(res.payload)` for every case contains no code, state or nonce value |
-| 23 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read and no `res.redirect` call |
+| 12 | `rawBody` absent from the request object | **401**, and the source pin below proves no re-serialised fallback exists |
+| 13 | The same signed POST sent twice | first 200 connected, second 200 `reason=state` — replay is stopped by the state, not the signature |
+| 14 | Unknown state / expired state | 200 `reason=state` |
+| 15 | Wrong nonce value in the body | 200 `reason=browser` **and** `used === true` on the state document |
+| 16 | **`nonce: ""` in the body — the absent-cookie case** | 200 `reason=browser` **and** `used === true`. Then a second signed POST with the *right* nonce and the same state → 200 `reason=state`. This is the §5 attack, and it is the reason the web route must not refuse an absent cookie |
+| 17 | No `nonce` key in the body at all | same as 16 |
+| 18 | Environment mismatch | 200 `reason=environment` |
+| 19 | Connector off, **unsigned** POST | 401, not `disabled` — the gate must not be readable without the key |
+| 20 | Connector off, signed POST | 200 `reason=disabled` |
+| 21 | **Signed** body of 9 KB → 400; **unsigned** body of 9 KB → 400 as well (the size guard is ahead of the HMAC, and the matrix says which is sent rather than leaving it ambiguous); signed non-JSON → 400; signed JSON array → 400; signed `v: 2` → 400 |
+| 22 | `rid` absent / 15 hex / 17 hex / uppercase hex / `"a".repeat(16)` / containing `\n` | 400 `{"ok":false}` with **no** `rid` key in the body |
+| 23 | `rid` set to the case's own code value, and separately to its state value, in an otherwise valid signed body | 400, and the log pin (#26) still passes — i.e. the value never reached a log line, because the shape check runs before anything is logged |
+| 24 | `state` = `"abc/def"`, `"a//b"`, `"x".repeat(1600)`, `"short"` in an otherwise valid signed body | 400 `{"ok":false,"rid"}`, `states().doc()` never called, and the log pin still passes. (Firestore's own `documentPath` error text embeds the rejected path, and a 1500-byte id is legal, so neither `.doc()` nor a length check is a filter) |
+| 25 | `code` of 4097 characters; `nonce` of 201 characters | 400 `{"ok":false,"rid"}` |
+| 26 | **Log pin** | `console.log/warn/error` captured across the whole suite. Assert that no captured line contains the code, the state, the nonce or the signature of any case above — **and also that it contains none of their first 8 characters**, which is what catches a truncated echo like `JSON.parse`'s ten-character prefix. Assert additionally that the only `rid` appearing in any line is one that matches `/^[0-9a-f]{16}$/` |
+| 27 | **Response pin** | `JSON.stringify(res.payload)` for every case contains no code, state or nonce value, and no 8-character prefix of one. The rid is checked against the shape, not against a fixture value — case 23 is the reason |
+| 28 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read, no `res.redirect` call, no `JSON.stringify(req.body)`, no `req.rawBody ||` fallback, and no `error.message` / `error.stack` passed to a `console.*` call; it does contain `req.originalUrl` (the stated query-string mechanism) and `req.rawBody`; and the file contains no `"cancelled"` literal |
 
 **qa — `commerce-ebay-wiring.test.js`:** `EBAY_SECRET_PARAMS` now names **five** secrets including
-`EBAY_CALLBACK_KEY` (the existing row says four and must be updated); the `callbackKey` dep is passed
-in `index.js`; `EBAY_RUNTIME` still carries `serviceAccount`, so the fifth secret is never mounted on
-the default compute account; `access-control-policy.test.js`'s `EBAY_*` regex already covers it.
+`EBAY_CALLBACK_KEY` (the existing row says four and must be updated); the array is still built **only**
+under `EBAY_SECRETS_READY`; the `callbackKey` dep is passed in `index.js`; `EBAY_RUNTIME` still carries
+`serviceAccount`, so the fifth secret is never mounted on the default compute account;
+`ebayOAuthCallback` is declared with `maxInstances`; `access-control-policy.test.js`'s `EBAY_*` regex
+already covers it.
 
-**qa — shared signature vector:** `functions/test/fixtures/ebay-callback-signature-vectors.json`
-holds `{ key, timestampMs, body, signature }` triples computed with a fixed **test** key that has no
-production meaning and is not any real secret. `ebay-connect.test.js` checks the function's verifier
-against them; `studioflow-web/scripts/check-ebay-relay-vectors.mjs` (wired as `npm run test:relay`,
-the `test:finance` precedent) checks the route's signer against the same file. The two
-implementations are in different languages and cannot import each other, so **the vector is the
-shared pure thing** — this is the "tests that assert the bug" lesson applied across the boundary: a
-test that re-implements the canonical string next to the code it tests would prove nothing.
+**qa — shared signature vector:** `functions/test/fixtures/ebay-callback-signature-vectors.json` holds
+`{ key, timestampMs, body, signature }` triples computed with a fixed **test** key that has no production
+meaning and is not any real secret. `ebay-connect.test.js` checks the function's verifier against them;
+`studioflow-web/scripts/check-ebay-relay-vectors.mjs` (wired as `npm run test:relay`, the `test:finance`
+precedent) checks the route's signer against the same file. The two implementations are in different
+languages and cannot import each other, so **the vector is the shared pure thing** — this is the "tests
+that assert the bug" lesson applied across the boundary: a test that re-implements the canonical string
+next to the code it tests would prove nothing. One vector's nonce is a base64url string, to pin that the
+route's `decodeURIComponent` and `setEbayNonceCookie`'s `encodeURIComponent` round-trip it unchanged; one
+vector's nonce is `""`.
 
-**e2e — `commerce-ebay-connector-emulator.test.js`:** set `process.env.EBAY_CALLBACK_KEY` beside the
-other four before `require("../../index.js")`. Case 1 becomes: begin → state doc with `nonceHash` and
-the `expireAt` twin; a signed POST with a forged state → `reason=state`; a signed POST with the right
-state and no nonce → `reason=browser` and the state is burned; a signed POST with the right nonce →
+`check-ebay-relay-vectors.mjs` additionally makes four **source** assertions over
+`app/ebay/callback/route.ts`, because there is no other automated coverage of that file: it exports
+`const runtime = "nodejs"` and `const dynamic = "force-dynamic"`; it contains the `error` →
+`ebay=cancelled` branch (the only place that word is produced); it reads
+`process.env.NIVADESK_EBAY_CALLBACK_KEY` **inside** the handler and checks its length; and it contains no
+`NEXT_PUBLIC_` reference and no early return on an absent nonce cookie.
+
+**e2e — `commerce-ebay-connector-emulator.test.js`:** set `process.env.EBAY_CALLBACK_KEY` beside the other
+four before `require("../../index.js")`. Case 1 becomes: begin → state doc with `nonceHash` and the
+`expireAt` twin; a signed POST with a forged state → 200 `reason=state`; a signed POST with the right
+state and `nonce: ""` → 200 `reason=browser` **and the state is burned**, proven by a follow-up signed
+POST with the right nonce answering `reason=state`; a signed POST with the right nonce (fresh state) →
 `outcome:"connected"` and every assertion that row already makes (capabilities, scopes,
 `sellerUserIdHash`, marketplaces, the credentials box decrypting under `EBAY_TOKEN_KEY`, no plaintext
-token and no `Hash` key in `getEbayConnections`). Add: an **unsigned** POST → 401 and the state
-survives untouched, provable by then completing the flow with a signed one.
+token and no `Hash` key in `getEbayConnections`). Add: an **unsigned** POST → 401 and the state survives
+untouched, provable by then completing the flow with a signed one.
 
-**web:** `npm run typecheck` and `npx next build --no-lint` clean, with `ƒ /ebay/callback` still
-dynamic in the manifest; `npm run test:relay` green; and a grep of the built chunks for
-`NIVADESK_EBAY_CALLBACK_KEY` and for the literal `x-nivadesk-signature` that must find **nothing**,
-proving the signer stayed on the server. This grep joins check 7 of the Round 166 pre-deploy list.
+**web:** `npm run typecheck` and `npx next build --no-lint` clean, with `ƒ /ebay/callback` still dynamic in
+the manifest; `npm run test:relay` green; and a grep of the built output that makes **two** assertions,
+not one:
 
-**§14.3 adversarial list gains:** unsigned POST, POST signed with a rotated-away key, replayed signed
-POST, body-swap after signing, timestamp outside the window, GET on the function, query string on the
-function, and the web route with no key configured.
+- **Negative**, over the *client* chunks: no `NIVADESK_EBAY_CALLBACK_KEY` and no literal
+  `x-nivadesk-signature`, proving the signer stayed on the server.
+- **Positive**, over the *server* chunk for the route: the literal string
+  `process.env.NIVADESK_EBAY_CALLBACK_KEY` is still present. The reference surviving is the evidence that
+  no build-time inlining happened. The negative grep alone is blind to exactly the failure it exists to
+  catch: if Next statically replaces `process.env.X` — which it does for Edge-runtime route handlers —
+  the *name* vanishes from the bundle and the *value* appears in its place, so the grep goes green in the
+  worst case. `export const runtime = "nodejs"` in the route (asserted by `test:relay`) is what keeps that
+  from happening; this grep is what proves it.
 
-#### What this change does not fix, stated plainly
+This grep joins check 7 of the Round 166 pre-deploy list.
 
-eBay's RuName has one accepted URL and eBay decides how it calls it: a top-level browser GET carrying
-`code` and `state` in the query string. That hop is untouched by this work. **Hostinger's own access
-log therefore still records `GET /ebay/callback?code=…&state=…`**, and anyone with access to that log
-can read a single-use authorization code for as long as it is retained.
+**§14.3 adversarial list gains:** unsigned POST, POST signed with a rotated-away key, replayed signed POST,
+body-swap after signing, timestamp outside the window in both directions, GET on the function, query
+string on the function, a path-shaped `state`, a `rid` set to the code, an absent `rawBody`, a 9 KB body,
+and the web route with no key configured.
 
-What has actually changed, precisely:
+#### Residual risk, stated plainly
 
-- The **nonce** now appears in no access log anywhere. On the first hop it travels in a `Cookie`
-  header, which access logs do not record; on the second it travels in a POST body, which Cloud Run
-  does not record. The value that browser binding depends on is out of the logs entirely — and that
-  was the sharper of the two exposures, because unlike a code it does not expire on use.
-- The **code** now appears in one access log instead of two, and the one that remains is on our own
-  domain rather than in a Google project whose log readers are a different and larger set of people.
+Four things this change does **not** fix. Each is reduced or bounded, none is closed, and each names who
+would have to decide otherwise.
 
-The residual can only be closed by not receiving the code in a query string at all, which eBay's
-redirect does not offer. It is reduced, not removed, by the two things that were already true — the
-code is single-use and short-lived, and it is worthless without the client secret held in Secret
-Manager — and by shortening Hostinger's log retention, which is an operator setting and not part of
-this design.
+1. **The code is still in Hostinger's access log.** eBay's RuName has one accepted URL and eBay decides how
+   it calls it: a top-level browser GET carrying `code` and `state` in the query string. That hop is
+   untouched by this work, so `GET /ebay/callback?code=…&state=…` is still recorded on nivadesk.app, and
+   anyone with access to that log can read a single-use authorization code for as long as it is retained.
+   The code now appears in **one** access log instead of two, and the one that remains is on our own
+   domain rather than in a Google project whose log readers are a different and larger set of people. It
+   is worthless without `EBAY_CLIENT_SECRET`, and — because of *The burn* — worthless against a state that
+   has already been presented. It can only be closed by not receiving the code in a query string at all,
+   which eBay's redirect does not offer. Shortening Hostinger's retention is the only lever, and it is an
+   **operator** setting, not part of this design. The state is in the same log, which is what makes the
+   leaked-key state oracle above reachable at all.
+2. **The nonce is a non-`HttpOnly` bearer string.** The headline result of this section is real — the nonce
+   now appears in **no** access log anywhere: on the first hop it travels in a `Cookie` header, which
+   access logs do not record; on the second it travels in a POST body, which Cloud Run does not record.
+   That was the sharper of the two exposures, because unlike a code it does not expire on use. But the
+   matching residual belongs in the same paragraph: `claimEbayConnectState` returns the nonce as JSON to
+   the client and `studioflow-web/lib/studioflow/ebay.ts:242-246` writes it with `document.cookie` from
+   client JavaScript, so it **cannot** be `HttpOnly` and is readable by any script running on
+   nivadesk.app. `Path=/ebay/callback` is a request-matching rule, not a boundary. Any script execution on
+   our origin therefore defeats browser binding regardless of this transport change. Making it `HttpOnly`
+   needs a server route to mint the cookie — a change to the connect flow (§5.2's native hand-off included),
+   not to this transport, and one the **owner** decides to schedule.
+3. **The web-side cookie check binds no session.** The route proves only that *some* browser presented a
+   string; it never checks that the browser is signed in, still less as the state's `uid`. The binding is
+   entirely the nonce, and a nonce is a bearer value that replays from any browser it is pasted into. This
+   is by construction: eBay's redirect lands on a route that must work for a seller who may have no
+   NivaDesk session at all. §5.3's list of what is claimed stays accurate; this sentence makes the
+   mechanism explicit so no reviewer reads the cookie check as more than it is.
+4. **The shared key is knowingly the sole control on a public endpoint.** No ingress restriction and no IAM
+   invoker requirement, for the reasons argued above; `maxInstances: 10` bounds the spend and nothing
+   bounds the attempts. If that is not acceptable, the alternative is a Google service-account credential
+   living on Hostinger, and that is an **owner** decision, not one this design can make quietly.
+
+Two things are recorded as **verified correct** so a later reviser does not re-litigate them: every one of
+the eight reason words plus `cancelled` still reaches the seller as a translated sentence
+(`EbayIntegrationSection.tsx:88-90`, with `unavailable` falling through to a string that already exists in
+all eleven non-English tables at `language.ts:7982`); and state consumability under transport failure is
+sound — `unreachable`, 401, 405 and 400 all leave the state consumable, and only the 20-second abort is
+genuinely indeterminate, which `refresh(true)` on any `ebay=` parameter already resolves on screen.
 
 ---
 
@@ -1825,9 +2096,9 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
 | `commerce-ebay-quota.test.js` | verdict table: connection share before app budget; sweep 75 % / nightly+import 80 % / people 95 %; a second connection is unaffected by the first's spent share |
 | `commerce-ebay-capabilities.test.js` | `proveEbay` yields `shipment.write/finance.read/inventory.read === "not_in_this_release"` and `orders.read === true`; with every proof the spec's default map is reproduced |
 | `privacy-reveal.test.js` | tier table (§3.3), response shape excludes `taxIdentifier`/`paths`/notes, log-before-return (failing fake log → no payload), rate limit |
-| `ebay-connect.test.js` (Etsy shape) | state replay refused (`reason=state`), expiry, environment mismatch, **nonce mismatch → `reason=browser` and the state is burned**, `claimEbayConnectState` refuses a different uid and a second claim, `no_seller` when identity fails, cross-workspace connection id, reconnect keeps `connectedAtMs`/`settings`/`importState`/`importCursor` and sets `catchUpDueFromMs`, `sellerUserIdHash` written, single-flight refresh + lock outlasting retries, loser refuses expired token, only auth-class failure flips `reconnect_required` (`invalid_client` does not), disconnect deletes `credentials/current` and writes `disconnectedByUid: uid`, public view contains no `Encrypted` key, no token substring, no `Hash` key; settings/marketplace/sinceDays whitelists (§4.11) |
+| `ebay-connect.test.js` (Etsy shape) | the whole §5.4 transport matrix (28 cases: method, query string, key floor, signature, skew both ways, rawBody, rid shape, state shape, field caps, log/response/source pins) — note the harness rewrite §5.4 specifies; state replay refused (`reason=state`), expiry, environment mismatch, **nonce mismatch and empty nonce → `reason=browser` and the state is burned in both cases**, `claimEbayConnectState` refuses a different uid and a second claim, `no_seller` when identity fails, cross-workspace connection id, reconnect keeps `connectedAtMs`/`settings`/`importState`/`importCursor` and sets `catchUpDueFromMs`, `sellerUserIdHash` written, single-flight refresh + lock outlasting retries, loser refuses expired token, only auth-class failure flips `reconnect_required` (`invalid_client` does not), disconnect deletes `credentials/current` and writes `disconnectedByUid: uid`, public view contains no `Encrypted` key, no token substring, no `Hash` key; settings/marketplace/sinceDays whitelists (§4.11) |
 | `ebay-sync.test.js` | pending-payment create rule, `autoSync` off skips creates but applies updates, `awaiting_first_import` before import, `includeCancelled`, `marketplace_disabled`, `restrictedCustomer` written on noop too, never on held, **never when the restricted half is empty**, `ebayBuyers` arrayUnion under the keyed hash **whenever the order names the buyer** (an address-less order is still reachable by a deletion notice), no `upsertIntegrationCustomer` call, held payload has no email, `marketplaceId` passed to the adapter, **queue path and sweep path agree** (same fake order → same documents), environment mismatch skipped, `app_credentials_invalid` stops the sweep after one row |
-| `commerce-ebay-wiring.test.js` (mirror of the Square pin) | secrets gate (`EBAY_SECRET_PARAMS` with the four names, marker file, `EBAY_RUNTIME` with `serviceAccount`), the four wrappers, every `exports.<fn> = ebayExports.<fn>;` line, `ebayEventWorker` on its own queue with the copied loop and the `buyer_deletion` health skip, `retryCommerceEvent` eBay branch enqueues and never processes, `commerceEventWorker` secrets literal **unchanged** and `provider_not_on_this_worker`, `_e2e.ebay`, rules regex for **all six** root blocks, purge steps, `releaseHeldIntegrationOrders` branch with a fresh fetch and no payload replay, `lifecycle/derive.js` group, `engine.applyEnvelope` used and no direct `orderDocRef(...).set` in the connector, exactly one `applyEbayOrder` definition and every path calling it, `NIVADESK_EBAY_CONNECTOR` read, retention sweep deletes `restrictedCustomer` |
+| `commerce-ebay-wiring.test.js` (mirror of the Square pin) | secrets gate (`EBAY_SECRET_PARAMS` with the **five** names including `EBAY_CALLBACK_KEY`, built only under `EBAY_SECRETS_READY`, marker file, `EBAY_RUNTIME` with `serviceAccount`), `ebayOAuthCallback` declared with `maxInstances`, the four wrappers, every `exports.<fn> = ebayExports.<fn>;` line, `ebayEventWorker` on its own queue with the copied loop and the `buyer_deletion` health skip, `retryCommerceEvent` eBay branch enqueues and never processes, `commerceEventWorker` secrets literal **unchanged** and `provider_not_on_this_worker`, `_e2e.ebay`, rules regex for **all six** root blocks, purge steps, `releaseHeldIntegrationOrders` branch with a fresh fetch and no payload replay, `lifecycle/derive.js` group, `engine.applyEnvelope` used and no direct `orderDocRef(...).set` in the connector, exactly one `applyEbayOrder` definition and every path calling it, `NIVADESK_EBAY_CONNECTOR` read, retention sweep deletes `restrictedCustomer` |
 | `commerce-flags.test.js` (extend) | `connectors` area precedence: connection > provider > global; default off; **`readCommerceFlags` merges `connectors` from the document**; cache reset |
 | `access-control-policy.test.js` (extend) | regex covers `EBAY_*`; a mount of an eBay secret without `serviceAccount` fails; the policy paragraph names eBay |
 | `commerce-ebay-adapter.test.js` (extend, first) | "a DE order with no ctx.marketplaceId links to ebay.de" (fails before §8.3 lands) |
@@ -1837,11 +2108,13 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
 | `connector-attribution.test.js`, `account-deletion-coverage.test.js`, `lifecycle-derive.test.js`, `outbound-pii-policy.test.js`, `guide-corpus-fresh.test.js`, `shopify-badge-uninstalled.test.js`, `dashboard-channels.test.js`, `commerce-contracts.test.js` | extended or unchanged-and-green (provider order pinned: do not touch `listProviders()`) |
 | `ebay-rules.test.mjs` | owner / member / outsider / signed-out fail read, create, update, delete on `ebayConnections`, `ebayConnections/x/credentials/current`, `ebayConnectStates`, `ebayBuyers`, `ebayDeletionRequests`, `ebayQuota`, `ebayNotificationKeys`, `companies/acme/restrictedCustomer/o1`, `companies/acme/privacyState/revealCounters/u1` |
 
-### 14.2 e2e (real emulator; `process.env.EBAY_*` (four) + `NIVADESK_EBAY_CONNECTOR=1` + random 32-byte hex keys set **before** `require("../../index.js")`; fakes via `global.__nivadeskEbayFake*`; wipe `siparisler / musteriler / commerceEvents / commerceHealth / commerceCursors / externalEntities / ebayBuyers / ebayQuota / companies/{cid}/restrictedCustomer` by companyId)
+### 14.2 e2e (real emulator; `process.env.EBAY_*` (**five**, `EBAY_CALLBACK_KEY` included) + `NIVADESK_EBAY_CONNECTOR=1` + random 32-byte hex keys set **before** `require("../../index.js")`; fakes via `global.__nivadeskEbayFake*`; wipe `siparisler / musteriler / commerceEvents / commerceHealth / commerceCursors / externalEntities / ebayBuyers / ebayQuota / companies/{cid}/restrictedCustomer` by companyId)
 `commerce-ebay-connector-emulator.test.js`:
-1. `beginEbayConnect.run(...)` → state doc with `expireAt` Timestamp twin and `nonceHash`; callback with a
-   forged state → 302 `reason=state`; callback with the right state and no nonce → `reason=browser`
-   and the state is burned; valid callback (nonce forwarded) → connection row `status connected`,
+1. `beginEbayConnect.run(...)` → state doc with `expireAt` Timestamp twin and `nonceHash`; a **signed POST**
+   with a forged state → 200 `reason=state`; a signed POST with the right state and `nonce: ""` →
+   200 `reason=browser` and the state is burned (proven by a follow-up signed POST with the *right* nonce
+   answering `reason=state`); an **unsigned** POST → 401 with the state untouched; a signed POST with the
+   right nonce on a fresh state → connection row `status connected`,
    `specStatus connected_read_only`, `capabilities.orders.read === true` and `shipment.write ===
    "not_in_this_release"`, `scopes` = the two read scopes, `sellerUserIdHash` present, `marketplaces[0]
    = EBAY_GB/GBP`, credentials doc decrypts with `etsy.decryptToken(box, process.env.EBAY_TOKEN_KEY)`,
@@ -1959,9 +2232,14 @@ Owner actions outside the repo (not this task), **in this order**:
    `getShippingFulfillments` into `test/fixtures/ebay-sandbox-*.json` with the `_captured` header
    (record whether `lastModifiedDate` moved on shipment), commit.
 3. Create the service account `ebay-connector@eggcraft-studio` with the grants of §3.2; create the
-   four secrets (`EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_TOKEN_KEY`, `EBAY_HASH_KEY` — the last
-   two 32-byte hex, one key each for now) granted to that account only; commit
-   `functions/.ebay-secrets-ready`.
+   **five** secrets (`EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_TOKEN_KEY`, `EBAY_HASH_KEY`,
+   `EBAY_CALLBACK_KEY` — the last three 32-byte hex, one key each for now) granted to that account only;
+   set the same value as `EBAY_CALLBACK_KEY` in Hostinger as `NIVADESK_EBAY_CALLBACK_KEY` and run §5.4's
+   rollout step 2a to prove the web reads it **at runtime**; only then commit
+   `functions/.ebay-secrets-ready` with all five names in `EBAY_SECRET_PARAMS`. The marker is the gate:
+   without it `EBAY_RUNTIME` is `{}`, nothing is mounted, and every callback answers 401 →
+   `reason=unavailable` forever (§5.4, *Rollout*). This list and §5.4's rollout are the same list; they
+   must not drift.
 4. Deploy; **then** register `ebayNotifications` as the notification destination with the
    verification token (the challenge is answered without secrets; the deletion POST needs them —
    hence step 3 first), subscribe `MARKETPLACE_ACCOUNT_DELETION`, press *Send Test Notification*

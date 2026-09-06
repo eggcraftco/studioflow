@@ -35,6 +35,8 @@ What that exposes: an authorization code that is single-use and short-lived, and
 
 The fix, if the operator wants it, is to stop putting them in a URL: the web route can POST the parameters to the function server-side and return the function's redirect, so neither platform's access log ever sees them. That is a change to the connect flow and to the function's own reading of `req.query`, so it is proposed here rather than made. **It should be decided before the first real OAuth connection**, because that is the first time a genuine code and nonce exist.
 
+**Decided (6 Sep 2026):** taken, and specified as §5.4 of `docs/ebay-connector-design.md` — a signed POST under a shared `EBAY_CALLBACK_KEY`, the function answering JSON and the web route performing the redirect. The residual this round could not remove — the code still landing in Hostinger's own access log on the first hop — is recorded there as residual 1.
+
 ## Rollback
 
 `git revert 0192411` in the publish repository and push; Hostinger rebuilds in two to four minutes and the eBay routes disappear. No server state is created by anything in this round.

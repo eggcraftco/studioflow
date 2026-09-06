@@ -1,5 +1,13 @@
 # eBay connector design (revised 6 Sep 2026) — 14-item map, review-finding coverage, OAuth URL design
 
+> **Snapshot, superseded in one area.** This file records the design *as it stood when it was reviewed*,
+> which is why it quotes line counts and sentences verbatim. Section **§5.4 of
+> `ebay-connector-design.md` was written after it** and replaces everything this file says about the
+> **callback transport**: the callback is a signed server-to-server POST, not a query-string redirect;
+> `connectRedirect()` and the function's own `error → cancelled` branch are deleted; `cancelled` is
+> produced by the web route alone; and an absent nonce cookie is **forwarded as `nonce: ""`** so the
+> state is still burned. Read §5.4 for that half. Everything else here still describes the design.
+
 Sources read (read-only, nothing edited or executed):
 - `/Users/gocmen/Developer/studioflow-ebay/docs/ebay-connector-design.md` (1,573 lines, 152 KB)
 - `/private/tmp/claude-501/-Users-gocmen-Developer-studioflow-app/5b787108-6e8d-45bb-9cdf-ad907f483cb8/scratchpad/ebay-design-findings.md`

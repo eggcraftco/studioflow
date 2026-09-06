@@ -235,9 +235,15 @@ export function ebayEventText(type: string): string {
 /**
  * The one place the nonce cookie is written.
  *
- * It is first-party to nivadesk.app, `SameSite=Lax` so it survives eBay's
- * top-level redirect back, and scoped to the callback path so no other page in
- * the app can read it. Ten minutes is the state's own life.
+ * It is first-party to nivadesk.app and `SameSite=Lax`, so it survives eBay's
+ * top-level redirect back. Ten minutes is the state's own life.
+ *
+ * `Path=/ebay/callback` narrows which requests carry it; it is NOT a security
+ * boundary, and this comment used to claim otherwise. The value is returned to
+ * the client as JSON and written here from client JavaScript, so the cookie
+ * cannot be HttpOnly and any script running on nivadesk.app can read it. It
+ * defends against a phished foreign seller's browser, not against script on our
+ * own origin (design §5.4, residual 2).
  */
 export function setEbayNonceCookie(nonce: string) {
   if (typeof document === "undefined" || !nonce) return;
