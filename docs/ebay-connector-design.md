@@ -925,16 +925,19 @@ transaction — and either way **the state is not burned**. That is not a flaw i
 there is nothing to sign with, and an unsigned POST would be a 401 that burns nothing either. It is a
 property that has to be *stated*, because it is the same collapse this section just argued against,
 reached by configuration instead of by a code change. For as long as a key outage lasts, **§5's browser
-binding is suspended for every state minted in that window**: each consent leaves a live, unused state
-for the rest of its ten-minute TTL, while eBay's code for that consent is in Hostinger's access log
-(residual 1). Attacker B, who minted the state and holds `nonce_B`, needs only the code.
+binding is suspended for every state minted in that window** — and, which matters more, **eBay's code for
+each of those consents is never presented, so it stays valid** in Hostinger's access log (residual 1) for
+the rest of eBay's own TTL. The attacker does not need the unburned state: a code the connector never
+spent is redeemable against a state of the attacker's own minting (*The burn, and the spend*).
 
-The window is small — ten minutes past the last failed attempt — and the deploy plan carries the
-operator's action rather than leaving it implied: a key outage is a reason to **expire the outstanding
-`ebayConnectStates` before restoring service** (`docs/ebay-web-callback-deploy-plan.md` §4.2), or to wait
-out the TTL of the last failure before telling sellers to retry. The half-configured state fails closed
-for the *connection* and open for the *defence*, and a rollout document that says only the first has told
-the operator half of it.
+That is also why "expire the outstanding `ebayConnectStates`" is **not** the remedy an earlier revision of
+this paragraph and of the deploy plan called it. Expiring them removes nothing the attacker was using. The
+honest operator action is the one now in `docs/ebay-web-callback-deploy-plan.md` §4.2: treat every consent
+that landed while the relay was not answering 200 as replayable for eBay's code TTL, tell those sellers to
+reconnect, and record that **nothing on our side can invalidate a code we never presented** — there is no
+revoke, and the only lever, redeem-immediately, is exactly what the outage prevented. The trigger is also
+wider than a key outage: `unreachable`, 401, 405, 400, a 5xx and the route's own timeout all leave the code
+unspent, and the deploy plan names all of them.
 
 Replay is likewise still stopped by the state, not by the signature. A captured POST replayed inside
 the five-minute skew window verifies, reaches the transaction, finds `used: true` and answers
@@ -955,10 +958,48 @@ What a key holder does get, stated so nobody has to rediscover it:
   (exists, unused, unexpired, wrong nonce). States are unguessable, so this is only useful against a
   state the attacker has already observed — realistically from Hostinger's access log, the residual at
   the end of this section.
-- **Targeted denial.** Every probe that *hits* a live state burns it, so an attacker holding both the
-  key and an observed state can stop that seller's connection from completing. The seller's remedy is
-  to press Connect again; the damage is nuisance, not data.
+- **Targeted denial.** Every probe that *hits* a live state burns it, so an attacker holding an observed
+  state can stop that seller's connection from completing. The seller's remedy is to press Connect again;
+  the damage is nuisance, not data. **This one does not need the key at all**, and filing it here was
+  wrong: see *The public entrance* below.
 - Everything else is a 401, a 400, or a `reason=state`.
+
+#### The public entrance: our own route signs for anyone who asks
+
+Stated because two claims in this section were false without it, and because it is the direct cost of the
+decision in *The burn, and the spend*.
+
+`app/ebay/callback/route.ts` signs unconditionally. It checks the shape of what arrived, reads a cookie
+and POSTs; it has no idea whether the caller is eBay, a seller, a scanner or an attacker, and it cannot
+have one — eBay's redirect is a plain browser GET with no authentication of any kind. So **any anonymous
+caller who requests `https://nivadesk.app/ebay/callback?code=x&state=<20–120 shaped characters>` makes our
+own server mint a valid HMAC** and drives `ebayOAuthCallback` to the Firestore transaction: one read, and
+— for a state the caller has observed — one write that burns it.
+
+Two sentences elsewhere in this document were therefore wrong and are corrected here rather than quietly
+deleted:
+
+- "An attacker with no key is refused with 401 before anything stateful is touched" is true only of a
+  caller who talks to the **function** directly. Through the route, no key is needed: the route supplies
+  the signature.
+- *Targeted denial* was filed under what a **leaked key** buys. It needs no key.
+
+What bounds it: the state is 32 random bytes, so burning one means observing one first (the access log,
+or an `/ebay/start?state=…` URL); a burned state costs the seller one more press of Connect and no data;
+the spend bound is `maxInstances: 10`; and the redeem-and-discard call is reachable only for a state that
+was live, which is one request per state, ever.
+
+What does **not** bound it: nothing rate-limits the path. `opsSay` throttles pre-signature LOG LINES, not
+work, and these requests are validly signed, so they pass it entirely. One GET on nivadesk.app buys one
+Cloud Run invocation and one Firestore transaction, 1:1, from anywhere.
+
+**A rate limit on the route was considered and is not obviously right**, which is why this is a stated
+residual rather than a silent one. Refusing at the edge is exactly the behaviour *The burn, and the spend*
+argues against: a refused relay is a consent whose code is never presented, and under a flood that would
+turn a bill problem into the residual-1 problem for every genuine seller caught in it. A limiter that
+refuses only *after* the function is already saturated buys nothing the function's own `maxInstances` does
+not. If the bill ever becomes the binding concern, the answer is a limiter that keeps a small allowance for
+requests carrying a nonce cookie — a change to this contract, and an **owner** decision.
 
 **The authorization code is bound to the application, not to the state that fetched it — so the burn is
 the whole of that defence.** `exchangeCode` sends `grant_type`, `code` and `redirect_uri` and nothing
@@ -993,8 +1034,10 @@ address is not stable enough to allowlist. What the design does add is a spend b
 declared with **`maxInstances: 10`** — far above any real OAuth rate, and enough that an unkeyed flood
 costs a bounded number of invocations rather than an unbounded bill. The trade is stated plainly: a
 sustained flood would also make legitimate connects fail with `reason=unavailable` for its duration,
-which is the correct failure direction for a connector. An attacker with no key is refused with 401
-before anything stateful is touched — no Firestore read, no state, no eBay call.
+which is the correct failure direction for a connector. An attacker with no key **who calls the function
+directly** is refused with 401 before anything stateful is touched — no Firestore read, no state, no eBay
+call. Through `nivadesk.app/ebay/callback` no key is needed, because our own route signs; that entrance,
+and what does and does not bound it, is *The public entrance* above.
 
 The timing question is clean and is left alone: `timingSafeEqual` with a length guard leaks only the
 digest length, which is public.

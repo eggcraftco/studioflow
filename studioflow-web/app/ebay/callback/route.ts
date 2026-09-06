@@ -179,18 +179,23 @@ export async function GET(request: NextRequest) {
   // ops line naming a cause. Only the variable's NAME is ever logged.
   //
   // These two returns are the ONE place this route does what step 3 forbids: it
-  // refuses without POSTing, so nothing burns the state. That is not a choice —
-  // without the key there is nothing to sign with, and an unsigned POST is a
-  // 401 that burns nothing either. But it is not neutral, and the deploy plan
-  // must not read as though it were: for as long as the key is missing, short,
-  // or disagrees with Secret Manager, **§5's browser binding is suspended for
-  // every state minted in that window**. Each consent leaves a live, unused
-  // state for the rest of its ten-minute TTL while eBay's code sits verbatim in
-  // Hostinger's access log — the collapse step 3 exists to prevent, reached by
-  // configuration instead of by design. It fails closed for the connection and
-  // open for the defence, and those are different things. The operator's action
-  // is in docs/ebay-web-callback-deploy-plan.md §4.2: treat a key outage as a
-  // reason to expire the outstanding ebayConnectStates before restoring service.
+  // refuses without POSTing. That is not a choice — without the key there is
+  // nothing to sign with, and an unsigned POST is a 401 that reaches nothing
+  // either. But it is not neutral: for as long as the key is missing, short, or
+  // disagrees with Secret Manager, every consent that lands leaves eBay's code
+  // UNSPENT, sitting verbatim in Hostinger's access log for the rest of its TTL,
+  // redeemable against a state the attacker mints later. The unburned state is
+  // not the damage; the unspent code is. It fails closed for the connection and
+  // open for the defence, and those are different things.
+  //
+  // The operator's action is docs/ebay-web-callback-deploy-plan.md §4.2, and it
+  // is not "expire the outstanding states" — that closes nothing, because the
+  // attacker does not need them. It is: treat every consent that landed while
+  // the relay was not answering 200 as replayable for eBay's code TTL, tell
+  // those sellers to reconnect, and record that nothing on our side can
+  // invalidate a code we never presented. The same is true of every other way
+  // this POST can fail to reach the transaction — unreachable, 401, 405, 400, a
+  // 5xx, the abort below — which is why §4.2's trigger is all of them.
   const key = String(process.env.NIVADESK_EBAY_CALLBACK_KEY || "");
   if (!key) {
     console.error("ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured");
