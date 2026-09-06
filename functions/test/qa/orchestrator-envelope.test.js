@@ -119,6 +119,35 @@ check("a group channel gets the same answer with the person and the money remove
   assert.strictEqual(row.orderId, "o1", "the non-sensitive fields survive");
 });
 
+check("the group redaction reads the value, not the field name", () => {
+  // Both directions are failures, and the ambiguous key is `value`: it is money
+  // in an inventory valuation and a count in a fact row.
+  const profile = { security: { pii_level: "none", financial_data_allowed: false } };
+  const data = envelope.applyChannelProfile({
+    counts: { critical: 1 },
+    value: { cost: 1200, retail: 3000, currency: "GBP" },
+    items: [{
+      title: "3 transaction(s) have no receipt attached",
+      reason: "420 GBP still outstanding. Dispatched with no tracking number recorded.",
+      facts: [{ key: "count", value: 2 }, { key: "amount", value: 120.5, currency: "GBP" }]
+    }]
+  }, profile);
+
+  assert.deepStrictEqual(data.value, { restricted: true, reason: "channel_financial_policy" }, "a stock valuation is money");
+  assert.strictEqual(data.items[0].facts[0].value, 2, "a count is not money and must survive");
+  assert.strictEqual(data.items[0].facts[1].value.restricted, true, "an amount fact is money whatever its field is called");
+  assert.ok(!/420/.test(data.items[0].reason), "the amount was written into a sentence and survived");
+  assert.ok(/withheld/.test(data.items[0].reason), "and the sentence has to say so, not silently lose a number");
+  assert.strictEqual(data.items[0].title, "3 transaction(s) have no receipt attached", "a plain count in a title is not an amount");
+  assert.strictEqual(data.counts.critical, 1, "severity counts are not money");
+});
+
+check("a channel that allows money and people is handed the answer untouched", () => {
+  const data = { totals: { grandTotal: 100 }, customer: { name: "Jane" } };
+  assert.strictEqual(envelope.applyChannelProfile(data, { security: { pii_level: "full", financial_data_allowed: true } }), data);
+  assert.strictEqual(envelope.applyChannelProfile(data, null), data);
+});
+
 check("duplicate warnings collapse: one problem is reported once", () => {
   const built = envelope.finish({
     capability: "x",

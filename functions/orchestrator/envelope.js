@@ -115,16 +115,74 @@ function finish({
     freshness: built.freshness,
     partial: partial === true || built.partial === true,
     warnings: deduped,
-    entityRefs: (Array.isArray(entityRefs) ? entityRefs : []).filter(Boolean),
+    // The refs go through the same policy: they leave the server beside the
+    // data, and a bank row's label is the counterparty's own name.
+    entityRefs: applyChannelProfile((Array.isArray(entityRefs) ? entityRefs : []).filter(Boolean), channelProfile),
     suggestedActions: (Array.isArray(suggestedActions) ? suggestedActions : []).filter(Boolean),
     summary: { lines: [] }
   };
   return envelope;
 }
 
+/** Blocks whose whole value is money, whatever shape the capability gave them. */
+const MONEY_BLOCK_KEYS = Object.freeze([
+  "totals", "sales", "fees", "tax", "settlements", "settlement", "amounts",
+  "amountsByCurrency", "profit", "payouts", "readinessAmounts"
+]);
+
+/**
+ * Does this field NAME money? Used for the `{ key, value }` fact rows, where
+ * the key is data rather than a field name: `{ key: "count", value: 2 }` and
+ * `{ key: "amount", value: 12.5, currency: "GBP" }` are the same shape, and a
+ * rule that reads the literal field name `value` destroys the first while it
+ * hides the second — so a group thread loses the counts it is allowed to see
+ * and keeps the amounts it is not.
+ */
+const MONEY_NAME = /(amount|total|gross|net\b|fee|refund|cost|profit|vat|tax|price|balance|revenue|paid|outstanding|payout|value)/i;
+
+/** A person can hide in these field names; a product name is not one of them. */
+const PII_KEYS = Object.freeze(["customer", "customerName", "customerEmail", "buyerName", "contactName", "contactEmail", "email", "phone"]);
+
+/** Entity references whose label can be a person rather than a number or a product. */
+const PII_LABEL_TYPES = Object.freeze(["bankTransaction", "note"]);
+
+/**
+ * Money written into a sentence. `"420 GBP still outstanding"` and `"£420 still
+ * outstanding"` are the figure, not a description of it, and a redaction that
+ * only looks at field names lets both through verbatim.
+ */
+const MONEY_IN_TEXT = new RegExp(
+  "(?:[£$€¥₺]\\s?\\d[\\d,]*(?:\\.\\d+)?)" +
+  "|(?:\\d[\\d,]*(?:\\.\\d+)?\\s?(?:[£$€¥₺]|(?:GBP|USD|EUR|TRY|JPY|CAD|AUD|CHF|SEK|NOK|DKK|PLN|NZD)\\b))",
+  "gi"
+);
+
+const WITHHELD_AMOUNT = "[amount withheld]";
+
+const restrictedMoney = () => ({ restricted: true, reason: "channel_financial_policy" });
+const restrictedPerson = () => ({ restricted: true, reason: "channel_pii_policy" });
+
+/** Is this object one of the `{ key, value }` fact rows? */
+const isFactRow = (row) => Boolean(row) && typeof row === "object" && !Array.isArray(row) && typeof row.key === "string" && "value" in row;
+
+/** Is this object an entityRef? */
+const isEntityRef = (row) => Boolean(row) && typeof row === "object" && !Array.isArray(row) && ENTITY_TYPES.includes(row.type) && "id" in row;
+
 /**
  * A channel's own limits, applied once. §65/§72 and the WhatsApp spec's group
  * defaults: a shared thread sees neither people nor money.
+ *
+ * Two rules, both learned from getting it wrong:
+ *
+ *  - **Redaction follows the VALUE, not the field name.** Money reaches a
+ *    reader in three shapes — a block (`totals`), a fact row keyed at runtime
+ *    (`{ key: "amount", value, currency }`), and a sentence a detector wrote
+ *    (`"420 GBP still outstanding"`). A key list catches the first only, so a
+ *    group thread was refused `sales` and handed the same money back inside
+ *    `reason`.
+ *  - **It must not destroy what the channel IS allowed to see.** The generic
+ *    key `value` is money in `{ value: { cost, currency } }` and a count in
+ *    `{ key: "count", value: 2 }`. Both directions are failures.
  */
 function applyChannelProfile(data, profile) {
   if (!profile || typeof profile !== "object") return data;
@@ -133,14 +191,34 @@ function applyChannelProfile(data, profile) {
   const stripMoney = security.financial_data_allowed === false;
   if (!stripPii && !stripMoney) return data;
 
+  const scrubText = (text) => (stripMoney ? String(text).replace(MONEY_IN_TEXT, WITHHELD_AMOUNT) : String(text));
+
   const walk = (value) => {
+    if (typeof value === "string") return scrubText(value);
     if (Array.isArray(value)) return value.map(walk);
     if (!value || typeof value !== "object") return value;
+
+    // A fact row is read by its own `key`, because that is where its meaning is.
+    if (isFactRow(value)) {
+      const money = MONEY_NAME.test(value.key) || "currency" in value;
+      if (stripMoney && money) return { ...value, value: restrictedMoney() };
+      return { ...value, value: walk(value.value) };
+    }
+
+    if (isEntityRef(value) && stripPii && PII_LABEL_TYPES.includes(value.type)) {
+      // The id stays: the thread can still say WHICH row, and a member with the
+      // grant can look up who.
+      return { ...value, label: "", labelRestricted: true };
+    }
+
     const out = {};
     for (const [key, inner] of Object.entries(value)) {
-      if (stripPii && key === "customer") { out[key] = { restricted: true, reason: "channel_pii_policy" }; continue; }
-      if (stripMoney && ["totals", "sales", "fees", "tax", "settlements", "value", "amounts"].includes(key)) {
-        out[key] = { restricted: true, reason: "channel_financial_policy" };
+      if (stripPii && PII_KEYS.includes(key)) { out[key] = restrictedPerson(); continue; }
+      if (stripMoney && MONEY_BLOCK_KEYS.includes(key)) { out[key] = restrictedMoney(); continue; }
+      // `value` alone is ambiguous: a money block when it holds one, a plain
+      // figure otherwise.
+      if (stripMoney && key === "value" && inner && typeof inner === "object" && !Array.isArray(inner)) {
+        out[key] = restrictedMoney();
         continue;
       }
       out[key] = walk(inner);
@@ -150,4 +228,7 @@ function applyChannelProfile(data, profile) {
   return walk(data);
 }
 
-module.exports = { STATES, WARNING_CODES, ENTITY_TYPES, warning, entityRef, finish, applyChannelProfile };
+module.exports = {
+  STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, PII_KEYS, PII_LABEL_TYPES,
+  warning, entityRef, finish, applyChannelProfile
+};

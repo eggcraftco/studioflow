@@ -235,6 +235,67 @@ checkAsync("a group thread sees the answer without the person and without the mo
   assert.strictEqual(result.data.sales.reason, "channel_financial_policy");
 });
 
+/** Any amount written the way a person writes one. */
+const MONEY_IN = (text) => /(?:[£$€¥₺]\s?\d)|(?:\d[\d,]*(?:\.\d+)?\s?(?:GBP|USD|EUR|TRY))/i.test(text);
+
+const groupContext = () => waContext({
+  channel: {
+    type: "whatsapp", bindingId: "cb_1", isGroup: true,
+    profile: { capabilities: ["read"], security: { assurance_level: 1, pii_level: "none", financial_data_allowed: false } }
+  }
+});
+
+checkAsync("a group thread gets no money in a SENTENCE either, and keeps the counts it may see", async () => {
+  // §6.4 promises the money is gone "whatever the capability wrote". A rule
+  // that only replaces fields called `totals` or `sales` misses the detector
+  // that formatted the same figure into free text — "420 GBP still
+  // outstanding" — and the entityRef whose label is a counterparty's name.
+  const snapshot = fixtures.attentionSnapshot();
+  const instance = orchestratorOver(snapshot);
+  const result = await instance.run({ capability: "get_business_attention_summary", args: {}, ctx: groupContext() });
+
+  const everything = JSON.stringify({ data: result.data, entityRefs: result.entityRefs, summary: result.summary });
+  assert.ok(!MONEY_IN(everything), `an amount reached a shared thread: ${everything.slice(0, 300)}`);
+
+  const late = result.data.items.find((item) => item.reasons.includes("payment_outstanding"));
+  assert.ok(late, "the finding itself must survive: the thread is told to look, not told how much");
+  assert.ok(/withheld/.test(late.reason), `the sentence must say the figure was withheld, got: ${late.reason}`);
+
+  // The other direction: a shared thread may see how MANY, and losing that
+  // would be the redaction destroying what it is allowed to show.
+  const counted = result.data.items.find((item) => item.facts.some((fact) => fact.key === "count"));
+  assert.ok(counted, "no grouped item survived at all");
+  assert.strictEqual(typeof counted.facts.find((fact) => fact.key === "count").value, "number",
+    "the count was redacted because its field is called `value`");
+  const amountFact = result.data.items.flatMap((item) => item.facts).find((fact) => fact.key === "amount");
+  if (amountFact) assert.strictEqual(amountFact.value.restricted, true, "an amount fact survived as a number");
+});
+
+checkAsync("a group thread is told which bank row, never who was paid", async () => {
+  const snapshot = fixtures.attentionSnapshot();
+  snapshot.bankRows = [
+    { id: "t_1", amount: -400, currency: "GBP", bookingDate: "2026-06-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
+    { id: "t_2", amount: -400, currency: "GBP", bookingDate: "2026-07-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
+    { id: "t_3", amount: -400, currency: "GBP", bookingDate: "2026-08-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
+    { id: "t_4", amount: -450, currency: "GBP", bookingDate: "2026-09-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" }
+  ];
+  const instance = orchestratorOver(snapshot);
+  const result = await instance.run({ capability: "get_banking_attention_summary", args: {}, ctx: groupContext() });
+  const everything = JSON.stringify({ data: result.data, entityRefs: result.entityRefs });
+  assert.ok(!everything.includes("Margaret Ellison"), "a counterparty's name reached a shared thread");
+  const ref = result.data.items.flatMap((item) => item.entityRefs).find((row) => row.id === "t_4");
+  assert.ok(ref, "the row itself must still be identified");
+  assert.strictEqual(ref.labelRestricted, true, "the label has to say it was withheld, not merely be empty");
+});
+
+checkAsync("a one-to-one thread that allows both still gets both", async () => {
+  const snapshot = fixtures.attentionSnapshot();
+  const instance = orchestratorOver(snapshot);
+  const result = await instance.run({ capability: "get_business_attention_summary", args: {}, ctx: waContext() });
+  const late = result.data.items.find((item) => item.reasons.includes("payment_outstanding"));
+  assert.ok(MONEY_IN(late.reason), "the redaction is following the channel, not the capability");
+});
+
 checkAsync("an unknown capability and a capability behind an off flag are both refused, by code", async () => {
   const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);

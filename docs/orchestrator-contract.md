@@ -348,7 +348,22 @@ The three honesty rules a channel must not paper over:
 `envelope.applyChannelProfile` runs inside `finish()`, so a group thread with `pii_level: "none"` and
 `financial_data_allowed: false` gets `{ restricted: true, reason: "channel_pii_policy" }` in place of the
 customer and the money, whatever the capability wrote. The channel cannot forget to apply it, and cannot
-undo it.
+undo it. It runs over `data` **and** `entityRefs`, because the refs leave the server beside the data.
+
+Redaction follows the value, not the field name, because money reaches a reader in three shapes:
+
+- a **block** — `totals`, `sales`, `fees`, `tax`, `settlements`, `amounts`, `profit`, and `value` when it
+  holds an object (a stock valuation) — replaced whole;
+- a **fact row** — `{ key, value, currency? }`, where the meaning is in `key` at runtime. `{ key:
+  "amount" }` is withheld and `{ key: "count" }` is not: a rule reading the literal field name `value`
+  destroys the counts a shared thread may see and keeps the amounts it may not;
+- a **sentence** — `"420 GBP still outstanding"`, written by a detector. Amounts in any string become
+  `[amount withheld]`, so the line still reads as a line and says what was removed.
+
+For `pii_level: "none"`: `customer`, `customerName`, `customerEmail`, `email` and `phone` are replaced,
+and an `entityRef` of type `bankTransaction` or `note` keeps its `id` and loses its `label` with
+`labelRestricted: true` — the thread is told WHICH row, never who was paid. A product name is not PII and
+is not touched.
 
 ---
 
