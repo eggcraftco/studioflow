@@ -465,6 +465,30 @@ function createEbayConnectorFunctions(deps) {
   // throw is logged by the platform with its message and stack — the one channel
   // these rules cannot govern. Hence: no error message, stack or object is ever
   // passed to console.*, and the whole body sits inside one outermost try.
+  // A refusal that reached the burn leaves eBay's authorization CODE alive, and
+  // the code is not the state's. `exchangeCode` sends `grant_type`, `code` and
+  // one global RuName (commerce/ebay/oauth.js), so eBay validates a code against
+  // our APPLICATION and never against the state that presented it. Burning
+  // `state_B` therefore stops `state_B` and nothing else: whoever can read the
+  // code out of the first hop's access log begins their own connect flow, gets a
+  // state and a nonce of their own, and presents the observed code against THAT
+  // state. Executed against this handler before this existed: the victim's state
+  // answered `browser` with zero exchanges, and a second, freshly minted state
+  // exchanged the same code and answered `connected`.
+  //
+  // So a refusal that burned a live state spends the code as well, and keeps
+  // nothing at all: one token request, no identity call, no connection, no
+  // credentials, no syncLog row, no log line. An observed code is dead before a
+  // log reader can use it, which is what makes residual 1 survivable rather than
+  // merely small. A failure here is not an error — a code that cannot be spent
+  // is already the outcome we want — so it is swallowed whole, and the seller's
+  // answer stays exactly the verdict the transaction reached.
+  async function spendAndDiscardCode(code, stateRuName) {
+    try {
+      await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateRuName || ruName() || ""), fetchImpl });
+    } catch { /* refused, expired, wrong environment or already spent — every one of those is the goal */ }
+  }
+
   const ebayOAuthCallback = onRequest({ region: "europe-west2", timeoutSeconds: 120, maxInstances: 10 }, async (req, res) => {
     let answered = false;
     const answer = (status, payload) => { answered = true; answerCallback(res, status, payload); };
@@ -522,14 +546,27 @@ function createEbayConnectorFunctions(deps) {
         if (row.used === true || n(row.expiresAt) < now()) return { reason: "state" };
         // Burned whatever the answer: a second attempt with the right nonce cannot follow a wrong one (§4.5).
         tx.update(ref, { used: true, usedAt: FieldValue.serverTimestamp() });
-        if (!nonce || sha256hex(nonce) !== String(row.nonceHash || "")) return { reason: "browser" };
-        if (String(row.environment || "sandbox") !== env()) return { reason: "environment" };
+        // The RuName travels with the verdict because a refusal spends the code
+        // below, and the code was fetched against the RuName this state named.
+        if (!nonce || sha256hex(nonce) !== String(row.nonceHash || "")) return { reason: "browser", ruName: String(row.redirectRuName || "") };
+        if (String(row.environment || "sandbox") !== env()) return { reason: "environment", ruName: String(row.redirectRuName || "") };
         return { reason: "", row };
       });
       // A fixed string, the validated rid and the numeric gRPC status — never
       // error.message, which for an argument error carries the path that threw.
     } catch (error) { console.error(`ebay callback: state transaction failed rid=${rid} code=${Number(error?.code) || 0}`); verdict = { reason: "state" }; }
-    if (verdict.reason) { answer(200, { ok: false, outcome: "error", reason: verdict.reason, rid }); return; }
+    if (verdict.reason) {
+      // `browser` and `environment` are the two verdicts that FOLLOW a burn, so
+      // they are the two where a live code arrived and nothing else will ever
+      // spend it. `state` (unknown, used or expired) is deliberately not one of
+      // them: it is reachable by a signed caller with no live state at all, and
+      // redeeming there would turn this endpoint into a way to drive outbound
+      // token requests to eBay at will. `disabled` is not one either — while the
+      // connector is switched off nothing may contact eBay (§2), and nothing can
+      // be connected with that code either.
+      if (verdict.reason === "browser" || verdict.reason === "environment") await spendAndDiscardCode(code, verdict.ruName);
+      answer(200, { ok: false, outcome: "error", reason: verdict.reason, rid }); return;
+    }
     const stateData = verdict.row;
     try {
       const tokens = await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateData.redirectRuName || ruName()), fetchImpl });

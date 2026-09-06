@@ -836,6 +836,13 @@ outermost `try`; see *Logging*.
     it (`used: true, usedAt`) inside the same transaction, then compare `sha256hex(nonce)` with
     `nonceHash` → mismatch **or empty nonce** → `browser`; then `row.environment !== environment()` →
     `environment`.
+11b. On a verdict that FOLLOWED the burn — `browser` or `environment` — redeem the code and throw the
+    tokens away before answering: one token request, no identity call, nothing written, nothing logged.
+    eBay's code is single use and is bound to the application rather than to the state, so a refusal that
+    leaves it unspent leaves it replayable against a freshly minted state (*The burn, and the spend*).
+    `state` and `disabled` are deliberately **not** redeemed: the first is reachable with no live state at
+    all and would let a signed caller drive outbound token requests at will, and the second must not
+    contact eBay while the connector is switched off (§2).
 12. Exchange the code server-side, ask the Identity API who the seller is, box the tokens, upsert the
     connection, write `syncLog` and health — all unchanged — then 200 `outcome:"connected"`.
     Identity 403 → `no_seller`; auth-class throw → `token`; anything else → `exchange`.
@@ -851,33 +858,54 @@ outermost `try`; see *Logging*.
 | Is the connector switched on? | **Function** | `NIVADESK_EBAY_CONNECTOR` is a server switch. |
 | What does the seller see? | **Web** | The function answers JSON now; the redirect is the route's. |
 
-#### The burn — why an absent cookie still costs one invocation
+#### The burn, and the spend — why an absent cookie still costs one invocation
 
 This is the part of §5 that the transport change must not touch, so it is written out rather than
-implied.
+implied. **An earlier revision of this section got the mechanism wrong, and the correction is the
+subject of the whole subsection**: it claimed the burn ended the attack "at the moment of consent,
+unconditionally". It does not. Burning a state stops *that state*; the attack does not need it.
 
 §5's threat model: attacker B is a legitimate owner of workspace B. B calls `beginEbayConnect`, keeps
 `state_B` and `nonce_B`, and phishes seller S into consenting. eBay sends S's browser to
 `nivadesk.app/ebay/callback?code=X&state=state_B`. **S has no cookie.**
 
-- **What must happen, and does:** the request reaches the function, the transaction burns `state_B`
-  (`used: true`) and answers `browser`. `state_B` is dead. Even if B later obtains code `X` — from
-  Hostinger's access log, from S's browser history, from S's address bar — the state is used, the answer
-  is `state`, and the attack is over **at the moment of consent, unconditionally**.
-- **What an absent-cookie web-side refusal would have done:** the route would refuse at its step 3,
-  never call, and `state_B` would sit `used: false` for the rest of its ten-minute TTL. B would then
-  need only code `X`, which this very section concedes is still written in cleartext to Hostinger's
-  access log — and B, unlike S, *does* hold `nonce_B` in B's own browser. B replays
-  `nivadesk.app/ebay/callback?code=X&state=state_B` from B's browser, the state is unused, the nonce
-  matches, the environment is right, and S's eBay account, orders and buyer addresses land in workspace
-  B. The whole flow's safety would have collapsed onto "can B learn code X", which today does not matter
-  at all.
+- **The burn, and exactly what it is worth.** The request reaches the function, the transaction burns
+  `state_B` (`used: true`) and answers `browser`. `state_B` is dead, and a *second presentation of
+  `state_B`* — the right nonce following a wrong one — answers `state`. That is the whole of it.
+- **Why that is not the end of the attack.** The authorization code is bound to the **application**, not
+  to the state that fetched it: `exchangeCode` sends `grant_type`, `code` and `redirect_uri`, and
+  `redirect_uri` is the one global RuName (`functions/commerce/ebay/oauth.js`). So B never needs
+  `state_B` again. B calls `beginEbayConnect` in B's own browser, gets a fresh `state_L` and `nonce_L`,
+  and requests `nivadesk.app/ebay/callback?code=X&state=state_L`. The state is live, the nonce matches,
+  the environment is right, and S's eBay account lands in workspace B. **Executed against the real
+  handler:** the victim's state answered `reason=browser` with `exchangeCode` called zero times, and a
+  second, freshly minted state then exchanged the *same* code and answered `outcome:"connected"`.
+- **What actually closes it: the refusal spends the code.** On a verdict that follows a burn — `browser`
+  and `environment` — the function calls `exchangeCode` itself and throws the tokens away: no identity
+  call, no connection document, no credentials, no `syncLog` row, no log line. eBay's codes are single
+  use, so an observed code is dead before a log reader can reach it, and B's replay above answers
+  `reason=token` (`invalid_grant`) instead of connecting. That, and not the burn, is what makes
+  residual 1 *survivable* rather than merely small.
+- **What an absent-cookie web-side refusal would cost.** The route would refuse at its step 3 and never
+  call, so nothing would burn `state_B` **and — the part that matters — nothing would spend code `X`**.
+  It would sit valid in Hostinger's access log for the rest of eBay's TTL, and B replays it against a
+  state of B's own minting. Refusing at the edge does not save the defence by one invocation; it removes
+  the only step that can kill the code.
 
 The "economy" was one function invocation. It is not an economy; it is the removal of the defence.
-The rule is therefore: **a shaped callback always POSTs**, cookie or no cookie, and the state is
-consumed at first presentation exactly as §4.5 says. The stated justification of the earlier draft —
-"the only party holding the nonce is the party who began the flow, who can simply start again" —
-describes the attacker in this threat model, not the victim.
+The rule is therefore: **a shaped callback always POSTs**, cookie or no cookie; the state is consumed at
+first presentation exactly as §4.5 says, and the code is consumed with it. The stated justification of
+the earlier draft — "the only party holding the nonce is the party who began the flow, who can simply
+start again" — describes the attacker in this threat model, not the victim.
+
+**Where the browser binding is decided, stated plainly rather than left to be inferred.** It is *split*,
+and criterion 2 of the review list ("browser/session binding verified in the web layer") is met in
+substance and not literally. The route can see only whether a cookie was **present**; it copies what it
+saw into `nonce` and posts. Whether the value is **right** is `sha256hex(nonce) !== row.nonceHash` inside
+the function's transaction, because the hash lives in Firestore and the Hostinger process holds no
+credential for it — and giving it one would be a far worse trade than the one under review. Nothing in
+the web layer *verifies* anything; it observes and carries. Residual 3 says what the cookie check is
+worth on its own.
 
 The cost of the rule is bounded: a scan can only reach the function with a `code` and a `state` that
 pass the web route's shape checks, and an invented state answers `reason=state` after one transaction
@@ -936,11 +964,13 @@ route signs and relays it unchanged; the function finds `state_L` unused, the no
 environment right, and exchanges **someone else's** code into the attacker's workspace. Nothing in the
 protocol notices, because nothing in the protocol ties the two together.
 
-The only thing that normally prevents it is that the genuine flow spends the single-use code first — and
-the genuine flow spends it *because the state is burned at first presentation*, which is why the two
-paragraphs above and the ones under *The burn* are the same argument seen twice. Residual 1 lists the
-places a code can be observed (Hostinger's access log, the seller's browser history, the address bar) and
-then discounts them; this paragraph says what that discount rests on. PKCE would bind the code to the
+What prevents it is that the code is spent before the attacker can present it — by the genuine flow when
+the flow completes, and by the **refusal path** when it does not (*The burn, and the spend*). Note which
+way that causality runs, because an earlier revision had it backwards: burning the state does **not**
+cause the code to be spent, and on the browser-mismatch path nothing used to spend it at all. Residual 1
+lists the places a code can be observed (Hostinger's access log, the seller's browser history, the address
+bar) and then discounts them; the discount rests on the code being dead by the time it is read, which is
+true only because the refusal redeems it. PKCE would bind the code to the
 request that started it, and eBay's OAuth documents do not offer it for this flow
 (`docs/ebay-callback-platform-logging.md`, Hostinger's own suggestion and why only "redeem immediately"
 was available). It is also the reason production stays blocked on `connect.nivadesk.app` rather than that
@@ -972,8 +1002,8 @@ reaches the screen.
 | eBay decline (`error=…`) | Web | 302 `ebay=cancelled`, no call | "eBay connection cancelled. Nothing was changed." | nothing by us |
 | Not a callback (no `code`, no `error`) | Web | 302 `reason=missing_code`, no call | "eBay did not complete the connection. Try again." | nothing by us |
 | Malformed `code`/`state` | Web | 302 `reason=missing_code`, no call | same | nothing by us |
-| **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned** | "Finish connecting eBay in the same browser you started from." | nothing |
-| Nonce mismatch | Function | 200 `reason=browser`, **state burned** | same | nothing |
+| **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned and the code redeemed and discarded** | "Finish connecting eBay in the same browser you started from." | nothing |
+| Nonce mismatch | Function | 200 `reason=browser`, **state burned, code redeemed and discarded** | same | nothing |
 | `NIVADESK_EBAY_CALLBACK_KEY` unset or under 32 chars | Web | 302 `reason=unavailable`, no call | "eBay did not complete the connection. Try again." | `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` / `… shorter than 32 characters` |
 | Unauthenticated / wrongly signed / stale timestamp / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection; **at most once a minute per instance** (below) |
 | `EBAY_CALLBACK_KEY` unset on the function | Function | **401** `{"ok":false}` (indistinguishable from a wrong key) | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured`, **at most once a minute per instance** — it is a configuration fact, not a per-request event, and the repeat is what an outsider would use to bury it |
@@ -985,7 +1015,7 @@ reaches the screen.
 | Malformed `state` / over-long `code` or `nonce` | Function | **400** `{"ok":false,"rid"}` | `reason=unavailable` | `ebay callback: field shape refused rid=<rid>` + which field name |
 | Connector off | Function | 200 `reason=disabled` | "eBay is not set up on this server yet. Contact support and we will enable it." | nothing |
 | Unknown / replayed / expired state | Function | 200 `reason=state` | "The eBay sign-in link has expired or was already used. Start again." | nothing (a transaction throw logs `ebay callback: state transaction failed rid=<rid> code=<n>` — a fixed string, the validated rid and the numeric gRPC status, **never** `error.message`) |
-| Environment mismatch | Function | 200 `reason=environment`, state burned | "This eBay account belongs to a different environment." | nothing |
+| Environment mismatch | Function | 200 `reason=environment`, state burned, code redeemed and discarded (best effort — a code minted on the other host is simply refused) | "This eBay account belongs to a different environment." | nothing |
 | Identity 403 / no seller | Function | 200 `reason=no_seller` | "eBay did not tell us which seller account this is. Reconnect and approve every permission." | nothing |
 | Exchange refused (auth class) | Function | 200 `reason=token` | "eBay did not complete the connection. Try again." | `ebayOAuthCallback failed:` + the truncated `EbayOAuthError` message, which §14.1 pins to be built from eBay's `error` / `error_description` only |
 | Exchange failed (anything else from `commerce/ebay/oauth.js`) | Function | 200 `reason=exchange` | same | as above |
@@ -1313,8 +1343,13 @@ would have to decide otherwise.
    anyone with access to that log can read a single-use authorization code for as long as it is retained.
    The code now appears in **one** access log instead of two, and the one that remains is on our own
    domain rather than in a Google project whose log readers are a different and larger set of people. It
-   is worthless without `EBAY_CLIENT_SECRET`, and — because of *The burn* — worthless against a state that
-   has already been presented. It can only be closed by not receiving the code in a query string at all,
+   is worthless without `EBAY_CLIENT_SECRET`, and — because of *The burn, and the spend* — worthless once
+   it has been presented **at all**: every callback that reaches the transaction either exchanges the code
+   into a connection or redeems and discards it, so a log reader finds a code eBay has already refused.
+   The exception is every consent that lands while the relay cannot reach the function (a key outage, a
+   401, a 5xx, the route's timeout): those codes are never presented, nothing on our side can invalidate
+   them, and the deploy plan's §4.2 says what the operator does about it. It can only be closed by not
+   receiving the code in a query string at all,
    which eBay's redirect does not offer. This is **measured, not assumed**: synthetic requests sent on 6
    September appear in hPanel's access-log view with the query string verbatim, and Hostinger's own
    answers offer no disable, no redaction, no established retention, no disclosed reader set and no

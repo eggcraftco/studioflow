@@ -69,7 +69,10 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
   store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: providerFlag }, connections: {} } });
   store.write("companies/c1", { ownerUid: "u1", companyName: "Acme", memberAccess });
   store.write("companySettings/c1", { defaultDeliveryTime: 14 });
-  const calls = { pushes: [], held: [], enqueued: [], piiLog: [], exchanges: 0, refreshes: 0, identities: 0, appTokens: 0 };
+  // `codes` is every code the connector actually presented to eBay's token
+  // endpoint, in order: §5.4's refusal path spends the code on purpose, and a
+  // counter alone cannot say WHICH code was spent.
+  const calls = { pushes: [], held: [], enqueued: [], piiLog: [], exchanges: 0, codes: [], refreshes: 0, identities: 0, appTokens: 0 };
   // `callbackKey` is a switch so a test can blank it or truncate it and watch the
   // handler fail closed — with the SAME 401 a wrong key gets (§5.4).
   const switches = { connectorOn, callbackKey: CALLBACK_KEY };
@@ -78,7 +81,7 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
     // A refusal is the REAL EbayOAuthError, not an Error wearing its fields: the
     // callback logs a caught message only for that class (§5.4), so a stand-in
     // would leave the one permitted message line unexercised by the log pin.
-    exchangeCode: async ({ code }) => { calls.exchanges += 1; if (code !== "good-code") throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${calls.exchanges}`, expires_in: 7200, refresh_token: `rt_${calls.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token", scope: realOAuth.SCOPES.join(" ") }; },
+    exchangeCode: async ({ code }) => { calls.exchanges += 1; calls.codes.push(String(code)); if (code !== "good-code") throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${calls.exchanges}`, expires_in: 7200, refresh_token: `rt_${calls.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token", scope: realOAuth.SCOPES.join(" ") }; },
     refreshToken: async () => { calls.refreshes += 1; await new Promise((r) => setTimeout(r, 30)); return { access_token: `at_refreshed_${calls.refreshes}`, expires_in: 7200 }; },
     fetchIdentity: async () => { calls.identities += 1; return { userId: "ebayuser_xxx", username: "eggcraft_uk", accountType: "BUSINESS", registrationMarketplaceId: "EBAY_GB" }; },
     appToken: async () => { calls.appTokens += 1; return { access_token: "app-token", expires_in: 7200 }; },

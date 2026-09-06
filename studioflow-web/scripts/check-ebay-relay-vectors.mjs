@@ -94,7 +94,7 @@ try {
   // The harness clock is what the function checks the signature's timestamp
   // against, and the route stamps the real one — so they are started together.
   const nowRef = { value: Date.now() };
-  const { fns, store } = harness.buildEbay({ nowRef });
+  const { fns, store, calls } = harness.buildEbay({ nowRef });
 
   /** Drive the real route, capture the request it would have sent. */
   async function relay(url, cookie, answer) {
@@ -168,6 +168,12 @@ try {
   check("…and the function answers browser with the state consumed, which is the whole of §5's browser binding",
     burned.payload.reason === "browser" && store.read(`ebayConnectStates/${third.state}`).used === true,
     JSON.stringify(burned.payload));
+  // The burn kills that state; only the exchange kills the code, which is bound
+  // to the application and not to the state that fetched it (§5.4, "The burn,
+  // and the spend"). This is the end of the round trip the route exists for, so
+  // it is checked here as well as in the qa suite.
+  check("…and the code the refusal saw was spent, not left in the access log for a fresh-state replay",
+    calls.codes.includes("good-code"), JSON.stringify(calls.codes));
 
   // A decline never reaches the connector, and an empty error= is still a decline.
   for (const query of ["error=access_denied", "error="]) {

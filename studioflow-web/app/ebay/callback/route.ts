@@ -23,7 +23,8 @@ import { createHmac, randomBytes } from "node:crypto";
 // there is no other hop.
 //
 // The transport moved; not one decision did. In particular this route does NOT
-// refuse a missing nonce cookie — see the burn at step 3.
+// refuse a missing nonce cookie — see step 3, where the reason is the CODE and
+// not, as an earlier revision of that comment claimed, the state.
 
 // Node, not Edge, and this is load-bearing rather than a default: Next replaces
 // process.env statically for Edge route handlers, which would bake the relay key
@@ -98,22 +99,33 @@ export async function GET(request: NextRequest) {
 
   // 3. The nonce cookie is READ, and never gated on.
   //
-  // This is the part of §5 the transport change must not touch, so it is
-  // written out. Attacker B owns workspace B, calls beginEbayConnect, keeps
-  // state_B and nonce_B, and phishes seller S into consenting. S's browser has
-  // no cookie. What must happen — and does — is that the request still reaches
-  // the function, which burns state_B inside the same transaction that finds
-  // the nonce wrong and answers `browser`. state_B is dead at the moment of
-  // consent, unconditionally.
+  // Attacker B owns workspace B, calls beginEbayConnect, keeps state_B and
+  // nonce_B, and phishes seller S into consenting. S's browser has no cookie,
+  // so this POST carries nonce:"" and the function burns state_B inside the
+  // transaction that finds the nonce wrong.
   //
-  // Refusing here "to save an invocation" would leave state_B unused for the
-  // rest of its ten-minute TTL, and B — who holds nonce_B in B's own browser —
-  // would need only the code, which is still in Hostinger's access log (§5.4,
-  // residual 1). B replays, the nonce matches, and S's eBay account, orders and
-  // buyer addresses land in workspace B. The saving is one invocation; the cost
-  // is the whole defence. So: a shaped callback always POSTs, cookie or no
-  // cookie, and an absent cookie travels as the empty string, whose meaning the
-  // function decides.
+  // Burning state_B is NOT what ends the attack, and an earlier revision of
+  // this comment said it was. eBay's authorization code is bound to our
+  // APPLICATION, not to the state that fetched it — exchangeCode sends
+  // grant_type, code and the one global RuName — so B never needs state_B
+  // again: B mints a fresh state and nonce in B's own browser and presents the
+  // observed code against that one. Executed against the real handler before it
+  // learned to spend the code: the victim's state answered `browser` with the
+  // exchange never called, and a second, freshly minted state then exchanged
+  // the SAME code and answered `connected`.
+  //
+  // What ends it is that the function REDEEMS the code on that refusal and
+  // discards the tokens (§5.4, "The burn, and the spend"), so an observed code
+  // is already dead when a log reader reaches it (residual 1). That is the
+  // whole reason this route posts rather than refusing: an edge refusal would
+  // save one invocation and leave the code alive for the rest of eBay's TTL,
+  // with nothing on our side able to kill it. The state was never the thing
+  // being protected here.
+  //
+  // So the cookie's PRESENCE is settled here and its CORRECTNESS in the
+  // transaction, where the hash lives and where this process has no credential
+  // to look. An absent cookie travels as the empty string and answers `browser`
+  // either way.
   //
   // No second decodeURIComponent: NextRequest's cookie jar already applies one
   // (next/dist/compiled/@edge-runtime/cookies, parseCookie), so the mirror of

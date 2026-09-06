@@ -17,6 +17,7 @@ const path = require("path");
 const { buildEbay, connect, callbackPost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
 const { decryptToken } = require("../../security/tokenBox");
 const hashing = require("../../commerce/ebay/hashing");
+const realOAuth = require("../../commerce/ebay/oauth");
 const { STATE_TTL_MS, TOKEN_REFRESH_AHEAD_MS } = require("../../ebayConnector");
 
 // Everything the suite says out loud, teed into one list for the log pin below.
@@ -124,18 +125,64 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(store.read(`ebayConnectStates/${other.state}`).used, true);
     const again = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
     assert.strictEqual(again.payload.reason, "state", "burned");
-    assert.strictEqual(calls.exchanges, 0, "no code was ever exchanged");
-    assert.strictEqual(store.paths("ebayConnections/").length, 0, "no connection, no credentials");
+    // The three refusals above each SPENT the code, and that is the other half
+    // of the defence: the burn kills this state, the exchange kills this code.
+    // A code is bound to the application, not to the state that fetched it, so
+    // an unspent one is replayable against any other live state (the case below).
+    assert.deepStrictEqual(calls.codes, ["good-code", "good-code", "good-code"], "every refusal that burned a live state also spent the code");
+    assert.strictEqual(calls.identities, 0, "spending is one token request: no identity call, nothing asked about the seller");
+    assert.strictEqual(store.paths("ebayConnections/").length, 0, "and nothing kept: no connection, no credentials");
   });
 
-  await check("a state minted for the sandbox is refused on a production server (reason=environment), before any exchange", async () => {
+  await check("the code a refusal observed is SPENT, so the §5 attacker's fresh-state replay fails — the burn alone never stopped it", async () => {
+    // eBay binds a code to the APPLICATION (grant_type, code, one global RuName),
+    // never to the state that fetched it, so burning the victim's state leaves
+    // the code usable against any other live state. Executed against this
+    // handler before the fix: the victim answered `browser` with zero exchanges,
+    // and a second, freshly minted state exchanged the same code and connected.
+    // Modelled here with eBay's real rule — a code is single use — which the
+    // shared fake does not impose, because most cases here reuse "good-code".
+    const spent = new Set();
+    const singleUse = async ({ code }) => {
+      if (spent.has(code)) throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" });
+      spent.add(code);
+      return { access_token: "at_x", expires_in: 7200, refresh_token: "rt_x", refresh_token_expires_in: 47304000, scope: realOAuth.SCOPES.join(" ") };
+    };
+    const { fns, store, calls } = buildEbay({ oauth: { exchangeCode: singleUse } });
+    const victim = await fns.beginEbayConnect({ auth, data: {} });
+    const phished = await callbackPost(fns, { state: victim.state, code: "OBSERVED-CODE-9f2a", nonce: "" });
+    assert.strictEqual(phished.payload.reason, "browser", said(phished));
+    assert.strictEqual(store.read(`ebayConnectStates/${victim.state}`).used, true, "the state is burned");
+    assert.ok(spent.has("OBSERVED-CODE-9f2a"), "…and the code is spent, which is the half the burn cannot do");
+    assert.strictEqual(store.paths("ebayConnections/").length, 0, "the tokens that came back were thrown away");
+    assert.strictEqual(calls.identities, 0);
+    // The attacker's own live state, their own nonce, the code they observed.
+    const attacker = await fns.beginEbayConnect({ auth, data: {} });
+    const replay = await callbackPost(fns, { state: attacker.state, code: "OBSERVED-CODE-9f2a", nonce: attacker.nonce });
+    assert.strictEqual(replay.payload.ok, false, said(replay));
+    assert.strictEqual(replay.payload.reason, "token", "eBay refuses a spent code — invalid_grant is auth class");
+    assert.strictEqual(store.paths("ebayConnections/").length, 0, "nothing landed in the attacker's workspace");
+    // And the same fresh state, with a code nobody spent, still connects: the
+    // defence is the spending, not a blanket refusal.
+    const honest = await fns.beginEbayConnect({ auth, data: {} });
+    const good = await callbackPost(fns, { state: honest.state, code: "FRESH-CODE-1", nonce: honest.nonce });
+    assert.strictEqual(good.payload.outcome, "connected", said(good));
+  });
+
+  await check("a state minted for the sandbox is refused on a production server (reason=environment) — nothing is stored, and the code is spent rather than left alive", async () => {
     const sandbox = buildEbay();
     const begun = await sandbox.fns.beginEbayConnect({ auth, data: {} });
     const production = buildEbay({ environment: "production" });
     production.store.write(`ebayConnectStates/${begun.state}`, sandbox.store.read(`ebayConnectStates/${begun.state}`));
-    const res = await callbackPost(production.fns, { state: begun.state, nonce: begun.nonce });
+    const res = await callbackPost(production.fns, { state: begun.state, code: "MIXED-ENV-CODE", nonce: begun.nonce });
     assert.strictEqual(res.payload.reason, "environment", said(res));
-    assert.strictEqual(production.calls.exchanges, 0);
+    assert.strictEqual(production.store.read(`ebayConnectStates/${begun.state}`).used, true, "burned like any other refusal");
+    // Best effort by construction: a code minted on the other host will not be
+    // redeemed by this one. It costs one refused request and closes the case
+    // where the two environments are not really different (a switched flag).
+    assert.deepStrictEqual(production.calls.codes, ["MIXED-ENV-CODE"], "the code is presented, not left for a log reader");
+    assert.strictEqual(production.calls.identities, 0, "and nothing else happens: no identity call, no connection");
+    assert.strictEqual(production.store.paths("ebayConnections/").length, 0);
   });
 
   await check("the connector switch off answers reason=disabled to a SIGNED caller and 401 to an unsigned one; an identity 403 answers no_seller; a bad code answers token", async () => {
