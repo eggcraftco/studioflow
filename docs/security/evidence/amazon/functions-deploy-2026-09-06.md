@@ -521,7 +521,7 @@ Started under the operator's standing approval after B5.1's clean gate. Same sev
 | saveStocktakeCounts | savestocktakecounts-00001-pob | 401 | savestocktakecounts-00002-git | 401 |
 | saveSupplier | savesupplier-00002-puj | 401 | savesupplier-00003-bed | 401 |
 
-6: fifteen-minute watch (03:54:37 → 04:10:30): _pending_.
+6: fifteen-minute watch (03:54:37 → 04:10:47 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic was the probe set — passed. Four conditions met → B5.3 started under the operator's standing approval.
 
 ## Rollback used
 
