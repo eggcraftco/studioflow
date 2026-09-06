@@ -84,7 +84,7 @@ const SHOPIFY = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "shopify");
 const signals = (...stores) => ({
   shopifyStores: stores,
   channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [],
-  squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [],
+  squareConnections: [], ebayConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [],
   retiredHolds: [],
 });
 const store = (shop, status) => ({ shop, status });
@@ -153,6 +153,69 @@ check("pausing every store still asks for attention, pausing one does not", () =
 
 check("a workspace with no store is Available", () => {
   assert.strictEqual(shipped.resolveIntegrationState(SHOPIFY, signals()).state, "available");
+});
+
+// ---- eBay: the same rule, on the connector that ships switched off ---------
+//
+// The card is read from rows the SERVER returns, and `needsAttention` is the
+// server's own specStatus (design §10, §11.1). These claims are the contract,
+// not the code: a disconnected row is not a connection; the card only asks for
+// attention when EVERY live account needs it; and a workspace with the
+// connector switched off — where getEbayConnections rejects and the signal
+// settles empty — reads Available, exactly as it did before eBay existed.
+check("eBay: no rows is Available, including when the connector is off", () => {
+  const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
+  assert(ebay, "no ebay provider in the shipped list");
+  assert.strictEqual(ebay.kind, "native", "a planned card short-circuits before the eBay branch");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, signals()).state, "available");
+  // The signals object built before eBay existed must not throw here either.
+  const older = signals();
+  delete older.ebayConnections;
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, older).state, "available");
+});
+
+check("eBay: a disconnected row is not a connection", () => {
+  const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
+  const live = { ...signals(), ebayConnections: [
+    { account: "eggcraft", status: "disconnected", specStatus: "disconnected", needsAttention: false }
+  ] };
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, live).state, "available");
+});
+
+check("eBay: one healthy account beside a broken one keeps the card green", () => {
+  const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
+  const both = { ...signals(), ebayConnections: [
+    { account: "eggcraft", status: "connected", specStatus: "connected_read_only", needsAttention: false },
+    { account: "second", status: "reconnect_required", specStatus: "reauthorization_required", needsAttention: true }
+  ] };
+  const resolved = shipped.resolveIntegrationState(ebay, both);
+  assert.strictEqual(resolved.state, "connected");
+  assert.strictEqual(resolved.detail, "2 accounts");
+});
+
+check("eBay: every live account needing a look lowers the card", () => {
+  const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
+  for (const specStatus of ["reauthorization_required", "degraded", "suspended"]) {
+    const rows = { ...signals(), ebayConnections: [
+      { account: "eggcraft", status: "connected", specStatus, needsAttention: true }
+    ] };
+    assert.strictEqual(
+      shipped.resolveIntegrationState(ebay, rows).state, "attention",
+      `${specStatus} is one of the three the spec calls needing attention`
+    );
+  }
+});
+
+check("eBay: a sandbox connection says so on the card", () => {
+  // A seller looking at a green badge over a sandbox account has no other way
+  // to learn that none of it is real.
+  const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
+  const sandbox = { ...signals(), ebayConnections: [
+    { account: "eggcraft", status: "connected", specStatus: "connected_read_only", needsAttention: false, environment: "sandbox" }
+  ] };
+  const resolved = shipped.resolveIntegrationState(ebay, sandbox);
+  assert.strictEqual(resolved.state, "connected");
+  assert(/Sandbox/.test(resolved.detail), `the sandbox is unmentioned: ${resolved.detail}`);
 });
 
 check("the other cards are untouched", () => {
