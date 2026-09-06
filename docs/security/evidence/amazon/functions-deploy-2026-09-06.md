@@ -112,7 +112,7 @@ Cloud Scheduler jobs behind the batch (read at 01:54 UTC, `gcloud scheduler jobs
 
 Result: "Deploy complete" at 01:55:56 (2 min 16 s), **8 of 8 "Successful update operation"**, exit 0; all eight ACTIVE on their new revisions at 01:56:05; ERROR entries since the start: 0. The eight Cloud Scheduler jobs read back ENABLED with the same schedules after the deploy. One side effect worth knowing for the later batches: re-deploying an `onSchedule` function re-applies its Scheduler job, and for interval schedules ("every N minutes/hours") that re-anchors the interval at the deploy time — after B2 the next runs read reminder check 02:10 (was 01:57), tracking refresh 02:55 (was 02:00), billing reconcile 02:55 (was 02:13), quick-reply key sweep 01:55 (ran at deploy time instead of 00:54 tomorrow); finance sweep 02:11, accounting reconcile 06:43 and bank sync 06:47 kept their next run. No job was lost or disabled; the hourly jobs simply skipped one tick.
 
-Gate (passive, as planned): each job's next scheduled run is read from the logs; no manual trigger. Readback at 02:20:41 UTC (window 01:53:40 → 02:20:41): **0 ERROR entries**; two jobs ran inside the window, both on their new revisions and both 200 — `scheduledremindercheck-00108-pev` at 02:10:01 (0.99 s) and `scheduledfinancesweep-00005-roz` at 02:11:02 (2.16 s). The hourly jobs (tracking refresh, billing reconcile) were re-anchored to 02:55 by the deploy and are read at that run; the 6-hourly, 8-hourly and daily jobs at theirs. No job disabled, no job lost.
+Gate (passive, as planned): each job's next scheduled run is read from the logs; no manual trigger. Readback at 02:20:41 UTC (window 01:53:40 → 02:20:41): **0 ERROR entries**; two jobs ran inside the window, both on their new revisions and both 200 — `scheduledremindercheck-00108-pev` at 02:10:01 (0.99 s) and `scheduledfinancesweep-00005-roz` at 02:11:02 (2.16 s). The hourly jobs (tracking refresh, billing reconcile) were re-anchored to 02:55 by the deploy and are read at that run; the 6-hourly, 8-hourly and daily jobs at theirs. No job disabled, no job lost. **Follow-up at 02:58:49 UTC:** the re-anchored hourly jobs ran at 02:55 on their new revisions — `scheduledtrackingrefresh-00113-gux` 200 (4.8 s), `scheduledbillingentitlementreconcile-00008-poq` 200 (2.2 s) — and the short-cycle jobs kept their cadence (reminder check 02:25 / 02:40 / 02:55, finance sweep 02:31 / 02:51, all 200); 0 ERROR entries; all eight Scheduler jobs ENABLED with a next run (accounting reconcile 06:43, bank sync 06:47, marketplace PII sweep 14:35, quick-reply key sweep at its next daily slot).
 
 ## B3 — event-triggered (7 functions)
 
@@ -318,6 +318,16 @@ Operator's instruction "B4.3'e geç" at 02:38 UTC, i.e. seven minutes into B4.2'
 | reconcileSquareConnections | reconcilesquareconnections-00013-fax | 403 | reconcilesquareconnections-00014-mox | 403 |
 
 6: fifteen-minute watch (02:40:37 → 02:56:31 UTC): **0 ERROR entries, 0 request 5xx**; traffic in the window was the probe set plus real calls on the new revisions (`reconcileSquareConnections` 200, `reconcileEtsyConnections` 200, `previewWorkspaceInvitation` 200) — passed.
+
+## Three-condition check before B4.4 (02:59 UTC)
+
+| Condition set by the operator | Readback | ERROR entries | Request 5xx | Probes vs baseline | Scheduler / trigger behaviour | Verdict |
+|---|---|---|---|---|---|---|
+| B4.2 full fifteen-minute gate | 02:31:00 → 02:50:57 | 0 | 0 | identical (45 callables) | real app calls 200/204 on the new revisions | clean |
+| B4.2 hourly scheduled-job check | 02:20 → 02:58:49 | 0 | n/a | n/a | hourly + 15/20-minute jobs ran 200 on new revisions; 8/8 jobs ENABLED; no run lost | clean |
+| B4.3 full fifteen-minute gate | 02:40:37 → 02:56:31 | 0 | 0 | identical (45 callables) | real calls 200 on the new revisions | clean |
+
+All three clean; no new 5xx or error increase, no scheduler loss, no probe difference, no unexpected trigger behaviour → B4.4 may proceed on the operator's go.
 
 ## Rollback used
 
