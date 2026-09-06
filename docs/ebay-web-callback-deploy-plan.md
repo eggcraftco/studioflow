@@ -122,11 +122,14 @@ key is never sent on the wire either, because the web side signs and the functio
 The pattern is the point: **every partial configuration fails closed for the connection.** No code is
 exchanged, no token is written, and nothing on the seller's screen is more specific than one sentence.
 
-**What it does not do is keep §5's browser binding, and this plan used to say the opposite.** That defence
-is the burn *and the spend* (design §5.4): a shaped callback always POSTs, cookie or no cookie, so that the
-state is consumed and — the half that actually stops the attack — **eBay's code is redeemed and thrown
-away** at the moment of consent, whoever presented it. In every row above the POST is either never made or
-never authenticated, so neither happens.
+**What it does not do is keep §5's browser binding, and this plan used to say the opposite.** A shaped
+callback always POSTs — but since design §5.5 it posts one of **two** envelopes, and which one depends on
+whether the browser holds the binding: a verified ticket posts `connect`, which consumes the state and
+exchanges the code, and anything else posts `dispose`, which names no state and whose whole effect is that
+**eBay's code is presented to the token endpoint and thrown away**. In every row above the POST is either
+never made or never authenticated, so neither envelope arrives and neither happens. (The earlier revision
+of this paragraph said the no-cookie case burns a state. It no longer does, and nothing is lost by that:
+the state left alive is the *attacker's own*, and the code is what mattered.)
 
 **The damage is the unspent code, not the unburned state**, and this plan previously had that backwards
 too. eBay binds a code to our application, never to the state that fetched it, so an attacker does not
@@ -134,12 +137,27 @@ need the state that was left alive: they mint their own after service is restore
 against it. Meanwhile that code is sitting verbatim in Hostinger's access log (measured, no redaction, no
 disable, retention and readers undisclosed — `docs/ebay-callback-platform-logging.md`).
 
-**The trigger is wider than a key outage.** The state is burned and the code spent only when the POST
-reaches the function *and* authenticates *and* reaches the transaction. So the same window opens on: a key
-outage, a bad or missing functions deploy, a 401 from a clock drift, a 5xx, a Cloud Run scaling failure, a
-Firestore transaction error, and the route's own 45-second abort. One observable covers all of them —
-`ebay callback relay rid=… status=…`, `… unreachable` or `… timeout` in the Hostinger log. **Any window in
-which the relay was not answering 200 is one of these.**
+**The trigger is wider than a key outage.** The code is spent only when the POST reaches the function
+*and* authenticates *and* gets as far as the exchange. So the same window opens on: a key outage, a bad or
+missing functions deploy, a 401 from a clock drift, a 5xx, a Cloud Run scaling failure, a Firestore
+transaction error, the route's own 45-second abort, and — new with §5.5 — an exhausted per-address
+disposal counter at the edge. One observable covers all of them — `ebay callback relay rid=… status=…`,
+`ebay callback dispose rid=… status=…`, `… unreachable` or `… timeout` in the Hostinger log. **Any window
+in which the relay was not answering 200 is one of these.**
+
+**Two triggers are not outages at all, and they are the ones nobody would think to look for.** A disposal
+has no state, so it cannot know which RuName or which environment the code it is spending was minted
+against: it uses this deployment's current `EBAY_RUNAME` and `NIVADESK_EBAY_ENVIRONMENT`. So:
+
+* **`EBAY_RUNAME` changed, or a second RuName added** — a code minted under the old one is rejected at the
+  exchange and stays live at eBay for the rest of its TTL.
+* **the environment flipped** — a sandbox code disposed against production, or the reverse, is not spent
+  at all.
+
+Neither is visible as an error, because a disposal's failure is swallowed by design. What makes them
+visible is the count: `ebay callback dispose window=… spent=0 refused=n` on the Google side, where a
+healthy deployment shows `spent` rising. The action for both is a quiet period at least as long as eBay's
+code TTL around the change, and the same notification as above for anything that landed inside it.
 
 **So the operator action, and it is not "wait for the fix to land".**
 
@@ -199,10 +217,19 @@ for the next time this pair moves.)
 5. **Proof that the callback is live and fail-closed**, before any OAuth attempt:
    - `GET https://nivadesk.app/ebay/callback` → **302** to `…/settings?section=ebay&ebay=error&reason=missing_code`. Not 404, not 500, and no POST.
    - `GET https://nivadesk.app/ebay/callback?state=<20+ shaped chars>&code=made-up` → **302 to the
-     settings page with `reason=unavailable`**, and a Hostinger log line
-     `ebay callback relay rid=<rid> unreachable`. It is **not** a redirect to the Cloud Function: the
-     browser never meets the function host under §5.4, and until the connector's functions are deployed
-     the POST simply has nowhere to land.
+     settings page with `reason=browser`**, and a Hostinger log line
+     `ebay callback ticket refused rid=<rid> class=no-cookie` beside
+     `ebay callback dispose rid=<rid> status=0`. Under §5.5 a browser holding no ticket cannot make this
+     route sign anything that names the state it asked about, so what goes out is a **dispose** envelope
+     and the landing is `browser` rather than `unavailable` — the earlier revision of this step expected
+     `unavailable` and a `relay … unreachable` line, which is what a *verified* landing produces when the
+     function is not there. It is **not** a redirect to the Cloud Function: the browser never meets the
+     function host, and until the connector's functions are deployed the POST has nowhere to land.
+   - `POST https://nivadesk.app/ebay/ticket` with `content-type: application/json`, `{"ticket":"nv1.x"}`
+     and no `Sec-Fetch-Site` or `Origin` → **400**, no `Set-Cookie`. The same body with
+     `Sec-Fetch-Site: same-origin` → **400** too (the ticket is nonsense), and a **503** instead means the
+     relay key is missing from the runtime environment — the same cause step 4 checks for, reached by a
+     different symptom and visible **before** any seller leaves for eBay.
    - `GET https://nivadesk.app/ebay/start` without a session → the sign-in path, never a stack trace.
 6. **Commit `functions/.ebay-secrets-ready` naming all five secrets**, then deploy **the connector's own
    functions** (`ebayOAuthCallback`, `beginEbayConnect`, `claimEbayConnectState` and the rest) by name — a
@@ -218,14 +245,17 @@ for the next time this pair moves.)
      five minutes** (§4.2, rows 3, 4 and 5). Read the Google-side line to tell them apart —
      `rejected unsigned request` for the first two, `relay timestamp outside the five-minute window` for
      the third. The 401 itself says nothing about the state;
-   - a callback with a valid state but **no nonce cookie** → `reason=browser`, **the state burned, and
-     eBay's code redeemed and discarded**. That last part is the point of it: the route posts
-     `nonce: ""` rather than refusing, not to burn a state — the attacker never needed that state, because
-     a code is bound to the application and not to the state that fetched it — but because the function is
-     the only thing that can *spend* the code and so make the copy in the access log worthless. A route
-     that refused an absent cookie locally would leave the code alive for the rest of eBay's TTL.
-     (Use a sandbox code that has already been spent, or expect the redemption to be refused: the
-     verification here is `reason=browser` with the state `used: true`, not a successful token call.)
+   - a callback with a valid state but **no ticket cookie** → `reason=browser`, **the state NOT burned**,
+     and eBay's code presented to the token endpoint and discarded. §5.5 changed the first half of that
+     sentence and an operator reading the old one will chase a burn that no longer happens: a browser
+     without the binding never reaches the state transaction at all, because the envelope the route signs
+     for it has no `state` field. What it does reach is the disposal — one token request, nothing kept —
+     which is the half that was always the point: the function is the only thing that can *spend* the
+     code and so make the copy in the access log worthless, and a route that refused locally would leave
+     the code alive for the rest of eBay's TTL. So the verification here is `reason=browser` with the
+     state still `used: false`, plus `ebay callback dispose window=… spent=… refused=…` on the Google
+     side within the minute. (Use a sandbox code that has already been spent, or expect the redemption to
+     be refused — `refused=1` is the disposal working, not failing.)
    - an **unsigned** POST straight to the function → 401, and the state survives untouched.
 8. **One log check on the Google side, before the first OAuth attempt.** The state is a Firestore
    document id, and Firestore **Data Access** audit logs record the full document path in
@@ -244,6 +274,17 @@ for the next time this pair moves.)
    `connect.nivadesk.app`, because eBay puts the code in the query string of the first hop and
    Hostinger's access log keeps it (measured; no disable, no redaction, retention and readers
    undisclosed — `docs/ebay-callback-platform-logging.md`). Nothing in §5.4 touches that hop.
+10. **Which proxy header carries the client address, recorded here beside `RELAY_TIMEOUT_MS`.** §5.5's two
+   admission counters — 30 a minute per address on `POST /ebay/ticket`, and 30 a minute per address on the
+   callback's disposal — read the first entry of `x-forwarded-for`, and **nothing on this stack has yet
+   established that Hostinger's front end overwrites that header rather than passing a client-supplied one
+   through**. Until it does, treat the per-address counter as a courtesy limit only: a spoofed value evades
+   it, and the bounds that actually hold are the per-process one (300 a minute on the sealing route) and
+   the function's own six-a-minute disposal bucket. Check it once — send a request with an
+   `X-Forwarded-For: 198.51.100.9` header of your own and read what the route counted — and write the
+   answer here. If the header cannot be trusted, the per-address counter comes out and only the
+   per-process one stays. **The address is never logged either way**, so this check is the only place it
+   is ever looked at.
 
 ## 5. Rollback
 
