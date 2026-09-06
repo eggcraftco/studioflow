@@ -71,10 +71,20 @@ Non-negotiables carried through every section:
 
 Naming decision (§11 "final only after repository conflict check"): the ten §11–§12 names were grepped
 across `functions/` (excluding `node_modules`) and none exists as a tool, callable or export. Nine are
-adopted as-is. `search_inventory_items` is **not** added: the repository already has a hidden
-`search_inventory` (`NV_MCP_INVENTORY`), and shipping both is the sprawl §10 forbids. `search_inventory`
-keeps its name and gains the §11 filters in the same flag branch. Result with every flag on:
-19 + 2 (inventory) + 9 (orchestrator) = 30 published tools.
+adopted as-is.
+
+> **Corrected 6 September 2026, after a reviewer measured the listing rather than reading this
+> paragraph.** What follows was the plan; it is not what the code does. `search_inventory_items` **is**
+> published, in the orchestrator flag branch (`functions/orchestrator/registry.js:782`, dispatched at
+> `functions/index.js:24640`), alongside the pre-existing hidden `search_inventory`
+> (`registry.js:585`). So the repository ships two inventory searches when both flags are on, which is
+> exactly the sprawl §10 warns about, and **that is an open decision for the submission rather than a
+> settled one**: either withdraw one of the two before the flip, or write down why both exist.
+>
+> The arithmetic was wrong as well. Measured across the flag states: 19 published with the
+> orchestrator flag off, 21 with inventory, 29 with the orchestrator, **31 with both** — the
+> orchestrator appends **ten** tools, not nine, and the tenth is `search_inventory_items`, which is
+> why §7 carries no submission description for it.
 
 ## 1. Annotations
 
@@ -752,7 +762,7 @@ path (WA §43) plugs in without changing signatures.
 
 ### 2.5 Capabilities
 
-All nine new tools plus the extended `search_inventory` are risk class A, assurance L1, annotations
+All ten new tools (see the correction in §0) plus the extended `search_inventory` are risk class A, assurance L1, annotations
 true/false/true/false, scope as in §1.2. `companyId` is accepted on every input for consistency with the
 schema style of the 19 (`"Optional. Usually omit this…"`) and, per §2.2, is a lookup key that is
 membership-checked, never a grant.
@@ -1725,7 +1735,7 @@ History: 1.0.0 published; 1.1.0 rejected (test-case customer name + annotations)
 after commit 68222996 and rejected on the annotation/justification wording (§1). 1.2.0 is the next version
 and the annotation justification is its release blocker.
 
-### Tool descriptions for the nine new tools (§21, §30)
+### Tool descriptions for the new tools (§21, §30) — ten are published; the tenth, `search_inventory_items`, still has no description here (see §0)
 
 On the wire, part of the catalogue freeze, and validated by CI — so they are written here rather than left
 to implementation. Each follows §21: what it does, when to use it, the read/write boundary, the provider

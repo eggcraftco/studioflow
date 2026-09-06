@@ -168,7 +168,7 @@ return exactly what they return today; none of their shapes changes.
   `bc718e06` is a commit on THIS branch, not the deployed 1.1.1 tree, so the fixture proves the listing
   has not moved since it was recorded, not that it equals what the review connection is being served.
   Between the merge base and `bc718e06` the branch added three tools (`get_bank_spending_summary`,
-  `search_bank_transactions`, `attach_bank_receipt`), corrected four annotation values
+  `search_bank_transactions`, `attach_bank_receipt`), corrected six annotation values across four tools
   (`update_order_status`, `update_note`, `pin_note`, `archive_note`) and renamed "Lite" to "Starter" in
   two descriptions — all of which §3 covers as intended 1.2.0 changes. **Diff the fixture against the
   live listing once before the flip**, so the two claims are not conflated.
