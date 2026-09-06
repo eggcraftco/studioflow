@@ -363,6 +363,92 @@ function bankingItems(snapshot, { nowMs, companyId, limitRows = 20, revealCounte
   return items;
 }
 
+/**
+ * The bank feed's own freshness row, in one place because both capabilities
+ * report it and a second copy is a second answer.
+ */
+function bankSourceRow(connection, { nowMs, kind = "bank" }) {
+  const freshness = require("./freshness");
+  return freshness.sourceRow({
+    provider: String((connection || {}).provider || "bank"),
+    connectionId: (connection || {}).id || null,
+    entity: "finance",
+    kind,
+    lastSuccessAtMs: Number((connection || {}).lastSyncedAtMs || 0),
+    state: connection ? null : "never",
+    contributed: true,
+    nowMs
+  });
+}
+
+/**
+ * Every source behind a cross-domain answer, one row per subsystem that fed it.
+ *
+ * The failure this exists for: reporting bank, payout and accounting items with
+ * commerce-only freshness. A bank feed four days dead produced two banking items
+ * and a `sources: []` that said nothing — "2 item(s) need attention" about a
+ * feed that stopped on Tuesday, with `partial: false` and no staleness sentence.
+ * §14 forbids exactly that, and freshness.js says a contributing source that
+ * cannot report a sync time must set partial and name itself.
+ *
+ * A section that was consulted contributes its source whether or not it found
+ * anything: "no banking items" is a claim about the bank feed, and a claim from
+ * a dead feed is worth less than silence. A subsystem the workspace does not
+ * have at all (no bank connection and no rows) contributes nothing, because
+ * there is no sync there to be stale.
+ */
+function attentionSources(snapshot, { views, sections, wantedDomains, nowMs }) {
+  const freshness = require("./freshness");
+  const rows = [];
+  const included = (domain) => wantedDomains.has(domain) && sections[domain] !== false;
+
+  // Orders, shipping and payments all read the same order documents, and the
+  // integrations section reads the same connection health.
+  if (["orders", "shipping", "payments"].some(included) || included("integrations")) {
+    rows.push(...require("./commerce").commerceSources(snapshot, views, { nowMs }));
+  }
+
+  const bankConnection = snapshot.bankConnection || ((snapshot.connections || {}).bank || [])[0] || null;
+  const bankRows = Array.isArray(snapshot.bankRows) ? snapshot.bankRows : [];
+  const payoutRows = Object.values(snapshot.payouts || {}).reduce((acc, list) => acc + (Array.isArray(list) ? list.length : 0), 0);
+
+  if (included("banking") && (bankConnection || bankRows.length > 0)) {
+    rows.push(bankSourceRow(bankConnection, { nowMs }));
+  } else if (included("payouts") && payoutRows > 0) {
+    // Matching a payout to a bank line is only as current as the bank feed, so
+    // when banking itself was not asked for, the payout section still says how
+    // old that feed is — the row payouts.js builds for the same reason.
+    rows.push(bankSourceRow(bankConnection, { nowMs, kind: "payouts" }));
+  }
+
+  if (included("accounting")) {
+    const connections = ((snapshot.connections || {}).accounting || []);
+    for (const connection of connections) {
+      rows.push(freshness.sourceRow({
+        provider: String(connection.provider || "accounting"),
+        connectionId: connection.id || null,
+        entity: "finance",
+        kind: "accounting",
+        lastSuccessAtMs: Number(connection.lastSyncAtMs || 0),
+        contributed: true,
+        nowMs
+      }));
+    }
+    if (connections.length === 0 && (snapshot.accountingAttention || []).length > 0) {
+      // Items with no connection to date them: partial, and said so.
+      rows.push(freshness.sourceRow({ provider: "accounting", entity: "finance", kind: "accounting", state: "never", contributed: true, nowMs }));
+    }
+  }
+
+  if (included("inventory") && Array.isArray(snapshot.inventoryItems)) {
+    // Stock has no sync of any kind. "unsupported" is the honest word; "never"
+    // would read as a broken connector.
+    rows.push(freshness.inventorySourceRow({ contributed: true, nowMs }));
+  }
+
+  return rows;
+}
+
 /** Bank connection state is its own item: a dead feed makes every other figure old. */
 function bankConnectionItems(snapshot, { nowMs, companyId }) {
   const connection = snapshot.bankConnection;
@@ -525,7 +611,7 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
   return {
     data: { counts, sections: sectionRows, items: limited, totalItems: items.length, horizonDays },
     warnings,
-    sources: require("./commerce").commerceSources(snapshot, views, { nowMs }),
+    sources: attentionSources(snapshot, { views, sections, wantedDomains, nowMs }),
     entityRefs: limited.flatMap((item) => item.entityRefs).slice(0, 25),
     state: items.some((item) => item.severity === "critical") ? "needs_attention" : "completed"
   };
@@ -549,7 +635,6 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
   for (const item of items) counts[item.severity] += 1;
 
   const connection = snapshot.bankConnection || null;
-  const freshness = require("./freshness");
   return {
     data: {
       counts,
@@ -562,15 +647,7 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
       } : null
     },
     warnings,
-    sources: [freshness.sourceRow({
-      provider: String((connection || {}).provider || "bank"),
-      entity: "finance",
-      kind: "bank",
-      lastSuccessAtMs: Number((connection || {}).lastSyncedAtMs || 0),
-      state: connection ? null : "never",
-      contributed: true,
-      nowMs
-    })],
+    sources: [bankSourceRow(connection, { nowMs })],
     entityRefs: items.slice(0, 10).flatMap((item) => item.entityRefs).slice(0, 25),
     state: items.some((item) => item.severity === "critical") ? "needs_attention" : "completed"
   };
@@ -598,6 +675,8 @@ module.exports = {
   mergeOrderItems,
   bankingItems,
   bankConnectionItems,
+  bankSourceRow,
+  attentionSources,
   businessAttentionSummary,
   bankingAttentionSummary
 };

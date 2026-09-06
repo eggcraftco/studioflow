@@ -21,6 +21,7 @@ const check = (name, run) => {
 const ctx = fixtures.ownerContext();
 const DAY = fixtures.DAY;
 const run = (snapshot, args = {}, context = ctx) => attention.businessAttentionSummary(snapshot, args, context, { nowMs: snapshot.nowMs });
+const domainOf = attention.domainOf;
 const itemFor = (result, orderNumber) => result.data.items.find((item) => item.title.includes(orderNumber));
 
 check("one late order is ONE item carrying every reason, at the highest severity", () => {
@@ -148,6 +149,74 @@ check("a workflow-only member sees only their own orders", () => {
   });
   const result = run(snapshot, {}, workflow);
   assert.strictEqual(itemFor(result, "1001"), undefined, "somebody else's order is not this member's to see");
+});
+
+/* ------------------------------------------------------------- freshness */
+
+const freshness = require("../../orchestrator/freshness");
+/** The envelope's own view of an answer's sources (§14 runs in envelope.finish). */
+const freshnessOf = (result, snapshot) => freshness.build(result.sources, { nowMs: snapshot.nowMs });
+
+check("a bank feed that died four days ago is said so, in an answer full of bank items", () => {
+  // §14: stale data must never be presented as live. The cross-domain read
+  // emits bank, payout, accounting and inventory items, so commerce-only
+  // freshness left the reader with "2 item(s) need attention" about a feed that
+  // stopped on Tuesday — partial:false, no source rows, no staleness sentence.
+  const snapshot = fixtures.attentionSnapshot();
+  const deadSince = snapshot.nowMs - 4 * DAY;
+  snapshot.bankConnection = { ...snapshot.bankConnection, lastSyncedAtMs: deadSince };
+  snapshot.connections = { ...snapshot.connections, bank: [snapshot.bankConnection] };
+
+  const result = run(snapshot);
+  assert.ok(result.data.items.some((item) => domainOf(item.type) === "banking"), "the fixture must actually raise banking items");
+
+  const bank = result.sources.find((row) => row.provider === "truelayer");
+  assert.ok(bank, "the bank feed put items in this answer and did not appear among its sources");
+  assert.strictEqual(bank.state, "stale", `four days is past the ${freshness.STALE_AFTER_MS.bank / 3600000}-hour bank threshold`);
+  assert.strictEqual(bank.contributed, true);
+
+  const built = freshnessOf(result, snapshot);
+  assert.ok(built.warnings.some((row) => row.code === "channel_stale" && /truelayer/.test(row.message)),
+    "the reader is told the feed is behind, and by which source");
+  assert.strictEqual(built.freshness.financeLastSync, new Date(deadSince).toISOString(),
+    "the answer has to date the money it reports");
+});
+
+check("every section that fed the answer names itself among the sources", () => {
+  const snapshot = fixtures.attentionSnapshot();
+  snapshot.connections = {
+    ...snapshot.connections,
+    accounting: [{ id: "qbo_1", provider: "quickbooks", lastSyncAtMs: snapshot.nowMs - 2 * 60 * 60 * 1000 }]
+  };
+  const result = run(snapshot);
+  const kinds = result.sources.map((row) => `${row.provider}|${row.entity}`);
+  assert.ok(kinds.includes("truelayer|finance"), "banking fed the answer");
+  assert.ok(kinds.includes("quickbooks|finance"), "accounting fed the answer");
+  assert.ok(kinds.includes("nivadesk|inventory"), "the low-stock item came from somewhere");
+  const stock = result.sources.find((row) => row.entity === "inventory");
+  assert.strictEqual(stock.state, "unsupported", "stock has no sync at all; \"never\" would read as a broken connector");
+  assert.strictEqual(freshness.build([stock], { nowMs: snapshot.nowMs }).partial, false,
+    "an unsupported source is not an incomplete answer");
+});
+
+check("a subsystem the workspace does not have contributes no source, and no false incompleteness", () => {
+  // The inverse mistake: naming a bank feed that was never connected would make
+  // every answer in a workspace without banking read as incomplete.
+  const snapshot = fixtures.attentionSnapshot();
+  snapshot.bankConnection = null;
+  snapshot.connections = { ...snapshot.connections, bank: [] };
+  snapshot.bankRows = [];
+  snapshot.payouts = {};
+  const result = run(snapshot);
+  assert.ok(!result.sources.some((row) => row.entity === "finance" && row.provider === "truelayer"));
+  assert.ok(!freshnessOf(result, snapshot).warnings.some((row) => row.code === "channel_not_connected" && /bank/.test(row.message)));
+});
+
+check("asking only about banking does not drag order freshness in behind it", () => {
+  const snapshot = fixtures.attentionSnapshot();
+  const result = run(snapshot, { domains: ["banking"] });
+  assert.ok(result.sources.some((row) => row.entity === "finance"), "the bank feed is the source of this answer");
+  assert.ok(!result.sources.some((row) => row.entity === "orders"), "no order sync was consulted to answer it");
 });
 
 /* ------------------------------------------------------------- who, and when */
