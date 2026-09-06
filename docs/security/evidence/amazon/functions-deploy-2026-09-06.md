@@ -462,7 +462,7 @@ Operator's conditional approval (in chat, 03:25 UTC): B5.1 → B5.2 → B5.3 eac
 | listInventoryMovements | listinventorymovements-00001-map | 401 | listinventorymovements-00002-wuj | 401 |
 | listInventoryRecipes | listinventoryrecipes-00001-tan | 401 | listinventoryrecipes-00002-mod | 401 |
 
-6: fifteen-minute watch (03:36:28 → 03:52:00): _pending_.
+6: fifteen-minute watch (03:36:28 → 03:52:18 UTC): **0 ERROR entries, 0 request 5xx**; traffic was the probe set (401s and the Play RTDN endpoint's 200 to an empty body, as baselined) — passed. Four conditions met → B5.2 started under the operator's standing approval.
 
 ## Rollback used
 
