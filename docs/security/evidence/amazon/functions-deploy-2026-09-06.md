@@ -567,13 +567,20 @@ Started under the operator's standing approval after B5.2's clean gate. Same sev
 | verifyGooglePlayPurchase | verifygoogleplaypurchase-00008-riw | 401 | verifygoogleplaypurchase-00009-yaf | 401 |
 | websiteChatRequestHuman | websitechatrequesthuman-00001-der | 400 | websitechatrequesthuman-00002-ras | 400 |
 
-6: fifteen-minute watch (04:12:34 → 04:28:31 UTC): the readback printed 0 ERROR entries and 0 request 5xx **but is UNVERIFIED** — at 04:28:57 the gcloud credentials were found expired ("Reauthentication failed. cannot prompt during non-interactive execution"), the watch script had suppressed stderr, and the same window showed no request at all, which is not credible after a probe set. The last query known to have worked was step 4 at 04:15:24. The window is re-read through a working credential (below) and, if that is not possible tonight, after the operator's `gcloud auth login` in the morning. Until then B5.3's gate is **open**, not passed.
+6: fifteen-minute watch (04:12:34 → 04:28:31 UTC): the readback printed 0 ERROR entries and 0 request 5xx **but is UNVERIFIED** — at 04:28:57 the gcloud credentials were found expired ("Reauthentication failed. cannot prompt during non-interactive execution"), the watch script had suppressed stderr, and the same window showed no request at all, which is not credible after a probe set. The last query known to have worked was step 4 at 04:15:24. The window was then re-read through the Logs Explorer in the operator's own console session (project eggcraft-studio), which does not depend on the expired CLI credential:
+
+| Readback (Logs Explorer, 04:12:34 → 04:31:00 UTC, the 32 B5.3 services) | Result |
+|---|---|
+| `severity>=ERROR OR httpRequest.status>=500` | **0 results** ("No data found") |
+| Positive control: `httpRequest.status>0` | **32 results** — the 32 step-5 probes at 04:15:29–04:15:33 (31 × 401, websiteChatRequestHuman 400, all `curl 8.7.1`), every one on the new revision; severity Warning only |
+
+The positive control proves the query and time window reach the right logs, so the empty error query is a real zero rather than a credential failure. B5.3's 15-minute gate is therefore **passed (verified through the console, not gcloud)**: 0 ERROR entries, 0 request 5xx, and the only traffic in the window was the probe set. The gcloud readback will be repeated after the operator's `gcloud auth login` in the morning as a second source, but the gate no longer depends on it.
 
 With B5.3 the August group (B5.1–B5.3, 122 functions) is on the remediated tree: **350 of 414** deployed. The 64 remaining are the June/July group (B6.1, B6.2), which per the plan and the operator's rule waits for a **24-hour soak** with no new batch, then the operator's go.
 
 ## 24-hour soak
 
-**Soak start: 2026-09-06 04:28:31 UTC** (provisional — B5.3's gate readback is unverified, see above; the soak clock runs from here but the first honest readback is the one that counts). No new batch until 2026-09-07 04:28 UTC at the earliest, and then only on the operator's go. Checks every two hours (errors and 5xx since the soak start across all 350 deployed functions, traffic by status class, the eight Scheduler jobs' state and next run, event-trigger executions), appended here; the 24-hour result subsection closes it.
+**Soak start: 2026-09-06 04:28:31 UTC** (B5.3's gate was verified through the console after the gcloud credential expired, see above; the soak clock runs from the end of that gate). While the gcloud credential is expired the two-hourly checks run through the Logs Explorer and Cloud Scheduler pages in the operator's console session; a check that cannot be done is recorded as a gap, never as a clean result. No new batch until 2026-09-07 04:28 UTC at the earliest, and then only on the operator's go. Checks every two hours (errors and 5xx since the soak start across all 350 deployed functions, traffic by status class, the eight Scheduler jobs' state and next run, event-trigger executions), appended here; the 24-hour result subsection closes it.
 
 ## Rollback used
 
