@@ -23,6 +23,7 @@
 
 const envelope = require("./envelope");
 const freshness = require("./freshness");
+const untrusted = require("./untrusted");
 const { DEFAULT_MAPPINGS } = require("../pandle");
 
 const POSTING_PHASES = Object.freeze(["prepared", "approved", "queued", "synced", "failed", "conflict"]);
@@ -87,14 +88,25 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     postings[key] = { value: 0, available: false, reason: "postings_not_implemented" };
   }
 
+  // The two fields on an attention row that QuickBooks or Xero wrote.
+  //
+  // `message` is built around the ledger's own words — accountingFunctions.js
+  // interpolates the provider's entity type, external id and change detail into
+  // it — and `entityRefs` are bare strings the same writer chose ("Invoice:123"),
+  // not `envelope.entityRef` objects, so they never met the 80-character label
+  // bound the envelope contract promises for a reference. Both land in `data`,
+  // which a model reads exactly as it reads a summary line, so both are bounded
+  // here the way every other outside string is (untrusted.js).
   const attention = (snapshot.accountingAttention || []).map((row) => ({
     id: String(row.id || ""),
     provider: String(row.provider || ""),
     connectionId: String(row.connectionId || ""),
     kind: String(row.kind || ""),
     severity: SEVERITY_FROM_STORED[String(row.severity || "")] || "low",
-    message: String(row.message || ""),
-    entityRefs: Array.isArray(row.entityRefs) ? row.entityRefs.slice(0, 5) : []
+    message: untrusted.safeText(row.message, { max: 200 }),
+    entityRefs: (Array.isArray(row.entityRefs) ? row.entityRefs.slice(0, 5) : [])
+      .map((ref) => untrusted.safeText(ref, { max: 80 }))
+      .filter(Boolean)
   }));
 
   const readiness = readinessOf(snapshot.bankRows || [], snapshot.categoryMappings || null);
@@ -125,7 +137,8 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
       connections: connections.map((connection) => ({
         provider: String(connection.provider || ""),
         connectionId: String(connection.id || ""),
-        company: String(connection.companyName || connection.realmName || ""),
+        // The company name as the LEDGER spells it, not as we do.
+        company: untrusted.safeText(connection.companyName || connection.realmName || "", { max: 80 }),
         mode: String(connection.mode || "read_only"),
         health: String(connection.status || "unknown"),
         writeBoundaryDate: String(connection.writeBoundaryDate || "") || null,

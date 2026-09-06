@@ -24,6 +24,20 @@ const envelope = require("./envelope");
 const freshness = require("./freshness");
 const health = require("../commerce/health");
 const channelModule = require("./channel");
+const untrusted = require("./untrusted");
+
+/**
+ * A connection's ACCOUNT is the shop's own name for itself — a Shopify store
+ * name, a WooCommerce site URL, a bank's institution name, a QuickBooks company
+ * name. All four are chosen outside NivaDesk, and this row goes into `data`,
+ * which a model reads exactly the way it reads a summary line, so the same
+ * bound applies here as everywhere else (untrusted.js). 80 characters, the same
+ * bound `envelope.entityRef` puts on a label, since that is what this becomes.
+ */
+const accountLabel = (value) => untrusted.safeText(value, { max: 80 });
+
+/** A provider key written by a bank or accounting document rather than by us. */
+const providerKey = (value, fallback) => untrusted.safeText(value, { max: 40 }) || fallback;
 
 const AUTH_STATUSES = Object.freeze(["ok", "reconnect_required", "pending", "disconnected", "not_visible"]);
 
@@ -140,7 +154,7 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
       rows.push({
         provider,
         connectionId: String(connection.id || ""),
-        account: String(connection.account || connection.storeName || connection.shopName || connection.siteUrl || connection.host || ""),
+        account: accountLabel(connection.account || connection.storeName || connection.shopName || connection.siteUrl || connection.host || ""),
         connectionKnown: true,
         authStatus,
         availability: channelModule.channelAvailability(provider, { hasOrders: true, connection }),
@@ -231,9 +245,9 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
     for (const connection of (connections.bank || [])) {
       const syncState = String(connection.syncState || "");
       rows.push({
-        provider: String(connection.provider || "bank"),
+        provider: providerKey(connection.provider, "bank"),
         connectionId: String(connection.id || ""),
-        account: String(connection.institutionName || connection.accountLabel || ""),
+        account: accountLabel(connection.institutionName || connection.accountLabel || ""),
         connectionKnown: true,
         authStatus: ["needs_reconsent", "disconnected"].includes(syncState) ? "reconnect_required" : (syncState === "error" ? "pending" : "ok"),
         availability: "connected",
@@ -264,9 +278,9 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
   if (ctx.accountingReader) {
     for (const connection of (connections.accounting || [])) {
       rows.push({
-        provider: String(connection.provider || "accounting"),
+        provider: providerKey(connection.provider, "accounting"),
         connectionId: String(connection.id || ""),
-        account: String(connection.companyName || connection.realmName || ""),
+        account: accountLabel(connection.companyName || connection.realmName || ""),
         connectionKnown: true,
         authStatus: authStatusOf(connection),
         availability: "connected",

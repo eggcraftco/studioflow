@@ -23,6 +23,8 @@
  * NivaDesk's rather than instead of it.
  */
 
+const untrusted = require("./untrusted");
+
 /** The dashboard's table, in its order. `source` is the string a connector writes. */
 const CHANNEL_SOURCES = Object.freeze([
   { key: "shopify", source: "Shopify" },
@@ -67,6 +69,15 @@ const OPAQUE_PROVIDERS = Object.freeze(["amazon"]);
 
 const clean = (value) => String(value === undefined || value === null ? "" : value).trim();
 
+/**
+ * The two identity fields a PROVIDER wrote: its own order id and its connection
+ * id. `channel`, `provider` and `manualSource` are closed vocabularies decided
+ * here; these two are copied out of a document a shop controls, and they are
+ * emitted in `data` by search_commerce_orders. A trim is not a bound, so they
+ * get the same treatment as every other outside string (untrusted.js).
+ */
+const outside = (value, max = 100) => untrusted.safeText(value, { max });
+
 function channelForSource(rawSource) {
   const folded = clean(rawSource).toLowerCase();
   if (!folded) return null;
@@ -108,9 +119,9 @@ function channelOf(order = {}) {
       channel: engineProvider,
       manualSource: null,
       provider: engineProvider,
-      connectionId: clean(commerce.connectionId) || null,
-      externalId: clean(commerce.externalOrderId || commerce.orderNumber) || null,
-      externalUpdatedAt: clean(commerce.externalUpdatedAt) || null,
+      connectionId: outside(commerce.connectionId) || null,
+      externalId: outside(commerce.externalOrderId || commerce.orderNumber) || null,
+      externalUpdatedAt: outside(commerce.externalUpdatedAt, 40) || null,
       identitySource: "engine"
     };
   }
@@ -120,9 +131,9 @@ function channelOf(order = {}) {
       channel: "etsy",
       manualSource: null,
       provider: "etsy",
-      connectionId: clean(etsySource.connectionId || etsySource.shopId) || null,
-      externalId: clean(etsySource.receiptId) || null,
-      externalUpdatedAt: clean(etsySource.lastSyncAt) || null,
+      connectionId: outside(etsySource.connectionId || etsySource.shopId) || null,
+      externalId: outside(etsySource.receiptId) || null,
+      externalUpdatedAt: outside(etsySource.lastSyncAt, 40) || null,
       identitySource: "legacy"
     };
   }
@@ -134,9 +145,9 @@ function channelOf(order = {}) {
       channel: fromField,
       manualSource: null,
       provider: fromField,
-      connectionId: clean(commerce.connectionId) || null,
-      externalId: clean(custom[`${fromField} Order`] || custom["External Order"] || commerce.externalOrderId) || null,
-      externalUpdatedAt: clean(commerce.externalUpdatedAt) || null,
+      connectionId: outside(commerce.connectionId) || null,
+      externalId: outside(custom[`${fromField} Order`] || custom["External Order"] || commerce.externalOrderId) || null,
+      externalUpdatedAt: outside(commerce.externalUpdatedAt, 40) || null,
       identitySource: "legacy"
     };
   }

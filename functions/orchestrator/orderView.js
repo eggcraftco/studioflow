@@ -20,12 +20,37 @@ const engine = require("../finance/engine");
 const productionModule = require("../production");
 const channelModule = require("./channel");
 const money = require("./money");
+const untrusted = require("./untrusted");
 
 const PAYMENT_STATUSES = require("../commerce/envelope").PAYMENT_STATUSES;
 const FULFILLMENT_STATUSES = require("../commerce/envelope").FULFILLMENT_STATUSES;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const clean = (value) => String(value === undefined || value === null ? "" : value).trim();
+
+/**
+ * A field on this order that somebody OUTSIDE NivaDesk wrote: the shop's own
+ * order number, the platform's status word, the buyer's name.
+ *
+ * `clean` is a trim, and a trim is not a bound. On a connector order
+ * `orderNumber` is `provider_metadata.order_number || identity.external_id`
+ * (commerce/engine.js), so a hostile shop can put 294 characters and two
+ * newlines in it — and every capability reading this view then copies that
+ * string into `data`, which a model reads exactly as it reads a summary line.
+ * render.js bounds what it interpolates into a sentence; nothing bounded the
+ * view behind it.
+ *
+ * So the bound is here, once, where an outside string enters NivaDesk's own
+ * shape: control characters, bidirectional overrides and zero-width joiners
+ * removed, whitespace collapsed so no value can span a line, and a length cap.
+ *
+ * Deliberately `safeText` and not `safeReference`: search matches on these
+ * values and an order genuinely numbered "INV 1001" has to stay findable.
+ * Refusing a value that is not identifier-shaped is the rule for a string being
+ * SHOWN as a label, and it is applied where labels are built — attention.js
+ * and the search projection in commerce.js.
+ */
+const outside = (value, max) => untrusted.safeText(value, { max });
 
 /** A date on an order, as UTC milliseconds, or null. */
 function dateMs(value) {
@@ -138,10 +163,11 @@ function buildOrderView(order = {}, { settings = {}, workspace = "GBP", nowMs = 
 
   return {
     id: String(order.id || ""),
-    orderNumber: clean(order.orderNumber || order.siparisNo || ""),
+    // The shop's sentence, bounded: see `outside` above.
+    orderNumber: outside(order.orderNumber || order.siparisNo || "", 64),
     stage,
     estimateWaitingSinceMs: awaitingEstimate.length ? awaitingEstimate[0] : null,
-    projectNumber: clean(order.projectNumber || ""),
+    projectNumber: outside(order.projectNumber || "", 64),
     identity,
     channel: identity.channel,
     manualSource: identity.manualSource,
@@ -152,27 +178,28 @@ function buildOrderView(order = {}, { settings = {}, workspace = "GBP", nowMs = 
     createdAtMs: createdMs,
     updatedAtMs: dateMs(order.updatedAt),
     dueDateMs: dueDateMs(order),
-    status: clean(order.status),
-    designStatus: clean(order.designStatus),
+    status: outside(order.status, 64),
+    designStatus: outside(order.designStatus, 64),
     completed: isCompletedStatus(order.status),
     cancelled: isCancelledStatus(order.status),
     isDispatched: order.isDispatched === true,
     isDelivered: order.isDelivered === true,
-    trackingNumber: clean(order.trackingNumber),
+    trackingNumber: outside(order.trackingNumber, 64),
     assignedToUid: clean(order.assignedToUid),
     finance,
     stampAgrees,
     paidAmount: Number(order.paidAmount) || 0,
     remainingAmount: Number(order.remainingAmount) || 0,
-    platformStatus: hasCommerce ? (clean(commerce.platformStatus) || null) : null,
+    platformStatus: hasCommerce ? (outside(commerce.platformStatus, 40) || null) : null,
     platformStatusSource: hasCommerce ? "provider" : "none",
     paymentStatus: PAYMENT_STATUSES.has(platformPayment) ? platformPayment : derivedPaymentStatus(finance, order),
     fulfillmentStatus: FULFILLMENT_STATUSES.has(platformFulfilment) ? platformFulfilment : derivedFulfillmentStatus(order),
     reviewRequired: commerce.reviewRequired === true,
     lastSyncAtMs: dateMs(commerce.lastSyncAt),
     restricted: order.__piiRestricted === true,
-    customerName: clean(order.customerName),
-    customerEmail: clean(order.emailAddress)
+    // The buyer typed these into the shop's checkout.
+    customerName: outside(order.customerName, 120),
+    customerEmail: outside(order.emailAddress, 160)
   };
 }
 
