@@ -22,8 +22,16 @@
  *    (`oauth.companyId || companyId`), so the argument does reach here — and
  *    `uidHasCompanyAccess` runs on the resolved document before any read,
  *    honouring `suspendedMembers`.
- * 3. **Scopes are enforced, not just carried.** The token's granted scope is
- *    checked against the registry entry's `scopes` at call time.
+ * 3. **Scopes are enforced, not just carried — and a grant of nothing grants
+ *    nothing.** The rule is one sentence and it is about WHO is asking: a
+ *    delegated grant is the whole of what that caller may do, so a token is
+ *    checked against the registry entry's `scopes` at call time and an empty
+ *    grant permits no capability at all. A member signed into NivaDesk with
+ *    their own ID token holds no delegated grant and is not scope-checked —
+ *    their role and area switches are the whole gate, as in the app. The check
+ *    used to read `granted.size > 0 && ...`, which let a token carrying no
+ *    scope string through every gate while this line claimed enforcement.
+ *    See `missingScopes` and FIRST_PARTY_AUTH_TYPES.
  * 4. **The role is resolved by the app's resolver, never re-derived here.**
  *    See `resolveRole`.
  */
@@ -53,6 +61,59 @@ function normalizeChannel(channel) {
 function scopeSet(scope) {
   if (Array.isArray(scope)) return new Set(scope.map((value) => String(value).trim()).filter(Boolean));
   return new Set(String(scope || "").split(/[\s,]+/).map((value) => value.trim()).filter(Boolean));
+}
+
+/**
+ * The auth types that are a member acting for THEMSELVES, rather than a third
+ * party holding a grant on their behalf.
+ *
+ * `firebase_session` is chatgptWorkspaceAction and the non-OAuth branch of
+ * nvRequireChatGPTWorkspaceAccessWithOAuth: the person is signed into NivaDesk
+ * with their own ID token, there is no consent screen and no delegation, and
+ * therefore no scope to check — the workspace role and the area switches are
+ * the whole of what limits them, exactly as in the app.
+ *
+ * The list is a DENY-of-the-gate list on purpose: an auth type nobody has named
+ * here is treated as a delegated token and must carry its scopes. A new
+ * delegated surface that forgets to declare itself is refused, which is the
+ * failure that leaves a mark rather than the one that quietly lets everything
+ * through.
+ */
+const FIRST_PARTY_AUTH_TYPES = Object.freeze(["firebase_session", "app"]);
+
+function scopeGateApplies(authType) {
+  return !FIRST_PARTY_AUTH_TYPES.includes(String(authType || "").trim());
+}
+
+/**
+ * ONE RULE, in one function, for every tool on every surface: a delegated
+ * grant is the whole of what that caller may do.
+ *
+ * What it replaces: `if (granted.size > 0 && required.some(...))`. That reads
+ * as "deny if the token names scopes and one of them is missing" — so a token
+ * carrying NO scope string passed every gate, and the header three lines above
+ * it claimed "Scopes are enforced, not just carried". A token with an empty
+ * grant is not a token with every grant; it is a token that was granted
+ * nothing, and it is refused.
+ *
+ * The caller that legitimately has no scopes is not a token at all — it is a
+ * member signed into NivaDesk — and that case is answered by WHO is asking
+ * (FIRST_PARTY_AUTH_TYPES) rather than by whether a string happens to be empty.
+ *
+ * @returns {string[]} the scopes this caller lacks, empty when the call is allowed.
+ */
+function missingScopes({ authType = "", scope = "" } = {}, required = []) {
+  if (!scopeGateApplies(authType)) return [];
+  const granted = scopeSet(scope);
+  return (Array.isArray(required) ? required : []).filter((needed) => !granted.has(needed));
+}
+
+/** The refusal text for a missing grant, so both surfaces say the same thing. */
+function scopeRefusal(missing = [], granted = []) {
+  if (granted.length === 0) {
+    return "This connection was not granted any scope, so it cannot read anything. Reconnect NivaDesk in ChatGPT to grant access.";
+  }
+  return `This connection was not granted the ${missing.join(", ")} scope. Reconnect NivaDesk in ChatGPT and approve it.`;
 }
 
 /**
@@ -159,11 +220,10 @@ function assertCapability(ctx, entry) {
     throw new OrchestratorError("failed-precondition", "The ChatGPT connection is not included in this workspace's plan.");
   }
 
-  // Scopes the token actually carries.
-  const granted = new Set(ctx.scope || []);
-  const required = Array.isArray(entry.scopes) ? entry.scopes : [];
-  if (granted.size > 0 && required.some((needed) => !granted.has(needed))) {
-    throw new OrchestratorError("permission-denied", `This connection was not granted the ${required.join(", ")} scope.`);
+  // The grant this caller holds, if the caller is holding one at all.
+  const missing = missingScopes({ authType: ctx.authType, scope: ctx.scope }, entry.scopes);
+  if (missing.length > 0) {
+    throw new OrchestratorError("permission-denied", scopeRefusal(missing, [...(ctx.scope || [])]));
   }
 
   if (permission.ownerOnly && !ctx.isOwner) {
@@ -215,4 +275,8 @@ function sectionAccess(ctx) {
   };
 }
 
-module.exports = { OrchestratorError, CHANNEL_TYPES, resolveContext, assertCapability, sectionAccess, scopeSet };
+module.exports = {
+  OrchestratorError, CHANNEL_TYPES, FIRST_PARTY_AUTH_TYPES,
+  resolveContext, assertCapability, sectionAccess, scopeSet,
+  scopeGateApplies, missingScopes, scopeRefusal
+};

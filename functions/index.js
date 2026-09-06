@@ -20429,6 +20429,10 @@ exports._nvChatGPTDispatchAction = nvChatGPTDispatchAction;
 // instead of reading the call site and hoping. See test/qa/pii-access-log.
 exports._nvMcpPiiAccessEntry = nvMcpPiiAccessEntry;
 exports._nvMcpPiiLoggedActions = nvMcpPiiLoggedActions;
+// The scope gate, exported so a test can assert what it REFUSES without a
+// dispatch that would then go looking for Firestore.
+exports._nvMcpAssertScope = nvMcpAssertScope;
+exports._nvOAuthDefaultScope = nvOAuthDefaultScope;
 // The served discovery surface itself, so a test can snapshot exactly what
 // tools/list returns instead of re-deriving it from the source text.
 exports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;
@@ -23286,7 +23290,15 @@ async function nvRequireChatGPTWorkspaceAccess(req, companyId = "") {
     email: String(decoded.email || "").trim().toLowerCase(),
     companyId: cleanCompanyId,
     companyRef,
-    companyData
+    companyData,
+    // Said out loud, because the scope gate asks WHO is calling rather than
+    // whether a scope string happens to be empty. This is the member's own
+    // Firebase ID token: no consent screen, no third party, no delegated grant,
+    // so no scope to check — their role and the workspace area switches are the
+    // whole gate, exactly as in the app. An auth type that does NOT name itself
+    // here is treated as a delegated token and must carry its scopes.
+    authType: "firebase_session",
+    scope: ""
   };
 }
 
@@ -24486,6 +24498,34 @@ function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   };
 }
 
+/**
+ * The scope gate, for every tool this dispatcher offers.
+ *
+ * One rule, from orchestrator/context.js and applied over the registry's
+ * `scopes` — the same table the securitySchemes on the wire come from — so
+ * there is no "the ten are enforced and the 19 are not". The rule is about WHO
+ * is asking: a delegated token's grant is the whole of what it may do (an empty
+ * grant permits nothing), while a member signed in with their own Firebase ID
+ * token holds no delegated grant and is limited by role and area alone.
+ *
+ * Behind the submission flag, deliberately. Enforcing scope on the 19 existing
+ * tools is a behaviour change, and the 1.1.1 listing under review must be
+ * served exactly what it is being served today until the operator flips 1.2.0.
+ * Flag off, this function is not called and nothing about scope changes; the
+ * orchestrator capabilities are unreachable in that state anyway.
+ */
+function nvMcpAssertScope(context, action) {
+  const entry = nvMcpRegistry.entryFor(action);
+  if (!entry) return;
+  const caller = { authType: String(context?.authType || ""), scope: context?.scope || "" };
+  const missing = nvOrchestratorContext.missingScopes(caller, entry.scopes);
+  if (missing.length === 0) return;
+  throw new HttpsError(
+    "permission-denied",
+    nvOrchestratorContext.scopeRefusal(missing, [...nvOrchestratorContext.scopeSet(caller.scope)])
+  );
+}
+
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
   const requested = String(action || "").trim();
   if (requested && !nvMcpAvailableActions().includes(requested)) {
@@ -24494,6 +24534,11 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       `Unknown action. Supported actions: ${nvMcpAvailableActions().join(", ")}.`
     );
   }
+
+  // Before the access-log row: a call refused for want of a scope read nothing,
+  // and an audit trail that records refused reads as reads is worth less than
+  // one that does not.
+  if (NV_MCP_ORCHESTRATOR) nvMcpAssertScope(context, requested);
 
   // An assistant reading a workspace's orders is a data access like any other,
   // and the one most likely to be questioned: the grant lasts thirty days and
@@ -25238,14 +25283,8 @@ function nvOAuthProtectedResourceMetadata(req) {
       NV_CHATGPT_PUBLIC_BASE_URL
     ],
     bearer_methods_supported: ["header"],
-    scopes_supported: [
-      "orders.read",
-      "orders.write",
-      "notes.read",
-      "notes.write",
-      "finance.read",
-      "tasks.write"
-    ],
+    // One list, the registry's. Identical bytes to the literal it replaces.
+    scopes_supported: [...nvMcpRegistry.SCOPES_SUPPORTED],
     resource_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`
   };
 }
@@ -25262,14 +25301,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: [
-      "orders.read",
-      "orders.write",
-      "notes.read",
-      "notes.write",
-      "finance.read",
-      "tasks.write"
-    ],
+    scopes_supported: [...nvMcpRegistry.SCOPES_SUPPORTED],
     service_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`,
     ui_locales_supported: ["en", "tr"]
   };
@@ -25298,8 +25330,27 @@ function nvOAuthExtractRedirectUri(req) {
   return nvSafeOAuthUri(req.query?.redirect_uri || req.body?.redirect_uri || "");
 }
 
+/**
+ * The grant a client gets when it asks for none.
+ *
+ * It is the list the metadata advertises, and nothing else. Three places used
+ * to answer this question and they did not agree: the registration response
+ * promised the client all six scopes, the WWW-Authenticate challenge asked for
+ * all six, and these two mint sites then issued "orders.read orders.write" —
+ * which is smaller than the tools/list every client is served, so a token
+ * minted by default could not call the finance tools the same server advertises
+ * to it. tools/list is one document served before any token exists and cannot
+ * be filtered per connection, so the fix is on this side: what the server mints
+ * by default must cover what the server advertises.
+ *
+ * A client that DOES name its scopes still gets exactly those.
+ */
+function nvOAuthDefaultScope() {
+  return nvMcpRegistry.SCOPES_SUPPORTED.join(" ");
+}
+
 function nvOAuthExtractScope(req) {
-  return nvCleanString(req.query?.scope || req.body?.scope || "orders.read orders.write", 500);
+  return nvCleanString(req.query?.scope || req.body?.scope || nvOAuthDefaultScope(), 500);
 }
 
 function nvOAuthExtractState(req) {
@@ -25601,7 +25652,7 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
     token_endpoint_auth_method: nvCleanString(body.token_endpoint_auth_method || "none", 60) || "none",
     grant_types: Array.isArray(body.grant_types) && body.grant_types.length ? body.grant_types : ["authorization_code"],
     response_types: Array.isArray(body.response_types) && body.response_types.length ? body.response_types : ["code"],
-    scope: nvCleanString(body.scope || "orders.read orders.write notes.read notes.write finance.read tasks.write", 500),
+    scope: nvCleanString(body.scope || nvOAuthDefaultScope(), 500),
     client_name: nvCleanString(body.client_name || "ChatGPT", 200)
   });
 });
@@ -25768,7 +25819,7 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const clientId = nvCleanString(body.client_id || body.clientId || "", 500);
     const redirectUri = nvSafeOAuthUri(body.redirect_uri || body.redirectUri || "");
-    const scope = nvCleanString(body.scope || "orders.read orders.write", 500);
+    const scope = nvCleanString(body.scope || nvOAuthDefaultScope(), 500);
     const state = nvCleanString(body.state || "", 2000);
     const codeChallenge = nvCleanString(body.code_challenge || body.codeChallenge || "", 500);
     const codeChallengeMethod = nvCleanString(body.code_challenge_method || body.codeChallengeMethod || "", 50);
@@ -26181,6 +26232,10 @@ const NV_MCP_FLAGS = {
  * can see is indistinguishable from a feature that quietly does not work.
  */
 const nvOrchestratorModule = require("./orchestrator");
+// The scope rule itself, pure and shared: nvMcpAssertScope applies it to the 19
+// legacy tools and assertCapability applies it to the ten, out of one function
+// over one table, so the two halves of the surface cannot enforce differently.
+const nvOrchestratorContext = require("./orchestrator/context");
 const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
   db: () => admin.firestore(),
   now: () => Date.now(),
@@ -27066,9 +27121,16 @@ function nvMcpProtectedResourceMetadataUrl() {
 
 function nvSendMcpOAuthChallenge(res, message = "Authentication required.") {
   const metadataUrl = nvMcpProtectedResourceMetadataUrl();
+  // The same list everywhere else: the metadata's scopes_supported, which is
+  // what the default grant mints and what the listing needs. This header used
+  // to name three read scopes, so a client that took the challenge at its word
+  // asked for a grant that could not call create_order or add_order_note — the
+  // fourth place with its own opinion about what a connection gets. (The web
+  // proxy in studioflow-web already emits exactly this string when the
+  // function sets no header of its own.)
   res.set(
     "WWW-Authenticate",
-    `Bearer resource_metadata="${metadataUrl}", scope="orders.read notes.read finance.read"`
+    `Bearer resource_metadata="${metadataUrl}", scope="${nvOAuthDefaultScope()}"`
   );
   res.status(401).json(nvMcpJsonRpcError(null, -32001, message));
 }

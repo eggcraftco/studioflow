@@ -206,14 +206,55 @@ does, or make the guard real. Making it real needs one piece of information the 
 real ChatGPT file host from a review-workspace call log, to pin the allowlist. Until that host is
 supplied the allowlist test is pending rather than passing.
 
-### 5.4 Scopes: advertised, not enforced
+### 5.4 Scopes: one rule, and what a token with no scope may do
 
-`nvMcpOAuthScopesForTool` now reads the registry, so the advertised scope per tool is single-sourced —
-but only the orchestrator capabilities check the token's granted scope at call time
-(`context.assertCapability`). Per-tool enforcement for the other 19 is still to build. Related, and a
-wire change if taken: `create_inventory_item` advertises `orders.read` today, which is a write tool
-advertising a read scope. Correcting it to `orders.write` is right and belongs in a submission, not in a
-merge.
+`nvMcpOAuthScopesForTool` reads the registry, so the advertised scope per tool is single-sourced. The
+enforcement of it now has ONE rule, stated in orchestrator/context.js and applied from one function
+(`missingScopes`) over that same table:
+
+> **A delegated grant is the whole of what that caller may do.**
+
+- **A token with no scope may do nothing.** The check used to be `granted.size > 0 && required.some(…)`
+  — "deny if the token names scopes and one is missing" — so a token carrying no scope string passed
+  every gate while the file's header claimed enforcement. An empty grant is not every grant; it is a
+  token that was granted nothing, and it is refused with a message that says to reconnect.
+- **A member signed into NivaDesk is not a token.** `chatgptWorkspaceAction` (and the non-OAuth branch
+  of `nvRequireChatGPTWorkspaceAccessWithOAuth`) authenticates a Firebase ID token: the person acting
+  for themselves, no consent screen, no third party, no delegated grant, and so nothing to check. That
+  context now says so — `authType: "firebase_session"` — and the gate asks WHO is calling rather than
+  whether a string happens to be empty. Role, area, financial and bankFeed gates apply to them exactly
+  as before. The list is closed the safe way round: an auth type nobody has named is treated as a token
+  and must carry its scopes.
+- **All 29 tools, not just the ten.** `nvMcpAssertScope` applies the same function over the registry's
+  `scopes` in the dispatcher, so `get_financial_overview` can no longer answer a token that
+  `get_commerce_overview` refuses.
+
+**Flag-gated, deliberately.** The dispatcher's gate runs only under `NIVADESK_MCP_ORCHESTRATOR`.
+Enforcing scope on the 19 is a behaviour change, and a live connection whose token was minted with the
+old default would begin to be refused — that belongs to the operator's 1.2.0 flip, beside the annotation
+corrections, not to a merge. Flag off, nothing about scope changes and the tools-list snapshot proves
+the wire is unmoved.
+
+**The default grant now covers the listing.** `tools/list` is one document served before any token
+exists and cannot be filtered per connection, so everything it advertises must be inside the grant this
+server mints when a client asks for none. Three places used to answer that question and disagreed: the
+registration response promised all six scopes, the `WWW-Authenticate` challenge asked for all six, and
+`chatgptOAuthAuthorize`/`chatgptOAuthApprove` issued `orders.read orders.write` — which would have made
+six advertised capabilities uncallable the moment enforcement became real. There is one answer now,
+`nvOAuthDefaultScope()` = the registry's `SCOPES_SUPPORTED`, and the connect page no longer sends a
+default of its own. A client that names its scopes still gets exactly those. The function's 401
+`WWW-Authenticate` challenge named a fourth list — three read scopes — so a client that took it at its
+word would have asked for a grant that could not call `create_order`; it names the same list now, which
+is the string studioflow-web's proxy already emitted when the function set no header.
+
+**Flip-day, stated plainly.** A token minted before this change with only `orders.read orders.write`
+will be refused on the finance and notes tools the moment the flag goes on. The refusal names the
+missing scope and tells the user to reconnect, which re-mints the grant at full width. Check the live
+token records before flipping.
+
+Related, and a wire change if taken: `create_inventory_item` advertises `orders.read` today, which is a
+write tool advertising a read scope. Correcting it to `orders.write` is right and belongs in a
+submission, not in a merge.
 
 ### 5.5 Audit and access-log corrections
 

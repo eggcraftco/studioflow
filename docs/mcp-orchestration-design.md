@@ -354,6 +354,17 @@ is pointing at: a `null` in source would silently ship as `false`. The change:
    challenge and the metadata document do not change. Enforcement is flag-gated with everything else,
    because refusing a call that used to succeed is a behaviour change to the reviewed surface.
 
+   **Built, September 2026, with the rule stated as one sentence: a delegated grant is the whole of what
+   that caller may do.** `context.missingScopes` is that rule and is the only place it lives;
+   `assertCapability` applies it to the ten and `nvMcpAssertScope` applies it to the 19, over the same
+   registry table. A token carrying no scope string is refused everything (the old
+   `granted.size > 0 && …` let it through everything), and a caller that legitimately has no grant — a
+   member on their own Firebase ID token, `authType: "firebase_session"` — is answered by WHO is asking
+   rather than by an empty string: no scope gate, role and area gates unchanged. A default grant smaller
+   than the unauthenticated `tools/list` would make advertised tools uncallable, so `nvOAuthDefaultScope()`
+   (the registry's `SCOPES_SUPPORTED`) is now the single default at every mint site. See
+   docs/mcp-submission-1.2.0.md §5.4 for the flip-day consequence.
+
 5. **`nvMcpAvailableActions()` → `nvRegistry.publishedNames({ inventory: NV_MCP_INVENTORY, orchestrator:
    NV_MCP_ORCHESTRATOR })`**. The dispatcher keeps an explicit `case "<name>"` per tool (the
    `mcp-permissions` source-text assertion depends on it); orchestrator cases are one-liners:
