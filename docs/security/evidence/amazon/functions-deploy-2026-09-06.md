@@ -388,6 +388,23 @@ Operator's conditional approval (in chat, 02:59 UTC): go if the three conditions
 
 6: fifteen-minute watch (03:01:54 → 03:17:38 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic in the window was the probe set — passed. Operator's condition for B4.5 met (45/45 ACTIVE on new revisions, probe parity, no new 5xx/error, clean window).
 
+## B4.5 — callables last deployed 1–5 Sep, chunk 5 (1 function)
+
+Operator's conditional approval (in chat, 03:03 UTC): go if B4.4's full gate is clean — it was. Same seven steps, kept in full for a single function.
+
+1–2: snapshot at 03:18:06, baseline probe at 03:18:11: 1 × 401, 0 × 5xx.
+3: started 2026-09-06T03:18:13Z from `d96f25b1` (functions code identical to `4b44eef9`); "Deploy complete" 03:20:40 (2 min 27 s), **1 of 1 "Successful update operation"**, exit 0.
+4: at 03:20:40 the service reports a new Ready revision (table below).
+5: probe re-run at 03:20:43 — identical; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| xeroSyncNow | xerosyncnow-00004-jil | 401 | xerosyncnow-00005-xok | 401 |
+
+6: fifteen-minute watch (03:18:13 → 03:34:00): _pending_.
+
+With B4.5 the whole "last deployed 1–5 Sep" group (B4.1–B4.5, 181 functions) is on the remediated tree: **228 of 414** deployed so far. Next per the plan: B5.1–B5.3 (callables last deployed in August), each on the operator's go; then a 24-hour soak before B6.
+
 ## Rollback used
 
 None so far.
