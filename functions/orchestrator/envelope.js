@@ -173,6 +173,90 @@ function entityRef(type, id, label = "", url = null) {
 }
 
 /**
+ * The bound a string gets when this module walks a finished envelope, by the
+ * field name it is stored under.
+ *
+ * Anything not named here gets `DEFAULT_STRING_MAX`. 200 is the widest bound
+ * any capability gives a field it fills from somebody else's text (a ledger's
+ * error message), and the longest honest string the ten capabilities produce
+ * outside `message` is 132 characters, so nothing true is clipped. `message`
+ * keeps `WARNING_MESSAGE_MAX` because a warning is quoted into a summary line
+ * and this module's own longest sentence is 215.
+ */
+const STRING_MAX = Object.freeze({
+  message: WARNING_MESSAGE_MAX,
+  // A rendered line, if one is ever carried inside `data` rather than beside it.
+  text: WARNING_MESSAGE_MAX
+});
+const DEFAULT_STRING_MAX = 200;
+
+/**
+ * A field NAME is a string a reader sees too, and it can be somebody else's:
+ * `attention.amountsByCurrency` keys a block by a currency code off a payout,
+ * which is the provider's own string. 60 is `WARNING_FIELD_MAX` — a key is a
+ * word, never a sentence.
+ */
+const KEY_MAX = WARNING_FIELD_MAX;
+
+/**
+ * Every string a finished envelope carries, bounded and stripped, once, here.
+ *
+ * The invariant is one sentence — nothing a provider, a bank, a ledger or a
+ * buyer wrote leaves this server unbounded, multi-line, or carrying a
+ * character that can move a cursor, reverse a sentence or hide a payload — and
+ * until now it was kept by each capability remembering to call
+ * `untrusted.safeText` at each of its own call sites. A reviewer poisoned every
+ * string source in a workspace with one 330-character payload and eight of the
+ * ten capabilities repeated it back — and two of the leaks were in no
+ * capability at all: `warning()` bounded nothing, and `freshness.build`
+ * interpolates a bank connection's own provider key into four sentences, one of
+ * which reached a rendered summary line. A rule kept by remembering is a rule
+ * the eleventh capability opts out of by being written next year.
+ *
+ * So it is kept HERE instead, at the one door every answer leaves through,
+ * over `data`, `warnings`, `freshness`, `entityRefs`, `suggestedActions` and
+ * the envelope's own `action` — the whole object, values AND keys, at whatever
+ * depth. The per-field bounds at the call sites stay: `entityRef` still caps a
+ * label at 80 and `freshness.sourceRow` still caps a provider key at 40,
+ * because a tighter bound where the meaning is known is better than a loose one
+ * here. This is the floor underneath them, not their replacement.
+ *
+ * Two deliberate details:
+ *
+ *  - a key that sanitises into one that is already present is DROPPED rather
+ *    than allowed to overwrite it (first wins), because a poisoned key must not
+ *    be able to replace a real field's value; and
+ *  - `Date` survives untouched. Nothing puts one in an envelope today (every
+ *    time is an ISO string) but walking one as a plain object would silently
+ *    turn it into `{}`.
+ *
+ * Numbers, booleans and null are returned as they are: this bounds text, and a
+ * figure that has been through `render`'s numeral check must not change here.
+ *
+ * The two `Object.prototype` dances are not decoration. A field named
+ * `constructor` would otherwise read a function out of the bounds table and
+ * lose its 200-character budget to `safeText`'s own default, and a field named
+ * `__proto__` — which `JSON.parse` produces as an OWN property — would set the
+ * output object's prototype instead of becoming a field on it.
+ */
+const maxFor = (key) => (Object.prototype.hasOwnProperty.call(STRING_MAX, key) ? STRING_MAX[key] : DEFAULT_STRING_MAX);
+
+function boundStrings(value, key = "") {
+  if (typeof value === "string") return untrusted.safeText(value, { max: maxFor(key) });
+  if (Array.isArray(value)) return value.map((row) => boundStrings(row, key));
+  if (!value || typeof value !== "object" || value instanceof Date) return value;
+  const out = {};
+  for (const [name, inner] of Object.entries(value)) {
+    const safeKey = untrusted.safeText(name, { max: KEY_MAX }) || "unnamed";
+    if (Object.prototype.hasOwnProperty.call(out, safeKey)) continue;
+    Object.defineProperty(out, safeKey, {
+      value: boundStrings(inner, safeKey), enumerable: true, writable: true, configurable: true
+    });
+  }
+  return out;
+}
+
+/**
  * Assemble the answer.
  *
  * The channel profile is applied HERE rather than in each capability, so a
@@ -229,7 +313,13 @@ function finish({
     suggestedActions: (Array.isArray(suggestedActions) ? suggestedActions : []).filter(Boolean),
     summary: { lines: [] }
   };
-  return envelope;
+  // Last, over everything: after the channel profile, so the text it writes is
+  // bounded too, and after the warnings are merged, so a freshness sentence
+  // built out of a bank connection's own provider key is bounded whether or not
+  // `warning()` was the function that built it. `summary.lines` is empty here —
+  // render.js writes them afterwards and bounds each one through `line()`,
+  // which is the same rule at the other door.
+  return boundStrings(envelope);
 }
 
 /** Blocks whose whole value is money, whatever shape the capability gave them. */
@@ -386,6 +476,6 @@ function applyChannelProfile(data, profile) {
 
 module.exports = {
   STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, MONEY_NAME, MONEY_IN_TEXT, PII_KEYS, PII_LABEL_TYPES, CAP_WARNINGS,
-  WARNING_MESSAGE_MAX, WARNING_FIELD_MAX,
-  warning, capWarnings, entityRef, finish, applyChannelProfile
+  WARNING_MESSAGE_MAX, WARNING_FIELD_MAX, STRING_MAX, DEFAULT_STRING_MAX, KEY_MAX,
+  warning, capWarnings, entityRef, finish, applyChannelProfile, boundStrings
 };

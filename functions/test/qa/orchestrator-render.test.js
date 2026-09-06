@@ -330,49 +330,15 @@ check("the structured data a model reads is bounded too, in every capability tha
   }
 });
 
-/** Every string anywhere in a finished envelope, with the path that carried it. */
-function stringsInEnvelope(built) {
-  const out = [];
-  for (const field of ["data", "entityRefs", "warnings", "freshness", "suggestedActions"]) {
-    stringsIn(built[field], field, out);
-  }
-  for (const [index, row] of (built.summary.lines || []).entries()) out.push([`summary.lines[${index}]`, row.text]);
-  return out;
-}
-
-check("no capability puts unbounded, multi-line or control-carrying provider text anywhere in an envelope", () => {
-  // The structural version of the check above, and the reason it exists: the
-  // first version of that check named three capabilities — the three the commit
-  // that wrote it had touched — and looked at `built.data` and
-  // `built.entityRefs` only. Seven of the other capabilities leaked, and two of
-  // the leaks were not in `data` at all: `envelope.warning` applied
-  // `String(message)` with no bound while `freshness.build` interpolated a bank
-  // connection's own provider key into four warning sentences, so a
-  // never-synced connection produced a 323-character multi-line `message`, a
-  // 242-character `channel`, and 227 characters of injected prose quoted into a
-  // rendered summary line.
-  //
-  // So: every capability, over every string the envelope carries.
-  const snapshot = fixtures.poisonedSnapshot();
-  for (const [capability, handler] of ALL_CAPABILITIES()) {
-    const built = envelopeFor(capability, handler, snapshot, {});
-    const strings = stringsInEnvelope(built);
-    assert.ok(strings.length > 0, `${capability}: nothing to check — the fixture no longer reaches it`);
-    for (const [path, value] of strings) {
-      // The module's own predicate for "this line still carries something it
-      // must not", used by the test that the invariant is for. It was exported
-      // and called by nothing, tests included, which is a fair summary of how
-      // seven capabilities went unchecked.
-      assert.ok(!untrusted.hasUnsafeCharacters(value),
-        `${capability}: ${path} carries a control, bidi or zero-width character`);
-      assert.ok(!/[\n\r]/.test(value), `${capability}: ${path} spans two lines`);
-      // 300 is render.LINE_MAX and envelope.WARNING_MESSAGE_MAX — the widest
-      // bound anything in an envelope is given. Unbounded is the defect.
-      assert.ok(value.length <= 300, `${capability}: ${path} is ${value.length} characters of somebody else's text`);
-      assert.ok(!value.includes(fixtures.POISON), `${capability}: ${path} is the payload verbatim`);
-    }
-  }
-});
+// The envelope-wide version of this rule — every capability, every field, over
+// a workspace where every string is the payload — lives in
+// test/qa/orchestrator-untrusted-envelope.test.js. It moved because the list it
+// ran over was hand-written here: `ALL_CAPABILITIES` is pinned against
+// CAPABILITY_NAMES above, which turns red when a capability is added, but red
+// on the list rather than on the answer. That file enumerates the registry
+// instead, and drives run(), so the eleventh capability is covered the day its
+// row is written. What stays here is the rendering half: the lines, and the
+// three capabilities whose `data` carried a shop's string verbatim.
 
 check("an order label cannot be a link, and can still be a slash-numbered order", () => {
   // `safeReference` admitted ":" and "/", so a shop could render
