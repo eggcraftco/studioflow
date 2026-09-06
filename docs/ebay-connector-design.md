@@ -659,7 +659,7 @@ nonce cookie on the web side "to save an invocation", that draft was wrong and i
          (the nonce cookie is READ, never gated on: absent means nonce:"" in the body)
    ──▶ POST https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback
          x-nivadesk-timestamp / x-nivadesk-signature, JSON body { v, rid, code, state, nonce }   ← no query string, ever
-   ──▶ ebayOAuthCallback: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ shapes ▸ gate ▸ state tx (burn) ▸ exchange ▸ identity ▸ upsert
+   ──▶ ebayOAuthCallback: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ rid ▸ gate ▸ presence ▸ shapes ▸ state tx (burn) ▸ exchange ▸ identity ▸ upsert
    ──▶ 200 { ok, outcome, reason?, rid }                                                  ← JSON, not a 302
    ──▶ the WEB route redirects the seller: 302 /settings?section=ebay&ebay=…&reason=…
 ```
