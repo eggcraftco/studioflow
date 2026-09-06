@@ -47,7 +47,17 @@ const ID_KEY = /(id|number|reference|code|sku|token|date|time|value|amount|quant
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const PHONE = /(?:\+|00)?\d[\d\s().-]{7,}\d/;
 const UK_POSTCODE = /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/;
-const US_ZIP = /\b\d{5}(?:-\d{4})?\b/;
+// A US ZIP is only a postcode when its state stands beside it. Five digits on
+// their own are not: eBay titles carry manufacturer part numbers ("Bosch 12345
+// Brake Pad Set") and variation aspects carry numeric size and part codes
+// ("55010"), and a bare \d{5} rule read those as the buyer's personalisation —
+// it redacted the product title into "[personalised item]", filed the real
+// title as buyer PII (deleted by the 90-day sweep), and, in a field the split
+// does not rewrite, made the whole order `pii_in_safe_half` and unimportable.
+// A US address is written "City, ST 90210", so the state token is the context
+// that separates an address from a part number.
+const US_STATE = "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|AS|GU|MP|PR|VI";
+const US_ZIP = new RegExp(`\\b(?:${US_STATE})\\b[.,]?\\s{0,3}\\d{5}(?:-\\d{4})?\\b`);
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:T|$)/;
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);

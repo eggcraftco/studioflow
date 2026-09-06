@@ -101,9 +101,48 @@ check("the scanner finds nothing on the safe half, and trips on an email, a phon
   assert.ok(plant((o) => { o.pricingSummary.note = "reach me at ada@example.com"; }).some((p) => /email/.test(p)), "email");
   assert.ok(plant((o) => { o.lineItems[1].sellerNote = "call 07700 900123 please"; }).some((p) => /phone/.test(p)), "phone");
   assert.ok(plant((o) => { o.lineItems[1].sellerNote = "deliver to N1 1AA"; }).some((p) => /postcode/.test(p)), "UK postcode");
-  assert.ok(plant((o) => { o.lineItems[1].sellerNote = "deliver to 90210"; }).some((p) => /postcode/.test(p)), "US zip");
+  assert.ok(plant((o) => { o.lineItems[1].sellerNote = "deliver to Beverly Hills, CA 90210"; }).some((p) => /postcode/.test(p)), "US zip beside its state");
   assert.ok(plant((o) => { o.newBlock = { fullName: "Somebody" }; }).some((p) => p === "newBlock.fullName"), "a key on the list, anywhere");
   assert.ok(plant((o) => { o.fulfillments[0].recipientName = "Somebody"; }).some((p) => /recipientName/.test(p)), "inside a fulfilment too");
+});
+
+// The other half of the contract. The trip-wire above is only correct if it is
+// quiet on the data eBay actually sends: titles carry manufacturer part
+// numbers, variation aspects carry numeric part and size codes, and promotion
+// descriptions carry order thresholds. A bare five-digit rule read all three as
+// a postcode — it redacted product titles into "[personalised item]", filed the
+// real title as buyer PII, and turned an ordinary order into `pii_in_safe_half`,
+// which pins the sync cursor. Ordinary product data must survive the split
+// unchanged and must not trip the scanner.
+check("ordinary product data survives: a part number in a title, a numeric variation aspect and a promotion threshold are not a buyer", () => {
+  const order = {
+    orderId: "12-09113-42375", buyer: { username: "ada_l" },
+    lineItems: [
+      { lineItemId: "1", sku: "BP-1", title: "Bosch 12345 Brake Pad Set", quantity: 1, lineItemCost: { value: "20.00", currency: "GBP" },
+        appliedPromotions: [{ promotionId: "p1", description: "Save on orders over 10000 items, code 12345" }] },
+      { lineItemId: "2", sku: "RING-1", title: "Silver Ring", quantity: 1, lineItemCost: { value: "30.00", currency: "GBP" },
+        variationAspects: [{ name: "Part", value: "55010" }, { name: "Size", value: "M" }] }
+    ]
+  };
+  const { safe, restricted, removed } = sanitize.splitEbayOrder(order, []);
+  assert.strictEqual(safe.lineItems[0].title, "Bosch 12345 Brake Pad Set", "a manufacturer part number is not personalisation");
+  assert.strictEqual(safe.lineItems[1].title, "Silver Ring", "one numeric aspect must not redact the whole line");
+  assert.strictEqual(safe.lineItems[1].variationAspects[0].value, "55010");
+  assert.strictEqual(safe.lineItems[0].appliedPromotions[0].description, "Save on orders over 10000 items, code 12345");
+  assert.deepStrictEqual(restricted, {}, "nothing about this order belongs in the restricted collection");
+  assert.deepStrictEqual(removed, []);
+  assert.deepStrictEqual(sanitize.scanForPii(safe), [], "and the order is importable: no pii_in_safe_half");
+});
+
+check("a real personalisation still trips: an engraved name with a phone, and a US address in a title", () => {
+  const engraved = sanitize.splitEbayOrder({ orderId: "x", buyer: { username: "ada_l" }, lineItems: [{ lineItemId: "1", title: "Signet ring", variationAspects: [{ name: "Engraving", value: "Ada 07700 900123" }] }] }, []);
+  assert.strictEqual(engraved.safe.lineItems[0].variationAspects[0].value, sanitize.PERSONALISED_VALUE);
+  assert.strictEqual(engraved.safe.lineItems[0].title, sanitize.PERSONALISED_TITLE);
+  assert.strictEqual(engraved.restricted.lineItems["0"].variationAspects[0].value, "Ada 07700 900123");
+  const addressed = sanitize.splitEbayOrder({ orderId: "y", buyer: { username: "ada_l" }, lineItems: [{ lineItemId: "1", title: "Deliver to Springfield, IL 62704" }] }, []);
+  assert.strictEqual(addressed.safe.lineItems[0].title, sanitize.PERSONALISED_TITLE);
+  assert.strictEqual(sanitize.looksPersonal("Springfield, IL 62704"), "postcode");
+  assert.strictEqual(sanitize.looksPersonal("Bosch 12345 Brake Pad Set"), "", "five digits alone are a part number, not an address");
 });
 
 check("the scanner never trips on a country code, an order id, a legacy id, a tracking number, a VAT reference, a date or a money value", () => {
