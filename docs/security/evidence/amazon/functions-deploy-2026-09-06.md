@@ -260,6 +260,65 @@ Operator's process for this batch (in chat, 02:14 UTC): go only if the four prev
 
 6: fifteen-minute watch (02:31:00 → 02:50:30): _pending_.
 
+## B4.3 — callables last deployed 1–5 Sep, chunk 3 (45 functions)
+
+Operator's instruction "B4.3'e geç" at 02:38 UTC, i.e. seven minutes into B4.2's fifteen-minute window; the immediate readback at 02:38:33 showed 0 ERROR entries and 0 request 5xx for B4.2 since its deploy and for all 137 functions deployed so far since 01:35, so the batch started; B4.2's full-window result is recorded in its own section. The operator's standing rule for B4.4: it does not start until B4.2's full gate, B4.2's hourly scheduled-job check and B4.3's full gate are all clean, shown together.
+
+1–2: snapshot at 02:38:45, baseline probes at 02:38:49: 1 × 200, 4 × 400, 36 × 401, 4 × 403, 0 × 5xx.
+3: started 2026-09-06T02:40:37Z from `85aee6c9` (functions code identical to `4b44eef9`); "Deploy complete" 02:43:58 (3 min 21 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 02:43:58 all 45 services report a new Ready revision (table below).
+5: probes re-run at 02:44:01 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| getSquareConnections | getsquareconnections-00008-cex | 401 | getsquareconnections-00009-duj | 401 |
+| getUserGuide | getuserguide-00053-qan | 401 | getuserguide-00054-guh | 401 |
+| getWebsiteChatThread | getwebsitechatthread-00004-juw | 400 | getwebsitechatthread-00005-naq | 400 |
+| getWooCommerceWebhookToken | getwoocommercewebhooktoken-00007-poy | 400 | getwoocommercewebhooktoken-00008-leg | 400 |
+| getWooConnections | getwooconnections-00002-gen | 401 | getwooconnections-00003-tij | 401 |
+| importOpeningStock | importopeningstock-00007-vih | 401 | importopeningstock-00008-baf | 401 |
+| importWorkspaceBackup | importworkspacebackup-00071-bex | 401 | importworkspacebackup-00072-liz | 401 |
+| initializeFreeDemoWorkspace | initializefreedemoworkspace-00032-web | 401 | initializefreedemoworkspace-00033-mil | 401 |
+| inviteWorkspaceMember | inviteworkspacemember-00001-yak | 401 | inviteworkspacemember-00002-qiw | 401 |
+| listChatGPTConnections | listchatgptconnections-00001-gic | 401 | listchatgptconnections-00002-caw | 401 |
+| listCommerceEvents | listcommerceevents-00003-pib | 401 | listcommerceevents-00004-tuy | 401 |
+| listCommerceReviewQueue | listcommercereviewqueue-00002-gib | 401 | listcommercereviewqueue-00003-poy | 401 |
+| listRetiredIntegrationHolds | listretiredintegrationholds-00001-jef | 401 | listretiredintegrationholds-00002-vew | 401 |
+| listSquarePayouts | listsquarepayouts-00008-vid | 401 | listsquarepayouts-00009-haw | 401 |
+| listSquareUnmatched | listsquareunmatched-00008-dew | 401 | listsquareunmatched-00009-pos | 401 |
+| listWorkspaceInvitations | listworkspaceinvitations-00001-hid | 401 | listworkspaceinvitations-00002-duj | 401 |
+| maintainFileScans | maintainfilescans-00002-xir | 403 | maintainfilescans-00003-qeb | 403 |
+| matchPayoutToBank | matchpayouttobank-00002-jek | 401 | matchpayouttobank-00003-tez | 401 |
+| matchSquarePayoutToBank | matchsquarepayouttobank-00001-yoj | 401 | matchsquarepayouttobank-00002-teg | 401 |
+| mergeOrders | mergeorders-00004-kil | 401 | mergeorders-00005-puy | 401 |
+| mergeWebCustomers | mergewebcustomers-00004-moz | 401 | mergewebcustomers-00005-var | 401 |
+| pandleConfirmMatch | pandleconfirmmatch-00003-yav | 401 | pandleconfirmmatch-00004-yej | 401 |
+| pandleConnectFinish | pandleconnectfinish-00002-zux | 401 | pandleconnectfinish-00003-nev | 401 |
+| pandleConnectStart | pandleconnectstart-00002-bec | 401 | pandleconnectstart-00003-tel | 401 |
+| pandlePreview | pandlepreview-00005-zod | 401 | pandlepreview-00006-cud | 401 |
+| pandlePush | pandlepush-00005-jiv | 401 | pandlepush-00006-luh | 401 |
+| pandleRefreshMeta | pandlerefreshmeta-00002-tir | 401 | pandlerefreshmeta-00003-quh | 401 |
+| pandleSelectBankAccount | pandleselectbankaccount-00002-rux | 401 | pandleselectbankaccount-00003-fer | 401 |
+| paypalConnect | paypalconnect-00005-fit | 401 | paypalconnect-00006-hay | 401 |
+| postEstimateDecision | postestimatedecision-00003-kek | 400 | postestimatedecision-00004-lum | 400 |
+| postWebsiteChatMessage | postwebsitechatmessage-00071-six | 400 | postwebsitechatmessage-00072-jeq | 400 |
+| previewEtsyImport | previewetsyimport-00015-goh | 401 | previewetsyimport-00016-wox | 401 |
+| previewFinancialRecalculationForOrders | previewfinancialrecalculationfororders-00003-laq | 401 | previewfinancialrecalculationfororders-00004-fuy | 401 |
+| previewSquareImport | previewsquareimport-00010-hut | 401 | previewsquareimport-00011-muz | 401 |
+| previewWooImport | previewwooimport-00005-vad | 401 | previewwooimport-00006-dum | 401 |
+| previewWorkspaceInvitation | previewworkspaceinvitation-00001-niy | 200 | previewworkspaceinvitation-00002-sup | 200 |
+| purgeExpiredEstimateLinks | purgeexpiredestimatelinks-00002-ron | 403 | purgeexpiredestimatelinks-00003-wef | 403 |
+| purgeWebOrders | purgeweborders-00002-yes | 401 | purgeweborders-00003-law | 401 |
+| quickbooksConnectStart | quickbooksconnectstart-00002-pil | 401 | quickbooksconnectstart-00003-ceq | 401 |
+| quickbooksDisconnect | quickbooksdisconnect-00003-mex | 401 | quickbooksdisconnect-00004-yen | 401 |
+| quickbooksSyncNow | quickbookssyncnow-00003-git | 401 | quickbookssyncnow-00004-duf | 401 |
+| recalculateFinancialSettingsForOrders | recalculatefinancialsettingsfororders-00077-nod | 401 | recalculatefinancialsettingsfororders-00078-jel | 401 |
+| recalculateWorkspacePlanUsage | recalculateworkspaceplanusage-00103-rud | 401 | recalculateworkspaceplanusage-00104-cud | 401 |
+| reconcileEtsyConnections | reconcileetsyconnections-00018-saw | 403 | reconcileetsyconnections-00019-noj | 403 |
+| reconcileSquareConnections | reconcilesquareconnections-00013-fax | 403 | reconcilesquareconnections-00014-mox | 403 |
+
+6: fifteen-minute watch (02:40:37 → 02:56:30): _pending_.
+
 ## Rollback used
 
 None so far.
