@@ -420,7 +420,9 @@ bankFeed, ownerOnly, …}`, `riskClass` (A–E), `minAssurance` (1–3), `pii[]`
 `annotations`, `domainNeeds[]`.
 
 The table validates itself at load (`assertRegistry`) and refuses to start rather than serve a listing
-with a hole in it. `CAPABILITY_KINDS`, `RISK_CLASSES` and `EFFECT_KINDS` are closed lists for the same
+with a hole in it. It validates BOTH value sets: `annotations` (what the runtime does) and the
+`liveAnnotations` that `annotationsFor` actually serves while the flag is off, which may differ only
+where `LIVE_HINT_EXEMPTIONS` names the tool, the hint and the reason. `CAPABILITY_KINDS`, `RISK_CLASSES` and `EFFECT_KINDS` are closed lists for the same
 reason the warning codes are.
 
 ### 8.1 The ten capabilities `run()` serves today

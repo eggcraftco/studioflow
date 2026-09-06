@@ -1038,6 +1038,33 @@ function effectsFor(name) {
   return entry ? [...entry.effects] : [];
 }
 
+/**
+ * The hints the DEPLOYED listing gets wrong, named one at a time.
+ *
+ * Check 3 below — openWorldHint against the effects the tool actually has, the
+ * check this file was built around — read `entry.annotations` only. But with
+ * the orchestrator flag off, `annotationsFor` serves `liveAnnotations`, so the
+ * values a reviewer is looking at today were exempt from the one structural
+ * check that would have caught the 1.1.1 rejection, and a third wrong live
+ * value could have been added without the load-time assertion noticing.
+ *
+ * Both value sets are checked now, and the difference between them has to be
+ * declared HERE, per tool and per hint, with the reason it is still on the
+ * wire. The list is exact in both directions: a live hint that disagrees with
+ * the verified one and is not named here fails the load, and a name here whose
+ * two values agree fails it too — so when the operator flips the flag and the
+ * `liveAnnotations` come out, this table cannot quietly rot into a licence.
+ */
+const LIVE_HINT_EXEMPTIONS = Object.freeze({
+  create_order: Object.freeze({
+    openWorldHint: "1.1.1 shipped false. The order-created trigger mails the buyer, so the verified value is true; the listing under review must not move under the reviewer, and the correction ships with NIVADESK_MCP_ORCHESTRATOR."
+  }),
+  update_order_status: Object.freeze({
+    openWorldHint: "1.1.1 shipped false. notifyCustomerOnStatusChange puts a message in the customer's inbox, so the verified value is true; corrected behind the same flag.",
+    idempotentHint: "1.1.1 shipped true. nvHistoryItem mints a fresh UUID and Timestamp per call, so a repeated status write appends a second history entry; corrected behind the same flag."
+  })
+});
+
 /** True where the live listing serves a hint the runtime no longer supports. */
 function correctionsPending() {
   return TOOL_REGISTRY
@@ -1102,15 +1129,58 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
     // 3. openWorldHint and effects say the same thing. This is the check that
     //    would have caught create_order and update_order_status: both had a
     //    trigger that mails the customer and both claimed openWorldHint false.
+    //
+    //    It runs over BOTH value sets, because `annotationsFor` serves
+    //    `liveAnnotations` while the orchestrator flag is off: a check that
+    //    read `entry.annotations` alone validated the set nobody is being
+    //    served yet and left the bytes on the wire exempt from the one
+    //    structural check this file was built around. The values that ship
+    //    are allowed to differ only where LIVE_HINT_EXEMPTIONS names the
+    //    tool, names the hint, and says why.
     if (!Array.isArray(entry.effects)) fail(`"${name}" has no effects list.`);
     for (const effect of entry.effects) {
       if (!EFFECT_KINDS.includes(effect)) fail(`"${name}" declares unknown effect "${effect}".`);
     }
-    if (entry.effects.length > 0 && entry.annotations.openWorldHint !== true) {
-      fail(`"${name}" declares effects [${entry.effects.join(", ")}] but openWorldHint is false.`);
+
+    const exemptions = LIVE_HINT_EXEMPTIONS[name] || {};
+    for (const key of Object.keys(exemptions)) {
+      if (!ANNOTATION_KEYS.includes(key)) fail(`"${name}" declares a pending live correction for "${key}", which is not a hint.`);
+      if (typeof exemptions[key] !== "string" || exemptions[key].trim().length < 20) {
+        fail(`"${name}" declares a pending live correction for ${key} with no reason.`);
+      }
     }
-    if (entry.annotations.openWorldHint === true && entry.effects.length === 0) {
-      fail(`"${name}" is openWorldHint true but names no effect.`);
+    if (!entry.liveAnnotations && Object.keys(exemptions).length > 0) {
+      fail(`"${name}" declares a pending live correction but serves no liveAnnotations.`);
+    }
+
+    for (const [label, values, exempt] of [
+      ["the verified values", entry.annotations, {}],
+      ["the values being served", entry.liveAnnotations || entry.annotations, exemptions]
+    ]) {
+      if (exempt.openWorldHint) continue;
+      if (entry.effects.length > 0 && values.openWorldHint !== true) {
+        fail(`"${name}" declares effects [${entry.effects.join(", ")}] but openWorldHint is false in ${label}.`);
+      }
+      if (values.openWorldHint === true && entry.effects.length === 0) {
+        fail(`"${name}" is openWorldHint true in ${label} but names no effect.`);
+      }
+    }
+
+    // The allowlist is exact in both directions, so a third wrong live value
+    // cannot arrive unannounced and a correction cannot outlive the defect it
+    // was written for.
+    if (entry.liveAnnotations) {
+      const differing = ANNOTATION_KEYS.filter((key) => entry.liveAnnotations[key] !== entry.annotations[key]);
+      for (const key of differing) {
+        if (!Object.prototype.hasOwnProperty.call(exemptions, key)) {
+          fail(`"${name}" serves ${key} = ${entry.liveAnnotations[key]} while the verified value is ${entry.annotations[key]}, and no pending correction names it. Declare it in LIVE_HINT_EXEMPTIONS with the reason it is still on the wire, or correct the value.`);
+        }
+      }
+      for (const key of Object.keys(exemptions)) {
+        if (!differing.includes(key)) {
+          fail(`"${name}" declares a pending live correction for ${key}, but the served and verified values agree; remove it.`);
+        }
+      }
     }
 
     // 4. A read tool that hands over people must say where that is recorded.
@@ -1175,6 +1245,13 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
     }
   }
 
+  // A pending correction for a tool this table does not have is a correction
+  // nobody will ever make; more to the point, it is how the allowlist outlives
+  // the entry it was written for.
+  for (const name of Object.keys(LIVE_HINT_EXEMPTIONS)) {
+    if (!seen.has(name)) fail(`LIVE_HINT_EXEMPTIONS names "${name}", which is not in the table.`);
+  }
+
   return true;
 }
 
@@ -1184,6 +1261,7 @@ assertRegistry();
 module.exports = {
   TOOL_REGISTRY,
   SCOPES_SUPPORTED,
+  LIVE_HINT_EXEMPTIONS,
   ANNOTATION_KEYS,
   EFFECT_KINDS,
   PII_KINDS,

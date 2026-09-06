@@ -137,6 +137,13 @@ The third row is a decision, not just a report: either the no-op guard ships and
 honestly (§5.2), or the hint goes out as `false`. The registry's `pendingGuard` mechanism fails the
 build if somebody adds the guard without flipping the hint, so the two cannot drift.
 
+These three are the ONLY hints on which the served listing and the verified table are allowed to
+differ, and they are declared one by one in `registry.LIVE_HINT_EXEMPTIONS`. The load-time check that
+compares `openWorldHint` against a tool's declared effects — the check that would have caught the 1.1.1
+rejection — now runs over the values actually being served as well as the verified ones, and any other
+difference between the two sets fails the load with the tool and the hint named. Until this, the half
+of the table that ships was the half nothing structural checked.
+
 ### 3.2 Result shape
 
 The ten new tools return the envelope described in §2.3 inside `structuredContent`. The existing 19

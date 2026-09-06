@@ -247,6 +247,58 @@ check("assertRegistry refuses the mistakes it exists for", () => {
   assert.strictEqual(registry.assertRegistry(registry.TOOL_REGISTRY, indexSource), true);
 });
 
+check("the annotation set that actually SHIPS is checked, not only the verified one", () => {
+  // With the orchestrator flag off, annotationsFor serves `liveAnnotations`.
+  // The openWorldHint-vs-effects check used to read `entry.annotations` only,
+  // so the four booleans a reviewer is looking at today were exempt from the
+  // one structural check this file was built around, and a third wrong live
+  // value could have been added without the load-time assertion noticing.
+  const clone = () => JSON.parse(JSON.stringify(registry.TOOL_REGISTRY));
+  const rejects = (mutate, why, pattern = /MCP tool registry/) => {
+    const table = clone();
+    mutate(table);
+    assert.throws(() => registry.assertRegistry(table), pattern, `should have refused: ${why}`);
+  };
+
+  // A third wrong live value, on a tool that has no pending correction.
+  rejects((t) => {
+    const entry = t.find((e) => !e.liveAnnotations && e.annotations.readOnlyHint === true);
+    entry.liveAnnotations = { ...entry.annotations, readOnlyHint: false };
+  }, "a live hint that disagrees with the verified one and is named nowhere", /no pending correction names it/);
+
+  // The served openWorldHint contradicting the tool's own effects — the 1.1.1
+  // defect itself, arriving through the half of the table that ships.
+  rejects((t) => {
+    const entry = t.find((e) => !e.liveAnnotations && e.effects.length === 0 && e.annotations.openWorldHint === false);
+    entry.effects = ["customer_message"];
+    entry.annotations = { ...entry.annotations, openWorldHint: true };
+    entry.liveAnnotations = { ...entry.annotations, openWorldHint: false };
+  }, "a served openWorldHint false on a tool that mails the customer");
+
+  // And the allowlist cannot rot into a licence: a correction whose two values
+  // now agree is a correction that has already shipped.
+  rejects((t) => {
+    const entry = t.find((e) => e.name === "create_order");
+    entry.liveAnnotations = { ...entry.annotations };
+  }, "a pending correction for a hint that no longer differs", /remove it/);
+
+  // Every declared correction names a real tool, a real hint, and a reason.
+  const names = new Set(registry.TOOL_REGISTRY.map((entry) => entry.name));
+  for (const [name, hints] of Object.entries(registry.LIVE_HINT_EXEMPTIONS)) {
+    assert.ok(names.has(name), `LIVE_HINT_EXEMPTIONS names ${name}, which is not a tool`);
+    for (const [hint, reason] of Object.entries(hints)) {
+      assert.ok(registry.ANNOTATION_KEYS.includes(hint), `${name}: ${hint} is not a hint`);
+      assert.ok(typeof reason === "string" && reason.trim().length >= 20, `${name}.${hint} has no reason`);
+    }
+  }
+  // The allowlist and the corrections the registry is holding back are the
+  // same list, read two ways.
+  assert.deepStrictEqual(
+    registry.correctionsPending().map((row) => `${row.name}.${row.changes.map((c) => c.hint).sort().join("+")}`).sort(),
+    Object.entries(registry.LIVE_HINT_EXEMPTIONS).map(([name, hints]) => `${name}.${Object.keys(hints).sort().join("+")}`).sort()
+  );
+});
+
 /* ------------------------------------------------------------------ *
  * 3. The served tools/list, snapshotted.
  * ------------------------------------------------------------------ */
