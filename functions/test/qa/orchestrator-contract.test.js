@@ -403,6 +403,39 @@ check("a capability, a state or a warning code that the document never learned a
   }
 });
 
+// §8.1's table is the page a channel author reads to find out what a capability
+// costs and what it may touch, and nothing checked it: `search_commerce_orders`
+// gained the `connections` domain (Etsy has no health document, so the search
+// has to read the connection) and the table kept the old three for a fortnight.
+check("§8.1's scopes and domains are the registry's, capability by capability", () => {
+  const rows = DOC.split("\n")
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 6 && /^`[a-z_]+`$/.test(cells[1]))
+    .map((cells) => ({ name: cells[1].slice(1, -1), scopes: cells[2], domains: cells[5] }))
+    .filter((row) => CAPABILITY_NAMES.includes(row.name));
+  assert.strictEqual(rows.length, CAPABILITY_NAMES.length,
+    `§8.1 describes ${rows.length} of the ${CAPABILITY_NAMES.length} capabilities run() serves`);
+  for (const row of rows) {
+    const entry = registry.entryFor(row.name);
+    assert.strictEqual(row.scopes, entry.scopes.join(" "), `§8.1 has the wrong scopes for ${row.name}`);
+    assert.strictEqual(row.domains, (entry.domainNeeds || []).join(" "),
+      `§8.1 says ${row.name} reads "${row.domains}"; it declares "${(entry.domainNeeds || []).join(" ")}"`);
+  }
+});
+
+// §2 is the wiring instruction. A dep that appears in run() and not in the
+// table is a hook a channel silently does not inject — which is how marketplace
+// PII blocks came to be unrecorded on ten capabilities.
+check("§2 names every dep the orchestrator reads", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "orchestrator", "index.js"), "utf8");
+  const used = new Set([...source.matchAll(/\bdeps\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((match) => match[1]));
+  assert(used.size >= 10, "the dep scan found almost nothing; the pattern has stopped matching");
+  const table = DOC.slice(DOC.indexOf("## 2. Building an instance"), DOC.indexOf("## 3. Who is asking"));
+  for (const dep of [...used].sort()) {
+    assert(table.includes(`\`${dep}\``), `§2's dependency table never mentions ${dep}`);
+  }
+});
+
 check("the loader caps a channel is told about are the caps it will hit", () => {
   for (const key of ["orders", "bank", "inventory", "payouts", "review", "inbox"]) {
     assert(DOC.includes(`${key} ${loaders.CAPS[key]}`), `the documented ${key} cap is not ${loaders.CAPS[key]}`);
