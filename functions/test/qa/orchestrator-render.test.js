@@ -9,8 +9,20 @@ const commerce = require("../../orchestrator/commerce");
 const inventory = require("../../orchestrator/inventory");
 const payouts = require("../../orchestrator/payouts");
 const attention = require("../../orchestrator/attention");
+const integrationHealth = require("../../orchestrator/integrationHealth");
+const accountingStatus = require("../../orchestrator/accountingStatus");
 const freshness = require("../../orchestrator/freshness");
 const fixtures = require("../fixtures/orchestrator");
+
+/** The smallest snapshot get_accounting_sync_status answers over. */
+const accountingSnapshot = () => ({
+  companyId: "co_1",
+  nowMs: fixtures.NOW,
+  settings: fixtures.settings,
+  connections: { accounting: [{ id: "qbo_1", provider: "quickbooks", companyName: "Test Studio Ltd", mode: "read_only", status: "connected", lastSyncAtMs: fixtures.NOW - 2 * 60 * 60 * 1000 }] },
+  accountingAttention: [],
+  bankRows: [{ id: "b1", amount: -50, currency: "GBP", bookingDate: "2026-09-01", category: "Materials", reviewStatus: "reviewed", splits: 0, categoryAuto: false }]
+});
 
 let failures = 0;
 const check = (name, run) => {
@@ -59,10 +71,16 @@ check("the slots come out in the §13 order and empty ones are dropped", () => {
 check("every number in a summary line exists in the data it summarises", () => {
   // A renderer that computes its own total is a second implementation of the
   // arithmetic, and the two drift.
+  // Every capability whose lines carry a numeral, not a sample of them: the rule
+  // is only worth something if it covers the line that would break it.
   for (const [capability, handler, snapshot, args] of [
     ["get_commerce_overview", commerce.commerceOverview, fixtures.mixedSnapshot(), RANGE],
     ["search_commerce_orders", commerce.searchCommerceOrders, fixtures.mixedSnapshot(), {}],
-    ["get_business_attention_summary", attention.businessAttentionSummary, fixtures.attentionSnapshot(), {}]
+    ["get_business_attention_summary", attention.businessAttentionSummary, fixtures.attentionSnapshot(), {}],
+    ["get_inventory_overview", inventory.inventoryOverview, fixtures.attentionSnapshot(), {}],
+    ["get_payout_reconciliation_overview", payouts.payoutReconciliation, fixtures.attentionSnapshot(), {}],
+    ["get_integration_health", integrationHealth.integrationHealth, fixtures.mixedSnapshot(), {}],
+    ["get_accounting_sync_status", accountingStatus.accountingSyncStatus, accountingSnapshot(), {}]
   ]) {
     const built = envelopeFor(capability, handler, snapshot, args);
     const inData = new Set(numeralsIn(JSON.stringify(built.data)));
