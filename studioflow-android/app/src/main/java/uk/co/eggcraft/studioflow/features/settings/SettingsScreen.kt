@@ -2670,7 +2670,7 @@ private fun EbayDetail(state: StudioFlowUiState) {
         if (connection == null) {
             // ---- Before connecting -----------------------------------------
             DetailCard(title = t("Connect your eBay account"), icon = Icons.Filled.Lock) {
-                Text(t("Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow."),
+                Text(t("Connect your eBay seller account once; orders, payments and refunds arrive on their own."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 // True of the scopes this half asks for, and only those.
                 Text(t("NivaDesk will read your orders. It will not change listings, prices or stock."),

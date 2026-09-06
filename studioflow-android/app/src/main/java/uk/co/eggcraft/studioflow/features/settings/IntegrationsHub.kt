@@ -203,8 +203,8 @@ val INTEGRATION_PROVIDERS = listOf(
     // No logo file: eBay's mark is theirs and we are not allowed to redraw it,
     // so the card carries the initial like Square and Etsy.
     IntegrationProvider("ebay", "eBay", "commerce", "native",
-        "Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
-        listOf("Orders", "Listings", "Inventory", "Fulfilment", "Refunds", "Fees", "Payouts", "ChatGPT"),
+        "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
+        listOf("Orders", "Payments", "Refunds"),
         "ebay", "E"),
     // Banking is its own section of the app here, not a settings screen, so this
     // card reports its state and sends nobody anywhere.

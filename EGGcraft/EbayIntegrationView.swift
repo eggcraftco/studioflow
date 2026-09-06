@@ -282,7 +282,7 @@ private struct EbayConnectCard: View {
     var body: some View {
         SettingsCard(title: tr("Connect your eBay account"), iconName: "lock.shield") {
             VStack(alignment: .leading, spacing: 12) {
-                Text(tr("Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow."))
+                Text(tr("Connect your eBay seller account once; orders, payments and refunds arrive on their own."))
                     .font(.system(size: 13)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // True of the scopes this half asks for, and only those.

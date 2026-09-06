@@ -106,8 +106,8 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     // No logo file: eBay's mark is theirs and we are not allowed to redraw it,
     // so the tile keeps its initial the way Square's does.
     id: "ebay", name: "eBay", category: "commerce", kind: "native", mark: "E",
-    blurb: "Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
-    capabilities: ["Orders", "Listings", "Inventory", "Fulfilment", "Refunds", "Fees", "Payouts", "ChatGPT"], manage: "ebay",
+    blurb: "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
+    capabilities: ["Orders", "Payments", "Refunds"], manage: "ebay",
   },
   {
     id: "openbanking", name: "Open Banking", category: "banking", kind: "native",

@@ -129,7 +129,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
     return stack(
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="orders" eyebrow={t("eBay")} title={t("Connect your eBay account")} />
-        <p className="muted-copy">{t("Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.")}</p>
+        <p className="muted-copy">{t("Connect your eBay seller account once; orders, payments and refunds arrive on their own.")}</p>
         <p className="muted-copy">{t("NivaDesk will read your orders. It will not change listings, prices or stock.")}</p>
         {environment === "sandbox" ? <p className="muted-copy"><strong>{t("Sandbox — test orders only")}</strong></p> : null}
         <div className="settings-action-row">

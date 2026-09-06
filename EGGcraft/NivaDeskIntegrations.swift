@@ -115,8 +115,8 @@ struct NivaDeskIntegration: Identifiable {
         // No logo file: eBay's mark is theirs and we are not allowed to redraw
         // it, so the card carries the initial like Square and Etsy.
         .init(id: "ebay", name: "eBay", category: "commerce", kind: "native",
-              blurb: "Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
-              capabilities: ["Orders", "Listings", "Inventory", "Fulfilment", "Refunds", "Fees", "Payouts", "ChatGPT"],
+              blurb: "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
+              capabilities: ["Orders", "Payments", "Refunds"],
               manage: "ebay", asset: "", mark: "E"),
         .init(id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
               blurb: "Read-only bank transaction sync.",
