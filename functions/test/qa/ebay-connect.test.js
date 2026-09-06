@@ -14,7 +14,7 @@ const assert = require("assert");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { buildEbay, connect, callbackPost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
+const { buildEbay, connect, callbackPost, disposePost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
 const { decryptToken } = require("../../security/tokenBox");
 const hashing = require("../../commerce/ebay/hashing");
 const realOAuth = require("../../commerce/ebay/oauth");
@@ -672,6 +672,196 @@ const said = (res) => JSON.stringify(res.payload);
     const lines = captured.slice(before);
     assert.ok(lines.some((l) => l.includes("ebay syncLog write failed") && l.includes("class=")), lines.join(" | "));
     for (const line of lines) { assert.ok(!line.includes(MARKER), line); assert.ok(!line.includes(MARKER.slice(0, 8)), line); }
+  });
+
+  // ---- §5.5: the browser-binding ticket, and the disposal envelope ----------
+  // The ticket is minted here and verified in the web tier, so these cases pin
+  // the MINTER: the shape the verifier parses, the key derivation both sides
+  // must agree on, and the two rules that make "no state ever has two live
+  // tickets" true. What the verifier does with one is the relay script's job
+  // (studioflow-web/scripts/check-ebay-relay-vectors.mjs), which runs the real
+  // route against this real function.
+  const TICKET_PATTERN = /^nv1\.[A-Za-z0-9_-]{20,120}\.[A-Za-z0-9_-]{43}\.[0-9]{13}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/;
+  const derivedKey = (key = CALLBACK_KEY) => crypto.createHmac("sha256", key).update("nivadesk/ebay/ticket/v1", "utf8").digest();
+  const ticketParts = (ticket) => {
+    const bits = String(ticket).split(".");
+    return { version: bits[0], state: bits[1], tag: bits[2], expMs: Number(bits[3]), jti: bits[4], mac: bits[5], payload: bits.slice(0, 5).join(".") };
+  };
+  const macOf = (payload, key = CALLBACK_KEY) => crypto.createHmac("sha256", derivedKey(key)).update(payload, "utf8").digest("base64url");
+  const tagOf = (nonce, key = CALLBACK_KEY) => crypto.createHmac("sha256", derivedKey(key)).update(`nonce.${nonce}`, "utf8").digest("base64url");
+
+  await check("begin mints a ticket beside the nonce — over that nonce, over the state's OWN expiry, and under a key derived from the relay key", async () => {
+    const { fns, store, switches } = buildEbay();
+    const out = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
+    const row = store.read(`ebayConnectStates/${out.state}`);
+    assert.ok(TICKET_PATTERN.test(out.ticket), out.ticket);
+    const parts = ticketParts(out.ticket);
+    assert.strictEqual(parts.state, out.state, "the ticket names its own state");
+    assert.strictEqual(parts.expMs, row.expiresAt, "expMs is the state document's expiry, never now + ten minutes");
+    assert.strictEqual(parts.tag, tagOf(out.nonce), "the nonce tag is keyed, over this nonce");
+    assert.strictEqual(parts.mac, macOf(parts.payload), "the MAC covers the exact ASCII prefix including nv1.");
+    // A ticket must carry nothing the state document compares, so the tag is NOT
+    // sha256hex(nonce) — that value is what `nonceHash` is checked against.
+    assert.ok(!out.ticket.includes(row.nonceHash), "the ticket does not carry the stored nonce hash");
+    assert.ok(!out.ticket.includes(out.nonce), "nor the nonce itself");
+    // Two begins, two jti — a ticket is not a deterministic function of values
+    // an attacker may know.
+    const twin = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
+    assert.notStrictEqual(ticketParts(twin.ticket).jti, parts.jti);
+    // A native app can hold neither cookie, so it gets neither half (§5.2).
+    const native = await fns.beginEbayConnect({ auth, data: { companyId: "c1", origin: "native" } });
+    assert.strictEqual(native.ticket, undefined, "a native begin mints no ticket");
+    // No key, no ticket: there would be nothing to verify it with and nothing to
+    // sign either envelope with, so the client refuses to send the seller to
+    // eBay rather than manufacturing a code whose return leg is already doomed.
+    switches.callbackKey = "";
+    assert.strictEqual((await fns.beginEbayConnect({ auth, data: { companyId: "c1" } })).ticket, "");
+    switches.callbackKey = "short";
+    assert.strictEqual((await fns.beginEbayConnect({ auth, data: { companyId: "c1" } })).ticket, "");
+  });
+
+  await check("claimEbayConnectState refuses a WEB-origin state — the guard that makes 'no state ever has two live tickets' true", async () => {
+    const { fns, store } = buildEbay();
+    // The sequence this closes is not an attack — it needs the state's own owner
+    // — but it is legitimate and it ends with a ticket verifying at the edge
+    // against a nonce the document has replaced, which the runbook would read as
+    // a bug. Claim rewrites nonceHash, and a web state is never claimed by the
+    // web flow, so it was claimable exactly once.
+    const web = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
+    const hashBefore = store.read(`ebayConnectStates/${web.state}`).nonceHash;
+    await assert.rejects(fns.claimEbayConnectState({ auth, data: { state: web.state } }), /expired or was already used/);
+    assert.strictEqual(store.read(`ebayConnectStates/${web.state}`).nonceHash, hashBefore, "the refused claim rewrote nothing");
+    assert.strictEqual(store.read(`ebayConnectStates/${web.state}`).claimedAtMs, 0);
+    // …and the web ticket it already minted still verifies against the web nonce.
+    assert.strictEqual(ticketParts(web.ticket).tag, tagOf(web.nonce));
+
+    const native = await fns.beginEbayConnect({ auth, data: { companyId: "c1", origin: "native" } });
+    const claimed = await fns.claimEbayConnectState({ auth, data: { state: native.state } });
+    const row = store.read(`ebayConnectStates/${native.state}`);
+    assert.ok(TICKET_PATTERN.test(claimed.ticket), claimed.ticket);
+    assert.strictEqual(ticketParts(claimed.ticket).state, native.state);
+    assert.strictEqual(ticketParts(claimed.ticket).tag, tagOf(claimed.nonce), "over the FRESH nonce this claim wrote");
+    assert.strictEqual(ticketParts(claimed.ticket).expMs, row.expiresAt, "and over the row's own expiry, not now + ten minutes");
+    assert.strictEqual(ticketParts(claimed.ticket).mac, macOf(ticketParts(claimed.ticket).payload));
+    await assert.rejects(fns.claimEbayConnectState({ auth, data: { state: native.state } }), /expired or was already used/);
+  });
+
+  await check("dispose: the envelope can name no state and no nonce, and its shape checks are charged before anything else", async () => {
+    const { fns, store, calls } = buildEbay();
+    const paths = store.paths("").length;
+    const rid = callbackRid();
+    // A body carrying either key is refused on the AUTHORITATIVE side: this is
+    // the structural property criterion 7 asks for, not an assertion about what
+    // the route happens to send.
+    for (const extra of [{ state: "a-perfectly-good-state-value" }, { nonce: "n" }, { state: "x", nonce: "y" }]) {
+      const res = await signedCallback(fns, { v: 1, op: "dispose", rid, code: "good-code", ...extra });
+      assert.strictEqual(res.statusCode, 400, JSON.stringify(extra));
+      assert.deepStrictEqual(res.payload, { ok: false, rid }, JSON.stringify(extra));
+    }
+    // `String(body.code || "")` would coerce these without complaint, and an
+    // empty code would consume a bucket token and make a pointless outbound
+    // request: free amplification at no attacker cost.
+    for (const code of [{ evil: 1 }, ["x"], 42, true, null, "", "x".repeat(5000)]) {
+      const res = await disposePost(fns, { code, rid });
+      assert.strictEqual(res.statusCode, 400, JSON.stringify(code));
+      assert.deepStrictEqual(res.payload, { ok: false, rid }, JSON.stringify(code));
+    }
+    // An ABSENT code, which is a body with no `code` key at all rather than one
+    // whose value is undefined: `signedCallback` builds the bytes, so nothing in
+    // the helper can fill it back in.
+    const absent = await signedCallback(fns, { v: 1, op: "dispose", rid });
+    assert.strictEqual(absent.statusCode, 400);
+    assert.deepStrictEqual(absent.payload, { ok: false, rid });
+    assert.strictEqual(calls.exchanges, 0, "not one outbound request for eleven refused bodies");
+    assert.strictEqual(store.paths("").length, paths, "and not one document read into or written");
+    // None of them consumed a token either: six disposals still fit in the minute.
+    for (let i = 0; i < 6; i += 1) await disposePost(fns, { code: `code-${i}` });
+    assert.strictEqual(calls.exchanges, 6, "the refused bodies charged no bucket token");
+    // An unknown op is a protocol error, out of a closed two-word vocabulary.
+    const unknown = await signedCallback(fns, { v: 1, op: "burn", rid, code: "good-code" });
+    assert.strictEqual(unknown.statusCode, 400);
+    assert.deepStrictEqual(unknown.payload, { ok: false, rid });
+  });
+
+  await check("dispose: one exchange, no identity call, no Firestore, no connection — and the same answer every time", async () => {
+    const { fns, store, calls } = buildEbay();
+    const paths = store.paths("").length;
+    const rid = callbackRid();
+    const res = await disposePost(fns, { code: "good-code", rid });
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(res.payload, { ok: false, outcome: "error", reason: "browser", rid });
+    assert.strictEqual(calls.exchanges, 1);
+    assert.deepStrictEqual(calls.codes, ["good-code"]);
+    assert.strictEqual(calls.identities, 0, "no identity call: nothing is being connected");
+    assert.strictEqual(store.paths("").length, paths, "no document is read, written or created");
+    // A code eBay refuses is the outcome we want, so the answer is identical.
+    const refused = await disposePost(fns, { code: "bad-code", rid });
+    assert.deepStrictEqual(refused.payload, { ok: false, outcome: "error", reason: "browser", rid });
+  });
+
+  await check("dispose: the seventh inside one minute makes no eBay call, and a switch turns the call off without changing the answer", async () => {
+    const { fns, calls, switches } = buildEbay();
+    const rid = callbackRid();
+    const answers = [];
+    for (let i = 0; i < 7; i += 1) answers.push(await disposePost(fns, { code: `code-${i}`, rid }));
+    assert.strictEqual(calls.exchanges, 6, "six a minute per instance, and maxInstances: 10 makes that 60 system-wide");
+    // Byte-identical: the bound is a cost control, and nothing a seller or an
+    // attacker can see may depend on it.
+    for (const res of answers) assert.deepStrictEqual(res.payload, { ok: false, outcome: "error", reason: "browser", rid });
+    // NIVADESK_EBAY_DISPOSE=0 — safe to throw in an incident, because eBay's
+    // token endpoint is shared with every live connection's refresh.
+    const off = buildEbay();
+    off.switches.disposeEnabled = false;
+    const quiet = await disposePost(off.fns, { code: "good-code", rid });
+    assert.strictEqual(off.calls.exchanges, 0);
+    assert.deepStrictEqual(quiet.payload, { ok: false, outcome: "error", reason: "browser", rid });
+    // The connector switch is a different thing and answers a different word:
+    // §2 forbids reaching eBay at all while it is off.
+    switches.connectorOn = false;
+    const disabled = await disposePost(fns, { code: "good-code", rid });
+    assert.deepStrictEqual(disabled.payload, { ok: false, outcome: "error", reason: "disabled", rid });
+    assert.strictEqual(calls.exchanges, 6, "nothing was contacted while the connector was off");
+  });
+
+  await check("dispose: the per-minute aggregate counts spent and refused apart — the only signal a wrong RuName would ever give", async () => {
+    const { fns, nowRef } = buildEbay();
+    const before = captured.length;
+    await disposePost(fns, { code: "good-code" });
+    await disposePost(fns, { code: "bad-code" });     // eBay refuses it
+    // The aggregate is emitted at most once a minute per instance, so nothing
+    // has been said yet: an example line is throttled, a COUNT must not be.
+    assert.ok(!captured.slice(before).some((l) => l.includes("ebay callback dispose window=")), captured.slice(before).join(" | "));
+    nowRef.value += 61 * 1000;
+    await disposePost(fns, { code: "good-code" });
+    const line = captured.slice(before).find((l) => l.includes("ebay callback dispose window="));
+    assert.ok(line, captured.slice(before).join(" | "));
+    assert.ok(/spent=1 refused=1 throttled=0 disabled=0$/.test(line), line);
+    // A wholesale RuName or environment mismatch shows up as spent=0 refused=n
+    // instead of silence — the failure is swallowed by design, so the count is
+    // the only thing that can tell an operator the disposal never works.
+    const wrong = buildEbay();
+    const mark = captured.length;
+    for (const code of ["bad-code", "bad-code-2"]) await disposePost(wrong.fns, { code });
+    wrong.nowRef.value += 61 * 1000;
+    await disposePost(wrong.fns, { code: "bad-code-3" });
+    const mismatch = captured.slice(mark).find((l) => l.includes("ebay callback dispose window="));
+    assert.ok(mismatch && /spent=0 refused=2 /.test(mismatch), String(mismatch));
+  });
+
+  await check("SOURCE PIN — the dispose branch reads no state, touches no connection and asks for no identity", async () => {
+    const source = fs.readFileSync(path.join(__dirname, "../../ebayConnector.js"), "utf8");
+    const from = source.indexOf("// ---- the dispose envelope (§5.5) — begins ---");
+    const to = source.indexOf("// ---- the dispose envelope (§5.5) — ends ---", from);
+    assert.ok(from > 0 && to > from, "the dispose branch was found between its own markers");
+    const branch = source.slice(from, to);
+    for (const name of ["states(", "connections(", "fetchIdentity", "storeCredentials", "writeSyncEvent", "credentialsRef", "runTransaction"]) {
+      assert.ok(!branch.includes(name), `the dispose branch must not reach ${name}`);
+    }
+    assert.ok(/typeof body\.state !== "undefined" \|\| typeof body\.nonce !== "undefined"/.test(branch), "it refuses a body that names either");
+    // `op` is validated out of a closed vocabulary BEFORE anything branches on it.
+    const handler = source.slice(source.indexOf("const ebayOAuthCallback = onRequest("), to);
+    assert.ok(handler.indexOf('op !== "connect" && op !== "dispose"') < handler.indexOf('if (op === "dispose")'), "op is validated before it is used");
+    assert.ok(handler.indexOf("rid = String(body.rid)") < handler.indexOf("const op ="), "and after the rid was shaped");
   });
 
   await check("LOG PIN — not one console line on any path carries a code, a state, a nonce, a signature, or even their first eight characters", async () => {

@@ -118,6 +118,27 @@ const CALLBACK_STATE_PATTERN = /^[A-Za-z0-9_-]{20,120}$/;
 // How often one pre-signature ops line may repeat, per instance. The lines
 // before the signature check are the ones an outsider can trigger at will.
 const CALLBACK_OPS_LOG_EVERY_MS = 60 * 1000;
+// The browser-binding ticket (§5.5). The key is DERIVED from the one the relay
+// already shares — HMAC(EBAY_CALLBACK_KEY, this label) — so there is no sixth
+// secret to mint, to set in two places, or to disagree about, and rotating the
+// callback key rotates this one with it. The labels below are domain
+// separation: a relay signature is HMAC(key, "v1." + …), a ticket is
+// HMAC(derived, "nv1." + …) and a nonce tag is HMAC(derived, "nonce." + …), so
+// no output of one can be fed to another.
+const TICKET_KEY_LABEL = "nivadesk/ebay/ticket/v1";
+const TICKET_NONCE_LABEL = "nonce.";
+// Disposal's bound (§5.5). Keyed on NOTHING — a bucket keyed on anything from
+// the body lets the caller pick a fresh key — and low, because `exchangeCode`
+// and `refreshToken` hit the SAME eBay endpoint: the blast radius of being
+// throttled there is token refresh for every already-connected seller, not the
+// connect flow. `maxInstances: 10` makes this ≤ 60 a minute system-wide.
+const DISPOSE_MAX_PER_MINUTE = 6;
+const DISPOSE_WINDOW_MS = 60 * 1000;
+// Counts, not lines. A count over a throttled line measures minutes with at
+// least one event, not events: ten sellers and one seller inside the same minute
+// produce the same single line. So the example stays throttled and the COUNT is
+// emitted as an unthrottled per-minute aggregate carrying nothing but numbers.
+const CALLBACK_COUNTER_WINDOW_MS = 60 * 1000;
 
 function safeIdPart(value) { return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 120); }
 function connectionDocId(companyId, sellerUserId) { return `${safeIdPart(companyId)}__${safeIdPart(sellerUserId)}`; }
@@ -132,6 +153,12 @@ function createEbayConnectorFunctions(deps) {
     clientId, clientSecret, tokenKey, hashKey, callbackKey = () => "", environment = () => "sandbox", ruName = () => "",
     deletionToken = () => "", deletionEndpointUrl = () => "", dailyCap = () => quota.DEFAULT_DAILY_CAP,
     connectorEnabled = () => false,
+    // An OPERATIONAL switch, not a secret and not a gate (§5.5): set
+    // NIVADESK_EBAY_DISPOSE=0 and no disposal ever contacts eBay. It is safe to
+    // throw in an incident — a disposal is a belt whose one job is the case
+    // where our eBay client credentials have leaked, and the phished landing it
+    // used to answer is refused at the edge before this envelope is built.
+    disposeEnabled = () => true,
     encryptToken, decryptToken,
     requireWorkspaceOwner, requireWorkspaceMember, isWorkspaceOwner = (companyData, uid) => String(companyData?.ownerUid || "") === String(uid || ""),
     isWorkflowOnlyMember = (companyData, uid) => /^workflow/i.test(String(companyData?.members?.[uid]?.role || "")),
@@ -302,6 +329,49 @@ function createEbayConnectorFunctions(deps) {
     console[level](line);
   };
 
+  // ---- the browser-binding ticket (§5.5) -------------------------------------
+  // Minted here, verified in the web tier, and NEVER sent to this function: it
+  // goes no further than the edge that reads it, so nothing in the callback's
+  // vocabulary changes because of it.
+  //
+  // What a valid ticket proves, exactly: that something holding the shared key
+  // minted it. It does NOT prove this function minted it — the derived key is
+  // derived from the key the web tier already holds, so the route can mint as
+  // easily as verify, and a process that has compromised the web tier could
+  // already sign an arbitrary connect body for any observed state (residual 4).
+  const ticketKey = () => {
+    const key = String(callbackKey() || "");
+    // Below the floor there is nothing to verify a ticket with on the other side
+    // and nothing to sign a relay POST with either, so a ticket is not minted at
+    // all: the client refuses to send the seller to eBay, and no live code is
+    // manufactured for a return leg that was always going to be refused.
+    if (key.length < CALLBACK_KEY_MIN_LENGTH) return null;
+    return crypto.createHmac("sha256", key).update(TICKET_KEY_LABEL, "utf8").digest();
+  };
+  // NOT sha256hex(nonce): that value is what the state document compares against
+  // `nonceHash`, and a ticket must carry nothing the state document compares.
+  // Keyed, so a ticket holder cannot even confirm a guessed nonce.
+  const ticketNonceTag = (tk, nonce) =>
+    crypto.createHmac("sha256", tk).update(`${TICKET_NONCE_LABEL}${nonce}`, "utf8").digest("base64url");
+  /**
+   * `nv1.<state>.<nonceTag>.<expMs>.<jti>.<mac>` — five dot-separated fields and
+   * a MAC over the exact ASCII prefix, so it parses with no JSON parser anywhere
+   * near attacker bytes. `expMs` is ALWAYS the state document's own expiry,
+   * never `now + 10 minutes`: for a native claim the state was minted earlier,
+   * and a ticket must never be the longer-lived half of the pair.
+   */
+  function mintTicket(state, nonce, expiresAtMs) {
+    const tk = ticketKey();
+    if (!tk) return "";
+    // Read by nothing today. It exists so a ticket is not a deterministic
+    // function of values an attacker may know, and so edge-side single-use
+    // storage — if that decision is ever taken — already has a MAC-covered
+    // handle to key on.
+    const jti = crypto.randomBytes(16).toString("base64url");
+    const payload = `nv1.${state}.${ticketNonceTag(tk, nonce)}.${Math.round(expiresAtMs)}.${jti}`;
+    return `${payload}.${crypto.createHmac("sha256", tk).update(payload, "utf8").digest("base64url")}`;
+  }
+
   // ---- token failures, classified by body (§6) -------------------------------
   async function recordTokenFailure(ref, error) {
     const cls = String(error?.errorClass || events.classifyError(error));
@@ -431,14 +501,18 @@ function createEbayConnectorFunctions(deps) {
     const state = crypto.randomBytes(32).toString("base64url");
     const nonce = crypto.randomBytes(24).toString("base64url");
     const scopes = ebayOAuth.SCOPES.slice();
+    const expiresAt = now() + STATE_TTL_MS;
     await states().doc(state).set({
       companyId, uid, environment: env(), redirectRuName: String(ruName()), scopes, nonceHash: sha256hex(nonce), origin, claimedAtMs: 0,
-      createdAt: FieldValue.serverTimestamp(), expiresAt: now() + STATE_TTL_MS, expireAt: admin.firestore.Timestamp.fromMillis(now() + STATE_TTL_MS), used: false
+      createdAt: FieldValue.serverTimestamp(), expiresAt, expireAt: admin.firestore.Timestamp.fromMillis(expiresAt), used: false
     });
     const authorizeUrl = oauth.authorizeUrl({ environment: env(), clientId: clientId(), ruName: ruName(), state, scopes });
     // A native app cannot set the browser cookie, so it gets no nonce and no URL to open directly (§5.2).
     if (origin === "native") return { ok: true, state, scopes, environment: env(), startUrl: `${appReturnUrl().replace(/\/settings.*$/, "")}/ebay/start?state=${encodeURIComponent(state)}` };
-    return { ok: true, authorizeUrl, state, nonce, scopes, environment: env() };
+    // Wherever a nonce is minted, a ticket is minted beside it, over that same
+    // nonce and the state's own expiry, from the same invocation (§5.5). The
+    // web tier seals it into an HttpOnly cookie and verifies it when eBay lands.
+    return { ok: true, authorizeUrl, state, nonce, ticket: mintTicket(state, nonce, expiresAt), scopes, environment: env() };
   });
 
   /** §5.2 — the web start page, signed in as the uid that began the flow, claims the nonce once. */
@@ -457,13 +531,30 @@ function createEbayConnectorFunctions(deps) {
       if (String(row.uid || "") !== uid) return { error: "permission-denied" };
       if (row.used === true || n(row.expiresAt) < now()) return { error: "expired" };
       if (n(row.claimedAtMs) > 0) return { error: "claimed" };
+      // A WEB-origin state is refused here, and this guard is load-bearing
+      // (§5.5). This transaction REWRITES nonceHash, and a web state is minted
+      // with claimedAtMs: 0 and never claimed by the web flow — so its owner
+      // could legitimately claim it once and leave ticket₁ verifying at the edge
+      // against nonce₁ while the document had moved on to nonce₂. Not an attack,
+      // but a sequence that ends in a live code and a `browser` verdict the
+      // runbook is entitled to read as a bug. With the guard the invariant is
+      // exact: no state ever has two live tickets. It costs nothing — /ebay/start
+      // is reached only from the native startUrl, and a web state has an
+      // authorizeUrl already.
+      if (String(row.origin || "") !== "native") return { error: "claimed" };
       tx.update(ref, { claimedAtMs: now(), nonceHash: sha256hex(nonce) });
       return { row };
     });
     if (claimed.error === "permission-denied") throw new HttpsError("permission-denied", "This eBay connection was started by a different NivaDesk user.");
     if (claimed.error) throw new HttpsError("failed-precondition", "The eBay sign-in link has expired or was already used. Start again.");
     const row = claimed.row;
-    return { ok: true, nonce, authorizeUrl: oauth.authorizeUrl({ environment: env(), clientId: clientId(), ruName: ruName(), state, scopes: Array.isArray(row.scopes) && row.scopes.length ? row.scopes : ebayOAuth.SCOPES }) };
+    // The ticket is minted over the FRESH nonce this claim just wrote, and over
+    // the row's own expiry — the state was minted earlier, so `now + 10 minutes`
+    // would make the ticket outlive the state it names (§5.5).
+    return {
+      ok: true, nonce, ticket: mintTicket(state, nonce, n(row.expiresAt)),
+      authorizeUrl: oauth.authorizeUrl({ environment: env(), clientId: clientId(), ruName: ruName(), state, scopes: Array.isArray(row.scopes) && row.scopes.length ? row.scopes : ebayOAuth.SCOPES })
+    };
   });
 
   // ---- 2. callback: the web route relays eBay's code as a signed POST (§5.4) --
@@ -473,10 +564,18 @@ function createEbayConnectorFunctions(deps) {
   // no live caller to keep working, and a GET would reopen the very hole this
   // closes — a query string that Cloud Run copies into the log.
   //
-  // The order is: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ rid ▸
+  // The order is: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ rid ▸ op ▸
   // gate ▸ presence ▸ shapes ▸ state transaction (the burn) ▸ exchange. The
   // connector gate sits AFTER the signature on purpose: whether the connector is
   // switched on is not a fact an unauthenticated caller may read.
+  //
+  // §5.5 makes that two envelopes rather than one, and only one of them can name
+  // a state: `op` absent or "connect" is the contract above, unchanged byte for
+  // byte; `op: "dispose"` is a strictly weaker envelope whose entire authority is
+  // "spend this code at eBay and keep nothing", and which is REFUSED if it
+  // carries a state or a nonce at all. That is what closes §5.4's public
+  // entrance: the web route signs a dispose envelope for an anonymous caller,
+  // and a dispose envelope cannot reach the state transaction.
   //
   // Nothing from the body reaches a log line on any path, error paths included.
   // Two traps make that fail silently unless they are named: a caught error's
@@ -503,10 +602,57 @@ function createEbayConnectorFunctions(deps) {
   // merely small. A failure here is not an error — a code that cannot be spent
   // is already the outcome we want — so it is swallowed whole, and the seller's
   // answer stays exactly the verdict the transaction reached.
+  //
+  // It answers a WORD — `spent` or `refused` — and the word never leaves this
+  // process either: it feeds the per-minute aggregate below and nothing else.
+  // The failure is still swallowed, but it is no longer SILENT, and that
+  // difference is the only signal there is that a wholesale RuName or
+  // environment mismatch has made every disposal a no-op (§5.5).
   async function spendAndDiscardCode(code, stateRuName) {
     try {
       await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateRuName || ruName() || ""), fetchImpl });
+      return "spent";
     } catch { /* refused, expired, wrong environment or already spent — every one of those is the goal */ }
+    return "refused";
+  }
+
+  // ---- disposal's bound, and what can be measured about it (§5.5) ------------
+  // A token bucket in the instance, refilled continuously, keyed on NOTHING: a
+  // bucket keyed on anything from the body lets the caller pick a fresh key.
+  const disposeBucket = { tokens: DISPOSE_MAX_PER_MINUTE, atMs: 0 };
+  function takeDisposeToken() {
+    const at = now();
+    if (disposeBucket.atMs === 0) disposeBucket.atMs = at;
+    const refill = ((at - disposeBucket.atMs) / DISPOSE_WINDOW_MS) * DISPOSE_MAX_PER_MINUTE;
+    disposeBucket.tokens = Math.min(DISPOSE_MAX_PER_MINUTE, disposeBucket.tokens + Math.max(0, refill));
+    disposeBucket.atMs = at;
+    if (disposeBucket.tokens < 1) return false;
+    disposeBucket.tokens -= 1;
+    return true;
+  }
+  // Counts and nothing else — no rid, no code, no address, no value from any
+  // request. `refused` is the disposal eBay rejected, which is where a RuName or
+  // environment mismatch becomes visible instead of silent; `throttled` is the
+  // empty bucket, which is a COST signal and not a defence signal; `disabled`
+  // is a disposal that made no call because a switch was off.
+  //
+  // (§5.5's line also carries `registered` and `duplicate`. Those are the
+  // presented-code registry's counts, and they join this line with it.)
+  const disposeCounts = { spent: 0, refused: 0, throttled: 0, disabled: 0, fromMs: 0 };
+  function countDispose(word) {
+    if (Object.prototype.hasOwnProperty.call(disposeCounts, word)) disposeCounts[word] += 1;
+  }
+  function sayDisposeCounts() {
+    const at = now();
+    if (disposeCounts.fromMs === 0) { disposeCounts.fromMs = at; return; }
+    const window = at - disposeCounts.fromMs;
+    if (window < CALLBACK_COUNTER_WINDOW_MS) return;
+    const { spent, refused, throttled, disabled } = disposeCounts;
+    if (spent || refused || throttled || disabled) {
+      console.warn(`ebay callback dispose window=${window} spent=${spent} refused=${refused} throttled=${throttled} disabled=${disabled}`);
+    }
+    disposeCounts.spent = 0; disposeCounts.refused = 0; disposeCounts.throttled = 0; disposeCounts.disabled = 0;
+    disposeCounts.fromMs = at;
   }
 
   const ebayOAuthCallback = onRequest({ region: "europe-west2", timeoutSeconds: 120, maxInstances: 10 }, async (req, res) => {
@@ -550,7 +696,51 @@ function createEbayConnectorFunctions(deps) {
     // logging. It is shaped BEFORE it is logged, echoed or used in any way.
     if (!CALLBACK_RID_PATTERN.test(String(body.rid || ""))) { console.warn("ebay callback: rid refused"); answer(400, { ok: false }); return; }
     rid = String(body.rid);
-    if (!connectorOn()) { answer(200, { ok: false, outcome: "error", reason: "disabled", rid }); return; }
+    // Which envelope this is, read and validated BEFORE anything branches on it,
+    // out of a closed two-word vocabulary. Absent is `connect`, so nothing
+    // already written has to change.
+    const op = typeof body.op === "undefined" ? "connect" : body.op;
+    if (op !== "connect" && op !== "dispose") { console.warn(`ebay callback: op refused rid=${rid}`); answer(400, { ok: false, rid }); return; }
+    // §2: while the connector is switched off nothing may contact eBay, and
+    // nothing can be connected with that code either, so there is nothing to
+    // defend and both envelopes stop here.
+    if (!connectorOn()) { if (op === "dispose") { sayDisposeCounts(); countDispose("disabled"); } answer(200, { ok: false, outcome: "error", reason: "disabled", rid }); return; }
+
+    // ---- the dispose envelope (§5.5) — begins ---------------------------------
+    // Everything this branch may do: check the shape of one field, charge one
+    // bucket token, make at most one outbound token request, and answer the same
+    // eight bytes every time. It reads no state, writes no document, calls no
+    // identity endpoint, and cannot be made to: there is no state key in the
+    // body and a body carrying one is refused here, on the authoritative side.
+    if (op === "dispose") {
+      sayDisposeCounts();
+      // Charged BEFORE anything is spent, sent or counted. `String(body.code||"")`
+      // would coerce an object or an array without complaint, and an empty code
+      // would consume a token and make a pointless outbound request — free
+      // amplification at no attacker cost.
+      if (typeof body.code !== "string") { console.warn(`ebay callback: field shape refused rid=${rid}`, "code"); answer(400, { ok: false, rid }); return; }
+      if (body.code.length < 1 || body.code.length > CALLBACK_MAX_CODE_LENGTH) { console.warn(`ebay callback: field shape refused rid=${rid}`, "code"); answer(400, { ok: false, rid }); return; }
+      // The structural guarantee, enforced where it counts: a signature the web
+      // route minted for an anonymous caller can name no state and no nonce.
+      if (typeof body.state !== "undefined" || typeof body.nonce !== "undefined") { console.warn(`ebay callback: field shape refused rid=${rid}`, "envelope"); answer(400, { ok: false, rid }); return; }
+      // The bound. An empty bucket skips the eBay call and answers exactly what a
+      // successful disposal answers — it is a cost control, and nothing the
+      // seller or an attacker sees may depend on it.
+      if (!takeDisposeToken()) { countDispose("throttled"); answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return; }
+      if (!disposeEnabled()) { countDispose("disabled"); answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return; }
+      // The RuName and the environment are this deployment's CURRENT globals: a
+      // dispose envelope has no state and so cannot know either. That is right
+      // for every code this deployment minted — which is every code the callback
+      // can legitimately receive — and wrong across a RuName change or an
+      // environment flip, where the exchange is rejected and the code stays live
+      // at eBay for the rest of its TTL. The aggregate is what makes that visible
+      // (`spent=0 refused=n`), and deploy plan §4.2's trigger list carries the
+      // operator action.
+      countDispose(await spendAndDiscardCode(body.code, ruName()));
+      answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return;
+    }
+    // ---- the dispose envelope (§5.5) — ends -----------------------------------
+
     state = String(body.state || "");
     code = String(body.code || "");
     nonce = typeof body.nonce === "string" ? body.nonce : "";

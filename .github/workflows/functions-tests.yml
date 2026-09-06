@@ -8,9 +8,10 @@
 #             the only tier that can catch a document that maps fine and stores
 #             badly, or a rule that lets the wrong user write.
 #   relay     studioflow-web's check-ebay-relay-vectors.mjs — the ONLY thing that
-#             executes app/ebay/callback/route.ts. It compiles the real route and
-#             hands what it produced to the real ebayOAuthCallback, so it is the
-#             one check that can see the two HMAC implementations drift apart.
+#             executes app/ebay/callback/route.ts and app/ebay/ticket/route.ts.
+#             It compiles the real routes and hands what they produced to the
+#             real ebayOAuthCallback, so it is the one check that can see the
+#             HMAC implementations — the relay's and now the ticket's — drift.
 #             Its failure mode is silent and production-only (an opaque 401 →
 #             `unavailable` on every seller's connect), and it was previously
 #             recorded as "runs in CI" while running nowhere.
@@ -23,7 +24,10 @@ name: functions-tests
 # does not support YAML anchors, so an alias here would fail the whole workflow
 # to parse. The web paths are the half of the eBay callback contract that lives
 # outside `functions/` — before they were listed, a change to the route fired NO
-# workflow at all, and the route owns one of the two HMAC implementations.
+# workflow at all, and the route owns one of the two HMAC implementations. The
+# ticket (§5.5) widened that half: its verifier lives in lib/studioflow/
+# ebayTicket.ts, its cookie names in ebayFlow.ts, and the settings section is now
+# a caller of the sealing route, so all three are listed for the same reason.
 on:
   push:
     paths:
@@ -32,7 +36,10 @@ on:
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
       - "studioflow-web/app/ebay/**"
+      - "studioflow-web/app/settings/EbayIntegrationSection.tsx"
       - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/lib/studioflow/ebayFlow.ts"
+      - "studioflow-web/lib/studioflow/ebayTicket.ts"
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
       - "studioflow-web/package.json"
   pull_request:
@@ -42,7 +49,10 @@ on:
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
       - "studioflow-web/app/ebay/**"
+      - "studioflow-web/app/settings/EbayIntegrationSection.tsx"
       - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/lib/studioflow/ebayFlow.ts"
+      - "studioflow-web/lib/studioflow/ebayTicket.ts"
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
       - "studioflow-web/package.json"
   workflow_dispatch:

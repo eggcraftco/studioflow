@@ -6199,6 +6199,12 @@ const ebayExports = createEbayConnectorFunctions({
   deletionEndpointUrl: () => process.env.NIVADESK_EBAY_DELETION_ENDPOINT_URL || "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications",
   dailyCap: () => Number(process.env.NIVADESK_EBAY_DAILY_CAP) || 5000,
   connectorEnabled: () => EBAY_CONNECTOR_ENABLED,
+  // §5.5's operational switch, default ON and read at call time: set
+  // NIVADESK_EBAY_DISPOSE=0 and no disposal contacts eBay. Not a secret and not
+  // a gate — the connector's own switch is untouched — and safe to throw during
+  // an incident on eBay's token endpoint, which disposal shares with every live
+  // connection's refresh.
+  disposeEnabled: () => String(process.env.NIVADESK_EBAY_DISPOSE || "1") !== "0",
   encryptToken: etsyModule.encryptToken,
   decryptToken: etsyModule.decryptToken,
   requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),

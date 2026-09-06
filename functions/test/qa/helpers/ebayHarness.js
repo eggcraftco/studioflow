@@ -75,7 +75,10 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
   const calls = { pushes: [], held: [], enqueued: [], piiLog: [], exchanges: 0, codes: [], refreshes: 0, identities: 0, appTokens: 0 };
   // `callbackKey` is a switch so a test can blank it or truncate it and watch the
   // handler fail closed — with the SAME 401 a wrong key gets (§5.4).
-  const switches = { connectorOn, callbackKey: CALLBACK_KEY };
+  // `disposeEnabled` is §5.5's operational switch, held here for the same reason
+  // `callbackKey` is: a test flips it and watches the disposal make no eBay call
+  // while the answer stays byte-identical.
+  const switches = { connectorOn, callbackKey: CALLBACK_KEY, disposeEnabled: true };
   const oauth = {
     ...realOAuth,
     // A refusal is the REAL EbayOAuthError, not an Error wearing its fields: the
@@ -91,7 +94,7 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
     admin, HttpsError: FakeHttpsError, onCall: passthrough, onRequest: passthrough, onSchedule: passthrough,
     clientId: () => (configured ? "app-id" : ""), clientSecret: () => "app-secret", tokenKey: () => TOKEN_KEY, hashKey: () => HASH_KEY, callbackKey: () => switches.callbackKey,
     environment: () => environment, ruName: () => "EGGcraft-sandbox-ru", deletionToken: () => "nivadesk_ebay_deletion-token_0123456789", deletionEndpointUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications",
-    dailyCap: () => 5000, connectorEnabled: () => switches.connectorOn,
+    dailyCap: () => 5000, connectorEnabled: () => switches.connectorOn, disposeEnabled: () => switches.disposeEnabled,
     encryptToken: tokenBox.encryptToken, decryptToken: tokenBox.decryptToken,
     requireWorkspaceOwner: async (request) => { if (!owner) throw new FakeHttpsError("permission-denied", "not owner"); return { uid: String(request?.auth?.uid || "u1"), companyId: "c1", companyData: store.read("companies/c1") }; },
     requireWorkspaceMember: async (request) => ({ uid: String(request?.auth?.uid || "u1"), companyId: "c1", companyData: store.read("companies/c1") }),
@@ -160,6 +163,18 @@ async function callbackPost(fns, { state, code = "good-code", nonce = "", rid = 
   return signedCallback(fns, fields, rest);
 }
 
+/**
+ * The DISPOSE envelope (§5.5): the strictly weaker of the two, and the one the
+ * web route signs for an anonymous caller. It has no state key and no nonce key,
+ * and the function refuses one that carries either — so `fields` is built here
+ * without them rather than with them blanked, which is the shape a caller who
+ * wanted a state would have to produce.
+ */
+async function disposePost(fns, { code = "good-code", rid = null, ...rest } = {}) {
+  const fields = { v: 1, op: "dispose", rid: rid === null ? callbackRid() : rid, ...(code === undefined ? {} : { code }) };
+  return signedCallback(fns, fields, rest);
+}
+
 /** Begin + callback with the browser nonce forwarded: a connected seller. */
 async function connect(fns, { auth = { uid: "u1" } } = {}) {
   const begun = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
@@ -167,4 +182,4 @@ async function connect(fns, { auth = { uid: "u1" } } = {}) {
   return { begun, res, connectionId: "c1__ebayuser_xxx" };
 }
 
-module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, callbackPost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };
+module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, callbackPost, disposePost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };
