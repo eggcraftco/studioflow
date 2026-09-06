@@ -13,7 +13,8 @@
     "start:emulator": "NEXT_PUBLIC_FIREBASE_EMULATOR=1 next start",
     "build:next": "next build",
     "test:finance": "node scripts/check-finance-vectors.mjs",
-    "test:relay": "node scripts/check-ebay-relay-vectors.mjs"
+    "test:relay": "node scripts/check-ebay-relay-vectors.mjs",
+    "test:ebay-regressions": "node scripts/check-ebay-callback-regressions.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

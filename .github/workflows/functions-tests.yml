@@ -7,14 +7,21 @@
 #             end-to-end suites (test/e2e) against a real Firestore emulator —
 #             the only tier that can catch a document that maps fine and stores
 #             badly, or a rule that lets the wrong user write.
-#   relay     studioflow-web's check-ebay-relay-vectors.mjs — the ONLY thing that
-#             executes app/ebay/callback/route.ts and app/ebay/ticket/route.ts.
-#             It compiles the real routes and hands what they produced to the
-#             real ebayOAuthCallback, so it is the one check that can see the
-#             HMAC implementations — the relay's and now the ticket's — drift.
-#             Its failure mode is silent and production-only (an opaque 401 →
-#             `unavailable` on every seller's connect), and it was previously
-#             recorded as "runs in CI" while running nowhere.
+#   relay     the two studioflow-web scripts that EXECUTE app/ebay/callback/
+#             route.ts and app/ebay/ticket/route.ts — the only things that do.
+#             check-ebay-relay-vectors.mjs compiles the real routes and hands
+#             what they produced to the real ebayOAuthCallback, so it is the one
+#             check that can see the HMAC implementations — the relay's and now
+#             the ticket's — drift. Its failure mode is silent and
+#             production-only (an opaque 401 → `unavailable` on every seller's
+#             connect), and it was previously recorded as "runs in CI" while
+#             running nowhere.
+#             check-ebay-callback-regressions.mjs is the ten cases the operator's
+#             report cites by id (EBAY-REG-01 … 10): the same chain driven end to
+#             end, asserting the CONSEQUENCE rather than the bytes — which state
+#             document was burned, which connection was written, which
+#             authorization code reached eBay. Nine of the ten were shown to fail
+#             on the pre-ticket source before they were committed.
 #
 # The integration tier (test/run-integration.sh) needs Auth + Functions
 # emulators and a seed step; it stays local until it is made hermetic.
@@ -41,6 +48,7 @@ on:
       - "studioflow-web/lib/studioflow/ebayFlow.ts"
       - "studioflow-web/lib/studioflow/ebayTicket.ts"
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
       - "studioflow-web/package.json"
   pull_request:
     paths:
@@ -54,6 +62,7 @@ on:
       - "studioflow-web/lib/studioflow/ebayFlow.ts"
       - "studioflow-web/lib/studioflow/ebayTicket.ts"
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
       - "studioflow-web/package.json"
   workflow_dispatch:
 
@@ -80,7 +89,7 @@ jobs:
       - run: npm test
 
   relay:
-    name: eBay callback relay (route ↔ function)
+    name: eBay callback (route ↔ function): relay vectors + cited regressions
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -90,12 +99,16 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: studioflow-web/package-lock.json
-      # Only the web tree is installed: the script needs `next` (for NextRequest)
-      # and the web tree's own `tsc` to compile the route, and the functions qa
-      # harness it drives the answer through pulls in no external package at all.
+      # Only the web tree is installed: both scripts need `next` (for NextRequest)
+      # and the web tree's own `tsc` to compile the routes, and the functions qa
+      # harness they drive the answer through pulls in no external package at all.
       - run: npm ci
         working-directory: studioflow-web
       - run: npm run test:relay
+        working-directory: studioflow-web
+      # The ten cited regressions. A separate step so a failure names itself in
+      # the job log without the relay's output in front of it.
+      - run: npm run test:ebay-regressions
         working-directory: studioflow-web
 
   emulator:

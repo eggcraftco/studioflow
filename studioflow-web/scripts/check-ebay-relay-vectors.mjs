@@ -29,6 +29,11 @@
 // The vector file itself (`functions/test/fixtures/ebay-callback-signature-vectors.json`)
 // is still unwritten and still blocked on who mints its fixture key; this script
 // says so out loud rather than reporting green for work nobody has done.
+//
+// This script stops at the BYTES the routes produce. The ten cases the operator's
+// report cites by id — EBAY-REG-01 … 10 — carry those bytes into the function and
+// assert what is left afterwards, and they live next door in
+// `check-ebay-callback-regressions.mjs`. Both run in the same CI job.
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { createHmac, randomBytes } from "node:crypto";
