@@ -55,6 +55,12 @@ struct NivaDeskIntegrationSignals {
     /// Live Square merchants, from getSquareConnections.
     var squareConnections = 0
     var squareConnectionsNeedingAttention = 0
+    /// Live eBay seller accounts, from getEbayConnections. The attention count
+    /// is the server's own specStatus — never an error code read again here.
+    var ebayConnections = 0
+    var ebayConnectionsNeedingAttention = 0
+    var ebayAccount = ""
+    var ebaySandbox = false
     /// PayPal money feeds (first-party credentials), from the bank connections.
     var paypalConnections = 0
     var paypalConnectionsNeedingAttention = 0
@@ -106,8 +112,12 @@ struct NivaDeskIntegration: Identifiable {
               blurb: "", capabilities: [], manage: "", asset: "", mark: "A"),
         // Named beside Amazon because a studio deciding where to list wants to
         // see both, and a marketplace missing from the grid reads as never coming.
-        .init(id: "ebay", name: "eBay", category: "commerce", kind: "planned",
-              blurb: "", capabilities: [], manage: "", asset: "", mark: "E"),
+        // No logo file: eBay's mark is theirs and we are not allowed to redraw
+        // it, so the card carries the initial like Square and Etsy.
+        .init(id: "ebay", name: "eBay", category: "commerce", kind: "native",
+              blurb: "Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
+              capabilities: ["Orders", "Listings", "Inventory", "Fulfilment", "Refunds", "Fees", "Payouts", "ChatGPT"],
+              manage: "ebay", asset: "", mark: "E"),
         .init(id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
               blurb: "Read-only bank transaction sync.",
               // Banking is its own section of the app here, not a settings screen,
@@ -148,6 +158,16 @@ struct NivaDeskIntegration: Identifiable {
             if signals.squareConnections == 0 { return "" }
             return signals.squareConnections == 1 ? "1 account" : "\(signals.squareConnections) accounts"
         }
+        if id == "ebay" {
+            if signals.ebayConnections == 0 { return "" }
+            let base = signals.ebayConnections == 1
+                ? (signals.ebayAccount.isEmpty ? "1 account" : signals.ebayAccount)
+                : "\(signals.ebayConnections) accounts"
+            // A sandbox account looks exactly like a live one on a card, and
+            // saying so is the difference between "no orders yet" and "these
+            // orders are not real".
+            return signals.ebaySandbox ? "\(base) · Sandbox" : base
+        }
         if id == "paypal" { return signals.paypalConnections == 0 ? "" : (signals.paypalSandbox ? "Sandbox" : "PayPal") }
         guard id == "shopify" else { return "" }
         let live = signals.shopifyStores.filter { $0.1 != "unlinked" }
@@ -186,6 +206,13 @@ struct NivaDeskIntegration: Identifiable {
         if id == "square" {
             if signals.squareConnections == 0 { return .available }
             return signals.squareConnectionsNeedingAttention == signals.squareConnections ? .attention : .connected
+        }
+        if id == "ebay" {
+            // A disconnected row is not a connection, and the card goes amber
+            // only when EVERY live account needs a look: one paused sandbox
+            // account beside a working live one is not an outage.
+            if signals.ebayConnections == 0 { return .available }
+            return signals.ebayConnectionsNeedingAttention == signals.ebayConnections ? .attention : .connected
         }
         if id == "paypal" {
             if signals.paypalConnections == 0 { return .available }
@@ -239,14 +266,22 @@ struct IntegrationTile: View {
             if state != .planned {
                 Text(provider.blurb.isEmpty ? "" : t(provider.blurb, lang: lang))
                     .font(.system(size: 12.5)).foregroundColor(.secondary).lineLimit(2)
+                // The web list wraps (`flex-wrap`), and eBay carries eight
+                // chips. In one HStack they squeeze until every label is an
+                // ellipsis, so the rows are laid out three at a time — every
+                // other card has three or fewer and is unchanged.
                 if !provider.capabilities.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(provider.capabilities, id: \.self) { cap in
-                            Text(t(cap, lang: lang))
-                                .font(.system(size: 11, weight: .semibold))
-                                .padding(.horizontal, 8).padding(.vertical, 2)
-                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.primary.opacity(0.15)))
-                                .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(stride(from: 0, to: provider.capabilities.count, by: 3)), id: \.self) { start in
+                            HStack(spacing: 6) {
+                                ForEach(provider.capabilities[start..<min(start + 3, provider.capabilities.count)], id: \.self) { cap in
+                                    Text(t(cap, lang: lang))
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .padding(.horizontal, 8).padding(.vertical, 2)
+                                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.primary.opacity(0.15)))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                     }
                 }

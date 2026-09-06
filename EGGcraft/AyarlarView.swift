@@ -6506,6 +6506,7 @@ struct AyarlarView: View {
                     else if integrationsManaging == "etsy" { etsyIntegrationAyari }
                     else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
                     else if integrationsManaging == "square" { squareIntegrationAyari }
+                    else if integrationsManaging == "ebay" { ebayIntegrationAyari }
                     else if integrationsManaging == "paypal" { paypalIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
@@ -6646,6 +6647,28 @@ struct AyarlarView: View {
                 integrationSignalsLoaded = true
             }
         }
+        // eBay's card state comes from the rows the server returns, and the
+        // attention count is the server's own specStatus: the status table
+        // lives once (functions/commerce/ebay/status.js) and the clients copy
+        // its words rather than each re-reading lastErrorCode their own way.
+        functions.httpsCallable("getEbayConnections").call(["companyId": companyId]) { result, _ in
+            DispatchQueue.main.async {
+                let rows = ((result?.data as? [String: Any])?["connections"] as? [[String: Any]] ?? []).filter {
+                    String(describing: $0["status"] ?? "") != "disconnected"
+                }
+                integrationSignals.ebayConnections = rows.count
+                integrationSignals.ebayConnectionsNeedingAttention = rows.filter {
+                    let spec = String(describing: $0["specStatus"] ?? "")
+                    return spec == "reauthorization_required" || spec == "degraded" || spec == "suspended"
+                }.count
+                let first = rows.first ?? [:]
+                let name = String(describing: first["displayName"] ?? "")
+                let username = String(describing: first["sellerUsername"] ?? "")
+                integrationSignals.ebayAccount = name.isEmpty ? username : name
+                integrationSignals.ebaySandbox = String(describing: first["environment"] ?? "") == "sandbox"
+                integrationSignalsLoaded = true
+            }
+        }
         for (name, channel) in [("getInboundWebhookToken", "inbound")] {
             functions.httpsCallable(name).call(["companyId": companyId]) { result, _ in
                 DispatchQueue.main.async {
@@ -6693,6 +6716,14 @@ struct AyarlarView: View {
 
     private var paypalIntegrationAyari: some View {
         PayPalIntegrationView(
+            language: seciliDil,
+            isOwner: firebaseManager.currentWorkspaceRole
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+        )
+    }
+
+    private var ebayIntegrationAyari: some View {
+        EbayIntegrationView(
             language: seciliDil,
             isOwner: firebaseManager.currentWorkspaceRole
                 .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
