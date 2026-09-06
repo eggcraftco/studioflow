@@ -401,7 +401,7 @@ Operator's conditional approval (in chat, 03:03 UTC): go if B4.4's full gate is 
 |---|---|---|---|---|
 | xeroSyncNow | xerosyncnow-00004-jil | 401 | xerosyncnow-00005-xok | 401 |
 
-6: fifteen-minute watch (03:18:13 → 03:34:00): _pending_.
+6: fifteen-minute watch (03:18:13 → 03:34:08 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic was the probe — passed. At 03:34:27 all 228 functions deployed so far read 0 ERROR entries and 0 request 5xx since 01:35 UTC.
 
 With B4.5 the whole "last deployed 1–5 Sep" group (B4.1–B4.5, 181 functions) is on the remediated tree: **228 of 414** deployed so far. Next per the plan: B5.1–B5.3 (callables last deployed in August), each on the operator's go; then a 24-hour soak before B6.
 
