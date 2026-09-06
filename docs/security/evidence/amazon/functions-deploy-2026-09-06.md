@@ -650,6 +650,27 @@ only the 350 deployed functions, `severity>=ERROR OR httpRequest.status>=500`, 0
 Result: **No data found**. Two paths, two query shapes, one answer, and the wider one would have
 caught an error in a function this deployment never touched.
 
+### The two timestamps, and which one is the gate
+
+Asked before the functions approval, because two different times were in circulation.
+
+| Time (UTC) | What it is |
+|---|---|
+| **2026-09-07 04:28:31** | **The gate.** The soak began at 04:28:31 on 6 September, at the end of B5.3's fifteen-minute watch, so a full twenty-four hours ends exactly one day later. Nothing may be deployed from the remediation batches before this moment |
+| 2026-09-07 05:41 | **The report, not the gate.** The scheduled job that writes the closing readback is `41 6 7 9 *` in local time, and local is BST, so it fires at 05:41 UTC — one hour and thirteen minutes **after** the window closes |
+
+So the two do not conflict and nothing is being shortened: the later time is the report, and it is
+deliberately after the end of the window rather than before it. The window itself is untouched at a
+full twenty-four hours.
+
+The report is scheduled late for a reason. The whole soak is answered by one retrospective query over
+`04:28:31Z` to the end, which can only be run once the end has passed; running it earlier would
+certify a shorter window. That query is also what recovered the seven unobserved hours earlier today,
+so a late reading is as good as a live one.
+
+**Progress at 22:54 UTC, 18 h 26 m in, 5 h 34 m to go:** 0 errors, 0 requests returning 5xx, 926
+requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps.
+
 ## Rollback used
 
 None so far.
