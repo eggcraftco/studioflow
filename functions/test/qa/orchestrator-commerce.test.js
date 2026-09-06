@@ -121,6 +121,21 @@ check("money is recomputed: a fee-percentage change moves the figures without to
   assert.notStrictEqual(after.data.fees.estimated, 999, "the stale stamp was served instead of a fresh computation");
 });
 
+check("the sales overview asks the connection whether a processor is connected", () => {
+  // The same defect as in the payout overview, reached through the other tool:
+  // settlementTotals read `payouts.square` and called its absence
+  // "provider_not_connected", so a Square account whose first payout had not
+  // arrived was reported as disconnected beside its own sales.
+  const snapshot = fixtures.tripleCountSnapshot();
+  snapshot.payouts = { square: [], paypal: [] };
+  const result = commerce.commerceOverview(snapshot, RANGE, ctx, { nowMs: snapshot.nowMs });
+  const others = result.data.settlements.others;
+  assert.ok(!others.some((row) => row.provider === "square"),
+    "the fixture's Square connection is live; it does not belong in the unavailable list");
+  assert.strictEqual(result.data.settlements.square.count, 0, "connected with nothing in range is a count of zero");
+  assert.strictEqual(others.find((row) => row.provider === "paypal").reason, "provider_not_connected");
+});
+
 check("a basic plan gets a smaller answer, and is told so", () => {
   const snapshot = fixtures.mixedSnapshot();
   const basic = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: false, chatgptAppEnabled: true } });

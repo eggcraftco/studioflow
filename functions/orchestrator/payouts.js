@@ -50,6 +50,42 @@ function inRange(payout, { fromMs, toMs }) {
   return true;
 }
 
+/**
+ * Whether there is a payout feed for `provider` at all — asked of the
+ * CONNECTION, never of the collection.
+ *
+ * "Connected, no payouts yet" and "not connected" are different answers, and
+ * both readers were giving them the same word. `loadPayouts` wrote a provider's
+ * array only when it found rows, so a Square account linked an hour ago whose
+ * first payout has not arrived came back as `provider_not_connected` from both
+ * get_payout_reconciliation_overview and get_commerce_overview. That is the
+ * §8/§14 degradation rule inverted: the spec warns against calling something
+ * available when it is not, and the same honesty forbids calling a connected
+ * processor disconnected.
+ *
+ * Where each connection lives matters here. Square's is a commerce connection
+ * (`connections.square`), which every capability declaring `connections` gets.
+ * PayPal's is a BANK connection (bankFeed.js writes paypalPayouts from a
+ * `bankConnections` document), which the loader reads only for a caller with the
+ * Banking area — so for a caller without it, the honest answer is that the
+ * connection cannot be seen from here rather than a guess in either direction.
+ */
+function payoutFeedState(snapshot, provider, ctx = {}) {
+  const rows = (snapshot.payouts || {})[provider];
+  if (Array.isArray(rows) && rows.length > 0) return { available: true };
+
+  const connections = snapshot.connections || {};
+  const connected = provider === "paypal"
+    ? (connections.bank || []).some((row) => String((row || {}).provider || "").toLowerCase() === "paypal")
+    : (connections[provider] || []).length > 0;
+  if (connected) return { available: true };
+
+  if (provider === "paypal" && !(ctx && ctx.areas && ctx.areas.bankFeed === true)) {
+    return { available: false, reason: "connection_not_visible" };
+  }
+  return { available: false, reason: "provider_not_connected" };
+}
+
 /** The state one payout is in. Matched-with-a-difference is its own answer. */
 function matchState(payout) {
   const match = payout && payout.bankMatch;
@@ -78,12 +114,13 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
 
   for (const provider of ["square", "paypal"]) {
     if (wanted !== "all" && wanted !== provider) continue;
-    const list = (snapshot.payouts || {})[provider];
-    if (!Array.isArray(list)) {
-      providers.push({ provider, available: false, reason: "provider_not_connected" });
+    const feed = payoutFeedState(snapshot, provider, ctx);
+    if (!feed.available) {
+      providers.push({ provider, available: false, reason: feed.reason });
       continue;
     }
-    const rows = list.filter((payout) => inRange(payout, bounds));
+    const list = (snapshot.payouts || {})[provider];
+    const rows = (Array.isArray(list) ? list : []).filter((payout) => inRange(payout, bounds));
     const row = { provider, available: true, matched: 0, partial: 0, unmatched: 0, needsReview: 0, unmatchedAmount: 0, currency: null, oldestUnmatchedAt: null };
 
     for (const payout of rows) {
@@ -173,4 +210,4 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   };
 }
 
-module.exports = { MATCHABLE_STATUSES, REVIEW_SCAN_CAP, matchState, payoutReconciliation };
+module.exports = { MATCHABLE_STATUSES, REVIEW_SCAN_CAP, payoutFeedState, matchState, payoutReconciliation };

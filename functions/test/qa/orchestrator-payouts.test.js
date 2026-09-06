@@ -99,6 +99,42 @@ check("a provider with no payout feed is unavailable with a reason, not zero pay
   assert.strictEqual(paypal.available, false, "PayPal with no payout documents is not connected, not \"0 payouts\"");
 });
 
+check("a connected processor with no payouts yet is not reported as disconnected", () => {
+  // The §8/§14 degradation rule the other way round. The loader now writes an
+  // empty array for a collection it read and found empty, so "we looked, there
+  // were none" is representable — and connectedness is asked of the connection.
+  const connected = snapshot({
+    payouts: { square: [], paypal: [] },
+    connections: { square: [{ id: "sq_1", provider: "square", status: "connected", lastSuccessAtMs: NOW - 60 * 60 * 1000 }], bank: [] }
+  });
+  const result = payouts.payoutReconciliation(connected, {}, ctx, { nowMs: NOW });
+  const square = result.data.providers.find((row) => row.provider === "square");
+  assert.strictEqual(square.available, true,
+    "a Square account linked an hour ago is connected; sending the owner to reconnect it is a wrong answer");
+  assert.strictEqual(square.matched + square.partial + square.unmatched, 0, "and it has nothing in range to report");
+
+  const paypal = result.data.providers.find((row) => row.provider === "paypal");
+  assert.strictEqual(paypal.available, false, "a provider with no connection at all still says so");
+  assert.strictEqual(paypal.reason, "provider_not_connected");
+});
+
+check("PayPal's connection is a bank connection, and a caller who cannot read it is told that", () => {
+  const linked = snapshot({
+    payouts: { square: [], paypal: [] },
+    connections: { bank: [{ id: "bc_1", provider: "paypal", institutionName: "PayPal" }] }
+  });
+  assert.strictEqual(
+    payouts.payoutReconciliation(linked, {}, ctx, { nowMs: NOW }).data.providers.find((row) => row.provider === "paypal").available,
+    true, "bankFeed.js writes paypalPayouts from a bankConnections document, so that is where connectedness lives"
+  );
+
+  // A caller without the Banking area never had the bank connection list read
+  // for them, so its emptiness proves nothing in either direction.
+  const noBanking = fixtures.ownerContext({ isOwner: false, areas: { orders: true, dashboard: true, customers: true, bankFeed: false } });
+  const blind = payouts.payoutFeedState({ payouts: { paypal: [] }, connections: { bank: [] } }, "paypal", noBanking);
+  assert.deepStrictEqual(blind, { available: false, reason: "connection_not_visible" });
+});
+
 check("the answer never calls an operational match a reconciliation", () => {
   const result = payouts.payoutReconciliation(snapshot(), {}, ctx, { nowMs: NOW });
   assert.strictEqual(result.data.matchWording, "matched_with_a_bank_line");

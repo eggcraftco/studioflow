@@ -218,14 +218,22 @@ function channelRows(views, snapshot, { workspace, advanced = true }) {
   return rows;
 }
 
-/** Payout totals for the range, kept strictly beside the sales figures. */
-function settlementTotals(snapshot, bounds) {
+/**
+ * Payout totals for the range, kept strictly beside the sales figures.
+ *
+ * Availability comes from `payouts.payoutFeedState` — that is, from the
+ * connection — and not from whether the payout collection happened to hold
+ * documents, which reported a Square account connected an hour ago as not
+ * connected at all.
+ */
+function settlementTotals(snapshot, bounds, ctx = {}) {
   const payouts = snapshot.payouts || {};
   const out = { };
   const others = [];
   for (const provider of ["square", "paypal"]) {
-    const list = Array.isArray(payouts[provider]) ? payouts[provider] : null;
-    if (!list) { others.push({ provider, available: false, reason: "provider_not_connected" }); continue; }
+    const feed = require("./payouts").payoutFeedState(snapshot, provider, ctx);
+    if (!feed.available) { others.push({ provider, available: false, reason: feed.reason }); continue; }
+    const list = Array.isArray(payouts[provider]) ? payouts[provider] : [];
     const rows = list.filter((payout) => {
       if (bounds.fromMs === null && bounds.toMs === null) return true;
       const at = orderView.dateMs(payout.arrivalDate || payout.externalCreatedAt);
@@ -341,7 +349,7 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
       unknownOrders: fees.unknownOrders,
       basis: "platformFeeKnown|settings.feePercentage"
     };
-    data.settlements = settlementTotals(snapshot, bounds);
+    data.settlements = settlementTotals(snapshot, bounds, ctx);
     data.settlementBasis = "arrivalDate";
   } else {
     warnings.push(envelope.warning("plan_limited", `This plan reports order counts, gross sales, refunds and fulfilment only. ${PLAN_LIMITED_DETAIL}`));
@@ -469,7 +477,7 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
   const warnings = [];
   const advanced = advancedFinance(ctx);
 
-  const settlements = settlementTotals(snapshot, bounds);
+  const settlements = settlementTotals(snapshot, bounds, ctx);
   const connections = snapshot.connections || {};
   const byChannel = new Map();
   for (const view of views) {

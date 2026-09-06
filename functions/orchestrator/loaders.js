@@ -140,11 +140,21 @@ function createLoaders({ db, now = () => Date.now() }) {
     return { rows, capped: snap.size >= CAPS.bank };
   }
 
+  /**
+   * The payout collections, each provider's rows under its own key — INCLUDING
+   * the empty ones.
+   *
+   * Writing a key only when rows existed left the readers unable to tell "read
+   * it, found none" from "never read", and both of them took a missing key as
+   * proof of a missing connection. An empty array is a fact: we looked, there
+   * were none. Whether the provider is connected is a question about the
+   * connection, and `payouts.payoutFeedState` asks it there.
+   */
   async function loadPayouts(companyId) {
     const out = {};
     for (const [provider, collection] of [["square", "squarePayouts"], ["paypal", "paypalPayouts"]]) {
       const { rows } = await readCollection(company(companyId).collection(collection), CAPS.payouts);
-      if (rows.length > 0) out[provider] = rows;
+      out[provider] = rows;
     }
     return out;
   }
