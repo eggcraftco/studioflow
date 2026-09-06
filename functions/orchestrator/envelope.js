@@ -127,7 +127,7 @@ function finish({
 /** Blocks whose whole value is money, whatever shape the capability gave them. */
 const MONEY_BLOCK_KEYS = Object.freeze([
   "totals", "sales", "fees", "tax", "settlements", "settlement", "amounts",
-  "amountsByCurrency", "profit", "payouts", "readinessAmounts"
+  "amountsByCurrency", "profit", "payouts"
 ]);
 
 /**
@@ -138,7 +138,7 @@ const MONEY_BLOCK_KEYS = Object.freeze([
  * hides the second — so a group thread loses the counts it is allowed to see
  * and keeps the amounts it is not.
  */
-const MONEY_NAME = /(amount|total|gross|net\b|fee|refund|cost|profit|vat|tax|price|balance|revenue|paid|outstanding|payout|value)/i;
+const MONEY_NAME = /(amount|total|gross|net\b|fee|refund|discount|cost|profit|vat|tax|price|balance|revenue|paid|outstanding|payout|value)/i;
 
 /** A person can hide in these field names; a product name is not one of them. */
 const PII_KEYS = Object.freeze(["customer", "customerName", "customerEmail", "buyerName", "contactName", "contactEmail", "email", "phone"]);
