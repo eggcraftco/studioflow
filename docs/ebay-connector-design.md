@@ -2428,6 +2428,12 @@ Changed, and this is the complete list:
 - `beginEbayConnect` (web origin) and `claimEbayConnectState` mint a ticket beside the nonce and return it.
 - `claimEbayConnectState` refuses a state whose `origin` is not `"native"`, inside the claim transaction,
   with the existing "expired or already used" sentence and no new vocabulary.
+- `claimEbayConnectState` also refuses **before** the transaction when there is no callback key, with the
+  existing "eBay is not enabled on this server yet." The claim is a one-way door — it stamps `claimedAtMs`
+  and rewrites `nonceHash` — so committing it and then returning an empty ticket would consume the state on
+  the way to a flow that cannot proceed, and the native app's link would answer "expired or already used"
+  ever after. Refusing first leaves the state exactly as it was, so the same link works the moment the key
+  is set. This is the only place a key outage could BURN something rather than merely stop it.
 - `claimCode()` and the `ebayPresentedCodes` root: one `.create()`, one TTL field, no index.
 - One `op: "dispose"` branch in `ebayOAuthCallback`, bounded as above, with its shape checks, its registry
   claim, its bucket and its switch.

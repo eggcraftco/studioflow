@@ -532,6 +532,18 @@ function createEbayConnectorFunctions(deps) {
     if (!connectorOn()) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
     const state = String(request.data?.state || "").trim();
     if (!/^[A-Za-z0-9_-]{20,120}$/.test(state)) throw new HttpsError("invalid-argument", "state is required.");
+    // Checked BEFORE the transaction, and that ordering is the whole of it. This
+    // claim is a one-way door: it stamps `claimedAtMs` and REWRITES `nonceHash`,
+    // so a state it consumed can never be claimed again. With no callback key
+    // there is no ticket to mint (`mintTicket` returns ""), the start page will
+    // refuse to send the seller to eBay, and the flow is over — but the state was
+    // consumed on the way, so pressing the native app's link again answers "The
+    // eBay sign-in link has expired or was already used. Start again." That turns
+    // a key outage into a BURNT state rather than a retryable one, for no gain:
+    // the seller must go back to the Mac, iPhone or Android app and begin again.
+    // Refusing here leaves the state exactly as it was, so the same link works the
+    // moment the key is set, and the sentence the seller sees is the truthful one.
+    if (!ticketKey()) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
     const nonce = crypto.randomBytes(24).toString("base64url");
     const claimed = await db().runTransaction(async (tx) => {
       const ref = states().doc(state);

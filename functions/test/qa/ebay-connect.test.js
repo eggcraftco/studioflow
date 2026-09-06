@@ -851,6 +851,23 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual((await fns.beginEbayConnect({ auth, data: { companyId: "c1" } })).ticket, "");
   });
 
+  await check("claimEbayConnectState with no callback key refuses BEFORE the claim, so a key outage leaves the native state retryable", async () => {
+    const { fns, store, switches } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: { origin: "native" } });
+    const before = JSON.stringify(store.read(`ebayConnectStates/${begun.state}`));
+    for (const value of ["", "0123456789abcdef"]) {
+      switches.callbackKey = value;
+      await assert.rejects(fns.claimEbayConnectState({ auth, data: { state: begun.state } }), /not enabled on this server/, JSON.stringify(value));
+      assert.strictEqual(JSON.stringify(store.read(`ebayConnectStates/${begun.state}`)), before,
+        "the claim is a one-way door — it rewrites nonceHash — so a refusal must happen before it, not after");
+    }
+    // …and the same link works the moment the key is set, which is the point.
+    switches.callbackKey = CALLBACK_KEY;
+    const claimed = await fns.claimEbayConnectState({ auth, data: { state: begun.state } });
+    assert.ok(claimed.ticket && claimed.nonce && claimed.authorizeUrl, JSON.stringify(claimed));
+    assert.notStrictEqual(JSON.stringify(store.read(`ebayConnectStates/${begun.state}`)), before, "the successful claim did consume it");
+  });
+
   await check("claimEbayConnectState refuses a WEB-origin state — the guard that makes 'no state ever has two live tickets' true", async () => {
     const { fns, store } = buildEbay();
     // The sequence this closes is not an attack — it needs the state's own owner
