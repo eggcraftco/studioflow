@@ -136,6 +136,20 @@ a rule for the rollout and for every later rotation, not an incident.
 
 ### 4.3 The order itself
 
+**The web route ships before the functions, and that is a safety property, not a preference.** Today's
+live site still runs Round 166's route, which forwards the seller's browser to `ebayOAuthCallback` as a
+**GET** (`docs/ebay-web-deploy-round-166.md`). The new function answers any non-POST with `405
+{"ok":false}`. So deploying the functions first would leave a real callback ending with the seller staring
+at raw JSON on `europe-west2-eggcraft-studio.cloudfunctions.net` — the one landing in this whole design
+that is neither a sentence nor on our own domain. Never invert steps 3 and 6.
+
+The reverse order — the one below — is safe by construction, which is worth recording beside it: the new
+route posts to a function that is not deployed, the fetch fails, and the seller lands on
+`reason=unavailable` with a sentence. Even against the **old** deployed function it would fail closed,
+because the route sets `redirect: "error"`, so that function's 302 becomes a throw rather than a followed
+redirect. (Both cases are moot today only because `ebayOAuthCallback` is not deployed at all; the rule is
+for the next time this pair moves.)
+
 1. **Sandbox RuName** registered in the eBay portal with the accepted and declined URLs (operator).
 2. **The shared key, both places, before the deploy that depends on it.** Secret Manager first
    (`EBAY_CALLBACK_KEY`, granted to `ebay-connector@` only), then the same value in Hostinger as
@@ -170,7 +184,8 @@ a rule for the rollout and for every later rotation, not an incident.
    - `GET https://nivadesk.app/ebay/start` without a session → the sign-in path, never a stack trace.
 6. **Commit `functions/.ebay-secrets-ready` naming all five secrets**, then deploy **the connector's own
    functions** (`ebayOAuthCallback`, `beginEbayConnect`, `claimEbayConnectState` and the rest) by name — a
-   separate approval, and not before the dependency soak closes. Without the marker `EBAY_RUNTIME` is
+   separate approval, and not before the dependency soak closes. **After step 3, never before it:** the
+   live route still GETs the function, and the new function answers a GET with 405 JSON. Without the marker `EBAY_RUNTIME` is
    empty, nothing is mounted, `EBAY_CALLBACK_KEY` reads as `""`, and every callback answers 401 →
    `reason=unavailable` forever, however correctly Hostinger is configured.
 7. **Then** the controlled-response proof repeats and must show a real refusal:
