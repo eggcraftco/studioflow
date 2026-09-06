@@ -1067,10 +1067,17 @@ eBay still produces a connection row even after the seller's browser has been se
 
 There is no half-consumed condition to leave behind: the state document has exactly two conditions,
 unused and used, and it moves between them in one transaction. An abandoned `fetch` on the web side
-changes nothing about it. What is genuinely ambiguous is the *screen*, not the data — and that is handled:
-`EbayIntegrationSection` already calls `refresh(true)` on any `ebay=` parameter, so a connection that did
-land appears a moment after the error banner, and pressing Connect again is a reconnect onto the same
-deterministic row (`companyId__sellerUserId`, `set(merge)`), which costs nothing. A separate
+changes nothing about it. What is genuinely ambiguous is the *screen*, not the data — and the recovery is real, though it is not
+quite the one an earlier draft of this paragraph described. `EbayIntegrationSection` calls `refresh(true)`
+**once**, in the same effect that sets the banner (`EbayIntegrationSection.tsx`); there is no interval and
+no second poll anywhere in that file. So if the function is still exchanging — the realistic case being a
+Cloud Run cold start on this bundle plus eBay's token and identity round trips inside a 20-second budget —
+that refresh returns nothing and the connection does **not** "appear a moment after the error banner". The
+seller sees the error, presses Connect again, and that second attempt reconnects onto the same
+deterministic row (`companyId__sellerUserId`, `set(merge)`), which costs nothing and is the actual
+recovery. A reload of the settings page shows the row too. If the sentence is ever to be true as written
+it needs a short re-poll on `reason=unavailable` — two calls a few seconds apart — which is a UI change,
+not a transport one, and is not part of this section. A separate
 `ebay=pending` outcome was considered and rejected: it would buy a slightly better sentence at the price
 of a new outcome word, a new string and twelve translations, for a case the refresh already resolves.
 
@@ -1355,7 +1362,9 @@ the eight reason words plus `cancelled` still reaches the seller as a translated
 (`EbayIntegrationSection.tsx:88-90`, with `unavailable` falling through to a string that already exists in
 all eleven non-English tables at `language.ts:7982`); and state consumability under transport failure is
 sound — `unreachable`, 401, 405 and 400 all leave the state consumable, and only the 20-second abort is
-genuinely indeterminate, which `refresh(true)` on any `ebay=` parameter already resolves on screen.
+genuinely indeterminate. What that abort leaves indeterminate is the screen, not the data, and the single
+`refresh(true)` fires too early to resolve it on its own; pressing Connect again reconnects onto the same
+deterministic row, which is the recovery (see *Timeouts*).
 
 ---
 
