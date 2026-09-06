@@ -644,6 +644,12 @@ and the retained entries answered for the unobserved hours as completely as a li
 
 Thirteen of the twenty-four hours are now verified end to end with no unobserved window inside them.
 
+**Confirmed a second time, independently.** With the console session restored, the same window was
+read through the Logs Explorer with a broader query — every `cloud_run_revision` in the project, not
+only the 350 deployed functions, `severity>=ERROR OR httpRequest.status>=500`, 04:28:31 → 17:30 UTC.
+Result: **No data found**. Two paths, two query shapes, one answer, and the wider one would have
+caught an error in a function this deployment never touched.
+
 ## Rollback used
 
 None so far.
