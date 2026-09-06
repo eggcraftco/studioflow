@@ -20425,6 +20425,9 @@ exports._nvSafeOrderForChatGPT = nvSafeOrderForChatGPT;
 exports._nvRequireOrdersArea = nvRequireOrdersArea;
 exports._nvMcpAvailableActions = nvMcpAvailableActions;
 exports._nvChatGPTDispatchAction = nvChatGPTDispatchAction;
+// The served discovery surface itself, so a test can snapshot exactly what
+// tools/list returns instead of re-deriving it from the source text.
+exports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;
 
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
@@ -26012,6 +26015,10 @@ function nvMcpToolErrorResult(error = {}) {
   return result;
 }
 
+// The one table the tool list, the justification document and (later) the
+// WhatsApp channel all read. Pure module: no admin, no flags read at load.
+const nvMcpRegistry = require("./orchestrator/registry");
+
 function nvMcpOAuthScopesForTool(toolName = "") {
   switch (String(toolName || "")) {
     case "search_orders":
@@ -26047,14 +26054,29 @@ function nvMcpOAuthScopesForTool(toolName = "") {
   }
 }
 
-function nvMcpNormalizedAnnotations(tool = {}) {
-  const annotations = tool.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
-  return {
-    readOnlyHint: annotations.readOnlyHint === true,
-    destructiveHint: annotations.destructiveHint === true,
-    idempotentHint: annotations.idempotentHint === true,
-    openWorldHint: annotations.openWorldHint === true
-  };
+/**
+ * The four hints, straight from the registry, with no coercion left in the path.
+ *
+ * This used to be nvMcpNormalizedAnnotations, which rewrote every hint as
+ * `value === true`. That is friendly right up to the moment it matters: a null
+ * or a forgotten key became `false` on the wire and nothing said so — the exact
+ * shape of the 1.1.1 rejection ("explicitly set to true or false (not null) for
+ * every tool"). Now a hint that is not a boolean is a TypeError, and the
+ * registry has already refused to load before this can be reached.
+ */
+function nvMcpAssertAnnotations(tool = {}) {
+  const annotations = tool.annotations && typeof tool.annotations === "object" ? tool.annotations : null;
+  if (!annotations) {
+    throw new TypeError(`MCP tool "${tool.name || "?"}" has no annotations object.`);
+  }
+  const out = {};
+  for (const key of nvMcpRegistry.ANNOTATION_KEYS) {
+    if (typeof annotations[key] !== "boolean") {
+      throw new TypeError(`MCP tool "${tool.name || "?"}" annotation ${key} is not an explicit boolean.`);
+    }
+    out[key] = annotations[key];
+  }
+  return out;
 }
 
 function nvMcpToolsWithSecuritySchemes() {
@@ -26065,7 +26087,7 @@ function nvMcpToolsWithSecuritySchemes() {
 
     return {
       ...tool,
-      annotations: nvMcpNormalizedAnnotations(tool),
+      annotations: nvMcpAssertAnnotations(tool),
       securitySchemes,
       _meta: {
         ...(tool._meta || {}),
@@ -26075,17 +26097,13 @@ function nvMcpToolsWithSecuritySchemes() {
   });
 }
 
-// Tool annotations are always explicit booleans (never null) and describe what the
-// handler really does:
-//   readOnlyHint    true only for tools that just read Firestore (search_*, get_*).
-//   destructiveHint true when a call overwrites something the workspace already had
-//                   (update_order_status, update_note, attach_bank_receipt replacing
-//                   an existing receipt). Additive writes (create_*, append/add note)
-//                   and reversible flags (pin_note, archive_note) are false.
-//   idempotentHint  true when the call sets an explicit end state, so repeating it
-//                   with the same arguments leaves the workspace unchanged.
-//   openWorldHint   true only for attach_bank_receipt, which fetches the user's file
-//                   from ChatGPT's file host; every other tool stays inside NivaDesk.
+// The annotation values, the definitions behind them and the per-hint
+// justification OpenAI asked for all live in one place now:
+// orchestrator/registry.js, with the reviewer-facing table in
+// docs/mcp-tool-annotations.md. The schemas below carry
+// `nvMcpRegistry.annotationsFor(name, NV_MCP_FLAGS)` instead of literals so the
+// tool list and the justification can never drift apart.
+//
 // Flip to "1" once the version in OpenAI review is decided: it adds the
 // receiptUrl / emailReceipt inputs to attach_bank_receipt so ChatGPT can pull an
 // invoice straight out of the user's mail. The handler already accepts them.
@@ -26095,6 +26113,18 @@ const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
 // coded, tested and dispatchable; flip this to "1" and redeploy chatgptMcp once
 // the verdict lands, then tell OpenAI about the two new tools.
 const NV_MCP_INVENTORY = process.env.NIVADESK_MCP_INVENTORY === "1";
+// The 1.2.0 submission flag. Today it carries the two annotation corrections
+// the runtime audit found (create_order and update_order_status reach the
+// customer through notifyCustomerOnStatusChange, and a repeated status write
+// appends a second history entry); the orchestrator read tools join it later.
+// Off, tools/list is the 1.1.1 bytes the review connection is served. The
+// operator flips it as part of a submission, never as part of a merge.
+const NV_MCP_ORCHESTRATOR = process.env.NIVADESK_MCP_ORCHESTRATOR === "1";
+const NV_MCP_FLAGS = {
+  emailReceipts: NV_MCP_EMAIL_RECEIPTS,
+  inventory: NV_MCP_INVENTORY,
+  orchestrator: NV_MCP_ORCHESTRATOR
+};
 
 function nvMcpOrderToolSchemas() {
   return [
@@ -26169,12 +26199,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("create_order", NV_MCP_FLAGS)
     },
     {
       name: "search_orders",
@@ -26203,12 +26228,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("search_orders", NV_MCP_FLAGS)
     },
     {
       name: "get_order_detail",
@@ -26229,12 +26249,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_order_detail", NV_MCP_FLAGS)
     },
     {
       name: "add_order_note",
@@ -26259,12 +26274,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("add_order_note", NV_MCP_FLAGS)
     },
     {
       name: "update_order_status",
@@ -26293,12 +26303,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("update_order_status", NV_MCP_FLAGS)
     },
     {
       name: "create_note",
@@ -26318,7 +26323,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "Whether to pin the note." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("create_note", NV_MCP_FLAGS)
     },
     {
       name: "search_notes",
@@ -26336,7 +26341,7 @@ function nvMcpOrderToolSchemas() {
           limit: { type: "number", description: "Maximum number of notes to return. Default is 20." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("search_notes", NV_MCP_FLAGS)
     },
     {
       name: "get_note_detail",
@@ -26351,7 +26356,7 @@ function nvMcpOrderToolSchemas() {
           noteId: { type: "string", description: "Personal note document ID." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("get_note_detail", NV_MCP_FLAGS)
     },
     {
       name: "append_note",
@@ -26367,7 +26372,7 @@ function nvMcpOrderToolSchemas() {
           text: { type: "string", description: "Text to append to the note." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("append_note", NV_MCP_FLAGS)
     },
     {
       name: "update_note",
@@ -26387,7 +26392,7 @@ function nvMcpOrderToolSchemas() {
           colorName: { type: "string", description: "Replacement color name." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("update_note", NV_MCP_FLAGS)
     },
     {
       name: "pin_note",
@@ -26403,7 +26408,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "True to pin, false to unpin." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("pin_note", NV_MCP_FLAGS)
     },
     {
       name: "archive_note",
@@ -26419,7 +26424,7 @@ function nvMcpOrderToolSchemas() {
           isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("archive_note", NV_MCP_FLAGS)
     },
     {
       name: "get_order_financials",
@@ -26452,12 +26457,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_order_financials", NV_MCP_FLAGS)
     },
     {
       name: "get_dashboard_summary",
@@ -26478,12 +26478,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_dashboard_summary", NV_MCP_FLAGS)
     },
     {
       name: "get_extra_spending_overview",
@@ -26536,12 +26531,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_extra_spending_overview", NV_MCP_FLAGS)
     },
     {
       name: "get_financial_overview",
@@ -26562,12 +26552,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_financial_overview", NV_MCP_FLAGS)
     },
     {
       name: "get_bank_spending_summary",
@@ -26584,7 +26569,7 @@ function nvMcpOrderToolSchemas() {
           month: { type: "integer", minimum: 1, maximum: 12, description: "1-12. Defaults to the current month when period is month." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("get_bank_spending_summary", NV_MCP_FLAGS)
     },
     {
       name: "search_bank_transactions",
@@ -26607,7 +26592,7 @@ function nvMcpOrderToolSchemas() {
           limit: { type: "integer", minimum: 1, maximum: 50, description: "Max rows to return (default 20)." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("search_bank_transactions", NV_MCP_FLAGS)
     },
     {
       name: "attach_bank_receipt",
@@ -26656,7 +26641,7 @@ function nvMcpOrderToolSchemas() {
           merchant: { type: "string", description: "Merchant/supplier name on the document, if you can read it." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      annotations: nvMcpRegistry.annotationsFor("attach_bank_receipt", NV_MCP_FLAGS),
       _meta: { "openai/fileParams": ["receipt"] }
     },
     ...(NV_MCP_INVENTORY ? [
@@ -26674,7 +26659,7 @@ function nvMcpOrderToolSchemas() {
             limit: { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
           }
         },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+        annotations: nvMcpRegistry.annotationsFor("search_inventory", NV_MCP_FLAGS)
       },
       {
         name: "create_inventory_item",
@@ -26717,7 +26702,7 @@ function nvMcpOrderToolSchemas() {
             }
           }
         },
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        annotations: nvMcpRegistry.annotationsFor("create_inventory_item", NV_MCP_FLAGS),
         _meta: { "openai/fileParams": ["photo"] }
       }
     ] : [])
