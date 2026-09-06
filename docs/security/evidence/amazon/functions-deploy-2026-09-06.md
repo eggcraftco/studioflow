@@ -36,47 +36,51 @@ Deploy started 01:36:07, "Deploy complete" 01:38:14 (three "Successful update op
 
 Authenticated canary (01:42:50): from the operator's session, Settings › Integrations › Website / inbound › "Check this payload" with a synthetic order (no customer data) — the callable answered **200 in 0.98 s on revision `validateinboundorderpayload-00002-fuf`** (the 204 before it is the CORS preflight) and the page rendered the parsed preview. Nothing was written: the function only validates.
 
-Gate: state ACTIVE on all three ✔, probes unchanged ✔, authenticated call on the new revision ✔, 15-minute error watch: _pending_.
+Gate: state ACTIVE on all three ✔, probes unchanged ✔, authenticated call on the new revision ✔. Error watch: 0 ERROR entries and 0 request 5xx from 01:35 to 01:46 UTC (checked at 01:46:10 before B1); the operator instructed "B1'e geç" at that point, so B1 started 11 minutes into the planned 15 — the full-window readback at 01:53:30 is recorded below when it lands.
 
 ## B1 — ingress (29 functions)
 
-Command: the `--only` list from the plan's appendix (B1 ingress), 29 names, run from the repository root.
+Command: the `--only` list from the plan's appendix (B1 ingress), 29 names, run from the repository root. Started **2026-09-06T01:46:26Z** from `ea37d25d` (functions code identical to `4b44eef9`).
 
 Rollback targets captured before the batch (Cloud Run latest ready revision at 01:33 UTC) and the unauthenticated probe baseline (01:34 UTC):
 
 | Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
 |---|---|---|---|---|
-| chatgptMcp | chatgptmcp-00070-muv | 200 | | |
-| chatgptOAuthApprove | chatgptoauthapprove-00042-doq | 405 | | |
-| chatgptOAuthAuthorizationServer | chatgptoauthauthorizationserver-00047-don | 200 | | |
-| chatgptOAuthAuthorize | chatgptoauthauthorize-00043-mip | 400 | | |
-| chatgptOAuthProtectedResource | chatgptoauthprotectedresource-00042-peb | 200 | | |
-| chatgptOAuthRegister | chatgptoauthregister-00046-rus | 400 | | |
-| chatgptOAuthToken | chatgptoauthtoken-00044-zec | 400 | | |
-| chatgptOAuthWorkspaces | chatgptoauthworkspaces-00033-jof | 401 | | |
-| etsyOAuthCallback | etsyoauthcallback-00013-xeb | 302 | | |
-| etsyWebhook | etsywebhook-00021-xug | 401 | | |
-| inboundOrderWebhook | inboundorderwebhook-00024-mis | 400 | | |
-| ingestAmazonEnvelope | ingestamazonenvelope-00001-gim | 403 | | |
-| quickbooksOAuthCallback | quickbooksoauthcallback-00003-yir | 302 | | |
-| quickbooksWebhook | quickbookswebhook-00003-qiz | 401 | | |
-| sendTestInboundWebhook | sendtestinboundwebhook-00003-nap | 401 | | |
-| sendTestIntegrationWebhook | sendtestintegrationwebhook-00002-how | 401 | | |
-| shopifyAppBridge | shopifyappbridge-00012-geh | 401 | | |
-| shopifyAppWebhook | shopifyappwebhook-00016-mit | 401 | | |
-| shopifyOrderWebhook | shopifyorderwebhook-00025-yaf | 410 | | |
-| smsDeliveryWebhook | smsdeliverywebhook-00001-vud | 403 | | |
-| squareOAuthCallback | squareoauthcallback-00008-bat | 302 | | |
-| squareWebhook | squarewebhook-00011-hud | 401 | | |
-| stripeWebhook | stripewebhook-00045-zog | 400 | | |
-| track17Webhook | track17webhook-00120-faz | 401 | | |
-| wooAuthCallback | wooauthcallback-00002-xez | 405 | | |
-| wooConnectorWebhook | wooconnectorwebhook-00005-jix | 401 | | |
-| woocommerceOrderWebhook | woocommerceorderwebhook-00138-zit | 410 | | |
-| xeroOAuthCallback | xerooauthcallback-00003-gul | 302 | | |
-| xeroWebhook | xerowebhook-00004-wev | 401 | | |
+| chatgptMcp | chatgptmcp-00070-muv | 200 | chatgptmcp-00071-tir | 200 |
+| chatgptOAuthApprove | chatgptoauthapprove-00042-doq | 405 | chatgptoauthapprove-00043-feq | 405 |
+| chatgptOAuthAuthorizationServer | chatgptoauthauthorizationserver-00047-don | 200 | chatgptoauthauthorizationserver-00048-puq | 200 |
+| chatgptOAuthAuthorize | chatgptoauthauthorize-00043-mip | 400 | chatgptoauthauthorize-00044-tew | 400 |
+| chatgptOAuthProtectedResource | chatgptoauthprotectedresource-00042-peb | 200 | chatgptoauthprotectedresource-00043-nuc | 200 |
+| chatgptOAuthRegister | chatgptoauthregister-00046-rus | 400 | chatgptoauthregister-00047-kax | 400 |
+| chatgptOAuthToken | chatgptoauthtoken-00044-zec | 400 | chatgptoauthtoken-00045-sup | 400 |
+| chatgptOAuthWorkspaces | chatgptoauthworkspaces-00033-jof | 401 | chatgptoauthworkspaces-00034-wow | 401 |
+| etsyOAuthCallback | etsyoauthcallback-00013-xeb | 302 | etsyoauthcallback-00014-vux | 302 |
+| etsyWebhook | etsywebhook-00021-xug | 401 | etsywebhook-00022-peb | 401 |
+| inboundOrderWebhook | inboundorderwebhook-00024-mis | 400 | inboundorderwebhook-00025-pay | 400 |
+| ingestAmazonEnvelope | ingestamazonenvelope-00001-gim | 403 | ingestamazonenvelope-00002-car | 403 |
+| quickbooksOAuthCallback | quickbooksoauthcallback-00003-yir | 302 | quickbooksoauthcallback-00004-fed | 302 |
+| quickbooksWebhook | quickbookswebhook-00003-qiz | 401 | quickbookswebhook-00004-pif | 401 |
+| sendTestInboundWebhook | sendtestinboundwebhook-00003-nap | 401 | sendtestinboundwebhook-00004-mib | 401 |
+| sendTestIntegrationWebhook | sendtestintegrationwebhook-00002-how | 401 | sendtestintegrationwebhook-00003-vub | 401 |
+| shopifyAppBridge | shopifyappbridge-00012-geh | 401 | shopifyappbridge-00013-wuh | 401 |
+| shopifyAppWebhook | shopifyappwebhook-00016-mit | 401 | shopifyappwebhook-00017-feh | 401 |
+| shopifyOrderWebhook | shopifyorderwebhook-00025-yaf | 410 | shopifyorderwebhook-00026-qux | 410 |
+| smsDeliveryWebhook | smsdeliverywebhook-00001-vud | 403 | smsdeliverywebhook-00002-xen | 403 |
+| squareOAuthCallback | squareoauthcallback-00008-bat | 302 | squareoauthcallback-00009-kic | 302 |
+| squareWebhook | squarewebhook-00011-hud | 401 | squarewebhook-00012-kat | 401 |
+| stripeWebhook | stripewebhook-00045-zog | 400 | stripewebhook-00046-peq | 400 |
+| track17Webhook | track17webhook-00120-faz | 401 | track17webhook-00121-lub | 401 |
+| wooAuthCallback | wooauthcallback-00002-xez | 405 | wooauthcallback-00003-pax | 405 |
+| wooConnectorWebhook | wooconnectorwebhook-00005-jix | 401 | wooconnectorwebhook-00006-tol | 401 |
+| woocommerceOrderWebhook | woocommerceorderwebhook-00138-zit | 410 | woocommerceorderwebhook-00139-dez | 410 |
+| xeroOAuthCallback | xerooauthcallback-00003-gul | 302 | xerooauthcallback-00004-yaf | 302 |
+| xeroWebhook | xerowebhook-00004-wev | 401 | xerowebhook-00005-law | 401 |
 
-Gate: probe table unchanged against the baseline (no 5xx), signed test deliveries from the app, 30-minute log watch.
+Result: "Deploy complete" at 01:48:47 (2 min 21 s), **29 of 29 "Successful update operation"**, exit 0. At 01:49:00 every function reads ACTIVE on its new revision (table above). ERROR entries for the 29 services since the start: 0 at 01:49:00. Unauthenticated probe table re-run at 01:49:28: identical to the baseline, 0 × 5xx.
+
+Signed test delivery (01:49:48, operator's session, Settings › Integrations › Website / inbound › "Send test webhook"): the callable `sendtestinboundwebhook-00004-mib` answered 200 in 1.9 s and its signed delivery reached `inboundorderwebhook-00025-pay`, which answered **200 in 0.9 s**; the app showed "The delivery URL answered. No order was created. This proves the URL, workspace and token." — the inbound path that reads the idempotency headers through `req.get` (the one the e2e fixture had to learn) works on the new revision with no order written. The Shopify / WooCommerce test button was not used: the workspace's store runs on the connector path and the legacy paste-URL webhooks answer 410 by design, exactly as in the probe table.
+
+Gate: probe table unchanged ✔, signed test delivery ✔, 30-minute log watch (01:46:26 → 02:18:30): _pending_.
 
 ## Rollback used
 
