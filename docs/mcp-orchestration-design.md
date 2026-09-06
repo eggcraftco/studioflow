@@ -1148,8 +1148,12 @@ checked. Reporting the second number as the first told an empty workspace it had
 
 `reviewCount` (missing from revision 1, required by §11) counts the root `commerceReviewQueue`
 (`commerce/engine.js:18` `REVIEW_COLLECTION`) `where("companyId","==",cid)`, grouped by
-`provider`/`connectionId`, plus `companies/{cid}/heldIntegrationOrders` for the generic inbound path,
-reported as `reviewCount: { queue, held }`. Those documents carry `customerName` (engine.js:147) — the
+`provider`/`connectionId`, plus `companies/{cid}/heldIntegrationOrders`, attributed by the `provider`
+`holdIntegrationOrder` writes on each held document, reported as `reviewCount: { queue, held }`. Held
+orders belonging to no connection row — the generic inbound path — appear in `heldForReview:
+{ total, unattributed }` beside the rows, and the renderer says how many orders are waiting: they are
+unimported sales, not error rows, and reading the collection without reporting it is a read paid for and
+thrown away. Those documents carry `customerName` (engine.js:147) — the
 loader projects it away before anything else sees the row (§3).
 
 Loaders: `shopifyStores`, `etsyConnections`, `wooConnections`, `squareConnections` (root, where companyId;

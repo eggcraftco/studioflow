@@ -71,11 +71,27 @@ function freshnessBlock(entityView, { fallbackMs = 0, nowMs, kind = "commerce" }
   };
 }
 
+const heldProviderOf = (row) => String((row || {}).provider || "").toLowerCase();
+
+/**
+ * The review counts for one connection.
+ *
+ * `held` used to be non-zero only for providers "manual" and "inbound", and
+ * this function is never called with either: the commerce loop covers
+ * shopify/woocommerce/etsy/square, Amazon passes "amazon", and the eBay row
+ * hardcodes zero. So `heldIntegrationOrders` — up to 200 documents, read on
+ * every call because this capability declares the "review" domain — could not
+ * reach the answer at all, while the tool description promises "orders held for
+ * review". The documents carry their own `provider` (holdIntegrationOrder
+ * writes it), so they are attributed by it; the ones belonging to no connection
+ * row are counted at the top of the answer rather than dropped.
+ */
 function reviewCountsFor(snapshot, provider, connectionId) {
   const queue = (snapshot.reviewQueue || []).filter((row) => String(row.provider || "") === provider
     && (!connectionId || !row.connectionId || String(row.connectionId) === String(connectionId)));
-  const held = provider === "manual" || provider === "inbound" ? (snapshot.heldOrders || []).length : 0;
-  return { queue: queue.length, held };
+  const wanted = String(provider || "").toLowerCase();
+  const held = (snapshot.heldOrders || []).filter((row) => heldProviderOf(row) === wanted);
+  return { queue: queue.length, held: held.length };
 }
 
 function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
@@ -279,12 +295,26 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
   // channels this answer looked at. Both are reported, because they answer two
   // different questions.
   const connected = rows.filter((row) => row.connectionKnown === true);
+
+  // Orders parked by the plan-limit gate, which the loader reads for this
+  // capability and which had no way into the answer. Some belong to a provider
+  // with a row (shopify, woocommerce); the generic inbound path has no
+  // connection to attribute them to, and those are real held sales too — so
+  // they are counted here rather than dropped.
+  const heldRows = (snapshot.heldOrders || []).filter((row) => !wanted || heldProviderOf(row) === wanted);
+  const reportedProviders = new Set(rows.map((row) => String(row.provider || "").toLowerCase()));
+  const heldForReview = {
+    total: heldRows.length,
+    unattributed: heldRows.filter((row) => !reportedProviders.has(heldProviderOf(row))).length
+  };
+
   return {
     data: {
       connections: rows,
       count: connected.length,
       considered: rows.length,
-      needsReconnect: rows.filter((row) => row.reconnectRequired).length
+      needsReconnect: rows.filter((row) => row.reconnectRequired).length,
+      heldForReview
     },
     warnings,
     sources,

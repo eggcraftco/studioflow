@@ -74,6 +74,30 @@ check("orders held for review are counted per connection, without the customer's
   assert.ok(!/customerName/.test(JSON.stringify(result.data)));
 });
 
+check("orders held for review are reported, not read and thrown away", () => {
+  // The loader reads up to 200 heldIntegrationOrders for this capability, and
+  // reviewCountsFor only ever returned a non-zero `held` for providers
+  // "manual" and "inbound" — which it is never called with. So the collection
+  // was read, paid for and dropped, while the tool description promises
+  // "orders held for review".
+  const snapshot = fixtures.mixedSnapshot();
+  snapshot.heldOrders = [
+    { id: "shopify_5001", provider: "shopify", reason: "plan_limit_reached" },
+    { id: "inbound_OVER-1", provider: "inbound", reason: "plan_limit_reached" }
+  ];
+  const result = health.integrationHealth(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+  assert.strictEqual(rowFor(result, "shopify").reviewCount.held, 1,
+    "a held order carries its own provider, so the row for that provider can show it");
+  assert.strictEqual(result.data.heldForReview.total, 2);
+  assert.strictEqual(result.data.heldForReview.unattributed, 1,
+    "the generic inbound path has no connection row, and its held orders are real sales all the same");
+
+  const render = require("../../orchestrator/render");
+  const lines = render.summaryFor({ action: "get_integration_health", data: result.data, warnings: [], freshness: {} }, {});
+  assert.ok(lines.some((row) => /2 order\(s\) from your shops are held for review/.test(row.text)),
+    lines.map((row) => row.text).join(" | "));
+});
+
 check("an empty workspace is not told it has six connections", () => {
   // The tool answers "is anything wrong with my connections?". Its headline
   // number counted placeholder rows — four unconnected commerce providers plus

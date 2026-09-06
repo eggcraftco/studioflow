@@ -222,8 +222,16 @@ function createLoaders({ db, now = () => Date.now() }) {
       const data = doc.data() || {};
       return { id: doc.id, provider: String(data.provider || ""), connectionId: String(data.connectionId || ""), reason: String(data.reason || "") };
     });
+    // `provider` is what makes these rows reportable: holdIntegrationOrder
+    // writes it (shopify, woocommerce, inbound), and without it the health
+    // answer could read 200 documents and attribute none of them. The raw
+    // provider payload on the same document — name, email, address — is not
+    // projected, and nothing here reads it.
     const heldSnap = await company(cid).collection("heldIntegrationOrders").limit(CAPS.review).get();
-    const held = heldSnap.docs.map((doc) => ({ id: doc.id, reason: String((doc.data() || {}).reason || "") }));
+    const held = heldSnap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return { id: doc.id, provider: String(data.provider || ""), reason: String(data.reason || "") };
+    });
     return { queue, held };
   }
 

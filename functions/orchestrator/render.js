@@ -122,6 +122,12 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
     lines.push(line("result", `${data.count} connection(s) set up; ${data.needsReconnect} need reconnecting.`));
     lines.push(line("breakdown", `${data.considered} channel(s) checked.`));
     for (const row of reconnect) lines.push(line("attention", `${row.provider} needs reconnecting.`));
+    // Read on every call and never reported until now. These are unimported
+    // sales waiting for room on the plan, which is exactly the sort of thing
+    // "is anything wrong with my connections?" is asked to surface.
+    if (data.heldForReview && data.heldForReview.total > 0) {
+      lines.push(line("attention", `${data.heldForReview.total} order(s) from your shops are held for review.`));
+    }
   } else if (capability === "get_accounting_sync_status") {
     lines.push(line("result", `${data.connections.length} accounting connection(s).`));
     lines.push(line("finance", "Ledger posting is not switched on yet; NivaDesk is preparing records only."));
