@@ -48,6 +48,26 @@ const HANDLERS = Object.freeze({
 
 const CAPABILITY_NAMES = Object.freeze(Object.keys(HANDLERS));
 
+/**
+ * Who the access log says made this read.
+ *
+ * `actorRole` is free text in `privacy/accessLog.js` (`text(input.actorRole,
+ * 60)`), with no closed list to fall back on, and both rows below hardcoded
+ * "chatgpt_connection" in a function whose whole purpose is to be
+ * channel-agnostic — so the first WhatsApp read of customer data would have
+ * filed a row saying a ChatGPT connection made it, on top of `source` landing
+ * as "unknown". One value per channel type, derived, so a new channel cannot
+ * inherit another one's name by accident.
+ */
+const ACTOR_ROLES = Object.freeze({
+  mcp: "chatgpt_connection",
+  rest: "chatgpt_connection",
+  whatsapp: "whatsapp_binding",
+  app: "workspace_member"
+});
+
+const actorRoleFor = (ctx) => ACTOR_ROLES[(ctx && ctx.channel && ctx.channel.type) || "mcp"] || "assistant_channel";
+
 function createOrchestrator(deps = {}) {
   const loaders = deps.loaders || loadersModule.createLoaders({ db: deps.db, now: deps.now });
   const flags = registry.normalizeFlags(deps.flags || {});
@@ -110,20 +130,37 @@ function createOrchestrator(deps = {}) {
     // The one PII-logging mechanism. A capability that hands over a person says
     // so in the registry, and the row is written whether or not the read then
     // succeeds.
-    if (Array.isArray(entry.pii) && entry.pii.length > 0 && typeof deps.recordPiiAccess === "function") {
+    //
+    // The predicate is `piiAccessLogged`, the field the MCP dispatcher keys on
+    // (`nvMcpPiiLoggedActions`). It used to be `entry.pii.length > 0` — a
+    // second predicate over one registry, while the contract document claimed
+    // in so many words that "the registry is the only list, so a channel cannot
+    // describe a read differently from the way the MCP dispatcher describes
+    // it". The two agree on today's ten orchestrator entries and disagree on
+    // `get_bank_spending_summary` and `search_bank_transactions`, so the first
+    // orchestrator capability to copy that shape would have logged on WhatsApp
+    // and not on MCP.
+    if (entry.piiAccessLogged === true && typeof deps.recordPiiAccess === "function") {
+      const subjectId = String(args.orderId || "");
       deps.recordPiiAccess({
         companyId: ctx.companyId,
         actorUid: ctx.uid,
         actorEmail: ctx.email || "",
-        actorRole: "chatgpt_connection",
+        actorRole: actorRoleFor(ctx),
         action: "assistant",
         source: ctx.channel.type,
         // The subject the capability is about, from the registry — the same
         // field the MCP dispatcher builds its row from, so the two surfaces
         // cannot describe one read differently.
-        subject: { kind: entry.piiSubject || "order", id: String(args.orderId || "") },
+        subject: { kind: entry.piiSubject || "order", id: subjectId },
         categories: [...entry.pii],
-        note: `capability=${name}`
+        // Two of the dispatcher's own conventions, for its own reasons. An
+        // empty subject id with nothing said reads as a row whose subject went
+        // missing rather than as a read of a SET. And `source` is normalised
+        // against `accessLog.ACCESS_SOURCES` at write time, which has no
+        // `whatsapp` in it — so without naming the channel here, the door a
+        // WhatsApp read came through is not recoverable from the row at all.
+        note: `capability=${name} channel=${ctx.channel.type}${subjectId ? "" : " subject=set"}`
       }).catch(() => undefined);
     }
 
@@ -145,7 +182,7 @@ function createOrchestrator(deps = {}) {
           companyId: ctx.companyId,
           actorUid: ctx.uid,
           actorEmail: ctx.email || "",
-          actorRole: "chatgpt_connection",
+          actorRole: actorRoleFor(ctx),
           action: "assistant",
           source: ctx.channel.type,
           // A set, not a record: the id is empty on purpose, and the provider
@@ -155,7 +192,7 @@ function createOrchestrator(deps = {}) {
           // declares it so both surfaces file one shape.
           categories: ["name", "email", "phone", "address"],
           recordCount: block.orders,
-          note: `${block.minimal ? "minimal" : "blocked"}:${block.reason} capability=${name} orders=${block.orders} fields=${block.fieldsRemoved}`
+          note: `${block.minimal ? "minimal" : "blocked"}:${block.reason} capability=${name} channel=${ctx.channel.type} subject=set orders=${block.orders} fields=${block.fieldsRemoved}`
         })).catch(() => undefined);
       }
     }
@@ -195,4 +232,4 @@ function createOrchestrator(deps = {}) {
   return { resolveContext, listCapabilities, run, loaders, flags };
 }
 
-module.exports = { createOrchestrator, HANDLERS, CAPABILITY_NAMES };
+module.exports = { createOrchestrator, HANDLERS, CAPABILITY_NAMES, ACTOR_ROLES, actorRoleFor };

@@ -18,6 +18,8 @@
  * identically to a reader.
  */
 
+const untrusted = require("./untrusted");
+
 /** Per-source staleness thresholds, with the reason each one is what it is. */
 const STALE_AFTER_MS = Object.freeze({
   // commerce/health.js healthView's own default.
@@ -37,6 +39,17 @@ const SOURCE_STATES = Object.freeze(["fresh", "stale", "never", "unsupported", "
 const ENTITIES = Object.freeze(["orders", "inventory", "finance"]);
 
 const isoOrNull = (ms) => (Number.isFinite(Number(ms)) && Number(ms) > 0 ? new Date(Number(ms)).toISOString() : null);
+
+/**
+ * A source row's `provider` is a provider KEY, and on a bank or accounting row
+ * it is whatever the connection document says. `integrationHealth.js` bounds it
+ * with `providerKey(…, 40)` for the health row and passed the same raw value
+ * into `sourceRow` seventeen lines later, so it is bounded HERE instead: this
+ * is the field `build()` interpolates into four warning sentences, and a row
+ * this module builds leaves the server inside `freshness.sources[]`, which a
+ * model reads exactly the way it reads `data`.
+ */
+const providerKey = (value) => untrusted.safeText(value, { max: 40 });
 
 /**
  * One `sources[]` row.
@@ -64,8 +77,8 @@ function sourceRow({
   }
   if (!SOURCE_STATES.includes(resolved)) resolved = "never";
   return {
-    provider: String(provider || ""),
-    connectionId: connectionId ? String(connectionId) : null,
+    provider: providerKey(provider),
+    connectionId: connectionId ? untrusted.safeText(connectionId, { max: 64 }) : null,
     entity: ENTITIES.includes(entity) ? entity : "orders",
     lastSuccessAt: isoOrNull(last),
     lagMs: last ? Math.max(0, nowMs - last) : null,

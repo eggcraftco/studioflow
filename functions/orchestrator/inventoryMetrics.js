@@ -15,7 +15,24 @@
  * cannot disagree.
  */
 
+const untrusted = require("./untrusted");
+
 const round = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+
+/**
+ * A product title, a SKU, a supplier and a shelf name are all typed by somebody
+ * — a member, a supplier's import file, a connector — and the rows below leave
+ * the server inside `data`, which a model reads exactly the way it reads a
+ * summary line. So they get the same bound `envelope.entityRef` puts on a
+ * label, which is what `item.name` becomes one line later in `inventory.js`.
+ * An unbounded `String(item.name || "")` in the row beside a bounded
+ * `entityRef(…, row.name)` is one string cleaned on one path and not the other.
+ *
+ * `cleanOrderText` on the write side is not a substitute: it collapses `\s+`
+ * and leaves U+202E, U+200B and U+0007 standing, which is precisely what
+ * `untrusted.safeText` removes.
+ */
+const label = (value, max = 80) => untrusted.safeText(value, { max });
 
 const OFF_SHELF_STATUSES = Object.freeze(["sold", "used", "removed"]);
 
@@ -107,13 +124,13 @@ function lowStockItems(items = [], { limit = 25 } = {}) {
   return (Array.isArray(items) ? items : [])
     .filter(isLowStock)
     .map((item) => ({
-      itemId: String(item.id || ""),
-      name: String(item.name || ""),
-      sku: String(item.sku || ""),
+      itemId: label(item.id, 200),
+      name: label(item.name),
+      sku: label(item.sku, 64),
       onHand: Number((item.quantity || {}).onHand) || 0,
       lowStockAt: Number(item.lowStockAt) || 0,
-      supplierName: String(item.supplierName || ""),
-      location: String(item.location || "")
+      supplierName: label(item.supplierName),
+      location: label(item.location, 64)
     }))
     .sort((lhs, rhs) => (lhs.onHand - lhs.lowStockAt) - (rhs.onHand - rhs.lowStockAt))
     .slice(0, limit);
@@ -126,11 +143,11 @@ function reservedItems(items = [], { limit = 25 } = {}) {
     .map((item) => {
       const reservations = Array.isArray(item.reservations) ? item.reservations : [];
       return {
-        itemId: String(item.id || ""),
-        name: String(item.name || ""),
+        itemId: label(item.id, 200),
+        name: label(item.name),
         onHand: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).onHand) || 0,
         reserved: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).reserved) || 0,
-        orderIds: reservations.map((row) => String((row || {}).orderId || "")).filter(Boolean).slice(0, 5)
+        orderIds: reservations.map((row) => label((row || {}).orderId, 200)).filter(Boolean).slice(0, 5)
       };
     })
     .slice(0, limit);

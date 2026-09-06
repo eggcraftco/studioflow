@@ -13,6 +13,8 @@
 //
 // Run: node test/qa/orchestrator-loaders.test.js
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const loadersModule = require("../../orchestrator/loaders");
 const registry = require("../../orchestrator/registry");
 const envelope = require("../../orchestrator/envelope");
@@ -211,7 +213,14 @@ const CAPPED_SEED = {
   commerceReviewQueue: many(loadersModule.CAPS.review, { companyId: CID, provider: "shopify", reason: "plan_limit" }),
   [`companies/${CID}/heldIntegrationOrders`]: many(loadersModule.CAPS.review, { provider: "shopify", reason: "plan_limit" }),
   [`companies/${CID}/accountingAttention`]: many(loadersModule.CAPS.attention, { provider: "quickbooks", kind: "changed", severity: "warning", message: "changed", status: "open" }),
-  [`companies/${CID}/bankReceiptInbox`]: many(loadersModule.CAPS.inbox, { status: "waiting", createdAtMs: fixtures.NOW - 1000 })
+  [`companies/${CID}/bankReceiptInbox`]: many(loadersModule.CAPS.inbox, { status: "waiting", createdAtMs: fixtures.NOW - 1000 }),
+  // The three that used to be integer literals outside CAPS, and therefore
+  // invisible to the check below by construction.
+  [`companies/${CID}/bankVendors`]: many(loadersModule.CAPS.vendors, { name: "Adobe", keys: ["ADOBE"], cadence: "monthly" }),
+  shopifyStores: many(loadersModule.CAPS.connections, { companyId: CID, shopDomain: "a.myshopify.com", status: "connected" }),
+  [`companies/${CID}/bankConnections`]: many(loadersModule.CAPS.connections, { provider: "truelayer", institutionName: "HSBC", syncState: "ok" }),
+  [`companies/${CID}/accountingConnections`]: many(loadersModule.CAPS.connections, { provider: "quickbooks", companyName: "Co", mode: "read_only", status: "connected" }),
+  commerceHealth: many(loadersModule.CAPS.commerceHealth, { companyId: CID, provider: "shopify", connectionId: "s1" })
 };
 
 check("a snapshot carries no company document", async () => {
@@ -271,6 +280,103 @@ check("a read that hits its cap says so, in the flag and in the answer", async (
   // And every cap is reachable by some capability, or the flag is decoration.
   assert.deepStrictEqual([...seen].sort(), Object.keys(envelope.CAP_WARNINGS).sort(),
     "a cap no capability can hit is a cap nobody needs");
+});
+
+check("every .limit() the loader issues is one of the caps that has a sentence", () => {
+  // The pin above compares two LISTS with each other, so a cap written as an
+  // integer literal at a call site was invisible to it by construction — which
+  // is how `bankVendors` (200), the four commerce-connection reads and
+  // `bankConnections` (25 each), `accountingConnections` (25) and
+  // `commerceHealth` (50) truncated in silence while both loaders.js and the
+  // contract document said every cap is announced. This reads the source
+  // instead, so the next literal fails here rather than in an answer.
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "orchestrator", "loaders.js"), "utf8")
+    // Comments talk ABOUT `.limit()`; only the code issues one.
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const names = new Set(Object.keys(loadersModule.CAPS).map((name) => `CAPS.${name}`));
+  // Both ways this file caps a read: a `.limit()` of its own, and the limit
+  // argument it hands `readCollection` — which is where the `bankVendors` 200
+  // lived, invisible to a check that only read `.limit(`.
+  const found = [
+    ...[...source.matchAll(/\.limit\(([^)]*)\)/g)].map((match) => match[1].trim()),
+    ...[...source.matchAll(/readCollection\([^,]+,\s*([^)]*)\)/g)].map((match) => match[1].trim())
+  ];
+  assert.ok(found.length >= 13, `only ${found.length} capped reads found — did the loader stop reading?`);
+  for (const argument of found) {
+    // `readCollection(ref, limit)` is the shared helper: its own `.limit(limit)`
+    // is the parameter every caller passes a CAPS constant to.
+    if (argument === "limit") continue;
+    assert.ok(names.has(argument),
+      `loaders.js caps a read at "${argument}", which is not one of CAPS — a cap outside CAPS sets no flag and says nothing`);
+  }
+});
+
+check("a member without Banking gets no PayPal payout collection read for them", async () => {
+  // The domain is one word over two bodies of data behind two different doors:
+  // Square's payouts ride a commerce connection, PayPal's are written off a
+  // `bankConnections` document (bankFeed.js paypalConnect). `readableDomain`
+  // let the whole domain through on `default: true`, so a member with orders
+  // and financial access and no Banking had companies/{cid}/paypalPayouts read
+  // — and commerce.settlementTotals published count/gross/fee/net from it under
+  // data.settlements.paypal, while get_payout_reconciliation_overview refused
+  // that same person outright.
+  const financialNoBank = {
+    isOwner: false,
+    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
+    financialInfo: true,
+    accountingReader: false
+  };
+  const { reads, snapshot } = await snapshotOf("get_commerce_overview", financialNoBank, {
+    [`companies/${CID}/paypalPayouts`]: [{ id: "pp_1", provider: "paypal", status: "PAID", amount: 4200.55, currency: "GBP", arrivalDate: "2026-09-02", totals: { gross: 4400, fee: -199.45, net: 4200.55 } }],
+    [`companies/${CID}/squarePayouts`]: [{ id: "sq_1", provider: "square", status: "PAID", amount: 10, currency: "GBP", arrivalDate: "2026-09-02", totals: { gross: 10, fee: 0, net: 10 } }]
+  });
+  assert.ok(!touched(reads, "paypalPayouts"), "the PayPal payout collection was read for a member without Banking");
+  assert.ok(touched(reads, "squarePayouts"), "the Square payouts a commerce answer is built on stopped being read");
+  assert.strictEqual(snapshot.payouts.paypal, undefined, "a collection nobody read must not look like a collection that was empty");
+
+  // And the money does not reach the answer.
+  const ctx = fixtures.ownerContext({ companyId: CID, ...financialNoBank });
+  const result = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
+  assert.strictEqual(result.data.settlements.paypal, undefined, `data.settlements still carries ${JSON.stringify(result.data.settlements.paypal)}`);
+  assert.ok(result.data.settlements.others.some((row) => row.provider === "paypal" && row.reason === "connection_not_visible"),
+    "the answer must say the PayPal feed cannot be seen from here, not guess that it is missing");
+});
+
+check("the owner still gets both payout feeds", async () => {
+  const { reads, snapshot } = await snapshotOf("get_payout_reconciliation_overview");
+  assert.ok(touched(reads, "paypalPayouts"));
+  assert.ok(touched(reads, "squarePayouts"));
+  assert.deepStrictEqual(Object.keys(snapshot.payouts).sort(), ["paypal", "square"]);
+});
+
+check("a member with neither Banking nor financial access has no payout read at all", async () => {
+  const { reads } = await snapshotOf("get_business_attention_summary", {
+    isOwner: false,
+    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
+    financialInfo: false,
+    accountingReader: false,
+    inventoryAccess: false
+  });
+  for (const name of ["squarePayouts", "paypalPayouts"]) {
+    assert.ok(!touched(reads, name), `${name} was read for a member who can see neither payouts nor money`);
+  }
+});
+
+check("settings reach only the capabilities that declared them", async () => {
+  // The one DOMAINS member with no branch: it rode along on every snapshot, so
+  // get_integration_health — the single entry whose domainNeeds omit it —
+  // received it anyway, and "read exactly what the capability declared, and
+  // nothing else" was true of ten domains and vacuous for the eleventh.
+  const workspaceSettings = { seciliParaBirimi: "£", feePercentage: 3 };
+  for (const capability of CAPABILITY_NAMES) {
+    const { db } = recorder();
+    const loaders = loadersModule.createLoaders({ db, now: () => fixtures.NOW });
+    const entry = registry.entryFor(capability);
+    const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], fixtures.ownerContext({ companyId: CID }), { settings: workspaceSettings });
+    const declared = (entry.domainNeeds || []).includes("settings");
+    assert.deepStrictEqual(snapshot.settings, declared ? workspaceSettings : {},
+      `${capability} ${declared ? "lost the settings it declared" : "was handed settings it never declared"}`);
+  }
 });
 
 (async () => {

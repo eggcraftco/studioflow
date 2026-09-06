@@ -21,6 +21,16 @@ const envelope = require("./envelope");
 const freshness = require("./freshness");
 const metrics = require("./inventoryMetrics");
 const money = require("./money");
+const untrusted = require("./untrusted");
+
+/**
+ * A shelf row's strings, bounded. Same reason and same bound as
+ * `inventoryMetrics.label` and `envelope.entityRef`: a product title is typed
+ * by somebody, `data` is read by a model the way a summary line is, and this
+ * file put the identical `row.name` through `entityRef` two lines below the raw
+ * copy of it.
+ */
+const label = (value, max = 80) => untrusted.safeText(value, { max });
 
 /** The runtime's own item statuses (inventory.js ITEM_STATUSES), not a paraphrase. */
 const ITEM_STATUSES = Object.freeze([
@@ -132,20 +142,28 @@ function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   }
 
   const rows = items.slice(0, limit).map((item) => ({
-    itemId: String(item.id || ""),
-    name: String(item.name || ""),
-    sku: String(item.sku || ""),
-    serialNumber: String(item.serialNumber || ""),
-    category: String(item.category || ""),
+    itemId: label(item.id, 200),
+    name: label(item.name),
+    sku: label(item.sku, 64),
+    serialNumber: label(item.serialNumber, 64),
+    category: label(item.category, 64),
     status: String(item.status || "available"),
     trackingType: String(item.trackingType || "unique"),
     onHand: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).onHand) || 0,
     reserved: String(item.trackingType) === "unique" ? 0 : Number((item.quantity || {}).reserved) || 0,
     lowStockAt: Number(item.lowStockAt) || 0,
-    location: String(item.location || ""),
-    supplierName: String(item.supplierName || ""),
+    location: label(item.location, 64),
+    supplierName: label(item.supplierName),
     customerOwned: String(item.ownership) === "customer"
   }));
+
+  // A page, said out loud. This capability truncated at `limit` and warned
+  // about nothing, while `search_commerce_orders` warned about the same thing
+  // under a code that means a truncated READ — two paging capabilities behaving
+  // in opposite directions over one question. One code for both.
+  if (items.length > rows.length) {
+    warnings.push(envelope.warning("result_truncated", `${items.length} items match; the first ${rows.length} are listed.`));
+  }
 
   return {
     data: { count: rows.length, matched: items.length, statuses: ITEM_STATUSES, items: rows },

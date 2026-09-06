@@ -105,7 +105,7 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
 
   const writers = connections.filter((row) => String(row.mode || "") === "primary_write");
   const primaryWriter = writers.length > 0
-    ? { provider: String(writers[0].provider || ""), connectionId: String(writers[0].id || "") }
+    ? { provider: untrusted.safeText(writers[0].provider, { max: 40 }), connectionId: untrusted.safeText(writers[0].id, { max: 64 }) }
     : null;
   const conflict = writers.length > 1;
 
@@ -123,11 +123,17 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   // bound the envelope contract promises for a reference. Both land in `data`,
   // which a model reads exactly as it reads a summary line, so both are bounded
   // here the way every other outside string is (untrusted.js).
+  //
+  // `message` and `entityRefs` were bounded and the five fields beside them on
+  // the same objects were not: `provider`, `connectionId` and `kind` here, and
+  // `health` and `writeBoundaryDate` on the connection row below. A bound that
+  // stops at the two longest fields is a bound on the two fields somebody
+  // thought of, not on the objects.
   const attention = (snapshot.accountingAttention || []).map((row) => ({
-    id: String(row.id || ""),
-    provider: String(row.provider || ""),
-    connectionId: String(row.connectionId || ""),
-    kind: String(row.kind || ""),
+    id: untrusted.safeText(row.id, { max: 200 }),
+    provider: untrusted.safeText(row.provider, { max: 40 }),
+    connectionId: untrusted.safeText(row.connectionId, { max: 64 }),
+    kind: untrusted.safeText(row.kind, { max: 60 }),
     severity: SEVERITY_FROM_STORED[String(row.severity || "")] || "low",
     message: untrusted.safeText(row.message, { max: 200 }),
     entityRefs: (Array.isArray(row.entityRefs) ? row.entityRefs.slice(0, 5) : [])
@@ -138,7 +144,7 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   const readiness = readinessOf(snapshot.bankRows || [], snapshot.categoryMappings || null);
 
   const sources = connections.map((connection) => freshness.sourceRow({
-    provider: String(connection.provider || "accounting"),
+    provider: connection.provider || "accounting",
     connectionId: connection.id,
     entity: "finance",
     kind: "accounting",
@@ -160,14 +166,21 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
       phase: "read_only",
       primaryWriter,
       conflict,
+      // The count as a FIELD. render.js wrote "${data.connections.length}
+      // accounting connection(s)" — a numeral it computed itself and that
+      // appears nowhere in `data`. It passed the "every number in a line comes
+      // from data" check only because the one fixture exercising it has a
+      // single connection whose id is "qbo_1", so the numeral 1 happened to be
+      // in the payload.
+      connectionCount: connections.length,
       connections: connections.map((connection) => ({
-        provider: String(connection.provider || ""),
-        connectionId: String(connection.id || ""),
+        provider: untrusted.safeText(connection.provider, { max: 40 }),
+        connectionId: untrusted.safeText(connection.id, { max: 64 }),
         // The company name as the LEDGER spells it, not as we do.
         company: untrusted.safeText(connection.companyName || connection.realmName || "", { max: 80 }),
-        mode: String(connection.mode || "read_only"),
-        health: String(connection.status || "unknown"),
-        writeBoundaryDate: String(connection.writeBoundaryDate || "") || null,
+        mode: untrusted.safeText(connection.mode, { max: 40 }) || "read_only",
+        health: untrusted.safeText(connection.status, { max: 40 }) || "unknown",
+        writeBoundaryDate: untrusted.safeText(connection.writeBoundaryDate, { max: 32 }) || null,
         lastSyncAt: connection.lastSyncAtMs ? new Date(Number(connection.lastSyncAtMs)).toISOString() : null
       })),
       postings,

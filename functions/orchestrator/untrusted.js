@@ -69,22 +69,40 @@ const hasUnsafeCharacters = (value) => new RegExp(UNSAFE_CLASS).test(String(valu
  * click. That is worth closing on its own, and an order number has no use for a
  * colon.
  *
- * The slash stays, against the finding's suggestion to drop both. Slash-
- * separated numbering is real ("2026/001", "INV/2026/014" are ordinary invoice
- * and order numbers in the UK and across Europe), refusing it costs the label
- * AND the `orderNumber` field in a search result, and a URL a renderer would
- * treat as absolute cannot be written without a colon or a double slash. So the
- * two URL shapes that survive the class are refused explicitly instead: `//`
- * anywhere, and a leading `www.`, which chat clients autolink.
+ * The slash stays in the character class rather than being dropped from it.
+ * Slash-separated numbering is real ("2026/001", "INV/2026/014" are ordinary
+ * invoice and order numbers in the UK and across Europe), and refusing it
+ * outright costs the label AND the `orderNumber` field in a search result. So
+ * the URL shapes that survive the class are refused explicitly instead.
  *
- * A bare dotted token ("evil.co") is still reference-shaped, and deliberately:
- * "1001.2" is an order number, the two cannot be told apart by shape, and a
- * bare domain in a sentence is a weaker thing than a link.
+ * That refusal used to stop at `//` anywhere and a leading `www.`, on the
+ * argument that "a URL a renderer would treat as absolute cannot be written
+ * without a colon or a double slash". Both halves of that are true separately
+ * and false together: `bit.ly/3xR9kQz` and `nivadesk-support.com/verify-now`
+ * are neither absolute nor `www.`-prefixed, and they are exactly the form every
+ * mainstream chat client autolinks — WhatsApp, the second channel this contract
+ * exists for, linkifies `domain.tld/path`. A shop controls this field
+ * (`provider_metadata.order_number`), so the payload changes from a sentence to
+ * a brand-lookalike link and the rest of the attack is unchanged: it lands in
+ * the attention line, in the entityRef label and in `data.orders[].orderNumber`.
+ *
+ * So a dot AND a slash in the same token is refused. `2026/001`, `INV/2026/014`
+ * and `1001.2` carry one or the other and survive; `bit.ly/x`, `evil.co/pay`
+ * and `nivadesk-support.com/reset` carry both and do not. A bare dotted token
+ * ("evil.co") is still reference-shaped, and deliberately: "1001.2" is an order
+ * number, the two cannot be told apart by shape, and a bare domain with no path
+ * is not what a renderer turns into something to click.
  */
 const REFERENCE_SHAPE = /^[\p{L}\p{N}#][\p{L}\p{N}\-_#/.]{0,63}$/u;
 
-/** Reference-shaped, and still a URL. */
+/** Reference-shaped, and still an absolute URL. */
 const URL_SHAPE = /\/\/|^www\./i;
+
+/**
+ * Reference-shaped, and still something a chat client will make clickable: a
+ * dot and a slash in one token is `host.tld/path`, whatever precedes it.
+ */
+const LINK_SHAPE = /(?=[^]*\.)[^]*\//;
 
 const DEFAULT_TEXT_MAX = 120;
 const DEFAULT_REFERENCE_MAX = 32;
@@ -124,7 +142,7 @@ function safeReference(value, { max = DEFAULT_REFERENCE_MAX } = {}) {
     .replace(UNSAFE_CHARACTERS, "")
     .trim();
   if (!cleaned || cleaned.length > limit) return "";
-  if (URL_SHAPE.test(cleaned)) return "";
+  if (URL_SHAPE.test(cleaned) || LINK_SHAPE.test(cleaned)) return "";
   return REFERENCE_SHAPE.test(cleaned) ? cleaned : "";
 }
 
@@ -138,6 +156,7 @@ module.exports = {
   hasUnsafeCharacters,
   REFERENCE_SHAPE,
   URL_SHAPE,
+  LINK_SHAPE,
   DEFAULT_TEXT_MAX,
   DEFAULT_REFERENCE_MAX,
   safeText,

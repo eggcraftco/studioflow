@@ -255,7 +255,8 @@ function settlementTotals(snapshot, bounds, ctx = {}) {
       gross: round2(totals.gross),
       fee: round2(totals.fee),
       net: round2(totals.net),
-      currency: String((rows[0] || {}).currency || "").toUpperCase() || null
+      // The processor's own string, bounded like every other outside value.
+      currency: untrusted.safeText((rows[0] || {}).currency, { max: 12 }).toUpperCase() || null
     };
   }
   for (const provider of ["amazon", "ebay", "shopify", "etsy", "faire"]) {
@@ -471,8 +472,18 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   } else if (!advanced) {
     warnings.push(envelope.warning("plan_limited", `This plan reports what each order took, what is paid and what is left. ${PLAN_LIMITED_DETAIL}`));
   }
+  // A PAGE is not a truncated read, and this used to say it was. The code was
+  // `loader_cap_reached`, which `envelope.finish` takes as proof of
+  // `partial: true` and the renderer quotes into "This answer is incomplete:
+  // …" — so an ordinary `limit: 5` over 30 matching orders reported itself as
+  // an incomplete answer; and when the order read HAD hit its 1000-document
+  // cap, `freshnessLines` picked whichever of the two messages came first and
+  // told the reader the only incompleteness was paging. `count` and `matched`
+  // say the paging part already. `search_inventory_items` raises the same code
+  // for the same reason — it truncated at `limit` and said nothing at all, so
+  // the two paging capabilities behaved in opposite directions.
   if (matches.length > rows.length) {
-    warnings.push(envelope.warning("loader_cap_reached", `${matches.length} orders match; the first ${rows.length} are listed.`));
+    warnings.push(envelope.warning("result_truncated", `${matches.length} orders match; the first ${rows.length} are listed.`));
   }
   warnings.push(...envelope.capWarnings(snapshot));
 
@@ -581,7 +592,17 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
   warnings.push(envelope.warning("channel_not_supported", "Faire has no adapter in NivaDesk, so it is reported as unsupported rather than as zero sales."));
 
   return {
-    data: { range: { fromDate: bounds.fromDate, toDate: bounds.toDate }, currency: workspace, channels: rows },
+    data: {
+      range: { fromDate: bounds.fromDate, toDate: bounds.toDate },
+      currency: workspace,
+      // The headline count, as a FIELD. render.js computed it with its own
+      // `channels.filter((row) => row.orders > 0).length`, which is the second
+      // implementation of an arithmetic §7 forbids — and it produced a numeral
+      // that was in no case in `data`, so a summary line said "7 channel(s) had
+      // orders in this range" over a payload containing no 7.
+      channelsWithOrders: rows.filter((row) => row.orders > 0).length,
+      channels: rows
+    },
     warnings,
     sources: commerceSources(snapshot, views, { nowMs }),
     entityRefs: []

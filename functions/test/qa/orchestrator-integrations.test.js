@@ -179,6 +179,47 @@ check("no row carries anything that looks like a credential", () => {
   assert.ok(!/token|secret|password/i.test(Object.keys(rowFor(result, "shopify")).join(" ")));
 });
 
+check("asking about one provider answers about that provider, banks and ledgers included", () => {
+  // `wanted` was honoured by the commerce loop, the Amazon row, the eBay row
+  // and heldForReview, and ignored by the bank and accounting blocks — whose
+  // rows then fed data.count, data.considered and data.needsReconnect. So "is
+  // Shopify OK?" came back as "3 connection(s) set up; 1 need reconnecting"
+  // with a BANK named as the thing to reconnect.
+  const snapshot = {
+    companyId: "co_1", nowMs: NOW, settings: fixtures.settings, orders: [], commerceHealth: [],
+    reviewQueue: [], heldOrders: [], accountingAttention: [],
+    connections: {
+      shopify: [{ id: "s1", provider: "shopify", account: "teststudio.myshopify.com", status: "connected", lastSuccessAtMs: NOW - HOUR }],
+      etsy: [], woocommerce: [], square: [],
+      bank: [
+        { id: "b1", provider: "truelayer", institutionName: "HSBC", syncState: "needs_reconsent", lastSyncedAtMs: NOW - HOUR },
+        { id: "b2", provider: "truelayer", institutionName: "Monzo", syncState: "ok", lastSyncedAtMs: NOW - HOUR }
+      ],
+      accounting: [{ id: "x1", provider: "xero", companyName: "Test Studio Ltd", mode: "read_only", status: "connected", lastSyncAtMs: NOW - HOUR }]
+    }
+  };
+
+  const all = health.integrationHealth(snapshot, {}, ctx, { nowMs: NOW });
+  assert.strictEqual(all.data.count, 4, "the unfiltered answer still counts every connection");
+  assert.strictEqual(all.data.needsReconnect, 1);
+
+  const shopifyOnly = health.integrationHealth(snapshot, { provider: "shopify" }, ctx, { nowMs: NOW });
+  assert.deepStrictEqual(shopifyOnly.data.connections.map((row) => row.provider), ["shopify"],
+    "a question about Shopify was answered with banks and a ledger");
+  assert.strictEqual(shopifyOnly.data.count, 1);
+  assert.strictEqual(shopifyOnly.data.considered, 1);
+  assert.strictEqual(shopifyOnly.data.needsReconnect, 0, "a bank was named as the thing Shopify needs");
+  assert.ok(!shopifyOnly.sources.some((row) => row.kind === "bank"), "a Shopify question carried a bank freshness row");
+
+  // And filtering BY a bank or a ledger still works: the argument is free text,
+  // not a commerce-only enum.
+  const bankOnly = health.integrationHealth(snapshot, { provider: "truelayer" }, ctx, { nowMs: NOW });
+  assert.deepStrictEqual(bankOnly.data.connections.map((row) => row.provider), ["truelayer", "truelayer"]);
+  assert.strictEqual(bankOnly.data.needsReconnect, 1);
+  const ledgerOnly = health.integrationHealth(snapshot, { provider: "xero" }, ctx, { nowMs: NOW });
+  assert.deepStrictEqual(ledgerOnly.data.connections.map((row) => row.provider), ["xero"]);
+});
+
 check("banking and accounting rows are gated separately, and the withheld section is named", () => {
   const snapshot = fixtures.mixedSnapshot();
   const limited = fixtures.ownerContext({ isOwner: false, areas: { orders: true, bankFeed: false }, accountingReader: false });

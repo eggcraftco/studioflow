@@ -10,6 +10,8 @@
 const assert = require("assert");
 const envelope = require("../../orchestrator/envelope");
 const freshness = require("../../orchestrator/freshness");
+const untrusted = require("../../orchestrator/untrusted");
+const fixtures = require("../fixtures/orchestrator");
 
 let failures = 0;
 const check = (name, run) => {
@@ -42,6 +44,31 @@ check("a warning code that is not in the closed list is refused", () => {
   for (const code of ["mixed_currency", "tax_needs_review", "needs_review_truncated", "source_state_unknown", "plan_limited", "estimated"]) {
     assert.ok(envelope.WARNING_CODES.includes(code), `${code} must be a known warning code`);
   }
+});
+
+check("a warning is bounded, single-line and control-free, message and fields alike", () => {
+  // `envelope.warning` applied `String(message)` and `String(extra.channel)`
+  // with no bound at all, and `freshness.build` interpolates a bank
+  // connection's own provider key into four warning sentences — so a
+  // never-synced connection produced a 323-character multi-line message, a
+  // 242-character channel, and 227 characters of injected prose quoted into
+  // "This answer is incomplete: …". A warning leaves the server beside the data
+  // and the renderer quotes one of them, so it gets the same treatment as a
+  // label.
+  const poison = fixtures.POISON;
+  const row = envelope.warning("estimated", `sync failed for ${poison}`, { channel: poison, connectionId: poison, section: poison });
+  assert.ok(row.message.length <= envelope.WARNING_MESSAGE_MAX, `a warning message is ${row.message.length} characters`);
+  assert.ok(row.channel.length <= envelope.WARNING_FIELD_MAX);
+  assert.ok(row.connectionId.length <= envelope.WARNING_FIELD_MAX);
+  assert.ok(row.section.length <= envelope.WARNING_FIELD_MAX);
+  for (const value of [row.message, row.channel, row.connectionId, row.section]) {
+    assert.ok(!untrusted.hasUnsafeCharacters(value), "a warning field still carries a control or bidi character");
+    assert.ok(!/[\n\r]/.test(value), "a warning field spans two lines");
+  }
+  // And an honest sentence this module's own capabilities write is not clipped:
+  // the longest is 215 characters.
+  const long = "x".repeat(215);
+  assert.strictEqual(envelope.warning("estimated", long).message, long);
 });
 
 check("staleness is per source: a bank feed and a shop age at different rates", () => {

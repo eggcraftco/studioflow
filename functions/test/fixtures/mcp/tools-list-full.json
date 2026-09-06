@@ -1,6 +1,6 @@
 {
   "recordedAt": "pre-orchestrator",
-  "note": "The four flag states WITHOUT the orchestrator flag were recorded from index.js BEFORE the orchestrator capabilities existed (commit bc718e06), so they are independent evidence that the listing OpenAI is reviewing did not move. The two orchestrator states were recorded with the flag on: they are the 1.2.0 proposal, and they differ from the 1.1.1 bytes only by appended tools plus the two annotation corrections that flag already carried.",
+  "note": "The four flag states WITHOUT the orchestrator flag were recorded from index.js at commit bc718e06, before the orchestrator capabilities existed. Read that scope exactly: bc718e06 is a commit on the mcp-orchestration branch, NOT the deployed 1.1.1 tree, so this fixture is evidence that the listing has not moved SINCE IT WAS RECORDED — it is not evidence that it equals what the review connection is served. Between the merge base (f753a8ca) and bc718e06 the branch added get_bank_spending_summary, search_bank_transactions and attach_bank_receipt, corrected four annotation values (update_order_status, update_note, pin_note, archive_note) and changed \"Lite\" to \"Starter\" in two descriptions; all of those are intended 1.2.0 changes, listed in docs/mcp-submission-1.2.0.md section 3. The operator diffs this fixture against the live listing once before the flip. The two orchestrator states were recorded with the flag on: they are the 1.2.0 proposal.",
   "states": {
     "off": {
       "tools": [

@@ -24,6 +24,19 @@
 const freshnessModule = require("./freshness");
 const untrusted = require("./untrusted");
 
+/**
+ * How much of a warning may be somebody else's text.
+ *
+ * 300 is `render.LINE_MAX`: the renderer quotes one warning message into a
+ * summary line, so a message that cannot be a line is not a message. 60 is
+ * `render.VALUE_MAX`, the bound on a value quoted inside a sentence — a
+ * `channel` is a provider key, not a paragraph. The longest sentence this
+ * module's own capabilities write is 215 characters, so no honest warning is
+ * clipped by either.
+ */
+const WARNING_MESSAGE_MAX = 300;
+const WARNING_FIELD_MAX = 60;
+
 /** Lifecycle states. `queued` ≠ `completed` (§25). */
 const STATES = Object.freeze([
   "prepared", "awaiting_approval", "approved", "queued", "executing",
@@ -39,6 +52,15 @@ const WARNING_CODES = Object.freeze([
   "channel_stale",
   "status_not_visible_from_this_surface",
   "loader_cap_reached",
+  // A PAGE, not a truncated read. `search_commerce_orders` raised
+  // `loader_cap_reached` for its ordinary `limit` truncation, so every paged
+  // search reported `partial: true` and rendered "This answer is incomplete:
+  // 30 orders match; the first 5 are listed." — an honest sentence under a
+  // heading that means something else. Worse, when a real cap HAD been hit the
+  // renderer quoted whichever `loader_cap_reached` row came first, so a read
+  // that stopped at 1000 documents hid behind the paging message. `partial` is
+  // for "a read was truncated"; asking for a page is not that.
+  "result_truncated",
   "plan_limited",
   "section_not_permitted",
   "unsupported_metric",
@@ -82,7 +104,16 @@ const CAP_WARNINGS = Object.freeze({
   payoutsCapped: "The payout read hit its cap, so some payouts in this range are not counted here.",
   reviewCapped: "The read of orders held or queued for review hit its cap, so more may be waiting than are counted here.",
   attentionCapped: "The accounting attention read hit its cap, so more items may be open than are listed here.",
-  inboxCapped: "The waiting-receipt read hit its cap, so more receipts may be waiting than are counted here."
+  inboxCapped: "The waiting-receipt read hit its cap, so more receipts may be waiting than are counted here.",
+  // Three reads that carried a hard limit written as a literal and no flag at
+  // all, so the list above described seven of the ten places this loader can
+  // truncate. The vendor one is the one with a consequence:
+  // `insights.detectRecurringSpends` matches bank rows against the vendor list,
+  // so "N recurring payment(s) changed price" and "N recurring payment(s) have
+  // stopped arriving" were counted over a list that could have been cut off.
+  vendorsCapped: "The saved-vendor read hit its cap, so recurring-payment items may be counted over part of the vendor list.",
+  connectionsCapped: "A connection read hit its cap, so this workspace may have more connections than are listed here.",
+  commerceHealthCapped: "The connection-health read hit its cap, so some connections may be reported without their sync history."
 });
 
 /**
@@ -103,10 +134,17 @@ function warning(code, message, extra = {}) {
   if (!WARNING_CODES.includes(code)) {
     throw new TypeError(`Orchestrator warning code "${code}" is not in the closed list; add it to envelope.WARNING_CODES with the rule that raises it.`);
   }
-  const row = { code, message: String(message || "") };
-  if (extra.channel) row.channel = String(extra.channel);
-  if (extra.connectionId) row.connectionId = String(extra.connectionId);
-  if (extra.section) row.section = String(extra.section);
+  // A warning leaves the server beside the data and the renderer quotes one of
+  // them into a line, so its fields are bounded HERE for the same reason
+  // entityRef bounds a label. `String(message)` was the whole of it, and
+  // `freshness.build` interpolates a bank connection's own `provider` into four
+  // of these sentences — so an unbounded, multi-line, control-carrying provider
+  // key produced a 323-character `message` and a 242-character `channel`, and
+  // 227 characters of it were quoted into "This answer is incomplete: …".
+  const row = { code, message: untrusted.safeText(message, { max: WARNING_MESSAGE_MAX }) };
+  if (extra.channel) row.channel = untrusted.safeText(extra.channel, { max: WARNING_FIELD_MAX });
+  if (extra.connectionId) row.connectionId = untrusted.safeText(extra.connectionId, { max: WARNING_FIELD_MAX });
+  if (extra.section) row.section = untrusted.safeText(extra.section, { max: WARNING_FIELD_MAX });
   return row;
 }
 
@@ -207,8 +245,11 @@ const MONEY_BLOCK_KEYS = Object.freeze([
  * rule that reads the literal field name `value` destroys the first while it
  * hides the second — so a group thread loses the counts it is allowed to see
  * and keeps the amounts it is not.
+ *
+ * It is also read for the FOURTH shape (see `applyChannelProfile`): an ordinary
+ * money-named number on a plain object that carries a currency of its own.
  */
-const MONEY_NAME = /(amount|total|gross|net\b|fee|refund|discount|cost|profit|vat|tax|price|balance|revenue|paid|outstanding|payout|value)/i;
+const MONEY_NAME = /(amount|total|gross|net\b|fee|refund|discount|cost|profit|vat|tax|price|balance|revenue|paid|outstanding|payout|value|aov)/i;
 
 /** A person can hide in these field names; a product name is not one of them. */
 const PII_KEYS = Object.freeze(["customer", "customerName", "customerEmail", "buyerName", "contactName", "contactEmail", "email", "phone"]);
@@ -217,14 +258,41 @@ const PII_KEYS = Object.freeze(["customer", "customerName", "customerEmail", "bu
 const PII_LABEL_TYPES = Object.freeze(["bankTransaction", "note"]);
 
 /**
+ * The letter-shaped currency markers a workspace can choose that are not
+ * Unicode currency symbols, straight out of `money.SYMBOL_TO_ISO`. The
+ * multi-character ones come FIRST in the alternation: JavaScript alternation is
+ * ordered, and `\p{Sc}` would otherwise match the `$` of `R$` on its own and
+ * leave the "R" standing beside a withheld amount.
+ */
+const CURRENCY_MARK = "R\\$|C\\$|A\\$|د\\.إ|CHF|zł|TL|kr|\\p{Sc}";
+
+/**
  * Money written into a sentence. `"420 GBP still outstanding"` and `"£420 still
  * outstanding"` are the figure, not a description of it, and a redaction that
  * only looks at field names lets both through verbatim.
+ *
+ * This used to be a hand-maintained list of five symbols and thirteen ISO
+ * codes. `money.SYMBOL_TO_ISO` lists seventeen currencies a workspace can pick
+ * — ₹ INR, R$ BRL, ₽ RUB, ₴ UAH, ₪ ILS, د.إ AED were all missing — and
+ * `money.currencyOf` accepts ANY `/^[A-Z]{3}$/` an order or a provider supplies,
+ * so the list could never be complete. So the rule is the SHAPE instead: a
+ * number next to any Unicode currency symbol, or next to any three-letter
+ * uppercase token. `attention.js` writes `${round2(amount)} ${currency}` into
+ * `data.items[].reason`, which is the one shape §6.4 calls out by name, and an
+ * INR or AED workspace was handing a group thread the outstanding balance
+ * verbatim.
+ *
+ * The ISO half is deliberately case-SENSITIVE. With `i`, `\d+\s?[A-Za-z]{3}\b`
+ * eats "12 day(s)" and "5 min" out of sentences a channel is allowed to read.
+ *
+ * A shape rule does over-match sometimes — "DEPOSIT 12 ABC" in a bank
+ * description loses its "12 ABC" — and that is the direction to err in on a
+ * channel that has been told it may not see money at all.
  */
 const MONEY_IN_TEXT = new RegExp(
-  "(?:[£$€¥₺]\\s?\\d[\\d,]*(?:\\.\\d+)?)" +
-  "|(?:\\d[\\d,]*(?:\\.\\d+)?\\s?(?:[£$€¥₺]|(?:GBP|USD|EUR|TRY|JPY|CAD|AUD|CHF|SEK|NOK|DKK|PLN|NZD)\\b))",
-  "gi"
+  `(?:(?:${CURRENCY_MARK})\\s?\\d[\\d,]*(?:\\.\\d+)?)` +
+  `|(?:\\d[\\d,]*(?:\\.\\d+)?\\s?(?:${CURRENCY_MARK}|[A-Z]{3}\\b))`,
+  "gu"
 );
 
 const WITHHELD_AMOUNT = "[amount withheld]";
@@ -245,14 +313,23 @@ const isEntityRef = (row) => Boolean(row) && typeof row === "object" && !Array.i
  * Two rules, both learned from getting it wrong:
  *
  *  - **Redaction follows the VALUE, not the field name.** Money reaches a
- *    reader in three shapes — a block (`totals`), a fact row keyed at runtime
- *    (`{ key: "amount", value, currency }`), and a sentence a detector wrote
- *    (`"420 GBP still outstanding"`). A key list catches the first only, so a
+ *    reader in FOUR shapes — a block (`totals`), a fact row keyed at runtime
+ *    (`{ key: "amount", value, currency }`), a sentence a detector wrote
+ *    (`"420 GBP still outstanding"`), and an ordinary money-named number on a
+ *    plain object that carries a currency of its own
+ *    (`{ payoutId, amount, currency }`). A key list catches the first only, so a
  *    group thread was refused `sales` and handed the same money back inside
- *    `reason`.
+ *    `reason`; the fourth shape was missed for a whole capability, and
+ *    get_payout_reconciliation_overview said "Payout matching figures are not
+ *    shown in this channel" in the line while `data.providers[].unmatchedAmount`
+ *    and `data.unmatched[].amount` carried the figure into the payload a model
+ *    reads.
  *  - **It must not destroy what the channel IS allowed to see.** The generic
  *    key `value` is money in `{ value: { cost, currency } }` and a count in
- *    `{ key: "count", value: 2 }`. Both directions are failures.
+ *    `{ key: "count", value: 2 }`. Both directions are failures. That is why the
+ *    fourth shape is keyed on the object declaring a `currency` rather than on
+ *    the name alone: `heldForReview.total` and `data.totalItems` are counts with
+ *    money-shaped names and no currency, and a group thread keeps them.
  */
 function applyChannelProfile(data, profile) {
   if (!profile || typeof profile !== "object") return data;
@@ -281,6 +358,10 @@ function applyChannelProfile(data, profile) {
       return { ...value, label: "", labelRestricted: true };
     }
 
+    // An object that names its own currency is holding money, whether or not
+    // the block it sits in is one of the named ones.
+    const carriesCurrency = Object.prototype.hasOwnProperty.call(value, "currency");
+
     const out = {};
     for (const [key, inner] of Object.entries(value)) {
       if (stripPii && PII_KEYS.includes(key)) { out[key] = restrictedPerson(); continue; }
@@ -288,6 +369,11 @@ function applyChannelProfile(data, profile) {
       // `value` alone is ambiguous: a money block when it holds one, a plain
       // figure otherwise.
       if (stripMoney && key === "value" && inner && typeof inner === "object" && !Array.isArray(inner)) {
+        out[key] = restrictedMoney();
+        continue;
+      }
+      // The fourth shape: a figure on a row that says which currency it is in.
+      if (stripMoney && carriesCurrency && typeof inner === "number" && MONEY_NAME.test(key)) {
         out[key] = restrictedMoney();
         continue;
       }
@@ -299,6 +385,7 @@ function applyChannelProfile(data, profile) {
 }
 
 module.exports = {
-  STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, PII_KEYS, PII_LABEL_TYPES, CAP_WARNINGS,
+  STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, MONEY_NAME, MONEY_IN_TEXT, PII_KEYS, PII_LABEL_TYPES, CAP_WARNINGS,
+  WARNING_MESSAGE_MAX, WARNING_FIELD_MAX,
   warning, capWarnings, entityRef, finish, applyChannelProfile
 };

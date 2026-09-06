@@ -161,12 +161,25 @@ return exactly what they return today; none of their shapes changes.
 
 ## 4. What stays
 
-- **Flag-off, the 19 tools are byte-identical**: names, order, titles, descriptions, input schemas,
-  annotation values and advertised scopes. That is not a promise, it is a fixture:
-  `test/fixtures/mcp/tools-list-full.json`, four states recorded before the orchestrator existed.
+- **Flag-off, the 19 tools have not moved since the fixture was recorded**: names, order, titles,
+  descriptions, input schemas, annotation values and advertised scopes. That is a fixture rather than a
+  promise — `test/fixtures/mcp/tools-list-full.json`, four flag-off states recorded from index.js at
+  commit `bc718e06`, before the orchestrator capabilities existed. Read the scope of that claim exactly:
+  `bc718e06` is a commit on THIS branch, not the deployed 1.1.1 tree, so the fixture proves the listing
+  has not moved since it was recorded, not that it equals what the review connection is being served.
+  Between the merge base and `bc718e06` the branch added three tools (`get_bank_spending_summary`,
+  `search_bank_transactions`, `attach_bank_receipt`), corrected four annotation values
+  (`update_order_status`, `update_note`, `pin_note`, `archive_note`) and renamed "Lite" to "Starter" in
+  two descriptions — all of which §3 covers as intended 1.2.0 changes. **Diff the fixture against the
+  live listing once before the flip**, so the two claims are not conflated.
 - The OAuth and discovery surface: `mcp.nivadesk.app`, the `.well-known` routes, dynamic client
   registration only, PKCE, the redirect-URI registry, 405 on an SSE GET, 202 on notifications, the
-  `openai-apps-challenge` file. **No new scope names in 1.2.0** — the metadata and the registration
+  `openai-apps-challenge` file. One qualification, since "stays" is read literally here: the dynamic
+  **registration response** is not what the merge base returned. The base echoed all six scopes
+  unconditionally and carried no `redirect_uris` or `client_name`; HEAD returns `body.scope || six` plus
+  both fields. That is `14ff0cfb`, the redirect-URI registry, it predates the fixture recording, and it
+  is not flag-gated — it belongs in §3 as a 1.2.0 change, not here as something unchanged. The scope
+  NAMES are what has not moved. **No new scope names in 1.2.0** — the metadata and the registration
   response have advertised the same six since before this branch, verified by replaying the
   merge-base tree. What DOES change, and only when the flag goes on, is which of those six a
   connection is minted with and which the 401 challenge asks for: flag off, the challenge is
@@ -293,6 +306,13 @@ it. The refusal names the missing scope and tells the user to reconnect, which r
 full width. Check the live token records before flipping, and expect to reconnect the review
 connection.
 
+**And the client will not offer to do it.** The refusal a pre-flip connection meets is a tool-level
+`permission-denied` from `context.scopeRefusal`, not a 401 with a `WWW-Authenticate` challenge, so
+ChatGPT has no signal to re-run OAuth on its own: the user has to disconnect and reconnect NivaDesk by
+hand. That is why the refusal text says "Reconnect NivaDesk in ChatGPT" in words rather than relying on
+the client to prompt, and why the review connection has to be reconnected deliberately as step 6 rather
+than assumed to heal itself on the next call.
+
 Related, and it gets worse the day this is enforced: `create_inventory_item` advertises `orders.read`
 today — a write tool advertising a read scope. While nothing checked scope that was a wire inaccuracy.
 Once `nvMcpAssertScope` runs, `scopesFor("create_inventory_item")` is the list the gate demands, so a
@@ -315,22 +335,34 @@ in this submission rather than in a merge — and it belongs with the flag, not 
   `search_commerce_orders` and `get_banking_attention_summary` take no record id because they read a
   SET, and `subject.id: ""` with nothing said reads as a subject that went missing. The row now
   carries `subject=set` in its note — the convention `run()` already uses for the marketplace-block
-  rows — while a read that names a record still names it. `recordCount` stays 1: the row is written
-  before dispatch, so the count is genuinely not known yet.
-- **The two bank tools hand over a person and file no row — a decision, and it belongs to this
-  submission.** `get_bank_spending_summary` returns `topMerchants[].merchant` and
-  `recurringSubscriptions[].merchant`; `search_bank_transactions` returns `merchant: tx.counterparty`.
-  A person-to-person payment puts a person in that field, and the registry says so — both declare
-  `pii: ["name"]` — but both declare `piiAccessLogged: false`, so neither read is recorded. The new
-  `get_banking_attention_summary` reads the same collection, declares the same `pii: ["name"]`, and
-  **does** log. So on flip day the assistant's newest door to bank counterparty names is audited and its
-  two oldest doors are not, which is the "one body of data, two doors" objection §5.4 settles for scope
-  and this branch settles for inventory. Closing it is flipping two fields (`piiAccessLogged: true`,
-  `piiSubject: "bank_transaction"`) and costs one fire-and-forget row per call, the same row the other
-  eight logging tools already write; the reason it was not flipped here is that it is a new write on a
-  read path against the live 1.1.1 connection, which is the operator's call and not a merge's. This was
-  written down in `docs/mcp-tool-annotations.md` ("Open items", 1) as a decision for this submission and
-  was missing from this list, so nobody would have met it at submission time.
+  rows — while a read that names a record still names it. `run()` files its own row the same way now,
+  with `channel=<type>` beside it, because `source` is normalised against `ACCESS_SOURCES` at write time
+  and a WhatsApp read would otherwise lose the channel entirely.
+
+  `recordCount` stays 1: the row is written before dispatch, so the count is genuinely not known yet.
+  That is a real limitation of writing before the read rather than a fact about the data —
+  `search_commerce_orders` can project a thousand orders under a row that says 1 — so it is now written
+  where an auditor meets it (`privacy/accessLog.js`, beside the field, and
+  `docs/orchestrator-contract.md` §5.4) instead of only in this operator's page.
+- **Done, behind the flag: the two bank tools now record the read.** `get_bank_spending_summary`
+  returns `topMerchants[].merchant` and `recurringSubscriptions[].merchant`; `search_bank_transactions`
+  returns `merchant: tx.counterparty`. A person-to-person payment puts a person in that field, both
+  declared `pii: ["name"]`, and neither read was recorded — while `get_banking_attention_summary`, which
+  reads the same collection and declares the same category, does. The newest door to bank counterparty
+  names was audited and the two oldest were not, which is the "one body of data, two doors" objection
+  §5.4 settles for scope and this branch settles for inventory.
+
+  The argument for leaving it open was that turning a write on for the live 1.1.1 connection is the
+  operator's call, not a merge's. That is right about the risk and wrong about the remedy: every other
+  behaviour change on this branch — the annotation corrections that move the wire, the whole
+  scope-enforcement gate — ships behind `NIVADESK_MCP_ORCHESTRATOR`, and so does this. Both entries now
+  declare `piiAccessLogged: true`, `piiSubject: "bank_transaction"` and
+  `piiAccessLoggedFlag: "orchestrator"`; `nvMcpPiiLogFlagOn` is the single predicate that reads it, in
+  both the dispatcher's list and its row builder; and `assertRegistry` refuses a flag name
+  `normalizeFlags` does not know. **Flag off, nothing changes** — no new write, and the tools/list
+  fixture is unmoved, because `justification` and `piiAccessLogged` are not on the wire. Flag on, every
+  PII path on this surface writes its row. `mcp-tool-annotations.test.js` asserts both states, and
+  refuses any registry entry that declares a `pii` category without declaring the row.
 - ~~`MCP_ACTIONS_READING_PII` duplicates the registry's `pii` field; the registry should be the only
   list.~~ **Done.** The dispatcher derives the set from `piiAccessLogged`, and builds each row's
   `categories` from the entry's `pii` and `subject.kind` from its new `piiSubject`. Before that every

@@ -24468,7 +24468,28 @@ function nvMcpAvailableActions() {
  * recordPiiAccess on this surface so a single call cannot file two rows.
  */
 function nvMcpPiiLoggedActions() {
-  return new Set(nvMcpRegistry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged === true).map((entry) => entry.name));
+  return new Set(nvMcpRegistry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged === true && nvMcpPiiLogFlagOn(entry)).map((entry) => entry.name));
+}
+
+/**
+ * Whether the flag an entry's access-log row waits on is on.
+ *
+ * `get_bank_spending_summary` and `search_bank_transactions` hand over a
+ * counterparty's name and did not record the read, while
+ * `get_banking_attention_summary` — the newest door to the same data —
+ * declares the same `pii: ["name"]` and does. "Every PII path writes its
+ * access-log row" was false, and the argument for leaving it false was that
+ * turning a write on for a live 1.1.1 connection is an operator's decision
+ * rather than a merge's. That argument is right about the risk and wrong about
+ * the remedy: every other behaviour change on this branch ships behind
+ * NIVADESK_MCP_ORCHESTRATOR, and so does this one. The registry says the row
+ * exists (`piiAccessLogged: true`) and names the flag it waits on
+ * (`piiAccessLoggedFlag`), the operator flips one switch, and there is no
+ * second list to forget.
+ */
+function nvMcpPiiLogFlagOn(entry) {
+  const flag = entry && entry.piiAccessLoggedFlag;
+  return !flag || NV_MCP_FLAGS[flag] === true;
 }
 
 /**
@@ -24483,7 +24504,7 @@ function nvMcpPiiLoggedActions() {
 function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   const requested = String(action || "").trim();
   const entry = nvMcpRegistry.entryFor(requested);
-  if (!entry || entry.piiAccessLogged !== true) return null;
+  if (!entry || entry.piiAccessLogged !== true || !nvMcpPiiLogFlagOn(entry)) return null;
   // One record, or a set of them. `search_orders` with no orderId,
   // `search_commerce_orders` and `get_banking_attention_summary` name no
   // subject because they HAVE none — they read a set — and an empty id with
@@ -26345,6 +26366,15 @@ function nvOrchestratorCapabilities() {
  * The workspace is the one the token resolved to, never the one the model
  * asked for: `companyId` in the arguments is a lookup key at most, and this
  * adapter does not even pass it on.
+ *
+ * The channel type comes from the SURFACE the entry point stamped, through the
+ * same `nvMcpAccessSource` the dispatcher's own access-log row is built from.
+ * It was hardcoded `"mcp"`, and `orchestrator/index.js` files both the
+ * marketplace-block row (`source: ctx.channel.type`) and the audit row
+ * (`channelType`) off it — so one `chatgptWorkspaceAction` request produced an
+ * access row correctly saying `rest` and, from that same request, a
+ * marketplace-block row saying `mcp`. That is the defect 11fdd1c8 was written
+ * about, one layer down, on the sink its own sibling commit had just added.
  */
 async function nvChatGPTOrchestratorRun(context, capability, args = {}) {
   const ctx = await nvOrchestrator.resolveContext(
@@ -26354,7 +26384,7 @@ async function nvChatGPTOrchestratorRun(context, capability, args = {}) {
       companyId: context.companyId,
       authType: context.authType,
       scope: context.scope,
-      channel: { type: "mcp" }
+      channel: { type: nvMcpAccessSource(context) }
     },
     {
       // The company document was read moments ago, in this same request, by

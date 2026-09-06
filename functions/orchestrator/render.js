@@ -35,6 +35,7 @@
  */
 
 const untrusted = require("./untrusted");
+const { CAP_WARNINGS } = require("./envelope");
 
 const SLOTS = Object.freeze(["result", "breakdown", "finance", "attention", "next"]);
 
@@ -86,7 +87,16 @@ function freshnessLines(envelopeRow) {
     const excluded = envelopeRow.warnings
       .filter((row) => ["channel_excluded_auth", "channel_not_connected", "status_not_visible_from_this_surface", "loader_cap_reached"].includes(row.code))
       .map((row) => row.message);
-    lines.push(line("finance", excluded.length ? `This answer is incomplete: ${safe(excluded[0], 200)}` : "This answer is incomplete; some sources could not be included."));
+    // One line, so WHICH message it quotes decides what the reader is told. A
+    // truncated read is the more serious of the two and it goes first: paging
+    // now has its own code (`result_truncated`), and while it shared this one a
+    // read that stopped at a thousand documents hid behind "30 orders match;
+    // the first 5 are listed." A cap sentence is recognisable by being one of
+    // `envelope.CAP_WARNINGS`, so a future code added to the list above cannot
+    // jump the queue either.
+    const capSentences = new Set(Object.values(CAP_WARNINGS));
+    const first = excluded.find((message) => capSentences.has(message)) || excluded[0];
+    lines.push(line("finance", excluded.length ? `This answer is incomplete: ${safe(first, 200)}` : "This answer is incomplete; some sources could not be included."));
   }
   return lines;
 }
@@ -115,7 +125,11 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
   } else if (capability === "search_commerce_orders") {
     lines.push(line("result", `${data.count} order(s) listed of ${data.matched} matching.`));
   } else if (capability === "get_channel_performance") {
-    lines.push(line("result", `${(data.channels || []).filter((row) => row.orders > 0).length} channel(s) had orders in this range.`));
+    // From `data`, not from a filter written here: the renderer counting the
+    // channels itself is the second implementation of an arithmetic this
+    // file's own header forbids, and the numeral it produced appeared nowhere
+    // in the payload.
+    lines.push(line("result", `${data.channelsWithOrders} channel(s) had orders in this range.`));
     for (const row of (data.channels || []).filter((entry) => entry.orders > 0)) {
       const first = Array.isArray(row.amounts) ? row.amounts[0] : null;
       lines.push(line("breakdown", first ? `${safe(row.channel)}: ${row.orders} order(s), ${money(first.gross)} ${safe(first.currency, 12)}` : `${safe(row.channel)}: ${row.orders} order(s)`));
@@ -160,7 +174,10 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
       lines.push(line("attention", `${data.heldForReview.total} order(s) from your shops are held for review.`));
     }
   } else if (capability === "get_accounting_sync_status") {
-    lines.push(line("result", `${data.connections.length} accounting connection(s).`));
+    // `data.connections.length` was arithmetic here too, and it passed the
+    // numerals check only by fixture accident: that fixture's one connection
+    // has id "qbo_1", so the numeral 1 happened to be somewhere in the payload.
+    lines.push(line("result", `${data.connectionCount} accounting connection(s).`));
     lines.push(line("finance", "Ledger posting is not switched on yet; NivaDesk is preparing records only."));
     // Named map, because "ready" is a claim about one: a workspace that has
     // confirmed its own category map is not being measured against ours.

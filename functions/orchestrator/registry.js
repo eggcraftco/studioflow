@@ -510,19 +510,24 @@ const TOOL_REGISTRY = [
     riskClass: "A",
     minAssurance: 1,
     // A person-to-person payment carries a person's name in `counterparty`, and
-    // linkedOrderLabel can carry a customer's. The dispatcher does not file a
-    // piiAccessLog row for this tool today (`piiAccessLogged: false` below is
-    // what decides that) — see docs/mcp-tool-annotations.md, "open items".
-    // Declared here so the gap is visible rather than implied.
+    // linkedOrderLabel can carry a customer's. The row IS declared now: the two
+    // oldest doors to bank counterparty names were the only PII paths on this
+    // surface that recorded nothing, while `get_banking_attention_summary` —
+    // the newest door to the same data — declares the same category and logs.
+    // Turning a write on for the live 1.1.1 connection is an operator's call,
+    // so the row waits on the same flag every other behaviour change on this
+    // branch waits on (`piiAccessLoggedFlag`, read by nvMcpPiiLogFlagOn), and
+    // not on a separate list somebody has to remember.
     pii: ["name"],
-    piiAccessLogged: false,
-    piiSubject: null,
+    piiAccessLogged: true,
+    piiAccessLoggedFlag: "orchestrator",
+    piiSubject: "bank_transaction",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
     pendingGuard: null,
     justification: {
-      readOnlyHint: "Because it reads the workspace's already-imported bankTransactions rows and classifies them in process; it writes nothing.",
+      readOnlyHint: `Because it reads the workspace's already-imported bankTransactions rows and classifies them in process; ${ACCESS_LOG_NOTE}.`,
       destructiveHint: "Because no transaction row is altered by the summary.",
       idempotentHint: "Because the same rows produce the same summary and nothing is created.",
       openWorldHint: "Because the rows were imported by the bank feed beforehand: this call contacts no bank, no TrueLayer and no PayPal endpoint."
@@ -537,15 +542,17 @@ const TOOL_REGISTRY = [
     permission: { guard: "nvRequireBankFeedAccess", area: "bankFeed", write: false, financial: false, bankFeed: true, ownerOnly: false },
     riskClass: "A",
     minAssurance: 1,
+    // Same gap, same fix, same flag as get_bank_spending_summary above.
     pii: ["name"],
-    piiAccessLogged: false,
-    piiSubject: null,
+    piiAccessLogged: true,
+    piiAccessLoggedFlag: "orchestrator",
+    piiSubject: "bank_transaction",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
     pendingGuard: null,
     justification: {
-      readOnlyHint: "Because it reads the workspace's already-imported bankTransactions rows and filters them in memory; it writes nothing.",
+      readOnlyHint: `Because it reads the workspace's already-imported bankTransactions rows and filters them in memory; ${ACCESS_LOG_NOTE}.`,
       destructiveHint: "Because searching does not change a transaction row.",
       idempotentHint: "Because the same query returns the same rows and creates nothing.",
       openWorldHint: "Because the rows were imported by the bank feed beforehand: this call contacts no bank or payment provider."
@@ -1206,6 +1213,17 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
       }
     } else if (entry.piiSubject !== null) {
       fail(`"${name}" names a PII subject kind but files no access-log row.`);
+    }
+    // A row that waits on a flag has to name a flag that exists, and only a row
+    // that exists can wait on one. Without this, `piiAccessLoggedFlag: "typo"`
+    // would silently mean "never log".
+    if (entry.piiAccessLoggedFlag !== undefined && entry.piiAccessLoggedFlag !== null) {
+      if (!Object.keys(normalizeFlags({})).includes(entry.piiAccessLoggedFlag)) {
+        fail(`"${name}" waits for a deployment flag "${entry.piiAccessLoggedFlag}" that normalizeFlags does not know.`);
+      }
+      if (!entry.piiAccessLogged) {
+        fail(`"${name}" names a flag for an access-log row it does not declare.`);
+      }
     }
     if (entry.annotations.readOnlyHint === true && entry.piiAccessLogged) {
       if (!/piiAccessLog/.test(entry.justification.readOnlyHint)) {

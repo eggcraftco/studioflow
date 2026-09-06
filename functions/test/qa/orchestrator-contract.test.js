@@ -23,6 +23,7 @@ const envelope = require("../../orchestrator/envelope");
 const render = require("../../orchestrator/render");
 const loaders = require("../../orchestrator/loaders");
 const { createOrchestrator, CAPABILITY_NAMES } = require("../../orchestrator");
+const accessLog = require("../../privacy/accessLog");
 const fixtures = require("../fixtures/orchestrator");
 
 const DOC = fs.readFileSync(path.join(__dirname, "..", "..", "..", "docs", "orchestrator-contract.md"), "utf8");
@@ -340,6 +341,47 @@ checkAsync("the audit record and the PII row carry the channel that asked", asyn
   assert.strictEqual(piiRows.length, 1, "a search that names buyers is an access to log");
   assert.strictEqual(piiRows[0].source, "whatsapp", "the row must say which channel saw the customer");
   assert.deepStrictEqual(piiRows[0].categories, registry.entryFor("search_commerce_orders").pii);
+
+  // The row AS WRITTEN, not as handed over. `accessLog.accessEntry` normalises
+  // `source` against ACCESS_SOURCES, which has no `whatsapp`, so asserting the
+  // pre-normalisation value passed over a row that lands as "unknown". The
+  // channel has to survive somewhere, and the note is where.
+  const written = accessLog.accessEntry(piiRows[0]);
+  assert.strictEqual(written.source, "unknown",
+    "whatsapp is in ACCESS_SOURCES now: say so in the contract §5.4 and §9 and drop this assertion");
+  assert.ok(/channel=whatsapp/.test(written.note), `the channel is not recoverable from the row: ${written.note}`);
+  // A read of a SET says so, the way the MCP dispatcher's row does.
+  assert.ok(/subject=set/.test(written.note), `a set read must say it read a set: ${written.note}`);
+  assert.strictEqual(written.actorRole, "whatsapp_binding",
+    "a WhatsApp read filed a row saying a ChatGPT connection made it");
+  // And the count is not a measurement: the row is written before dispatch.
+  assert.strictEqual(written.recordCount, 1);
+});
+
+checkAsync("both channels decide 'does this read log?' from the same registry field", async () => {
+  // docs/orchestrator-contract.md §5.4: "the registry is the only list, so a
+  // channel cannot describe a read differently from the way the MCP dispatcher
+  // describes it." `run()` keyed on `entry.pii.length > 0` while the dispatcher
+  // keyed on `piiAccessLogged` — two predicates over one table, agreeing on the
+  // ten orchestrator entries and disagreeing on the two bank tools.
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "orchestrator", "index.js"), "utf8");
+  assert.ok(/entry\.piiAccessLogged === true && typeof deps\.recordPiiAccess/.test(source),
+    "run() no longer keys its PII row on the registry's piiAccessLogged");
+
+  // And a capability that declares a category without declaring the row files
+  // nothing — proved, not assumed, by running one.
+  const snapshot = fixtures.mixedSnapshot();
+  const rows = [];
+  const instance = orchestratorOver(snapshot, { recordPiiAccess: async (row) => { rows.push(row); } });
+  const quiet = registry.publishedNames({ orchestrator: true })
+    .filter((name) => CAPABILITY_NAMES.includes(name))
+    .filter((name) => registry.entryFor(name).piiAccessLogged !== true);
+  for (const name of quiet) {
+    assert.deepStrictEqual(registry.entryFor(name).pii, [],
+      `${name} declares pii categories and no access-log row: the two predicates disagree again`);
+  }
+  await instance.run({ capability: "get_commerce_overview", args: {}, ctx: waContext() });
+  assert.deepStrictEqual(rows, []);
 });
 
 checkAsync("a capability that names nobody files no PII row", async () => {
@@ -488,6 +530,44 @@ check("the reserved interfaces are still reserved, and still labelled as such", 
     assert(!(name in instance),
       `${name} exists now: implement it in the contract document too, and take it out of the reserved list`);
   }
+});
+
+check("the two things §5.4 promises about a PII row are written where the code is too", () => {
+  // §5.4 tells a second channel that `recordCount` is always 1 on a read row
+  // and that `actorRole` is derived from the channel. Both are properties of
+  // code an auditor reads elsewhere — `privacy/accessLog.js` normalises the
+  // field and has no vocabulary behind `actorRole` — so the caveat belongs
+  // beside them, not only in this document and the operator's submission page.
+  const accessLogSource = fs.readFileSync(path.join(__dirname, "..", "..", "privacy", "accessLog.js"), "utf8");
+  assert(/before dispatch/i.test(accessLogSource) && /not measured/i.test(accessLogSource),
+    "accessLog.js does not say that a 1 on an assistant read row means \"not measured\"");
+  assert(DOC.includes("`recordCount` is always 1 on a read row"),
+    "§5.4 no longer tells a second channel what the count on its own rows means");
+  assert(DOC.includes("`actorRole` is derived from the channel type"),
+    "§5.4 no longer tells a second channel where actorRole comes from");
+  // And the vocabulary the document points at exists.
+  const { ACTOR_ROLES } = require("../../orchestrator");
+  assert.deepStrictEqual(Object.keys(ACTOR_ROLES).sort(), [...contextModule.CHANNEL_TYPES].sort(),
+    "a channel type with no actorRole would file a row naming another channel's client");
+});
+
+check("the ACCESS_SOURCES the page prints is the one the code has", () => {
+  // The reserved-interface check above iterates three named objects, so the one
+  // reserved item that MOVED was not covered by it: `rest` shipped inside the
+  // 1.2.0 audit corrections and §5.4 went on printing the pre-`rest` array and
+  // calling it a "known gap, not yet fixed", on the page the WhatsApp gateway is
+  // written from. Pinned to the constant now, in both directions.
+  const printed = JSON.stringify(accessLog.ACCESS_SOURCES);
+  assert(DOC.includes(printed), `§5.4 does not print the ACCESS_SOURCES the code has: ${printed}`);
+  for (const value of accessLog.ACCESS_SOURCES) {
+    assert(!DOC.includes(`Adding \`${value}\``) && !DOC.includes(`gaining \`${value}\` and`),
+      `the document still asks for "${value}" to be added to ACCESS_SOURCES, and it is already there`);
+  }
+  const reserved = DOC.indexOf("## 9. Reserved interfaces — not implemented");
+  assert(DOC.indexOf("`ACCESS_SOURCES` gaining `whatsapp`", reserved) > reserved,
+    "the one half of this that is genuinely still reserved is not in the reserved list");
+  assert(!accessLog.ACCESS_SOURCES.includes("whatsapp"),
+    "whatsapp is in ACCESS_SOURCES now: rewrite §5.4 and §9, and drop it from the reserved list");
 });
 
 (async () => {

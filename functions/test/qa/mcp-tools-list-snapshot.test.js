@@ -154,9 +154,19 @@ check("the initialize instructions describe what the flag state actually serves"
   assert.ok(/stale|incomplete/i.test(on), "§14: the model has to be told never to present stale data as live");
 });
 
-check("the fixture says where it came from", () => {
-  assert.ok(/BEFORE the orchestrator/.test(fixture.note),
+check("the fixture says where it came from, and how far that goes", () => {
+  assert.ok(/before the orchestrator capabilities existed/i.test(fixture.note),
     "the recording's provenance is the whole reason it is evidence; keep it written down");
+  // And the limit of the evidence, which the note used to overclaim: it said
+  // the four flag-off states are "independent evidence that the listing OpenAI
+  // is reviewing did not move". bc718e06 is a commit on THIS branch, so what
+  // the fixture proves is that the listing has not moved since it was recorded
+  // — between the merge base and that commit it moved by three tools, four
+  // annotation values and two descriptions, all of them intended.
+  assert.ok(/NOT the deployed/i.test(fixture.note) && /since it was recorded/i.test(fixture.note),
+    "the note claims more than a branch-internal recording can: say what it does not prove");
+  assert.ok(/before the flip/i.test(fixture.note),
+    "the note must name the one thing that closes the gap: diff it against the live listing once");
 });
 
 console.log(failures === 0 ? "\nAll tools/list snapshot checks passed." : `\n${failures} check(s) failed.`);

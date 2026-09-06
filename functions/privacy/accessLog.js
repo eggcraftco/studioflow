@@ -130,6 +130,17 @@ function accessEntry(input = {}) {
     categories,
     // How many records, for a list or an export. One access to four hundred
     // customers and one access to a single customer are not the same event.
+    //
+    // Read a 1 here carefully. The assistant surfaces write their READ row
+    // BEFORE dispatch — the row has to exist whether or not the read then
+    // succeeds — so at the moment it is written nobody knows how many records
+    // the read will return, and it defaults to 1. `search_orders` and
+    // `search_commerce_orders` can project up to a thousand orders under such a
+    // row. The rows that DO carry a real count are the ones written after the
+    // fact: the marketplace-block rows from `orchestrator/index.js`, which
+    // group by provider and reason and set `recordCount` to the orders each
+    // decision covered. A count of 1 on an assistant read means "not measured",
+    // not "one customer".
     recordCount: Math.max(1, Math.min(Number(input.recordCount) || 1, 1000000)),
     requestId: text(input.requestId, 120),
     note: text(input.note, 300)

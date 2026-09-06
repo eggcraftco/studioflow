@@ -38,8 +38,23 @@ const production = require("../production");
  * attention and inbox reads carried no flag at all, so a truncated answer said
  * it was complete. The flag name is the cap's name plus "Capped", and a test
  * pins the two sets against each other.
+ *
+ * Every `.limit()` this file issues has to be one of these constants. Three of
+ * them used to be integer literals written inline — 200 on `bankVendors`, 25 on
+ * each connection collection, 50 on `commerceHealth` — which made them
+ * invisible to the test that pins `CAPS` against `envelope.CAP_WARNINGS` by
+ * construction: a cap that is not in this object cannot fail a check about this
+ * object. The vendor one had a consequence, not just a shape: `bankVendors`
+ * feeds `insights.detectRecurringSpends`, so past 200 vendors the recurring
+ * price-change and stopped-subscription items were counted over a partial list
+ * and the answer said nothing. `orchestrator-loaders.test.js` now reads this
+ * file's own source and refuses any capped read — a `.limit()` of its own or a
+ * limit handed to `readCollection` — whose argument is not a CAPS name.
  */
-const CAPS = Object.freeze({ orders: 1000, bank: 3000, inventory: 2000, payouts: 500, review: 200, attention: 100, inbox: 100 });
+const CAPS = Object.freeze({
+  orders: 1000, bank: 3000, inventory: 2000, payouts: 500, review: 200, attention: 100, inbox: 100,
+  vendors: 200, connections: 25, commerceHealth: 50
+});
 
 /** What each capability declares it needs; the loader reads nothing else. */
 const DOMAINS = Object.freeze([
@@ -186,6 +201,29 @@ function piiBlockRows(decisions = []) {
  * accounting callables ask for can be true while the area map says no
  * (accounting/core/access.js). Anything not named here is readable by anyone
  * the capability's own gate let through.
+ *
+ * `payouts` is a union for the same reason and needs a second gate BELOW it,
+ * because the domain is one word over two bodies of data that live behind two
+ * different doors. A Square payout is written off a commerce connection
+ * (`squareConnections`) and is reported beside sales, so the gate is the one
+ * get_commerce_overview and get_channel_performance sit behind: financial
+ * access. A PayPal payout is written off a `bankConnections` document
+ * (bankFeed.js `paypalConnect` — the same collection `connections.bank` is read
+ * from), so the gate is Banking, and it is applied in `loadPayouts` exactly the
+ * way `loadConnections` applies it to the bank sub-read. Without that second
+ * gate the domain's `default: return true` handed a member with orders and
+ * financial access, and no Banking, the PayPal payout collection — and
+ * `commerce.settlementTotals` published `count/gross/fee/net` from it under
+ * `data.settlements.paypal`, while get_payout_reconciliation_overview refused
+ * the same person with "Bank Spending is not enabled for your role".
+ *
+ * What the union still permits and should not: get_business_attention_summary
+ * declares payouts and gates its payout SECTION on Banking, so a member with
+ * financial access and no Banking has `squarePayouts` read for an answer that
+ * cannot use it. Closing that needs the capability's own gate, not the domain's
+ * — the domain is all `readableDomain` can see — and the read is of the same
+ * commerce collection that member's answer already reads (`squareConnections`),
+ * so it is a wasted read rather than a read of data they were refused.
  */
 function readableDomain(domain, ctx = {}) {
   const areas = (ctx && ctx.areas) || {};
@@ -194,8 +232,26 @@ function readableDomain(domain, ctx = {}) {
     case "receiptInbox": return areas.bankFeed === true;
     case "inventory": return ctx.inventoryAccess === true;
     case "accounting": return ctx.accountingReader === true;
+    case "payouts": return areas.bankFeed === true || ctx.financialInfo === true;
     default: return true;
   }
+}
+
+/**
+ * Which payout collections this caller may see, and where each one comes from.
+ *
+ * Square's rows ride a commerce connection; PayPal's ride a bank connection.
+ * The collection a caller may not read is not read and its key is left OFF the
+ * snapshot — which is not the same as the empty array `loadPayouts` writes for
+ * a collection it DID read and found empty. `payouts.payoutFeedState` tells the
+ * two apart already: for PayPal without Banking it answers
+ * `connection_not_visible` rather than guessing "not connected".
+ */
+function payoutCollectionsFor(ctx = {}) {
+  const areas = (ctx && ctx.areas) || {};
+  const rows = [["square", "squarePayouts"]];
+  if (areas.bankFeed === true) rows.push(["paypal", "paypalPayouts"]);
+  return rows;
 }
 
 function createLoaders({ db, now = () => Date.now() }) {
@@ -248,11 +304,17 @@ function createLoaders({ db, now = () => Date.now() }) {
    * proof of a missing connection. An empty array is a fact: we looked, there
    * were none. Whether the provider is connected is a question about the
    * connection, and `payouts.payoutFeedState` asks it there.
+   *
+   * "Each provider's" means each provider this CALLER may see:
+   * `payoutCollectionsFor` drops the PayPal collection for a caller without the
+   * Banking area, because those rows are written off a bankConnections document.
+   * A collection that was never read has no key at all, which is the third
+   * state, and the only reader that needs it already distinguishes it.
    */
-  async function loadPayouts(companyId) {
+  async function loadPayouts(companyId, ctx) {
     const out = {};
     let capped = false;
-    for (const [provider, collection] of [["square", "squarePayouts"], ["paypal", "paypalPayouts"]]) {
+    for (const [provider, collection] of payoutCollectionsFor(ctx)) {
       const read = await readCollection(company(companyId).collection(collection), CAPS.payouts);
       out[provider] = read.rows;
       // `readCollection` has always returned this and this function used to
@@ -264,9 +326,20 @@ function createLoaders({ db, now = () => Date.now() }) {
     return { payouts: out, capped };
   }
 
+  /**
+   * Every connection this caller may see.
+   *
+   * Six collections, each capped, and the cap used to be an integer literal
+   * with no flag: a workspace past the cap had connections silently missing
+   * from `data.count`, from `needsReconnect` and from the freshness rows built
+   * off them. One `connectionsCapped` flag covers all six — the answer's claim
+   * is "these are your connections", and it is equally untrue whichever of the
+   * six was cut off.
+   */
   async function loadConnections(companyId, ctx) {
     const cid = String(companyId);
     const connections = { shopify: [], etsy: [], woocommerce: [], square: [], bank: [], accounting: [] };
+    let capped = false;
     const rootReads = [
       ["shopify", "shopifyStores"],
       ["etsy", "etsyConnections"],
@@ -274,11 +347,14 @@ function createLoaders({ db, now = () => Date.now() }) {
       ["square", "squareConnections"]
     ];
     for (const [provider, collection] of rootReads) {
-      const snap = await db().collection(collection).where("companyId", "==", cid).limit(25).get();
+      const snap = await db().collection(collection).where("companyId", "==", cid).limit(CAPS.connections).get();
       connections[provider] = snap.docs.map((doc) => projectCommerceConnection(doc.id, doc.data() || {}, provider));
+      capped = capped || snap.size >= CAPS.connections;
     }
     if (ctx && ctx.areas && ctx.areas.bankFeed) {
-      const { rows } = await readCollection(company(cid).collection("bankConnections"), 25);
+      const read = await readCollection(company(cid).collection("bankConnections"), CAPS.connections);
+      const rows = read.rows;
+      capped = capped || read.capped;
       connections.bank = rows.map((row) => ({
         id: row.id,
         provider: String(row.provider || "bank"),
@@ -290,7 +366,9 @@ function createLoaders({ db, now = () => Date.now() }) {
       }));
     }
     if (ctx && ctx.accountingReader) {
-      const { rows } = await readCollection(company(cid).collection("accountingConnections"), 25);
+      const read = await readCollection(company(cid).collection("accountingConnections"), CAPS.connections);
+      const rows = read.rows;
+      capped = capped || read.capped;
       connections.accounting = rows.map((row) => ({
         id: row.id,
         provider: String(row.provider || ""),
@@ -301,12 +379,12 @@ function createLoaders({ db, now = () => Date.now() }) {
         lastSyncAtMs: num(row.lastSyncAtMs)
       }));
     }
-    return connections;
+    return { connections, capped };
   }
 
   async function loadCommerceHealth(companyId) {
-    const snap = await db().collection("commerceHealth").where("companyId", "==", String(companyId)).limit(50).get();
-    return snap.docs.map((doc) => {
+    const snap = await db().collection("commerceHealth").where("companyId", "==", String(companyId)).limit(CAPS.commerceHealth).get();
+    const rows = snap.docs.map((doc) => {
       const data = doc.data() || {};
       return {
         provider: String(data.provider || ""),
@@ -316,6 +394,7 @@ function createLoaders({ db, now = () => Date.now() }) {
         financeLastSuccessAtMs: num((data.finance || {}).lastSuccessAtMs)
       };
     });
+    return { rows, capped: snap.size >= CAPS.commerceHealth };
   }
 
   async function loadReview(companyId) {
@@ -429,7 +508,12 @@ function createLoaders({ db, now = () => Date.now() }) {
     // answer then reports as not_permitted.
     const needs = new Set([...declared].filter((name) => readableDomain(name, ctx)));
     const companyId = ctx.companyId;
-    const snapshot = { companyId, nowMs: now(), settings };
+    // `settings` was the one DOMAINS member with no branch: it rode along on
+    // every snapshot whether or not the capability declared it, so
+    // get_integration_health — the one entry whose domainNeeds omit it —
+    // received it anyway, and the header's "and nothing else" was true of ten
+    // domains and vacuous for the eleventh. It is enforced like the rest now.
+    const snapshot = { companyId, nowMs: now(), settings: needs.has("settings") ? settings : {} };
 
     if (needs.has("orders")) {
       const { rows, capped, piiBlocks } = await loadOrders(companyId, ctx);
@@ -461,7 +545,13 @@ function createLoaders({ db, now = () => Date.now() }) {
       const { rows, capped } = await loadBank(companyId);
       snapshot.bankRows = rows;
       snapshot.bankCapped = capped;
-      const { rows: vendors } = await readCollection(company(companyId).collection("bankVendors"), 200);
+      // `insights.detectRecurringSpends` matches bank rows against this list,
+      // so a truncated vendor list is a recurring-payment count nobody can
+      // check. `readCollection` has always returned `capped`; this call site
+      // dropped it, which is verbatim the mistake `loadPayouts` was fixed for.
+      const vendorRead = await readCollection(company(companyId).collection("bankVendors"), CAPS.vendors);
+      const vendors = vendorRead.rows;
+      snapshot.vendorsCapped = vendorRead.capped;
       snapshot.bankVendors = vendors.map((row) => ({
         id: row.id,
         name: String(row.name || ""),
@@ -480,12 +570,14 @@ function createLoaders({ db, now = () => Date.now() }) {
     // a feed exists (payouts.payoutFeedState), so it reads what this branch
     // loaded rather than fetching a second copy of the same documents.
     if (needs.has("connections")) {
-      snapshot.connections = await loadConnections(companyId, ctx);
+      const connectionRead = await loadConnections(companyId, ctx);
+      snapshot.connections = connectionRead.connections;
+      snapshot.connectionsCapped = connectionRead.capped;
       snapshot.bankConnection = (snapshot.connections.bank || [])[0] || null;
     }
 
     if (needs.has("payouts")) {
-      const payoutRead = await loadPayouts(companyId);
+      const payoutRead = await loadPayouts(companyId, ctx);
       snapshot.payouts = payoutRead.payouts;
       snapshot.payoutsCapped = payoutRead.capped;
       // Bank rows come from the `bank` domain or not at all.
@@ -504,7 +596,11 @@ function createLoaders({ db, now = () => Date.now() }) {
         : [];
     }
 
-    if (needs.has("commerceHealth")) snapshot.commerceHealth = await loadCommerceHealth(companyId);
+    if (needs.has("commerceHealth")) {
+      const healthRead = await loadCommerceHealth(companyId);
+      snapshot.commerceHealth = healthRead.rows;
+      snapshot.commerceHealthCapped = healthRead.capped;
+    }
     if (needs.has("review")) {
       const { queue, held, capped } = await loadReview(companyId);
       snapshot.reviewQueue = queue;
@@ -527,4 +623,4 @@ function createLoaders({ db, now = () => Date.now() }) {
   return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
 }
 
-module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, piiBlockRows, projectCommerceConnection, projectOrderForAssistant, projectBankRow };
+module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, payoutCollectionsFor, piiBlockRows, projectCommerceConnection, projectOrderForAssistant, projectBankRow };

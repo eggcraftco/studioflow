@@ -28,7 +28,20 @@
 
 const envelope = require("./envelope");
 const freshness = require("./freshness");
+const untrusted = require("./untrusted");
 const settlements = require("../commerce/settlements");
+
+/**
+ * Everything on a payout document that the PROVIDER wrote.
+ *
+ * `externalId`, `currency` and `arrivalDate` are stored verbatim by the
+ * connectors (squareConnector.js `set`s the provider's own fields), and all
+ * three land in `data.unmatched[]` and `data.providers[]`, which a model reads
+ * exactly the way it reads a summary line. There is no bound to lose here: a
+ * payout id is an identifier, a currency is three letters and an arrival date
+ * is a day.
+ */
+const providerString = (value, max = 64) => untrusted.safeText(value, { max });
 
 /** Payouts that have left the processor and can be on a statement. */
 const MATCHABLE_STATUSES = new Set(["PAID", "SENT"]);
@@ -150,9 +163,9 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
       row.unmatched += 1;
       totals.unmatched += 1;
       row.unmatchedAmount += Number(payout.amount) || 0;
-      row.currency = row.currency || (payout.currency ? String(payout.currency).toUpperCase() : null);
-      const arrival = payout.arrivalDate || payout.externalCreatedAt || null;
-      if (arrival && (!row.oldestUnmatchedAt || String(arrival) < row.oldestUnmatchedAt)) row.oldestUnmatchedAt = String(arrival);
+      row.currency = row.currency || (payout.currency ? providerString(payout.currency, 12).toUpperCase() : null);
+      const arrival = providerString(payout.arrivalDate || payout.externalCreatedAt, 32) || null;
+      if (arrival && (!row.oldestUnmatchedAt || arrival < row.oldestUnmatchedAt)) row.oldestUnmatchedAt = arrival;
 
       let candidateCount = null;
       if (scanned < REVIEW_SCAN_CAP) {
@@ -173,10 +186,10 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
 
       if (unmatchedRows.length < 25) {
         unmatchedRows.push({
-          payoutId: String(payout.id || payout.externalId || ""),
+          payoutId: providerString(payout.id || payout.externalId, 200),
           provider,
           amount: round2(payout.amount),
-          currency: payout.currency ? String(payout.currency).toUpperCase() : null,
+          currency: payout.currency ? providerString(payout.currency, 12).toUpperCase() : null,
           arrivalDate: arrival,
           candidateCount
         });

@@ -312,13 +312,37 @@ answer has started keeping its own truth.
 ### 5.4 The two PII hooks — WhatsApp must inject both
 
 **What was released.** `recordPiiAccess` is called before dispatch for any capability whose registry
-entry declares `pii` (today: `search_commerce_orders` → name, e-mail, subject `order`;
+entry sets `piiAccessLogged: true` (today: `search_commerce_orders` → name, e-mail, subject `order`;
 `get_banking_attention_summary` → counterparty name, subject `bank_transaction`), with
 `source: ctx.channel.type`. The row's `categories` come from the entry's `pii` and its `subject.kind`
 from the entry's `piiSubject` — the registry is the only list, so a channel cannot describe a read
-differently from the way the MCP dispatcher describes it. MCP does **not** inject this hook, because the
-MCP dispatcher already writes exactly one row per call and two rows for one read is a worse audit than
-none. Any other channel must inject it, or its reads of customer data are unlogged.
+differently from the way the MCP dispatcher describes it. That claim was false while `run()` keyed on
+`entry.pii.length > 0` and the dispatcher keyed on `piiAccessLogged`: two predicates over one table,
+agreeing on today's ten entries and disagreeing on the two bank tools, so the first capability to copy
+that shape would have logged on WhatsApp and not on MCP. Both read `piiAccessLogged` now. MCP does
+**not** inject this hook, because the MCP dispatcher already writes exactly one row per call and two
+rows for one read is a worse audit than none. Any other channel must inject it, or its reads of customer
+data are unlogged.
+
+Three properties of that row a second channel has to know, because they are not obvious from the field
+names:
+
+- **`recordCount` is always 1 on a read row.** It is written BEFORE dispatch — the row has to exist
+  whether or not the read then succeeds — so nothing knows yet how many records the read will return,
+  and `search_commerce_orders` can project up to a thousand orders under such a row. A 1 there means "not
+  measured", not "one customer". The rows that carry a real count are the after-the-fact ones:
+  `recordPiiBlock` (below), which groups by provider and reason. `privacy/accessLog.js` says so where an
+  auditor reads it.
+- **`actorRole` is derived from the channel type**, from `orchestrator.ACTOR_ROLES` — `mcp` and `rest`
+  file `chatgpt_connection`, `whatsapp` files `whatsapp_binding`. It was hardcoded to
+  `chatgpt_connection` in a function whose whole purpose is to be channel-agnostic, so the first WhatsApp
+  read of customer data would have filed a row saying a ChatGPT connection made it. The field is free
+  text in `accessLog.js` (`text(input.actorRole, 60)`), with no closed list to catch a wrong value.
+- **`source` is normalised at write time** against `accessLog.ACCESS_SOURCES`, which has no `whatsapp`
+  (see below), so a WhatsApp row lands as `unknown`. The channel is therefore also written into `note`
+  (`capability=<name> channel=<type>`), which is where it survives. A read of a SET rather than a record
+  adds `subject=set`, the same convention the MCP dispatcher uses for `search_orders` with no `orderId`:
+  an empty `subject.id` with nothing said reads as a row whose subject went missing.
 
 **What was withheld.** `recordPiiBlock` is called after the read for every marketplace decision the
 outbound policy refused (`privacy/outbound.js`: a block nobody can see is indistinguishable from a
@@ -328,11 +352,14 @@ sink makes Amazon and eBay blocks that leave no trace. One row per provider and 
 `recordCount`, not one per order: these capabilities project up to a thousand orders for one question,
 and a thousand identical rows is an audit trail nobody can read.
 
-Known gap, not yet fixed: `functions/privacy/accessLog.js` `ACCESS_SOURCES` is
-`["web","ios","android","mcp","portal","server","unknown"]`, so a WhatsApp row lands as `unknown` today
-— for both hooks. Adding `whatsapp` and `rest` to that list is part of the 1.2.0 audit corrections
-(`docs/mcp-submission-1.2.0.md` §5.5, and §9 below); do it before the first WhatsApp read of customer
-data ships, not after.
+Half done: `functions/privacy/accessLog.js` `ACCESS_SOURCES` is
+`["web","ios","android","mcp","rest","portal","server","unknown"]`. `rest` landed with the 1.2.0 audit
+corrections — `chatgptWorkspaceAction` stamps `surface: "rest"`, and `nvChatGPTOrchestratorRun` derives
+`channel.type` from that same surface, so the access row, the marketplace-block row and the audit record
+of one request all name the same door. `whatsapp` is **still not in the list**, so a WhatsApp row lands
+as `unknown` for both hooks; adding it is §9 below, and it belongs with the first WhatsApp read of
+customer data rather than before it. `orchestrator-contract.test.js` pins this paragraph against the
+constant, so the next half cannot land silently either.
 
 PII rules that hold on every channel: the assistant is told which order and asks before it is told who;
 `restrictedCustomer` never leaves the server without an explicit reveal grant; orders are redacted once,
@@ -383,9 +410,17 @@ data.
 ### 6.3 `warnings[].code` is a closed list
 
 `channel_not_connected`, `channel_adapter_only`, `channel_not_supported`, `channel_excluded_auth`,
-`channel_stale`, `status_not_visible_from_this_surface`, `loader_cap_reached`, `plan_limited`,
-`section_not_permitted`, `unsupported_metric`, `estimated`, `mixed_currency`, `tax_needs_review`,
-`needs_review_truncated`, `source_state_unknown`.
+`channel_stale`, `status_not_visible_from_this_surface`, `loader_cap_reached`, `result_truncated`,
+`plan_limited`, `section_not_permitted`, `unsupported_metric`, `estimated`, `mixed_currency`,
+`tax_needs_review`, `needs_review_truncated`, `source_state_unknown`.
+
+`loader_cap_reached` and `result_truncated` are different facts and are not interchangeable. The first
+means a READ stopped at its cap, and it sets `partial: true`; the second means the caller asked for a
+page and got one, and it does not. They shared a code until September 2026, so an ordinary `limit: 5`
+over thirty matching orders reported `partial: true` and rendered "This answer is incomplete: 30 orders
+match; the first 5 are listed." — and, worse, when a real cap HAD been hit the single incompleteness
+line quoted whichever message came first, so a read that stopped at a thousand documents hid behind the
+paging message. `render.js` now prefers a `CAP_WARNINGS` sentence for that line.
 
 A new kind of incompleteness has to be named in `envelope.WARNING_CODES` next to the others, and the
 renderer taught to say it. An open string bag lets a capability invent `amazon_probably_fine` and nobody
@@ -413,7 +448,17 @@ Redaction follows the value, not the field name, because money reaches a reader 
   "amount" }` is withheld and `{ key: "count" }` is not: a rule reading the literal field name `value`
   destroys the counts a shared thread may see and keeps the amounts it may not;
 - a **sentence** — `"420 GBP still outstanding"`, written by a detector. Amounts in any string become
-  `[amount withheld]`, so the line still reads as a line and says what was removed.
+  `[amount withheld]`, so the line still reads as a line and says what was removed. The match is on the
+  SHAPE — a number beside any Unicode currency symbol or any three-letter uppercase token — not on a
+  list of codes: the list had thirteen entries while `money.SYMBOL_TO_ISO` offers seventeen currencies
+  and `money.currencyOf` accepts any `/^[A-Z]{3}$/` a provider supplies, so an INR, BRL, RUB, UAH, ILS or
+  AED workspace handed a group thread its outstanding balance verbatim;
+- an ordinary **money-named number on a row that names its own currency** — `{ payoutId, amount,
+  currency }`. The first three shapes missed this one for a whole capability:
+  `get_payout_reconciliation_overview` rendered "Payout matching figures are not shown in this channel"
+  while `data.providers[].unmatchedAmount` and `data.unmatched[].amount` carried the figure into the
+  payload a model reads. The `currency` marker is what keeps counts safe: `heldForReview.total` and
+  `data.totalItems` are money-NAMED and carry no currency, and a shared thread keeps them.
 
 For `pii_level: "none"`: `customer`, `customerName`, `customerEmail`, `email` and `phone` are replaced,
 and an `entityRef` of type `bankTransaction` or `note` keeps its `id` and loses its `label` with
@@ -446,7 +491,13 @@ empty slots are dropped. Three rules the render tests pin:
   overrides and zero-width joiners removed, whitespace collapsed so nothing can span a line, hard length
   cap. `safeReference` is for a value that is meant to be an IDENTIFIER, and **refuses** one that is not
   reference-shaped rather than truncating it, because a shortened injection is the same attack with
-  fewer words — an order whose number is a sentence is named by its NivaDesk id instead.
+  fewer words — an order whose number is a sentence is named by its NivaDesk id instead. A reference may
+  carry a dot (`1001.2`) or a slash (`2026/001`, `INV/2026/014` are ordinary European order numbers) and
+  never both: a dot AND a slash in one token is `host.tld/path`, which is what a chat client linkifies,
+  what a person taps and what a browsing-capable model may fetch out of `data.orders[].orderNumber`. The
+  earlier rule refused only `//` and a leading `www.`, on the argument that an absolute URL needs a colon
+  or a double slash — true of absolute URLs and beside the point, since a WooCommerce shop controls the
+  field and `bit.ly/3xR9kQz` and `nivadesk-support.com/verify-now` are neither.
 
   It is applied twice on purpose: at the source, so the structured `data` a model reads is bounded and
   not only the rendered line (`attention.js`'s order label, `envelope.entityRef`'s label, which is where
@@ -530,19 +581,40 @@ the caller may see it, so a member whose banking section the answer reports as `
 have the bank feed, the vendor list or the receipt inbox read on their behalf either. `bank` is
 deliberately the union of two predicates — the `bankFeed` area or the accounting reader — because two
 capabilities behind two different gates declare it, and a custom role can carry one without the other.
+`payouts` is a union for the same reason and is gated twice, because the domain is one word over two
+bodies of data behind two different doors. A Square payout is written off a commerce connection
+(`squareConnections`) and reported beside sales, so the domain gate is financial access; a PayPal payout
+is written off a `bankConnections` document (`bankFeed.js` `paypalConnect`), so `loadPayouts` reads that
+collection only for a caller with the Banking area, the way `loadConnections` already gated its bank
+sub-read. Without the second gate a member with orders and financial access and no Banking had
+`companies/{cid}/paypalPayouts` read, and `commerce.settlementTotals` published its `count/gross/fee/net`
+under `data.settlements.paypal`, while `get_payout_reconciliation_overview` refused the same person with
+"Bank Spending is not enabled for your role." A collection a caller may not read has **no key** on the
+snapshot, which is a third state distinct from the empty array a read collection gets, and
+`payouts.payoutFeedState` already tells them apart: for PayPal without Banking it answers
+`connection_not_visible` rather than guessing "not connected".
+
 A capability that reads a collection outside its declared domains fails `orchestrator-loaders.test.js`,
 which is generic: it records every path the handle was asked for and matches it against the declaration.
 
 Loader caps, per call: orders 1000, bank 3000, inventory 2000, payouts 500 per provider, review 200
-(each of the two collections), attention 100, inbox 100. Hitting one sets `<name>Capped` on the
-snapshot, which every capability turns into a `loader_cap_reached` warning through
-`envelope.capWarnings(snapshot)`, and that warning sets `partial: true` inside `envelope.finish` — a
-truncated answer says it is truncated. Four of the seven used to be silent (this paragraph and
-loaders.js both claimed otherwise): `bankCapped` was written and read by nobody, and the payout,
-review, attention and inbox reads carried no flag at all, so `heldForReview.total` and the accounting
-readiness figure were stated as facts over reads that could have been cut off.
-`orchestrator-loaders.test.js` now pins the cap names against `envelope.CAP_WARNINGS` and fills every
-capped collection to its cap to check each capability says so.
+(each of the two collections), attention 100, inbox 100, vendors 200, connections 25 (each of the six
+connection collections), commerceHealth 50. Hitting one sets `<name>Capped` on the snapshot, which every
+capability turns into a `loader_cap_reached` warning through `envelope.capWarnings(snapshot)`, and that
+warning sets `partial: true` inside `envelope.finish` — a truncated answer says it is truncated.
+
+Seven of the ten used to be silent, in two different ways, and both this paragraph and loaders.js
+claimed otherwise. First `bankCapped` was written and read by nobody while the payout, review, attention
+and inbox reads carried no flag at all, so `heldForReview.total` and the accounting readiness figure were
+stated as facts over reads that could have been cut off. Then the fix for that left three caps written as
+integer literals at their call sites — `bankVendors` 200, the connection reads 25, `commerceHealth` 50 —
+which made them invisible to the test pinning `CAPS` against `envelope.CAP_WARNINGS`, because that test
+compares two lists with each other. The vendor one had a consequence: `bankVendors` is what
+`insights.detectRecurringSpends` matches against, so "N recurring payment(s) changed price" was counted
+over a list that could have been cut off with nothing said. `orchestrator-loaders.test.js` now pins the
+cap names against `envelope.CAP_WARNINGS`, fills every capped collection to its cap to check each
+capability says so, AND reads loaders.js's own source to refuse a `.limit()` whose argument is not a
+`CAPS` constant.
 
 ---
 
@@ -569,7 +641,9 @@ shrinks with it.
   no second note, no second status change and no second customer message (WA §42–§43).
 - **`request.idempotencyKey` / `providerMessageId` enforcement.** Accepted and carried today; deduplication
   is the gateway's until a write capability needs it.
-- **`ACCESS_SOURCES` gaining `whatsapp` and `rest`** (§5.4).
+- **`ACCESS_SOURCES` gaining `whatsapp`** (§5.4). `rest` is already in the list and is not reserved;
+  `whatsapp` is the remaining half, and until it is taken a WhatsApp PII row is written with
+  `source: "unknown"` and the channel recoverable only from `note`.
 - **`FIRST_PARTY_AUTH_TYPES` gaining `whatsapp_binding`** (§3.1). One line in
   `orchestrator/context.js`, and the thing that unblocks CH-2's first call — but it exempts a channel
   from the scope gate, so it is a reviewed decision and not a patch. What has to be true before it is

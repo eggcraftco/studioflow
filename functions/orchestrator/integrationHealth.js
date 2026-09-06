@@ -252,12 +252,23 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
     }
   }
 
-  // Banking and accounting rows are permission-gated separately from commerce.
+  // Banking and accounting rows are permission-gated separately from commerce —
+  // and filtered by the same `provider` argument as everything else. They were
+  // not: `wanted` was honoured by the commerce loop, by the Amazon row, by the
+  // eBay row and by `heldForReview`, and ignored by these two blocks, whose
+  // rows then fed `count`, `considered` and `needsReconnect`. So
+  // `get_integration_health({ provider: "shopify" })` on a workspace with two
+  // bank connections and a Xero one answered "3 connection(s) set up; 1 need
+  // reconnecting" and named a BANK as the thing to reconnect. That is the same
+  // class of wrong number the `count`/`considered` split was written to fix,
+  // corrected for the empty workspace and left standing for the filtered one.
   if (ctx.areas && ctx.areas.bankFeed) {
     for (const connection of (connections.bank || [])) {
+      const provider = providerKey(connection.provider, "bank");
+      if (wanted && wanted !== provider.toLowerCase()) continue;
       const syncState = String(connection.syncState || "");
       rows.push({
-        provider: providerKey(connection.provider, "bank"),
+        provider,
         connectionId: String(connection.id || ""),
         account: accountLabel(connection.institutionName || connection.accountLabel || ""),
         connectionKnown: true,
@@ -274,7 +285,11 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         mode: "read_only"
       });
       sources.push(freshness.sourceRow({
-        provider: String(connection.provider || "bank"),
+        // The bounded key, not the raw one. This row leaves the server in
+        // `freshness.sources[]` and `freshness.build` interpolates it into a
+        // warning sentence, so passing the value `providerKey` had just
+        // cleaned, raw, seventeen lines below it was the whole gap.
+        provider,
         connectionId: connection.id,
         entity: "finance",
         kind: "bank",
@@ -289,8 +304,10 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
 
   if (ctx.accountingReader) {
     for (const connection of (connections.accounting || [])) {
+      const provider = providerKey(connection.provider, "accounting");
+      if (wanted && wanted !== provider.toLowerCase()) continue;
       rows.push({
-        provider: providerKey(connection.provider, "accounting"),
+        provider,
         connectionId: String(connection.id || ""),
         account: accountLabel(connection.companyName || connection.realmName || ""),
         connectionKnown: true,
@@ -304,7 +321,8 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         reviewCount: { queue: 0, held: 0 },
         lastSuccessfulSync: connection.lastSyncAtMs ? new Date(Number(connection.lastSyncAtMs)).toISOString() : null,
         reconnectRequired: authStatusOf(connection) === "reconnect_required",
-        mode: String(connection.mode || "read_only")
+        // The ledger's own word for its mode, bounded like the rest of the row.
+        mode: untrusted.safeText(connection.mode, { max: 40 }) || "read_only"
       });
     }
   } else {

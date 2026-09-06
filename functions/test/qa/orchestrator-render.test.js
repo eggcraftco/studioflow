@@ -15,6 +15,7 @@ const freshness = require("../../orchestrator/freshness");
 const fixtures = require("../fixtures/orchestrator");
 const { projectOrderForAssistant } = require("../../orchestrator/loaders");
 const untrusted = require("../../orchestrator/untrusted");
+const { CAPABILITY_NAMES } = require("../../orchestrator");
 
 /** The smallest snapshot get_accounting_sync_status answers over. */
 const accountingSnapshot = () => ({
@@ -77,20 +78,48 @@ check("the slots come out in the §13 order and empty ones are dropped", () => {
   assert.ok(slots.includes("result"), "an answer always starts with the answer");
 });
 
+/**
+ * Every capability, with a snapshot that exercises the lines it writes.
+ *
+ * The list is checked against `orchestrator.CAPABILITY_NAMES` below, because a
+ * per-capability rule tested over a hand-picked subset is a rule about the
+ * subset. `get_channel_performance` and `search_inventory_items` were both
+ * missing from the numerals check, and the first of them had the defect that
+ * check exists to catch.
+ */
+const ALL_CAPABILITIES = () => [
+  ["get_commerce_overview", commerce.commerceOverview, fixtures.mixedSnapshot(), RANGE],
+  ["search_commerce_orders", commerce.searchCommerceOrders, fixtures.mixedSnapshot(), {}],
+  ["get_channel_performance", commerce.channelPerformance, fixtures.mixedSnapshot(), RANGE],
+  ["get_business_attention_summary", attention.businessAttentionSummary, fixtures.attentionSnapshot(), {}],
+  ["get_banking_attention_summary", attention.bankingAttentionSummary, fixtures.attentionSnapshot(), {}],
+  ["get_inventory_overview", inventory.inventoryOverview, fixtures.attentionSnapshot(), {}],
+  ["search_inventory_items", inventory.searchInventoryItems, fixtures.attentionSnapshot(), {}],
+  ["get_payout_reconciliation_overview", payouts.payoutReconciliation, fixtures.attentionSnapshot(), {}],
+  ["get_integration_health", integrationHealth.integrationHealth, fixtures.mixedSnapshot(), {}],
+  ["get_accounting_sync_status", accountingStatus.accountingSyncStatus, accountingSnapshot(), {}]
+];
+
+check("the capability list these rules run over is the whole registry, not a sample", () => {
+  assert.deepStrictEqual(
+    ALL_CAPABILITIES().map(([name]) => name).sort(),
+    [...CAPABILITY_NAMES].sort(),
+    "a capability exists that the render rules below do not cover"
+  );
+});
+
 check("every number in a summary line exists in the data it summarises", () => {
   // A renderer that computes its own total is a second implementation of the
   // arithmetic, and the two drift.
-  // Every capability whose lines carry a numeral, not a sample of them: the rule
-  // is only worth something if it covers the line that would break it.
-  for (const [capability, handler, snapshot, args] of [
-    ["get_commerce_overview", commerce.commerceOverview, fixtures.mixedSnapshot(), RANGE],
-    ["search_commerce_orders", commerce.searchCommerceOrders, fixtures.mixedSnapshot(), {}],
-    ["get_business_attention_summary", attention.businessAttentionSummary, fixtures.attentionSnapshot(), {}],
-    ["get_inventory_overview", inventory.inventoryOverview, fixtures.attentionSnapshot(), {}],
-    ["get_payout_reconciliation_overview", payouts.payoutReconciliation, fixtures.attentionSnapshot(), {}],
-    ["get_integration_health", integrationHealth.integrationHealth, fixtures.mixedSnapshot(), {}],
-    ["get_accounting_sync_status", accountingStatus.accountingSyncStatus, accountingSnapshot(), {}]
-  ]) {
+  //
+  // Every capability, not a sample of them: the rule is only worth something if
+  // it covers the line that would break it. The old list omitted
+  // get_channel_performance — whose "7 channel(s) had orders in this range" was
+  // a numeral the renderer counted itself, present nowhere in the payload — and
+  // search_inventory_items, and it passed get_accounting_sync_status by
+  // accident, because that fixture's single connection is called "qbo_1" so the
+  // numeral 1 happened to be in `data`.
+  for (const [capability, handler, snapshot, args] of ALL_CAPABILITIES()) {
     const built = envelopeFor(capability, handler, snapshot, args);
     const inData = new Set(numeralsIn(JSON.stringify(built.data)));
     for (const line of built.summary.lines) {
@@ -99,6 +128,44 @@ check("every number in a summary line exists in the data it summarises", () => {
       }
     }
   }
+});
+
+check("a headline count is a field in data, not a filter the renderer runs", () => {
+  // The numerals check above can only see a numeral that is ABSENT from the
+  // payload, and a recomputed count usually collides with some other number in
+  // it — which is how "${data.connections.length} accounting connection(s)"
+  // survived: that fixture's one connection is called "qbo_1". The rule is not
+  // "the numeral happens to appear", it is "the renderer does not do the
+  // arithmetic", so it is asserted directly: give `data` a count that differs
+  // from what a filter would produce and the line has to follow `data`.
+  const cases = [
+    ["get_channel_performance", { currency: "GBP", channelsWithOrders: 9, channels: [{ channel: "shopify", orders: 2, amounts: [] }, { channel: "etsy", orders: 1, amounts: [] }] }, /^9 channel\(s\) had orders/],
+    ["get_accounting_sync_status", {
+      connectionCount: 7,
+      connections: [{ provider: "quickbooks", connectionId: "a" }, { provider: "xero", connectionId: "b" }],
+      readiness: { ready: 0, mappingSource: "default" }
+    }, /^7 accounting connection\(s\)/]
+  ];
+  for (const [capability, data, expected] of cases) {
+    const built = envelope.finish({ capability, data, nowMs: fixtures.NOW });
+    built.summary.lines = render.summaryFor(built, { style: "chat" });
+    const result = built.summary.lines.find((row) => row.slot === "result");
+    assert.ok(expected.test(result.text), `${capability}: the renderer counted for itself: ${result.text}`);
+  }
+
+  // And the capabilities really emit the fields, with the right value — a field
+  // the renderer reads and nobody writes is worse than the filter it replaced.
+  const channels = commerce.channelPerformance(fixtures.mixedSnapshot(), RANGE, ctx, { nowMs: fixtures.NOW });
+  assert.strictEqual(channels.data.channelsWithOrders, channels.data.channels.filter((row) => row.orders > 0).length);
+  const accountingThree = accountingSnapshot();
+  accountingThree.connections.accounting = [
+    { id: "qbo", provider: "quickbooks", companyName: "A", mode: "read_only", status: "connected", lastSyncAtMs: fixtures.NOW },
+    { id: "xero", provider: "xero", companyName: "B", mode: "read_only", status: "connected", lastSyncAtMs: fixtures.NOW },
+    { id: "pandle", provider: "pandle", companyName: "C", mode: "read_only", status: "connected", lastSyncAtMs: fixtures.NOW }
+  ];
+  const accounts = envelopeFor("get_accounting_sync_status", accountingStatus.accountingSyncStatus, accountingThree, {});
+  assert.strictEqual(accounts.data.connectionCount, 3);
+  assert.ok(accounts.summary.lines.some((row) => /^3 accounting connection\(s\)/.test(row.text)));
 });
 
 check("a withheld figure is said to be withheld, never rendered as zero", () => {
@@ -262,6 +329,50 @@ check("the structured data a model reads is bounded too, in every capability tha
   }
 });
 
+/** Every string anywhere in a finished envelope, with the path that carried it. */
+function stringsInEnvelope(built) {
+  const out = [];
+  for (const field of ["data", "entityRefs", "warnings", "freshness", "suggestedActions"]) {
+    stringsIn(built[field], field, out);
+  }
+  for (const [index, row] of (built.summary.lines || []).entries()) out.push([`summary.lines[${index}]`, row.text]);
+  return out;
+}
+
+check("no capability puts unbounded, multi-line or control-carrying provider text anywhere in an envelope", () => {
+  // The structural version of the check above, and the reason it exists: the
+  // first version of that check named three capabilities — the three the commit
+  // that wrote it had touched — and looked at `built.data` and
+  // `built.entityRefs` only. Seven of the other capabilities leaked, and two of
+  // the leaks were not in `data` at all: `envelope.warning` applied
+  // `String(message)` with no bound while `freshness.build` interpolated a bank
+  // connection's own provider key into four warning sentences, so a
+  // never-synced connection produced a 323-character multi-line `message`, a
+  // 242-character `channel`, and 227 characters of injected prose quoted into a
+  // rendered summary line.
+  //
+  // So: every capability, over every string the envelope carries.
+  const snapshot = fixtures.poisonedSnapshot();
+  for (const [capability, handler] of ALL_CAPABILITIES()) {
+    const built = envelopeFor(capability, handler, snapshot, {});
+    const strings = stringsInEnvelope(built);
+    assert.ok(strings.length > 0, `${capability}: nothing to check — the fixture no longer reaches it`);
+    for (const [path, value] of strings) {
+      // The module's own predicate for "this line still carries something it
+      // must not", used by the test that the invariant is for. It was exported
+      // and called by nothing, tests included, which is a fair summary of how
+      // seven capabilities went unchecked.
+      assert.ok(!untrusted.hasUnsafeCharacters(value),
+        `${capability}: ${path} carries a control, bidi or zero-width character`);
+      assert.ok(!/[\n\r]/.test(value), `${capability}: ${path} spans two lines`);
+      // 300 is render.LINE_MAX and envelope.WARNING_MESSAGE_MAX — the widest
+      // bound anything in an envelope is given. Unbounded is the defect.
+      assert.ok(value.length <= 300, `${capability}: ${path} is ${value.length} characters of somebody else's text`);
+      assert.ok(!value.includes(fixtures.POISON), `${capability}: ${path} is the payload verbatim`);
+    }
+  }
+});
+
 check("an order label cannot be a link, and can still be a slash-numbered order", () => {
   // `safeReference` admitted ":" and "/", so a shop could render
   // "Order http://evil.co/x needs attention" into a sentence a model reads and
@@ -272,6 +383,16 @@ check("an order label cannot be a link, and can still be a slash-numbered order"
   for (const link of ["http://evil.co/x", "https://evil.co", "//evil.co/x", "www.evil.co/x", "ignore.previous:instructions/now"]) {
     assert.strictEqual(label(link), "ord_1", `${link} reached a summary line as an order label`);
   }
+  // The shape people actually click, and the one this list did not have. The
+  // module's stated defence was that "a URL a renderer would treat as absolute
+  // cannot be written without a colon or a double slash" — true of absolute
+  // URLs and beside the point, because `host.tld/path` is what a chat client
+  // linkifies, what a person taps, and what a browsing-capable model may fetch
+  // out of `data.orders[].orderNumber`. WhatsApp, the second channel this
+  // contract exists for, linkifies exactly this.
+  for (const link of ["bit.ly/3xR9kQz", "t.co/aBcD", "tinyurl.com/x1", "goo.gl/abc", "evil.co/pay", "nivadesk-support.com/verify-now"]) {
+    assert.strictEqual(label(link), "ord_1", `${link} reached a summary line as an order label`);
+  }
   // And the legitimate cases the finding's "drop : and / both" would have cost:
   // slash-separated numbering is ordinary, and refusing it loses the label AND
   // the orderNumber field in a search result.
@@ -280,6 +401,103 @@ check("an order label cannot be a link, and can still be a slash-numbered order"
   }
   // A sentence is still refused, not truncated.
   assert.strictEqual(label(ORDER_NUMBER_INJECTION), "ord_1");
+});
+
+check("a group thread that may not see money gets none of it, in any capability", () => {
+  // §6.4: "a group thread gets the same answer with the person and the money
+  // taken out whatever the capability wrote." The checks that pinned this read
+  // `built.summary.lines` (a sentence saying a figure is withheld) and
+  // hand-built objects shaped like a search result. Neither looked at a real
+  // capability's redacted `data`, and
+  // get_payout_reconciliation_overview put the figure there twice —
+  // `data.providers[].unmatchedAmount` and `data.unmatched[].amount` — under
+  // the very line that said payout figures are not shown in this channel.
+  //
+  // The rule, generically: an object that names its own `currency` is holding
+  // money, so no money-named number may survive on one.
+  const moneyLeaks = (value, path, out = []) => {
+    if (Array.isArray(value)) value.forEach((row, index) => moneyLeaks(row, `${path}[${index}]`, out));
+    else if (value && typeof value === "object") {
+      const carriesCurrency = Object.prototype.hasOwnProperty.call(value, "currency");
+      for (const [key, inner] of Object.entries(value)) {
+        if (carriesCurrency && typeof inner === "number" && envelope.MONEY_NAME.test(key)) out.push([`${path}.${key}`, inner]);
+        moneyLeaks(inner, `${path}.${key}`, out);
+      }
+    }
+    return out;
+  };
+  for (const [capability, handler, snapshot, args] of ALL_CAPABILITIES()) {
+    const built = envelopeFor(capability, handler, snapshot, args, GROUP);
+    const leaks = moneyLeaks(built.data, "data");
+    assert.deepStrictEqual(leaks, [], `${capability}: the payload still carries ${JSON.stringify(leaks)}`);
+  }
+  // And specifically the capability that was leaking, so this cannot pass by
+  // the fixture happening to have no unmatched payout.
+  const payoutSnapshot = fixtures.attentionSnapshot();
+  const open = envelopeFor("get_payout_reconciliation_overview", payouts.payoutReconciliation, payoutSnapshot, {});
+  assert.ok(open.data.unmatched.length > 0 && open.data.providers.some((row) => row.unmatchedAmount > 0),
+    "the fixture no longer has an unmatched payout, so this check proves nothing");
+  const shut = envelopeFor("get_payout_reconciliation_overview", payouts.payoutReconciliation, payoutSnapshot, {}, GROUP);
+  assert.strictEqual(shut.data.unmatched[0].amount.restricted, true);
+  assert.strictEqual(shut.data.providers.find((row) => row.available).unmatchedAmount.restricted, true);
+});
+
+check("a sentence carrying money is redacted in every currency the app offers, not thirteen of them", () => {
+  // attention.js writes "${amount} ${currency} still outstanding." into
+  // data.items[].reason — the one shape §6.4 names as the hard case. The rule
+  // was a hand-maintained list of five symbols and thirteen ISO codes, while
+  // money.SYMBOL_TO_ISO lists seventeen currencies a workspace can pick and
+  // money.currencyOf accepts any /^[A-Z]{3}$/ an order or a provider supplies.
+  // So an INR, BRL, RUB, UAH, ILS or AED workspace handed a group thread the
+  // outstanding balance verbatim.
+  const scrub = (text) => envelope.applyChannelProfile({ items: [{ reason: text }] }, GROUP).items[0].reason;
+  for (const code of ["GBP", "INR", "AED", "ZAR", "BRL", "RUB", "UAH", "ILS", "PLN"]) {
+    assert.ok(/\[amount withheld\]/.test(scrub(`420 ${code} still outstanding.`)), `${code} amounts are not withheld`);
+  }
+  for (const symbol of ["£", "₹", "R$", "₽", "₴", "₪", "€", "$"]) {
+    assert.ok(/\[amount withheld\]/.test(scrub(`${symbol}12000 still outstanding.`)), `${symbol} amounts are not withheld`);
+  }
+  // And what a shared thread IS allowed to read still reads: the counts and the
+  // durations must survive, or the redaction has eaten the answer.
+  assert.strictEqual(scrub("An estimate has been waiting for 5 day(s)."), "An estimate has been waiting for 5 day(s).");
+  assert.strictEqual(scrub("3 order(s) need attention."), "3 order(s) need attention.");
+  assert.strictEqual(scrub("Due 2026-09-10 and not dispatched."), "Due 2026-09-10 and not dispatched.");
+});
+
+check("the one incompleteness line quotes the truncated READ, never the page", () => {
+  // Two things used to share `loader_cap_reached`: a read that stopped at its
+  // cap, and an ordinary `limit` page. render.js emits ONE "This answer is
+  // incomplete" line, from `excluded[0]`, and the pagination message was pushed
+  // first — so a search over an order read that had stopped at 1000 documents
+  // told the reader the only incompleteness was paging.
+  const snapshot = fixtures.mixedSnapshot();
+  snapshot.ordersCapped = true;
+  const built = envelopeFor("search_commerce_orders", commerce.searchCommerceOrders, snapshot, { limit: 1 });
+  const incomplete = built.summary.lines.find((row) => /This answer is incomplete/.test(row.text));
+  assert.ok(incomplete, "a truncated read said nothing at all");
+  assert.ok(/order read hit its cap/.test(incomplete.text), `the paging message jumped the queue: ${incomplete.text}`);
+
+  // And a page on its own is not an incomplete answer. The Amazon order is
+  // dropped first: its connection status is invisible from this surface, which
+  // makes the answer partial for a reason that has nothing to do with paging.
+  const clean = fixtures.mixedSnapshot();
+  clean.orders = clean.orders.filter((order) => String((order.commerce || {}).provider || "") !== "amazon");
+  const paged = envelopeFor("search_commerce_orders", commerce.searchCommerceOrders, clean, { limit: 1 });
+  assert.strictEqual(paged.data.matched > paged.data.count, true, "the fixture no longer pages");
+  assert.strictEqual(paged.partial, false, "asking for one row of four made the whole answer partial");
+  assert.ok(paged.warnings.some((row) => row.code === "result_truncated"), "a page must still say it is a page");
+  assert.ok(!paged.warnings.some((row) => row.code === "loader_cap_reached"), "paging is still filed as a truncated read");
+  assert.ok(!paged.summary.lines.some((row) => /incomplete/.test(row.text)), "a paged answer still renders as incomplete");
+
+  // The two paging capabilities behave the same way now; one of them used to
+  // truncate at `limit` and say nothing at all.
+  const shelf = fixtures.attentionSnapshot();
+  shelf.inventoryItems = [...shelf.inventoryItems, { ...shelf.inventoryItems[0], id: "i_low_2" }];
+  const items = envelopeFor("search_inventory_items", inventory.searchInventoryItems, shelf, { limit: 1 });
+  assert.strictEqual(items.data.count, 1);
+  assert.strictEqual(items.data.matched, 2);
+  assert.ok(items.warnings.some((row) => row.code === "result_truncated"), "a truncated shelf search still says nothing");
+  assert.strictEqual(items.partial, false);
 });
 
 check("a line is bounded and single-line, whatever the capability put in the data", () => {

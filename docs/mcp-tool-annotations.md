@@ -99,8 +99,10 @@ attention queue is READ, never opened through `store.openAttention`, which would
 on every call), they overwrite nothing, the same question over the same data gives the same answer, and
 none of them contacts a shop, a bank, a marketplace or an accounting provider. What differs between them is
 which gate they sit behind and whether they hand over a person: `search_commerce_orders` and
-`get_banking_attention_summary` do, and both declare `piiAccessLogged: true`, which is the one list the
-dispatcher derives its PII set from, so each call files exactly one access-log row — carrying that
+`get_banking_attention_summary` do, and both declare `piiAccessLogged: true`, which is the one list BOTH
+the dispatcher and the channel-agnostic `run()` derive their PII set from — `run()` used to key on
+`entry.pii.length > 0` instead, which is a second predicate over one table — so each call files exactly
+one access-log row — carrying that
 entry's own `pii` categories and its own `piiSubject`, not a fixed four and a guessed subject — the orchestrator itself is built without `recordPiiAccess` on
 this surface so a single call cannot file two. `functions/test/qa/orchestrator-purity.test.js` is what
 keeps the first half of that claim true: it fails the build if any module under `functions/orchestrator/`
@@ -251,14 +253,14 @@ discovery document exposes as `annotationJustification`.
 
 ### `get_bank_spending_summary`
 
-- **readOnlyHint true** — Because it reads the workspace's already-imported bankTransactions rows and classifies them in process; it writes nothing.
+- **readOnlyHint true** — Because it reads the workspace's already-imported bankTransactions rows and classifies them in process; the only write it makes is the piiAccessLog row recording the read.
 - **destructiveHint false** — Because no transaction row is altered by the summary.
 - **idempotentHint true** — Because the same rows produce the same summary and nothing is created.
 - **openWorldHint false** — Because the rows were imported by the bank feed beforehand: this call contacts no bank, no TrueLayer and no PayPal endpoint.
 
 ### `search_bank_transactions`
 
-- **readOnlyHint true** — Because it reads the workspace's already-imported bankTransactions rows and filters them in memory; it writes nothing.
+- **readOnlyHint true** — Because it reads the workspace's already-imported bankTransactions rows and filters them in memory; the only write it makes is the piiAccessLog row recording the read.
 - **destructiveHint false** — Because searching does not change a transaction row.
 - **idempotentHint true** — Because the same query returns the same rows and creates nothing.
 - **openWorldHint false** — Because the rows were imported by the bank feed beforehand: this call contacts no bank or payment provider.
@@ -289,14 +291,19 @@ discovery document exposes as `annotationJustification`.
 Three things this pass found and deliberately did not change, because each is a behaviour change rather
 than an annotation, and the surface under review must not move on its own:
 
-1. **The two bank tools hand over a person's name without an access-log row.** `get_bank_spending_summary`
-   and `search_bank_transactions` are honest `readOnlyHint: true` — they write nothing at all — but a
-   person-to-person payment carries a person in `counterparty`, and `linkedOrderLabel` can carry a
-   customer's name. Both declare `piiAccessLogged: false`, so these two reads are not recorded. The
-   registry declares `pii: ["name"], piiAccessLogged: false` so the gap is written down rather than
-   implied, and the test pins which tools log so neither the gap nor its closing can happen silently.
-   Closing it means flipping two flags — a new write on a read path, which is a decision for the same
-   submission.
+1. **The two bank tools now record the read, behind the same flag as everything else.**
+   `get_bank_spending_summary` and `search_bank_transactions` hand over a person: a person-to-person
+   payment carries one in `counterparty`, and `linkedOrderLabel` can carry a customer's name. Both used
+   to declare `piiAccessLogged: false`, so these two reads were the only PII paths on this surface that
+   recorded nothing — while `get_banking_attention_summary`, the newest door to the same data, declares
+   the same category and logs. The argument for leaving it that way was that turning a write on for the
+   live 1.1.1 connection is an operator's decision rather than a merge's. That is right about the risk
+   and wrong about the remedy: every other behaviour change in this round ships behind
+   `NIVADESK_MCP_ORCHESTRATOR`, and so does this one. The registry declares
+   `piiAccessLogged: true, piiAccessLoggedFlag: "orchestrator", piiSubject: "bank_transaction"`,
+   `nvMcpPiiLogFlagOn` is the one place that reads the flag, and `assertRegistry` refuses a flag name
+   `normalizeFlags` does not know. Flag off, the wire and the writes are the 1.1.1 ones; flag on, every
+   PII path on this surface writes its row.
 
    The 1.2.0 reads do not widen this gap. `get_banking_attention_summary` declares `pii: ["name"]`
    **and** `piiAccessLogged: true`, so its counterparty labels are recorded — as `categories: ["name"]`

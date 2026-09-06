@@ -28,8 +28,10 @@ sentence that was going to be sent to a reviewer:
 4. `nvLoadBankTransactions` (index.js:24681) reads `bankTransactions` only, not `bankReceiptInbox`.
 5. `requireReader` is a closure inside `createAccountingFunctions`, not an export, and it is *stricter*
    than the bankFeed area predicate revision 1 planned to reuse in its place.
-6. `privacy/accessLog.ACCESS_SOURCES` has no `rest` or `whatsapp` value; both would be logged as
-   `unknown`.
+6. `privacy/accessLog.ACCESS_SOURCES` had no `rest` or `whatsapp` value; both were logged as
+   `unknown`. `rest` shipped with the 1.2.0 audit corrections and is in the list; `whatsapp` is
+   deliberately still out (a source nothing can write is a vocabulary entry pretending to be a control)
+   and goes in with CH-3, so a WhatsApp row lands as `unknown` and names its channel in `note`.
 7. Amazon orders reach this project's `siparisler` through `ingestAmazonEnvelope` (index.js:34228), so
    "Amazon is not available" cannot be a static registry fact.
 
@@ -1325,10 +1327,12 @@ PII rules (§22, memory "amazon-pii-isolation-layer", "told which order, asks be
    strips `customer` even for allowed providers; `financial_data_allowed:false` strips `totals`, money
    facts and the whole finance/banking sections (group chats default to both). Applied inside
    `envelope.finish`, so a channel cannot forget it.
-6. `recordPiiAccess` source is the channel type (`mcp`, `rest`, `whatsapp` — all three now in
-   `ACCESS_SOURCES`, §1.4.11), never a phone number or display name (§68, §85.1); `actorRole` comes from
-   the fixed vocabulary; the audit record (§2.4) carries provenance but never arguments, result bodies or
-   tokens.
+6. `recordPiiAccess` source is the channel type, never a phone number or display name (§68, §85.1).
+   `mcp` and `rest` are in `ACCESS_SOURCES`; `whatsapp` is NOT (see the correction above), so a WhatsApp
+   row normalises to `unknown` and the channel survives in `note` as `channel=whatsapp`. `actorRole` is
+   derived from the channel type through `orchestrator.ACTOR_ROLES` — the field is free text in
+   `accessLog.js` and there is no enforced vocabulary behind it, so the derivation is the control. The
+   audit record (§2.4) carries provenance but never arguments, result bodies or tokens.
 7. No secrets in any argument or result (§22): loaders read connection docs through the same field
    projections as the app's `publicView` helpers; a test asserts no orchestrator output key or string
    matches `/token|secret|refresh|access_key|password/i`.

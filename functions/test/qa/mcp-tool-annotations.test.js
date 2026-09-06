@@ -173,15 +173,55 @@ check("the dispatcher's PII list is the registry's, and it is still these eight 
   );
   const logged = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged).map((entry) => entry.name).sort();
   assert.deepStrictEqual(logged, [
+    "get_bank_spending_summary",
     "get_banking_attention_summary",
     "get_dashboard_summary",
     "get_extra_spending_overview",
     "get_financial_overview",
     "get_order_detail",
     "get_order_financials",
+    "search_bank_transactions",
     "search_commerce_orders",
     "search_orders"
   ]);
+  // Every tool that hands over a person records the read. The two bank tools
+  // were the exception — `pii: ["name"]` with `piiAccessLogged: false` — while
+  // get_banking_attention_summary, the newest door to the same counterparty
+  // names, logged. There is no exception now.
+  for (const entry of registry.TOOL_REGISTRY) {
+    if (entry.pii.length === 0) continue;
+    assert.strictEqual(entry.piiAccessLogged, true,
+      `${entry.name} hands over ${entry.pii.join(", ")} and records nothing`);
+  }
+});
+
+check("a PII row that waits on a deployment flag waits on it, and says which", () => {
+  // Turning a write on for the live 1.1.1 connection is the operator's call, so
+  // the two bank rows ship behind NIVADESK_MCP_ORCHESTRATOR like every other
+  // behaviour change on this branch — declared in the registry rather than
+  // hidden in a second list somewhere in index.js.
+  const api = require("../../index");
+  const waiting = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLoggedFlag);
+  assert.deepStrictEqual(waiting.map((entry) => entry.name).sort(),
+    ["get_bank_spending_summary", "search_bank_transactions"]);
+  for (const entry of waiting) {
+    assert.strictEqual(entry.piiAccessLoggedFlag, "orchestrator");
+    assert.strictEqual(entry.piiAccessLogged, true, `${entry.name} names a flag for a row it does not declare`);
+    assert.ok(require("../../privacy/accessLog").SUBJECT_KINDS.includes(entry.piiSubject),
+      `${entry.name}: subject kind "${entry.piiSubject}" would be rewritten at write time`);
+  }
+  // And the flag is what decides, in the deployment as built. With
+  // NIVADESK_MCP_ORCHESTRATOR off — which is the default and the state this
+  // test process runs in — the wire and the writes are the 1.1.1 ones.
+  const flagOn = process.env.NIVADESK_MCP_ORCHESTRATOR === "1";
+  const live = api._nvMcpPiiLoggedActions();
+  for (const entry of waiting) {
+    assert.strictEqual(live.has(entry.name), flagOn,
+      `${entry.name} logs with the orchestrator flag ${flagOn ? "on" : "off"} — the gate is not the flag`);
+    assert.strictEqual(api._nvMcpPiiAccessEntry(entry.name, { companyId: "c", uid: "u", surface: "mcp" }, {}) !== null, flagOn);
+  }
+  // The gate is one predicate, not a copy per call site.
+  assert.ok(/nvMcpPiiLogFlagOn\(entry\)/.test(indexSource), "the flag gate is no longer a shared predicate");
 });
 
 check("every access-logged tool names categories and a subject the access log will keep", () => {
@@ -237,6 +277,17 @@ check("an access-log row names the door it came through, and says when it has no
     "the MCP tool-call path no longer stamps its surface");
   assert.ok(/nvChatGPTDispatchAction\(\{ \.\.\.context, surface: "rest" \}/.test(indexSource),
     "chatgptWorkspaceAction no longer stamps its surface");
+
+  // Half of that fix landed. The orchestrator adapter hardcoded
+  // `channel: { type: "mcp" }` and never read the surface, and
+  // orchestrator/index.js files the marketplace-PII-block row off
+  // `ctx.channel.type` — so one chatgptWorkspaceAction request produced an
+  // access row correctly saying "rest" and a block row from the same request
+  // saying "mcp". Both halves come from `nvMcpAccessSource(context)` now.
+  assert.ok(/channel: \{ type: nvMcpAccessSource\(context\) \}/.test(indexSource),
+    "the orchestrator adapter files a REST request as MCP again");
+  assert.ok(!/channel: \{ type: "mcp" \}/.test(indexSource),
+    "the channel type is hardcoded somewhere in index.js again");
 });
 
 check("assertRegistry refuses the mistakes it exists for", () => {

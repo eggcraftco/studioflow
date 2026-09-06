@@ -241,7 +241,10 @@ function bookingMs(row) {
 function amountsByCurrency(rows) {
   const out = {};
   for (const row of rows) {
-    const currency = String(row.currency || "GBP").toUpperCase();
+    // A currency code off a payout or a bank row is the provider's own string,
+    // and it becomes a KEY here and a `currency` field on a fact row — both
+    // read by a model. Three letters is what a currency is.
+    const currency = untrusted.safeText(row.currency, { max: 12 }).toUpperCase() || "GBP";
     out[currency] = (out[currency] || 0) + Math.abs(Number(row.amount) || 0);
   }
   return out;
