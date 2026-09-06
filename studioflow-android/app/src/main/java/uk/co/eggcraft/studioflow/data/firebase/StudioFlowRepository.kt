@@ -4203,6 +4203,302 @@ class StudioFlowRepository(
     }
 
     // ---------------------------------------------------------------------
+    // eBay
+    //
+    // Mirrors studioflow-web/lib/studioflow/ebay.ts and
+    // EGGcraft/EbayIntegration.swift: the same callables, the same codes, the
+    // same sentences. Three rules decide the shape, and none is obvious from
+    // the wire format:
+    //
+    //   * Card state comes from the rows getEbayConnections returns (`status`,
+    //     `specStatus`), never from a local "I pressed Connect" flag, and this
+    //     client never re-derives specStatus from an error code. The status
+    //     table lives once, on the server (functions/commerce/ebay/status.js);
+    //     the three clients copy its words.
+    //   * A native app cannot set the browser cookie that binds an OAuth
+    //     callback to the browser that started it, so it never opens eBay's
+    //     authorize URL itself. beginEbayConnect(origin="native") returns a
+    //     state and a nivadesk.app start page, which signs the owner in,
+    //     claims the state once and sets the cookie there (docs §5.2). That is
+    //     why claimEbayConnectState and the callback are absent here: they
+    //     belong to the browser, not to the app.
+    //   * Nothing here ever sees a token, a credential box, a buyer hash or a
+    //     nonce hash — the public view carries none of them (docs §11.3), so a
+    //     screenshot of this screen is not a credential.
+    //
+    // Every ebayConnections row is denied to clients in the firestore rules, so
+    // there is no listener: asking the callable again is the only way to see
+    // status.
+    // ---------------------------------------------------------------------
+
+    data class EbaySyncEventRow(
+        val atMs: Long,
+        val type: String,
+        val error: String,
+        val orderId: String,
+        val reason: String,
+    )
+
+    data class EbayMarketplaceRow(val marketplace: String, val enabled: Boolean, val currency: String)
+
+    data class EbayConnectionSettings(
+        val autoSync: Boolean = true,
+        val includeUnpaid: Boolean = false,
+        val includeCancelled: Boolean = true,
+    )
+
+    data class EbayConnectionRow(
+        val id: String,
+        val environment: String,
+        val sellerUsername: String,
+        val sellerUserId: String,
+        val displayName: String,
+        val marketplaces: List<EbayMarketplaceRow>,
+        /** What the server stores. `disconnected` is not a connection. */
+        val status: String,
+        /** The spec's word for the same row — the only thing the card may branch on. */
+        val specStatus: String,
+        val settings: EbayConnectionSettings,
+        val importState: String,
+        val importCreated: Int,
+        val importUpdated: Int,
+        val importHeld: Int,
+        val importFailed: Int,
+        /** null until an import has run. `false` means "press Import again". */
+        val importComplete: Boolean?,
+        val importFailedCount: Int,
+        val lastSyncAtMs: Long,
+        val lastSuccessAtMs: Long,
+        val lastFullReconciliationAtMs: Long,
+        val lastErrorCode: String,
+        /** When the 18-month refresh authorisation should be renewed by. 0 = unknown. */
+        val reauthorizeByMs: Long,
+        val needsReconnect: Boolean,
+        val paused: Boolean,
+        val quotaToday: Int,
+        val quotaShare: Int,
+        val recentEvents: List<EbaySyncEventRow>,
+    ) {
+        val title: String get() = displayName.ifBlank { sellerUsername.ifBlank { sellerUserId } }
+        val isSandbox: Boolean get() = environment == "sandbox"
+        val importDone: Boolean get() = importState == "done"
+
+        /** The server's word, never re-read from the error code. */
+        val needsAttention: Boolean
+            get() = specStatus == "reauthorization_required" || specStatus == "degraded" || specStatus == "suspended"
+    }
+
+    data class EbayConnectionsResult(
+        val connections: List<EbayConnectionRow>,
+        /** false is "this server has no eBay application wired up" — a card, not an error. */
+        val configured: Boolean,
+        val environment: String,
+    )
+
+    data class EbayImportPreview(
+        val sinceDays: Int,
+        val ordersFound: Int,
+        val duplicatesPrevented: Int,
+        val unpaid: Int,
+        val cancelled: Int,
+        val marketplaces: List<String>,
+        /** The budget ran out before the window did: the count is a floor, not a total. */
+        val truncated: Boolean,
+    )
+
+    data class EbayOutcome(
+        val created: Int,
+        val updated: Int,
+        val held: Int,
+        val skipped: Int,
+        val failed: Int,
+    )
+
+    /** `complete == false` means the run stopped on its budget. Nothing is
+     *  lost; press Import again. */
+    data class EbayImportResult(val outcome: EbayOutcome, val complete: Boolean)
+
+    private fun ebayOutcomeOf(raw: Any?): EbayOutcome {
+        val outcome = raw as? Map<*, *> ?: emptyMap<String, Any?>()
+        return EbayOutcome(
+            longFromAny(outcome["created"], 0L).toInt(),
+            longFromAny(outcome["updated"], 0L).toInt(),
+            longFromAny(outcome["held"], 0L).toInt(),
+            longFromAny(outcome["skipped"], 0L).toInt(),
+            longFromAny(outcome["failed"], 0L).toInt(),
+        )
+    }
+
+    /** Every eBay callable is workspace-scoped and role-checked on the server,
+     *  so they all travel through [etsyCall], which injects companyId and talks
+     *  to europe-west2. Sending companyId explicitly also stops the server
+     *  falling back to users/{uid}.activeCompanyId, which is not necessarily
+     *  the workspace this screen is showing. */
+    suspend fun ebayConnections(workspaceId: String): EbayConnectionsResult {
+        val raw = etsyCall("getEbayConnections", workspaceId)
+        val rows = (raw["connections"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            val settings = row["settings"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            val counters = row["importCounters"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            // The cursor is absent until an import has run, and absent is not
+            // the same as finished: a missing cursor must never draw
+            // "Import paused".
+            val cursor = row["importCursor"] as? Map<*, *>
+            val quota = row["quota"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            EbayConnectionRow(
+                id = row["id"]?.toString().orEmpty(),
+                environment = row["environment"]?.toString().orEmpty().ifBlank { "sandbox" },
+                sellerUsername = row["sellerUsername"]?.toString().orEmpty(),
+                sellerUserId = row["sellerUserId"]?.toString().orEmpty(),
+                displayName = row["displayName"]?.toString().orEmpty(),
+                marketplaces = (row["marketplaces"] as? List<*>).orEmpty().mapNotNull { m ->
+                    val site = m as? Map<*, *> ?: return@mapNotNull null
+                    EbayMarketplaceRow(
+                        marketplace = site["marketplace"]?.toString().orEmpty(),
+                        enabled = site["enabled"] as? Boolean ?: false,
+                        currency = site["currency"]?.toString().orEmpty(),
+                    )
+                },
+                status = row["status"]?.toString().orEmpty().ifBlank { "connecting" },
+                specStatus = row["specStatus"]?.toString().orEmpty().ifBlank { "connected_read_only" },
+                settings = EbayConnectionSettings(
+                    autoSync = settings["autoSync"] as? Boolean ?: true,
+                    includeUnpaid = settings["includeUnpaid"] as? Boolean ?: false,
+                    includeCancelled = settings["includeCancelled"] as? Boolean ?: true,
+                ),
+                importState = row["importState"]?.toString().orEmpty().ifBlank { "none" },
+                importCreated = longFromAny(counters["created"], 0L).toInt(),
+                importUpdated = longFromAny(counters["updated"], 0L).toInt(),
+                importHeld = longFromAny(counters["held"], 0L).toInt(),
+                importFailed = longFromAny(counters["failed"], 0L).toInt(),
+                importComplete = if (cursor == null) null else (cursor["complete"] as? Boolean ?: false),
+                importFailedCount = if (cursor == null) 0 else longFromAny(cursor["failedCount"], 0L).toInt(),
+                lastSyncAtMs = longFromAny(row["lastSyncAtMs"], 0L),
+                lastSuccessAtMs = longFromAny(row["lastSuccessAtMs"], 0L),
+                lastFullReconciliationAtMs = longFromAny(row["lastFullReconciliationAtMs"], 0L),
+                lastErrorCode = row["lastErrorCode"]?.toString().orEmpty(),
+                reauthorizeByMs = longFromAny(row["reauthorizeByMs"], 0L),
+                needsReconnect = row["needsReconnect"] as? Boolean ?: false,
+                paused = row["paused"] as? Boolean ?: false,
+                quotaToday = longFromAny(quota["today"], 0L).toInt(),
+                quotaShare = longFromAny(quota["share"], 0L).toInt(),
+                recentEvents = (row["recentEvents"] as? List<*>).orEmpty().take(9).mapNotNull { e ->
+                    val event = e as? Map<*, *> ?: return@mapNotNull null
+                    EbaySyncEventRow(
+                        atMs = longFromAny(event["atMs"], 0L),
+                        type = event["type"]?.toString().orEmpty(),
+                        error = event["error"]?.toString().orEmpty(),
+                        orderId = event["orderId"]?.toString().orEmpty(),
+                        reason = event["reason"]?.toString().orEmpty(),
+                    )
+                },
+            )
+        }
+        // Default configured=true so a server that answers without the field is
+        // not reported to the seller as switched off.
+        return EbayConnectionsResult(
+            connections = rows,
+            configured = raw["configured"] as? Boolean ?: true,
+            environment = raw["environment"]?.toString().orEmpty().ifBlank { "sandbox" },
+        )
+    }
+
+    /** Owner only, server-side. Returns the page to open in the browser — never
+     *  eBay's own authorize URL, which only the browser holding the nonce
+     *  cookie may reach (docs §5.2). */
+    suspend fun ebayBeginConnect(workspaceId: String): String {
+        val raw = etsyCall("beginEbayConnect", workspaceId, mapOf("origin" to "native"))
+        val startUrl = raw["startUrl"]?.toString().orEmpty()
+        if (startUrl.isNotEmpty()) return startUrl
+        val state = raw["state"]?.toString().orEmpty()
+        if (state.isEmpty()) return ""
+        return "https://nivadesk.app/ebay/start?state=" +
+            java.net.URLEncoder.encode(state, "UTF-8")
+    }
+
+    /** Asks eBay, right now, whether this connection still works. Never throws
+     *  for a provider failure: an unhealthy connection is an answer. */
+    suspend fun ebayVerify(workspaceId: String, connectionId: String): Pair<Boolean, String> {
+        val raw = etsyCall("verifyEbayConnection", workspaceId, mapOf("connectionId" to connectionId))
+        return (raw["healthy"] as? Boolean ?: false) to raw["reason"]?.toString().orEmpty()
+    }
+
+    suspend fun ebayUpdateSettings(workspaceId: String, connectionId: String, settings: Map<String, Any?>) {
+        etsyCall("updateEbayConnectionSettings", workspaceId, mapOf("connectionId" to connectionId, "settings" to settings))
+    }
+
+    suspend fun ebaySetMarketplace(workspaceId: String, connectionId: String, marketplace: String, enabled: Boolean) {
+        etsyCall(
+            "updateEbayConnectionSettings", workspaceId,
+            mapOf(
+                "connectionId" to connectionId,
+                "marketplaces" to listOf(mapOf("marketplace" to marketplace, "enabled" to enabled)),
+            ),
+        )
+    }
+
+    /** A dry run. Writes no orders — it counts what eBay holds for the period
+     *  and how much of it is already here. */
+    suspend fun ebayPreviewImport(workspaceId: String, connectionId: String, sinceDays: Int): EbayImportPreview {
+        val raw = etsyCall(
+            "previewEbayImport", workspaceId,
+            mapOf("connectionId" to connectionId, "sinceDays" to sinceDays),
+            timeoutSeconds = 300,
+        )
+        return EbayImportPreview(
+            sinceDays = longFromAny(raw["sinceDays"], 0L).toInt(),
+            ordersFound = longFromAny(raw["ordersFound"], 0L).toInt(),
+            duplicatesPrevented = longFromAny(raw["duplicatesPrevented"], 0L).toInt(),
+            unpaid = longFromAny(raw["unpaid"], 0L).toInt(),
+            cancelled = longFromAny(raw["cancelled"], 0L).toInt(),
+            marketplaces = (raw["marketplaces"] as? List<*>).orEmpty().map { it?.toString().orEmpty() },
+            truncated = raw["truncated"] as? Boolean ?: false,
+        )
+    }
+
+    /** Resumable: `complete == false` means press Import again, and nothing
+     *  between the two runs is lost. */
+    suspend fun ebayRunImport(
+        workspaceId: String,
+        connectionId: String,
+        sinceDays: Int,
+        includeUnpaid: Boolean,
+        includeCancelled: Boolean,
+    ): EbayImportResult {
+        val raw = etsyCall(
+            "runEbayImport", workspaceId,
+            mapOf(
+                "connectionId" to connectionId,
+                "sinceDays" to sinceDays,
+                "includeUnpaid" to includeUnpaid,
+                "includeCancelled" to includeCancelled,
+            ),
+            timeoutSeconds = 540,
+        )
+        return EbayImportResult(ebayOutcomeOf(raw["outcome"]), raw["complete"] as? Boolean ?: false)
+    }
+
+    /** remaining and recovered, in that order on the wire. */
+    suspend fun ebayRetryImportFailures(workspaceId: String, connectionId: String): Pair<Int, Int> {
+        val raw = etsyCall("retryEbayImportFailures", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300)
+        return longFromAny(raw["remaining"], 0L).toInt() to longFromAny(raw["recovered"], 0L).toInt()
+    }
+
+    /** held and failed are part of what happened. Reading only created and
+     *  updated is how a pass where every order failed gets reported to the
+     *  seller as a success. */
+    suspend fun ebaySyncNow(workspaceId: String, connectionId: String): EbayOutcome {
+        val raw = etsyCall("syncEbayNow", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300)
+        return ebayOutcomeOf(raw["outcome"])
+    }
+
+    /** eBay has no revoke endpoint: this destroys our copy of the tokens.
+     *  Orders already imported stay in the workspace. */
+    suspend fun ebayDisconnect(workspaceId: String, connectionId: String) {
+        etsyCall("disconnectEbay", workspaceId, mapOf("connectionId" to connectionId))
+    }
+
+    // ---------------------------------------------------------------------
     // Customer SMS notifications
     //
     // Two callables, europe-west2, workspace-scoped. The read is open to any
