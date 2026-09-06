@@ -14,6 +14,9 @@ const channel = require("../../orchestrator/channel");
 const money = require("../../orchestrator/money");
 const orderView = require("../../orchestrator/orderView");
 const { PAYMENT_STATUSES, FULFILLMENT_STATUSES } = require("../../commerce/envelope");
+const registry = require("../../orchestrator/registry");
+const freshness = require("../../orchestrator/freshness");
+const loaders = require("../../orchestrator/loaders");
 const fixtures = require("../fixtures/orchestrator");
 
 let failures = 0;
@@ -127,6 +130,55 @@ check("a basic plan gets a smaller answer, and is told so", () => {
   assert.strictEqual(result.data.settlements, undefined);
   assert.ok(result.data.orders.count > 0 && result.data.sales.gross > 0, "counts and gross still answer the question");
   assert.ok(result.warnings.some((row) => row.code === "plan_limited"));
+});
+
+/**
+ * The snapshot the LOADER would hand a capability, given what that capability
+ * declares. A fixture richer than the declaration is a fixture that tests a
+ * capability nobody deploys: loaders.snapshotFor reads a domain only when it is
+ * declared, and populates `connections` only under "connections" or "payouts".
+ */
+function asLoaded(capability, snapshot) {
+  const needs = new Set(registry.entryFor(capability).domainNeeds || []);
+  const out = { ...snapshot };
+  assert.ok([...needs].every((need) => loaders.DOMAINS.includes(need)), `${capability} declares a domain the loader cannot read`);
+  if (!needs.has("connections") && !needs.has("payouts")) delete out.connections;
+  if (!needs.has("payouts")) delete out.payouts;
+  if (!needs.has("commerceHealth")) delete out.commerceHealth;
+  if (!needs.has("bank")) delete out.bankRows;
+  if (!needs.has("inventory")) delete out.inventoryItems;
+  if (!needs.has("orders")) out.orders = [];
+  return out;
+}
+
+check("a live Etsy shop is dated from its connection, on every capability that lists Etsy orders", () => {
+  // Etsy writes no commerceHealth document — ever. The connection is the only
+  // place its last successful sync is recorded, so a capability that reports
+  // Etsy orders without declaring "connections" reports a working shop as never
+  // synced, drags the answer to partial, and says so in a warning that is false.
+  const base = fixtures.mixedSnapshot();
+  // Amazon is opaque on purpose and would make every answer partial by itself.
+  base.orders = base.orders.filter((order) => order.id !== "o_amazon");
+
+  for (const [capability, handler] of [
+    ["search_commerce_orders", commerce.searchCommerceOrders],
+    ["get_commerce_overview", commerce.commerceOverview],
+    ["get_channel_performance", commerce.channelPerformance]
+  ]) {
+    const snapshot = asLoaded(capability, base);
+    const result = handler(snapshot, {}, ctx, { nowMs: base.nowMs });
+    const etsy = result.sources.find((row) => row.provider === "etsy" && row.entity === "orders");
+    assert.ok(etsy, `${capability}: Etsy rows are in the answer with no source row at all`);
+    assert.strictEqual(etsy.state, "fresh", `${capability}: a healthy Etsy sync was reported as ${etsy.state}`);
+    assert.strictEqual(etsy.lastSuccessAt, new Date(base.nowMs - 3 * 60 * 60 * 1000).toISOString());
+
+    const built = freshness.build(result.sources, { nowMs: base.nowMs });
+    assert.strictEqual(built.partial, false, `${capability}: the answer claims to be incomplete when it is not`);
+    assert.ok(!built.warnings.some((row) => row.channel === "etsy"),
+      `${capability}: told the reader something untrue about Etsy`);
+    assert.strictEqual(built.freshness.ordersLastSync, new Date(base.nowMs - 3 * 60 * 60 * 1000).toISOString(),
+      `${capability}: the oldest contributing order sync is the one to report`);
+  }
 });
 
 check("no answer in this file hands VAT to a plan that does not include it", () => {

@@ -676,7 +676,11 @@ const TOOL_REGISTRY = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
     pendingGuard: null,
-    domainNeeds: ["settings", "orders", "commerceHealth"],
+    // "connections" is not optional detail: commerceSources dates a channel from
+    // its connection when that channel writes no commerceHealth document, which
+    // is every Etsy shop. Without it a healthy Etsy sync is reported as never
+    // synced and the whole answer goes partial on a warning that is not true.
+    domainNeeds: ["settings", "orders", "connections", "commerceHealth"],
     justification: {
       readOnlyHint: "Because it filters orders the loader already read and returns rows; the only write on the path is the piiAccessLog row recording that an assistant was shown customer names, which is a record of the read rather than a change to the workspace.",
       destructiveHint: "Because searching cannot alter an order: no field is written and no row is removed.",
