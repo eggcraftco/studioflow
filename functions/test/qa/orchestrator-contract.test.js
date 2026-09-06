@@ -115,6 +115,72 @@ check("every permission.area a row names is an area a context can actually hold"
   assert.throws(() => contextModule.assertCapability(withheld, notesRow), /does not include notes/);
 });
 
+check("§4.2's worked examples are what the projection actually returns, set for set", () => {
+  // The absences were pinned and the PRESENCES were not, so the "gets" column
+  // could say anything. It did: "all four kinds, level 1 → reads and nothing
+  // else" — the measured projection is 26 entries including six writes
+  // (`add_order_note` and the five note tools), every one `internal_write`,
+  // class B, minAssurance 1, so nothing gates them once the kind is allowed.
+  // And `["read","internal_write","file_upload"]` at level 3 was described as
+  // "reads, note writes, attach_bank_receipt" while it also returns
+  // `create_inventory_item`, which the row above it correctly calls level 2.
+  //
+  // This is the table a gateway author sizes a read-only beta from. It is now
+  // asserted as a set, both halves.
+  const project = (capabilities, level) => registry
+    .publishedForChannel({ flags: ALL_FLAGS, channelProfile: { capabilities, security: { assurance_level: level } } })
+    .map((entry) => entry.name);
+
+  const everything = registry.publishedNames(ALL_FLAGS);
+  const writes = registry.TOOL_REGISTRY
+    .filter((entry) => everything.includes(entry.name) && (entry.permission || {}).write === true)
+    .map((entry) => entry.name);
+  const reads = everything.filter((name) => !writes.includes(name));
+  const NOTE_WRITES = ["add_order_note", "create_note", "append_note", "update_note", "pin_note", "archive_note"];
+  const FILE_WRITES = ["attach_bank_receipt", "create_inventory_item"];
+
+  assert.strictEqual(everything.length, 30, "§4.2 quotes 30 published entries with every flag on");
+  assert.strictEqual(writes.length, 10, "§4.2 quotes 10 writes");
+  assert.strictEqual(reads.length, 20, "§4.2's first row quotes 20 read entries");
+
+  const rows = [
+    ["`[\"read\"]`, level 1", project(["read"], 1), reads],
+    ["all four kinds, level 1", project(registry.CAPABILITY_KINDS, 1), [...reads, ...NOTE_WRITES]],
+    ["`[\"read\",\"internal_write\",\"file_upload\"]`, level 3", project(["read", "internal_write", "file_upload"], 3), [...reads, ...NOTE_WRITES, ...FILE_WRITES]]
+  ];
+  for (const [label, actual, expected] of rows) {
+    assert.deepStrictEqual(actual.slice().sort(), expected.slice().sort(),
+      `§4.2 "${label}" describes a set the projection does not return`);
+  }
+
+  // The reason the middle row carries six writes and not zero, stated as the
+  // property rather than as a list: nothing gates an internal_write of class B
+  // at assurance 1, so allowing the kind IS allowing the tool.
+  for (const name of NOTE_WRITES) {
+    const entry = registry.entryFor(name);
+    assert.deepStrictEqual(registry.kindsFor(entry), ["internal_write"], `${name} is no longer a plain internal write`);
+    assert.strictEqual(entry.minAssurance, 1, `${name} no longer sits at assurance 1`);
+    assert.strictEqual(entry.riskClass, "B", `${name} is no longer class B`);
+  }
+  // And the pair the third row used to omit are the pair the second row calls
+  // level 2 — one fact, told the same way in both cells.
+  for (const name of FILE_WRITES) {
+    const entry = registry.entryFor(name);
+    assert.deepStrictEqual(registry.kindsFor(entry).slice().sort(), ["file_upload", "internal_write"]);
+    assert.strictEqual(entry.minAssurance, 2, `${name} no longer needs assurance 2`);
+  }
+
+  // Finally the document itself: the numbers above are quoted there, so a
+  // future edit that changes the projection and not the page fails here.
+  const section = DOC.slice(DOC.indexOf("### 4.2"), DOC.indexOf("## 5."));
+  for (const name of NOTE_WRITES) {
+    assert.ok(section.includes(`\`${name}\``), `§4.2 does not name ${name}, which a level-1 binding gets`);
+  }
+  assert.ok(/\*\*26\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the level-1 projection");
+  assert.ok(/\*\*28\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the level-3 projection");
+  assert.ok(/\*\*20\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the read-only projection");
+});
+
 check("assurance gates a tool even when the binding allows its kind (WA §15)", () => {
   const everyKind = registry.CAPABILITY_KINDS;
   const atLevel = (level) => registry

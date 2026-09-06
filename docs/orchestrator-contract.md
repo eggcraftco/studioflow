@@ -273,15 +273,25 @@ annotation can never disagree about the same tool:
 | write, no outward effect | `internal_write` | |
 | plus `effects` includes `external_fetch` or `ocr` | adds `file_upload` | the tool takes a document off the caller |
 
-Worked examples over the full registry (`registry.publishedForChannel({ flags, channelProfile })`):
+Worked examples over the full registry (`registry.publishedForChannel({ flags, channelProfile })`), each
+measured against the projection rather than reasoned about — with all three flags on the table is 30
+entries, of which 10 are writes:
 
 | binding | gets | does not get |
 |---------|------|--------------|
-| `["read"]`, level 1 | every read tool, including all ten orchestrator capabilities | `create_order`, `update_order_status`, `add_order_note`, `attach_bank_receipt`, `create_inventory_item` |
-| all four kinds, level 1 | reads and nothing else | `attach_bank_receipt`/`create_inventory_item` (level 2), `create_order`/`update_order_status` (level 3) |
-| `["read","internal_write","file_upload"]`, level 3 | reads, note writes, `attach_bank_receipt` | `create_order`, `update_order_status` — those need `external_write` because they can e-mail the buyer |
+| `["read"]`, level 1 | **20** entries: every read tool, including all ten orchestrator capabilities | all ten writes: `create_order`, `update_order_status`, `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, `attach_bank_receipt`, `create_inventory_item` |
+| all four kinds, level 1 | **26** entries: the 20 reads **plus six writes** — `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, every one of them `internal_write`, class B, `minAssurance: 1` | `attach_bank_receipt`/`create_inventory_item` (level 2), `create_order`/`update_order_status` (level 3) |
+| `["read","internal_write","file_upload"]`, level 3 | **28** entries: the 20 reads, the six note writes, **and both** `attach_bank_receipt` and `create_inventory_item` | `create_order`, `update_order_status` — those need `external_write` because they can e-mail the buyer |
 
-That last row is the point of the whole mechanism: `update_order_status` is class D / assurance 3 and
+Row two used to read "reads and nothing else", which is where a gateway author sizing a beta would have
+been misled: allowing `internal_write` at level 1 hands over six writes, because nothing else gates them
+once the kind is allowed. Row three used to name `attach_bank_receipt` alone and omit
+`create_inventory_item`, which is `internal_write` + `file_upload` at `minAssurance: 2` — the same pair
+row two correctly calls level 2. **Assurance is what holds the consequential tools back, not the kind
+list**, and that is the sentence the table has to make obvious. `orchestrator-contract.test.js` now
+asserts each row's full set, not just the absences.
+
+The third row is the point of the whole mechanism: `update_order_status` is class D / assurance 3 and
 `external_write` because a status change fires `notifyCustomerOnStatusChange` and reaches the customer's
 inbox. A read-only WhatsApp beta cannot call it by accident, and a level-1 binding cannot either.
 
