@@ -769,10 +769,13 @@ and `reason` set from a fixed vocabulary; no value from the query ever reaches `
    word is not in its vocabulary.
 2. `code` and `state` both present and shaped (`state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code` is
    1–4096 characters) → else `?ebay=error&reason=missing_code`. **No call.**
-3. Read the `nv_ebay_nonce` cookie and `decodeURIComponent` it — the mirror of `setEbayNonceCookie`'s
-   `encodeURIComponent`, which is the identity for a base64url nonce and is pinned as such. Absent,
-   empty or longer than 200 characters → the body carries `nonce: ""`. **This is not a refusal and never
-   was one:** an absent cookie must reach the function so the state is burned. See *The burn*.
+3. Read the `nv_ebay_nonce` cookie. The mirror of `setEbayNonceCookie`'s `encodeURIComponent` is
+   **already applied by `NextRequest.cookies`** — `next/dist/compiled/@edge-runtime/cookies`'s
+   `parseCookie` calls `decodeURIComponent` on every value — so the route must **not** decode a second
+   time. (This step used to instruct one. For a base64url nonce both readings are the identity, so
+   nothing was at risk, but a second decode is wrong in principle and throws `URIError` on a stray `%`.)
+   Absent, empty or longer than 200 characters → the body carries `nonce: ""`. **This is not a refusal
+   and never was one:** an absent cookie must reach the function so the state is burned. See *The burn*.
 4. `NIVADESK_EBAY_CALLBACK_KEY` present **and at least 32 characters** → else
    `?ebay=error&reason=unavailable`. **No call**, plus one ops log line naming the variable and which
    check failed by name (`not configured` / `shorter than 32 characters`) and nothing else. The length
@@ -1151,9 +1154,9 @@ meaning and is not any real secret. `ebay-connect.test.js` checks the function's
 precedent) checks the route's signer against the same file. The two implementations are in different
 languages and cannot import each other, so **the vector is the shared pure thing** — this is the "tests
 that assert the bug" lesson applied across the boundary: a test that re-implements the canonical string
-next to the code it tests would prove nothing. One vector's nonce is a base64url string, to pin that the
-route's `decodeURIComponent` and `setEbayNonceCookie`'s `encodeURIComponent` round-trip it unchanged; one
-vector's nonce is `""`.
+next to the code it tests would prove nothing. One vector's nonce is a base64url string, to pin that
+`setEbayNonceCookie`'s `encodeURIComponent` and the cookie jar's own `decodeURIComponent` (step 3)
+round-trip it unchanged; one vector's nonce is `""`.
 
 `check-ebay-relay-vectors.mjs` additionally makes four **source** assertions over
 `app/ebay/callback/route.ts`, because there is no other automated coverage of that file: it exports
