@@ -224,17 +224,66 @@ function piiBlockRows(decisions = []) {
  * — the domain is all `readableDomain` can see — and the read is of the same
  * commerce collection that member's answer already reads (`squareConnections`),
  * so it is a wasted read rather than a read of data they were refused.
+ *
+ * The table below is written as a table for one reason: this used to be a
+ * `switch` whose `default` was `return true`, and a default that says yes is
+ * how `payouts` went ungated. A domain is not gated by being financial — it is
+ * gated by somebody noticing it is. So every domain has a row, a row is either
+ * a predicate or an `open: true` with the reason it is open written beside it,
+ * and a domain with NO row is refused: `readableDomain` fails closed. The next
+ * domain added to `DOMAINS` reads nothing at all until its row is written, and
+ * orchestrator-domain-gates.test.js turns red the moment the two lists differ.
  */
-function readableDomain(domain, ctx = {}) {
-  const areas = (ctx && ctx.areas) || {};
-  switch (domain) {
-    case "bank": return areas.bankFeed === true || ctx.accountingReader === true;
-    case "receiptInbox": return areas.bankFeed === true;
-    case "inventory": return ctx.inventoryAccess === true;
-    case "accounting": return ctx.accountingReader === true;
-    case "payouts": return areas.bankFeed === true || ctx.financialInfo === true;
-    default: return true;
+const areasOf = (ctx) => (ctx && ctx.areas) || {};
+
+const DOMAIN_GATES = Object.freeze({
+  // Open: the capability's own permission row is the whole gate. Each of these
+  // is a judgement, not an omission.
+  settings: { open: true, why: "The workspace's own currency, tax and stage configuration. Not a person, not a figure — every capability that formats money needs it." },
+  orders: { open: true, why: "Every capability that declares orders sits behind the orders area, and each row is redacted by privacy/outbound before it leaves this file." },
+  production: { open: true, why: "Stage and step names out of the workspace's own settings; the rows they are applied to are the orders domain." },
+  connections: { open: true, why: "Commerce connections are readable by anyone who may see orders. The bank and accounting sub-reads inside loadConnections carry their own gates — bankFeed and accountingReader — because those documents are not commerce documents." },
+  commerceHealth: { open: true, why: "Sync timestamps for the commerce connections above. No money, no person." },
+  review: { open: true, why: "Orders from the workspace's own shops that are held or queued for import; the same rows the orders domain would carry once imported." },
+
+  // Gated. `grant` names the grant in words a refusal can be checked against.
+  inventory: {
+    grant: "inventoryAccess",
+    allows: (ctx) => ctx.inventoryAccess === true,
+    why: "nvRequireInventoryAccess is the gate on both inventory capabilities; the attention summary must not be the looser door into the same shelf."
+  },
+  bank: {
+    grant: "areas.bankFeed OR accountingReader",
+    allows: (ctx) => areasOf(ctx).bankFeed === true || ctx.accountingReader === true,
+    why: "Two capabilities behind two different gates read the same rows; a custom role can hold the accounting grant without the area."
+  },
+  receiptInbox: {
+    grant: "areas.bankFeed",
+    allows: (ctx) => areasOf(ctx).bankFeed === true,
+    why: "Waiting receipts are part of Bank Spending and nothing else reads them."
+  },
+  accounting: {
+    grant: "accountingReader",
+    allows: (ctx) => ctx.accountingReader === true,
+    why: "accounting/core/access.js owns this grant; the assistant asks the same question it does."
+  },
+  payouts: {
+    grant: "areas.bankFeed OR financialInfo",
+    allows: (ctx) => areasOf(ctx).bankFeed === true || ctx.financialInfo === true,
+    why: "One word over two bodies of data: Square's rows ride a commerce connection and are gated on financial access, PayPal's ride a bankConnections document and are gated on Banking inside payoutCollectionsFor."
   }
+});
+
+function readableDomain(domain, ctx = {}) {
+  // `hasOwnProperty`, not a bare lookup: `DOMAIN_GATES["constructor"]` is a
+  // function, which is truthy, has no `allows`, and would throw rather than
+  // refuse. Failing closed means failing closed on every string.
+  const gate = Object.prototype.hasOwnProperty.call(DOMAIN_GATES, domain) ? DOMAIN_GATES[domain] : null;
+  // A domain with no row is a domain nobody has decided about, and the safe
+  // reading of "nobody decided" is no.
+  if (!gate) return false;
+  if (gate.open === true) return true;
+  return gate.allows(ctx) === true;
 }
 
 /**
@@ -623,4 +672,4 @@ function createLoaders({ db, now = () => Date.now() }) {
   return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
 }
 
-module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, payoutCollectionsFor, piiBlockRows, projectCommerceConnection, projectOrderForAssistant, projectBankRow };
+module.exports = { createLoaders, CAPS, DOMAINS, DOMAIN_GATES, readableDomain, payoutCollectionsFor, piiBlockRows, projectCommerceConnection, projectOrderForAssistant, projectBankRow };

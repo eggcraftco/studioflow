@@ -616,6 +616,18 @@ snapshot, which is a third state distinct from the empty array a read collection
 `payouts.payoutFeedState` already tells them apart: for PayPal without Banking it answers
 `connection_not_visible` rather than guessing "not connected".
 
+The gate is a TABLE, `loaders.DOMAIN_GATES`, with a row for every domain in `DOMAINS`: either a predicate
+naming the grant it asks for, or `open: true` with the reason it is open written beside it. A domain with
+no row is refused — `readableDomain` fails closed. That shape is the actual fix for the payouts finding:
+the predicate used to be a `switch` whose `default` was `return true`, so a domain was gated by somebody
+having remembered to gate it, and `payouts` is what remembering missed. Six domains are open on purpose —
+`settings`, `orders`, `production`, `connections`, `commerceHealth`, `review` — and `connections` is open
+only at the top level: the bank and accounting sub-reads inside `loadConnections` carry their own gates,
+because those documents are not commerce documents. `test/qa/orchestrator-domain-gates.test.js`
+enumerates the loader's own `DOMAINS`, so the next domain added without a row fails the suite rather than
+a reviewer; it also pins each gated domain against every grant it does NOT name, and asserts the sentence
+a refused caller actually reads.
+
 A capability that reads a collection outside its declared domains fails `orchestrator-loaders.test.js`,
 which is generic: it records every path the handle was asked for and matches it against the declaration.
 
@@ -714,6 +726,9 @@ shrinks with it.
   where every provider-, bank-, ledger- and buyer-authored string is one 330-character payload. It also
   proves the enforcement is in `envelope.finish` rather than in the call sites, by finishing an envelope
   whose fields no capability writes.
+- `test/qa/orchestrator-domain-gates.test.js` — every domain the loader knows is gated or deliberately
+  open, no grant opens a domain its row does not name, no capability reads a gated domain for a caller
+  without the grant, and the refusal reaches the caller as a sentence.
 - `test/qa/mcp-tool-annotations.test.js` — the registry's four booleans and their justifications, and
   which tools file a PII row.
 - Fixtures: `test/fixtures/orchestrator.js` (`mixedSnapshot`, `attentionSnapshot`, `ownerContext`). Build
