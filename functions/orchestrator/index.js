@@ -128,7 +128,7 @@ function createOrchestrator(deps = {}) {
     }
 
     const nowMs = typeof deps.now === "function" ? deps.now() : Date.now();
-    const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: ctx.settings, companyData: ctx.companyData });
+    const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: ctx.settings });
 
     // The other half of privacy/outbound.js's third rule: "THE DECISION IS
     // RECORDED ... a block nobody can see is indistinguishable from a feature

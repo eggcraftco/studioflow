@@ -32,6 +32,11 @@
  *    a caller passed in alongside it. The WhatsApp gateway copying this
  *    pattern needs no new parameter either — it returns the document it read
  *    for the message it is answering.
+ *
+ *    The snapshot field of that name is gone too (`loaders.snapshotFor`). It
+ *    carried the whole company document — members, memberAccess,
+ *    suspendedMembers, billing — into every pure capability, and nothing read
+ *    it.
  * 2. **A supplied `companyId` is a lookup key, never a grant.** The MCP path
  *    falls back to the argument when the OAuth token carries no workspace
  *    (`oauth.companyId || companyId`), so the argument does reach here — and

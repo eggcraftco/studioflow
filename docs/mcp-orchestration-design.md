@@ -592,9 +592,13 @@ Three corrections to revision 1's version of this block:
    all require the revocation to bite on the next request. `resolveContext` takes no caller-supplied
    snapshot at all: injected `loadCompany` must return a document read DURING this request (a caller
    that already read one for the same request may return it, which is what the MCP adapter does), and
-   every gate reads that document. `snapshot.companyDataHint` is a different thing with a confusingly
-   similar name — `loaders.snapshotFor` puts `ctx.companyData` there for the handlers to display, after
-   the gates have already run. A test asserts that a snapshot passed in by the caller reaches no gate.
+   every gate reads that document. A test asserts that a snapshot passed in by the caller reaches no
+   gate. There was a `snapshot.companyDataHint` with a confusingly similar name —
+   `loaders.snapshotFor` put `ctx.companyData` there "for the handlers to display" — and it is gone:
+   no handler ever read it, and what it actually did was carry `members`, `memberAccess`,
+   `suspendedMembers` and the billing fields into every pure capability, one careless `...snapshot`
+   away from being emitted. A snapshot is what the capability's declared domains read, and nothing
+   else.
 2. **`companyId` is the caller's resolved authority when the caller has one, and is membership-checked in
    every other case.** Revision 1 said it "never comes from tool arguments". That is overstated:
    `nvRequireChatGPTWorkspaceAccessWithOAuth` uses `oauth.companyId || companyId` (index.js:25448), so a

@@ -408,8 +408,20 @@ function createLoaders({ db, now = () => Date.now() }) {
     return bankRows.filter((row) => row.bookingDate >= from && row.bookingDate <= to && row.amount > 0);
   }
 
-  /** Read exactly what the capability declared, and nothing else. */
-  async function snapshotFor(domainNeeds = [], ctx, { settings = {}, companyData = {} } = {}) {
+  /**
+   * Read exactly what the capability declared, and nothing else.
+   *
+   * The company document is NOT part of a snapshot. It used to be, as
+   * `companyDataHint` — the whole document, `members`, `memberAccess`,
+   * `suspendedMembers`, billing fields and all, handed to every pure capability
+   * and read by none of them (a grep across functions/ found no reader outside
+   * this file). Nothing emitted it, and it was one careless `...snapshot` away
+   * from being emitted. The gates that need that document read it through
+   * `loadCompany` in context.js, for this request, which is the safeguard that
+   * matters; a display copy riding along in the snapshot adds nothing and
+   * carries everything.
+   */
+  async function snapshotFor(domainNeeds = [], ctx, { settings = {} } = {}) {
     const declared = new Set(domainNeeds.filter((name) => DOMAINS.includes(name)));
     // Declared AND permitted. `loadConnections` has always gated its bank and
     // accounting sub-reads this way; the top-level branches did not, so three
@@ -417,7 +429,7 @@ function createLoaders({ db, now = () => Date.now() }) {
     // answer then reports as not_permitted.
     const needs = new Set([...declared].filter((name) => readableDomain(name, ctx)));
     const companyId = ctx.companyId;
-    const snapshot = { companyId, nowMs: now(), settings, companyDataHint: companyData };
+    const snapshot = { companyId, nowMs: now(), settings };
 
     if (needs.has("orders")) {
       const { rows, capped, piiBlocks } = await loadOrders(companyId, ctx);

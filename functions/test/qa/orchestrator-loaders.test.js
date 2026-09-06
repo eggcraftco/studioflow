@@ -59,7 +59,7 @@ async function snapshotOf(capability, ctxOverrides = {}, seed = {}) {
   const loaders = loadersModule.createLoaders({ db, now: () => fixtures.NOW });
   const ctx = fixtures.ownerContext({ companyId: CID, ...ctxOverrides });
   const entry = registry.entryFor(capability);
-  const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: {}, companyData: {} });
+  const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: {} });
   return { snapshot, reads, entry };
 }
 
@@ -213,6 +213,22 @@ const CAPPED_SEED = {
   [`companies/${CID}/accountingAttention`]: many(loadersModule.CAPS.attention, { provider: "quickbooks", kind: "changed", severity: "warning", message: "changed", status: "open" }),
   [`companies/${CID}/bankReceiptInbox`]: many(loadersModule.CAPS.inbox, { status: "waiting", createdAtMs: fixtures.NOW - 1000 })
 };
+
+check("a snapshot carries no company document", async () => {
+  // `companyDataHint` handed every pure capability the whole company document —
+  // members, memberAccess, suspendedMembers, billing — for display, and no
+  // handler ever read it (a grep across functions/ found no reader outside the
+  // loader). Nothing emitted it; one `...snapshot` in a future capability
+  // would have. The gates read that document through `loadCompany`, for the
+  // request, which is where it belongs.
+  for (const capability of CAPABILITY_NAMES) {
+    const { snapshot } = await snapshotOf(capability, {}, { [`companies/${CID}`]: { ownerUid: "u_owner", members: { u_member: true } } });
+    const serialised = JSON.stringify(snapshot);
+    for (const field of ["companyDataHint", "companyData", "memberAccess", "suspendedMembers", "members"]) {
+      assert.ok(!serialised.includes(field), `${capability}: the snapshot carries "${field}"`);
+    }
+  }
+});
 
 check("every cap has a flag, and the flag has a sentence", async () => {
   // The two lists that have to agree: what the loader can truncate, and what an
