@@ -648,9 +648,17 @@ It began ungated, on the `switch` whose `default` was `return true`. `1127c548` 
 collection for a caller without Banking. Both halves were argued from where each document is *written*:
 a Square payout rides a commerce connection (`squareConnections`), a PayPal payout is written off a
 `bankConnections` document (`bankFeed.js` `paypalConnect`). `759b0f48` then replaced the `switch` with
-`DOMAIN_GATES` and a fail-closed default; it carried that same predicate into a table row and changed no
-payout behaviour, whatever its own commit message claims about being the commit that closed the hole.
-Read `git log -S'case "payouts": return areas.bankFeed'` before believing either message.
+`DOMAIN_GATES` and a fail-closed default: a good change, and **not** a payouts fix. It carried
+`1127c548`'s predicate into a table row unaltered and changed no payout behaviour at all.
+
+Its commit message says otherwise — "payouts was the one domain `readableDomain` did not cover … a
+member with orders and financial access and no Banking was handed PayPal money" — which describes the
+state before `1127c548`, not the state `759b0f48` inherited. Its own pre-image already reads
+`case "payouts": return areas.bankFeed === true || ctx.financialInfo === true;`, and
+`git log -S'case "payouts": return areas.bankFeed'` names `1127c548` as the commit that put it there.
+A message cannot be amended once it is history, so the correction lives here: an auditor reading
+`git log` should credit `1127c548` with the PayPal half and `759b0f48` with the shape, and neither with
+the Square half, which stood until the gate became `areas.bankFeed` alone.
 
 Provenance is not permission, and the union left the Square half exactly where it started. The client is
 refused those documents outright:
