@@ -57,6 +57,9 @@ const connIdA = eb.connectionDocId(A, "seller_a"); const connIdB = eb.connection
 const connRef = (id) => db.collection(eb.CONNECTION_COLLECTION).doc(id);
 const header = (kid = "kid-known-0001") => Buffer.from(JSON.stringify({ alg: "ecdsa", kid, signature: "valid-signature", digest: "SHA1" })).toString("base64");
 let counter = 0;
+// The username/userId/eiasToken below are eBay's own published sample values from the
+// Marketplace Account Deletion documentation, not a captured buyer. The connector never
+// reads eiasToken; it is here only so the fixture matches the documented payload shape.
 function deletionBody({ username = "ada_l", userId = "ebayuser_ada", notificationId = null, eventDate = null } = {}) {
   counter += 1;
   return { metadata: { topic: "MARKETPLACE_ACCOUNT_DELETION", schemaVersion: "1.0", deprecated: false }, notification: { notificationId: notificationId || `del-${counter}-${crypto.randomBytes(4).toString("hex")}`, eventDate: eventDate || new Date().toISOString(), publishDate: new Date().toISOString(), publishAttemptCount: 1, data: { username, userId, eiasToken: "nY+sHZ2PrBmdj6wVnY+sEZ2PrA2dj6wFk4GhC5eEoA2dj6x9nY+seQ==" } } };

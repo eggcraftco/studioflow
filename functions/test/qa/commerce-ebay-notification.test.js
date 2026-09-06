@@ -46,6 +46,9 @@ check("pemOf wraps the one-line key eBay returns and leaves a real PEM alone", (
 
 check("a vector signed with our own EC P-256 key over JSON.stringify(body) with SHA-1 verifies; a changed body, a wrong key and a wrong signature do not", () => {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  // The username/userId/eiasToken below are eBay's own published sample values from the
+  // Marketplace Account Deletion documentation, not a captured buyer. The connector never
+  // reads eiasToken; it is here only so the fixture matches the documented payload shape.
   const body = { metadata: { topic: "MARKETPLACE_ACCOUNT_DELETION", schemaVersion: "1.0", deprecated: false }, notification: { notificationId: "49feeaeb-4982-42d9-a377-9645b8479411_33f7e043", eventDate: "2021-03-19T20:43:59.462Z", publishDate: "2021-03-19T20:43:59.679Z", publishAttemptCount: 1, data: { username: "test_user", userId: "ma8vp1jySJC", eiasToken: "nY+sHZ2PrBmdj6wVnY+sEZ2PrA2dj6wFk4GhC5eEoA2dj6x9nY+seQ==" } } };
   const signer = crypto.createSign("sha1"); signer.update(JSON.stringify(body)); signer.end();
   const signature = signer.sign(privateKey, "base64");
