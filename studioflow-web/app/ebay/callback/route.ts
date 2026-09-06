@@ -72,7 +72,11 @@ function land(outcome: "connected" | "cancelled" | "error", reason?: Reason) {
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const code = params.get("code") || "";
-  const declined = Boolean(params.get("error"));
+  // PRESENCE, not truthiness — design §5.4 step 1 says "`error` present". `.get`
+  // answers "" (not null) for `?error=`, and Boolean("") is false, so a truthy
+  // test sent an empty decline down the missing_code path and told the seller
+  // "try again" instead of "cancelled, nothing was changed".
+  const declined = params.has("error");
 
   // 0. Fail closed at the edge. eBay always arrives with `code` (accepted) or
   // `error` (declined); anything else is a scan, a stale bookmark or someone

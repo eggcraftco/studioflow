@@ -194,13 +194,25 @@ const REASON_TEXT: Record<string, string> = {
   environment: "This eBay account belongs to a different environment.",
   no_seller: "eBay did not tell us which seller account this is. Reconnect and approve every permission.",
   disabled: "eBay is not set up on this server yet. Contact support and we will enable it.",
-  // The callback route's own word, never the function's (design §5.4): the relay
-  // key is unset or short, or the signed POST failed, timed out, or answered
-  // anything other than a 200 carrying a word from the list above. Listed rather
-  // than left to the fallback so the vocabulary is complete in one place; it
-  // points at that same fallback sentence, which already exists in all eleven
-  // other languages, so it needs no new translation.
-  unavailable: "eBay did not complete the connection. Try again."
+  // The four below share one sentence, and they are listed rather than left to
+  // the fallback so the vocabulary really is complete in one place — this
+  // comment used to claim that while three of the words the route can redirect
+  // with were missing from the table. The sentence is the one `ebayReasonText`
+  // already falls back to and already exists in all eleven other languages, so
+  // none of these needs a new translation.
+  //
+  // `unavailable` and `missing_code` are the route's own words, never the
+  // function's (design §5.4): the relay key is unset or short, or the signed
+  // POST failed, timed out or answered anything but a 200 carrying a known word;
+  // or the visit was not a callback at all. `token` and `exchange` are the
+  // function's, relayed unchanged — eBay refused the code, or the exchange
+  // failed some other way. None of the four earns a sentence of its own: there
+  // is nothing the seller can do but try again, and a technical code must never
+  // reach the screen.
+  unavailable: "eBay did not complete the connection. Try again.",
+  missing_code: "eBay did not complete the connection. Try again.",
+  token: "eBay did not complete the connection. Try again.",
+  exchange: "eBay did not complete the connection. Try again."
 };
 
 /** The `reason` the callback route redirects with, and verify's own reason codes. */

@@ -767,7 +767,9 @@ and `reason` set from a fixed vocabulary; no value from the query ever reaches `
 1. `error` present → `?ebay=cancelled`. **No backend call.** eBay's declined URL points straight at the
    settings page, so this is defence in depth; either way a decline never reaches the connector. This is
    the **only** place `cancelled` is produced: the function's POST body has no `error` field and the
-   word is not in its vocabulary.
+   word is not in its vocabulary. **Presence is `params.has("error")`, not the truthiness of its value:**
+   `URLSearchParams.get` answers `""` — not `null` — for `?error=`, so a truthy test reads an empty
+   decline as "not a decline" and sends the seller down the `missing_code` path.
 2. `code` and `state` both present and shaped (`state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code` is
    1–4096 characters) → else `?ebay=error&reason=missing_code`. **No call.**
 3. Read the `nv_ebay_nonce` cookie. The mirror of `setEbayNonceCookie`'s `encodeURIComponent` is
@@ -1036,6 +1038,13 @@ fallback and which already exists in all eleven other languages — so it is add
 at that same string and needs **no** new translation. It is produced only by the web route and is never
 returned by the function.
 
+`REASON_TEXT` carries **nine** rows, not six. The three that share `unavailable`'s sentence —
+`missing_code` (the route's, for a visit that is not a callback) and `token` / `exchange` (the function's,
+relayed unchanged) — are listed explicitly rather than left to the fallback. The landing is identical
+either way; what is not identical is the claim the table makes about itself. Its own comment says the
+vocabulary is complete in one place, and a reader checking a reason word against it has to be able to
+find every word the route can redirect with. Same string, same translations, no new key.
+
 #### What does not change
 
 - `beginEbayConnect`, `claimEbayConnectState`, `/ebay/start` and the whole native hand-off (§5.2) are
@@ -1044,7 +1053,8 @@ returned by the function.
 - `ebayConnectStates/{state}` (§4.5) is unchanged: same fields, same TTL, same `nonceHash`, same
   single-use transaction, same burn — on an absent nonce and on a wrong one alike.
 - The eight reason words, the sentences behind them, and §10's table are unchanged apart from the
-  `unavailable` row.
+  `unavailable` row and the three rows (`missing_code`, `token`, `exchange`) that point at the same
+  sentence the fallback already gave them.
 - The accepted URL registered in the eBay portal is unchanged. eBay is not told anything new and is not
   contacted about this.
 - The nonce cookie's transport attributes are unchanged: `nv_ebay_nonce`, `Secure`, `SameSite=Lax`,
@@ -1932,7 +1942,9 @@ code becomes a sentence — a technical code never reaches the screen. Every sen
 English key with entries in all 11 other languages (§11.5). `unavailable` is the one reason word the
 function never sends: it is produced by the web callback route alone (§5.4) and points at the sentence
 `ebayReasonText` already returns as its fallback, so it is added to `REASON_TEXT` and needs no new
-translation. Reconnect = `beginEbayConnect` again;
+translation. `missing_code`, `token` and `exchange` are listed beside it pointing at that same sentence,
+so every word the callback can redirect with is in the table rather than three of them relying on the
+fallback while the table claims to be complete. Reconnect = `beginEbayConnect` again;
 the callback lands on the same row and sets `catchUpDueFromMs` (§7.6).
 
 ---
