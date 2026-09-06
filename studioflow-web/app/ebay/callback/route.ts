@@ -23,7 +23,24 @@ const NONCE_COOKIE = "nv_ebay_nonce";
 
 export const dynamic = "force-dynamic";
 
+// Where a visit that is not an eBay callback is sent. The settings page reads
+// `ebay=…` and says one sentence; the reason never reaches the screen as a code.
+const SETTINGS = "https://nivadesk.app/settings?section=ebay&ebay=error&reason=missing_code";
+
 export function GET(request: NextRequest) {
+  // Fail closed at the edge. eBay always arrives with `code` (accepted) or
+  // `error` (declined); anything else is a scan, a stale bookmark or someone
+  // poking the URL, and forwarding it would spend a Cloud Function invocation
+  // and put an attacker-shaped query on the other side of the redirect. It is
+  // also what makes the state-less callback provably refused before the
+  // connector's own functions exist in production.
+  const hasCode = Boolean(request.nextUrl.searchParams.get("code"));
+  const hasError = Boolean(request.nextUrl.searchParams.get("error"));
+  if (!hasCode && !hasError) {
+    const refusal = NextResponse.redirect(SETTINGS, 302);
+    refusal.cookies.set(NONCE_COOKIE, "", { path: "/ebay/callback", maxAge: 0, sameSite: "lax", secure: true });
+    return refusal;
+  }
   const target = new URL(CALLBACK);
   // Every eBay parameter goes through as it came — code, state, expires_in and
   // eBay's own error fields.
