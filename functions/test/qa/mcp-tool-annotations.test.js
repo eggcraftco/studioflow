@@ -39,6 +39,11 @@ const FLAG_STATES = {
   "inventory+orchestrator": { inventory: true, orchestrator: true }
 };
 
+// Documents write counts as words ("Nine read tools"), so the checks that read a
+// number back out of a document have to read both spellings.
+const NUMBER_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+const asCount = (text) => (/^\d+$/.test(text) ? Number(text) : NUMBER_WORDS[String(text).toLowerCase()]);
+
 let failures = 0;
 function check(name, run) {
   try { run(); console.log("PASS ", name); }
@@ -250,9 +255,6 @@ check("the carve-out paragraph counts the access-log rows the registry declares"
   // So all four numbers in that paragraph are read back out of it: the
   // registry's count, the two flag-state counts the deployment actually
   // returns, and the reachable count.
-  const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
-  const value = (text) => (/^\d+$/.test(text) ? Number(text) : WORDS[String(text).toLowerCase()]);
-
   const paragraph = doc.split("\n\n").find((block) => / read tools cause one write:/.test(block));
   assert.ok(paragraph, 'the carve-out paragraph ("N read tools cause one write") is gone from the document');
 
@@ -260,7 +262,7 @@ check("the carve-out paragraph counts the access-log rows the registry declares"
   const stated = /(\*{0,2})([A-Za-z]+|\d+)\1 read tools cause one write:/.exec(paragraph);
   assert.ok(stated, "could not read the count out of the carve-out sentence");
   assert.strictEqual(
-    value(stated[2]), declared.length,
+    asCount(stated[2]), declared.length,
     `the carve-out says "${stated[2]} read tools" and the registry declares ${declared.length} with piiAccessLogged: true ` +
     `(${declared.map((entry) => entry.name).sort().join(", ")})`
   );
@@ -272,9 +274,9 @@ check("the carve-out paragraph counts the access-log rows the registry declares"
   const perFlag = /names (\*{0,2})([A-Za-z]+|\d+)\1 with the flag off and (\*{0,2})([A-Za-z]+|\d+)\3 with it on/.exec(paragraph);
   assert.ok(perFlag,
     'the carve-out must state both flag states, as "names <n> with the flag off and <n> with it on" — flags-off the two bank tools do not file the row');
-  assert.strictEqual(value(perFlag[2]), off.logged.length,
+  assert.strictEqual(asCount(perFlag[2]), off.logged.length,
     `the carve-out says ${perFlag[2]} with the flag off; nvMcpPiiLoggedActions() returns ${off.logged.length} (${off.logged.sort().join(", ")})`);
-  assert.strictEqual(value(perFlag[4]), on.logged.length,
+  assert.strictEqual(asCount(perFlag[4]), on.logged.length,
     `the carve-out says ${perFlag[4]} with the flag on; nvMcpPiiLoggedActions() returns ${on.logged.length} (${on.logged.sort().join(", ")})`);
 
   // And the number that was actually in the sentence before: how many a caller
@@ -284,13 +286,70 @@ check("the carve-out paragraph counts the access-log rows the registry declares"
   const stateReachable = /(\*{0,2})([A-Za-z]+|\d+)\1 of those seven are reachable/.exec(paragraph)
     || /With the flag off (\*{0,2})([A-Za-z]+|\d+)\1 of/.exec(paragraph);
   assert.ok(stateReachable, "the carve-out must say how many of the flags-off rows a caller can actually reach");
-  assert.strictEqual(value(stateReachable[2]), reachable.length,
+  assert.strictEqual(asCount(stateReachable[2]), reachable.length,
     `the carve-out says ${stateReachable[2]} reachable flags-off; the dispatcher reaches ${reachable.length} (${reachable.sort().join(", ")})`);
 
   assert.ok(/NIVADESK_MCP_ORCHESTRATOR/.test(paragraph), "the carve-out must name the flag the two bank rows wait on");
   for (const name of ["get_bank_spending_summary", "search_bank_transactions"]) {
     assert.ok(paragraph.includes(`\`${name}\``), `the carve-out must name ${name} as one of the flag-gated rows`);
   }
+});
+
+check("the submission's carve-out sign-off names every tool the operator is signing for", () => {
+  // §5.7 is the operator's signature, not narration: "a position to sign off,
+  // not a bug". On 7 September 2026 it described seven tools and weighed an
+  // alternative of "flipping seven readOnlyHints to false", in a document whose
+  // own §5.5 says two more tools gain the row on NIVADESK_MCP_ORCHESTRATOR —
+  // the very flag the signature authorises. Nine is what is being signed, and
+  // nine hints is a materially larger alternative than seven.
+  const submission = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-submission-1.2.0.md"), "utf8");
+  const start = submission.indexOf("### 5.7 ");
+  assert.ok(start > 0, "§5.7, the readOnlyHint carve-out sign-off, is gone from the submission document");
+  const end = submission.indexOf("\n### ", start + 1);
+  const section = submission.slice(start, end > start ? end : undefined);
+
+  // Every tool the section names, against the registry's own list. Naming a
+  // tool that does NOT file the row is as wrong as omitting one that does.
+  const logged = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged).map((entry) => entry.name).sort();
+  const named = registry.TOOL_REGISTRY
+    .map((entry) => entry.name)
+    .filter((name) => section.includes(`\`${name}\``))
+    .sort();
+  assert.deepStrictEqual(
+    named, logged,
+    `§5.7 names [${named.join(", ")}]; the tools that file a piiAccessLog row are [${logged.join(", ")}]`
+  );
+
+  // And the numbers, each against its own source.
+  const off = loggedAndAvailableUnder({ orchestrator: false });
+  const on = loggedAndAvailableUnder({ orchestrator: true });
+  const reachableOff = off.logged.filter((name) => off.available.includes(name));
+
+  const opening = /^### 5\.7[^\n]*\n+([A-Za-z]+|\d+) read tools write one `piiAccessLog` row/m.exec(section);
+  assert.ok(opening, '§5.7 must open with "<n> read tools write one `piiAccessLog` row per call"');
+  assert.strictEqual(asCount(opening[1]), logged.length,
+    `§5.7 opens with ${opening[1]}; the registry declares ${logged.length} tools that file the row`);
+
+  const alternative = /flipping ([A-Za-z]+|\d+) `readOnlyHint`s to `false`/.exec(section);
+  assert.ok(alternative, "§5.7 must weigh the alternative it is being signed against");
+  assert.strictEqual(asCount(alternative[1]), logged.length,
+    `§5.7 weighs flipping ${alternative[1]} hints; the flipped state has ${logged.length}. ` +
+    `The size of the alternative is half of what the signature is for.`);
+
+  const live = /([A-Za-z]+|\d+) are live today/.exec(section);
+  assert.ok(live, '§5.7 must say how many of them are live today ("<n> are live today")');
+  assert.strictEqual(asCount(live[1]), reachableOff.length,
+    `§5.7 says ${live[1]} are live today; flags-off the dispatcher reaches ${reachableOff.length} (${reachableOff.sort().join(", ")})`);
+
+  const flagOff = /names ([A-Za-z]+|\d+) with the flag off/.exec(section);
+  assert.ok(flagOff, "§5.7 must state what nvMcpPiiLoggedActions() returns with the flag off");
+  assert.strictEqual(asCount(flagOff[1]), off.logged.length,
+    `§5.7 says ${flagOff[1]} with the flag off; the deployment returns ${off.logged.length}`);
+
+  const flagOn = /That is ([A-Za-z]+|\d+) with the flag on/.exec(section);
+  assert.ok(flagOn, "§5.7 must state what it becomes with the flag on — that is the state being signed");
+  assert.strictEqual(asCount(flagOn[1]), on.logged.length,
+    `§5.7 says ${flagOn[1]} with the flag on; the deployment returns ${on.logged.length}`);
 });
 
 check("every access-logged tool names categories and a subject the access log will keep", () => {

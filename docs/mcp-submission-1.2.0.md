@@ -437,14 +437,23 @@ the bump, because it is on the wire and the review connection is live on the cur
 
 ### 5.7 The `readOnlyHint` carve-out (a position to sign off, not a bug)
 
-Six live read tools (`search_orders`, `get_order_detail`, `get_order_financials`,
-`get_dashboard_summary`, `get_financial_overview`, `get_extra_spending_overview`) and one of the new ones
-(`search_commerce_orders`) write one `piiAccessLog` row per call,
-recording that a person's details were shown to an assistant. We call them read-only and say so in each
-tool's own `readOnlyHint` justification. The alternative — flipping seven `readOnlyHint`s to `false` — is defensible
-under a literal reading of "changes no persistent state" and would make every read tool look mutating to
-the model. Recommendation: keep the carve-out, disclosed on each tool. The operator signs this off,
-because it is the one annotation position a reviewer could reasonably disagree with.
+Nine read tools write one `piiAccessLog` row per call, recording that a person's details were shown to an
+assistant. The signature is for the flipped state, so it is nine, split three ways:
+
+- Six are live today: `search_orders`, `get_order_detail`, `get_order_financials`,
+  `get_dashboard_summary`, `get_financial_overview`, `get_extra_spending_overview`.
+- One of the new ones, `search_commerce_orders`, carries the row in the registry and is not dispatchable
+  until `NIVADESK_MCP_ORCHESTRATOR` is set — so `nvMcpPiiLoggedActions()` names seven with the flag off,
+  six of them reachable.
+- Two more, `get_bank_spending_summary` and `search_bank_transactions`, gain the row on that same flag
+  (§5.5). That is nine with the flag on, which is the state this sign-off authorises.
+
+We call them read-only and say so in each tool's own `readOnlyHint` justification. The alternative —
+flipping nine `readOnlyHint`s to `false`, two of them on the bank tools — is defensible under a literal
+reading of "changes no persistent state" and would make every read tool look mutating to the model.
+Recommendation: keep the carve-out, disclosed on each tool. The operator signs this off, because it is the
+one annotation position a reviewer could reasonably disagree with — and what is being signed is nine tools,
+not the seven this section described until 7 September 2026.
 
 ### 5.8 Flip order
 
