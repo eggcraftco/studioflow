@@ -41,7 +41,7 @@ truthful capability map (§4.1), SDK-shaped signature verification and the order
 | Template | One Square-style factory `functions/ebayConnector.js` → `createEbayConnectorFunctions(deps)`; orders land only through `commerce/engine.applyEnvelope` in `mode:"apply"`, and every path (sweep, Sync now, import, queue, held release) goes through **one** `applyEbayOrder` (§7.5, MERGE-006) | The adapter already emits the canonical envelope; Etsy's own live applier + shadow path is legacy. Shadow mode has no live path to diff against, so it is inapplicable (§75 "shadow → verify → enable" is satisfied by the connector flag + sandbox seller instead) |
 | Connection row | Root `ebayConnections/{companyId__sellerUserId}` (server-only), like `squareConnections` | Purge, lifecycle, sweep, wiring pins and the rules layout all assume root connector collections |
 | Credentials | Separate server-only doc `ebayConnections/{id}/credentials/current`, boxed with `EBAY_TOKEN_KEY` via `security/tokenBox.js`; never on the connection doc | §11 "Token/secret bu JSON içinde tutulmaz" taken literally; the public view then has nothing to strip |
-| Secrets identity | The three `EBAY_*` secrets are mounted **only** on functions that run as the dedicated service account `ebay-connector@eggcraft-studio.iam.gserviceaccount.com`; eBay tasks ride their own Cloud Tasks worker `ebayEventWorker`, never `commerceEventWorker`; the access-control trip-wire is extended from `AMAZON_*` to `(AMAZON|EBAY)_*` (§3.2) | `docs/security/access-control-policy.md` §5 "Open remediation": a marketplace's credentials must not be readable by every function; eBay's obligations (API License Agreement, account-deletion program, buyer PII in `restrictedCustomer`) are the same class as Amazon's, so the same answer |
+| Secrets identity | The **five** `EBAY_*` secrets (`EBAY_CALLBACK_KEY` included since §5.4) are mounted **only** on functions that run as the dedicated service account `ebay-connector@eggcraft-studio.iam.gserviceaccount.com`; eBay tasks ride their own Cloud Tasks worker `ebayEventWorker`, never `commerceEventWorker`; the access-control trip-wire is extended from `AMAZON_*` to `(AMAZON|EBAY)_*` (§3.2) | `docs/security/access-control-policy.md` §5 "Open remediation": a marketplace's credentials must not be readable by every function; eBay's obligations (API License Agreement, account-deletion program, buyer PII in `restrictedCustomer`) are the same class as Amazon's, so the same answer |
 | Buyer PII | Split **before** the adapter by `commerce/ebay/sanitize.js` — its **own** camelCase path list and scanner, pinned against a captured sandbox order (§8.1); restricted half → `companies/{cid}/restrictedCustomer/{orderId}` (existing, `provider:"ebay"`); the order doc carries the buyer **username** as `customerName` (§8.2) | §25 minimisation + `privacy/outbound.js` already marks eBay `restricted: true`; the Amazon isolation layer is the precedent for the shape, not for the field names |
 | Buyer identifiers at rest | Keyed hashes only: `HMAC-SHA256(EBAY_HASH_KEY, lower(value))` for `ebayBuyers`, the deletion ledger, the deletion task and the seller match; `sellerUserIdHash` stored on the connection at connect time (§4.6, §4.7, §9) | An unsalted SHA-256 of a low-entropy eBay handle is dictionary-reversible; a Cloud Tasks payload is readable by any project viewer |
 | Reveal | `revealRestrictedCustomer` is **implemented in this half**, provider-agnostic, in `functions/privacy/reveal.js` + one wiring line; the Amazon side consumes it (§3.3) | Two variants racing is the failure mode; one owner |
@@ -51,7 +51,7 @@ truthful capability map (§4.1), SDK-shaped signature verification and the order
 | Gate | Three layers: secrets marker file, runtime env switch, Firestore connector flag (`appConfig/commerce.connectors`) — **none of which gates account-deletion compliance** (§2) | Deploy activates nothing; rollback without redeploy; per-connection pause; compliance is not a feature |
 | Queue | `ebayEventWorker` (its own Cloud Tasks queue, created by the deploy under the function's own name, own service account); `retryCommerceEvent` re-enqueues eBay rows there instead of processing inline | §72 "payload goes to a queue"; §3.2 secrets isolation |
 | Scopes | `sell.fulfillment.readonly` + `commerce.identity.readonly` — **nothing else** | Read-only half, `readOnly: true`, consent copy "NivaDesk will read your orders". Square precedent SQ-AUTH-011 (read-first). When shipment-write ships, the card's existing *Reconnect required* event carries the new scope; a leaked refresh token from this half cannot write |
-| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc; the web stores the nonce in a short-lived first-party cookie; the callback route forwards it; the function refuses a callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace (§5) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
+| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc; the web stores the nonce in a short-lived first-party cookie; the callback route reads it and copies it into a **signed POST body**, never a URL (§5.4), forwarding an absent cookie as `nonce: ""` so the state is still burned at the moment of consent; the function refuses a callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace (§5) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
 | Preview / Sync now | `previewEbayImport` owner-only with the `syncLockUntilMs` single-flight; `syncEbayNow` member but charged to the connection's daily share (§7.4) | Square's preview is owner-only (`squareConnector.js` 832–833); an app-wide cap alone is a cross-tenant DoS |
 | Retention | `privacy/retention.js` eBay `{ days: 90, reason: "ebay_address_withheld_after_90d" }` — restricted doc deleted 90 days after delivery by `sweepMarketplacePii` (§8.4) | eBay itself stops returning `addressLine1/2` for orders older than 90 days (§1); keeping them longer than eBay does is not minimisation |
 
@@ -106,7 +106,8 @@ marker, the switch and the flag (§9); the challenge GET is always answered.
    ```js
    const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || fs.existsSync(path.join(__dirname, ".ebay-secrets-ready"));
    const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY
-     ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY")]
+     ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"),
+        defineSecret("EBAY_HASH_KEY"), defineSecret("EBAY_CALLBACK_KEY")]   // five since §5.4
      : [];
    const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";
    // Every eBay trigger spreads this into its options: secrets AND identity travel together (§3.2).
@@ -219,7 +220,7 @@ literal `exports.<fn> = ebayExports.<fn>;` line per export; `_e2e.ebay = ebayExp
 `retention` sweep's restricted-doc deletion step (§8.4).
 
 Deps injected (Square shape): `admin, HttpsError, onCall, onRequest, onSchedule, onTaskDispatched,
-clientId, clientSecret, tokenKey, hashKey, environment, ruName, deletionToken, deletionEndpointUrl,
+clientId, clientSecret, tokenKey, hashKey, callbackKey, environment, ruName, deletionToken, deletionEndpointUrl,
 connectorEnabled, encryptToken, decryptToken, requireWorkspaceOwner, requireWorkspaceMember,
 appReturnUrl, functionsBaseUrl, orderDocRef, integrationOrderCapacity, holdIntegrationOrder,
 sendPushNotificationToCompany, reconcileLineItems, resolveDefaultDeliveryTime, companySettingsDocRef,
@@ -259,8 +260,8 @@ suite enforces it from the first commit.**
   readable by the 39-secret default compute identity.
 - What runs as `ebay-connector@eggcraft-studio.iam.gserviceaccount.com`: every function in the table
   above that spreads `EBAY_RUNTIME` — the callables, the callback, the two sweeps, the gateway and
-  `ebayEventWorker`. The account holds `roles/secretmanager.secretAccessor` on the four `EBAY_*` secrets
-  only, `roles/datastore.user`, `roles/cloudtasks.enqueuer` on the `ebayEventWorker` queue, and
+  `ebayEventWorker`. The account holds `roles/secretmanager.secretAccessor` on the **five** `EBAY_*` secrets
+  (`EBAY_CALLBACK_KEY` included since §5.4) only, `roles/datastore.user`, `roles/cloudtasks.enqueuer` on the `ebayEventWorker` queue, and
   `roles/iam.serviceAccountUser` for the Cloud Tasks OIDC call. The default compute account is
   **not** granted the `EBAY_*` secrets.
 - Why a separate worker: `commerceEventWorker` mounts `SHOPIFY_TOKEN_KEY`, `WOO_TOKEN_KEY` and
@@ -1209,13 +1210,28 @@ would have to decide otherwise.
    domain rather than in a Google project whose log readers are a different and larger set of people. It
    is worthless without `EBAY_CLIENT_SECRET`, and — because of *The burn* — worthless against a state that
    has already been presented. It can only be closed by not receiving the code in a query string at all,
-   which eBay's redirect does not offer. Shortening Hostinger's retention is the only lever, and it is an
-   **operator** setting, not part of this design. The state is in the same log, which is what makes the
-   leaked-key state oracle above reachable at all.
-2. **The nonce is a non-`HttpOnly` bearer string.** The headline result of this section is real — the nonce
-   now appears in **no** access log anywhere: on the first hop it travels in a `Cookie` header, which
-   access logs do not record; on the second it travels in a POST body, which Cloud Run does not record.
-   That was the sharper of the two exposures, because unlike a code it does not expire on use. But the
+   which eBay's redirect does not offer. This is **measured, not assumed**: synthetic requests sent on 6
+   September appear in hPanel's access-log view with the query string verbatim, and Hostinger's own
+   answers offer no disable, no redaction, no established retention, no disclosed reader set and no
+   confirmation that copies are not forwarded (`docs/ebay-callback-platform-logging.md`). Retention is
+   therefore **not** the lever it was assumed to be. The lever is where the accepted URL points, and the
+   operator's decision on it is recorded in that note: the sandbox residual accepted on the record, and
+   **production blocked** until the callback is served by a Cloudflare Worker on `connect.nivadesk.app`
+   with synthetic values proving no query string is retained there. That is an operator decision, not
+   part of this design. The state is in the same log, which is what makes the leaked-key state oracle
+   above reachable at all.
+2. **The nonce is a non-`HttpOnly` bearer string.** The headline result of this section is real, but it
+   must be stated at exactly its true size: **the nonce is out of every URL.** On the second hop that is
+   the end of it — it travels in a POST body, and Cloud Run records `requestUrl` but neither headers nor
+   bodies. On the first hop it travels in a `Cookie` header, and the access-log view Hostinger exposes
+   records the request line, the user agent and the caller's IP, not request headers — measured on 6
+   September, not assumed (`docs/ebay-callback-platform-logging.md`). What no measurement of ours can
+   establish is what sits behind that view: retention, readers and onward copies are "not established",
+   "not disclosed" and "cannot confirm or deny" in Hostinger's own answers. So the claim this section
+   supports is that the nonce is in no URL anywhere and in nothing the access log shows — and **never**
+   that OAuth values have stopped appearing in platform logs, which is false: the code and the state
+   demonstrably still do (residual 1). That still removes the sharper of the two exposures, because
+   unlike a code the nonce does not expire on use. But the
    matching residual belongs in the same paragraph: `claimEbayConnectState` returns the nonce as JSON to
    the client and `studioflow-web/lib/studioflow/ebay.ts:242-246` writes it with `document.cookie` from
    client JavaScript, so it **cannot** be `HttpOnly` and is readable by any script running on
@@ -1867,6 +1883,7 @@ TRANSIENT, or `now − lastSuccessAtMs > STALE_AFTER_MS` while `settings.autoSyn
 | Sandbox/production mismatch at callback | `reason=environment` | — | — | "This eBay account belongs to a different environment." |
 | Identity scope missing | `reason=no_seller` | — | — | "eBay did not tell us which seller account this is. Reconnect and approve every permission." |
 | Exchange failed | `reason=exchange` / `token` | — | — | "eBay did not complete the connection. Try again." |
+| The callback could not be completed at all: `NIVADESK_EBAY_CALLBACK_KEY` unset or too short, the two halves of the shared key disagreeing, the function unreachable, any non-200 (401/400/405/5xx), an unparseable body, an unknown reason word, or the web route's 20-second abort | `reason=unavailable` (§5.4) | — | — | same sentence |
 | `invalid_grant` (HTTP 400 body) / 401 after refresh / revoked | `credentials_rejected` | `reconnect_required` | `reauthorization_required` | Reconnect required · "eBay no longer accepts this connection. Reconnect to continue syncing." + **Reconnect** (owner) |
 | Credential box unreadable | `token_unreadable` | `reconnect_required` | `reauthorization_required` | same sentence |
 | Refresh token within 14 d of expiry | `refresh_token_expiring` | `reconnect_required` | `reauthorization_required` | "Reconnect eBay before {date} to keep syncing." |
@@ -1884,7 +1901,10 @@ TRANSIENT, or `now − lastSuccessAtMs > STALE_AFTER_MS` while `settings.autoSyn
 `verifyEbayConnection` returns `{ ok:true, healthy:false, reason }` with the same codes; the web
 `ebayErrorText(code)` / `ebayEventText(type)` / `ebayReasonText(reason)` maps are the single place a
 code becomes a sentence — a technical code never reaches the screen. Every sentence above is an
-English key with entries in all 11 other languages (§11.5). Reconnect = `beginEbayConnect` again;
+English key with entries in all 11 other languages (§11.5). `unavailable` is the one reason word the
+function never sends: it is produced by the web callback route alone (§5.4) and points at the sentence
+`ebayReasonText` already returns as its fallback, so it is added to `REASON_TEXT` and needs no new
+translation. Reconnect = `beginEbayConnect` again;
 the callback lands on the same row and sets `catchUpDueFromMs` (§7.6).
 
 ---
@@ -1955,9 +1975,15 @@ Never a token, box, hash, nonce hash, or `sellerUserIdHash`.
   *Disconnect* card (confirm / Keep connected → "eBay account disconnected. Your orders stay in NivaDesk.").
 - The external-management line (§71) is not shown here (no listings in this half); the section states
   "Listings and stock stay managed on eBay."
-- `app/ebay/callback/route.ts` = the Square route targeting
-  `https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback`, `dynamic = "force-dynamic"`,
-  plus the nonce forwarding and cookie clearing of §5.1 — still reading no eBay parameter.
+- `app/ebay/callback/route.ts` (**§5.4**) is no longer the Square redirect route. It exports
+  `dynamic = "force-dynamic"` and `runtime = "nodejs"` (load-bearing, not a default: Next replaces
+  `process.env` statically for Edge route handlers, which would bake the relay key into the build
+  output). It settles the decline and the shape checks itself, reads the nonce cookie **without gating
+  on it**, signs a JSON body with `NIVADESK_EBAY_CALLBACK_KEY` and POSTs it to
+  `https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback` — no query string on that
+  hop, ever — then turns the function's JSON answer into the seller-facing 302 and clears the cookie on
+  every path, the connected one included. The redirect target is a module constant and `reason` a fixed
+  union, so no eBay parameter and no value from the function's body reaches a URL.
 - `app/ebay/start/page.tsx` (§5.2): signed-in gate, `claimEbayConnectState`, cookie, redirect; on
   `permission-denied` it shows "This eBay connection was started by a different NivaDesk user." and
   a link back to Settings. `dynamic = "force-dynamic"`, `noindex`.
