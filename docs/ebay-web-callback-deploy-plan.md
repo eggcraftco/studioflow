@@ -218,10 +218,14 @@ for the next time this pair moves.)
      five minutes** (§4.2, rows 3, 4 and 5). Read the Google-side line to tell them apart —
      `rejected unsigned request` for the first two, `relay timestamp outside the five-minute window` for
      the third. The 401 itself says nothing about the state;
-   - a callback with a valid state but **no nonce cookie** → `reason=browser`, **and the state burned**.
-     This still holds under §5.4 and is the point of it: the route posts `nonce: ""` rather than refusing,
-     precisely so the state is consumed at the moment of consent. A route that refused an absent cookie
-     locally would leave the state alive for its full ten minutes and hand the §5 attacker a second try.
+   - a callback with a valid state but **no nonce cookie** → `reason=browser`, **the state burned, and
+     eBay's code redeemed and discarded**. That last part is the point of it: the route posts
+     `nonce: ""` rather than refusing, not to burn a state — the attacker never needed that state, because
+     a code is bound to the application and not to the state that fetched it — but because the function is
+     the only thing that can *spend* the code and so make the copy in the access log worthless. A route
+     that refused an absent cookie locally would leave the code alive for the rest of eBay's TTL.
+     (Use a sandbox code that has already been spent, or expect the redemption to be refused: the
+     verification here is `reason=browser` with the state `used: true`, not a successful token call.)
    - an **unsigned** POST straight to the function → 401, and the state survives untouched.
 8. **One log check on the Google side, before the first OAuth attempt.** The state is a Firestore
    document id, and Firestore **Data Access** audit logs record the full document path in

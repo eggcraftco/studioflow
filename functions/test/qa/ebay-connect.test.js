@@ -202,6 +202,19 @@ const said = (res) => JSON.stringify(res.payload);
     const b = await bad.fns.beginEbayConnect({ auth, data: {} });
     const r3 = await callbackPost(bad.fns, { state: b.state, code: "bad-code", nonce: b.nonce });
     assert.strictEqual(r3.payload.reason, "token", said(r3));
+    // §5.4's stated exception 1 to "a shaped callback always burns": the gate is
+    // before the transaction, so a switch flipped MID-FLOW leaves a live state
+    // unburned and its code unspent. Harmless while the switch stays off — begin
+    // refuses, so no state can be minted to replay that code against, and §2
+    // forbids contacting eBay — but it is an exception, so it is executed here
+    // rather than promised in prose.
+    const live = buildEbay();
+    const midFlow = await live.fns.beginEbayConnect({ auth, data: {} });
+    live.switches.connectorOn = false;
+    const mid = await callbackPost(live.fns, { state: midFlow.state, code: "good-code", nonce: midFlow.nonce });
+    assert.strictEqual(mid.payload.reason, "disabled", said(mid));
+    assert.strictEqual(live.store.read(`ebayConnectStates/${midFlow.state}`).used, false, "the documented exception: the gate sits before the transaction");
+    assert.deepStrictEqual(live.calls.codes, [], "and nothing is presented to eBay while the connector is off");
   });
 
   // ---- §5.4: the transport ---------------------------------------------------

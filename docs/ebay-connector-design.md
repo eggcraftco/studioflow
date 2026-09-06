@@ -918,6 +918,23 @@ The cost of the rule is bounded: a scan can only reach the function with a `code
 pass the web route's shape checks, and an invented state answers `reason=state` after one transaction
 read.
 
+**The rule has two exceptions, and stating them is part of stating the rule.** It is asserted absolutely
+here, in the route's own comment and in the deploy plan, so a reader is entitled to the list:
+
+1. **Connector off.** `connectorOn()` answers `reason=disabled` *before* the transaction, so a switch
+   flipped mid-flow leaves a live state unburned and a code unspent. It is harmless while the switch stays
+   off — `beginEbayConnect` refuses, so no state can be minted to replay a code against, and §2 forbids
+   contacting eBay at all — but it is an exception, and it is executed in `ebay-connect.test.js` rather
+   than promised here.
+2. **A transaction throw.** If the Firestore transaction itself fails, the handler answers `reason=state`
+   with nothing burned. That is the right direction (a failed write must not be reported as a burn), and
+   it is the same residual as any other window in which the relay does not reach the transaction — deploy
+   plan §4.2.
+
+A third exception is **closed** rather than listed: the two shape checks used to disagree on units (4096
+characters at the route, 8192 bytes at the function), so a multi-byte code the route accepted became a 400
+with no burn. The route now applies the function's cap to the exact bytes it sends.
+
 **The burn has one dependency, and it is the key.** The rule "a shaped callback always POSTs" holds only
 while the route *can* post: with `NIVADESK_EBAY_CALLBACK_KEY` unset, short, or disagreeing with Secret
 Manager, step 4 above returns `unavailable` without calling, or the function answers 401 before the
@@ -1221,7 +1238,8 @@ find every word the route can redirect with. Same string, same translations, no 
   rather than a compromise — but the clear bought nothing on those paths. **`HttpOnly` is absent from that list because the cookie structurally cannot have it**, not
   because it was forgotten — see the residuals below. The claim "scoped to the callback path so no other
   page can read it", which appears in §5.1, in `setEbayNonceCookie`'s JSDoc at
-  `studioflow-web/lib/studioflow/ebay.ts:236-241` and in the deploy plan's stated-property paragraph, is
+  `studioflow-web/lib/studioflow/ebay.ts:254-266` (the JSDoc; the writer itself is 267-271) and in the
+  deploy plan's stated-property paragraph, is
   **wrong and is removed in all three**: `Path` is a request-matching rule, not a security
   boundary, and same-origin script under a matching path reads the cookie freely.
 
@@ -1456,7 +1474,7 @@ would have to decide otherwise.
    demonstrably still do (residual 1). That still removes the sharper of the two exposures, because
    unlike a code the nonce does not expire on use. But the
    matching residual belongs in the same paragraph: `claimEbayConnectState` returns the nonce as JSON to
-   the client and `studioflow-web/lib/studioflow/ebay.ts:242-246` writes it with `document.cookie` from
+   the client and `studioflow-web/lib/studioflow/ebay.ts:267-271` writes it with `document.cookie` from
    client JavaScript, so it **cannot** be `HttpOnly` and is readable by any script running on
    nivadesk.app. `Path=/ebay/callback` is a request-matching rule, not a boundary. Any script execution on
    our origin therefore defeats browser binding regardless of this transport change. Making it `HttpOnly`
