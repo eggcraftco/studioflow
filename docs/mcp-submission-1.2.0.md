@@ -128,11 +128,25 @@ claims the assistant "does not send messages to your customers", because a statu
 ChatGPT fires the workspace's own notification exactly as the app does. That correction is **not gated**
 — it describes the 19 tools that are live today.
 
-The four cross-channel bullets are written in the same chapter under "Coming in the next version of the
-app" / "Uygulamanın sonraki sürümünde geliyor", marked as not yet published. When the flags flip, move
-those bullets into "What you can ask", delete the heading and its caveat bullet, rebuild the corpus
-(`node functions/assistant/buildGuideCorpus.js`), deploy the seven assistant functions and probe the
-live bot — the guide rule, unchanged.
+The TWO cross-channel bullets are written in the same chapter under "Coming in the next version of the
+app" / "Uygulamanın sonraki sürümünde geliyor", marked as not yet published: one for
+`search_commerce_orders`, and one for `search_inventory` with `create_inventory_item`'s confirmed
+photo-add.
+
+There were four until 7 September 2026, and they had not been touched by the reduction: three described
+capabilities that came out on 6 September — a per-channel money summary with payouts, an attention list,
+a shop/bank/accounting connection roster with accounting sync status — and the fourth promised a stock
+overview and valuation that also came out. This is not an internal design page: it compiles into
+`functions/assistant/guideCorpus.json`, which is what the in-app assistant answers paying users from, so
+the four bullets were four descriptions of capabilities that do not exist, in the answer set of a live
+bot.
+
+When the flags flip, move THOSE TWO bullets into "What you can ask", delete the heading and its caveat
+bullet, rebuild the corpus (`node functions/assistant/buildGuideCorpus.js`), deploy the seven assistant
+functions and probe the live bot — the guide rule, unchanged. Two bullets move, and nothing else: a
+bullet with no registry row behind it is exactly what the reduction removed, and
+`functions/test/qa/mcp-reduced-surface.test.js` now reads this chapter out of the built corpus and fails
+if one comes back.
 
 ### 2.6 What pins it
 
@@ -500,8 +514,12 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    (§2.3). Do not stage the demo around a channel roster. Plus one `update_order_status` on an order with
    automatic updates **off**, so the notification boundary can be demonstrated without mailing a test
    address.
-8. Guide: move the Step B bullets, rebuild the corpus, deploy the seven assistant functions, probe the
-   live bot with one question per new capability.
+8. Guide: move the TWO bullets under "Coming in the next version of the app" (§2.5) into "What you can
+   ask", in EN and TR, and delete the heading with its caveat bullet. Two, and nothing else — the
+   chapter carried four until 7 September 2026 and three of them named capabilities the reduction
+   removed. Rebuild the corpus (`node functions/assistant/buildGuideCorpus.js`), deploy the seven
+   assistant functions, and probe the live bot with one question per published capability:
+   `search_commerce_orders` and `search_inventory`.
 9. Submit 1.2.0 with the release notes below.
 
 ---

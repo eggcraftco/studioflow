@@ -263,6 +263,115 @@ check("render.js branches on names it can never be handed", () => {
     "render.summaryFor has more than one caller; the unreachability argument above covers only run()");
 });
 
+/**
+ * The guide's "coming in the next version" block, EN and TR, as the in-app
+ * assistant sees it.
+ *
+ * Read from the BUILT corpus rather than from guide.ts, because the corpus is
+ * what the bot answers from — `guide-corpus-fresh.test.js` is what keeps the
+ * two in step, so reading the artefact tests the surface and still fails on an
+ * unbuilt edit.
+ */
+function comingBullets(marker) {
+  const corpus = require("../../assistant/guideCorpus.json").sections || [];
+  const chapter = corpus.find((section) => section.id === "chatgpt-app");
+  assert.ok(chapter, "the guide has no chatgpt-app chapter any more");
+  // `search` carries the EN text followed by the TR one, so both languages'
+  // blocks are sliceable out of the same field.
+  const text = String(chapter.search || chapter.text || "");
+  // The heading also appears in the chapter's " · "-joined heading list, so
+  // match it as its own LINE, which is where the bullets follow it.
+  const heading = `\n${marker}\n`;
+  const at = text.indexOf(heading);
+  assert.ok(at >= 0, `the guide chapter no longer carries the heading "${marker}"`);
+  const lines = text.slice(at + heading.length).split("\n");
+  const bullets = [];
+  for (const line of lines) {
+    if (!line.startsWith("- ")) break;   // the next heading ends the block
+    bullets.push(line);
+  }
+  assert.ok(bullets.length > 0, `the block under "${marker}" has no bullets`);
+  return bullets.join("\n");
+}
+
+check("the guide promises only capabilities that have a registry row", () => {
+  // The fifth door, and the one that reaches a paying user. The reduction did
+  // not touch studioflow-web/lib/publicSite/guide.ts: on 7 September 2026 its
+  // ChatGPT chapter still carried four "coming in the next version" bullets,
+  // three of them entirely describing capabilities removed on 6 September and
+  // the fourth promising a stock overview and valuation that also came out. It
+  // compiles into functions/assistant/guideCorpus.json, which is what the
+  // in-app assistant answers from, and two places in
+  // docs/mcp-submission-1.2.0.md told the operator to publish those bullets on
+  // flip day. A bot that offers a tool the app does not publish sends the
+  // reader somewhere that is not there — the guide rule, and the shape of the
+  // 1.1.1 rejection.
+  //
+  // Both halves of this check are keyed on the registry. What is hand-written
+  // is the phrase per name, for the same reason REMOVED itself is hand-written
+  // and can only be: a capability that has no registry row cannot be enumerated
+  // from the registry. What CANNOT drift is the set of names — every REMOVED
+  // name must have a phrase, and every flag-gated published capability must
+  // have a marker the guide carries.
+  const EN = "Coming in the next version of the app";
+  const TR = "Uygulamanın sonraki sürümünde geliyor";
+
+  /** The promise that identifies each removed capability, in both languages. */
+  const REMOVED_PROMISES = Object.freeze({
+    get_business_attention_summary: { en: /needs attention today/i, tr: /nelere bakılmalı/i },
+    get_commerce_overview: { en: /how many orders this month and where they came from/i, tr: /bu ay kaç sipariş geldi/i },
+    get_channel_performance: { en: /platform fees/i, tr: /platform ücret/i },
+    get_inventory_overview: { en: /stock overview/i, tr: /stok özeti/i },
+    get_payout_reconciliation_overview: { en: /\bpayouts?\b/i, tr: /\bpayout\b/i },
+    get_integration_health: { en: /connections? (?:is|are) healthy/i, tr: /bağlantısının sağlıklı/i },
+    get_accounting_sync_status: { en: /Pandle|Xero|QuickBooks/i, tr: /Pandle|Xero|QuickBooks/i },
+    get_banking_attention_summary: { en: /uncategorised bank lines/i, tr: /kategorisiz banka satırları/i }
+  });
+
+  /** And what the guide must say about each capability the flags DO publish. */
+  const PUBLISHED_MARKERS = Object.freeze({
+    search_commerce_orders: { en: /find an order from any channel/i, tr: /herhangi bir kanaldaki siparişi bulma/i },
+    search_inventory: { en: /search your stock by name/i, tr: /stoğunuzu ad, SKU/i },
+    create_inventory_item: { en: /add an item from a photo/i, tr: /fotoğraftan ürün ekleyebilirsiniz/i }
+  });
+
+  // Neither table may fall behind the registry.
+  assert.deepStrictEqual(Object.keys(REMOVED_PROMISES).sort(), [...REMOVED_NAMES].sort(),
+    "every removed capability needs the promise that identifies it, or this check stops covering it");
+  const flagsOff = new Set(registry.publishedNames({}));
+  const gated = registry.publishedNames({ inventory: true, orchestrator: true }).filter((name) => !flagsOff.has(name));
+  assert.deepStrictEqual(Object.keys(PUBLISHED_MARKERS).sort(), [...gated].sort(),
+    "the flags publish a capability the guide has no marker for: give it an EN+TR bullet and add it here (the guide rule)");
+
+  for (const [language, marker] of [["EN", EN], ["TR", TR]]) {
+    const block = comingBullets(marker);
+    const key = language.toLowerCase();
+
+    for (const [name, promise] of Object.entries(REMOVED_PROMISES)) {
+      assert.ok(
+        !promise[key].test(block),
+        `the ${language} guide promises ${name} ("${(block.match(promise[key]) || [""])[0]}"), and it has no registry row. ` +
+        `${REMOVED[name]}. A bot that offers a tool the app does not publish sends the reader somewhere that is not there.`
+      );
+    }
+    for (const [name, mark] of Object.entries(PUBLISHED_MARKERS)) {
+      assert.ok(
+        mark[key].test(block),
+        `the ${language} guide no longer describes ${name}, which the flags publish. ` +
+        `If the bullet was reworded, update its marker here; if the capability left the release, it leaves the registry too.`
+      );
+    }
+    // A block that says "four" while carrying two is how the flip-day
+    // instruction went wrong in the first place.
+    const bulletCount = block.split("\n").filter((line) => line.startsWith("- ")).length - 1;
+    const stated = /\bThe (two|three|four|five|six) below\b/i.exec(block) || /\bAşağıdaki (iki|üç|dört|beş|altı) madde\b/i.exec(block);
+    assert.ok(stated, `the ${language} caveat bullet must say how many capabilities are described below it`);
+    const WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, iki: 2, "üç": 3, "dört": 4, "beş": 5, altı: 6 };
+    assert.strictEqual(WORDS[stated[1].toLowerCase()], bulletCount,
+      `the ${language} caveat says "${stated[1]}" and there are ${bulletCount} capability bullets under it`);
+  }
+});
+
 check("the orphaned modules are still on disk, unchanged and unpublished", () => {
   // They stay because deleting them would churn a diff the reduction did not
   // need to touch. The claim being made about them is only ever "unreachable",
