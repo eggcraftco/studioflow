@@ -464,6 +464,65 @@ Operator's conditional approval (in chat, 03:25 UTC): B5.1 → B5.2 → B5.3 eac
 
 6: fifteen-minute watch (03:36:28 → 03:52:18 UTC): **0 ERROR entries, 0 request 5xx**; traffic was the probe set (401s and the Play RTDN endpoint's 200 to an empty body, as baselined) — passed. Four conditions met → B5.2 started under the operator's standing approval.
 
+## B5.2 — callables last deployed in August, chunk 2 (45 functions)
+
+Started under the operator's standing approval after B5.1's clean gate. Same seven steps.
+
+1–2: snapshot and baseline probes at 03:52–03:54: 1 × 200, 1 × 400, 42 × 401, 1 × 403, 0 × 5xx.
+3: started 2026-09-06T03:54:37Z from `b278ef6a` (functions code identical to `4b44eef9`); "Deploy complete" 03:58:14 (3 min 37 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 03:58:14 all 45 services report a new Ready revision (table below).
+5: probes re-run at 03:58:19 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| listLibraryFiles | listlibraryfiles-00002-kig | 401 | listlibraryfiles-00003-luf | 401 |
+| listMySupportTickets | listmysupporttickets-00044-kuj | 401 | listmysupporttickets-00045-qus | 401 |
+| listPurchases | listpurchases-00001-wup | 401 | listpurchases-00002-sar | 401 |
+| listStocktakes | liststocktakes-00001-tad | 401 | liststocktakes-00002-yis | 401 |
+| listSuppliers | listsuppliers-00002-tug | 401 | listsuppliers-00003-zic | 401 |
+| listWorkspaceTickets | listworkspacetickets-00041-vey | 401 | listworkspacetickets-00042-guw | 401 |
+| mergeInventoryCategories | mergeinventorycategories-00001-bep | 401 | mergeinventorycategories-00002-kov | 401 |
+| nvViewSharedFile | nvviewsharedfile-00005-fuv | 400 | nvviewsharedfile-00006-vif | 400 |
+| pandleDisconnect | pandledisconnect-00001-cik | 401 | pandledisconnect-00002-heg | 401 |
+| pandleRejectMatch | pandlerejectmatch-00002-wot | 401 | pandlerejectmatch-00003-hof | 401 |
+| pandleSaveMappings | pandlesavemappings-00001-vik | 401 | pandlesavemappings-00002-waz | 401 |
+| parseOpeningStock | parseopeningstock-00003-fuj | 401 | parseopeningstock-00004-xuc | 401 |
+| pinMessageInThread | pinmessageinthread-00002-ten | 401 | pinmessageinthread-00003-gap | 401 |
+| prepareAppleSubscriptionPurchase | prepareapplesubscriptionpurchase-00005-qoh | 401 | prepareapplesubscriptionpurchase-00006-ciq | 401 |
+| prepareGooglePlayPurchase | preparegoogleplaypurchase-00005-dat | 401 | preparegoogleplaypurchase-00006-dug | 401 |
+| previewClearAllOrdersTax | previewclearallorderstax-00001-nap | 401 | previewclearallorderstax-00002-ciw | 401 |
+| purgeDeletedOrders | purgedeletedorders-00003-sah | 403 | purgedeletedorders-00004-giv | 403 |
+| receivePurchase | receivepurchase-00003-fin | 401 | receivepurchase-00004-pov | 401 |
+| recordInventoryLoss | recordinventoryloss-00001-gax | 401 | recordinventoryloss-00002-boz | 401 |
+| registerLibraryFile | registerlibraryfile-00002-fom | 401 | registerlibraryfile-00003-xin | 401 |
+| releaseInventoryFromOrder | releaseinventoryfromorder-00002-ceg | 401 | releaseinventoryfromorder-00003-wet | 401 |
+| removeClientDomain | removeclientdomain-00006-rub | 401 | removeclientdomain-00007-dul | 401 |
+| renameLibraryFile | renamelibraryfile-00001-taw | 401 | renamelibraryfile-00002-wij | 401 |
+| requestClientDomain | requestclientdomain-00001-dod | 401 | requestclientdomain-00002-zub | 401 |
+| reserveInventoryForOrder | reserveinventoryfororder-00002-wed | 401 | reserveinventoryfororder-00003-zac | 401 |
+| resetOrderWorkspaceCardLayout | resetorderworkspacecardlayout-00062-pol | 401 | resetorderworkspacecardlayout-00063-gol | 401 |
+| resolveClientDomain | resolveclientdomain-00001-cud | 200 | resolveclientdomain-00002-nic | 200 |
+| restoreLibraryFile | restorelibraryfile-00001-nuc | 401 | restorelibraryfile-00002-hoc | 401 |
+| resyncIntegrationCustomer | resyncintegrationcustomer-00001-jez | 401 | resyncintegrationcustomer-00002-rip | 401 |
+| saveClientPortalBranding | saveclientportalbranding-00001-duy | 401 | saveclientportalbranding-00002-taz | 401 |
+| saveDashboardWidgetVisibility | savedashboardwidgetvisibility-00052-rud | 401 | savedashboardwidgetvisibility-00053-zap | 401 |
+| saveIntegrationSyncSettings | saveintegrationsyncsettings-00003-xak | 401 | saveintegrationsyncsettings-00004-hop | 401 |
+| saveInventoryCategories | saveinventorycategories-00001-xir | 401 | saveinventorycategories-00002-cuf | 401 |
+| saveInventoryLocation | saveinventorylocation-00001-xoh | 401 | saveinventorylocation-00002-rus | 401 |
+| saveInventoryRecipe | saveinventoryrecipe-00001-mev | 401 | saveinventoryrecipe-00002-qiy | 401 |
+| saveOrderCardDisplaySettings | saveordercarddisplaysettings-00039-quc | 401 | saveordercarddisplaysettings-00040-siv | 401 |
+| saveOrderPortalSettings | saveorderportalsettings-00001-soj | 401 | saveorderportalsettings-00002-mig | 401 |
+| saveOrderWorkspaceCardLayout | saveorderworkspacecardlayout-00061-mib | 401 | saveorderworkspacecardlayout-00062-gen | 401 |
+| savePdfExportSettings | savepdfexportsettings-00077-rin | 401 | savepdfexportsettings-00078-nen | 401 |
+| savePersonalInterfaceSettings | savepersonalinterfacesettings-00019-rid | 401 | savepersonalinterfacesettings-00020-sin | 401 |
+| savePurchase | savepurchase-00004-guz | 401 | savepurchase-00005-vot | 401 |
+| saveQuickReplyContribution | savequickreplycontribution-00016-tel | 401 | savequickreplycontribution-00017-jab | 401 |
+| saveQuickReplySettings | savequickreplysettings-00085-sez | 401 | savequickreplysettings-00086-gof | 401 |
+| saveStocktakeCounts | savestocktakecounts-00001-pob | 401 | savestocktakecounts-00002-git | 401 |
+| saveSupplier | savesupplier-00002-puj | 401 | savesupplier-00003-bed | 401 |
+
+6: fifteen-minute watch (03:54:37 → 04:10:30): _pending_.
+
 ## Rollback used
 
 None so far.
