@@ -227,6 +227,13 @@ merge.
   the log claimed a bank-counterparty read had exposed a phone number and a postal address, filed as an
   order. `assertRegistry` now refuses a logged entry with no valid subject kind and an unlogged entry
   that names one.
+- ~~Marketplace PII blocks made on the orchestrator path are never recorded.~~ **Done.**
+  `loaders.projectOrderForAssistant` hands each audited outbound decision back to its caller (it stays
+  pure and writes nothing) and `run()` files it through an injected `recordPiiBlock` — one row per
+  provider and reason, carrying `recordCount`, rather than one per order over a read of up to a
+  thousand. Before this, a block by one of the ten read capabilities left no trace while the same block
+  by `search_orders` left one, which is the failure privacy/outbound.js's third rule names: a block
+  nobody can see is indistinguishable from a feature that quietly does not work.
 - The orchestrator's audit record needs its collection (`companies/{cid}/assistantAudit`), a retention
   rule and a Firestore rules entry — remembering that the `companies/{cid}` wildcard is a **deny list**:
   a new sensitive subcollection that is not named in all three places is readable by every member.

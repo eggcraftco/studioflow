@@ -62,10 +62,20 @@ function projectCommerceConnection(id, data, provider) {
  * Pure, and exported, so the unit tests can build their snapshots through the
  * same redaction the loader applies instead of approximating it — a fixture
  * that skips this would be testing a row that never reaches a capability.
+ *
+ * `onDecision` is how the third rule of privacy/outbound.js reaches this
+ * surface: "THE DECISION IS RECORDED ... a block nobody can see is
+ * indistinguishable from a feature that quietly does not work." This function
+ * stays pure — it hands the decision to the caller and writes nothing — and the
+ * caller that has a database (`run()` in orchestrator/index.js, through the
+ * injected recordPiiBlock) files it.
  */
-function projectOrderForAssistant(raw = {}) {
-  const { record, verdict } = outbound.redactForChannel(raw, "assistant");
+function projectOrderForAssistant(raw = {}, onDecision = null) {
+  const { record, verdict, removed } = outbound.redactForChannel(raw, "assistant");
   const restricted = !verdict.allow || verdict.minimal;
+  if (typeof onDecision === "function" && outbound.decisionNeedsAudit(verdict)) {
+    onDecision({ verdict, removedCount: removed.length, orderId: String(raw.id || "") });
+  }
   const projected = { ...record, __piiRestricted: restricted };
   if (restricted) {
     // Buyer-authored free text is PII by another route: engine orders store
@@ -75,6 +85,41 @@ function projectOrderForAssistant(raw = {}) {
     delete projected.historyLog;
   }
   return projected;
+}
+
+/**
+ * The decisions of one read, as access-log rows — one per provider and reason,
+ * not one per order.
+ *
+ * The live path (nvSafeOrderForChatGPT) files a row per order because it
+ * projects the handful of orders a search returned. This loader projects up to
+ * a thousand, and a thousand identical rows for one question is an audit trail
+ * nobody can read and a write bill nobody expected. `recordCount` is the field
+ * accessLog.js added for exactly this — "one access to four hundred customers
+ * and one access to a single customer are not the same event".
+ *
+ * `categories` is what the policy WITHHELD, declared the same way the live path
+ * declares it, so an auditor querying "every Amazon decision" gets one shape
+ * rather than two.
+ */
+function piiBlockRows(decisions = []) {
+  const grouped = new Map();
+  for (const decision of decisions) {
+    const verdict = (decision && decision.verdict) || {};
+    const key = `${verdict.provider || ""}|${verdict.reason || ""}|${verdict.minimal ? "minimal" : "blocked"}`;
+    const row = grouped.get(key) || {
+      provider: String(verdict.provider || ""),
+      reason: String(verdict.reason || ""),
+      minimal: verdict.minimal === true,
+      allowed: verdict.allow === true,
+      orders: 0,
+      fieldsRemoved: 0
+    };
+    row.orders += 1;
+    row.fieldsRemoved += Number(decision && decision.removedCount) || 0;
+    grouped.set(key, row);
+  }
+  return [...grouped.values()];
 }
 
 /**
@@ -130,14 +175,15 @@ function createLoaders({ db, now = () => Date.now() }) {
   async function loadOrders(companyId, ctx) {
     const snap = await db().collection("siparisler").where("companyId", "==", String(companyId)).limit(CAPS.orders).get();
     const rows = [];
+    const decisions = [];
     for (const doc of snap.docs) {
       const raw = { id: doc.id, ...(doc.data() || {}) };
       // A workflow-only member sees their own work and nothing else, here as
       // everywhere else in the product.
       if (ctx && ctx.workflowOnly && String(raw.assignedToUid || "") !== ctx.uid) continue;
-      rows.push(projectOrderForAssistant(raw));
+      rows.push(projectOrderForAssistant(raw, (decision) => decisions.push(decision)));
     }
-    return { rows, capped: snap.size >= CAPS.orders };
+    return { rows, capped: snap.size >= CAPS.orders, piiBlocks: piiBlockRows(decisions) };
   }
 
   async function loadBank(companyId) {
@@ -341,11 +387,14 @@ function createLoaders({ db, now = () => Date.now() }) {
     const snapshot = { companyId, nowMs: now(), settings, companyDataHint: companyData };
 
     if (needs.has("orders")) {
-      const { rows, capped } = await loadOrders(companyId, ctx);
+      const { rows, capped, piiBlocks } = await loadOrders(companyId, ctx);
       snapshot.orders = rows;
       snapshot.ordersCapped = capped;
+      // Not part of any answer: `run()` files these and nothing renders them.
+      snapshot.piiBlocks = piiBlocks;
     } else {
       snapshot.orders = [];
+      snapshot.piiBlocks = [];
     }
 
     if (needs.has("production")) {
@@ -427,4 +476,4 @@ function createLoaders({ db, now = () => Date.now() }) {
   return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
 }
 
-module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, projectCommerceConnection, projectOrderForAssistant };
+module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, piiBlockRows, projectCommerceConnection, projectOrderForAssistant };

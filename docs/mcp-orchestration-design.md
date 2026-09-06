@@ -693,6 +693,14 @@ run({ capability, args, ctx, request: { requestId, channelType, providerMessageI
    returns. The set is now derived from `piiAccessLogged`, and each row's `categories` and `subject.kind`
    come from that entry's `pii` and `piiSubject`. Two mechanisms disagreeing about which tools release
    personal data is worse than either alone.
+
+   The MCP surface keeps writing that row in the DISPATCHER rather than in
+   `run()` — `recordPiiAccess` is not injected there — so one call cannot file two rows. What IS injected
+   is `recordPiiBlock`, for the other half of privacy/outbound.js's third rule: `loaders` applies
+   `redactForChannel` to every order and hands each audited decision back (it stays pure and writes
+   nothing), `run()` files one row per provider and reason with `recordCount`, rather than one per order
+   over a thousand-order read. Without it a marketplace block made by these ten capabilities left no
+   trace while the same block made by `search_orders` left one.
 4. `loaders.snapshotFor(entry.domainNeeds, ctx)` — reads only what the capability declares; orders are
    redacted at the choke point (`redactForChannel(order, "assistant")`) before any pure module sees them.
 5. `handler(snapshot, args, ctx, { nowMs })` → `data`, plus per-capability warnings/refs/suggestions.

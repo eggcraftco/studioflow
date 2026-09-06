@@ -26170,12 +26170,22 @@ const NV_MCP_FLAGS = {
  * `piiAccessLogged` entries, before dispatch. Injecting it here as well would
  * file two rows for one read. The WhatsApp gateway, which has no such
  * dispatcher, will inject it.
+ *
+ * recordPiiBlock IS injected, and it records a different fact: not "an
+ * assistant was shown people" but "a marketplace's buyer data was refused".
+ * The dispatcher cannot write that one — it runs before any read and does not
+ * know which orders the policy blocked — so without this injection a block made
+ * by the ten read capabilities would leave no trace at all, while the same
+ * block made by search_orders leaves one (nvSafeOrderForChatGPT).
+ * privacy/outbound.js states the rule that would have broken: a block nobody
+ * can see is indistinguishable from a feature that quietly does not work.
  */
 const nvOrchestratorModule = require("./orchestrator");
 const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
   db: () => admin.firestore(),
   now: () => Date.now(),
   flags: NV_MCP_FLAGS,
+  recordPiiBlock: (entry) => recordPiiAccess(entry),
   uidHasCompanyAccess,
   uidIsCompanyOwner,
   uidCanAccessWorkspaceArea,

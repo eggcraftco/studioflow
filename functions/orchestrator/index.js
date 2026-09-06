@@ -14,6 +14,7 @@
  *   2. assert permission BEFORE any read (§38)
  *   3. record the PII access, when the capability declares one
  *   4. load ONLY the domains the capability declares
+ *   4b. record any marketplace PII the outbound policy refused to release
  *   5. run the pure handler
  *   6. build the envelope (freshness, warnings, partial) and the §13 summary
  */
@@ -117,7 +118,10 @@ function createOrchestrator(deps = {}) {
         actorRole: "chatgpt_connection",
         action: "assistant",
         source: ctx.channel.type,
-        subject: { kind: "order", id: String(args.orderId || "") },
+        // The subject the capability is about, from the registry — the same
+        // field the MCP dispatcher builds its row from, so the two surfaces
+        // cannot describe one read differently.
+        subject: { kind: entry.piiSubject || "order", id: String(args.orderId || "") },
         categories: [...entry.pii],
         note: `capability=${name}`
       }).catch(() => undefined);
@@ -125,6 +129,36 @@ function createOrchestrator(deps = {}) {
 
     const nowMs = typeof deps.now === "function" ? deps.now() : Date.now();
     const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: ctx.settings, companyData: ctx.companyData });
+
+    // The other half of privacy/outbound.js's third rule: "THE DECISION IS
+    // RECORDED ... a block nobody can see is indistinguishable from a feature
+    // that quietly does not work." The loader applies redactForChannel and,
+    // being pure, cannot write the audit row; nothing else on this path did,
+    // so a marketplace block made by one of these ten reads left no trace at
+    // all, while the same block made by search_orders left one.
+    //
+    // One row per provider and reason, carrying `recordCount`, rather than one
+    // per order: the loader projects up to a thousand orders for one question.
+    if (typeof deps.recordPiiBlock === "function") {
+      for (const block of (snapshot.piiBlocks || [])) {
+        Promise.resolve(deps.recordPiiBlock({
+          companyId: ctx.companyId,
+          actorUid: ctx.uid,
+          actorEmail: ctx.email || "",
+          actorRole: "chatgpt_connection",
+          action: "assistant",
+          source: ctx.channel.type,
+          // A set, not a record: the id is empty on purpose, and the provider
+          // is what makes "show me every Amazon decision" answerable.
+          subject: { kind: "order", id: "", provider: block.provider, externalId: "" },
+          // What the policy WITHHELD, declared the way nvSafeOrderForChatGPT
+          // declares it so both surfaces file one shape.
+          categories: ["name", "email", "phone", "address"],
+          recordCount: block.orders,
+          note: `${block.minimal ? "minimal" : "blocked"}:${block.reason} capability=${name} orders=${block.orders} fields=${block.fieldsRemoved}`
+        })).catch(() => undefined);
+      }
+    }
     const result = handler(snapshot, args, ctx, { nowMs }) || {};
 
     const built = envelope.finish({

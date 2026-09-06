@@ -277,6 +277,87 @@ check("a block is recorded, not silent", () => {
   assert.ok(source.includes("redacted=${redactedForExport}"), "the export does not record what it redacted");
 });
 
+// ---- the same rule on the orchestrator's ten read capabilities ---------------
+
+/** A Firestore handle that serves seeded rows and holds nothing else. */
+function seededDb(seed = {}) {
+  const query = (path) => ({
+    where: () => query(path),
+    orderBy: () => query(path),
+    limit: () => query(path),
+    get: async () => {
+      const docs = (seed[path] || []).map((data, index) => ({ id: String(data.id || `d${index}`), data: () => data }));
+      return { docs, size: docs.length, empty: docs.length === 0 };
+    }
+  });
+  const doc = (path) => ({
+    collection: (name) => collection(`${path}/${name}`),
+    get: async () => ({ exists: Boolean(seed[path]), data: () => seed[path] || {} })
+  });
+  const collection = (path) => ({ ...query(path), doc: (id) => doc(`${path}/${id}`) });
+  return () => ({ collection: (name) => collection(name) });
+}
+
+check("a block made by an orchestrator capability is recorded too", async () => {
+  // loaders.projectOrderForAssistant applies the same redactForChannel the live
+  // path applies and dropped the audit half — correctly, since the module is
+  // pure — while nothing else on that path wrote it. So once an Amazon or eBay
+  // connector lands, a block made by one of the ten read capabilities would
+  // have left no trace at all, and the same block made by search_orders would
+  // have left one.
+  const { createOrchestrator } = require("../../orchestrator");
+  const fixtures = require("../fixtures/orchestrator");
+  const filed = [];
+  const orchestrator = createOrchestrator({
+    db: seededDb({
+      siparisler: [
+        { id: "o_amz1", companyId: "co_1", ...order("amazon"), createdAt: "2026-09-01" },
+        { id: "o_amz2", companyId: "co_1", ...order("amazon"), createdAt: "2026-09-02" },
+        { id: "o_own", companyId: "co_1", ...order(""), createdAt: "2026-09-03" }
+      ]
+    }),
+    now: () => fixtures.NOW,
+    flags: { orchestrator: true },
+    recordPiiBlock: async (entry) => { filed.push(entry); }
+  });
+  const ctx = fixtures.ownerContext({ companyId: "co_1" });
+  await orchestrator.run({ capability: "search_commerce_orders", args: {}, ctx });
+
+  assert.strictEqual(filed.length, 1, "one row per provider and reason: not one per order, and not none");
+  const row = filed[0];
+  assert.strictEqual(row.subject.provider, "amazon");
+  assert.strictEqual(row.recordCount, 2, "two blocked orders are not the same event as one");
+  assert.ok(/^blocked:denied_by_policy capability=search_commerce_orders/.test(row.note), row.note);
+  assert.strictEqual(row.actorRole, "chatgpt_connection");
+  // The log must not become a copy of the data it is logging.
+  const serialised = JSON.stringify(row);
+  for (const value of ["Ada Lovelace", "ada@example.com", "7700 900000", "Analytical Way"]) {
+    assert.ok(!serialised.includes(value), `the block row copied ${value}`);
+  }
+  // And it survives the access log's own rules rather than being dropped.
+  const accessLog = require("../../privacy/accessLog");
+  assert.strictEqual(accessLog.worthLogging(accessLog.accessEntry({ ...row, atMs: Date.now() })), true);
+
+  // A workspace with nothing but its own customers files nothing at all.
+  const quiet = [];
+  const clean = createOrchestrator({
+    db: seededDb({ siparisler: [{ id: "o_own", companyId: "co_1", ...order(""), createdAt: "2026-09-03" }] }),
+    now: () => fixtures.NOW,
+    flags: { orchestrator: true },
+    recordPiiBlock: async (entry) => { quiet.push(entry); }
+  });
+  await clean.run({ capability: "search_commerce_orders", args: {}, ctx });
+  assert.deepStrictEqual(quiet, [], "a workshop's own customer is not a marketplace decision");
+});
+
+check("the deployment actually injects the block recorder", () => {
+  // orchestrator/index.js's PII hook was dead on this surface for exactly this
+  // reason: a sink nobody injects is a control that quietly does not work.
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  assert.ok(/createOrchestrator\(\{[\s\S]{0,600}recordPiiBlock:/.test(source),
+    "the MCP orchestrator is built without recordPiiBlock, so its marketplace blocks go unrecorded");
+});
+
 check("every provider the commerce layer knows has a policy, or is denied on purpose", () => {
   // A connector shipped without a policy entry is denied — but silently, which
   // is safe and confusing. This check makes the omission visible here instead.
