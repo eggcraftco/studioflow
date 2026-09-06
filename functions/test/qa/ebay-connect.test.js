@@ -399,6 +399,16 @@ const said = (res) => JSON.stringify(res.payload);
     assert.ok(withMessage[0].includes('console.error("ebayOAuthCallback failed:"'), withMessage[0]);
     assert.ok(/error\?\.name === "EbayOAuthError"/.test(withMessage[0]), "the message line is reached only for the class §14.1 pins");
     assert.ok(!/error\??\.stack/.test(body), "no stack anywhere");
+    // The handler is not the whole of §5.4's logging surface, and this is how a
+    // real leak got past this pin: `writeSyncEvent` is called from the connect
+    // block and `spendAndDiscardCode` from the refusal path, and both are
+    // defined ABOVE the slice above. So they are pinned by name.
+    for (const name of ["async function writeSyncEvent(", "async function spendAndDiscardCode("]) {
+      const at = source.indexOf(name);
+      assert.ok(at > 0, `${name} was not found — this pin follows the callback's reachable log sites`);
+      const helper = source.slice(at, source.indexOf("\n  }", at));
+      assert.ok(!/error\??\.(message|stack)/.test(helper), `${name}) may log a class word, never a caught message`);
+    }
     assert.ok(source.includes("crypto.timingSafeEqual(offered, expected)"), "the digests are compared in constant time");
     assert.ok(!source.includes("function connectRedirect"), "connectRedirect had one caller and is gone");
     assert.ok(source.includes("appReturnUrl()"), "appReturnUrl stays — beginEbayConnect derives the native startUrl from it");
@@ -603,6 +613,25 @@ const said = (res) => JSON.stringify(res.payload);
     const refused = await callbackPost(pinned.fns, { state: begun2.state, nonce: begun2.nonce, code: "bad-code" });
     assert.strictEqual(refused.payload.reason, "token", said(refused));
     assert.ok(captured.slice(mark).some((l) => l.includes("ebayOAuthCallback failed:") && l.includes("invalid_grant")), "the EbayOAuthError message is the one that may be logged");
+  });
+
+  await check("a Firestore refusal on the callback's OWN success path is logged as a class word — the syncLog write is inside §5.4's rule, not beside it", async () => {
+    // Found by execution rather than by reading: making the syncLog write throw
+    // printed the refused write's message verbatim, from a line neither pin
+    // could see. The SOURCE PIN slices only the handler body, and writeSyncEvent
+    // is defined above it; the LOG PIN never drove a failing syncLog write.
+    const MARKER = "MARKER-SYNCLOG-must-never-be-logged";
+    watch(MARKER);
+    const { fns, store } = buildEbay();
+    store.refuseWrites(/\/syncLog$/, `7 INVALID_ARGUMENT: write refused ${MARKER}`);
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const before = captured.length;
+    const res = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    // The row is best effort — a lost audit line must not lose the connection.
+    assert.strictEqual(res.payload.outcome, "connected", said(res));
+    const lines = captured.slice(before);
+    assert.ok(lines.some((l) => l.includes("ebay syncLog write failed") && l.includes("class=")), lines.join(" | "));
+    for (const line of lines) { assert.ok(!line.includes(MARKER), line); assert.ok(!line.includes(MARKER.slice(0, 8)), line); }
   });
 
   await check("LOG PIN — not one console line on any path carries a code, a state, a nonce, a signature, or even their first eight characters", async () => {

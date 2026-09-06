@@ -163,6 +163,16 @@ function createEbayConnectorFunctions(deps) {
   const box = (plain) => encryptToken(plain, tokenKeys());
   const unbox = (b) => (b && typeof b === "object" ? decryptToken(b, tokenKeys()) : "");
 
+  // §5.4's logging rule as a function: a caught error's MESSAGE can carry the
+  // value that threw — JSON.parse quotes the body back, Firestore's argument
+  // validation embeds the rejected path — so a log line on any path the callback
+  // can reach gets the error's CLASS instead: one word from a closed vocabulary,
+  // which can carry nothing.
+  function classWordOf(error) {
+    const cls = String(error?.errorClass || events.classifyError(error) || "");
+    return events.ERROR_CLASSES.has(cls) ? cls : "unknown";
+  }
+
   function classedError(message, errorClass, code, extra = {}) {
     const error = new Error(message); error.errorClass = errorClass; error.code = code; Object.assign(error, extra); return error;
   }
@@ -173,7 +183,10 @@ function createEbayConnectorFunctions(deps) {
 
   async function writeSyncEvent(ref, event) {
     try { await ref.collection("syncLog").add({ ts: FieldValue.serverTimestamp(), atMs: now(), ...event }); }
-    catch (error) { console.warn("ebay syncLog write failed:", error?.message || error); }
+    // This line is REACHED FROM THE CALLBACK's success path, so it is under
+    // §5.4's rule and not merely near it: demonstrated by making the syncLog
+    // write throw, which printed the refused write's message verbatim.
+    catch (error) { console.warn(`ebay syncLog write failed: ${ref.id} class=${classWordOf(error)}`); }
   }
 
   // ---- whitelists (§4.11): nothing reaches set(merge) unshaped ----------------
@@ -391,7 +404,7 @@ function createEbayConnectorFunctions(deps) {
       try {
         const refresh = unbox(cred.refreshTokenEncrypted);
         await credentialsRef(ref).set({ accessTokenEncrypted: box(accessToken), ...(refresh ? { refreshTokenEncrypted: box(refresh) } : {}), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      } catch (error) { console.warn("ebay rebox failed:", ref.id, error?.message || error); }
+      } catch (error) { console.warn(`ebay rebox failed: ${ref.id} class=${classWordOf(error)}`); }
     }
     if (n(cred.accessTokenExpiresAtMs) - now() < TOKEN_REFRESH_AHEAD_MS) accessToken = await refreshWithLock(ref, data);
     return createClient({
@@ -629,8 +642,7 @@ function createEbayConnectorFunctions(deps) {
       // the module (or a subclass) would slip an identity check — and every
       // other throw is a fixed string plus its classification word, which comes
       // from a closed vocabulary and can carry no value.
-      const cls = String(error?.errorClass || events.classifyError(error) || "");
-      const errorClass = events.ERROR_CLASSES.has(cls) ? cls : "unknown";
+      const errorClass = classWordOf(error);
       if (error?.name === "EbayOAuthError") console.error("ebayOAuthCallback failed:", String(error?.message || "").slice(0, 200));
       else console.error(`ebayOAuthCallback failed: rid=${rid} class=${errorClass}`);
       answer(200, { ok: false, outcome: "error", reason: errorClass === "auth" ? "token" : "exchange", rid });

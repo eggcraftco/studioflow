@@ -1042,8 +1042,16 @@ behaviour rather than the code:
    the body's first ten characters — verified on this repo's Node v22.22.3,
    `JSON.parse("AUTHCODE_v4x_SECRET_…")` throws `Unexpected token 'A', "AUTHCODE_v"... is not valid JSON`.
    Firestore's `.doc()` embeds the whole rejected path (step 10 above). Therefore: **no caught error's
-   `message`, `stack` or object may be passed to a log function anywhere in `ebayConnector.js`.** The one
-   exception is the truncated `EbayOAuthError` from `commerce/ebay/oauth.js`, which §14.1 already pins to
+   `message`, `stack` or object may be passed to a log function on any path `ebayOAuthCallback` can
+   reach** — today the handler body, `writeSyncEvent` (called from the connect block) and
+   `spendAndDiscardCode` (called from the refusal path). An earlier revision wrote that as "anywhere in
+   `ebayConnector.js`", which was both wider than the design enforces — the sync, import, notification and
+   deletion paths log a provider message deliberately, and no callback value can reach them — and, where
+   it counted, **false**: `writeSyncEvent` logged `error?.message || error` and is reached from the
+   callback's own SUCCESS path. A test now proves it rather than asserting it, by refusing the `syncLog`
+   write and hunting the marker through every captured line, and both helpers are pinned **by name** in
+   `ebay-connect.test.js` because the handler slice cannot see them. The one
+   exception is the truncated `EbayOAuthError` from `commerce/ebay/oauth.js`, which §14.1 pins to
    be built from eBay's own `error`/`error_description` fields. Everywhere else the log line is a fixed
    string plus values from the allowed list. The existing
    `console.error("ebayOAuthCallback state failed:", error?.message || error)` at

@@ -65,13 +65,27 @@ function valueMatches(actual, op, expected) {
 function makeFakeFirestore(nowRef = { value: Date.now() }) {
   const docs = new Map();   // full path → data
   const now = () => nowRef.value;
+  // Failure injection, for the rules a test can only prove by executing them: a
+  // real Firestore refusal arrives as an Error whose MESSAGE carries the value
+  // that was refused, and §5.4's logging rule is precisely that no such message
+  // may reach a log line. `store.refuseWrites(/syncLog/, "…")` makes writes under
+  // matching paths throw that shape.
+  const refusals = [];
+  const refusalFor = (path) => refusals.find((r) => r.match.test(path));
+  function guard(path) {
+    const refusal = refusalFor(path);
+    if (!refusal) return;
+    const error = new Error(refusal.message);
+    error.code = refusal.code;
+    throw error;
+  }
 
   function docHandle(path) {
     const id = path.split("/").pop();
     const handle = {
       id, path,
       get: async () => snapshotOf(path),
-      set: async (patch, options = {}) => { docs.set(path, options.merge && docs.has(path) ? deepMerge(docs.get(path), patch, now()) : replaceAll(patch, now())); },
+      set: async (patch, options = {}) => { guard(path); docs.set(path, options.merge && docs.has(path) ? deepMerge(docs.get(path), patch, now()) : replaceAll(patch, now())); },
       update: async (patch) => { if (!docs.has(path)) throw new Error(`fake firestore: update on missing ${path}`); docs.set(path, deepMerge(docs.get(path), patch, now())); },
       delete: async () => { docs.delete(path); },
       create: async (data) => { if (docs.has(path)) { const e = new Error("ALREADY_EXISTS"); e.code = 6; throw e; } docs.set(path, replaceAll(data, now())); },
@@ -106,7 +120,7 @@ function makeFakeFirestore(nowRef = { value: Date.now() }) {
     return {
       path: prefix,
       doc: (id) => docHandle(`${prefix}/${id || `auto_${++counter}_${Math.random().toString(36).slice(2, 8)}`}`),
-      add: async (row) => { const ref = docHandle(`${prefix}/auto_${++counter}_${Math.random().toString(36).slice(2, 8)}`); await ref.set(row); return ref; },
+      add: async (row) => { guard(prefix); const ref = docHandle(`${prefix}/auto_${++counter}_${Math.random().toString(36).slice(2, 8)}`); await ref.set(row); return ref; },
       ...query(prefix)
     };
   }
@@ -135,7 +149,9 @@ function makeFakeFirestore(nowRef = { value: Date.now() }) {
     admin, docs, now,
     read: (path) => (docs.has(path) ? clone(docs.get(path)) : undefined),
     write: (path, data) => { docs.set(path, clone(data)); },
-    paths: (prefix) => [...docs.keys()].filter((p) => p.startsWith(prefix)).sort()
+    paths: (prefix) => [...docs.keys()].filter((p) => p.startsWith(prefix)).sort(),
+    /** Make every write under a matching path throw the way Firestore does. */
+    refuseWrites: (match, message, code = 3) => { refusals.push({ match, message, code }); }
   };
 }
 
