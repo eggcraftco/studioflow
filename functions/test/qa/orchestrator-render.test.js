@@ -14,6 +14,7 @@ const accountingStatus = require("../../orchestrator/accountingStatus");
 const freshness = require("../../orchestrator/freshness");
 const fixtures = require("../fixtures/orchestrator");
 const { projectOrderForAssistant } = require("../../orchestrator/loaders");
+const untrusted = require("../../orchestrator/untrusted");
 
 /** The smallest snapshot get_accounting_sync_status answers over. */
 const accountingSnapshot = () => ({
@@ -259,6 +260,26 @@ check("the structured data a model reads is bounded too, in every capability tha
       assert.ok(!UNSAFE_IN_A_LINE.test(ref.label), `${capability}: an entity ref label carries a control character`);
     }
   }
+});
+
+check("an order label cannot be a link, and can still be a slash-numbered order", () => {
+  // `safeReference` admitted ":" and "/", so a shop could render
+  // "Order http://evil.co/x needs attention" into a sentence a model reads and
+  // a person may click. The refusal is keyed on shape rather than meaning, so
+  // a space-free slogan still passes — no character class fixes that — but a
+  // link is a different kind of payload and it is closed.
+  const label = (orderNumber) => untrusted.safeOrderLabel({ orderNumber, id: "ord_1" });
+  for (const link of ["http://evil.co/x", "https://evil.co", "//evil.co/x", "www.evil.co/x", "ignore.previous:instructions/now"]) {
+    assert.strictEqual(label(link), "ord_1", `${link} reached a summary line as an order label`);
+  }
+  // And the legitimate cases the finding's "drop : and / both" would have cost:
+  // slash-separated numbering is ordinary, and refusing it loses the label AND
+  // the orderNumber field in a search result.
+  for (const number of ["2026/001", "INV/2026/014", "#1001", "1001.2", "203-1234567-1234567"]) {
+    assert.strictEqual(label(number), number, `${number} is an order number and was refused`);
+  }
+  // A sentence is still refused, not truncated.
+  assert.strictEqual(label(ORDER_NUMBER_INJECTION), "ord_1");
 });
 
 check("a line is bounded and single-line, whatever the capability put in the data", () => {
