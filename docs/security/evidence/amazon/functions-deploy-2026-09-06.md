@@ -386,7 +386,7 @@ Operator's conditional approval (in chat, 02:59 UTC): go if the three conditions
 | xeroListTenants | xerolisttenants-00003-yab | 401 | xerolisttenants-00004-xut | 401 |
 | xeroSelectTenant | xeroselecttenant-00003-rud | 401 | xeroselecttenant-00004-nih | 401 |
 
-6: fifteen-minute watch (03:01:54 → 03:17:30): _pending_.
+6: fifteen-minute watch (03:01:54 → 03:17:38 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic in the window was the probe set — passed. Operator's condition for B4.5 met (45/45 ACTIVE on new revisions, probe parity, no new 5xx/error, clean window).
 
 ## Rollback used
 
