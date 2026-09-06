@@ -188,9 +188,12 @@ checkAsync("an orchestrator built without the resolver refuses rather than guess
   );
 });
 
-check("a workflow-only member sees no money and no banking sections", () => {
+check("a workflow-only member with no grants sees no money and no banking sections", () => {
+  // The role as `workspaceMemberAccess` actually leaves it: dashboard,
+  // financialInfo, customers and cardFinancial forced false, and every grant
+  // an owner has not handed out still off.
   const ctx = fixtures.ownerContext({
-    isOwner: false, workflowOnly: true, financialInfo: false,
+    isOwner: false, workflowOnly: true, financialInfo: false, accountingReader: false,
     areas: { orders: true, dashboard: false, customers: false, bankFeed: false }
   });
   const sections = context.sectionAccess(ctx);
@@ -199,6 +202,81 @@ check("a workflow-only member sees no money and no banking sections", () => {
   assert.strictEqual(sections.banking, false);
   assert.strictEqual(sections.payouts, false);
   assert.strictEqual(sections.accounting, false);
+});
+
+check("every section line is the SAME predicate as the capability that owns the data", () => {
+  // The comment above sectionAccess claims this, and for three lines it was
+  // false: `banking`, `payouts` and `accounting` carried `&& !ctx.workflowOnly`
+  // while their capabilities carry `permission.bankFeed` /
+  // `permission.accountingReader` and nothing else — and so does the app's own
+  // nvRequireBankFeedAccess. A workflow-only member granted Bank Spending was
+  // told "banking items are not included for your role" by the summary and
+  // answered in full by the banking tool, in one session.
+  //
+  // A claim of parity is checkable, so it is checked, over every combination of
+  // the four grants and both roles rather than at one example. `SECTION_OWNERS`
+  // names the owning capability per section; assertCapability is the other side.
+  const GRANTS = ["bankFeed", "financialInfo", "accountingReader", "inventoryAccess"];
+  let combinations = 0;
+  for (let mask = 0; mask < (1 << GRANTS.length); mask += 1) {
+    for (const workflowOnly of [false, true]) {
+      const held = new Set(GRANTS.filter((_, index) => (mask & (1 << index)) !== 0));
+      // The orders area is held throughout: without it nothing reaches
+      // get_business_attention_summary, which is the only caller of
+      // sectionAccess, so the population under test is exactly the population
+      // this function is evaluated over.
+      const ctx = fixtures.ownerContext({
+        isOwner: false,
+        role: workflowOnly ? "workflowOnly" : "member",
+        workflowOnly,
+        assignedOnly: workflowOnly,
+        areas: { orders: true, dashboard: true, customers: true, bankFeed: held.has("bankFeed") },
+        financialInfo: held.has("financialInfo"),
+        accountingReader: held.has("accountingReader"),
+        inventoryAccess: held.has("inventoryAccess")
+      });
+      const sections = context.sectionAccess(ctx);
+      for (const [section, capability] of Object.entries(context.SECTION_OWNERS)) {
+        const entry = registry.entryFor(capability);
+        assert.ok(entry, `SECTION_OWNERS names ${capability}, which is not in the registry`);
+        let allowed = true;
+        try { context.assertCapability(ctx, entry); } catch (error) { allowed = false; }
+        assert.strictEqual(sections[section], allowed,
+          `section "${section}" says ${sections[section]} while ${capability} says ${allowed} — ` +
+          `grants: ${[...held].join(", ") || "none"}${workflowOnly ? ", workflowOnly" : ""}`);
+      }
+      combinations += 1;
+    }
+  }
+  assert.strictEqual(combinations, 32, "the cross-product stopped covering every grant combination");
+  // And every section has an owner: a section nobody owns is a predicate with
+  // nothing to be the same as.
+  assert.deepStrictEqual(
+    Object.keys(context.sectionAccess(fixtures.ownerContext())).sort(),
+    Object.keys(context.SECTION_OWNERS).sort(),
+    "a section was added or removed without saying which capability owns its data"
+  );
+});
+
+check("the workflow-only member the summary contradicted gets one answer now", () => {
+  // The finding itself, as the session that produced it: a workflow-only member
+  // holding Bank Spending and the accounting reader.
+  const ctx = fixtures.ownerContext({
+    isOwner: false, role: "workflowOnly", workflowOnly: true, assignedOnly: true,
+    financialInfo: false, inventoryAccess: false, accountingReader: true,
+    areas: { orders: true, dashboard: false, customers: false, bankFeed: true }
+  });
+  const sections = context.sectionAccess(ctx);
+  for (const [section, capability] of [["banking", "get_banking_attention_summary"], ["payouts", "get_payout_reconciliation_overview"], ["accounting", "get_accounting_sync_status"]]) {
+    assert.doesNotThrow(() => context.assertCapability(ctx, registry.entryFor(capability)),
+      `${capability} refuses this member, so the section must be closed rather than the capability opened`);
+    assert.strictEqual(sections[section], true,
+      `the summary reports "${section}" as not permitted while ${capability} answers in full`);
+  }
+  // The grants this member does NOT hold are still closed, so the fix is not
+  // "open everything to workflow-only".
+  assert.strictEqual(sections.payments, false);
+  assert.strictEqual(sections.inventory, false);
 });
 
 checkAsync("an unknown capability, and a capability whose flag is off, are both refused", async () => {

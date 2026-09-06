@@ -164,6 +164,18 @@ A channel never calls it directly to *decide* something — deciding twice is ho
 question get born — but `context.sectionAccess(ctx)` is fair game when a gateway wants to say up front
 which sections of a multi-section answer this person will get.
 
+`sectionAccess` is safe to use that way only because each of its eight lines is the SAME predicate as the
+capability that owns that section's data, and `context.SECTION_OWNERS` names which capability that is,
+line for line. `orchestrator-context.test.js` drives both sides over every combination of the four grants
+and both roles and fails on the first divergence — because for three lines the claim had quietly stopped
+being true. `banking`, `payouts` and `accounting` carried `&& !ctx.workflowOnly`, which no capability and
+no app guard has (`nvRequireBankFeedAccess` is owner OR the bankFeed area, full stop), so a workflow-only
+member granted Bank Spending was told "banking items are not included for your role" by
+`get_business_attention_summary` and answered in full by `get_banking_attention_summary` in the same
+session. Strict in one place only is not safe; it is just a second answer. The right narrowing for that
+role is the one `loaders.js` already applies — every order not assigned to them is dropped before a
+section is built — not a term bolted onto one of the two predicates.
+
 ### 3.1 Delegated or first-party — settle this before the first call
 
 The orchestrator knows two kinds of caller, and `authType` is how it tells them apart

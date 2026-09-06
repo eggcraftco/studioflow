@@ -272,31 +272,70 @@ function assertCapability(ctx, entry) {
  * role cannot see is NAMED and left empty — "Banking items are not included for
  * your role" — rather than silently missing, which reads as "nothing to report".
  *
- * Every line is the SAME predicate as the capability that owns that data.
+ * Every line is the SAME predicate as the capability that owns that data, and
+ * `SECTION_OWNERS` below names which capability that is, one per line, so the
+ * claim is checkable instead of asserted. `orchestrator-context.test.js` drives
+ * both sides over a cross-product of grants and fails on the first divergence.
+ *
  * `inventory` used to read `ctx.areas.orders`, which is looser than the gate on
- * get_inventory_overview and search_inventory_items (`permission.inventory` →
+ * get_inventory_overview and search_inventory (`permission.inventory` →
  * nvRequireInventoryAccess: owner, OR the orders area AND an order role that
  * can fully edit). A member who fell between those two predicates was refused
  * both inventory tools and then handed item names and on-hand levels by the
  * attention summary's `stock_low` item — the assistant as the looser door into
  * the same data, which is the thing accounting/core/access.js was written in
  * this branch to prevent. Two predicates over one body of data is the defect.
+ *
+ * `banking`, `payouts` and `accounting` carried `&& !ctx.workflowOnly`, which
+ * made this comment false for three of its eight lines in the STRICT direction:
+ * get_banking_attention_summary and get_payout_reconciliation_overview carry
+ * `permission.bankFeed` only, get_accounting_sync_status carries
+ * `permission.accountingReader` only, and `assertCapability` has no workflowOnly
+ * term at all — nor does the app's own `nvRequireBankFeedAccess`, which is
+ * owner OR the bankFeed area and nothing else. A workflow-only member granted
+ * Bank Spending (reachable: `workspaceMemberAccess` forces dashboard,
+ * financialInfo, customers and cardFinancial false for that role and leaves
+ * bankFeed alone) was told "banking items are not included for your role" by the
+ * summary and then answered in full by the banking tool, in one session.
+ *
+ * Strict is not safe when it is only strict HERE: the extra term did not keep
+ * anything from that member, it just made the assistant contradict itself. So
+ * the three lines drop it and match their capability. Adding the term to
+ * `assertCapability` instead would have been a THIRD predicate, one the product
+ * does not have — the web client shows Banking to exactly the same member.
+ *
+ * `payments` is `ctx.financialInfo` alone for the same reason: the app's
+ * `nvRoleCanAccessFinancialInfo` already returns false for a workflow-only
+ * role, so `&& !ctx.workflowOnly` was a second copy of a rule that lives in one
+ * place. A redundant term is a divergence waiting for the day the rule it
+ * duplicates changes.
  */
+const SECTION_OWNERS = Object.freeze({
+  orders: "search_commerce_orders",
+  shipping: "search_commerce_orders",
+  payments: "get_commerce_overview",
+  inventory: "get_inventory_overview",
+  banking: "get_banking_attention_summary",
+  payouts: "get_payout_reconciliation_overview",
+  accounting: "get_accounting_sync_status",
+  integrations: "get_integration_health"
+});
+
 function sectionAccess(ctx) {
   return {
     orders: ctx.areas.orders === true,
     shipping: ctx.areas.orders === true,
-    payments: ctx.financialInfo === true && !ctx.workflowOnly,
+    payments: ctx.financialInfo === true,
     inventory: ctx.inventoryAccess === true,
-    banking: ctx.areas.bankFeed === true && !ctx.workflowOnly,
-    payouts: ctx.areas.bankFeed === true && !ctx.workflowOnly,
-    accounting: ctx.accountingReader === true && !ctx.workflowOnly,
+    banking: ctx.areas.bankFeed === true,
+    payouts: ctx.areas.bankFeed === true,
+    accounting: ctx.accountingReader === true,
     integrations: ctx.areas.orders === true
   };
 }
 
 module.exports = {
   OrchestratorError, CHANNEL_TYPES, FIRST_PARTY_AUTH_TYPES,
-  resolveContext, assertCapability, sectionAccess, scopeSet,
+  resolveContext, assertCapability, sectionAccess, SECTION_OWNERS, scopeSet,
   scopeGateApplies, missingScopes, scopeRefusal
 };

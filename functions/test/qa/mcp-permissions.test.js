@@ -283,10 +283,34 @@ check("a workflow-only member on a custom role is workflow-only to the orchestra
   assert.strictEqual(ctxOut.role, "workflowOnly", "the orchestrator read members[uid].role instead of the custom role");
   assert.strictEqual(ctxOut.workflowOnly, true, "so the assigned-orders filter in loaders.js would never have run");
 
-  const sections = require("../../orchestrator/context").sectionAccess(ctxOut);
-  for (const section of ["payments", "banking", "payouts", "accounting"]) {
-    assert.strictEqual(sections[section], false, `${section} was opened to a workflow-only member`);
+  const contextModule = require("../../orchestrator/context");
+  const registry = require("../../orchestrator/registry");
+  const sections = contextModule.sectionAccess(ctxOut);
+
+  // Every section is the answer its own capability gives, and nothing else.
+  // This loop used to assert a flat `false` for payments/banking/payouts/
+  // accounting, which held only because sectionAccess carried an extra
+  // `&& !ctx.workflowOnly` that no capability and no app guard has. That made
+  // the summary the STRICT door: this very member is handed money by
+  // get_order_financials and get_commerce_overview, because the app's
+  // nvRoleCanAccessFinancialInfo takes the custom-role branch and reads the
+  // role's own access map rather than its base role — so `ctx.financialInfo` is
+  // genuinely true here. One predicate per body of data, whichever way it falls.
+  for (const [section, capability] of Object.entries(contextModule.SECTION_OWNERS)) {
+    let allowed = true;
+    try { contextModule.assertCapability(ctxOut, registry.entryFor(capability)); } catch (error) { allowed = false; }
+    assert.strictEqual(sections[section], allowed,
+      `section "${section}" says ${sections[section]} while ${capability} says ${allowed}`);
   }
+
+  // The grants this custom role does not carry stay shut — the reconciliation
+  // is "match the capability", not "open everything to workflow-only".
+  for (const section of ["banking", "payouts", "accounting", "inventory"]) {
+    assert.strictEqual(sections[section], false, `${section} was opened to a member holding no such grant`);
+  }
+  // And the narrowing that MATTERS for this role is untouched: loaders.js drops
+  // every order not assigned to them before any section is built.
+  assert.strictEqual(ctxOut.assignedOnly, true, "the assigned-orders filter stopped applying to a workflow-only member");
 });
 
 check("a member on an ordinary custom role keeps the base role that role carries", async () => {
