@@ -56,7 +56,7 @@ watching.
 | 6 | Cookie flags — **rewritten by §5.5; the row this replaced described one cookie and the wrong path** | There are now **two** cookies per flow, and the flow's tag (the state's first sixteen characters) is in the NAME, so a seller who presses Connect twice no longer overwrites the first flow's pair with the second's. Both take the **`__Host-` prefix**, which is the change that matters: `Path=/ebay/callback` was a request-matching rule and not a boundary, and nivadesk.app fronts a Cloudflare-for-SaaS Worker with a catch-all route, so a `Domain=nivadesk.app` cookie of the same name written from any `*.nivadesk.app` origin would arrive beside the host-only one with no defined precedence. `__Host-` forbids `Domain`, forbids any `Path` but `/`, and requires `Secure`. So: `__Host-nv_ebay_nonce_<tag>` — `Secure; SameSite=Lax; Path=/; Max-Age=600`, written by client JavaScript, therefore **not** `HttpOnly`; and `__Host-nv_ebay_ticket_<tag>` — `Max-Age=<the ticket's own remaining life>; Path=/; Secure; HttpOnly; SameSite=Lax`, written **only** by `POST /ebay/ticket`. Clearing changed with them: a landing clears **this flow's pair and only this flow's**, and the disposal landing clears **nothing at all**, because whatever that browser is holding belongs to some other flow (a `Set-Cookie` there would be a link's free way to destroy someone's in-flight connect) | **verified in `lib/studioflow/ebay.ts` and `lib/studioflow/ebayFlow.ts`; the exact `Set-Cookie` attribute set, character for character, and every landing that does and does not clear, are executed by `npm run test:relay`** |
 | 7 | No secret in the client bundle | grep the **client** chunks for `EBAY_`, `CLIENT_SECRET`, `CERT`, `TOKEN_KEY`, `NIVADESK_EBAY_CALLBACK_KEY` and the literal `x-nivadesk-signature` | **the §5.4 pair is clean** on the current build (no `NIVADESK_EBAY_CALLBACK_KEY`, no `x-nivadesk-signature` in `.next/static`); the older four are re-run on the deploy build |
 | 7b | The key was **not inlined at build time** | grep the **server** chunk for the route: the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` must still be **present**. If Next replaced it statically the name vanishes and the value takes its place, so check 7 would pass in exactly the failure case. `export const runtime = "nodejs"` in the route is what prevents it | **done** — `.next/server/app/ebay/callback/route.js` still contains the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` |
-| 8 | The eBay screen degrades when the server has no eBay functions | open the settings section against production, where the callables do not exist: it must say the connector is not set up, not throw | run against the built app before the rsync |
+| 8 | The eBay screen degrades when the server has no eBay functions | with the callables absent the callable answers HTTP 404 and `@firebase/functions` makes the FirebaseError's **message** the bare word `not-found`; the section must say a sentence, not the word. This is not a corner case — it is the state of every workspace between step 3 and step 6 of the order below, and the eBay card is `kind: "native"` in the integrations grid, so it is live and clickable throughout | **done** — the section no longer prints a raw callable message (`lib/studioflow/ebayScreenRules.ts`), and `npm run test:relay` drives the **real** `@firebase/functions` to a 404 to prove the premise, checks the sentence, and pins the section's source so the raw message cannot come back. Still worth one eyeball against the built app before the rsync |
 | 9 | Nothing else changed on the site | diff the publish repository after the rsync, and expect only eBay files, the registry, the language tables and the build output | run at deploy time |
 | 10 | `npm run test:relay` green — **and it is a CI job now, not a thing to remember** (`functions-tests.yml`, job `relay`) | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, a browser without the binding posts a **dispose** envelope that names no state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`). **And, since §5.5, the committed vectors**: the route's signer and its ticket verifier against a frozen fixture | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It **does** read the committed vector file now, and fails if it is missing; see below |
 
@@ -140,12 +140,38 @@ key is never sent on the wire either, because the web side signs and the functio
 |---|---|---|
 | set | set, same value | The only combination that can complete a connection. |
 | **unset**, or shorter than 32 characters | anything | **Since §5.5 the seller never reaches eBay at all, and that is the important half.** `POST /ebay/ticket` reads the same value and answers **503** without it; `sealEbayTicket` returns false; the Connect button stops with "eBay did not complete the connection. Try again." and never navigates to `authorizeUrl`. **No authorization code is ever minted**, so the residual below — a live code sitting in Hostinger's access log — does not open for a web-origin flow at all. If a code does land anyway (a stale tab, a bookmarked callback, a native flow begun before the outage), the callback route then makes **no call at all**, the seller lands on `…&ebay=error&reason=unavailable`, and the Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. **No state is consumed and no code is spent — and the second is still the cost for that narrower case: see below.** |
-| set | **unset**, or the marker not committed, or the functions not deployed | The route signs and POSTs. An unconfigured function answers **401** — deliberately identical to a wrong key, so the status cannot be used to ask whether the secret exists — and an undeployed one is simply unreachable. Seller sees `reason=unavailable`; Hostinger logs `ebay callback relay rid=<rid> status=401` or `… unreachable`; Google logs `ebay callback: EBAY_CALLBACK_KEY not configured` when the function is there — **once a minute per instance, not once per request** (§5.4: that line is reachable without a key, so it is throttled; look for its presence, never count it). **No state is consumed — the cost, not the comfort: see below.** |
-| set, same value | set, same value, but the **web host's clock is more than five minutes off** Google's | The signature is never even compared: the function refuses on the timestamp window and answers the **same 401** as a wrong key. Hostinger logs `ebay callback relay rid=<rid> status=401`; Google logs `ebay callback: relay timestamp outside the five-minute window` — a different ops line from `rejected unsigned request`, which is the only way to tell this row from the one below. Without that line an operator re-mints the key, sets both halves, redeploys, and is still at 401 with nothing left to check. **No state is consumed.** |
-| set | set, **different value** (a half-finished rotation) | The signature does not verify: 401, seller `reason=unavailable`, `ebay callback relay rid=<rid> status=401` on Hostinger and `ebay callback: rejected unsigned request` on Google. The rid is the only value in either line, and it is minted by the web side for exactly this trace. **No state is consumed — the cost, not the comfort: see below.** This is the realistic steady-state row: a rotation where Hostinger already has the new value and Secret Manager does not. |
+| set | **unset**, or the marker not committed, or the functions not deployed | **The seller never reaches eBay, and the three ops lines this row used to name cannot appear.** The ticket is minted by the FUNCTION, from the same key: `ticketKey()` returns null below the 32-character floor, `mintTicket` returns `""`, `beginEbayConnect` answers `ticket: ""`, and the settings card refuses to navigate ("eBay did not complete the connection. Try again."). No code is minted, the callback route is never reached, and there is no `ebay callback relay … status=401`, no `… unreachable`, and no `ebay callback: EBAY_CALLBACK_KEY not configured` — the function is not called. **Where to look instead:** the seller-facing sentence, and nothing in either log. If the functions are not deployed *at all*, the settings card says "eBay is not set up on this server yet." (the callable answers 404). A code CAN still land from a flow begun before the outage — a stale tab, a bookmarked callback, a native start claimed earlier — and only then does the route make its POST and produce those lines. **No state is consumed.** |
+| set, same value | set, same value, but the **web host's clock is more than five minutes off** Google's | **This fails at the EDGE, not at the function, and the ops line this row used to send the operator to grep for can never be written.** The ticket's window is checked in the web tier against the state's own expiry (`expMs > now` and `expMs ≤ now + 15 min`), so `POST /ebay/ticket` answers **400** and the seller never leaves. Measured on the compiled route: 4 minutes either way still seals (204); 6 and 11 minutes behind and 11 ahead are 400. The only line is `ebay ticket: refused` on Hostinger (throttled to once a minute) plus the `ebay ticket route window=… refused=n` aggregate. Google logs **nothing**, `ebay callback: relay timestamp outside the five-minute window` included. **Where to look:** `refused=` rising on the ticket-route aggregate with `sealed=` at zero — and then compare the two hosts' clocks, which is what that line used to be for. **No state is consumed.** |
+| set | set, **different value** (a half-finished rotation) | **Also at the edge.** The ticket is minted under the function's key and verified under the route's, so `POST /ebay/ticket` answers **400** before the seller leaves — measured. Hostinger logs `ebay ticket: refused` and the same aggregate; Google logs nothing, because the function is never called. The `401` / `ebay callback relay … status=401` / `ebay callback: rejected unsigned request` triple this row used to promise belongs to a code that lands from a flow begun before the rotation. It is still the realistic steady-state row: a rotation where Hostinger already has the new value and Secret Manager does not. **No state is consumed — the cost, not the comfort: see below.** |
 
 The pattern is the point: **every partial configuration fails closed for the connection.** No code is
 exchanged, no token is written, and nothing on the seller's screen is more specific than one sentence.
+
+**And since §5.5 there is a second pattern, which is what the three rows above were rewritten for: every
+one of those failures now happens BEFORE the seller leaves for eBay, not on the return leg.** That is the
+good news and the trap in one. The good news is that no authorization code is minted at all, so residual 1
+never opens. The trap is that an operator debugging from the §5.4 text goes looking in Google's logs for
+lines that cannot exist, finds nothing, re-mints the key, redeploys, and is no further forward — the exact
+dead end the clock row warned about, created by the row itself.
+
+**So the first place to look for any half-configured key is `POST /ebay/ticket`, on Hostinger**, not the
+callback and not Google:
+
+```
+ebay ticket: refused                                                   (throttled, once a minute)
+ebay ticket route window=<ms> sealed=<n> refused=<n> throttled=<n> blocked=<n>
+ebay ticket route: NIVADESK_EBAY_CALLBACK_KEY not configured           (Hostinger's own half missing)
+```
+
+`sealed=0` with `refused=n` is every row above except the first. `sealed=0` with `refused=0` and the
+"not configured" line is Hostinger's half. Only once sealing succeeds does anything reach the function, and
+only then are `ebay callback relay rid=… status=…` and Google's own lines worth reading. Design §5.5's
+*What a mis-set key looks like* says the same thing, and these two documents disagreed until now: the
+deploy plan is the one the operator follows, so it is the one that was wrong.
+
+Each of these five rows is executed rather than argued: `npm run test:relay` drives the compiled routes
+against the real function with the function's key blanked, truncated and rotated, and with the web clock
+moved 4, 6 and 11 minutes in both directions.
 
 **What it does not do is keep §5's browser binding, and this plan used to say the opposite.** A shaped
 callback always POSTs — but since design §5.5 it posts one of **two** envelopes, and which one depends on
@@ -162,11 +188,11 @@ need the state that was left alive: they mint their own after service is restore
 against it. Meanwhile that code is sitting verbatim in Hostinger's access log (measured, no redaction, no
 disable, retention and readers undisclosed — `docs/ebay-callback-platform-logging.md`).
 
-**The trigger is wider than a key outage.** The code is spent only when the POST reaches the function
-*and* authenticates *and* gets as far as the exchange. So the same window opens on: a key outage, a bad or
+**The trigger is wider than a key outage.** The code is registered and spent only when the POST reaches the
+function *and* authenticates. So the same window opens on: a key outage, a bad or
 missing functions deploy, a 401 from a clock drift, a 5xx, a Cloud Run scaling failure, a Firestore
-transaction error, the route's own 45-second abort, and — new with §5.5 — an exhausted per-address
-disposal counter at the edge. One observable covers all of them — `ebay callback relay rid=… status=…`,
+transaction error, the route's own 45-second abort, and — new with §5.5 — an exhausted disposal counter at
+the edge (per process or per address). One observable covers all of them — `ebay callback relay rid=… status=…`,
 `ebay callback dispose rid=… status=…`, `… unreachable` or `… timeout` in the Hostinger log. **Any window
 in which the relay was not answering 200 is one of these.**
 
@@ -214,6 +240,17 @@ live site still runs Round 166's route, which forwards the seller's browser to `
 {"ok":false}`. So deploying the functions first would leave a real callback ending with the seller staring
 at raw JSON on `europe-west2-eggcraft-studio.cloudfunctions.net` — the one landing in this whole design
 that is neither a sentence nor on our own domain. Never invert steps 3 and 6.
+
+**And the ugly landing is the smaller half of it, which this paragraph used to leave out.** Round 166's
+route redirects the browser to `…/ebayOAuthCallback?code=…&state=…&nonce=…` (that document records the
+exact shape). Cloud Run writes `httpRequest.requestUrl` — query string included — into Cloud Logging on
+every request. So inverting the order does not merely produce a bad screen: it **reopens in full the leak
+§5.4 exists to close**, on Google's side as well as Hostinger's, and it publishes the browser-binding
+**nonce** as well as the code — the one value that stops a phished consent landing in someone else's
+workspace. Worse, the 405 lands before the body is read, so the state is never burned, the code is never
+registered and never spent, and both sit live in two logs for the rest of eBay's TTL. If the order is ever
+inverted by accident, that is not "redeploy the web tier": it is deploy plan §4.2's notification, for every
+consent that landed in the window, plus a Cloud Logging retention question for the entries themselves.
 
 The reverse order — the one below — is safe by construction, which is worth recording beside it: the new
 route posts to a function that is not deployed, the fetch fails, and the seller lands on

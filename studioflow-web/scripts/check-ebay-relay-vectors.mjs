@@ -160,7 +160,7 @@ try {
   // The harness clock is what the function checks the signature's timestamp
   // against, and the routes stamp the real one — so they are started together.
   const nowRef = { value: Date.now() };
-  const { fns, store, calls } = harness.buildEbay({ nowRef });
+  const { fns, store, calls, switches: harnessSwitches } = harness.buildEbay({ nowRef });
 
   // The adversarial minter, fenced: every ticket a real flow uses below comes
   // from the real function, and this exists only for tickets no honest minter
@@ -704,6 +704,60 @@ try {
   check("start page: …and the page itself sends a signed-out visitor through that helper, not to a bare /login",
     !/router\.replace\("\/login"\)/.test(startSource) && startSource.includes("ebayStartLoginHref(state)"),
     "EbayStartContent still drops the state on the way to /login");
+
+  // ---- 2b-iii. Deploy plan §4.2's rows, executed ---------------------------
+  // The half-configured-key matrix is the operator's whole runbook for the most
+  // likely way this deploy goes wrong, and three of its five rows named evidence
+  // that cannot be produced any more: they were written for §5.4, before the
+  // ticket, and the ticket moved every one of those failures to a point BEFORE
+  // the seller leaves for eBay. So the rows are pinned here by execution.
+
+  // Row: the FUNCTION has no key (secret unset, marker not committed, or the
+  // functions not deployed). It is the function that mints the ticket, so there
+  // is no ticket, the client refuses to navigate, and the callback is never
+  // reached — no 401, no `ebay callback relay … status=401`, no
+  // `ebay callback: EBAY_CALLBACK_KEY not configured`.
+  const keyBefore = harnessSwitches.callbackKey;
+  for (const [label, value] of [["unset", ""], ["shorter than 32 characters", "0123456789abcdef"]]) {
+    harnessSwitches.callbackKey = value;
+    const begun = await fns.beginEbayConnect({ auth: { uid: "u1" }, data: { companyId: "c1" } });
+    check(`deploy §4.2: with the function's key ${label} the reply carries NO ticket, so the seller never leaves for eBay`,
+      begun.ticket === "" && typeof begun.authorizeUrl === "string", JSON.stringify({ ticket: begun.ticket }));
+  }
+  harnessSwitches.callbackKey = keyBefore;
+
+  // Row: the two halves hold DIFFERENT values (a half-finished rotation). The
+  // ticket is minted under the function's key and verified under the route's, so
+  // sealing fails with a 400 and the seller never leaves. The function is not
+  // called, so Google logs nothing at all — not `rejected unsigned request`.
+  const rotating = await browser();
+  process.env.NIVADESK_EBAY_CALLBACK_KEY = createHmac("sha256", "rotation").update("a different 32-byte value", "utf8").digest("hex");
+  const rotated = await seal(rotating.begun.ticket);
+  process.env.NIVADESK_EBAY_CALLBACK_KEY = KEY;
+  check("deploy §4.2: a half-finished rotation is a 400 at POST /ebay/ticket, before the seller leaves — not a 401 at the function",
+    rotated.status === 400 && rotated.setCookie.length === 0, String(rotated.status));
+
+  // Row: the web host's clock is off. The ticket's window is checked at the edge
+  // against the state's own expiry, so a drift big enough to matter is a 400 at
+  // POST /ebay/ticket — and `ebay callback: relay timestamp outside the
+  // five-minute window`, the line this row tells the operator to grep for, can
+  // never appear, because the function is never called.
+  const drifting = await browser();
+  const driftAt = Date.now();
+  for (const [label, offsetMs, expected] of [
+    ["four minutes behind", -4 * 60000, 204],
+    ["four minutes ahead", 4 * 60000, 204],
+    ["six minutes behind", -6 * 60000, 400],
+    ["eleven minutes behind", -11 * 60000, 400],
+    ["eleven minutes ahead", 11 * 60000, 400]
+  ]) {
+    const realNow = Date.now;
+    Date.now = () => driftAt + offsetMs;
+    let attempt;
+    try { attempt = await seal(drifting.begun.ticket); } finally { Date.now = realNow; }
+    check(`deploy §4.2: a web clock ${label} seals ${expected === 204 ? "normally" : "not at all, and fails at the EDGE"}`,
+      attempt.status === expected, `${attempt.status} (wanted ${expected})`);
+  }
 
   // ---- 2c. Admission, and it goes LAST because it drains the process buckets --
   // Both buckets live in their route's module scope, so anything after this
