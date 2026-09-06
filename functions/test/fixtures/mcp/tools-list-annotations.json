@@ -738,6 +738,129 @@
             "finance.read",
             "orders.write"
           ]
+        },
+        {
+          "name": "get_business_attention_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_commerce_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_commerce_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_channel_performance",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_inventory_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "search_inventory_items",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_payout_reconciliation_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_integration_health",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_accounting_sync_status",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_banking_attention_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
         }
       ]
     },
@@ -1001,6 +1124,129 @@
           },
           "scopes": [
             "orders.read"
+          ]
+        },
+        {
+          "name": "get_business_attention_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_commerce_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_commerce_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_channel_performance",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_inventory_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "search_inventory_items",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_payout_reconciliation_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_integration_health",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_accounting_sync_status",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_banking_attention_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
           ]
         }
       ]

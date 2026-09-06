@@ -75,15 +75,36 @@ class is the channel-policy grade (A lowest, E highest) the WhatsApp gateway wil
 | `attach_bank_receipt` | false | true | false | true | — | finance.read, orders.write | external_fetch, ocr | C |
 | `search_inventory` | true | false | true | false | inventory | orders.read | — | A |
 | `create_inventory_item` | false | false | false | true | inventory | orders.read | external_fetch | C |
+| `get_business_attention_summary` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
+| `get_commerce_overview` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
+| `search_commerce_orders` | true | false | true | false | orchestrator | orders.read | — | A |
+| `get_channel_performance` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
+| `get_inventory_overview` | true | false | true | false | orchestrator | orders.read | — | A |
+| `search_inventory_items` | true | false | true | false | orchestrator | orders.read | — | A |
+| `get_payout_reconciliation_overview` | true | false | true | false | orchestrator | finance.read | — | A |
+| `get_integration_health` | true | false | true | false | orchestrator | orders.read | — | A |
+| `get_accounting_sync_status` | true | false | true | false | orchestrator | finance.read | — | A |
+| `get_banking_attention_summary` | true | false | true | false | orchestrator | finance.read | — | A |
 
-Twenty-one tools: nineteen published to the review connection, and two more (`search_inventory`,
-`create_inventory_item`) that exist and are dispatchable but stay hidden behind
-`NIVADESK_MCP_INVENTORY` until the operator decides to submit them.
+Thirty-one tools, in three groups. Nineteen are published to the review connection. Two
+(`search_inventory`, `create_inventory_item`) are dispatchable but hidden behind
+`NIVADESK_MCP_INVENTORY`. Ten more — the cross-channel read capabilities of the orchestration design —
+are hidden behind `NIVADESK_MCP_ORCHESTRATOR`, and each of them arrived in the same commit as the handler
+behind it. A registry entry publishes a name into `tools/list`, and a name in the listing with no handler
+behind it is the list-versus-dispatcher split all over again, so a name is never added here first.
 
-The cross-channel read tools the orchestration design proposes (`get_commerce_overview`,
-`get_integration_health` and the rest) are deliberately **not** in this table. A registry entry publishes a
-name into `tools/list`, and a name in the listing with no handler behind it is the same split the
-list-versus-dispatcher bug was: they are added here in the commit that adds their handlers, not before.
+The ten read capabilities all carry the same four values — `true / false / true / false` — and that is not
+a copy-paste. They are pure functions over data NivaDesk already holds: they write nothing (the accounting
+attention queue is READ, never opened through `store.openAttention`, which would create or bump a document
+on every call), they overwrite nothing, the same question over the same data gives the same answer, and
+none of them contacts a shop, a bank, a marketplace or an accounting provider. What differs between them is
+which gate they sit behind and whether they hand over a person: `search_commerce_orders` and
+`get_banking_attention_summary` do, and both are in the dispatcher's `MCP_ACTIONS_READING_PII` set, so
+each call files exactly one access-log row — the orchestrator itself is built without `recordPiiAccess` on
+this surface so a single call cannot file two. `functions/test/qa/orchestrator-purity.test.js` is what
+keeps the first half of that claim true: it fails the build if any module under `functions/orchestrator/`
+other than `loaders.js` can reach Firestore, if any of them imports or calls a writer, or if any of them
+reads `siparisler` outside the one place that redacts it.
 
 ## Corrections: three values 1.1.1 got wrong
 
@@ -285,6 +306,76 @@ than an annotation, and the surface under review must not move on its own:
    blocks a request that would otherwise be made. The annotation is `openWorldHint: true` either way, and
    is correct either way; the guard itself is tracked in the orchestration design document (§1.4.10). Until
    it is fixed, no NivaDesk document should describe these fetches as "SSRF-guarded".
+
+### `get_business_attention_summary`
+
+- **readOnlyHint true** — Because every detector runs over documents the loader read and writes nothing back: the accounting queue is read through its own reader, never through store.openAttention, which would create or bump an attention document on each call.
+- **destructiveHint false** — Because nothing is overwritten, moved or deleted; the answer is assembled in memory and discarded.
+- **idempotentHint true** — Because the detectors are deterministic over the same data, and a grouped item keeps its attentionId across days so a repeat call does not mint new items.
+- **openWorldHint false** — Because it reads NivaDesk's own collections only: no provider API is called, no URL is fetched and no message leaves the workspace.
+
+### `get_commerce_overview`
+
+- **readOnlyHint true** — Because it totals orders and payouts in memory through finance/engine.js and writes nothing: the money is recomputed on every call rather than stamped back onto the order.
+- **destructiveHint false** — Because no order, payout or setting is changed by reading them.
+- **idempotentHint true** — Because the same range over the same orders produces the same totals; only generatedAt moves, and that is metadata about the read.
+- **openWorldHint false** — Because the figures come from orders and payouts already stored in NivaDesk; no shop, marketplace or bank is contacted to answer it.
+
+### `search_commerce_orders`
+
+- **readOnlyHint true** — Because it filters orders the loader already read and returns rows; the only write on the path is the piiAccessLog row recording that an assistant was shown customer names, which is a record of the read rather than a change to the workspace.
+- **destructiveHint false** — Because searching cannot alter an order: no field is written and no row is removed.
+- **idempotentHint true** — Because the same filters over the same orders return the same rows in the same order.
+- **openWorldHint false** — Because it searches NivaDesk's own order collection; the provider is never queried, even for an order that came from one.
+
+### `get_channel_performance`
+
+- **readOnlyHint true** — Because it groups the same recomputed order figures by channel and writes nothing back to any order or connection.
+- **destructiveHint false** — Because comparing channels changes none of them.
+- **idempotentHint true** — Because the same range produces the same per-channel figures, including the cost-coverage ratio that decides whether profit is reported as a definite number.
+- **openWorldHint false** — Because every figure comes from stored orders and payouts; no channel API is called to build the comparison.
+
+### `get_inventory_overview`
+
+- **readOnlyHint true** — Because it counts stock through the same pure summarize() the Inventory screen uses and writes no item, movement or ledger row.
+- **destructiveHint false** — Because counting stock cannot change it: no quantity, reservation or valuation is touched.
+- **idempotentHint true** — Because the same shelf produces the same counts and value on every call.
+- **openWorldHint false** — Because inventory has no external connector at all: the numbers come from NivaDesk's own items and nothing is fetched.
+
+### `search_inventory_items`
+
+- **readOnlyHint true** — Because it filters items in memory and returns rows; no item is created, reserved or written.
+- **destructiveHint false** — Because a search does not touch the stock it finds.
+- **idempotentHint true** — Because the same filters return the same items, including two items that share a SKU, which is a search key here and never an identity.
+- **openWorldHint false** — Because there is no listing or channel data to consult: the search runs entirely over NivaDesk's own inventory.
+
+### `get_payout_reconciliation_overview`
+
+- **readOnlyHint true** — Because it scores candidate bank rows with the pure settlements scorer and reports the result: it never calls the matcher that writes bankMatch onto a payout and settlement onto a transaction.
+- **destructiveHint false** — Because no payout is matched, unmatched or relabelled by asking about it.
+- **idempotentHint true** — Because scoring the same payouts against the same bank rows yields the same counts, and a second call still writes no match.
+- **openWorldHint false** — Because payouts and bank rows are already in NivaDesk; neither the processor nor the bank is contacted to answer the question.
+
+### `get_integration_health`
+
+- **readOnlyHint true** — Because it reads connection documents and health records and writes nothing: reporting that a connection needs reauthorisation does not attempt the reauthorisation.
+- **destructiveHint false** — Because no connection is disconnected, retried or reset by reporting its state.
+- **idempotentHint true** — Because the same stored health records produce the same rows, and no counter is incremented by the read.
+- **openWorldHint false** — Because freshness is read from NivaDesk's own health documents rather than by pinging each provider, which is also why an Amazon connection this project cannot see is reported as not visible instead of as broken.
+
+### `get_accounting_sync_status`
+
+- **readOnlyHint true** — Because the open accounting items are read from the attention collection rather than opened through store.openAttention, which would write a document and bump an occurrence counter on every call.
+- **destructiveHint false** — Because nothing in the accounting state is resolved, ignored or retried by reading it.
+- **idempotentHint true** — Because the same connections and attention rows produce the same status, and the read cannot advance a posting through its state machine.
+- **openWorldHint false** — Because QuickBooks, Xero and Pandle are not called: the answer is the state NivaDesk already stored, which is why it says posting is not switched on rather than reporting zero failures.
+
+### `get_banking_attention_summary`
+
+- **readOnlyHint true** — Because the duplicate, recurring, transfer and unusual-charge rules are pure functions over rows the loader read; the only write on the path is the piiAccessLog row, recording that a counterparty name was shown to an assistant.
+- **destructiveHint false** — Because no transaction is categorised, linked, dismissed or marked reviewed by reporting it.
+- **idempotentHint true** — Because the same rows produce the same grouped items with the same attentionId, so a second call does not create a second alert for the same eight receipts.
+- **openWorldHint false** — Because it reads bank rows already imported into NivaDesk; the bank is not contacted and no sync is triggered.
 
 ## How to check this against a deployment
 

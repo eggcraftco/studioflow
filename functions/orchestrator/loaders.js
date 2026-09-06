@@ -1,0 +1,336 @@
+"use strict";
+
+/**
+ * The ONLY module here that touches Firestore, and it only ever reads.
+ *
+ * Everything else in `functions/orchestrator/` is snapshot-in, data-out, which
+ * is what lets the capabilities be tested with hand-built fixtures instead of a
+ * fake database. Two consequences are enforced by test/qa/orchestrator-purity:
+ * no other orchestrator file imports firebase-admin, and no orchestrator file at
+ * all imports `openAttention`, `resolveAttention`, `recordAudit` or
+ * `settlementMatch` — the first two and the last are WRITERS, and a capability
+ * annotated `readOnlyHint: true` that bumps an attention document on every read
+ * is exactly the annotation mismatch OpenAI rejected 1.1.1 over.
+ *
+ * Reads are single-field by construction: `where("companyId","==",cid)` on root
+ * collections, plain subcollection reads, at most one equality on a
+ * subcollection, and everything else filtered in memory.
+ * `firestore.indexes.json` has no composite index for `siparisler`,
+ * `bankTransactions` or `inventoryItems`, and a composite `where` returns
+ * nothing SILENTLY — which would look like an empty workspace rather than an
+ * error.
+ *
+ * PII: `siparisler` is read HERE and nowhere else, and every order goes through
+ * `redactForChannel(order, "assistant")` before it leaves this file. Rows the
+ * policy restricts also lose `notes` and `historyLog`: a row that will not name
+ * the buyer must not carry the buyer's own sentence either — engine orders store
+ * `notes: buyer_note`, and the assistant reads it back verbatim.
+ */
+
+const outbound = require("../privacy/outbound");
+const production = require("../production");
+
+/** Caps. Hitting one sets `partial: true` with a `loader_cap_reached` warning. */
+const CAPS = Object.freeze({ orders: 1000, bank: 3000, inventory: 2000, payouts: 500, review: 200, attention: 100, inbox: 100 });
+
+/** What each capability declares it needs; the loader reads nothing else. */
+const DOMAINS = Object.freeze([
+  "settings", "orders", "production", "inventory", "bank", "payouts", "connections",
+  "commerceHealth", "review", "accounting", "receiptInbox"
+]);
+
+const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+
+/** Connection documents, projected to what their own publicView helpers expose. */
+function projectCommerceConnection(id, data, provider) {
+  return {
+    id,
+    provider,
+    account: String(data.shopDomain || data.storeName || data.shopName || data.siteUrl || data.host || data.merchantName || ""),
+    status: String(data.status || ""),
+    mode: String(data.mode || ""),
+    scopes: Array.isArray(data.scopes) ? data.scopes.map(String) : [],
+    lastSyncAtMs: num(data.lastSyncAtMs),
+    lastSuccessAtMs: num(data.lastSuccessAtMs),
+    lastErrorCode: String(data.lastErrorCode || "")
+  };
+}
+
+/**
+ * One order, as the assistant is allowed to see it.
+ *
+ * Pure, and exported, so the unit tests can build their snapshots through the
+ * same redaction the loader applies instead of approximating it — a fixture
+ * that skips this would be testing a row that never reaches a capability.
+ */
+function projectOrderForAssistant(raw = {}) {
+  const { record, verdict } = outbound.redactForChannel(raw, "assistant");
+  const restricted = !verdict.allow || verdict.minimal;
+  const projected = { ...record, __piiRestricted: restricted };
+  if (restricted) {
+    // Buyer-authored free text is PII by another route: engine orders store
+    // `notes: buyer_note`, and a row that will not name the buyer must not
+    // carry the buyer's own sentence either.
+    delete projected.notes;
+    delete projected.historyLog;
+  }
+  return projected;
+}
+
+function createLoaders({ db, now = () => Date.now() }) {
+  const company = (companyId) => db().collection("companies").doc(String(companyId));
+
+  async function readCollection(ref, limit) {
+    const snap = await ref.limit(limit).get();
+    return { rows: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })), capped: snap.size >= limit };
+  }
+
+  /**
+   * The company document, read for THIS request. A cached snapshot would keep
+   * serving a member whose access was revoked a minute ago.
+   */
+  async function loadCompany(companyId) {
+    const snap = await company(companyId).get();
+    if (!snap.exists) return null;
+    const companyData = snap.data() || {};
+    companyData.__workspaceId = String(companyId);
+    const settingsSnap = await db().collection("companySettings").doc(String(companyId)).get();
+    return { companyData, settings: settingsSnap.exists ? settingsSnap.data() || {} : {} };
+  }
+
+  async function loadOrders(companyId, ctx) {
+    const snap = await db().collection("siparisler").where("companyId", "==", String(companyId)).limit(CAPS.orders).get();
+    const rows = [];
+    for (const doc of snap.docs) {
+      const raw = { id: doc.id, ...(doc.data() || {}) };
+      // A workflow-only member sees their own work and nothing else, here as
+      // everywhere else in the product.
+      if (ctx && ctx.workflowOnly && String(raw.assignedToUid || "") !== ctx.uid) continue;
+      rows.push(projectOrderForAssistant(raw));
+    }
+    return { rows, capped: snap.size >= CAPS.orders };
+  }
+
+  async function loadBank(companyId) {
+    const snap = await company(companyId).collection("bankTransactions").orderBy("bookingDate", "desc").limit(CAPS.bank).get();
+    const rows = snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        amount: num(data.amount),
+        currency: String(data.currency || "GBP").toUpperCase(),
+        bookingDate: String(data.bookingDate || "").slice(0, 10),
+        description: String(data.description || "").slice(0, 200),
+        counterparty: String(data.counterparty || "").slice(0, 160),
+        category: String(data.category || data.categoryAuto || "").slice(0, 60),
+        categoryAuto: Boolean(data.categoryAuto) && !data.category,
+        txType: String(data.txType || ""),
+        hasReceipt: Boolean(data.receiptPath),
+        receiptNotNeeded: data.receiptNotNeeded === true,
+        reviewStatus: String(data.reviewStatus || ""),
+        accountId: String(data.accountId || ""),
+        provider: String(data.provider || ""),
+        incomingKind: String(data.incomingKind || ""),
+        outgoingKind: String(data.outgoingKind || ""),
+        linkedOrderId: String(data.linkedOrderId || ""),
+        settlement: data.settlement ? { payoutId: String(data.settlement.payoutId || ""), provider: String(data.settlement.provider || "") } : null,
+        splits: Array.isArray(data.splits) ? data.splits.length : 0
+      };
+    });
+    return { rows, capped: snap.size >= CAPS.bank };
+  }
+
+  async function loadPayouts(companyId) {
+    const out = {};
+    for (const [provider, collection] of [["square", "squarePayouts"], ["paypal", "paypalPayouts"]]) {
+      const { rows } = await readCollection(company(companyId).collection(collection), CAPS.payouts);
+      if (rows.length > 0) out[provider] = rows;
+    }
+    return out;
+  }
+
+  async function loadConnections(companyId, ctx) {
+    const cid = String(companyId);
+    const connections = { shopify: [], etsy: [], woocommerce: [], square: [], bank: [], accounting: [] };
+    const rootReads = [
+      ["shopify", "shopifyStores"],
+      ["etsy", "etsyConnections"],
+      ["woocommerce", "wooConnections"],
+      ["square", "squareConnections"]
+    ];
+    for (const [provider, collection] of rootReads) {
+      const snap = await db().collection(collection).where("companyId", "==", cid).limit(25).get();
+      connections[provider] = snap.docs.map((doc) => projectCommerceConnection(doc.id, doc.data() || {}, provider));
+    }
+    if (ctx && ctx.areas && ctx.areas.bankFeed) {
+      const { rows } = await readCollection(company(cid).collection("bankConnections"), 25);
+      connections.bank = rows.map((row) => ({
+        id: row.id,
+        provider: String(row.provider || "bank"),
+        institutionName: String(row.institutionName || row.bankName || ""),
+        syncState: String(row.syncState || ""),
+        syncFailures: num(row.syncFailures),
+        lastSyncedAtMs: num(row.lastSyncedAtMs) || Date.parse(String(row.lastSyncedAt || "")) || 0,
+        consentExpiresAt: row.consentExpiresAt || null
+      }));
+    }
+    if (ctx && ctx.accountingReader) {
+      const { rows } = await readCollection(company(cid).collection("accountingConnections"), 25);
+      connections.accounting = rows.map((row) => ({
+        id: row.id,
+        provider: String(row.provider || ""),
+        companyName: String(row.companyName || row.realmName || ""),
+        mode: String(row.mode || "read_only"),
+        status: String(row.status || ""),
+        writeBoundaryDate: String(row.writeBoundaryDate || ""),
+        lastSyncAtMs: num(row.lastSyncAtMs)
+      }));
+    }
+    return connections;
+  }
+
+  async function loadCommerceHealth(companyId) {
+    const snap = await db().collection("commerceHealth").where("companyId", "==", String(companyId)).limit(50).get();
+    return snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        provider: String(data.provider || ""),
+        connectionId: String(data.connectionId || ""),
+        doc: data,
+        ordersLastSuccessAtMs: num((data.orders || {}).lastSuccessAtMs),
+        financeLastSuccessAtMs: num((data.finance || {}).lastSuccessAtMs)
+      };
+    });
+  }
+
+  async function loadReview(companyId) {
+    const cid = String(companyId);
+    const queueSnap = await db().collection("commerceReviewQueue").where("companyId", "==", cid).limit(CAPS.review).get();
+    // These documents carry `customerName`. It is projected away here so no
+    // pure module can emit it by accident.
+    const queue = queueSnap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return { id: doc.id, provider: String(data.provider || ""), connectionId: String(data.connectionId || ""), reason: String(data.reason || "") };
+    });
+    const heldSnap = await company(cid).collection("heldIntegrationOrders").limit(CAPS.review).get();
+    const held = heldSnap.docs.map((doc) => ({ id: doc.id, reason: String((doc.data() || {}).reason || "") }));
+    return { queue, held };
+  }
+
+  async function loadAccountingAttention(companyId) {
+    // The READER on the attention collection. `store.openAttention` writes; it
+    // is never called from this module or any other under orchestrator/.
+    const snap = await company(companyId).collection("accountingAttention")
+      .where("status", "==", "open").limit(CAPS.attention).get();
+    return snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        provider: String(data.provider || ""),
+        connectionId: String(data.connectionId || ""),
+        kind: String(data.kind || ""),
+        severity: String(data.severity || ""),
+        message: String(data.message || "").slice(0, 200),
+        firstSeenAtMs: num(data.firstSeenAtMs),
+        entityRefs: Array.isArray(data.entityRefs) ? data.entityRefs.slice(0, 5) : []
+      };
+    });
+  }
+
+  /**
+   * The bank rows covering the settlement windows of the unmatched payouts, in
+   * one pass. `settlementMatch.suggestForPayout` would do this with a Firestore
+   * query per payout, from inside a module this design declares pure.
+   */
+  function bankRowsForPayoutWindows(bankRows, payouts) {
+    const settlements = require("../commerce/settlements");
+    const windows = [];
+    for (const provider of Object.keys(payouts || {})) {
+      for (const payout of payouts[provider] || []) {
+        if (payout.bankMatch && payout.bankMatch.transactionId) continue;
+        const window = settlements.settlementWindow(payout);
+        if (window) windows.push(window);
+      }
+    }
+    if (windows.length === 0) return [];
+    const from = windows.map((w) => w.from).sort()[0];
+    const to = windows.map((w) => w.to).sort().slice(-1)[0];
+    return bankRows.filter((row) => row.bookingDate >= from && row.bookingDate <= to && row.amount > 0);
+  }
+
+  /** Read exactly what the capability declared, and nothing else. */
+  async function snapshotFor(domainNeeds = [], ctx, { settings = {}, companyData = {} } = {}) {
+    const needs = new Set(domainNeeds.filter((name) => DOMAINS.includes(name)));
+    const companyId = ctx.companyId;
+    const snapshot = { companyId, nowMs: now(), settings, companyDataHint: companyData };
+
+    if (needs.has("orders")) {
+      const { rows, capped } = await loadOrders(companyId, ctx);
+      snapshot.orders = rows;
+      snapshot.ordersCapped = capped;
+    } else {
+      snapshot.orders = [];
+    }
+
+    if (needs.has("production")) {
+      snapshot.production = {
+        stages: production.productionStagesFromSettings(settings),
+        steps: (Array.isArray(settings.customSteps) ? settings.customSteps : [])
+          .map((step) => ({ id: String((step || {}).id || "").trim(), title: String((step || {}).title || "").trim() }))
+          .filter((step) => Boolean(step.title))
+      };
+    }
+
+    if (needs.has("inventory")) {
+      const { rows, capped } = await readCollection(company(companyId).collection("inventoryItems"), CAPS.inventory);
+      snapshot.inventoryItems = rows;
+      snapshot.inventoryCapped = capped;
+    }
+
+    if (needs.has("bank")) {
+      const { rows, capped } = await loadBank(companyId);
+      snapshot.bankRows = rows;
+      snapshot.bankCapped = capped;
+      const { rows: vendors } = await readCollection(company(companyId).collection("bankVendors"), 200);
+      snapshot.bankVendors = vendors.map((row) => ({
+        id: row.id,
+        name: String(row.name || ""),
+        keys: Array.isArray(row.keys) ? row.keys.map(String) : [],
+        cadence: String(row.cadence || "") || null
+      }));
+    }
+
+    if (needs.has("receiptInbox")) {
+      const snap = await company(companyId).collection("bankReceiptInbox").where("status", "==", "waiting").limit(CAPS.inbox).get();
+      snapshot.receiptInbox = snap.docs.map((doc) => ({ id: doc.id, status: "waiting", createdAtMs: num((doc.data() || {}).createdAtMs) }));
+    }
+
+    if (needs.has("payouts")) {
+      snapshot.payouts = await loadPayouts(companyId);
+      const bankRows = snapshot.bankRows || (await loadBank(companyId)).rows;
+      snapshot.payoutBankRows = bankRowsForPayoutWindows(bankRows, snapshot.payouts);
+      const connections = snapshot.connections || (await loadConnections(companyId, ctx));
+      snapshot.connections = connections;
+      snapshot.bankConnection = (connections.bank || [])[0] || null;
+    }
+
+    if (needs.has("connections") && !snapshot.connections) {
+      snapshot.connections = await loadConnections(companyId, ctx);
+      snapshot.bankConnection = (snapshot.connections.bank || [])[0] || null;
+    }
+
+    if (needs.has("commerceHealth")) snapshot.commerceHealth = await loadCommerceHealth(companyId);
+    if (needs.has("review")) {
+      const { queue, held } = await loadReview(companyId);
+      snapshot.reviewQueue = queue;
+      snapshot.heldOrders = held;
+    }
+    if (needs.has("accounting")) snapshot.accountingAttention = await loadAccountingAttention(companyId);
+
+    return snapshot;
+  }
+
+  return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
+}
+
+module.exports = { createLoaders, CAPS, DOMAINS, projectCommerceConnection, projectOrderForAssistant };

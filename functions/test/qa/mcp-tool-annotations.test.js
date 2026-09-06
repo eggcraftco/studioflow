@@ -188,7 +188,10 @@ check("assertRegistry refuses the mistakes it exists for", () => {
   rejects((t) => { t[0].scopes = ["inventory.write"]; }, "a scope the OAuth metadata does not advertise");
   rejects((t) => { t[0].scopes = []; }, "no scope at all");
   rejects((t) => { t[0].annotations.openWorldHint = false; }, "an effect with openWorldHint false");
-  rejects((t) => { t[t.length - 1].effects = []; }, "openWorldHint true with no effect named");
+  // Found by name, not by position: the table grew and "the last entry" stopped
+  // being an open-world tool, which made this mutation silently stop testing
+  // anything.
+  rejects((t) => { t.find((entry) => entry.annotations.openWorldHint === true).effects = []; }, "openWorldHint true with no effect named");
   rejects((t) => { t[1].justification.readOnlyHint = "Because it reads orders."; }, "a logged read that hides its access-log row");
   rejects((t) => { t[1].name = t[0].name; }, "a duplicate tool name");
   rejects((t) => { t[0].name = "debug_orders"; }, "a name that reads like an internal action");
@@ -327,17 +330,25 @@ check("no annotation literal is left behind in index.js", () => {
 });
 
 check("the advertised scope of each tool comes from one table", () => {
-  const scopesFor = new Function(
-    indexSource.slice(
-      indexSource.indexOf("function nvMcpOAuthScopesForTool"),
-      indexSource.indexOf("function nvMcpAssertAnnotations")
-    ) + "; return nvMcpOAuthScopesForTool;"
-  )();
-  for (const entry of registry.TOOL_REGISTRY) {
-    assert.deepStrictEqual(
-      scopesFor(entry.name), entry.scopes,
-      `${entry.name}: the OAuth scope table and the registry disagree`
-    );
+  // There used to be two lists: a switch in index.js and the registry's own
+  // `scopes` field, kept in step by hand. index.js now asks the registry, and
+  // the served listing is what proves it — comparing the switch to the registry
+  // would only have compared the registry to itself.
+  const scopeSource = indexSource.slice(
+    indexSource.indexOf("function nvMcpOAuthScopesForTool"),
+    indexSource.indexOf("function nvMcpAssertAnnotations")
+  );
+  assert.ok(
+    /return nvMcpRegistry\.scopesFor\(toolName\);/.test(scopeSource),
+    "nvMcpOAuthScopesForTool has grown its own table again; the registry has to be the only one"
+  );
+  for (const [label, flags] of Object.entries(FLAG_STATES)) {
+    for (const tool of servedTools(flags)) {
+      assert.deepStrictEqual(
+        tool.scopes, registry.scopesFor(tool.name),
+        `${label}/${tool.name}: the scope on the wire and the registry disagree`
+      );
+    }
   }
 });
 

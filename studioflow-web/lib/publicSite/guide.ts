@@ -1151,16 +1151,43 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "The NivaDesk app for ChatGPT" },
           { kind: "bullets", items: [
-            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language: what is overdue, what a customer has ordered before, how much stock is left of something.",
-            "Connect it from ChatGPT: find NivaDesk in its apps list and sign in with the NivaDesk account you already use. ChatGPT never sees your password — you approve the connection in NivaDesk, and you can withdraw it later the same way.",
-            "It reads the workspace you approved and answers from it. It cannot see other workspaces, and what your role cannot see in the app it cannot see there either.",
-            "You can also send a receipt or an invoice photo to it. If the payment is already in your bank feed the receipt is matched to it; if the payment has not arrived yet the receipt waits in Banking under Receipts until it does, rather than being lost."
+            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language. It has its own section: see NivaDesk in ChatGPT."
           ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
             "The \"Powered by NivaDesk\" line on customer pages can be switched off on the Pro and Team plans.",
             "Your logo, business name and footer note already come from your workspace branding settings."
+          ] }
+        ]
+      },
+      {
+        id: "chatgpt-app",
+        title: "NivaDesk in ChatGPT",
+        blocks: [
+          { kind: "para", text: "NivaDesk has an app inside ChatGPT. Once you connect your workspace you can ask about it in plain language — what is overdue, what a customer ordered before, how a month went — and ChatGPT answers from your own records, in the role you have in NivaDesk." },
+          { kind: "para", text: "It works on the same orders, notes, finance and banking data you see in the app. It cannot see another workspace, and it never talks to your shops or your bank directly: everything comes through NivaDesk." },
+          { kind: "sub", text: "Connecting" },
+          { kind: "bullets", items: [
+            "In ChatGPT open the apps list, choose NivaDesk and sign in with the NivaDesk account you already use. You pick the workspace on the NivaDesk consent page; ChatGPT never sees your password.",
+            "Owners can see and end ChatGPT connections under Settings ▸ Account; connecting again from the same account replaces the earlier connection."
+          ] },
+          { kind: "sub", text: "What you can ask" },
+          { kind: "bullets", items: [
+            "Orders: find orders by customer, reference, design name or status; open one; add a note; change its status or design status; create a new order. Workflow-only members see only the orders assigned to them, and money fields are hidden from roles without the Financial permission.",
+            "Notes: create, search, open, append to, edit, pin and archive your own personal notes. Team notes are not changed from ChatGPT.",
+            "Finance and dashboard: an order's financials, the dashboard summary, the financial overview and extra spending for a month, year or date range — on the Starter plan in the basic shape, on Pro and Team with profit and remaining balances.",
+            "Banking: monthly spending by category and merchant, recurring costs, search of bank transactions, and receipts — send a receipt or invoice photo and NivaDesk matches it to the bank line; if several lines could fit it asks which; if the payment has not arrived yet the receipt waits under Banking ▸ Receipts and is matched when it does. Attaching receipts is for the workspace owner."
+          ] },
+          { kind: "sub", text: "When your customer hears about it" },
+          { kind: "bullets", items: [
+            "Changing an order's status from ChatGPT is the same action as changing it in the app, and it can reach your customer the same way: if the order has automatic updates on — which is the default for orders that carry an email address — NivaDesk emails them about the new status, and sends an SMS too where you have SMS switched on. ChatGPT can only choose from the statuses your workspace already uses, and it should tell you before it changes one.",
+            "You control this per order with the customer updates switch, and for the whole workspace under Settings ▸ Notifications. Turning automatic updates off for an order means no message goes out however the status is changed."
+          ] },
+          { kind: "sub", text: "What it will not do" },
+          { kind: "bullets", items: [
+            "It does not change anything in Shopify, Etsy, WooCommerce, Square, Amazon or eBay, and it does not write to your bank or your accounting software. It cannot write a message of its own to a customer either — the only thing that reaches them is your workspace's own status update, in your workspace's own words.",
+            "When a figure depends on a shop or bank sync that is behind, the answer says so instead of presenting old numbers as live."
           ] }
         ]
       },
@@ -2326,16 +2353,43 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "ChatGPT için NivaDesk uygulaması" },
           { kind: "bullets", items: [
-            "NivaDesk'in ChatGPT içinde bir uygulaması var; kendi çalışma alanınızı gündelik dille sorabilirsiniz: neyin gecikmiş olduğunu, bir müşterinin daha önce ne sipariş ettiğini, bir üründen ne kadar stok kaldığını.",
-            "ChatGPT'den bağlayın: uygulama listesinde NivaDesk'i bulun ve zaten kullandığınız NivaDesk hesabınızla giriş yapın. ChatGPT parolanızı asla görmez — bağlantıyı NivaDesk'te onaylarsınız ve daha sonra aynı yerden geri alabilirsiniz.",
-            "Onayladığınız çalışma alanını okur ve oradan yanıtlar. Başka çalışma alanlarını göremez; uygulamada rolünüzün göremediği şeyi orada da göremez.",
-            "Ona bir fiş ya da fatura fotoğrafı da gönderebilirsiniz. Ödeme banka akışınızda zaten varsa fiş onunla eşleştirilir; ödeme henüz gelmediyse fiş kaybolmak yerine Banking'de Receipts altında ödeme gelene kadar bekler."
+            "NivaDesk'in ChatGPT içinde bir uygulaması var; çalışma alanınızı gündelik dille sorabilirsiniz. Kendi bölümü var: ChatGPT'de NivaDesk."
           ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
             "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
             "Müşteri sayfalarındaki \"Powered by NivaDesk\" satırı Pro ve Team planlarında kapatılabilir.",
             "Logonuz, işletme adınız ve alt not zaten çalışma alanı markalama ayarlarınızdan gelir."
+          ] }
+        ]
+      },
+      {
+        id: "chatgpt-app",
+        title: "ChatGPT'de NivaDesk",
+        blocks: [
+          { kind: "para", text: "NivaDesk'in ChatGPT içinde bir uygulaması var. Çalışma alanınızı bağladıktan sonra onu gündelik dille sorabilirsiniz — ne gecikmiş, bir müşteri daha önce ne sipariş etmiş, bir ay nasıl geçmiş — ve ChatGPT NivaDesk'teki rolünüzle kendi kayıtlarınızdan yanıtlar." },
+          { kind: "para", text: "Uygulamada gördüğünüz sipariş, not, finans ve banka verisinin aynısı üzerinde çalışır. Başka bir çalışma alanını göremez; mağazalarınızla ya da bankanızla doğrudan konuşmaz, her şey NivaDesk üzerinden gelir." },
+          { kind: "sub", text: "Bağlama" },
+          { kind: "bullets", items: [
+            "ChatGPT'de uygulama listesini açın, NivaDesk'i seçin ve zaten kullandığınız NivaDesk hesabıyla giriş yapın. Çalışma alanını NivaDesk onay sayfasında siz seçersiniz; ChatGPT parolanızı asla görmez.",
+            "Sahipler ChatGPT bağlantılarını Settings ▸ Account altında görüp sonlandırabilir; aynı hesaptan yeniden bağlanmak önceki bağlantının yerine geçer."
+          ] },
+          { kind: "sub", text: "Neler sorabilirsiniz" },
+          { kind: "bullets", items: [
+            "Siparişler: müşteri, referans, tasarım adı ya da duruma göre sipariş bulma; birini açma; not ekleme; durumunu veya tasarım durumunu değiştirme; yeni sipariş oluşturma. Yalnızca iş akışı üyeleri sadece kendilerine atanan siparişleri görür; Financial izni olmayan rollerden para alanları gizlenir.",
+            "Notlar: kendi kişisel notlarınızı oluşturma, arama, açma, sonuna ekleme, düzenleme, sabitleme ve arşivleme. Ekip notları ChatGPT'den değiştirilmez.",
+            "Finans ve pano: bir siparişin finansı, pano özeti, finansal genel bakış ve bir ay, yıl ya da tarih aralığı için ek harcamalar — Starter planda temel biçimde, Pro ve Team'de kâr ve kalan bakiyelerle.",
+            "Banka: kategori ve satıcıya göre aylık harcama, tekrarlayan giderler, banka hareketlerinde arama ve fişler — bir fiş ya da fatura fotoğrafı gönderin, NivaDesk onu banka satırıyla eşleştirir; birden fazla satır uyuyorsa hangisi olduğunu sorar; ödeme henüz gelmediyse fiş Banking ▸ Receipts altında bekler ve geldiğinde eşlenir. Fiş ekleme çalışma alanı sahibine özeldir."
+          ] },
+          { kind: "sub", text: "Müşteriniz ne zaman haber alır" },
+          { kind: "bullets", items: [
+            "Bir siparişin durumunu ChatGPT'den değiştirmek, uygulamadan değiştirmekle aynı işlemdir ve müşterinize aynı şekilde ulaşabilir: siparişte otomatik güncellemeler açıksa — e-posta adresi olan siparişlerde varsayılan olarak açıktır — NivaDesk yeni durumu e-postayla bildirir, SMS'i açtıysanız SMS de gönderir. ChatGPT yalnızca çalışma alanınızın hâlihazırda kullandığı durumlardan birini seçebilir ve bir durumu değiştirmeden önce size söylemelidir.",
+            "Bunu sipariş bazında müşteri güncellemeleri anahtarından, çalışma alanı genelinde Settings ▸ Notifications altından yönetirsiniz. Bir siparişte otomatik güncellemeleri kapatmak, durum nasıl değiştirilirse değiştirilsin mesaj gitmemesi demektir."
+          ] },
+          { kind: "sub", text: "Yapmayacakları" },
+          { kind: "bullets", items: [
+            "Shopify, Etsy, WooCommerce, Square, Amazon ya da eBay'de hiçbir şeyi değiştirmez; bankanıza veya muhasebe yazılımınıza yazmaz. Müşterinize kendi cümlesiyle bir mesaj da yazamaz — müşteriye ulaşan tek şey çalışma alanınızın kendi durum bildirimidir, kendi kelimelerinizle.",
+            "Bir rakam geride kalmış bir mağaza ya da banka senkronuna bağlıysa yanıt bunu söyler; eski sayıları canlıymış gibi sunmaz."
           ] }
         ]
       },

@@ -1,0 +1,267 @@
+"use strict";
+
+/**
+ * get_integration_health (§11) — "is anything wrong with my connections?"
+ *
+ * Three things this module refuses to do, each because the honest answer is
+ * different from the convenient one:
+ *
+ *  - **Etsy's freshness does not come from `commerceHealth`.** Etsy never writes
+ *    that document, so `healthView` reports "never" for a connector that is
+ *    syncing perfectly well. Its freshness comes from the connection document's
+ *    own `lastSuccessAtMs`, and pairing the two is mandatory.
+ *  - **Amazon's status is `not_visible`, not `disconnected`.** The connection
+ *    lives in the hardened `nivadesk-amazon` project and is readable only as
+ *    `amazon-caller@`, which this function is not. A status nobody can read is
+ *    not a status of "broken" — and it does not make the Amazon SALES invisible
+ *    either: the commerce capability still counts those orders.
+ *  - **No token, ever.** The loader projects connection documents down to the
+ *    fields their own `publicView` helpers expose, and nothing here reads a
+ *    field whose name looks like a credential.
+ */
+
+const envelope = require("./envelope");
+const freshness = require("./freshness");
+const health = require("../commerce/health");
+const channelModule = require("./channel");
+
+const AUTH_STATUSES = Object.freeze(["ok", "reconnect_required", "pending", "disconnected", "not_visible"]);
+
+const RECONNECT_STATUSES = new Set([
+  "reconnect_required", "needs_reconnect", "needsreauth", "uninstalled", "revoked", "invalid_grant"
+]);
+
+function authStatusOf(connection) {
+  const raw = String((connection || {}).status || "").toLowerCase();
+  if (!raw) return "pending";
+  if (RECONNECT_STATUSES.has(raw)) return "reconnect_required";
+  if (raw === "disconnected") return "disconnected";
+  if (raw === "pending") return "pending";
+  if (raw === "connected" || raw === "linked" || raw === "active" || raw === "ok") return "ok";
+  return "pending";
+}
+
+/** read_only / limited / full, from what the provider's capability registry says. */
+function modeOf(provider, connection) {
+  const caps = require("../commerce/capabilities").getCapabilities(provider) || {};
+  const writes = Object.values(caps).some((entry) => entry && entry.write === true);
+  if (String((connection || {}).mode || "") === "read_only") return "read_only";
+  if (!writes) return "read_only";
+  const scopes = Array.isArray((connection || {}).scopes) ? connection.scopes : [];
+  return scopes.length > 0 ? "full" : "limited";
+}
+
+function healthRowFor(snapshot, provider, connectionId) {
+  const rows = Array.isArray(snapshot.commerceHealth) ? snapshot.commerceHealth : [];
+  return rows.find((row) => String(row.provider || "") === provider
+    && (!connectionId || String(row.connectionId || "") === String(connectionId))) || null;
+}
+
+function freshnessBlock(entityView, { fallbackMs = 0, nowMs, kind = "commerce" }) {
+  const staleAfterMs = freshness.STALE_AFTER_MS[kind];
+  if (entityView && entityView.state === "unsupported") return { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null };
+  const last = Number((entityView || {}).lastSuccessAtMs || 0) || Number(fallbackMs || 0);
+  if (!last) return { state: "never", lastSuccessAt: null, lagMs: null, staleAfterMs };
+  const lagMs = Math.max(0, nowMs - last);
+  return {
+    state: lagMs > staleAfterMs ? "stale" : "fresh",
+    lastSuccessAt: new Date(last).toISOString(),
+    lagMs,
+    staleAfterMs
+  };
+}
+
+function reviewCountsFor(snapshot, provider, connectionId) {
+  const queue = (snapshot.reviewQueue || []).filter((row) => String(row.provider || "") === provider
+    && (!connectionId || !row.connectionId || String(row.connectionId) === String(connectionId)));
+  const held = provider === "manual" || provider === "inbound" ? (snapshot.heldOrders || []).length : 0;
+  return { queue: queue.length, held };
+}
+
+function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
+  const wanted = String(args.provider || "").toLowerCase();
+  const warnings = [];
+  const rows = [];
+  const sources = [];
+  const connections = snapshot.connections || {};
+
+  const commerceProviders = ["shopify", "woocommerce", "etsy", "square"];
+  for (const provider of commerceProviders) {
+    if (wanted && wanted !== provider) continue;
+    const list = Array.isArray(connections[provider]) ? connections[provider] : [];
+    if (list.length === 0) {
+      rows.push({
+        provider,
+        connectionId: null,
+        account: null,
+        authStatus: "disconnected",
+        availability: channelModule.channelAvailability(provider, { hasOrders: false, connection: null }),
+        ordersFreshness: { state: "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
+        inventoryFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        financeFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        retries: 0,
+        deadLetters: 0,
+        reviewCount: { queue: 0, held: 0 },
+        lastSuccessfulSync: null,
+        reconnectRequired: false,
+        mode: modeOf(provider, null)
+      });
+      continue;
+    }
+    for (const connection of list) {
+      const healthDoc = healthRowFor(snapshot, provider, connection.id);
+      const view = healthDoc ? health.healthView(healthDoc.doc || healthDoc, provider, { now: nowMs, staleAfterMs: freshness.STALE_AFTER_MS.commerce }) : {};
+      // Etsy writes no commerceHealth document; its own connection carries the
+      // last success, and without this fallback a working Etsy sync reports
+      // "never".
+      const fallbackMs = Number(connection.lastSuccessAtMs || connection.lastSyncAtMs || 0);
+      const ordersFreshness = freshnessBlock(view.orders, { fallbackMs, nowMs });
+      const authStatus = authStatusOf(connection);
+      rows.push({
+        provider,
+        connectionId: String(connection.id || ""),
+        account: String(connection.account || connection.storeName || connection.shopName || connection.siteUrl || connection.host || ""),
+        authStatus,
+        availability: channelModule.channelAvailability(provider, { hasOrders: true, connection }),
+        ordersFreshness,
+        inventoryFreshness: freshnessBlock(view.inventory, { fallbackMs: 0, nowMs }),
+        financeFreshness: freshnessBlock(view.finance, { fallbackMs: 0, nowMs }),
+        retries: Number((view.orders || {}).pendingRetries || 0),
+        deadLetters: Number((view.orders || {}).deadLetters || 0),
+        reviewCount: reviewCountsFor(snapshot, provider, connection.id),
+        lastSuccessfulSync: ordersFreshness.lastSuccessAt,
+        reconnectRequired: authStatus === "reconnect_required",
+        mode: modeOf(provider, connection)
+      });
+      sources.push(freshness.sourceRow({
+        provider,
+        connectionId: connection.id,
+        entity: "orders",
+        kind: "commerce",
+        lastSuccessAtMs: Number((view.orders || {}).lastSuccessAtMs || fallbackMs || 0),
+        contributed: true,
+        nowMs
+      }));
+      if (authStatus === "reconnect_required") {
+        warnings.push(envelope.warning("channel_excluded_auth", `${provider} needs reconnecting before it can sync again.`, { channel: provider, connectionId: connection.id }));
+      }
+    }
+  }
+
+  // Amazon: orders arrive, the connection status does not.
+  if (!wanted || wanted === "amazon") {
+    const hasAmazonOrders = (snapshot.orders || []).some((order) => String((order.commerce || {}).provider || "").toLowerCase() === "amazon");
+    rows.push({
+      provider: "amazon",
+      connectionId: null,
+      account: null,
+      authStatus: "not_visible",
+      availability: channelModule.channelAvailability("amazon", { hasOrders: hasAmazonOrders, connection: null }),
+      ordersFreshness: { state: hasAmazonOrders ? "not_visible" : "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
+      inventoryFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+      financeFreshness: { state: "not_visible", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+      retries: 0,
+      deadLetters: 0,
+      reviewCount: reviewCountsFor(snapshot, "amazon", null),
+      lastSuccessfulSync: null,
+      reconnectRequired: false,
+      mode: "read_only"
+    });
+    warnings.push(envelope.warning(
+      "status_not_visible_from_this_surface",
+      "Amazon's connection status lives in a separate hardened project this connection cannot read. Amazon orders already in NivaDesk are still counted.",
+      { channel: "amazon" }
+    ));
+  }
+
+  // eBay: adapter code, no runtime.
+  if (!wanted || wanted === "ebay") {
+    const hasEbayOrders = (snapshot.orders || []).some((order) => String((order.commerce || {}).provider || "").toLowerCase() === "ebay");
+    rows.push({
+      provider: "ebay",
+      connectionId: null,
+      account: null,
+      authStatus: "disconnected",
+      availability: hasEbayOrders ? "data_only" : "adapter_only",
+      ordersFreshness: { state: "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
+      inventoryFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+      financeFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+      retries: 0,
+      deadLetters: 0,
+      reviewCount: { queue: 0, held: 0 },
+      lastSuccessfulSync: null,
+      reconnectRequired: false,
+      mode: "read_only"
+    });
+    if (!hasEbayOrders) {
+      warnings.push(envelope.warning("channel_adapter_only", "eBay has adapter code but no live connector yet, so there is nothing to report on it.", { channel: "ebay" }));
+    }
+  }
+
+  // Banking and accounting rows are permission-gated separately from commerce.
+  if (ctx.areas && ctx.areas.bankFeed) {
+    for (const connection of (connections.bank || [])) {
+      const syncState = String(connection.syncState || "");
+      rows.push({
+        provider: String(connection.provider || "bank"),
+        connectionId: String(connection.id || ""),
+        account: String(connection.institutionName || connection.accountLabel || ""),
+        authStatus: ["needs_reconsent", "disconnected"].includes(syncState) ? "reconnect_required" : (syncState === "error" ? "pending" : "ok"),
+        availability: "connected",
+        ordersFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        inventoryFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        financeFreshness: freshnessBlock(null, { fallbackMs: Number(connection.lastSyncedAtMs || 0), nowMs, kind: "bank" }),
+        retries: Number(connection.syncFailures || 0),
+        deadLetters: 0,
+        reviewCount: { queue: 0, held: 0 },
+        lastSuccessfulSync: connection.lastSyncedAtMs ? new Date(Number(connection.lastSyncedAtMs)).toISOString() : null,
+        reconnectRequired: ["needs_reconsent", "disconnected"].includes(syncState),
+        mode: "read_only"
+      });
+      sources.push(freshness.sourceRow({
+        provider: String(connection.provider || "bank"),
+        connectionId: connection.id,
+        entity: "finance",
+        kind: "bank",
+        lastSuccessAtMs: Number(connection.lastSyncedAtMs || 0),
+        contributed: true,
+        nowMs
+      }));
+    }
+  } else {
+    warnings.push(envelope.warning("section_not_permitted", "Bank connections are not included for your role.", { section: "banking" }));
+  }
+
+  if (ctx.accountingReader) {
+    for (const connection of (connections.accounting || [])) {
+      rows.push({
+        provider: String(connection.provider || "accounting"),
+        connectionId: String(connection.id || ""),
+        account: String(connection.companyName || connection.realmName || ""),
+        authStatus: authStatusOf(connection),
+        availability: "connected",
+        ordersFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        inventoryFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
+        financeFreshness: freshnessBlock(null, { fallbackMs: Number(connection.lastSyncAtMs || 0), nowMs, kind: "accounting" }),
+        retries: 0,
+        deadLetters: 0,
+        reviewCount: { queue: 0, held: 0 },
+        lastSuccessfulSync: connection.lastSyncAtMs ? new Date(Number(connection.lastSyncAtMs)).toISOString() : null,
+        reconnectRequired: authStatusOf(connection) === "reconnect_required",
+        mode: String(connection.mode || "read_only")
+      });
+    }
+  } else {
+    warnings.push(envelope.warning("section_not_permitted", "Accounting connections are not included for your role.", { section: "accounting" }));
+  }
+
+  return {
+    data: { connections: rows, count: rows.length },
+    warnings,
+    sources,
+    entityRefs: rows.filter((row) => row.connectionId).slice(0, 20)
+      .map((row) => envelope.entityRef("connection", row.connectionId, `${row.provider} ${row.account || ""}`.trim()))
+  };
+}
+
+module.exports = { AUTH_STATUSES, authStatusOf, modeOf, integrationHealth };
