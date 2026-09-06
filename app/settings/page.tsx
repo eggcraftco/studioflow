@@ -37,6 +37,7 @@ import { ChatGPTIntegrationSection } from "./ChatGPTIntegrationSection";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
+import { EbayIntegrationSection } from "./EbayIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
@@ -163,6 +164,7 @@ type SettingsSection = {
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
+  ebay: "integrations",
   paypal: "integrations",
   shopify: "integrations",
   inbound: "integrations",
@@ -238,7 +240,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   "safety-uploads": "upload file size limit policy zip audit virus",
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
-  integrations: "integration connect webhook woocommerce shopify etsy square pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
+  integrations: "integration connect webhook woocommerce shopify etsy square ebay marketplace pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
   "support-tickets": "ticket help support contact"
 };
 
@@ -544,7 +546,7 @@ export default function SettingsPage() {
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
-      rawRequested === "square" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
+      rawRequested === "square" || rawRequested === "ebay" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -556,6 +558,13 @@ export default function SettingsPage() {
     // they most need an answer.
     if (params.get("etsy")) {
       setIntegrationProvider("etsy");
+      setActiveSection("integrations");
+    }
+    // eBay does carry section=ebay, but a redirect is not a promise: the
+    // outcome parameter is the one thing that must open the panel, because the
+    // panel is where the seller is told whether it worked.
+    if (params.get("ebay")) {
+      setIntegrationProvider("ebay");
       setActiveSection("integrations");
     }
     if (!rawRequested) return;
@@ -5340,6 +5349,7 @@ function IntegrationsSection({
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "ebay" ? <EbayIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}

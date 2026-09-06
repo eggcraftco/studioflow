@@ -25,6 +25,7 @@ import { db, functions } from "@/lib/firebase/client";
 import { getEtsyConnections } from "@/lib/studioflow/etsy";
 import { getWooConnections } from "@/lib/studioflow/woocommerce";
 import { getSquareConnections } from "@/lib/studioflow/square";
+import { getEbayConnections } from "@/lib/studioflow/ebay";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation";
@@ -36,7 +37,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "paypal" | "quickbooks" | "xero" | "chatgpt";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "paypal" | "quickbooks" | "xero" | "chatgpt";
 
 export type IntegrationProvider = {
   id: string;
@@ -102,8 +103,11 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
   {
     // Named beside Amazon because a studio deciding where to list wants to see
     // both, and a marketplace missing from the grid reads as "never coming".
-    id: "ebay", name: "eBay", category: "commerce", kind: "planned", mark: "E",
-    blurb: "", capabilities: [], manage: "",
+    // No logo file: eBay's mark is theirs and we are not allowed to redraw it,
+    // so the tile keeps its initial the way Square's does.
+    id: "ebay", name: "eBay", category: "commerce", kind: "native", mark: "E",
+    blurb: "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
+    capabilities: ["Orders", "Payments", "Refunds"], manage: "ebay",
   },
   {
     id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
@@ -193,7 +197,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, accounting, chatgpt, retired] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, ebay, accounting, chatgpt, retired] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -201,6 +205,10 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     getEtsyConnections(companyId),
     getWooConnections(companyId),
     getSquareConnections(companyId),
+    // Gated off on most servers, so a rejection here is the ordinary case and
+    // settles as an empty list — the card then reads "Available", which is
+    // what it said before this connector existed.
+    getEbayConnections(companyId),
     getDocs(collection(db, "companies", companyId, "accountingConnections")),
     // The ChatGPT grant lives in a top-level collection no client may read, so
     // this is the only way a workspace can be told it has one. Owner-only on
@@ -242,6 +250,18 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     squareConnections: square.status === "fulfilled"
       ? square.value.map((row) => ({ merchant: row.merchantName || row.merchantId, status: row.status, needsAttention: row.status === "reconnect_required" || Boolean(row.lastErrorCode) }))
       : [],
+    // needsAttention is the SERVER's word (specStatus), never re-derived from
+    // an error code here: the status table lives in one place and the three
+    // clients copy it rather than each inventing their own reading of it.
+    ebayConnections: ebay.status === "fulfilled"
+      ? ebay.value.connections.map((row) => ({
+          account: row.displayName || row.sellerUsername || row.sellerUserId,
+          status: row.status,
+          specStatus: row.specStatus,
+          needsAttention: row.specStatus === "reauthorization_required" || row.specStatus === "degraded" || row.specStatus === "suspended",
+          environment: row.environment,
+        }))
+      : [],
     // Accounting providers (QuickBooks Online, Xero): the owner-readable connection projection.
     accountingConnections: accounting.status === "fulfilled"
       ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production"), lastWebhookAtMs: Number(d.lastWebhookAtMs) || 0, linkedAtMs: Number(d.linkedAtMs) || 0 }; })
@@ -274,7 +294,7 @@ export async function revokeChatGPTConnection(companyId: string, tokenHash = "")
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], ebayConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
 };
 
 export type IntegrationSignals = {
@@ -289,6 +309,8 @@ export type IntegrationSignals = {
   wooConnections: { store: string; status: string; needsAttention: boolean }[];
   /** Connected Square merchants, and whether one needs the owner's attention. */
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
+  /** Connected eBay seller accounts, carrying the server's own specStatus. */
+  ebayConnections: { account: string; status: string; specStatus: string; needsAttention: boolean; environment?: string }[];
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
@@ -386,6 +408,22 @@ function resolveProviderState(
     if (live.length === 0) return { state: "available" };
     const broken = live.filter((row) => row.needsAttention).length;
     return { state: broken === live.length ? "attention" : "connected", detail: live.length === 1 ? live[0].merchant : `${live.length} accounts` };
+  }
+
+  // eBay, like Square, is a native connection with rows of its own. The row
+  // already carries the server's specStatus, so this branch only counts: a
+  // disconnected row is not a connection, and a card goes amber only when
+  // EVERY live account needs a look — one paused sandbox account beside a
+  // working live one is not an outage.
+  if (provider.id === "ebay") {
+    const live = (signals.ebayConnections || []).filter((row) => row.status !== "disconnected");
+    if (live.length === 0) return { state: "available" };
+    const broken = live.filter((row) => row.needsAttention).length;
+    const sandbox = live[0].environment === "sandbox" ? " · Sandbox" : "";
+    return {
+      state: broken === live.length ? "attention" : "connected",
+      detail: `${live.length === 1 ? live[0].account : `${live.length} accounts`}${sandbox}`,
+    };
   }
 
   if (provider.id === "quickbooks" || provider.id === "xero") {
