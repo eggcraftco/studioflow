@@ -345,32 +345,51 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     assert.ok(cursor.watermarkMs > Date.now() - 60000, "the watermark ends at now, not at now − 24 h");
   });
 
-  await check("#11 plan capacity: a held order's payload has no email; the release fetches fresh (fake getOrder called) and creates the order with its restricted document; a refusing client leaves the row held", async () => {
+  await check("#11 plan capacity: a held order's payload has no email; the release hands the row to the eBay worker rather than unboxing a token it has no key for, and the order lands fresh with its restricted document", async () => {
+    // Deterministic: fill the free plan's limit rather than hoping the suite has
+    // created enough orders by now. The old version of this check wrapped every
+    // assertion in `if (outcome.result === "held")` and logged a shrug
+    // otherwise, so it could pass while testing nothing — which is how a release
+    // path that could never work shipped.
     await db.collection("companies").doc(COMPANY).set({ billingPlan: "free", billingPlanName: "Free", billingStatus: "active" }, { merge: true });
-    const heldRef = db.collection("companies").doc(COMPANY).collection("heldIntegrationOrders").doc("ebay_H1");
-    ebay.orders.set("H1", order("H1"));
-    const data = await conn();
-    const outcome = await eb.applyEbayOrder(connRef(), data, ebay.orders.get("H1"), { eventKey: "ebay|x|h1", eventOrigin: "reconcile" });
-    if (outcome.result === "held") {
+    const active = await db.collection("siparisler").where("companyId", "==", COMPANY).get();
+    const fillers = [];
+    try {
+      for (let i = active.size; i < 12; i += 1) {
+        const ref = db.collection("siparisler").doc(`e2e-ebay-filler-${i}`);
+        fillers.push(ref);
+        await ref.set({ companyId: COMPANY, isDeleted: false, isDelivered: false, customerName: "filler" });
+      }
+      const heldRef = db.collection("companies").doc(COMPANY).collection("heldIntegrationOrders").doc("ebay_H1");
+      ebay.orders.set("H1", order("H1"));
+      const data = await conn();
+      const outcome = await eb.applyEbayOrder(connRef(), data, ebay.orders.get("H1"), { eventKey: "ebay|x|h1", eventOrigin: "reconcile" });
+      assert.strictEqual(outcome.result, "held", JSON.stringify(outcome));
       const held = (await heldRef.get()).data();
       assert.ok(!JSON.stringify(held.payload).includes("example.com") && !JSON.stringify(held.payload).includes("Analytical"), "the held payload is the safe half");
       assert.strictEqual(held.ebayConnectionId, connId);
       assert.strictEqual((await restrictedRef("H1").get()).exists, false, "never on held");
+
+      // Room again. releaseHeldIntegrationOrders mounts no eBay secret and
+      // cannot take the eBay identity, so it must not decrypt anything itself:
+      // the row goes to ebayEventWorker (the fake enqueue runs it inline here).
       await db.collection("companies").doc(COMPANY).set(PAID, { merge: true });
       ebay.failOrders.add("H1");
       const refused = await index.releaseHeldIntegrationOrders.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
-      assert.ok((await heldRef.get()).exists, "left held when eBay refuses"); assert.ok(refused.unknown >= 1);
+      assert.strictEqual(refused.queued, 1, JSON.stringify(refused));
+      assert.ok((await heldRef.get()).exists, "eBay refused the fetch, so the sale is still parked, not deleted");
+      assert.strictEqual((await orderRef("H1").get()).exists, false);
       ebay.failOrders.delete("H1");
       const fetches = ebay.calls.filter((c) => c.op === "getOrder" && c.id === "H1").length;
       const released = await index.releaseHeldIntegrationOrders.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
-      assert.ok(released.imported >= 1, JSON.stringify(released));
+      assert.strictEqual(released.queued, 1, JSON.stringify(released));
+      assert.strictEqual(released.imported, 0, "this callable hands the row over; it does not import eBay orders itself");
       assert.ok(ebay.calls.filter((c) => c.op === "getOrder" && c.id === "H1").length > fetches, "fetched fresh, never replayed");
-      assert.ok((await orderRef("H1").get()).exists); assert.ok((await restrictedRef("H1").get()).exists, "the fresh fetch brought the address"); assert.strictEqual((await heldRef.get()).exists, false);
-    } else {
-      // The free plan's order limit was not reached with this many orders — say so rather than pretend.
-      await db.collection("companies").doc(COMPANY).set(PAID, { merge: true });
-      assert.strictEqual(outcome.result, "created");
-      console.log("      (capacity allowed the order — the free plan's limit is above this suite's order count; the held path is covered by ebay-sync.test.js)");
+      assert.ok((await orderRef("H1").get()).exists, "the worker landed the order");
+      assert.ok((await restrictedRef("H1").get()).exists, "the fresh fetch brought the address");
+      assert.strictEqual((await heldRef.get()).exists, false, "and the parked copy went with it");
+    } finally {
+      for (const ref of fillers) await ref.delete().catch(() => undefined);
     }
   });
 

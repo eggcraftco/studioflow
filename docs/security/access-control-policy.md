@@ -169,6 +169,16 @@ its tasks ride their own Cloud Tasks queue (`ebayEventWorker`), never the shared
 
 A check in the suite fails if Amazon or eBay code ships without that separation.
 
+That separation has two directions, and the suite now checks both. A function
+that **mounts** a marketplace secret must run as that connector's own identity —
+and a function that **runs** the connector's code must mount its secrets. The
+second one was missed once: a shared callable called into the eBay connector to
+release a parked order, mounted no eBay secret (it cannot: it cannot take the
+eBay identity either), and so threw `No eBay key is configured.` on every attempt
+— silently, into a counter that read 'left in place'. The rule that follows from
+it is not "add the secret": a shared callable hands the work to that connector's
+own worker instead.
+
 ## 6. Administrative access to production
 
 Administrative access — the Firebase console, the Google Cloud project,

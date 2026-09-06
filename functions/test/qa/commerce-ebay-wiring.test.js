@@ -97,7 +97,7 @@ check("the rules deny all six eBay root collections and the per-workspace restri
   }
 });
 
-check("account deletion purges the eBay roots; the held-order release fetches fresh and never replays the payload", () => {
+check("account deletion purges the eBay roots; the held-order release goes to the eBay worker and never replays the payload", () => {
   assert.ok(index.includes('await step("ebayConnections", async () => {') && index.includes('db.collection("ebayConnections").where("companyId", "==", companyId).get();\n    for (const doc of snap.docs) await db.recursiveDelete(doc.ref);'));
   assert.ok(index.includes('await step("ebayConnectStates", () => deleteMatching(db.collection("ebayConnectStates").where("companyId", "==", companyId)));'));
   assert.ok(index.includes('await step("ebayBuyers", () => deleteMatching(db.collection("ebayBuyers").where("companyId", "==", companyId)));'));
@@ -105,10 +105,22 @@ check("account deletion purges the eBay roots; the held-order release fetches fr
   const at = index.indexOf('} else if (provider === "ebay") {');
   assert.ok(at > 0, "the release branch exists");
   const branch = index.slice(at, index.indexOf("} else {", at));
-  assert.ok(branch.includes("const fresh = await client.getOrder(String(data.externalId || \"\"));"), "fetched fresh");
-  assert.ok(branch.includes("ebayExports._internal.applyEbayOrder(connectionRef, connectionData, fresh,"), "through the one apply path");
-  assert.ok(!/applyEbayOrder\([^)]*\border\b/.test(branch), "the stored payload is never replayed");
-  assert.ok(branch.includes("unknown += 1;\n          continue;"), "left held when the fetch is refused");
+  // The release runs in a shared callable that cannot hold EBAY_TOKEN_KEY (it
+  // cannot take the eBay identity, and the two travel together), so it hands
+  // the row to the worker that can — the move retryCommerceEvent already makes.
+  // Unboxing the credentials here threw "No eBay key is configured." into the
+  // branch's own catch, which counted the row 'left in place': a held eBay order
+  // could never be imported, even after the owner upgraded.
+  assert.ok(!/ebayExports\._internal/.test(branch), "the release must not run eBay code it has no key for");
+  assert.ok(branch.includes("await enqueueEbayTask(task, 0);"), "the row goes to ebayEventWorker");
+  assert.ok(/eventType: "release", attempt: 1, eventOrigin: "retry"/.test(branch), "as a retry-origin order task");
+  const code = branch.replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!/payload|\border\b(?! task| document)/.test(code.replace(/entityType: "order"/g, "")), "the stored payload is never replayed; the worker fetches fresh");
+  assert.ok(!/doc\.ref\.delete\(\)/.test(branch), "the held row is not deleted on the way out — it goes when the order lands");
+  assert.ok(branch.includes("unknown += 1;\n          continue;"), "left held when the connection or the queue refuses it");
+  const applyAt = connector.indexOf("async function applyEbayOrder(");
+  const apply = connector.slice(applyAt, connector.indexOf("\n  // ---- 5.", applyAt));
+  assert.ok(apply.includes('if (outcome.result === "created" || eventOrigin === "retry") await clearHeldOrder(companyId, externalId);'), "and applyEbayOrder is what clears it");
 });
 
 check("the retention sweep deletes the restricted document beside the scrub; lifecycle derives integration_connected from eBay rows", () => {

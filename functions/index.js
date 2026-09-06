@@ -6169,6 +6169,10 @@ exports.matchSquarePayoutToBank = squareExports.matchSquarePayoutToBank;
 // queue (ebayEventWorker below), never commerceEventWorker.
 const EBAY_QUEUE_FUNCTION = "ebayEventWorker";
 async function enqueueEbayTask(task, delaySeconds = 0) {
+  // One door to the queue, so every caller — the gateway, a retry, the held
+  // release, the deletion reconciliation — is the same code path, and the
+  // emulator suite's stand-in replaces all of them at once.
+  if (process.env.NIVADESK_E2E === "1" && global.__nivadeskEbayFakeEnqueue) return global.__nivadeskEbayFakeEnqueue(task, delaySeconds);
   const queue = getFunctions().taskQueue(`locations/europe-west2/functions/${EBAY_QUEUE_FUNCTION}`);
   await queue.enqueue(task, { scheduleDelaySeconds: Math.max(0, Math.round(delaySeconds)) });
 }
@@ -15002,6 +15006,12 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
   const defaultDeliveryTime = resolveDefaultDeliveryTime(settings);
   let imported = 0;
   let unknown = 0;
+  // eBay rows are handed to their own worker rather than imported here, so they
+  // are counted apart: the sale is on its way in, but it is not in yet. The
+  // capacity check above cannot see them either, so a workspace with room for
+  // one may queue several — the engine re-parks whatever still does not fit,
+  // which is the same protection the first hold gave them.
+  let queuedForImport = 0;
 
   for (const doc of snap.docs) {
     const capacity = await integrationOrderCapacity(companyId, companyData);
@@ -15105,11 +15115,27 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         continue;
       } else if (provider === "ebay") {
         // The stored payload is the SAFE half — it has no address — so it is
-        // never replayed: the order is fetched fresh from eBay and lands through
-        // the connector's one apply path, restricted half included (design §7.3).
-        // A connection that is gone, not connected, or refused by eBay leaves
-        // the row held for the next release rather than importing an order whose
-        // buyer could never be filled in.
+        // never replayed: the order has to be fetched fresh from eBay and land
+        // through the connector's one apply path, restricted half included
+        // (design §7.3).
+        //
+        // That fetch has to unbox the seller's credentials under EBAY_TOKEN_KEY,
+        // and this callable is a shared, general-purpose one: it cannot hold the
+        // eBay secrets, because it cannot take the ebay-connector@ identity, and
+        // the policy is that the two travel together (access-control-policy.md,
+        // design §3.2 — the default compute account never holds EBAY_*). Adding
+        // `secrets:` here is therefore not the fix. Doing it inline WAS the bug:
+        // `process.env.EBAY_TOKEN_KEY` is undefined in this function, keyListOf
+        // threw "No eBay key is configured." on the first held row, the catch
+        // below wrote releaseError and counted it 'left in place', and an eBay
+        // order held by a plan limit could never be imported — even after the
+        // owner upgraded — until its 90-day expireAt deleted it.
+        //
+        // So the row goes to ebayEventWorker, which alone has the key and the
+        // identity: the same move retryCommerceEvent makes for an eBay event.
+        // The held row stays until the order actually lands — applyEbayOrder
+        // clears it — so a task that never gets there leaves the sale parked
+        // rather than deleted.
         const connectionId = String(data.ebayConnectionId || "");
         let connectionRef = connectionId ? admin.firestore().collection("ebayConnections").doc(connectionId) : null;
         if (!connectionRef) {
@@ -15123,22 +15149,33 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
           unknown += 1;
           continue;
         }
-        let outcome = null;
-        try {
-          const client = await ebayExports._internal.clientFor(connectionRef, connectionData, { priority: "people" });
-          const fresh = await client.getOrder(String(data.externalId || ""));
-          if (!fresh) throw new Error("ebay_order_not_found");
-          const fulfillments = String(fresh.orderFulfillmentStatus || "").toUpperCase() === "NOT_STARTED" ? [] : await client.getShippingFulfillments(String(fresh.orderId));
-          outcome = await ebayExports._internal.applyEbayOrder(connectionRef, connectionData, fresh, { eventOrigin: "retry", client, fulfillments, eventKey: commerce.events.idempotencyKey({ provider: "ebay", connectionId: connectionRef.id, externalId: String(data.externalId || ""), eventType: `release@${fresh.lastModifiedDate || ""}` }) });
-        } catch (error) {
-          await doc.ref.set({ releaseError: String(error?.message || error).slice(0, 200), releaseAttemptedAtMs: Date.now() }, { merge: true }).catch(() => undefined);
-          console.warn("releaseHeldIntegrationOrders: eBay fetch failed, left in place", doc.id, error?.message || error);
+        const externalId = String(data.externalId || "");
+        if (!externalId) {
+          console.warn("releaseHeldIntegrationOrders: eBay row carries no external id, left in place", doc.id);
           unknown += 1;
           continue;
         }
-        if (outcome && outcome.result === "held") continue;
-        await doc.ref.delete();
-        if (outcome && ["created", "updated", "noop", "duplicate"].includes(outcome.result)) imported += 1;
+        // One key per held row (RETRY-005): releasing the same row twice is a
+        // duplicate at the engine, not a second order.
+        const task = {
+          key: commerce.events.idempotencyKey({ provider: "ebay", connectionId: connectionRef.id, externalId, eventType: "release" }),
+          provider: "ebay", connectionId: connectionRef.id, companyId, entityType: "order", externalId,
+          eventType: "release", attempt: 1, eventOrigin: "retry", correlationId: commerce.events.newCorrelationId()
+        };
+        try {
+          // Marked BEFORE the hand-off, never after: the worker deletes this row
+          // the moment the order lands, and a mark written afterwards would
+          // recreate it as a payload-less zombie.
+          await doc.ref.set({ releaseQueuedAtMs: Date.now(), releaseTaskKey: task.key, releaseError: "" }, { merge: true });
+          await commerce.worker.recordReceived(admin.firestore(), task, { status: "queued" });
+          await enqueueEbayTask(task, 0);
+        } catch (error) {
+          await doc.ref.set({ releaseError: String(error?.message || error).slice(0, 200), releaseAttemptedAtMs: Date.now() }, { merge: true }).catch(() => undefined);
+          console.warn("releaseHeldIntegrationOrders: eBay queue refused the row, left in place", doc.id, error?.message || error);
+          unknown += 1;
+          continue;
+        }
+        queuedForImport += 1;
         continue;
       } else {
         // TEST-016. A provider this build does not know how to replay. Deleting
@@ -15159,7 +15196,7 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
   const remaining = await heldIntegrationOrdersRef(companyId).count().get()
     .then((agg) => agg.data().count || 0)
     .catch(() => 0);
-  return { ok: true, imported, unknown, stillHeld: remaining };
+  return { ok: true, imported, queued: queuedForImport, unknown, stillHeld: remaining };
 });
 
 exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
@@ -34142,7 +34179,7 @@ async function runEbayEventTask(task) {
   }
   if (result.status === "retrying" && result.nextRetryInMs) {
     const again = { ...task, attempt: Number(task.attempt || 1) + 1 };
-    await (process.env.NIVADESK_E2E === "1" && global.__nivadeskEbayFakeEnqueue ? global.__nivadeskEbayFakeEnqueue(again, result.nextRetryInMs / 1000) : enqueueEbayTask(again, result.nextRetryInMs / 1000));
+    await enqueueEbayTask(again, result.nextRetryInMs / 1000);
   }
   return result;
 }

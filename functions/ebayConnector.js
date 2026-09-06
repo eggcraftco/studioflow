@@ -567,6 +567,29 @@ function createEbayConnectorFunctions(deps) {
     await buyers().doc(`${safeIdPart(companyId)}__${hash}`).set({ companyId, provider: "ebay", usernameHash: hash, orderIds: FieldValue.arrayUnion(orderDocId), updatedAtMs: now() }, { merge: true });
   }
 
+  /**
+   * The parked copy of an order the workspace had no room for. Built exactly
+   * the way `holdIntegrationOrder` builds it, because that is the writer.
+   */
+  function heldOrderRef(companyId, externalId) {
+    const id = `ebay_${String(externalId || "").replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 180);
+    return db().collection("companies").doc(String(companyId)).collection("heldIntegrationOrders").doc(id);
+  }
+
+  /**
+   * A parked order that has now landed. The row exists only because the order
+   * could not be created yet, so once it is created the row is a stale second
+   * copy of a sale that is already in the workspace — and the release path
+   * (§7.3) needs exactly this, because it hands the row to the queue and never
+   * sees the outcome itself.
+   */
+  async function clearHeldOrder(companyId, externalId) {
+    if (!companyId || !externalId) return;
+    const ref = heldOrderRef(companyId, externalId);
+    const snap = await ref.get().catch(() => null);
+    if (snap && snap.exists) await ref.delete().catch(() => undefined);
+  }
+
   async function writeRestrictedCustomer(companyId, orderDocId, ref, safe, restricted, removed, envelope) {
     const username = String(safe?.buyer?.username || "");
     await restrictedRef(companyId, orderDocId).set({
@@ -632,6 +655,11 @@ function createEbayConnectorFunctions(deps) {
       // address — §7.3).
       await indexBuyer(companyId, docId, safe?.buyer?.username);
       if (Object.keys(restricted).length) await writeRestrictedCustomer(companyId, docId, ref, safe, restricted, removed, envelope);
+      // A held row can only exist for an order that was never created, so a
+      // `created` is the moment it goes stale; a release (`retry`) is handed to
+      // the queue and its held row is this path's to clear whatever the verdict
+      // was. Every other apply skips the read.
+      if (outcome.result === "created" || eventOrigin === "retry") await clearHeldOrder(companyId, externalId);
     }
     if (outcome.result === "created") {
       await writeSyncEvent(ref, { type: "order_imported", orderId: outcome.orderId || docId, externalId });
@@ -1063,7 +1091,7 @@ function createEbayConnectorFunctions(deps) {
               if (connId) touched.set(connId, (touched.get(connId) || 0) + 1);
               const externalId = String(order.commerce?.externalId || "");
               if (externalId && companyId) {
-                const heldRef = db().collection("companies").doc(companyId).collection("heldIntegrationOrders").doc(`ebay_${safeIdPart(externalId)}`);
+                const heldRef = heldOrderRef(companyId, externalId);
                 const held = await heldRef.get();
                 if (held.exists) { const payload = (held.data() || {}).payload || {}; await heldRef.set({ payload: { ...payload, buyer: { ...(payload.buyer || {}), username: "" } } }, { merge: true }); }
               }

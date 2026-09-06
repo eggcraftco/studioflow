@@ -813,15 +813,30 @@ inside a slice does not matter because a slice is always read to its end or not 
 
 `releaseHeldIntegrationOrders` gains `else if (provider === "ebay")`: look the connection up by
 `extra.ebayConnectionId` (fallback: the workspace's single connected eBay row); require
-`status === "connected"` and a working client; **fetch fresh** — `order = client.getOrder(externalId)`
-and `fulfillments = client.getShippingFulfillments(externalId)` — and call
-`ebayExports._internal.applyEbayOrder(ref, data, order, { eventOrigin:"retry", client, fulfillments })`.
-The stored safe payload is **never** replayed: it has no address, so replaying it would land an order
-whose `restrictedCustomer` could never be filled (and step 5.i's empty-half guard would leave it
-address-less forever). When the credentials do not allow the fetch (row not connected, auth failure,
-404), the row is **left held** with `releaseError` and retried on the next release sweep; a 404 after
-the 90-day `expireAt` lets it expire. Without this branch an eBay order held by a plan limit sits until
-its `expireAt`.
+`status === "connected"`; then **hand the row to `ebayEventWorker`** as an ordinary order task
+(`eventType:"release"`, `eventOrigin:"retry"`, one idempotency key per row) and leave it parked.
+The worker **fetches fresh** — `client.getOrder(externalId)` + `getShippingFulfillments` — and lands it
+through the one `applyEbayOrder`, which clears the held row once the order exists. The stored safe
+payload is **never** replayed: it has no address, so replaying it would land an order whose
+`restrictedCustomer` could never be filled (and step 5.i's empty-half guard would leave it
+address-less forever).
+
+It is handed over rather than done here because `releaseHeldIntegrationOrders` is a **shared,
+general-purpose callable**: it cannot wear the `ebay-connector@` identity, and §3.2 and
+`access-control-policy.md` both say the secrets and the identity travel together, so it cannot mount
+`EBAY_TOKEN_KEY` either. Calling `clientFor` from it therefore threw `No eBay key is configured.` on
+the first row, into the branch's own catch, which wrote `releaseError`, counted the row `unknown` and
+reported a benign 'left in place' — an eBay order held by a plan limit could never be imported, even
+after the owner upgraded, until its 90-day `expireAt` deleted it. `retryCommerceEvent` had already
+established the fix (re-enqueue rather than process inline); this path uses it. The callable's result
+counts these apart as `queued`, because the sale is on its way in, not in.
+
+When the connection is gone or not connected, or the queue refuses the task, the row is **left held**
+with `releaseError` and retried on the next release; a 404 after the 90-day `expireAt` lets it expire.
+The held row is marked (`releaseQueuedAtMs`, `releaseTaskKey`) **before** the hand-off, never after:
+the worker deletes it the moment the order lands, and a mark written afterwards would recreate it as a
+payload-less zombie. The trip-wire is in `access-control-policy.test.js`: any function reaching
+`ebayExports._internal` must spread `EBAY_RUNTIME`.
 
 ### 7.4 Rate limiting (§61) — per connection first, app-wide second
 
@@ -1497,8 +1512,12 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
     applies all three and the watermark ends at `now` (rollback proof, §84; the **document field**
     drives it).
 11. Plan capacity `allowed:false` → `held`, `heldIntegrationOrders` payload has no email;
-    `releaseHeldIntegrationOrders` eBay branch fetches fresh (fake `getOrder` called) and creates the
-    order with its `restrictedCustomer`; with the fake client refusing, the row stays held.
+    `releaseHeldIntegrationOrders` eBay branch **queues** the row (`queued:1`, `imported:0`), the worker
+    fetches fresh (fake `getOrder` called) and creates the order with its `restrictedCustomer`, and the
+    held row is gone; with the fake client refusing, the row is still parked and no order exists. The
+    limit is **filled deliberately** rather than assumed: this check used to wrap every assertion in
+    `if (outcome.result === "held")` and fall through to a `console.log`, so it could pass while
+    testing nothing.
 12. Disconnect → credentials doc gone, `status disconnected`, `disconnectedByUid`, a pending fake task for
     that connection → `errorClass auth`, no order write.
 13. `purgeProviderDataForWorkspace` → `report.ebayConnections === 1`, `report.ebayConnectStates === 1`,

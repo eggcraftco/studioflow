@@ -191,6 +191,53 @@ check("if Amazon or eBay has shipped, its secrets are not readable by every func
   assert.deepStrictEqual(bareMounts.map((m) => m[0]), [], "an eBay secret is mounted outside EBAY_RUNTIME");
 });
 
+// The trip-wire above is one-directional: it asks whether a function that NAMES
+// a marketplace secret also names an identity. It says nothing about a function
+// that USES marketplace code without mounting the secret at all — which is the
+// same policy broken from the other side, and fails at runtime rather than at
+// deploy. releaseHeldIntegrationOrders did exactly that: it called into the eBay
+// connector's internals, which unbox the seller's token under EBAY_TOKEN_KEY, in
+// a shared callable that mounts no eBay secret. `process.env.EBAY_TOKEN_KEY` is
+// undefined there, so every held eBay order failed to release, silently, into a
+// counter that reported 'left in place'.
+check("a function that runs eBay connector code also mounts the eBay runtime", () => {
+  const source = fs.readFileSync(path.join(root, "index.js"), "utf8");
+  // Top-level symbols in file order: exported triggers, const triggers and
+  // plain functions. Each one's body runs to the next symbol's start.
+  const marks = [];
+  for (const m of source.matchAll(/^(?:exports\.(\w+)\s*=\s*(on[A-Za-z]+)\(|const\s+(\w+)\s*=\s*(on[A-Za-z]+)\(|(?:async\s+)?function\s+(\w+)\s*\()/gm)) {
+    marks.push({ name: m[1] || m[3] || m[5], trigger: Boolean(m[2] || m[4]), at: m.index });
+  }
+  const symbols = marks.map((mark, i) => ({ ...mark, body: source.slice(mark.at, i + 1 < marks.length ? marks[i + 1].at : source.length) }));
+  const mountsRuntime = (symbol) => /\.\.\.EBAY_RUNTIME/.test(symbol.body.slice(0, 600));
+  const usesEbayInternals = (body) => /ebayExports\._internal\./.test(body);
+
+  // Which triggers can reach a symbol, following plain functions up to their
+  // callers (runEbayEventTask is a plain function; ebayEventWorker is what runs it).
+  const triggersReaching = (symbol, seen = new Set()) => {
+    if (seen.has(symbol.name)) return [];
+    seen.add(symbol.name);
+    if (symbol.trigger) return [symbol];
+    const callers = symbols.filter((other) => other !== symbol && new RegExp(`\\b${symbol.name}\\s*\\(`).test(other.body));
+    return callers.flatMap((caller) => triggersReaching(caller, seen));
+  };
+
+  const users = symbols.filter((symbol) => usesEbayInternals(symbol.body));
+  assert.ok(users.length > 0, "nothing in index.js calls the eBay connector any more — has the wiring moved?");
+  for (const user of users) {
+    const triggers = triggersReaching(user);
+    assert.ok(triggers.length > 0, `${user.name} runs eBay connector code but no trigger reaches it`);
+    for (const trigger of triggers) {
+      assert.ok(mountsRuntime(trigger),
+        `${trigger.name} reaches eBay connector code (through ${user.name}) without spreading EBAY_RUNTIME. ` +
+        "The eBay internals unbox the seller's credentials under EBAY_TOKEN_KEY, which is mounted only by that " +
+        "bundle — so this throws \"No eBay key is configured.\" in production. Adding `secrets:` alone is not the " +
+        "fix: secrets and the ebay-connector@ identity travel together (access-control-policy.md §5). Hand the " +
+        "work to ebayEventWorker instead, the way retryCommerceEvent does.");
+    }
+  }
+});
+
 // ---- the document keeps itself current ----------------------------------------
 
 check("the policy is reviewed every six months, and is not overdue", () => {
