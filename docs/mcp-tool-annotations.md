@@ -38,13 +38,20 @@ and `update_order_status`.
 
 ### One carve-out, stated rather than buried
 
-Six read tools cause one write: `recordPiiAccess` files a row in `companies/{cid}/piiAccessLog` before the
+Nine read tools cause one write: `recordPiiAccess` files a row in `companies/{cid}/piiAccessLog` before the
 call is dispatched, recording that a workspace's customer data was handed to an assistant. Those tools keep
-`readOnlyHint: true`. The row is a record *of* the read, not a change to what the workspace holds, and
+`readOnlyHint: true`. Nine is the registry's count — every entry carrying `piiAccessLogged: true`, and all
+nine carry `readOnlyHint: true` — and the deployment reaches it only under `NIVADESK_MCP_ORCHESTRATOR`:
+`get_bank_spending_summary` and `search_bank_transactions` file the row behind that flag, so
+`nvMcpPiiLoggedActions()` names seven with the flag off and nine with it on. With the flag off six of those
+seven are reachable at all — `search_commerce_orders` is registered but not dispatchable until the flag is
+set — and six is what this paragraph said until 7 September 2026, which was the live figure written as
+though it were the table's. The row is a record *of* the read, not a change to what the workspace holds, and
 removing it to make the hint tidier would trade an audit trail for a word. This is a position, not a
 deduction, so every tool that relies on it repeats it in its own `readOnlyHint` reason below — the reviewer
 sees the carve-out on the tool, not in a footnote. The test enforces that: a tool that is `readOnlyHint:
-true` and files an access-log row fails the build if its reason does not mention it.
+true` and files an access-log row fails the build if its reason does not mention it, and every number in
+this paragraph is read back out of it and compared against the registry and the running deployment.
 
 ## The table
 

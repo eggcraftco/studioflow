@@ -223,6 +223,76 @@ check("a PII row that waits on a deployment flag waits on it, and says which", (
   assert.ok(/nvMcpPiiLogFlagOn\(entry\)/.test(indexSource), "the flag gate is no longer a shared predicate");
 });
 
+/** `_nvMcpPiiLoggedActions()` / `_nvMcpAvailableActions()` under a chosen flag state. */
+function loggedAndAvailableUnder(flags) {
+  const script = `
+    for (const k of Object.keys(process.env)) if (/MCP/.test(k)) delete process.env[k];
+    process.env.NIVADESK_MCP_ORCHESTRATOR = ${JSON.stringify(flags.orchestrator ? "1" : "0")};
+    const api = require(${JSON.stringify(INDEX)});
+    console.log(JSON.stringify({
+      logged: [...api._nvMcpPiiLoggedActions()],
+      available: [...api._nvMcpAvailableActions()]
+    }));
+  `;
+  const raw = execFileSync(process.execPath, ["-e", script], { cwd: FUNCTIONS_DIR, maxBuffer: 40 * 1024 * 1024 }).toString();
+  return JSON.parse(raw.trim().split("\n").pop());
+}
+
+check("the carve-out paragraph counts the access-log rows the registry declares", () => {
+  // docs/mcp-tool-annotations.md exists to disclose the one place a
+  // `readOnlyHint: true` tool writes, and on 7 September 2026 the sentence that
+  // does the disclosing said "Six read tools" while the registry held nine and
+  // the document's own per-tool sections disclosed the row on all nine. Six was
+  // the number of tools a caller could REACH with the orchestrator flag off —
+  // a live figure written as though it were the table's — and it went stale the
+  // moment the two bank tools gained the row behind that flag.
+  //
+  // So all four numbers in that paragraph are read back out of it: the
+  // registry's count, the two flag-state counts the deployment actually
+  // returns, and the reachable count.
+  const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+  const value = (text) => (/^\d+$/.test(text) ? Number(text) : WORDS[String(text).toLowerCase()]);
+
+  const paragraph = doc.split("\n\n").find((block) => / read tools cause one write:/.test(block));
+  assert.ok(paragraph, 'the carve-out paragraph ("N read tools cause one write") is gone from the document');
+
+  const declared = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged);
+  const stated = /(\*{0,2})([A-Za-z]+|\d+)\1 read tools cause one write:/.exec(paragraph);
+  assert.ok(stated, "could not read the count out of the carve-out sentence");
+  assert.strictEqual(
+    value(stated[2]), declared.length,
+    `the carve-out says "${stated[2]} read tools" and the registry declares ${declared.length} with piiAccessLogged: true ` +
+    `(${declared.map((entry) => entry.name).sort().join(", ")})`
+  );
+
+  // The split the sentence has to carry, because flags-off the bank tools are
+  // not among them: what the deployment returns in each state, measured.
+  const off = loggedAndAvailableUnder({ orchestrator: false });
+  const on = loggedAndAvailableUnder({ orchestrator: true });
+  const perFlag = /names (\*{0,2})([A-Za-z]+|\d+)\1 with the flag off and (\*{0,2})([A-Za-z]+|\d+)\3 with it on/.exec(paragraph);
+  assert.ok(perFlag,
+    'the carve-out must state both flag states, as "names <n> with the flag off and <n> with it on" — flags-off the two bank tools do not file the row');
+  assert.strictEqual(value(perFlag[2]), off.logged.length,
+    `the carve-out says ${perFlag[2]} with the flag off; nvMcpPiiLoggedActions() returns ${off.logged.length} (${off.logged.sort().join(", ")})`);
+  assert.strictEqual(value(perFlag[4]), on.logged.length,
+    `the carve-out says ${perFlag[4]} with the flag on; nvMcpPiiLoggedActions() returns ${on.logged.length} (${on.logged.sort().join(", ")})`);
+
+  // And the number that was actually in the sentence before: how many a caller
+  // can reach flags-off, which is smaller again because search_commerce_orders
+  // is registered and not dispatchable in that state.
+  const reachable = off.logged.filter((name) => off.available.includes(name));
+  const stateReachable = /(\*{0,2})([A-Za-z]+|\d+)\1 of those seven are reachable/.exec(paragraph)
+    || /With the flag off (\*{0,2})([A-Za-z]+|\d+)\1 of/.exec(paragraph);
+  assert.ok(stateReachable, "the carve-out must say how many of the flags-off rows a caller can actually reach");
+  assert.strictEqual(value(stateReachable[2]), reachable.length,
+    `the carve-out says ${stateReachable[2]} reachable flags-off; the dispatcher reaches ${reachable.length} (${reachable.sort().join(", ")})`);
+
+  assert.ok(/NIVADESK_MCP_ORCHESTRATOR/.test(paragraph), "the carve-out must name the flag the two bank rows wait on");
+  for (const name of ["get_bank_spending_summary", "search_bank_transactions"]) {
+    assert.ok(paragraph.includes(`\`${name}\``), `the carve-out must name ${name} as one of the flag-gated rows`);
+  }
+});
+
 check("every access-logged tool names categories and a subject the access log will keep", () => {
   // accessLog.worthLogging drops an entry with no categories, and accessEntry
   // rewrites an unknown subject kind to "order". Either turns a row that was
