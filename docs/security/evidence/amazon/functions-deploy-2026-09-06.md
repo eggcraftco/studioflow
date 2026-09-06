@@ -80,7 +80,7 @@ Result: "Deploy complete" at 01:48:47 (2 min 21 s), **29 of 29 "Successful updat
 
 Signed test delivery (01:49:48, operator's session, Settings › Integrations › Website / inbound › "Send test webhook"): the callable `sendtestinboundwebhook-00004-mib` answered 200 in 1.9 s and its signed delivery reached `inboundorderwebhook-00025-pay`, which answered **200 in 0.9 s**; the app showed "The delivery URL answered. No order was created. This proves the URL, workspace and token." — the inbound path that reads the idempotency headers through `req.get` (the one the e2e fixture had to learn) works on the new revision with no order written. The Shopify / WooCommerce test button was not used: the workspace's store runs on the connector path and the legacy paste-URL webhooks answer 410 by design, exactly as in the probe table.
 
-Gate: probe table unchanged ✔, signed test delivery ✔, 30-minute log watch (01:46:26 → 02:18:30): _pending_.
+Gate: probe table unchanged ✔, signed test delivery ✔, 30-minute log watch (01:46:26 → 02:18:48 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic in the window was the probe set (401/403/400/410 as baselined) and the signed test delivery (200) — passed.
 
 ## B2 — scheduled (8 functions)
 
@@ -112,7 +112,7 @@ Cloud Scheduler jobs behind the batch (read at 01:54 UTC, `gcloud scheduler jobs
 
 Result: "Deploy complete" at 01:55:56 (2 min 16 s), **8 of 8 "Successful update operation"**, exit 0; all eight ACTIVE on their new revisions at 01:56:05; ERROR entries since the start: 0. The eight Cloud Scheduler jobs read back ENABLED with the same schedules after the deploy. One side effect worth knowing for the later batches: re-deploying an `onSchedule` function re-applies its Scheduler job, and for interval schedules ("every N minutes/hours") that re-anchors the interval at the deploy time — after B2 the next runs read reminder check 02:10 (was 01:57), tracking refresh 02:55 (was 02:00), billing reconcile 02:55 (was 02:13), quick-reply key sweep 01:55 (ran at deploy time instead of 00:54 tomorrow); finance sweep 02:11, accounting reconcile 06:43 and bank sync 06:47 kept their next run. No job was lost or disabled; the hourly jobs simply skipped one tick.
 
-Gate (passive, as planned): each job's next scheduled run is read from the logs; no manual trigger. Four of the eight run inside the 30-minute window (reminder check 01:57, tracking refresh 02:00, finance sweep 02:11, billing reconcile 02:13); the others are read at their next run.
+Gate (passive, as planned): each job's next scheduled run is read from the logs; no manual trigger. Readback at 02:20:41 UTC (window 01:53:40 → 02:20:41): **0 ERROR entries**; two jobs ran inside the window, both on their new revisions and both 200 — `scheduledremindercheck-00108-pev` at 02:10:01 (0.99 s) and `scheduledfinancesweep-00005-roz` at 02:11:02 (2.16 s). The hourly jobs (tracking refresh, billing reconcile) were re-anchored to 02:55 by the deploy and are read at that run; the 6-hourly, 8-hourly and daily jobs at theirs. No job disabled, no job lost.
 
 ## B3 — event-triggered (7 functions)
 
