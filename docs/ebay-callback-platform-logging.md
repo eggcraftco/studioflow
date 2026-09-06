@@ -88,4 +88,37 @@ query string is retained with no way to redact it and the operator is not conten
 > are not asking for the entries to be deleted; we need to document where a short-lived credential is
 > stored and for how long.
 
-Nothing has been sent. Sending it is the operator's call.
+## Sent — 2026-09-06 14:52 local (13:52 UTC)
+
+The operator approved sending it. Asked through hPanel's support chat, which routes to a human when
+the answer needs one ("İsteğiniz yönlendiriliyor" — your request is being routed). The five questions
+as sent:
+
+1. Can query-string logging be disabled, or the query string stripped or redacted, for a specific
+   path on this site? If not per path, can access logging be disabled for the whole site?
+2. What is the real retention period of these entries on Hostinger's side, beyond the seven days the
+   panel filter offers?
+3. Who can read them — which roles inside Hostinger — and is that access audited?
+4. Are they forwarded to any other system: a SIEM, an analytics pipeline, a backup, or malware and
+   abuse scanning? With what retention?
+5. Is there any masking option for URL query values, at any level: web server, CDN or panel?
+
+The message named the site, the path and the nature of the credential. It contained no secret, no
+code and no token. It also said plainly that we are not asking for anything to be deleted, only for
+a written answer about where a short-lived credential is stored and who can see it.
+
+First response from Hostinger's assistant confirmed two facts before answering the policy half: the
+site is a Node.js application on Cloud Startup, and **Hostinger's CDN is not enabled for
+nivadesk.app** — so there is no CDN layer holding a second copy of these request lines. The
+substantive answers are recorded below as they arrive.
+
+| Question | Answer | Received |
+|---|---|---|
+| 1. Path-level disable or redaction | — | — |
+| 2. Real retention | — | — |
+| 3. Who can read | — | — |
+| 4. Forwarded to other systems | — | — |
+| 5. Query-value masking | — | — |
+
+**An assistant's answer is not a policy answer.** Anything that decides the production gate must come
+from a human agent or Hostinger documentation, and is marked here with which of the two it was.
