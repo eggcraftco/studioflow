@@ -25,6 +25,9 @@
 //     order through ONE applyEbayOrder and the engine's applyEnvelope (MERGE-006).
 //   * The Marketplace Account Deletion endpoint answers eBay's challenge without
 //     a secret and anonymises a buyer on a task that bypasses every gate (§9).
+//     Its ledger dedups on COMPLETION: only a row that already says `done` is
+//     answered `duplicate`, anything else is re-driven, and reconcileEbayDeletions
+//     reads the ledger back every ten minutes so nothing is left waiting on eBay.
 //   * Everything else ships gated off: a secrets marker, a runtime switch and a
 //     Firestore connector flag, none of which gates deletion compliance (§2).
 const crypto = require("crypto");
@@ -87,6 +90,15 @@ const KEY_CACHE_MEMORY_MS = 60 * 60 * 1000;
 const KEY_CACHE_DOC_MS = 24 * 60 * 60 * 1000;
 const UNKNOWN_KID_NEGATIVE_MS = 6 * 60 * 60 * 1000;
 const MAX_DELETION_ATTEMPTS = 6;
+// The deletion ledger is a WORK LIST, not a receipt. A row is claimed with a
+// lease so two deliveries of the same notification do not both drive it, and
+// the lease expires so a process that died mid-anonymisation does not park the
+// row forever. `reconcileEbayDeletions` re-drives whatever is still queued or
+// failed once the lease is out and the backoff has passed (§9).
+const DELETION_LEASE_MS = 5 * 60 * 1000;
+const DELETION_RETRY_AFTER_MS = 5 * 60 * 1000;
+const DELETION_MAX_BACKOFF_MS = 6 * 60 * 60 * 1000;
+const DELETION_RECONCILE_LIMIT = 50;
 const CONNECTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 
 function safeIdPart(value) { return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 120); }
@@ -1078,17 +1090,123 @@ function createEbayConnectorFunctions(deps) {
         }
       }
       for (const [connId, count] of touched) await writeSyncEvent(connections().doc(connId), { type: "buyer_deleted", reason: `${count} order(s)` });
-      await ledgerRef.set({ status: "done", finishedAtMs: now(), attempts: FieldValue.increment(1), ...counters, sanitizedError: "" }, { merge: true }).catch(() => undefined);
+      // `status:"done"` is the ONE state the gateway answers `duplicate` to, so
+      // it is written only here, after the work. The lease goes with it.
+      await ledgerRef.set({ status: "done", finishedAtMs: now(), attempts: FieldValue.increment(1), leaseUntilMs: 0, ...counters, sanitizedError: "" }, { merge: true }).catch(() => undefined);
       return { status: "applied", outcome: { result: "applied", ...counters } };
     } catch (error) {
       const attempt = Number(task.attempt || 1);
       const dead = attempt >= MAX_DELETION_ATTEMPTS;
       const safeMessage = events.safeMessage("transient", error);
-      await ledgerRef.set({ status: dead ? "failed" : "queued", attempts: FieldValue.increment(1), sanitizedError: safeMessage.slice(0, 200), lastAttemptAtMs: now() }, { merge: true }).catch(() => undefined);
+      // A dead row drops its lease at once so the reconciliation pass can take
+      // it; a retrying one keeps a lease for the worker's own next attempt, and
+      // that lease expires if the worker never comes back.
+      await ledgerRef.set({ status: dead ? "failed" : "queued", attempts: FieldValue.increment(1), sanitizedError: safeMessage.slice(0, 200), lastAttemptAtMs: now(), leaseUntilMs: dead ? 0 : now() + DELETION_LEASE_MS }, { merge: true }).catch(() => undefined);
       console.error("ebay buyer deletion failed:", safeMessage);
       return dead ? { status: "dead", errorClass: "transient", safeMessage } : { status: "retrying", nextRetryInMs: events.retryDelayMs("transient", attempt) || 60000, errorClass: "transient", safeMessage };
     }
   }
+
+  function deletionTaskOf(notificationId, { usernameHashes = [], userIdHashes = [], eventOrigin = "provider" } = {}) {
+    return {
+      key: `ebay|deletion|${notificationId}`, notificationId, provider: "ebay", connectionId: "", companyId: "",
+      entityType: "buyer_deletion", externalId: "", eventType: notification.TOPICS.ACCOUNT_DELETION,
+      attempt: 1, eventOrigin, correlationId: events.newCorrelationId(), usernameHashes, userIdHashes
+    };
+  }
+
+  /** Hand the task to the eBay queue; run it inline (bounded) when there is no queue, and leave the row re-drivable if that fails too. */
+  async function driveDeletion(task, ledgerRef) {
+    try { if (!enqueue) throw new Error("no_queue"); await enqueue(task, 0); return { queued: true }; }
+    catch (error) {
+      console.warn("ebay deletion enqueue failed, running inline:", String(error?.message || error).slice(0, 120));
+      const inline = await Promise.race([processEbayBuyerDeletion(task), new Promise((resolve) => setTimeout(() => resolve({ status: "timeout" }), 40 * 1000))]);
+      if (inline.status !== "applied") {
+        // The lease is dropped, not held: whatever went wrong here, the row is
+        // now the reconciliation pass's to pick up.
+        await ledgerRef.set({ status: "failed", leaseUntilMs: 0, lastAttemptAtMs: now(), sanitizedError: String(inline.safeMessage || inline.status || "").slice(0, 200) }, { merge: true }).catch(() => undefined);
+      }
+      return { queued: false, status: inline.status };
+    }
+  }
+
+  /**
+   * Claim one notification (§9). eBay's own redelivery is the only safety net
+   * behind this endpoint, and the first version of it neutralised that net: the
+   * row was created BEFORE the work and any create() failure answered
+   * `duplicate`, whatever the stored row said. A row left `failed` (six
+   * attempts spent, or the inline fallback losing its 40-second race) or
+   * stranded `queued` (enqueue threw and the fallback failed too) meant the
+   * anonymisation never happened — and every redelivery of that notificationId
+   * got a cheerful 200.
+   *
+   * `duplicate` is now answered for exactly one state: the stored row says
+   * `done`. Anything else is re-driven, unless another delivery is holding the
+   * lease right now.
+   */
+  async function claimDeletion(ledgerRef, { eventDateMs, usernameHashes, userIdHashes }) {
+    return db().runTransaction(async (tx) => {
+      const snap = await tx.get(ledgerRef);
+      const row = snap.exists ? (snap.data() || {}) : null;
+      if (row && String(row.status) === "done") return { verdict: "duplicate" };
+      if (row && n(row.leaseUntilMs) > now()) return { verdict: "in_progress" };
+      const claim = { status: "queued", leaseUntilMs: now() + DELETION_LEASE_MS, usernameHash: usernameHashes[0] || "", userIdHash: userIdHashes[0] || "", usernameHashes, userIdHashes };
+      if (row) tx.set(ledgerRef, { ...claim, redeliveries: FieldValue.increment(1), lastRedeliveryAtMs: now() }, { merge: true });
+      else {
+        tx.set(ledgerRef, {
+          receivedAtMs: now(), eventDate: new Date(eventDateMs).toISOString(), ...claim, attempts: 0, redeliveries: 0,
+          ordersScrubbed: 0, restrictedDocsDeleted: 0, connectionsDisconnected: 0, finishedAtMs: 0, sanitizedError: "",
+          expireAt: admin.firestore.Timestamp.fromMillis(now() + LEDGER_TTL_MS)
+        });
+      }
+      return { verdict: "claimed", first: !row };
+    });
+  }
+
+  /**
+   * The pass that reads the ledger back (§9). Nothing else does: without it a
+   * failed anonymisation is a console line and a row that expires silently
+   * after 400 days. Ungated, like the rest of the deletion path — no connector
+   * switch, no per-connection flag, no connection at all.
+   */
+  async function reconcileDeletionRequests({ limit = DELETION_RECONCILE_LIMIT } = {}) {
+    const out = { scanned: 0, redriven: 0, waiting: 0, stuck: 0 };
+    for (const status of ["queued", "failed"]) {
+      let snap;
+      try { snap = await ledgerRows().where("status", "==", status).limit(limit).get(); }
+      catch (error) { console.error("ebay deletion reconciliation could not read the ledger:", String(error?.message || error).slice(0, 200)); return out; }
+      for (const doc of snap.docs) {
+        const row = doc.data() || {};
+        out.scanned += 1;
+        if (n(row.leaseUntilMs) > now()) { out.waiting += 1; continue; }
+        const attempts = n(row.attempts);
+        const since = Math.max(n(row.lastAttemptAtMs), n(row.lastRedeliveryAtMs), n(row.receivedAtMs));
+        const backoffMs = Math.min(DELETION_RETRY_AFTER_MS * Math.max(1, attempts), DELETION_MAX_BACKOFF_MS);
+        if (since > 0 && now() - since < backoffMs) { out.waiting += 1; continue; }
+        const usernameHashes = (Array.isArray(row.usernameHashes) ? row.usernameHashes : [row.usernameHash]).map((h) => String(h || "")).filter(Boolean);
+        const userIdHashes = (Array.isArray(row.userIdHashes) ? row.userIdHashes : [row.userIdHash]).map((h) => String(h || "")).filter(Boolean);
+        if (!usernameHashes.length && !userIdHashes.length) {
+          // Nothing to match on. Say so loudly rather than retry a row forever.
+          out.stuck += 1;
+          console.error("ebay deletion", doc.id, "carries no hashes and cannot be retried; eBay must redeliver it");
+          continue;
+        }
+        if (attempts >= MAX_DELETION_ATTEMPTS * 2) {
+          out.stuck += 1;
+          console.error(`ebay deletion ${doc.id} has not completed after ${attempts} attempts: ${String(row.sanitizedError || "").slice(0, 120)}`);
+        }
+        await doc.ref.set({ leaseUntilMs: now() + DELETION_LEASE_MS, lastRedeliveryAtMs: now(), reconciledAtMs: now() }, { merge: true }).catch(() => undefined);
+        await driveDeletion(deletionTaskOf(doc.id, { usernameHashes, userIdHashes, eventOrigin: "reconcile" }), doc.ref);
+        out.redriven += 1;
+      }
+    }
+    if (out.redriven || out.stuck) console.log(`ebay deletion reconciliation: ${out.scanned} unfinished, ${out.redriven} re-driven, ${out.waiting} waiting, ${out.stuck} stuck`);
+    return out;
+  }
+
+  const reconcileEbayDeletions = onSchedule
+    ? onSchedule({ schedule: "every 10 minutes", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 300 }, async () => { await reconcileDeletionRequests(); })
+    : null;
 
   // ---- 8. the notification gateway (§9) ----------------------------------------
   let appTokenCache = { token: "", expiresAtMs: 0 };
@@ -1159,17 +1277,15 @@ function createEbayConnectorFunctions(deps) {
         const usernameHashes = hashing.hashesUnderEveryKey(hashKey(), hashing.normalizeUsername(shape.data.username));
         const userIdHashes = hashing.hashesUnderEveryKey(hashKey(), hashing.normalizeUserId(shape.data.userId));
         const ledgerRef = ledgerRows().doc(safeIdPart(shape.notificationId));
-        try {
-          await ledgerRef.create({ receivedAtMs: now(), eventDate: new Date(shape.eventDateMs).toISOString(), usernameHash: usernameHashes[0] || "", userIdHash: userIdHashes[0] || "", status: "queued", attempts: 0, ordersScrubbed: 0, restrictedDocsDeleted: 0, connectionsDisconnected: 0, finishedAtMs: 0, sanitizedError: "", expireAt: admin.firestore.Timestamp.fromMillis(now() + LEDGER_TTL_MS) });
-        } catch { res.status(200).json({ ok: true, result: "duplicate" }); return; }
-        const task = { key: `ebay|deletion|${shape.notificationId}`, notificationId: shape.notificationId, provider: "ebay", connectionId: "", companyId: "", entityType: "buyer_deletion", externalId: "", eventType: shape.topic, attempt: 1, eventOrigin: "provider", correlationId: events.newCorrelationId(), usernameHashes, userIdHashes };
-        res.status(200).json({ ok: true, result: "queued" });
-        try { if (!enqueue) throw new Error("no_queue"); await enqueue(task, 0); }
-        catch (error) {
-          console.warn("ebay deletion enqueue failed, running inline:", String(error?.message || error).slice(0, 120));
-          const inline = await Promise.race([processEbayBuyerDeletion(task), new Promise((resolve) => setTimeout(() => resolve({ status: "timeout" }), 40 * 1000))]);
-          if (inline.status !== "applied") await ledgerRef.set({ status: "failed", sanitizedError: String(inline.safeMessage || inline.status || "").slice(0, 200) }, { merge: true }).catch(() => undefined);
-        }
+        // Dedup on COMPLETION, never on receipt: a redelivery of a notification
+        // whose anonymisation failed is eBay handing us the work again, and
+        // answering it `duplicate` would throw the only remaining safety net.
+        let claim;
+        try { claim = await claimDeletion(ledgerRef, { eventDateMs: shape.eventDateMs, usernameHashes, userIdHashes }); }
+        catch (error) { console.error("ebay deletion ledger unavailable:", String(error?.message || error).slice(0, 120)); res.status(503).json({ ok: false, error: "busy" }); return; }
+        if (claim.verdict !== "claimed") { res.status(200).json({ ok: true, result: claim.verdict }); return; }
+        res.status(200).json({ ok: true, result: claim.first ? "queued" : "requeued" });
+        await driveDeletion(deletionTaskOf(shape.notificationId, { usernameHashes, userIdHashes, eventOrigin: "provider" }), ledgerRef);
         return;
       }
 
@@ -1247,10 +1363,10 @@ function createEbayConnectorFunctions(deps) {
   return {
     beginEbayConnect, claimEbayConnectState, ebayOAuthCallback, getEbayConnections, verifyEbayConnection, updateEbayConnectionSettings,
     previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
-    reconcileEbayConnections, reconcileEbayConnectionsNightly, ebayNotifications, revealRestrictedCustomer,
+    reconcileEbayConnections, reconcileEbayConnectionsNightly, reconcileEbayDeletions, ebayNotifications, revealRestrictedCustomer,
     _internal: {
       applyEbayOrder, reconcileConnection, reconcileConnectionNightly, runSweep, eligibleRows, clientFor, refreshWithLock, recordTokenFailure, storeCredentials, credentialsRef,
-      processEbayCommerceTask, processEbayBuyerDeletion, handleNotificationRequest, signingKeyFor, resetCaches,
+      processEbayCommerceTask, processEbayBuyerDeletion, reconcileDeletionRequests, handleNotificationRequest, signingKeyFor, resetCaches,
       publicView, settingsOf, marketplacesOf, clampSinceDays, connectionDocId, ebayOrderDocId, deletionPatch, limits,
       CONNECTION_COLLECTION, STATE_COLLECTION, BUYER_INDEX_COLLECTION, DELETION_LEDGER_COLLECTION, QUOTA_COLLECTION, KEY_CACHE_COLLECTION, RESTRICTED_SUBCOLLECTION, REVEAL_COUNTERS_SUBCOLLECTION
     }

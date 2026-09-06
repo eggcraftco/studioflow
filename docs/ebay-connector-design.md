@@ -1119,7 +1119,14 @@ nivadesk.app forwarder, so the hashed URL and the receiving URL cannot drift). M
    notification.
 5. Body shape: `metadata.topic`, `notification.notificationId`, `notification.eventDate` (parseable, not
    more than 5 min in the future) else 400. Replay: `deliveries` claim keyed by `notificationId` — for the
-   deletion topic the claim lives at `ebayDeletionRequests/{notificationId}` (`.create()`); duplicate → 200.
+   deletion topic the claim lives at `ebayDeletionRequests/{notificationId}`, and it is a claim on
+   **completion, not on receipt**: `claimDeletion` reads the row in a transaction and answers
+   `duplicate` for exactly one stored state, `status:"done"`. A row that is `queued` or `failed` is
+   **re-driven** (`requeued`), because eBay's redelivery is the only safety net behind this endpoint
+   and a receipt-shaped dedup (`.create()`, any failure → 200 `duplicate`) threw it away: an
+   anonymisation that failed stayed failed for ever. A delivery already in flight holds
+   `leaseUntilMs` (5 min) and is answered `in_progress` rather than run twice; the lease expires, so a
+   process that died mid-task does not park the row.
 6. Dispatch by topic:
    - `MARKETPLACE_ACCOUNT_DELETION` → compute `usernameHash = buyerHash(key, lower(data.username))` and
      `userIdHash = buyerHash(key, data.userId)` **in the request** (the raw values are dropped here and
@@ -1128,9 +1135,8 @@ nivadesk.app forwarder, so the hashed URL and the receiving URL cannot drift). M
      key:"ebay|deletion|<notificationId>", connectionId:"", companyId:"", usernameHash, userIdHash,
      attempt:1, correlationId }, 0)` — **hashes only in the Cloud Tasks payload** (readable by any
      project viewer via `gcloud tasks describe`); fallback inline (bounded to 40 s) when enqueue throws,
-     ledger `status:"failed"` + sanitized error on failure so `sweepMarketplacePii` can retry
-     `queued|failed` rows older than 10 min by re-enqueueing them (the sweep is itself ungated for this
-     step). **Bypasses all three gates** (§2): the task is dispatched with the switch off, with the
+     ledger `status:"failed"` + sanitized error + `leaseUntilMs: 0` on failure, so the row is the
+     reconciliation's to take. **Bypasses all three gates** (§2): the task is dispatched with the switch off, with the
      flag off, and — since the secrets are needed to hash — the endpoint answers 503 before the marker
      is committed rather than dropping the notification.
    - order topics (when subscribed) → §7.5; connector off → `received`, 200.
@@ -1161,8 +1167,20 @@ nivadesk.app forwarder, so the hashed URL and the receiving URL cannot drift). M
    `set({ status:"disconnected", disconnectReason:"ebay_account_deleted", sellerUsername:"", displayName:"eBay account (deleted)", hasCredentials:false, disconnectedAtMs, disconnectedByUid:"ebay" })`
    + `syncLog disconnected`. Orders stay (they are the workshop's own sales records; buyer data was
    handled in step 1 if the seller was also a buyer).
-4. Ledger `status:"done"`, counters; `syncLog buyer_deleted { count }` on each affected connection
-   (no username). Idempotent: running twice finds nothing and still reports `done`.
+4. Ledger `status:"done"`, counters, lease dropped; `syncLog buyer_deleted { count }` on each affected
+   connection (no username). Idempotent: running twice finds nothing and still reports `done`.
+   `status:"done"` is written **only here, after the work** — it is the one state the gateway calls a
+   duplicate.
+
+**Reconciliation** (`reconcileEbayDeletions`, `every 10 minutes`, ungated — no connector switch, no
+flag, no connection): reads the ledger back, which nothing did before it. For `status` `queued` and
+`failed`, a row whose lease has expired and whose backoff has passed
+(`min(5 min × attempts, 6 h)` since its last attempt or redelivery) is re-driven through the same
+`driveDeletion` path as a live notification, from the hashes the row already carries
+(`usernameHashes`/`userIdHashes`, arrays, so a rotation in progress is still matched). A row with no
+hashes at all, and a row still unfinished after twice `MAX_DELETION_ATTEMPTS`, are counted `stuck` and
+logged at error level with the `notificationId`. Without this pass the only signal that an
+anonymisation never happened was a console line and a row that expires silently after 400 days.
 
 ---
 
@@ -1500,7 +1518,12 @@ only, the enqueued task payload has no `username`/`userId`/`eiasToken` → task 
 with the connector switch **off** and the flag **off** → both orders scrubbed with `PII_FIELDS` blanks
 + `customFields["eBay Buyer"] === ""`, both `restrictedCustomer` docs deleted, `ebayBuyers` rows gone,
 review rows `customerName: null`, ledger `done` with counters, no `commerceHealth/ebay__` document
-created, second delivery of the same `notificationId` → 200 + no change; seller `userId` match via
+created, second delivery of the same `notificationId` → 200 + no change; **the replay-after-FAILURE
+case beside it** — a deletion whose queue is down and whose inline run fails leaves the row `failed`
+with no lease and the order un-anonymised, the next delivery of that same `notificationId` answers
+`requeued` (never `duplicate`) and finishes the work, and only then is a third delivery a duplicate;
+**the reconciliation pass** — a `queued` row nobody redelivered is re-driven and finishes, a leased
+row and a `done` row are left alone, and a second pass does nothing; seller `userId` match via
 `sellerUserIdHash` → connection disconnected with credentials deleted and `sellerUsername ""`; a
 notification whose `username` field carries the immutable id (U.S. case) still matches; secrets
 absent → 503. Extend `account-deletion-emulator.test.js` for the purge report.

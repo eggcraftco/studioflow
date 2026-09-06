@@ -34,7 +34,7 @@ check("the connector ships gated off: the runtime switch is read once, and every
 });
 
 check("every export is a literal line, and the e2e hook exposes the internals", () => {
-  for (const name of ["beginEbayConnect", "claimEbayConnectState", "ebayOAuthCallback", "getEbayConnections", "verifyEbayConnection", "updateEbayConnectionSettings", "previewEbayImport", "runEbayImport", "retryEbayImportFailures", "syncEbayNow", "disconnectEbay", "reconcileEbayConnections", "reconcileEbayConnectionsNightly", "ebayNotifications", "revealRestrictedCustomer"]) {
+  for (const name of ["beginEbayConnect", "claimEbayConnectState", "ebayOAuthCallback", "getEbayConnections", "verifyEbayConnection", "updateEbayConnectionSettings", "previewEbayImport", "runEbayImport", "retryEbayImportFailures", "syncEbayNow", "disconnectEbay", "reconcileEbayConnections", "reconcileEbayConnectionsNightly", "reconcileEbayDeletions", "ebayNotifications", "revealRestrictedCustomer"]) {
     assert.ok(index.includes(`exports.${name} = ebayExports.${name};`), name);
   }
   assert.ok(index.includes("ebay: ebayExports._internal,"));
@@ -139,9 +139,34 @@ check("the notification gateway hashes in the request, answers 503 without secre
   assert.ok(gateway.includes("notification.challengeResponse({ challengeCode, verificationToken: token, endpointUrl: endpoint })"));
   assert.ok(gateway.includes("hashing.hashesUnderEveryKey(hashKey(), hashing.normalizeUsername(shape.data.username))"));
   assert.ok(!/\.eiasToken|\["eiasToken"\]/.test(gateway), "the eiasToken is never read");
-  const taskLine = gateway.slice(gateway.indexOf("const task = { key: `ebay|deletion|"), gateway.indexOf("\n", gateway.indexOf("const task = { key: `ebay|deletion|")));
-  assert.ok(!/username:|userId:/.test(taskLine) && taskLine.includes("usernameHashes, userIdHashes"), "hashes only in the Cloud Tasks payload");
-  assert.ok(gateway.indexOf('res.status(200).json({ ok: true, result: "queued" });') < gateway.indexOf("await enqueue(task, 0);"), "200 first, then the work");
+  const builderAt = connector.indexOf("function deletionTaskOf(notificationId,");
+  const builder = connector.slice(builderAt, connector.indexOf("\n  }", builderAt));
+  assert.ok(!/username:|userId:/.test(builder) && builder.includes("usernameHashes, userIdHashes"), "hashes only in the Cloud Tasks payload");
+  assert.ok(gateway.indexOf('res.status(200).json({ ok: true, result: claim.first ? "queued" : "requeued" });') < gateway.indexOf("await driveDeletion("), "200 first, then the work");
+});
+
+// The endpoint eBay makes mandatory for production keys. Its dedup was on
+// RECEIPT — the ledger row was created before the work and any create() failure
+// answered `duplicate` whatever the row said — so a failed anonymisation was
+// permanent: eBay's redelivery, the only remaining safety net, got a cheerful
+// 200 forever, and nothing ever read the ledger back.
+check("a deletion is deduped on completion, and the ledger is read back by an ungated reconciliation", () => {
+  const at = connector.indexOf("async function claimDeletion(ledgerRef,");
+  assert.ok(at > 0, "the claim is a transaction of its own");
+  const claim = connector.slice(at, connector.indexOf("\n  }", at));
+  assert.ok(claim.includes('if (row && String(row.status) === "done") return { verdict: "duplicate" };'), "duplicate is answered for exactly one state");
+  assert.ok(claim.includes("n(row.leaseUntilMs) > now()"), "a delivery in flight holds a lease rather than being re-driven");
+  assert.ok(!/create\(/.test(claim), "the create()-based dedup is gone");
+  assert.ok(/status: "done"[\s\S]{0,200}finishedAtMs: now\(\)/.test(connector.slice(connector.indexOf("async function processEbayBuyerDeletion("))), "done is written after the work, never before it");
+  // The pass that reads it back, and the schedule that runs it.
+  const sweepAt = connector.indexOf("async function reconcileDeletionRequests(");
+  assert.ok(sweepAt > 0, "nothing sweeps the deletion ledger");
+  const sweep = connector.slice(sweepAt, connector.indexOf("\n  const reconcileEbayDeletions", sweepAt));
+  assert.ok(sweep.includes('for (const status of ["queued", "failed"])'), "both unfinished states are re-driven");
+  assert.ok(!/connectorOn\(\)|flagOn\(/.test(sweep), "compliance is not gated by the connector switch or the flag");
+  assert.ok(sweep.includes("await driveDeletion("), "re-driven through the same queue path as a live notification");
+  assert.ok(/const reconcileEbayDeletions = onSchedule[\s\S]{0,200}schedule: "every 10 minutes"/.test(connector), "the sweep is scheduled");
+  assert.ok(index.includes("exports.reconcileEbayDeletions = ebayExports.reconcileEbayDeletions;"), "and exported");
 });
 
 check("the reveal grant is a member-access key defaulting to false, and the callable logs before it returns", () => {

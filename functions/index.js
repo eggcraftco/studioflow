@@ -6220,6 +6220,9 @@ exports.syncEbayNow = ebayExports.syncEbayNow;
 exports.disconnectEbay = ebayExports.disconnectEbay;
 exports.reconcileEbayConnections = ebayExports.reconcileEbayConnections;
 exports.reconcileEbayConnectionsNightly = ebayExports.reconcileEbayConnectionsNightly;
+// Compliance, not sync: this one re-drives account-deletion rows that never
+// finished, and is gated by nothing (§9).
+exports.reconcileEbayDeletions = ebayExports.reconcileEbayDeletions;
 exports.ebayNotifications = ebayExports.ebayNotifications;
 exports.revealRestrictedCustomer = ebayExports.revealRestrictedCustomer;
 

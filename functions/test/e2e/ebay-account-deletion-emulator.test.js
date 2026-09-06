@@ -198,6 +198,70 @@ async function wipe() {
     assert.strictEqual(rerun.status, "applied"); assert.strictEqual(rerun.outcome.ordersScrubbed, 0, "idempotent: nothing left to find");
   });
 
+  // The replay-after-SUCCESS case above was the only one covered, which is how
+  // the opposite one shipped: the ledger row was created before the work and
+  // every redelivery of that notificationId was answered `duplicate` whatever
+  // the row said. A failed anonymisation was therefore permanent — eBay's
+  // redelivery is the only safety net behind this endpoint, and the dedup threw
+  // it away.
+  await check("a deletion that FAILED is re-driven by eBay's redelivery, not answered duplicate; the ledger dedups on completion", async () => {
+    const id = eb.ebayOrderDocId(A, "ORD-R");
+    assert.strictEqual((await eb.applyEbayOrder(connRef(connIdA), (await connRef(connIdA).get()).data(), order("ORD-R", "retry_buyer"), { eventKey: "ebay|a|r", eventOrigin: "reconcile", client, fulfillments: [] })).result, "created");
+    const hash = hashing.usernameHash(HASH_KEY, "retry_buyer");
+    const indexRef = db.collection("ebayBuyers").doc(`${A}__${hash}`);
+    // A real failure part-way through: an order id the index carries that
+    // Firestore will not accept. The queue is down too, so the gateway's inline
+    // fallback runs and fails.
+    await indexRef.set({ orderIds: ["bad/id", id] }, { merge: true });
+    const workingQueue = global.__nivadeskEbayFakeEnqueue;
+    global.__nivadeskEbayFakeEnqueue = async () => { throw new Error("cloud tasks unavailable"); };
+    const body = deletionBody({ username: "retry_buyer", userId: "u_retry" });
+    const first = await post(body);
+    assert.strictEqual(first.statusCode, 200); assert.strictEqual(first.payload.result, "queued");
+    const failed = (await db.collection("ebayDeletionRequests").doc(body.notification.notificationId).get()).data();
+    assert.strictEqual(failed.status, "failed", "the row records that the work did not happen");
+    assert.strictEqual(failed.leaseUntilMs, 0, "and holds no lease, so it can be picked up again");
+    assert.strictEqual((await db.collection("siparisler").doc(id).get()).data().customerName, "retry_buyer", "nothing was anonymised");
+
+    global.__nivadeskEbayFakeEnqueue = workingQueue;
+    await indexRef.set({ orderIds: [id] }, { merge: true });
+    const again = await post(deletionBody({ username: "retry_buyer", userId: "u_retry", notificationId: body.notification.notificationId }));
+    assert.strictEqual(again.statusCode, 200);
+    assert.notStrictEqual(again.payload.result, "duplicate", "a redelivery of unfinished work must not be waved through");
+    assert.strictEqual(again.payload.result, "requeued");
+    const o = (await db.collection("siparisler").doc(id).get()).data();
+    assert.strictEqual(o.customerName, "Buyer details removed"); assert.strictEqual(o.customFields["eBay Buyer"], "");
+    const done = (await db.collection("ebayDeletionRequests").doc(body.notification.notificationId).get()).data();
+    assert.strictEqual(done.status, "done"); assert.strictEqual(done.ordersScrubbed, 1); assert.strictEqual(done.redeliveries, 1);
+    // Only now is a redelivery a duplicate.
+    const third = await post(deletionBody({ username: "retry_buyer", userId: "u_retry", notificationId: body.notification.notificationId }));
+    assert.strictEqual(third.payload.result, "duplicate");
+  });
+
+  await check("a row nobody redelivers is still finished: the reconciliation pass re-drives queued and failed rows, leaves leased and done ones alone, and is idempotent", async () => {
+    const id = eb.ebayOrderDocId(A, "ORD-S");
+    assert.strictEqual((await eb.applyEbayOrder(connRef(connIdA), (await connRef(connIdA).get()).data(), order("ORD-S", "stranded_buyer"), { eventKey: "ebay|a|s", eventOrigin: "reconcile", client, fulfillments: [] })).result, "created");
+    const hash = hashing.usernameHash(HASH_KEY, "stranded_buyer");
+    const stale = Date.now() - 30 * 60 * 1000;
+    const ledger = (docId, patch) => db.collection("ebayDeletionRequests").doc(docId).set({ receivedAtMs: stale, eventDate: new Date(stale).toISOString(), usernameHash: hash, userIdHash: "", usernameHashes: [hash], userIdHashes: [], attempts: 1, lastAttemptAtMs: stale, ordersScrubbed: 0, restrictedDocsDeleted: 0, connectionsDisconnected: 0, finishedAtMs: 0, sanitizedError: "", ...patch });
+    // Stranded: the enqueue threw, the fallback failed, nobody ever came back.
+    await ledger("del-stranded", { status: "queued", leaseUntilMs: 0 });
+    // In flight right now, and already finished: neither is the sweep's to take.
+    await ledger("del-inflight", { status: "queued", leaseUntilMs: Date.now() + 60000 });
+    await ledger("del-finished", { status: "done", leaseUntilMs: 0, finishedAtMs: stale });
+
+    const out = await eb.reconcileDeletionRequests();
+    assert.strictEqual(out.redriven, 1, JSON.stringify(out));
+    assert.strictEqual(out.waiting, 1, "the leased row was left alone");
+    const o = (await db.collection("siparisler").doc(id).get()).data();
+    assert.strictEqual(o.customerName, "Buyer details removed", "the anonymisation eBay asked for finally happened");
+    assert.strictEqual((await db.collection("ebayDeletionRequests").doc("del-stranded").get()).data().status, "done");
+    assert.strictEqual((await db.collection("ebayBuyers").doc(`${A}__${hash}`).get()).exists, false);
+    const secondPass = await eb.reconcileDeletionRequests();
+    assert.strictEqual(secondPass.redriven, 0, "a finished row is never re-driven");
+    assert.strictEqual((await db.collection("ebayDeletionRequests").doc("del-finished").get()).data().ordersScrubbed, 0, "and a done row was not touched");
+  });
+
   await check("a seller whose account was deleted is matched through sellerUserIdHash: credentials deleted, disconnected, username blanked; the U.S. case (immutable id in the username field) still matches the buyer index", async () => {
     const res = await post(deletionBody({ username: "ma8vp1jySJC", userId: "ma8vp1jySJC" }));
     assert.strictEqual(res.statusCode, 200);
