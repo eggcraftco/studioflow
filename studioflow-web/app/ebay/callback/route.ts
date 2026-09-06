@@ -41,8 +41,10 @@ import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure } from "../.
 //
 // A public caller can therefore still make us sign — that cost is real and is
 // not waved away — but what they can make us sign no longer names anything they
-// chose. Its only Firestore effect is none, and its only effect on the world is
-// that an eBay authorization code stops working: an attacker who spends a
+// chose. Its only Firestore effect is ONE `.create()` at `ebayPresentedCodes/`
+// under an id the caller cannot aim (a hash of the code), and its only effect on
+// the world is that an eBay authorization code stops working — through us for
+// certain, and at eBay too if the disposal lands: an attacker who spends a
 // request on that is doing our job.
 
 // Node, not Edge, and this is load-bearing rather than a default: Next replaces

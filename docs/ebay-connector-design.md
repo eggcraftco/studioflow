@@ -51,7 +51,7 @@ truthful capability map (§4.1), SDK-shaped signature verification and the order
 | Gate | Three layers: secrets marker file, runtime env switch, Firestore connector flag (`appConfig/commerce.connectors`) — **none of which gates account-deletion compliance** (§2) | Deploy activates nothing; rollback without redeploy; per-connection pause; compliance is not a feature |
 | Queue | `ebayEventWorker` (its own Cloud Tasks queue, created by the deploy under the function's own name, own service account); `retryCommerceEvent` re-enqueues eBay rows there instead of processing inline | §72 "payload goes to a queue"; §3.2 secrets isolation |
 | Scopes | `sell.fulfillment.readonly` + `commerce.identity.readonly` — **nothing else** | Read-only half, `readOnly: true`, consent copy "NivaDesk will read your orders". Square precedent SQ-AUTH-011 (read-first). When shipment-write ships, the card's existing *Reconnect required* event carries the new scope; a leaked refresh token from this half cannot write |
-| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc; the web stores the nonce in a short-lived first-party cookie; the callback route reads it and copies it into a **signed POST body**, never a URL (§5.4), forwarding an absent cookie as `nonce: ""` so the state is still burned at the moment of consent; the function refuses a callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace (§5) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
+| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc **and a MAC'd ticket beside it** (§5.5); the web stores the nonce in `__Host-nv_ebay_nonce_<flowTag>` and has `POST /ebay/ticket` seal the ticket into `__Host-nv_ebay_ticket_<flowTag>`, both `Path=/`; the callback route **verifies the ticket itself** — shape, MAC, window, this flow's state, this flow's nonce — and only then copies `code`, `state` and the nonce into a **signed POST body**, never a URL (§5.4). A landing it cannot verify posts a **dispose** envelope instead, which can name no state; an absent cookie is **no longer forwarded as `nonce: ""`** (that was the §5.4 rule, superseded). Either envelope **registers the code** in `ebayPresentedCodes/{sha256hex(code)}`, and only the invocation whose `create()` won may exchange it. The function still refuses a connect callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace and sends a signed-out visitor to sign in **and back** (§5, §5.2) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
 | Preview / Sync now | `previewEbayImport` owner-only with the `syncLockUntilMs` single-flight; `syncEbayNow` member but charged to the connection's daily share (§7.4) | Square's preview is owner-only (`squareConnector.js` 832–833); an app-wide cap alone is a cross-tenant DoS |
 | Retention | `privacy/retention.js` eBay `{ days: 90, reason: "ebay_address_withheld_after_90d" }` — restricted doc deleted 90 days after delivery by `sweepMarketplacePii` (§8.4) | eBay itself stops returning `addressLine1/2` for orders older than 90 days (§1); keeping them longer than eBay does is not minimisation |
 
@@ -426,8 +426,13 @@ holds (§5). Consumed inside `runTransaction`: `!exists || used === true || expi
 `reason=state`; `stateData.environment !== environment()` → `reason=environment`;
 `sha256hex(body.nonce) !== stateData.nonceHash` → `reason=browser` (the state is **also** burned,
 so a second attempt with the right nonce cannot follow a wrong one). This holds for an **empty** nonce
-exactly as for a wrong one: **§5.4** forwards an absent cookie as `nonce: ""` precisely so that the burn
-still happens, and the burn is the whole of §5's defence. `state` must match
+exactly as for a wrong one — the function's contract is unchanged and this is what the function-level and
+emulator tests still drive. What changed above it is who sends such a body: **§5.4** forwarded an absent
+cookie as `nonce: ""` so that the burn still happened, and **§5.5 superseded that**. The edge now verifies
+a ticket and, failing that, posts a **dispose** envelope which carries no nonce key and no state key at
+all, so the "empty nonce" connect body no longer arrives from a cookieless browser. It remains reachable
+by a key holder, which is why the function still answers it exactly as described. And the burn is no
+longer "the whole of §5's defence": the presented-code registry is (§5.5). `state` must match
 `/^[A-Za-z0-9_-]{20,120}$/` **before** it is passed to `states().doc(state)` — Firestore's own argument
 error embeds the rejected path in its message, so an unvalidated path-shaped state plus any logged error
 message writes the state into Cloud Logging (§5.4, *Logging*).
@@ -548,10 +553,15 @@ seven) and on `restrictedCustomer`.
 ## 5. OAuth with RuName, bound to the owner's browser (§19, §69 B steps 1–4)
 
 ```
-Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{state} { nonceHash } ──▶ { authorizeUrl, nonce }
-   ──▶ [web] section sets cookie nv_ebay_nonce=<nonce> (Secure; SameSite=Lax; Path=/ebay/callback; Max-Age=600) ──▶ location = authorizeUrl
+Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{state} { nonceHash } ──▶ { authorizeUrl, nonce, ticket }
+   ──▶ [web] section writes __Host-nv_ebay_nonce_<tag>=<nonce> (Secure; SameSite=Lax; Path=/; Max-Age=600)
+   ──▶ [web] POST /ebay/ticket seals __Host-nv_ebay_ticket_<tag>=<ticket> (Path=/; Secure; HttpOnly; SameSite=Lax)   (§5.5)
+   ──▶ location = authorizeUrl   (only if BOTH were written; sealing failed ⇒ the seller is not sent at all)
    ──▶ seller consents on auth[.sandbox].ebay.com ──▶ RuName "accepted URL" https://nivadesk.app/ebay/callback?code&state&expires_in
-   ──▶ app/ebay/callback/route.ts READS the cookie (absent → nonce:""), then SIGNED POST { v, rid, code, state, nonce } ──▶ ebayOAuthCallback   (§5.4 — never a query string)
+   ──▶ app/ebay/callback/route.ts VERIFIES the ticket (shape, MAC, window, this state, this nonce)   (§5.5)
+        ├─ verified   ──▶ SIGNED POST { v, rid, code, state, nonce }                    ──▶ ebayOAuthCallback   (§5.4 — never a query string)
+        └─ anything else ──▶ SIGNED POST { v, op:"dispose", rid, code } — NO state, NO nonce ──▶ ebayOAuthCallback ──▶ 200 reason=browser
+   ──▶ claimCode(code): create ebayPresentedCodes/{sha256hex(code)} — the ONLY thing that authorises an exchange   (§5.5)
    ──▶ consume state (tx: used/expiry/environment/nonceHash) ──▶ exchange code (server, Basic auth) ──▶ identity API ──▶ box tokens ──▶ upsert connection
    ──▶ touchHealth success ──▶ syncLog connected ──▶ catchUpDueFromMs (reconnect) ──▶ 200 { ok, outcome } ──▶ the WEB route redirects: /settings?section=ebay&ebay=connected
 ```
@@ -600,16 +610,17 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
 
 ### 5.1 Web
 `EbayIntegrationSection` calls `beginEbayConnect`, writes `document.cookie =
-"nv_ebay_nonce=<nonce>; Secure; SameSite=Lax; Path=/ebay/callback; Max-Age=600"` and then sets
-`window.location.href = authorizeUrl`. `app/ebay/callback/route.ts` reads `nv_ebay_nonce` from `request.cookies` and sends `code`, `state` and
-that nonce — the empty string when there is no cookie — to the function in a **signed POST body**, never
-a URL (**§5.4**, which supersedes the forwarding this paragraph used to describe). An absent cookie was
+"__Host-nv_ebay_nonce_<flowTag>=<nonce>; Secure; SameSite=Lax; Path=/; Max-Age=600"`, has `POST
+/ebay/ticket` seal `__Host-nv_ebay_ticket_<flowTag>` — and only then sets `window.location.href =
+authorizeUrl`; if either half fails the seller is **not** sent to eBay at all (§5.5). `app/ebay/callback/route.ts` reads both cookies from `request.cookies`, verifies the ticket, and — only for a
+verified one — sends `code`, `state` and that nonce to the function in a **signed POST body**, never
+a URL (**§5.4** for the transport; **§5.5** for which envelope). An absent cookie was
 **not** refused on the web side, so that the request reached the function and the state was burned **and the
 code spent** at the moment of consent (§5.4, *The burn, and the spend*) — **superseded by §5.5**, where a
 second cookie carries a MAC the route can verify by itself, a callback without one signs only a code
 disposal that can name no state, and the code is **registered** whether or not it is spent. §5.5 also
-renames both cookies — `__Host-nv_ebay_nonce_<flowTag>` and `__Host-nv_ebay_ticket_<flowTag>`, `Path=/`,
-one pair per flow — so the names and the path in this paragraph are the old ones. It expired the cookie on the landings
+renamed both cookies — `__Host-nv_ebay_nonce_<flowTag>` and `__Host-nv_ebay_ticket_<flowTag>`, `Path=/`,
+one pair per flow — and the paragraph above now carries those names rather than the pre-§5.5 ones. It expired the cookie on the landings
 whose answer proved the state was consumed, and on no others — clearing it on a landing that consumed
 nothing let any link break a seller's in-flight connect (§5.4). The cookie is first-party to
 `nivadesk.app` and `SameSite=Lax` survives the top-level GET redirect from eBay. It is scoped to the
@@ -813,6 +824,13 @@ that **consumed** it and on no others (below).
    nothing was at risk, but a second decode is wrong in principle and throws `URIError` on a stray `%`.)
    Absent, empty or longer than 200 characters → the body carries `nonce: ""`. **This is not a refusal
    and never was one:** an absent cookie must reach the function so the state is burned and the code is spent. See *The burn, and the spend*.
+   **Superseded by §5.5.** There is now a second cookie holding a MAC the route can verify by itself, so
+   the edge *can* tell "no cookie" from "the right cookie" — and it no longer forwards either an absent
+   nonce or the state. A landing whose ticket does not verify posts a `dispose` envelope carrying only
+   `code`, which registers that code and spends it and can reach no state document. The reason the
+   absent-cookie case had to reach the function at all — that only the function can act on eBay's code —
+   still holds and is why the disposal exists; what changed is that it acts on the code without being
+   handed a state the caller named.
 4. `NIVADESK_EBAY_CALLBACK_KEY` present **and at least 32 characters** → else
    `?ebay=error&reason=unavailable`. **No call**, plus one ops log line naming the variable and which
    check failed by name (`not configured` / `shorter than 32 characters`) and nothing else. The length
@@ -1436,7 +1454,9 @@ body bytes and all — to the real `ebayOAuthCallback` through `functions/test/q
 under the harness's per-run key. Neither side re-implements the other and no key is committed. It covers:
 the canonical string agreeing across the boundary (the function accepts the route's signature and connects);
 the signature binding the body (one swapped field → 401, and the state survives); the absent cookie posting
-`nonce: ""` and the function burning the state; both decline shapes settling on our domain with no call;
+a **dispose** envelope that names no state, and the victim's own flow surviving it (§5.5 — this line used to
+say the absent cookie posted `nonce: ""` and burned the state, which is the §5.4 behaviour it replaced);
+both decline shapes settling on our domain with no call;
 and a blank or 31-character key making no call, landing `unavailable`, and leaving the state unburned —
 the cost §4.2 of the deploy plan now names. It also makes the source assertions the plan listed, which no
 execution can show: `runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler
@@ -1582,12 +1602,22 @@ deterministic row, which is the recovery (see *Timeouts*).
 
 ### 5.5 The browser-binding ticket, the presented-code registry, and a disposal that is a belt rather than the defence
 
-**Supersedes** three properties of §5.4, and nothing else: (a) *The public entrance* — "our own route signs
+**Supersedes** three properties of §5.4: (a) *The public entrance* — "our own route signs
 for anyone who asks" — which was recorded as an accepted residual and is now closed for the connect
 envelope; (b) the `CONSUMED` cookie-clearing rule in `app/ebay/callback/route.ts`, replaced by a stronger
 rule the edge can decide by itself; (c) the sentence in *The burn, and the spend* that says every shaped
 callback reaches the state transaction — it now reaches one of **two** envelopes, and only one of them can
 name a state.
+
+**And it reaches further than §5.4, which the first revision of this list denied.** Four places outside
+§5.4 described the pre-ticket contract as current, and the convention in this file is to fix such a
+paragraph in place rather than leave a reader to find this list. All four now carry the current design:
+**§0**'s *OAuth browser binding* row (which said an absent cookie is forwarded as `nonce: ""`), **§4.5**'s
+paragraph on the empty nonce (which called the burn "the whole of §5's defence" — the registry is),
+**§5**'s flow diagram and **§5.1**'s *Web* paragraph (both of which named `nv_ebay_nonce` with
+`Path=/ebay/callback`, one cookie and no ticket). §5.4's own step 3 keeps its text with a supersession
+note, because that section is a record of a transport decision and its wording is quoted elsewhere.
+`docs/ebay-design-review-map.md`'s banner named §5.4 only and has been extended.
 
 **Stands, word for word:** the signed POST contract (*The request*, *The response*, *Order of checks*), §4.5's
 single-use transaction, the burn, the logging rules and their two traps, and every residual. §5.4's
@@ -1958,7 +1988,7 @@ that name at all.
 | Value | `base64url(randomBytes(24))` | the ticket string |
 | Written by | client JavaScript, `document.cookie` (`setEbayNonceCookie(state, nonce)`) | a `Set-Cookie` on `POST /ebay/ticket` |
 | `Secure` | yes — **unconditionally**, required by the prefix | yes |
-| `HttpOnly` | **no — structurally impossible**, the value is returned to the client as JSON and written by script (residual 2) | **yes** |
+| `HttpOnly` | **no — structurally impossible**, the value is returned to the client as JSON and written by script (residual 2) | **yes, on the cookie** — but the VALUE is returned to the client as JSON too and passes through page script on its way to `POST /ebay/ticket`, so `HttpOnly` protects it only *after* sealing (residual 2) |
 | `SameSite` | `Lax` | `Lax` |
 | `Path` | `/` — required by the prefix | `/` — required by the prefix |
 | `Domain` | **absent** — required by the prefix | **absent** — required by the prefix |
@@ -1981,7 +2011,17 @@ that carries a `Domain`, or a `Path` other than `/`, or no `Secure`. The price i
 which this design has itself called "a request-matching rule and not a security boundary" — so the trade is
 a matching rule for an actual boundary, and it is taken. The consequence to be aware of: both cookies now
 ride every request to `nivadesk.app` for their ten minutes, which is our own origin either way, and the
-ticket is `HttpOnly` throughout.
+ticket **cookie** is `HttpOnly` for the whole of that.
+
+**"Throughout" is the wrong word for the ticket VALUE, and this sentence used to use it.** The cookie is
+`HttpOnly`; the value inside it is not a secret the browser never sees. It arrives as `result.ticket` in
+`beginEbayConnect`'s callable reply and again in `claimEbayConnectState`'s, and passes through plain
+JavaScript in `EbayIntegrationSection.startConnect` and `EbayStartContent` before `sealEbayTicket` posts
+it. A script on `nivadesk.app` present at that moment reads the ticket in the clear and can read the
+nonce cookie at any time, and that pair replayed from any cookie jar completes a landing. So the accurate
+claim is the narrow one: **a script injected *after* sealing cannot exfiltrate the ticket, though it can
+still cause the browser to send it.** That is residual 2 below, which the first revision wrote about the
+nonce alone.
 
 `__Host-` also requires a secure context. Browsers treat `http://localhost` as trustworthy, so local
 development is unaffected; on any other plain-HTTP origin the cookie is refused and the flow cannot
@@ -2269,6 +2309,17 @@ the connector switched off (answered before either path reaches eBay or Firestor
 connect path; and now an exhausted disposal counter at the edge (per process or per address). All four leave a code
 unpresented **and unregistered**, and the operator action is unchanged — deploy plan §4.2, whose honest
 sentence stays honest: nothing on our side can invalidate a code we never presented.
+
+**One landing shape is an exception to the *spend* but not to the registration, and it was missing from
+this list.** A verified ticket over an already-burned state (case 5, or a seller who reloads the callback)
+posts a connect envelope; `claimCode` registers the code; the state transaction answers `state`; and the
+function deliberately does **not** redeem there, because `state` is reachable by a signed caller with no
+live state at all and redeeming would make the endpoint a way to drive outbound token requests to eBay at
+will. So that code is presented to eBay **zero** times and stays spendable there for the rest of its TTL.
+Under §5.4, when the spend was the defence, that was a genuine gap; under §5.5 it is not, because the code
+is **registered**, which is the half that stops it being replayed into anyone's workspace. It is recorded
+here rather than left for a reader to rediscover: the disposition is the registry's, not the exchange's,
+and "its only effect on the world is that an eBay authorization code stops working" means *through us*.
 
 Note what is *no longer* on that list, and this is the whole point of the registry: an empty disposal
 bucket, a `NIVADESK_EBAY_DISPOSE=0`, an eBay 429, a RuName that has moved on, an environment that has

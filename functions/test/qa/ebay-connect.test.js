@@ -964,6 +964,26 @@ const said = (res) => JSON.stringify(res.payload);
     const disposeRes = await disposePost(broken.fns, { code: "good-code-unrecordable-2", rid });
     assert.deepStrictEqual(disposeRes.payload, { ok: false, outcome: "error", reason: "browser", rid }, said(disposeRes));
     assert.strictEqual(broken.calls.exchanges, 1, "the dispose path fails TOWARD spending");
+
+    // The one landing shape that registers a code and NEVER spends it: a verified
+    // ticket over an already-burned state. The function deliberately does not
+    // redeem on the `state` verdict — that verdict is reachable by a signed caller
+    // with no live state at all, and redeeming there would make this endpoint a way
+    // to drive outbound token requests to eBay at will. Under §5.4, when the spend
+    // was the defence, that left a live code with nothing on our side able to kill
+    // it. It does not now: the code is registered on the way in.
+    const burned = buildEbay();
+    const flow = await burned.fns.beginEbayConnect({ auth, data: {} });
+    await callbackPost(burned.fns, { state: flow.state, code: "good-code-burns-it", nonce: flow.nonce });
+    const exchanges = burned.calls.exchanges;
+    const registry = burned.store.paths("ebayPresentedCodes/").length;
+    const second = await callbackPost(burned.fns, { state: flow.state, code: "SECOND-CODE-never-spent", nonce: flow.nonce });
+    assert.strictEqual(second.payload.reason, "state", said(second));
+    assert.strictEqual(burned.calls.exchanges, exchanges, "the second code was presented to eBay, which the `state` verdict must never do");
+    assert.strictEqual(burned.store.paths("ebayPresentedCodes/").length, registry + 1,
+      "…and it was registered anyway, which is what makes that landing shape leave nothing usable behind");
+    const id = crypto.createHash("sha256").update("SECOND-CODE-never-spent").digest("hex");
+    assert.ok(burned.store.read(`ebayPresentedCodes/${id}`));
   });
 
   await check("REGISTRY — a flood repeating one code costs one outbound request, and the aggregate says so", async () => {

@@ -1,12 +1,24 @@
 # eBay connector design (revised 6 Sep 2026) — 14-item map, review-finding coverage, OAuth URL design
 
 > **Snapshot, superseded in one area.** This file records the design *as it stood when it was reviewed*,
-> which is why it quotes line counts and sentences verbatim. Section **§5.4 of
-> `ebay-connector-design.md` was written after it** and replaces everything this file says about the
-> **callback transport**: the callback is a signed server-to-server POST, not a query-string redirect;
-> `connectRedirect()` and the function's own `error → cancelled` branch are deleted; `cancelled` is
-> produced by the web route alone; and an absent nonce cookie is **forwarded as `nonce: ""`** so the
-> state is still burned. Read §5.4 for that half. Everything else here still describes the design.
+> which is why it quotes line counts and sentences verbatim. Sections **§5.4 and then §5.5 of
+> `ebay-connector-design.md` were written after it**, and together they replace everything this file says
+> about the **callback transport**:
+>
+> * **§5.4** — the callback is a signed server-to-server POST, not a query-string redirect;
+>   `connectRedirect()` and the function's own `error → cancelled` branch are deleted; `cancelled` is
+>   produced by the web route alone; and an absent nonce cookie is forwarded as `nonce: ""` so the state
+>   is still burned.
+> * **§5.5** — **which supersedes that last clause.** An absent nonce cookie is no longer forwarded at
+>   all. The browser carries a second, `HttpOnly` cookie holding a MAC'd **ticket**, the callback route
+>   verifies it with no round trip, and a landing it cannot verify posts a **dispose** envelope that can
+>   name no state instead of a connect envelope naming one the caller chose. Both envelopes **register**
+>   eBay's code in `ebayPresentedCodes/{sha256hex(code)}`, and that registration — not the burn and not
+>   the spend — is what stops an observed code being replayed into a second, attacker-owned flow. Both
+>   cookies are `__Host-`-prefixed, `Path=/`, and named per flow.
+>
+> Read §5.4 and §5.5 for that half; where they disagree, §5.5 wins. Everything else here still describes
+> the design.
 
 Sources read (read-only, nothing edited or executed):
 - `/Users/gocmen/Developer/studioflow-ebay/docs/ebay-connector-design.md` (1,573 lines, 152 KB)
