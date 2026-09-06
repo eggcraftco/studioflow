@@ -262,7 +262,9 @@ duplicated". A create tool with no search next to it is a duplicate-maker.
 What moved, so nothing useful was dropped: the merged tool returns `number` (the item number on the
 label and in the QR) and `unit` (what `onHand` counts), the two fields only the older handler had.
 
-Wire effect: `inventory + orchestrator` is **30** tools, not 31. With the orchestrator flag off nothing
+Wire effect: `inventory + orchestrator` is **22** tools, which is what §3's table says. The fold
+itself took that state from 31 to 30; the 6 September reduction (§2.3) then removed eight capabilities
+and took it to 22. With the orchestrator flag off nothing
 moves — the inventory-only listing is byte-identical to what it has always been, and the older handler
 still answers it, because everything new on this branch stays behind `NIVADESK_MCP_ORCHESTRATOR`.
 

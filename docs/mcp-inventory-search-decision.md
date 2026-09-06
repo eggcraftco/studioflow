@@ -169,7 +169,7 @@ wrong about the same field. The merged tool's description names all seven.
 | implementation, orchestrator flag **on** | `orchestrator/inventory.js` `searchInventoryItems`, through `run()` |
 | implementation, orchestrator flag **off** | the older `nvChatGPTSearchInventory`, unchanged |
 | `search_inventory_items` | **no registry row.** An internal alias in `orchestrator/index.js` (`CAPABILITY_ALIASES`), resolved before the registry is consulted, so `run("search_inventory_items", …)` still answers — and answers with `action: "search_inventory"`, because that is the tool that answered |
-| tool counts | 19 / 21 / 29 / **30** (was 31) |
+| tool counts | 19 / 21 / 21 / **22** — this fold took the last state from 31 to 30, and the 6 September reduction then removed eight capabilities |
 
 **Why this name rather than the other.** The submission document's §5.1 recommended the opposite —
 publish `search_inventory_items`, drop `search_inventory` — and that option has a defect that only shows
@@ -241,12 +241,14 @@ OpenAI is reviewing did not move by a single byte.**
 Two fixtures record the orchestrator states, and only one of them was re-recorded at the time:
 `test/fixtures/mcp/tools-list-annotations.json`, whose note says so. `tools-list-full.json` was left
 alone — and nothing compared its two orchestrator states, so it went on shipping the defect this section
-describes: 29 tools with `search_inventory_items` and no `search_inventory`, and an
-`inventory+orchestrator` state of **31** tools carrying both. That is the exact listing this decision
+describes: a 29-tool orchestrator state with `search_inventory_items` and no `search_inventory`, and an
+`inventory+orchestrator` state of 31 carrying both. That is the exact listing this decision
 removed, sitting in the repository as a recording of it, one `--write` away from coming back. Both states
-were re-recorded on 6 Sep 2026 (29 and 30 tools), `mcp-tools-list-snapshot.test.js` now compares them
-like the other four, and a check asserts neither offers two inventory searches. A fixture nothing reads
-is not evidence.
+were re-recorded on 6 Sep 2026, and again when the reduction that followed took eight capabilities out:
+they hold **21** tools and **22** tools today, `search_inventory` only. `mcp-tools-list-snapshot.test.js`
+now compares them like the other four, a check asserts neither offers two inventory searches, and a
+third asserts every tool count each fixture's own `note` states is a count that fixture records. A
+fixture nothing reads is not evidence.
 
 ---
 

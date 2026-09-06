@@ -725,6 +725,65 @@ check("the submission document counts the surface the flags actually publish", (
     "the submission document lists a different number of annotation corrections than the registry holds");
 });
 
+check("no document states a wire count in prose that the builder does not produce", () => {
+  // The check above pins the submission document's TABLE ROWS, and it was green
+  // on 7 September 2026 while three documents each carried a sentence beside a
+  // pinned row stating a different number: the submission said `inventory +
+  // orchestrator` is "**30** tools" two sections after its own table said 22,
+  // the design document said "**30** tools, not 31", and the decision
+  // document's outcome row read "19 / 21 / 29 / **30**". All three were the
+  // count before the 6 September reduction took eight capabilities out. A row
+  // that a test reads stays true and a sentence beside it does not, so the
+  // sentences are read here too — every bolded "**N** tools" and every
+  // four-state "a / b / c / d" quartet in the documents an operator flips flags
+  // from, and in the two gate artefacts that report counts.
+  //
+  // A historical figure is written unbolded, with the sentence saying what it
+  // is the history of. Only a count the builder produces today may be bold.
+  const DOCS = [
+    "mcp-submission-1.2.0.md",
+    "mcp-inventory-search-decision.md",
+    "mcp-orchestration-design.md",
+    "mcp-backlog.md"
+  ];
+  const counts = Object.values(FLAG_STATES).map((flags) => registry.publishedNames(flags).length);
+  const live = new Set(counts);
+  const quartet = counts.join(" / ");
+  let bold = 0;
+  let quartets = 0;
+
+  for (const name of DOCS) {
+    const text = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", name), "utf8");
+    text.split("\n").forEach((line, index) => {
+      for (const match of line.matchAll(/\*\*(\d+)\*\* tools?\b/g)) {
+        bold += 1;
+        assert.ok(
+          live.has(Number(match[1])),
+          `${name}:${index + 1} states **${match[1]}** tools; no flag state publishes that. ` +
+          `The builder publishes ${[...live].sort((a, b) => a - b).join(", ")}. ` +
+          `Bold a count only when it is one of those; write a historical figure unbolded and say what it is history of.`
+        );
+      }
+      // `**19 / 21 / 21 / 22**` bolds the whole quartet, so strip emphasis first.
+      // Requiring spaces around the slashes keeps this off line and version
+      // references like `index.js:2074/2105/2138/2175`.
+      for (const match of line.replace(/\*\*/g, "").matchAll(/(?<![\d.])(\d+) \/ (\d+) \/ (\d+) \/ (\d+)(?![\d.])/g)) {
+        quartets += 1;
+        assert.strictEqual(
+          match.slice(1, 5).join(" / "), quartet,
+          `${name}:${index + 1} states the four flag states as "${match[0]}"; the builder publishes ${quartet} ` +
+          `for ${Object.keys(FLAG_STATES).join(" / ")}`
+        );
+      }
+    });
+  }
+
+  // If the patterns stop matching anything the check has gone quiet rather than
+  // green, which is how B4, B5 and B9 survived in the first place.
+  assert.ok(bold >= 3, `expected the pinned documents to state at least three bolded tool counts, found ${bold}`);
+  assert.ok(quartets >= 2, `expected at least two four-state quartets in the pinned documents, found ${quartets}`);
+});
+
 if (failures > 0) {
   console.error(`\n❌ MCP TOOL ANNOTATIONS: ${failures} failure(s)`);
   process.exit(1);

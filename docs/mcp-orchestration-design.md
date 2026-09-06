@@ -115,7 +115,9 @@ adopted as-is.
 > every MCP flag unset, so its listing carries no inventory search at all — so the choice was made on
 > the merits: the published name is `search_inventory`, gated by **both** flags, with the orchestrator's
 > implementation behind it whenever the orchestrator flag is on; `search_inventory_items` has no
-> registry row and survives only as an internal alias. Both flags on is **30** tools, not 31. The
+> registry row and survives only as an internal alias. Both flags on is **22** tools. This fold took
+> that state from 31 to 30; the 6 September reduction in the banner at the top of this document then
+> removed eight capabilities and took it to 22, which is where the builder stands today. The
 > field-by-field comparison, what was folded in rather than dropped, and the test that fails if a second
 > inventory search ever appears in any flag state are in `docs/mcp-inventory-search-decision.md`.
 
