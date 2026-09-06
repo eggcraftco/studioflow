@@ -203,6 +203,42 @@ check("every access-logged tool names categories and a subject the access log wi
   }
 });
 
+check("an access-log row names the door it came through, and says when it has no subject", () => {
+  // Two halves of the same finding. `source: "mcp"` was hardcoded while
+  // chatgptWorkspaceAction dispatches the same actions through the same switch
+  // over a member's own ID token, so every REST read was filed as MCP — the one
+  // question a source field exists to answer. And a capability that takes no
+  // orderId files `subject.id: ""`, which reads as a row whose subject went
+  // missing rather than as a read of a SET.
+  const api = require("../../index");
+  const accessLog = require("../../privacy/accessLog");
+  const base = { companyId: "co_1", uid: "u1", email: "u@example.com" };
+
+  const mcp = api._nvMcpPiiAccessEntry("search_commerce_orders", { ...base, surface: "mcp" }, {});
+  const rest = api._nvMcpPiiAccessEntry("search_commerce_orders", { ...base, surface: "rest" }, {});
+  assert.strictEqual(mcp.source, "mcp");
+  assert.strictEqual(rest.source, "rest", "a REST read is still filed as MCP");
+  assert.ok(accessLog.ACCESS_SOURCES.includes("rest"), "\"rest\" would be rewritten to \"unknown\" at write time");
+  for (const row of [mcp, rest]) {
+    assert.strictEqual(accessLog.accessEntry(row).source, row.source, "the source survives normalisation");
+  }
+
+  // A set read says so; a record read names the record.
+  assert.strictEqual(mcp.subject.id, "");
+  assert.ok(/subject=set/.test(mcp.note), `a set read must say it read a set: ${mcp.note}`);
+  const one = api._nvMcpPiiAccessEntry("get_order_detail", { ...base, surface: "mcp" }, { orderId: "o_1" });
+  assert.strictEqual(one.subject.id, "o_1");
+  assert.ok(!/subject=set/.test(one.note));
+
+  // And the two entry points stamp the surface, because they are the only
+  // things that know it: an MCP call authenticated with a member's own ID
+  // token is still an MCP call.
+  assert.ok(/nvChatGPTDispatchAction\(\{ \.\.\.context, surface: "mcp" \}/.test(indexSource),
+    "the MCP tool-call path no longer stamps its surface");
+  assert.ok(/nvChatGPTDispatchAction\(\{ \.\.\.context, surface: "rest" \}/.test(indexSource),
+    "chatgptWorkspaceAction no longer stamps its surface");
+});
+
 check("assertRegistry refuses the mistakes it exists for", () => {
   const clone = () => JSON.parse(JSON.stringify(registry.TOOL_REGISTRY));
   const rejects = (mutate, why) => {

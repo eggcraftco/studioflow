@@ -51,8 +51,16 @@ const ACCESS_ACTIONS = Object.freeze([
   "erased"
 ]);
 
-/** Where the request came from. */
-const ACCESS_SOURCES = Object.freeze(["web", "ios", "android", "mcp", "portal", "server", "unknown"]);
+/**
+ * Where the request came from.
+ *
+ * `rest` is `chatgptWorkspaceAction`: the same assistant actions, the same
+ * dispatcher, a different door — a member's own Firebase ID token over HTTP
+ * rather than a delegated OAuth connection. Without it, every read through that
+ * door was filed as "mcp", which is the one thing a source field exists to
+ * answer.
+ */
+const ACCESS_SOURCES = Object.freeze(["web", "ios", "android", "mcp", "rest", "portal", "server", "unknown"]);
 
 const SUBJECT_KINDS = Object.freeze(["order", "customer", "estimate", "file", "bank_transaction", "amazon_order"]);
 

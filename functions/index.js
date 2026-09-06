@@ -24484,20 +24484,37 @@ function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   const requested = String(action || "").trim();
   const entry = nvMcpRegistry.entryFor(requested);
   if (!entry || entry.piiAccessLogged !== true) return null;
+  // One record, or a set of them. `search_orders` with no orderId,
+  // `search_commerce_orders` and `get_banking_attention_summary` name no
+  // subject because they HAVE none — they read a set — and an empty id with
+  // nothing said reads as a row whose subject went missing. accessLog's own
+  // convention for this is the one `run()` uses for the marketplace-block rows:
+  // the id is empty on purpose, and the row says so.
+  const subjectId = String(args?.orderId || args?.customerId || "");
   return {
     companyId: String(context?.companyId || ""),
     actorUid: String(context?.uid || ""),
     actorEmail: String(context?.email || ""),
     actorRole: "chatgpt_connection",
     action: "assistant",
-    source: "mcp",
+    // Which door, not which product. `chatgptWorkspaceAction` dispatches the
+    // same actions through the same switch over a member's own Firebase ID
+    // token, and every one of those reads was filed as "mcp" — the one question
+    // a source field exists to answer. The surface is stamped by the two HTTP
+    // entry points, which are the only things that know it.
+    source: nvMcpAccessSource(context),
     // What the tool is about. `requested.includes("customer") ? "customer" :
     // "order"` guessed from the tool's NAME, which put a banking summary under
     // "order"; the registry names it next to the categories.
-    subject: { kind: entry.piiSubject, id: String(args?.orderId || args?.customerId || "") },
+    subject: { kind: entry.piiSubject, id: subjectId },
     categories: [...entry.pii],
-    note: `action=${requested}`
+    note: subjectId ? `action=${requested}` : `action=${requested} subject=set`
   };
+}
+
+/** MCP or the REST twin, from the surface its entry point stamped. */
+function nvMcpAccessSource(context = {}) {
+  return String(context?.surface || "") === "rest" ? "rest" : "mcp";
 }
 
 /**
@@ -27195,7 +27212,10 @@ async function nvHandleMcpToolCall(req, params = {}) {
   }
 
   const context = await nvRequireChatGPTWorkspaceAccessWithOAuth(req, companyId);
-  return nvChatGPTDispatchAction(context, toolName, args);
+  // The surface, for the access log. Stamped here rather than in the auth
+  // helper because the helper serves both doors: an MCP call authenticated with
+  // a member's own ID token is still an MCP call.
+  return nvChatGPTDispatchAction({ ...context, surface: "mcp" }, toolName, args);
 }
 
 async function nvHandleMcpRequest(req, body = {}) {
@@ -27323,7 +27343,9 @@ exports.chatgptWorkspaceAction = onRequest({ region: "europe-west2", cors: true 
     const action = nvCleanString(body.action || "", 120);
     const args = body.arguments && typeof body.arguments === "object" && !Array.isArray(body.arguments) ? body.arguments : {};
     const context = await nvRequireChatGPTWorkspaceAccess(req, companyId);
-    const result = await nvChatGPTDispatchAction(context, action, args);
+    // Not MCP. Same actions, same dispatcher, a different door — and the access
+    // log said "mcp" for every read that came through this one.
+    const result = await nvChatGPTDispatchAction({ ...context, surface: "rest" }, action, args);
     res.status(200).json(result);
   } catch (error) {
     const code = error?.code || "internal";

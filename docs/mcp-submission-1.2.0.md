@@ -304,9 +304,19 @@ in this submission rather than in a merge — and it belongs with the flag, not 
 
 ### 5.5 Audit and access-log corrections
 
-- `privacy/accessLog.js` `ACCESS_SOURCES` has no `rest` and no `whatsapp`, so those reads are filed as
-  `unknown`. Add both.
-- `chatgptWorkspaceAction` stamps its REST reads as `mcp`.
+- ~~`privacy/accessLog.js` `ACCESS_SOURCES` has no `rest` and no `whatsapp`, so those reads are filed as
+  `unknown`. Add both.~~ ~~`chatgptWorkspaceAction` stamps its REST reads as `mcp`.~~ **Done for
+  `rest`.** `ACCESS_SOURCES` carries it, the two HTTP entry points stamp `surface` (`"mcp"` on
+  `nvHandleMcpToolCall`, `"rest"` on `chatgptWorkspaceAction` — the auth helper cannot decide it,
+  because an MCP call authenticated with a member's own ID token is still an MCP call), and
+  `nvMcpPiiAccessEntry` reads it. `whatsapp` is NOT added: the channel does not exist yet, and a
+  source nothing can write is a vocabulary entry pretending to be a control. It goes in with CH-3.
+- **Done: a row with no subject says it read a set.** `search_orders` without an `orderId`,
+  `search_commerce_orders` and `get_banking_attention_summary` take no record id because they read a
+  SET, and `subject.id: ""` with nothing said reads as a subject that went missing. The row now
+  carries `subject=set` in its note — the convention `run()` already uses for the marketplace-block
+  rows — while a read that names a record still names it. `recordCount` stays 1: the row is written
+  before dispatch, so the count is genuinely not known yet.
 - **The two bank tools hand over a person and file no row — a decision, and it belongs to this
   submission.** `get_bank_spending_summary` returns `topMerchants[].merchant` and
   `recurringSubscriptions[].merchant`; `search_bank_transactions` returns `merchant: tx.counterparty`.
