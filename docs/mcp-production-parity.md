@@ -68,7 +68,16 @@ Broken out per class, so the empty result is not a formatting accident:
 |-------|-------|----------------|
 | expected/documented (`mcp-submission-1.2.0.md` §3) | **0** | — |
 | backward-compatible metadata-only | **0** | — |
-| **unexpected/behaviour-changing** | **0** | — |
+| **unexpected — a listing field that changed** | **0** | — |
+
+The third class used to be named "unexpected/**behaviour**-changing", and §6 then retracted the word:
+"Handler behaviour is **not** [compared]". A zero counted over `tools/list` must not be labelled with a
+word this document does not measure — and the label was not merely imprecise. Two flags-off behaviour
+changes were live under it: `nvMcpPiiAccessEntry`'s `source` and `note` fields changed what every
+`piiAccessLog` row records, for the six reads production already logs, with every MCP flag unset. They
+are behind `NIVADESK_MCP_ORCHESTRATOR` now, and `mcp-tool-annotations.test.js` pins the flags-off row
+field by field against what the deployed tree writes. See §6 for what this document does and does not
+cover.
 
 In particular, **no tool that does not exist in production appears with the flags off.** The candidate
 serves 19 tools; production serves the same 19. The ten orchestrator capabilities, `search_inventory`
@@ -151,7 +160,11 @@ rather than outstanding.
 
 - `tools/list` and the §4 surfaces are compared. **Handler behaviour is not** — two listings being equal
   says nothing about what a tool does once called, and the scope gate, the PII layer and the dispatcher
-  were not exercised here.
+  were not exercised here. This is a real limit, not a formality: the one flags-off behaviour change on
+  this branch was in the PII layer, was invisible to every comparison in this document, and was found by
+  driving `_nvMcpPiiAccessEntry` with the flags unset rather than by diffing a listing. A parity document
+  that measures one surface must say so in its counts as well as in its scope note — hence the rename in
+  §3.
 - Everything is reconstructed from the deployed source. It is sound because the deployed tree is
   byte-identical to `015d5792`, but it is a source-level equality, not a live capture.
 - Nothing was deployed, pushed, or called with credentials.

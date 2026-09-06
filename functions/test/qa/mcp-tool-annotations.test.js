@@ -243,6 +243,19 @@ check("every access-logged tool names categories and a subject the access log wi
   }
 });
 
+/** `_nvMcpPiiAccessEntry` rows built in a child process under a chosen flag state. */
+function accessRowsUnder(flags, calls) {
+  const script = `
+    for (const k of Object.keys(process.env)) if (/MCP/.test(k)) delete process.env[k];
+    process.env.NIVADESK_MCP_ORCHESTRATOR = ${JSON.stringify(flags.orchestrator ? "1" : "0")};
+    const api = require(${JSON.stringify(INDEX)});
+    const out = ${JSON.stringify(calls)}.map(([action, context, args]) => api._nvMcpPiiAccessEntry(action, context, args));
+    console.log(JSON.stringify(out));
+  `;
+  const raw = execFileSync(process.execPath, ["-e", script], { cwd: FUNCTIONS_DIR, maxBuffer: 40 * 1024 * 1024 }).toString();
+  return JSON.parse(raw.trim().split("\n").pop());
+}
+
 check("an access-log row names the door it came through, and says when it has no subject", () => {
   // Two halves of the same finding. `source: "mcp"` was hardcoded while
   // chatgptWorkspaceAction dispatches the same actions through the same switch
@@ -250,12 +263,18 @@ check("an access-log row names the door it came through, and says when it has no
   // question a source field exists to answer. And a capability that takes no
   // orderId files `subject.id: ""`, which reads as a row whose subject went
   // missing rather than as a read of a SET.
-  const api = require("../../index");
+  //
+  // Both fixes are BEHIND THE FLAG, and the next check is why: they are the two
+  // fields that changed what a compliance surface records with every flag unset,
+  // for reads production already performs today.
   const accessLog = require("../../privacy/accessLog");
   const base = { companyId: "co_1", uid: "u1", email: "u@example.com" };
 
-  const mcp = api._nvMcpPiiAccessEntry("search_commerce_orders", { ...base, surface: "mcp" }, {});
-  const rest = api._nvMcpPiiAccessEntry("search_commerce_orders", { ...base, surface: "rest" }, {});
+  const [mcp, rest, one] = accessRowsUnder({ orchestrator: true }, [
+    ["search_commerce_orders", { ...base, surface: "mcp" }, {}],
+    ["search_commerce_orders", { ...base, surface: "rest" }, {}],
+    ["get_order_detail", { ...base, surface: "mcp" }, { orderId: "o_1" }]
+  ]);
   assert.strictEqual(mcp.source, "mcp");
   assert.strictEqual(rest.source, "rest", "a REST read is still filed as MCP");
   assert.ok(accessLog.ACCESS_SOURCES.includes("rest"), "\"rest\" would be rewritten to \"unknown\" at write time");
@@ -266,7 +285,6 @@ check("an access-log row names the door it came through, and says when it has no
   // A set read says so; a record read names the record.
   assert.strictEqual(mcp.subject.id, "");
   assert.ok(/subject=set/.test(mcp.note), `a set read must say it read a set: ${mcp.note}`);
-  const one = api._nvMcpPiiAccessEntry("get_order_detail", { ...base, surface: "mcp" }, { orderId: "o_1" });
   assert.strictEqual(one.subject.id, "o_1");
   assert.ok(!/subject=set/.test(one.note));
 
@@ -288,6 +306,66 @@ check("an access-log row names the door it came through, and says when it has no
     "the orchestrator adapter files a REST request as MCP again");
   assert.ok(!/channel: \{ type: "mcp" \}/.test(indexSource),
     "the channel type is hardcoded somewhere in index.js again");
+});
+
+check("with the flags off, the access log records exactly what production records", () => {
+  // The invariant is behavioural, not a claim about tools/list: merging and
+  // deploying with every flag unset must not change what a compliance surface
+  // writes for reads that already happen today. Two fields broke it.
+  //
+  //   `source: nvMcpAccessSource(context)` — production hardcodes "mcp" for
+  //   BOTH doors, so every chatgptWorkspaceAction read started being filed as
+  //   "rest" the moment the branch merged, flags or no flags.
+  //
+  //   `note: subjectId ? … : "… subject=set"` — production writes only
+  //   `action=<name>`, so every set read gained a suffix.
+  //
+  // Both are improvements. That is not the point: `piiAccessLoggedFlag` already
+  // exists three lines away and puts the two bank rows behind the flag for
+  // exactly this reason. It simply was not applied here.
+  const base = { companyId: "co_1", uid: "u1", email: "u@example.com" };
+  // The six actions production logs, driven through both doors and both shapes
+  // of subject.
+  const PRODUCTION_LOGGED = [
+    "get_dashboard_summary", "get_extra_spending_overview", "get_financial_overview",
+    "get_order_detail", "get_order_financials", "search_orders"
+  ];
+  const calls = [];
+  for (const action of PRODUCTION_LOGGED) {
+    for (const surface of ["mcp", "rest"]) {
+      calls.push([action, { ...base, surface }, {}]);
+      calls.push([action, { ...base, surface }, { orderId: "o_1" }]);
+    }
+  }
+
+  const off = accessRowsUnder({ orchestrator: false }, calls);
+  assert.strictEqual(off.filter((row) => row === null).length, 0,
+    "an action production logs stopped being logged with the flags off");
+  for (let index = 0; index < calls.length; index += 1) {
+    const [action, context, args] = calls[index];
+    const row = off[index];
+    assert.strictEqual(row.source, "mcp",
+      `${action} over ${context.surface} files source "${row.source}" with the flags off; the deployed tree writes "mcp"`);
+    assert.strictEqual(row.note, `action=${action}`,
+      `${action} files note "${row.note}" with the flags off; the deployed tree writes "action=${action}"`);
+    // The fields that did NOT move stay where they were, so this check does not
+    // quietly become "the row is whatever it is".
+    assert.strictEqual(row.actorRole, "chatgpt_connection");
+    assert.strictEqual(row.action, "assistant");
+    assert.strictEqual(row.subject.kind, "order");
+    assert.deepStrictEqual(row.categories, ["name", "email", "phone", "address"]);
+    assert.strictEqual(row.subject.id, String(args.orderId || ""));
+  }
+
+  // And the improvements are reachable — a gate that never opens is a feature
+  // that does not work.
+  const on = accessRowsUnder({ orchestrator: true }, [
+    ["search_orders", { ...base, surface: "rest" }, {}],
+    ["search_orders", { ...base, surface: "rest" }, { orderId: "o_1" }]
+  ]);
+  assert.strictEqual(on[0].source, "rest");
+  assert.strictEqual(on[0].note, "action=search_orders subject=set");
+  assert.strictEqual(on[1].note, "action=search_orders");
 });
 
 check("assertRegistry refuses the mistakes it exists for", () => {

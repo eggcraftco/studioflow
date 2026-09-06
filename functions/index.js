@@ -24507,6 +24507,25 @@ function nvMcpPiiLogFlagOn(entry) {
  * reading the call site. The categories are declared rather than derived,
  * because the dispatcher has not read anything yet — but they are the
  * registry's declaration for THAT tool, not a fixed four.
+ *
+ * TWO of the fields here are behind NIVADESK_MCP_ORCHESTRATOR, and it is worth
+ * saying why a strict improvement is gated. Everything new on this branch sits
+ * behind that flag, default off, and "flags off, production behaviour is
+ * unchanged" is the operator's invariant — it is not a claim about `tools/list`
+ * only. `source` and `note` are the two fields that broke it: with every flag
+ * unset, the six actions production already logs still logged the same
+ * categories and the same subject kind, but a set read wrote
+ * `note: "action=search_orders subject=set"` where production writes
+ * `action=search_orders`, and every `chatgptWorkspaceAction` read wrote
+ * `source: "rest"` where production writes `"mcp"`. Merging and deploying with
+ * the flags off would have changed what a compliance surface records for reads
+ * that already happen today.
+ *
+ * The gating mechanism was already here and already used three lines away:
+ * `piiAccessLoggedFlag` puts `get_bank_spending_summary` and
+ * `search_bank_transactions` behind the same flag for the same reason. It was
+ * simply not applied to these two. Both improvements ship the day the operator
+ * flips 1.2.0, with everything else.
  */
 function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   const requested = String(action || "").trim();
@@ -24519,6 +24538,7 @@ function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   // convention for this is the one `run()` uses for the marketplace-block rows:
   // the id is empty on purpose, and the row says so.
   const subjectId = String(args?.orderId || args?.customerId || "");
+  const improved = NV_MCP_FLAGS.orchestrator === true;
   return {
     companyId: String(context?.companyId || ""),
     actorUid: String(context?.uid || ""),
@@ -24530,17 +24550,23 @@ function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
     // token, and every one of those reads was filed as "mcp" — the one question
     // a source field exists to answer. The surface is stamped by the two HTTP
     // entry points, which are the only things that know it.
-    source: nvMcpAccessSource(context),
+    source: improved ? nvMcpAccessSource(context) : "mcp",
     // What the tool is about. `requested.includes("customer") ? "customer" :
     // "order"` guessed from the tool's NAME, which put a banking summary under
     // "order"; the registry names it next to the categories.
     subject: { kind: entry.piiSubject, id: subjectId },
     categories: [...entry.pii],
-    note: subjectId ? `action=${requested}` : `action=${requested} subject=set`
+    note: (improved && !subjectId) ? `action=${requested} subject=set` : `action=${requested}`
   };
 }
 
-/** MCP or the REST twin, from the surface its entry point stamped. */
+/**
+ * MCP or the REST twin, from the surface its entry point stamped.
+ *
+ * Only consulted with the orchestrator flag on: see the note above
+ * `nvMcpPiiAccessEntry`. Flags off, every row says "mcp", which is what the
+ * deployed tree writes and therefore what the existing log means.
+ */
 function nvMcpAccessSource(context = {}) {
   return String(context?.surface || "") === "rest" ? "rest" : "mcp";
 }
