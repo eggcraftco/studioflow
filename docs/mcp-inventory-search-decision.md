@@ -213,8 +213,10 @@ is resolvable but published nowhere.
 The predicate is written against the **shape** of the defect, not the two names — a published tool counts
 as an inventory search when its name or title carries both a search word and a stock word, because that
 is the pair a user reads in a client's tool picker. The test proves the predicate discriminates
-(`get_inventory_overview` and `create_inventory_item` do not trip it; a hypothetical `find_stock_rows`
-does) so that "exactly one" is a constraint rather than a tautology.
+(`create_inventory_item` and `search_orders` do not trip it — one for each half of the predicate; a
+hypothetical `find_stock_rows` does. `get_inventory_overview` was the no-search-verb neighbour until the
+6 September 2026 reduction took it out of the release, and `create_inventory_item` now carries that
+half) so that "exactly one" is a constraint rather than a tautology.
 
 **It was verified to fail.** Reintroducing the old `search_inventory_items` registry row and schema block
 turns four of its eight checks red and the process exits 1; the files were restored from a checksummed

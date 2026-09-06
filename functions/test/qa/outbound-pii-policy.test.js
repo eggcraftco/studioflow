@@ -277,7 +277,7 @@ check("a block is recorded, not silent", () => {
   assert.ok(source.includes("redacted=${redactedForExport}"), "the export does not record what it redacted");
 });
 
-// ---- the same rule on the orchestrator's ten read capabilities ---------------
+// ---- the same rule on the orchestrator's read capabilities ------------------
 
 /** A Firestore handle that serves seeded rows and holds nothing else. */
 function seededDb(seed = {}) {

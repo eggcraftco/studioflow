@@ -74,13 +74,21 @@ reasoning rather than our conclusion:
 `search_inventory` and `search_commerce_orders`.
 
 The design proposed ten. On 6 September 2026 the operator reduced the flagged set for this release to
-order search, customer search and the workspace's ONE inventory search: every banking capability,
+order search and read and the workspace's ONE inventory search: every banking capability,
 marketplace payouts, the sales and per-channel money summaries, the inventory valuation, the connection
 roster and the accounting sync status came out. "Out" means the registry has no row for them and the
 dispatcher publishes and runs nothing for them — not a flag left off — so no flag state can list or call
 one. `functions/test/qa/mcp-reduced-surface.test.js` is the standing proof, over all eight flag
 combinations. The modules stay on disk, unreachable, so reviving one is a decision (registry row, schema,
 dispatcher case, handler) rather than a merge.
+
+**On "customer search and read", which the operator's list named third: no such capability exists, and
+none was removed.** No assistant surface in this repository can read a customer — `nvMcpAvailableActions()`
+has never carried a customer action, and `list_customers` / `get_customer` / `search_customers` appear in
+`functions/index.js` only inside a comment recording that the PII set once named them although they were
+never dispatchable. Nothing was kept or dropped for it. Customer data reaches the assistant only as fields
+on an order: `search_commerce_orders` declares `pii: ["name","email"]` and files an access-log row, and the
+production tool `get_order_detail` declares all four categories.
 
 The first of the two is also published by `NIVADESK_MCP_INVENTORY` on its own, where an older handler
 answers it. It was a separate capability called `search_inventory_items` until §5.1 was closed.

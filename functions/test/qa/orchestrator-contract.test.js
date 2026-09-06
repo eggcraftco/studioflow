@@ -316,7 +316,7 @@ check("listCapabilities is the flag projection for MCP and the binding projectio
   assert.deepStrictEqual(
     instance.listCapabilities({ channelProfile: { capabilities: ["read"], security: { assurance_level: 1 } } }),
     CAPABILITY_NAMES.slice(),
-    "a read-only binding gets all ten"
+    "a read-only binding gets every capability run() serves"
   );
   assert.deepStrictEqual(
     instance.listCapabilities({ channelProfile: { capabilities: [], security: { assurance_level: 3 } } }),
@@ -529,7 +529,7 @@ checkAsync("both channels decide 'does this read log?' from the same registry fi
   // channel cannot describe a read differently from the way the MCP dispatcher
   // describes it." `run()` keyed on `entry.pii.length > 0` while the dispatcher
   // keyed on `piiAccessLogged` — two predicates over one table, agreeing on the
-  // ten orchestrator entries and disagreeing on the two bank tools.
+  // orchestrator entries of the day and disagreeing on the two bank tools.
   const source = fs.readFileSync(path.join(__dirname, "..", "..", "orchestrator", "index.js"), "utf8");
   assert.ok(/entry\.piiAccessLogged === true && typeof deps\.recordPiiAccess/.test(source),
     "run() no longer keys its PII row on the registry's piiAccessLogged");

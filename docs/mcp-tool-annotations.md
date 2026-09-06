@@ -83,7 +83,7 @@ Twenty-two tools. Nineteen are published to the review connection. Two (`search_
 `NIVADESK_MCP_ORCHESTRATOR`, and each of them arrived in the same commit as the handler behind it.
 
 The orchestration design proposed ten read capabilities here and eight of them are not in this release.
-The operator reduced the flagged set on 6 September 2026 to order search, customer search and the
+The operator reduced the flagged set on 6 September 2026 to order search and read and the
 workspace's one inventory search: every banking capability, marketplace payouts, the sales and
 per-channel money summaries, the inventory valuation, the connection roster and the accounting sync
 status came out. They have no row in this table because they have no row in the registry — not a flag
@@ -97,10 +97,12 @@ publishes a name into `tools/list`, and a name in the listing with no handler be
 list-versus-dispatcher split all over again, so a name is never added here first.
 
 The two flagged read capabilities carry the same four values — `true / false / true / false` — and that is
-not a copy-paste. They are pure functions over data NivaDesk already holds: they write nothing (the accounting
-attention queue is READ, never opened through `store.openAttention`, which would create or bump a document
-on every call), they overwrite nothing, the same question over the same data gives the same answer, and
-none of them contacts a shop, a bank, a marketplace or an accounting provider. What differs between them is
+not a copy-paste. They are pure functions over data NivaDesk already holds: they write nothing (no module
+under `functions/orchestrator/` may import or call a writer at all — the parenthetical here used to argue
+the narrower point that the accounting attention queue is read and never opened through
+`store.openAttention`, which belonged to `get_accounting_sync_status`, and neither surviving capability
+declares the accounting domain), they overwrite nothing, the same question over the same data gives the
+same answer, and none of them contacts a shop, a bank, a marketplace or an accounting provider. What differs between them is
 which gate they sit behind and whether they hand over a person: `search_commerce_orders` does, and
 declares `piiAccessLogged: true`, which is the one list BOTH
 the dispatcher and the channel-agnostic `run()` derive their PII set from — `run()` used to key on

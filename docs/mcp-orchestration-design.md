@@ -3,9 +3,10 @@
 Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/Users/gocmen/Developer/studioflow-mcp`.
 
 > **Scope, 6 September 2026 — eight of the ten capabilities below are NOT in this release.** The
-> operator reduced the flagged set to order search and read, customer search and read, and the
-> workspace's ONE inventory search: `search_commerce_orders` and `search_inventory` ship behind
-> `NIVADESK_MCP_ORCHESTRATOR`. `get_business_attention_summary`, `get_commerce_overview`,
+> operator's list was order search and read, customer search and read, and the workspace's ONE inventory
+> search; there has never been a customer capability on any assistant surface, so what ships behind
+> `NIVADESK_MCP_ORCHESTRATOR` is the two that exist: `search_commerce_orders` and `search_inventory`.
+> `get_business_attention_summary`, `get_commerce_overview`,
 > `get_channel_performance`, `get_inventory_overview`, `get_payout_reconciliation_overview`,
 > `get_integration_health`, `get_accounting_sync_status` and `get_banking_attention_summary` came out —
 > every banking capability, marketplace payouts, the sales and per-channel money summaries, the
@@ -16,6 +17,17 @@ Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/U
 > are DESIGNED is still accurate; what changed is which of them the release publishes, and this
 > document has not been rewritten around that — read it as the design, and §8.1 of
 > `docs/orchestrator-contract.md` as the surface.
+>
+> **One part of this document is not a design and is therefore corrected here rather than left standing:
+> §5, the test plan.** It names a file per capability, and the files for the eight removed capabilities
+> are not in the suite. Three of them existed and were deleted by the reduction —
+> `orchestrator-attention.test.js`, `orchestrator-payouts.test.js` and `orchestrator-integrations.test.js`
+> (§5.5 calls the last of these `orchestrator-integration-health.test.js`) — because a test asserting the
+> behaviour of a capability nothing can reach hides real coverage rather than adding to it. The rest
+> (`orchestrator-channel.test.js`, `orchestrator-money.test.js`, `orchestrator-search-commerce.test.js`,
+> `orchestrator-channel-performance.test.js`, `orchestrator-accounting.test.js`,
+> `orchestrator-no-secrets.test.js`, `bank-insights.test.js`) were never written; they were the plan.
+> §11 of the contract document lists the suite that exists.
 Spec: `NivaDesk_ChatGPT_MCP_Agentic_Orchestration_Expanded_2026-09-05-2.md` (§1–§93) and
 `NivaDesk_WhatsApp_AI_Channel_Implementation_Spec_2026-09-05.md` (cited as WA §n). Both read-only.
 
