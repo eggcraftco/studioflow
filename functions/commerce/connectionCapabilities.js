@@ -87,4 +87,27 @@ function capabilityReason(capabilities, name) {
   return "unsupported";
 }
 
-module.exports = { AMAZON_DEFAULTS, EBAY_DEFAULTS, defaultCapabilities, capabilityAllowed, capabilityReason };
+/** What the account half proves; what the default map claims but no shipped code has proved. */
+const NOT_IN_THIS_RELEASE = "not_in_this_release";
+
+/**
+ * The TRUTHFUL registry for an eBay connection: every default `true` that the
+ * shipped code has not proved becomes the reason string "not_in_this_release"
+ * (so capabilityAllowed answers no), the strings stay as they are, and the
+ * proofs supplied are copied in. The account half passes { "orders.read":
+ * true }; a later half that ships shipment write passes that too. With every
+ * default proved, the specification's own map comes back unchanged.
+ */
+function proveEbay(base, proofs = {}) {
+  const start = base && typeof base === "object" ? base : EBAY_DEFAULTS;
+  const out = {};
+  for (const [name, value] of Object.entries(start)) {
+    out[name] = value === true && !Object.prototype.hasOwnProperty.call(proofs || {}, name) ? NOT_IN_THIS_RELEASE : value;
+  }
+  for (const [name, value] of Object.entries(proofs || {})) {
+    if (value === true || value === false || (typeof value === "string" && value)) out[name] = value;
+  }
+  return out;
+}
+
+module.exports = { AMAZON_DEFAULTS, EBAY_DEFAULTS, NOT_IN_THIS_RELEASE, defaultCapabilities, capabilityAllowed, capabilityReason, proveEbay };
