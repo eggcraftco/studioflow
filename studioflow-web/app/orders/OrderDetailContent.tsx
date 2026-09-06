@@ -110,6 +110,7 @@ import {
   resolveProductionStage,
   type ProductionStage
 } from "@/lib/studioflow/production";
+import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
@@ -1449,6 +1450,74 @@ function ChannelSourceStrip({
           {t("Open in")} {source} ↗
         </a>
       ) : null}
+    </div>
+  );
+}
+
+// A marketplace buyer's protected details (design §8.2). eBay's own rules say
+// the buyer's name and address may be kept only while there is a reason to
+// hold them, so the order document deliberately does NOT carry them: they live
+// in companies/{cid}/restrictedCustomer, which no client may read, and come
+// out one order at a time through a callable that writes the access log BEFORE
+// it answers. This button is that road, and pressing it is a recorded event —
+// which is why it says so.
+//
+// The gate here is the honest half of the server's rule (privacy/reveal.js):
+// the owner always may. A per-member grant exists on the server and has no
+// owner-facing switch on any client yet, so a member sees no button rather
+// than a button that refuses.
+const RESTRICTED_BUYER_PROVIDERS = ["ebay"];
+
+function RestrictedBuyerAddress({
+  order,
+  canReveal,
+}: {
+  order: { id: string; companyId: string; commerce: OrderChannelStamp | null };
+  canReveal: boolean;
+}) {
+  const language = useContext(DetailLanguageContext);
+  const t = (text: string) => studioT(text, language);
+  const [details, setDetails] = useState<EbayRevealedCustomer | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const provider = order.commerce?.provider || "";
+  if (!canReveal || !RESTRICTED_BUYER_PROVIDERS.includes(provider)) return null;
+  const address = details?.fields.address;
+  return (
+    <div className="shopify-source-strip channel-source-strip">
+      {details ? (
+        <>
+          <span className="shopify-source-item">{details.fields.fullName || details.buyerUsername}</span>
+          {details.fields.companyName ? <span className="shopify-source-item">· {details.fields.companyName}</span> : null}
+          {address ? (
+            <span className="shopify-source-item">
+              · {[address.line1, address.line2, address.city, address.stateOrProvince, address.postalCode, address.countryCode].filter(Boolean).join(", ")}
+            </span>
+          ) : null}
+          {details.fields.phone ? <span className="shopify-source-item">· {details.fields.phone}</span> : null}
+          {details.fields.email ? <span className="shopify-source-item">· {details.fields.email}</span> : null}
+          <button type="button" className="link-button" onClick={() => setDetails(null)}>{t("Hide")}</button>
+        </>
+      ) : (
+        <>
+          <span className="shopify-source-item">{t("The buyer's address is kept out of this order.")}</span>
+          <button type="button" className="link-button" disabled={busy}
+            onClick={async () => {
+              setBusy(true); setError("");
+              try {
+                setDetails(await revealRestrictedCustomer(order.companyId, order.id));
+              } catch (revealError) {
+                setError(revealError instanceof Error ? revealError.message : t("Could not load."));
+              } finally {
+                setBusy(false);
+              }
+            }}>
+            {busy ? t("Loading…") : t("Show address")}
+          </button>
+          <span className="shopify-source-item">· {t("Every time an address is shown is recorded.")}</span>
+        </>
+      )}
+      {error ? <span className="shopify-source-item" style={{ color: "#dc2626" }}>· {error}</span> : null}
     </div>
   );
 }
@@ -9004,6 +9073,7 @@ export function OrderDetailContent({
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
       <ChannelSourceStrip order={order} />
+      <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">
