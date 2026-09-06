@@ -2246,3 +2246,10 @@ denirdi. Kanıt artık `externalEntities` (tek eşitlik, indekssiz).
 **Sonraki:** QBO/Xero Faz 3 defter yazımı (denetimin kalan tek maddesi), Amazon/eBay için hesap +
 OAuth (kullanıcıyla), Native Onboarding'in geri kalanı (feedback döngüsü, mesaj gönderimi, native
 ekranlar).
+
+## eBay — hesap yarısı başladı (6 Eyl 2026, 02:35 UTC)
+
+- eBay Developers Program hesabı `nivadesk` (5 Eyl'de açıldı, hoş geldin maili var; onay süreci yok, hesap anında aktif).
+- **Sandbox keyset "NivaDesk" oluşturuldu** (6 Eyl ~02:34 UTC, birincil iletişim: EGGCRAFT LIMITED / Business). App ID (Client ID): `EGGCRAFT-NivaDesk-SBX-05fd51f72-0f019961`. Dev ID ve Cert ID kaydedilmedi; Cert ID'yi kullanıcı Secret Manager'a girecek (`EBAY_CLIENT_SECRET`), App ID `EBAY_CLIENT_ID`, kutu anahtarı `EBAY_TOKEN_KEY`.
+- Kod: `ebay-connector` dalı, ayrı worktree `/Users/gocmen/Developer/studioflow-ebay` (ana ağaç functions batch deploy'ları sırasında dokunulmaz). İş akışı `ebay-connector-build`: OAuth (RuName), token kutusu, Fulfillment API senkronu (engine üzerinden), marketplace account deletion challenge uç noktası, flag kapalı; web kartı + Mac/iPhone + Android kartları + testler.
+- Sırada: tasarım çıkınca eBay portalında RuName (redirect URL) kaydı; Sandbox test hesabı; production keyset (anında verilir) ve Application Growth Check yalnız hacim büyüyünce.
