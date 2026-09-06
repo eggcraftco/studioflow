@@ -14,8 +14,8 @@ behavior."* Three things are owed, and this is where they are paid:
 1. **Every hint on every published tool is a literal `true` or `false`.** Not null, not absent, not
    inferred. Before this change the four hints were literals scattered through the schema list and then
    re-coerced with `=== true`, so a `null` in source would have shipped silently as `false` and nothing
-   would have said so. The coercion is gone: a hint that is not a boolean now throws at module load, and
-   the function fails to start rather than serving a listing with a hole in it.
+   would have said so. The coercion is gone: a hint that is not a boolean throws, and the MCP surface
+   refuses to serve a listing with a hole in it rather than serving one.
 2. **Each value has a written reason**, per hint, in the same table the runtime reads — reproduced below.
 3. **Each reason is checked against the runtime**, not against the tool's name. Every claim below was read
    out of the handler in September 2026, and three of the values published in 1.1.1 did not survive that

@@ -928,6 +928,7 @@ function isPublished(entry, flags) {
 
 /** Published entries, in tools/list order. */
 function publishedEntries(flags = {}) {
+  assertRegistryOnce();
   return TOOL_REGISTRY.filter((entry) => isPublished(entry, flags));
 }
 
@@ -937,6 +938,7 @@ function publishedNames(flags = {}) {
 }
 
 function entryFor(name) {
+  assertRegistryOnce();
   return BY_NAME.get(String(name || "")) || null;
 }
 
@@ -996,6 +998,7 @@ function normalizeChannelProfile(profile) {
  * is no WhatsApp-specific tool set to drift (WA §81, §14).
  */
 function publishedForChannel({ flags = {}, channelProfile = null } = {}) {
+  assertRegistryOnce();
   const profile = normalizeChannelProfile(channelProfile);
   const entries = publishedEntries(flags);
   if (!profile) return entries;
@@ -1067,6 +1070,7 @@ const LIVE_HINT_EXEMPTIONS = Object.freeze({
 
 /** True where the live listing serves a hint the runtime no longer supports. */
 function correctionsPending() {
+  assertRegistryOnce();
   return TOOL_REGISTRY
     .filter((entry) => entry.liveAnnotations)
     .map((entry) => ({
@@ -1255,8 +1259,42 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
   return true;
 }
 
-// A registry that cannot describe itself must not be served.
-assertRegistry();
+/**
+ * The check, run once, before anything this table describes is served.
+ *
+ * It used to run at module scope. The position it encodes is right — a
+ * function that cannot describe its own tools honestly should not serve a
+ * listing with a hole in it — but the blast radius was wrong: `functions/
+ * index.js` requires this module unconditionally, so a malformed registry
+ * edit failed the cold start of every one of the 400-plus deployed functions,
+ * on a codebase whose rollouts are 45 callables per batch with per-batch
+ * rollback targets. A mistake in a tool description would have taken down
+ * order writes, the bank feed and the Stripe webhooks with it.
+ *
+ * So the check keeps its teeth and loses its reach: it runs on the first call
+ * to anything that describes, publishes or dispatches a tool — `tools/list`,
+ * the annotations, the scopes, the channel projection — and a bad edit takes
+ * down the MCP surface alone while the rest of the deployment starts. It is
+ * memoised, so the cost is one pass per process, and the failure is memoised
+ * too: the same error is rethrown rather than a second, different one from a
+ * half-validated table. CI still validates eagerly and by name
+ * (`assertRegistry(TOOL_REGISTRY, indexSource)` in
+ * test/qa/mcp-tool-annotations.test.js), so a broken table never reaches a
+ * deploy in the first place.
+ */
+let validation = null;
+function assertRegistryOnce() {
+  if (validation === true) return true;
+  if (validation instanceof Error) throw validation;
+  try {
+    assertRegistry();
+    validation = true;
+  } catch (error) {
+    validation = error instanceof Error ? error : new TypeError(String(error));
+    throw validation;
+  }
+  return true;
+}
 
 module.exports = {
   TOOL_REGISTRY,
@@ -1280,5 +1318,6 @@ module.exports = {
   scopesFor,
   effectsFor,
   correctionsPending,
-  assertRegistry
+  assertRegistry,
+  assertRegistryOnce
 };

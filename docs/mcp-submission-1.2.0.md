@@ -37,8 +37,9 @@ All of it is dormant with the flags off, and all of it is pinned by tests (`§2.
 `functions/orchestrator/registry.js` is now the single table behind `tools/list`, the OAuth scopes and
 the channel policy. It carries, per tool: the four hints as literal booleans, a `Because …` line for
 each, the outward `effects`, the `pii` categories, the permission descriptor, the risk class and the
-minimum identity assurance. It validates itself at module load and **throws rather than serve a listing
-with a hole in it**. The old path coerced every hint with `=== true`, which would have shipped a `null`
+minimum identity assurance. It validates itself before it describes, publishes or dispatches anything
+and **throws rather than serve a listing with a hole in it** — on the MCP surface alone, so a malformed
+tool entry no longer fails the cold start of the other 400-odd functions that share this deployment. The old path coerced every hint with `=== true`, which would have shipped a `null`
 silently as `false` — exactly the class of mistake the rejection points at.
 
 `docs/mcp-tool-annotations.md` is the same table for a reader, and a test asserts the document and the

@@ -247,6 +247,43 @@ check("assertRegistry refuses the mistakes it exists for", () => {
   assert.strictEqual(registry.assertRegistry(registry.TOOL_REGISTRY, indexSource), true);
 });
 
+check("a broken table takes down the MCP surface, not every function's cold start", () => {
+  // `assertRegistry()` used to run at module scope, and functions/index.js
+  // requires this module unconditionally — so a malformed tool entry failed
+  // the cold start of all 400-plus deployed functions, order writes and bank
+  // feed included. The check keeps its teeth and loses its reach.
+  assert.ok(
+    !/^assertRegistry\(\);\s*$/m.test(registrySource),
+    "registry.js validates at require time again: a bad entry there fails every deployed function's cold start"
+  );
+
+  // Behavioural, and the two halves prove each other: the corruption is
+  // introduced AFTER the module is required, so a table validated at require
+  // time would have memoised "valid" and let these calls through.
+  const saved = require.cache[REGISTRY_PATH];
+  delete require.cache[REGISTRY_PATH];
+  try {
+    const fresh = require(REGISTRY_PATH);
+    fresh.TOOL_REGISTRY[0].annotations.readOnlyHint = null;
+    for (const [label, call] of [
+      ["publishedNames", () => fresh.publishedNames({})],
+      ["annotationsFor", () => fresh.annotationsFor("create_order", {})],
+      ["scopesFor", () => fresh.scopesFor("create_order")],
+      ["publishedForChannel", () => fresh.publishedForChannel({ flags: {} })]
+    ]) {
+      assert.throws(call, /MCP tool registry/, `${label} served a table that cannot describe itself`);
+    }
+    // Memoised, and memoised as the SAME failure rather than a second, later
+    // one from a half-validated table.
+    const first = (() => { try { fresh.publishedNames({}); } catch (error) { return error; } return null; })();
+    const second = (() => { try { fresh.publishedNames({}); } catch (error) { return error; } return null; })();
+    assert.strictEqual(first, second, "the second call reported a different failure");
+  } finally {
+    delete require.cache[REGISTRY_PATH];
+    if (saved) require.cache[REGISTRY_PATH] = saved;
+  }
+});
+
 check("the annotation set that actually SHIPS is checked, not only the verified one", () => {
   // With the orchestrator flag off, annotationsFor serves `liveAnnotations`.
   // The openWorldHint-vs-effects check used to read `entry.annotations` only,

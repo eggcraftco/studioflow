@@ -329,8 +329,8 @@ is pointing at: a `null` in source would silently ship as `false`. The change:
    }
    ```
 
-   `assertRegistry()` runs at module load and throws (so the function fails to start, not silently)
-   when any published entry has a hint that is not `typeof "boolean"`, a missing/empty justification
+   `assertRegistry()` throws — never warns — when any published entry has a hint that is not
+   `typeof "boolean"`, a missing/empty justification
    line, an empty scope list, a scope outside `scopes_supported`, `openWorldHint:false` alongside a
    non-empty `effects`, or `readOnlyHint:true` with a non-empty `pii` whose justification line does not
    mention the access log. `publishedNames(flags)` returns the frozen 19 in order, then `inventory`

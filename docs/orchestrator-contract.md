@@ -419,8 +419,11 @@ Entry fields a channel policy reads: `name`, `flag`, `scopes`, `permission{guard
 bankFeed, ownerOnly, …}`, `riskClass` (A–E), `minAssurance` (1–3), `pii[]`, `piiAccessLogged`, `effects[]`,
 `annotations`, `domainNeeds[]`.
 
-The table validates itself at load (`assertRegistry`) and refuses to start rather than serve a listing
-with a hole in it. It validates BOTH value sets: `annotations` (what the runtime does) and the
+The table validates itself on the first call to anything that describes, publishes or dispatches a
+tool (`assertRegistryOnce`, memoised) and refuses to serve a listing with a hole in it. It is not
+checked at require time: `functions/index.js` requires this module unconditionally, so a throw there
+failed every deployed function's cold start over a mistake in a tool description. CI validates eagerly
+(`assertRegistry(TOOL_REGISTRY, indexSource)`), so a broken table does not reach a deploy. It validates BOTH value sets: `annotations` (what the runtime does) and the
 `liveAnnotations` that `annotationsFor` actually serves while the flag is off, which may differ only
 where `LIVE_HINT_EXEMPTIONS` names the tool, the hint and the reason. `CAPABILITY_KINDS`, `RISK_CLASSES` and `EFFECT_KINDS` are closed lists for the same
 reason the warning codes are.
