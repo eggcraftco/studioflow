@@ -158,13 +158,18 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     const forged = await callback("forged-state-value-00000000", { nonce: "x" });
     assert.strictEqual(forged.payload.reason, "state", JSON.stringify(forged.payload));
     // The absent-cookie case: the web route posts nonce:"" and the state is
-    // consumed anyway — that burn is the whole of §5's defence.
+    // consumed anyway — and eBay's code is spent and thrown away, which is the
+    // half that actually stops the attack. A code is bound to the application
+    // and not to the state that fetched it, so a refusal that leaves it unspent
+    // leaves it replayable against a state the attacker mints (§5.4).
     const phished = await callback(out.state);
     assert.strictEqual(phished.payload.reason, "browser", JSON.stringify(phished.payload));
     assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data().used, true, "burned on an absent nonce");
     const again = await callback(out.state, { nonce: out.nonce });
     assert.strictEqual(again.payload.reason, "state", "burned");
-    assert.strictEqual(ebay.exchanges, 0, "no code was exchanged for a phished state");
+    assert.strictEqual(ebay.exchanges, 1, "the refusal PRESENTED the code — one token request, against a real Firestore");
+    assert.strictEqual((await connRef().get()).exists, false, "and kept nothing: no connection document");
+    assert.strictEqual((await connRef().collection("credentials").doc("current").get()).exists, false, "no credentials either");
     const { begun, res } = await connect();
     state = begun.state;
     assert.strictEqual(res.statusCode, 200); assert.strictEqual(res.payload.ok, true); assert.strictEqual(res.payload.outcome, "connected");
@@ -176,13 +181,17 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     assert.strictEqual(c.sellerUserIdHash, hashing.userIdHash(process.env.EBAY_HASH_KEY, "ebayuser_xxx"));
     assert.deepStrictEqual(c.marketplaces, [{ marketplace: "EBAY_GB", enabled: true, currency: "GBP" }]);
     const cred = (await connRef().collection("credentials").doc("current").get()).data();
-    assert.strictEqual(etsy.decryptToken(cred.accessTokenEncrypted, process.env.EBAY_TOKEN_KEY), "at_1"); assert.strictEqual(etsy.decryptToken(cred.refreshTokenEncrypted, process.env.EBAY_TOKEN_KEY), "rt_1");
-    assert.ok(!JSON.stringify(c).includes("at_1") && !JSON.stringify(c).includes("rt_1") && !JSON.stringify(c).includes("Encrypted"));
+    // at_2 / rt_2, because the phished refusal above spent the FIRST exchange and
+    // threw its tokens away. That the first pair is nowhere on disk is the point:
+    // a refusal redeems the code and keeps nothing.
+    assert.strictEqual(etsy.decryptToken(cred.accessTokenEncrypted, process.env.EBAY_TOKEN_KEY), "at_2"); assert.strictEqual(etsy.decryptToken(cred.refreshTokenEncrypted, process.env.EBAY_TOKEN_KEY), "rt_2");
+    assert.ok(!JSON.stringify(cred).includes("at_1") && !JSON.stringify(cred).includes("rt_1"), "the discarded exchange's tokens were never boxed");
+    assert.ok(!JSON.stringify(c).includes("at_2") && !JSON.stringify(c).includes("rt_2") && !JSON.stringify(c).includes("Encrypted"));
     const listed = await views();
     assert.strictEqual(listed.configured, true); assert.strictEqual(listed.connections.length, 1);
     const view = listed.connections[0];
     assert.strictEqual(view.specStatus, "connected_read_only"); assert.strictEqual(view.status, "connected");
-    assert.ok(!JSON.stringify(view).includes("at_1") && !Object.keys(view).some((k) => /Hash$/.test(k)) && !JSON.stringify(view).includes("Encrypted"));
+    assert.ok(!JSON.stringify(view).includes("at_1") && !JSON.stringify(view).includes("at_2") && !Object.keys(view).some((k) => /Hash$/.test(k)) && !JSON.stringify(view).includes("Encrypted"));
     assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(state).get()).data().connectionId, connId);
   });
 
