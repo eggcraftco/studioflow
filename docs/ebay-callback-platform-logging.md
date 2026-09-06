@@ -158,6 +158,39 @@ presentation, so a reader gets an oracle and a denial, never a connection. Closi
 hashing the state to derive the document id, which is an owner decision and a change to §4.5, not to the
 transport.
 
+## Nothing since has touched the first hop, and this note says so on purpose
+
+Everything built after this measurement — design §5.5's browser-binding ticket, the disposal envelope, the
+sealing route `POST /ebay/ticket`, the two `__Host-` cookies, and the committed signature and ticket
+vectors in `functions/test/fixtures/ebay-callback-signature-vectors.json` — happens **after** eBay's
+redirect has already been written to Hostinger's access log, or nowhere near it at all. So, plainly:
+
+**Hostinger's access log is untouched by any of it.** eBay still delivers `code` and `state` as query
+parameters to `https://nivadesk.app/ebay/callback`, LiteSpeed still writes that request line verbatim, the
+panel still offers a 7-day search and a download, there is still no setting to disable or redact it, and
+retention, readers and onward copies are still undisclosed. Every measured fact and every answer in the
+table above stands exactly as recorded. Nothing in this repository can change the first hop; only moving
+the accepted URL off Hostinger can, which is option 2 and is what the production block is waiting for.
+
+What the later work *did* change is what that logged copy is worth, and the change is real but is on our
+side of the wire, not on Hostinger's:
+
+- **A visitor who replays a logged `code` and `state` no longer makes our server sign anything that names
+  that state.** Before §5.5 the route signed a `connect` envelope for anyone; now a browser without the
+  ticket cookie gets a `dispose` envelope with no `state` field at all.
+- **The code in that log line is the one thing we can still kill, and the disposal is what kills it.** A
+  refused landing presents the code to eBay's token endpoint once and keeps nothing, so the copy in the
+  access log is spent rather than live. That is a mitigation of the residual, not a removal: it needs the
+  relay to be answering, and deploy plan §4.2 lists every window in which it is not.
+- **The browser-binding nonce is still in no log**, and the ticket is in none either: it lives in an
+  `HttpOnly` cookie and is verified at the edge, so it never appears in a URL on either hop.
+- **The committed vectors carry a test key and no real value.** They are frozen HMAC answers under a key
+  the fixture mints for itself and labels `TEST-KEY-NOT-A-SECRET`; nothing in them has ever been sent
+  anywhere, and no log on either hop has ever seen one.
+
+The `state` also remains a Firestore document id, so the check in the section above — Data Access audit
+logs off — is still outstanding and is still the third log.
+
 ## What this decides
 
 The operator's rule was: if Hostinger offers no path-level redaction or disable, **or** the retention

@@ -13,8 +13,8 @@ branch, waiting on you.
 | Server half | OAuth, sync, notifications, the account-deletion endpoint, quota, rules, tests |
 | Web card, Mac and iPhone card, Android card | All four shipped on the branch, with the eBay screen translated into eleven languages |
 | Review | Two adversarial reviewers raised sixteen findings, four of them high; all fixed on the branch |
-| Verification | Unit suite 1,277 passing and 0 failing, exit 0, re-run independently after the reviews. The emulator chain (rules plus twenty-two end-to-end suites) exits 0. Web typechecks and builds. Mac and Android compile |
-| Credential hygiene | The whole branch diff was scanned: no Cert ID, no client secret, no token, no base64 blob. The secrets marker file is not committed |
+| Verification | Unit suite 1,306 passing and 0 failing, exit 0. The two eBay callback scripts — which compile the real web routes and drive them into the real Cloud Function — exit 0: `test:relay` (the transport, the browser-binding ticket, and the committed vectors) and `test:ebay-regressions` (the ten cases the review cites by id). The emulator chain (rules plus the end-to-end suites) exits 0. Web typechecks and builds. Mac and Android compile |
+| Credential hygiene | The whole branch diff was scanned: no Cert ID, no client secret, no token, no base64 blob. The secrets marker file is not committed. **One thing to know before you see it in a diff:** the branch now contains a committed file with two 64-character hex values in it, `functions/test/fixtures/ebay-callback-signature-vectors.json`. They are **test keys the file generates for itself** — labelled `TEST-KEY-NOT-A-SECRET`, with a README in the file saying they must never be entered in Secret Manager or Hostinger — and a test walks the whole repository and fails if either value appears anywhere else. They have never signed anything real and nothing outside the test suites reads them. Nothing here needs you to mint, record or store a value |
 | Live effect if deployed today | None. The connector is behind a switch that is off, and the secrets marker does not exist, so the functions deploy with no eBay identity and no eBay secret |
 
 ## 2. The four URLs
@@ -28,12 +28,16 @@ branch, waiting on you.
 | Notification destination | `https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications` |
 
 The accepted URL is a page on our own site rather than the Cloud Function, and the seller's browser
-**stops there**. That page adds one thing eBay never sees — a nonce from a cookie — and then hands the
-code, the state and that nonce to the Cloud Function in a **signed server-to-server POST**, never in a
-URL (design §5.4). The nonce is what binds the OAuth state to the browser that started it, so a stolen
-state parameter cannot finish someone else's connection. Why it travels in a body rather than a query
-string — and what that does and does not fix — is Gate C below and
-`docs/ebay-callback-platform-logging.md`.
+**stops there**. That page adds two things eBay never sees — a nonce from a cookie, and a short-lived
+**ticket** in a second, `HttpOnly` cookie our own server wrote — and then hands the code, the state and
+that nonce to the Cloud Function in a **signed server-to-server POST**, never in a URL (design §5.4,
+§5.5). The nonce is what binds the OAuth state to the browser that started it, so a stolen state parameter
+cannot finish someone else's connection. The ticket is what stops the page being a signing oracle: without
+it, anyone who visited that URL with a state of their choosing made our own server sign a message naming
+that state. A visitor with no ticket now gets a message that names **nothing** — its only effect is that
+eBay's authorization code is presented once and thrown away, which is the one thing that makes the copy in
+the hosting log worthless. Why any of it travels in a body rather than a query string — and what that does
+and does not fix — is Gate C below and `docs/ebay-callback-platform-logging.md`.
 
 The declined URL returns the seller to the eBay settings section with a plain sentence. A decline that
 arrives the other way, as an `error` parameter on the accepted URL, is settled by that same page and
@@ -77,14 +81,26 @@ Nothing is mounted until `functions/.ebay-secrets-ready` is committed naming all
 are deployed. Until that moment the callback answers 401 to everything — which is what "deploying this
 code activates nothing" means in practice, not a promise about a switch.
 
+**There is no sixth secret, and the ticket did not add one.** The ticket is signed with a key *derived*
+from `EBAY_CALLBACK_KEY` under a fixed label, so rotating the fifth secret rotates the ticket with it and
+needs no extra step from you. The committed test vectors named in the table above are the same story from
+the other end: a value that looks like a key but is one the repository mints for itself.
+
+One consequence of the ticket worth knowing, because it changes what a mis-set key looks like: if
+Hostinger has no `NIVADESK_EBAY_CALLBACK_KEY`, the seller now **never reaches eBay at all** — the sealing
+route answers 503, the Connect button stops with "try again", and no authorization code is ever created.
+Before §5.5 a seller in that state went to eBay, consented, and came back to a route that could not
+complete, leaving a live code in the hosting access log. Deploy plan §4.2 has the full matrix.
+
 **Gate C, notification destination and the first real connection.** The deletion endpoint plus a
 verification token, registered after the secrets are live, because the challenge is answered without
 a secret but the deletion request needs one. Two things must also be true before the first sandbox
 seller, because that is the first moment a genuine authorization code and a genuine nonce exist: the
-web deploy carrying the §5.4 callback must be live (the version on the site today still redirects the
-browser onward to the Cloud Function with those values in the URL), and the one-off proof that
-Hostinger hands the shared key to the running server rather than only to the build must have been done
-— deploy plan §4.3 step 4. Then the first sandbox seller.
+web deploy carrying the §5.4 callback **and §5.5's sealing route `/ebay/ticket`** must be live (the
+version on the site today still redirects the browser onward to the Cloud Function with those values in
+the URL, and has no sealing route at all — the two ship together or every consent is refused), and the
+one-off proof that Hostinger hands the shared key to the running server rather than only to the build must
+have been done — deploy plan §4.3 step 4. Then the first sandbox seller.
 
 **Production is not simply "after sandbox acceptance" any more; it is blocked, and by something
 outside this code.** eBay delivers the authorization code to the accepted URL in a query string, and

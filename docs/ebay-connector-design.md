@@ -1419,12 +1419,17 @@ same time: it watched only `functions/**`, `firestore.rules` and `firebase.json`
 *The plan was:* `functions/test/fixtures/ebay-callback-signature-vectors.json` holding
 `{ key, timestampMs, body, signature }` triples under a fixed **test** key, checked by the function's
 verifier in `ebay-connect.test.js` and by the route's signer in the script — the two implementations
-being, it said, unable to import each other, so **the vector is the shared pure thing**. That file has
-**not** been written, and it is blocked on a decision rather than effort: a committed vector needs a fixed
-HMAC key, and who mints that key and where it is recorded is the **owner's** call (deploy plan check 10).
+being, it said, unable to import each other, so **the vector is the shared pure thing**. **That file is
+now written**; the sentence that used to stand here — "blocked on a decision rather than effort: who
+mints that fixture key is the owner's call" — is dead, and the answer is in §5.5, *The committed signature
+vectors — the skip ends here*: **the fixture mints its own key, inside itself, and says on every line that
+matters that it is a test key.** It is 32 random bytes with no meaning anywhere, `keyLabel` is
+`TEST-KEY-NOT-A-SECRET`, and `ebay-connect.test.js` walks the whole repository and fails if the value
+appears in any file but the fixture and its generator. Nothing was ever an owner decision except the
+question of where a meaningless 64-hex value may live, and a file that answers it about itself settles it.
 
-*What is written instead:* the script **executes both implementations against each other**, which is what
-the vector was for. It compiles the real `app/ebay/callback/route.ts` with the project's own `tsc`
+*What was written first, and still carries most of the weight:* the script **executes both implementations
+against each other**, which is what the vector was a proxy for. It compiles the real `app/ebay/callback/route.ts` with the project's own `tsc`
 (CommonJS, so `next/server` resolves; into a temp dir under the web tree, so `next` resolves at all),
 drives `GET` with `globalThis.fetch` captured, and hands the request the route produced — headers, exact
 body bytes and all — to the real `ebayOAuthCallback` through `functions/test/qa/helpers/ebayHarness.js`,
@@ -1438,9 +1443,26 @@ execution can show: `runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decli
 `process.env.NIVADESK_EBAY_CALLBACK_KEY` read with its length floor, no `NEXT_PUBLIC_` outside comments,
 and no `return` on the line that reads the nonce cookie.
 
-*What it does not cover, and says so on every run:* the committed vector file. If someone writes it, the
-function's verifier should be checked against it in `ebay-connect.test.js` as planned; the script prints a
-`NOTE` when the file appears so the two do not drift apart silently.
+*Why both halves exist, now that both are written, and it is not belt-and-braces.* The execution above is
+**symmetric**: it proves the route and the function agree with **each other**, and it stays green just as
+happily if both of them move together — which is a real edit, not a hypothetical, because one person
+changing a canonical string changes both files in one commit. The fixture is the **asymmetric** half: a
+frozen answer that neither side can move. Run the experiment and it separates cleanly — change
+`` `v1.${timestamp}.` `` in *both* `ebayConnector.js` and `route.ts`, and "the canonical string agrees
+across the boundary" still passes while every relay vector goes red on both sides; change
+`"nivadesk/ebay/ticket/v1"` in both `ebayConnector.js` and `ebayTicket.ts`, and the ticket vectors go red
+the same way.
+
+*And it can no longer skip.* This paragraph used to end "the script prints a `NOTE` when the file appears",
+and the script printed a `SKIP` line on every run for work nobody had done. Both are gone. A missing
+fixture is now a **failure**: `check-ebay-relay-vectors.mjs` prints one `FAIL` and exits 1 before it
+compiles anything, and `ebay-connect.test.js`'s four fixture cases fail with `ENOENT`. A source pin in
+that suite asserts the vector cases contain no `skip`, no `todo` and no early `return`, and that the relay
+script's *code* — comments stripped, so prose about the skip that ended cannot keep it green — contains no
+`SKIP` at all. `functions/test/fixtures/generate-ebay-callback-vectors.mjs` is committed beside the fixture
+and is a **verifier** by default: it re-derives every frozen value from the real implementations, prints
+which one moved if any did, and refuses to overwrite without `--force`. It runs in CI as
+`npm run test:vectors`, ahead of `npm test`, so a drift is named rather than only failing.
 
 **e2e — `commerce-ebay-connector-emulator.test.js`:** set `process.env.EBAY_CALLBACK_KEY` beside the other
 four before `require("../../index.js")`. Case 1 becomes: begin → state doc with `nonceHash` and the
@@ -2375,22 +2397,55 @@ stable and a regeneration is a no-op unless a format changed. The fixture:
 
 ```json
 {
-  "README": "TEST VECTORS ONLY. The key below is a test key generated by generate-ebay-callback-vectors.mjs for this file alone. It is not a secret, has never been a secret, is used by nothing outside functions/test/** and studioflow-web/scripts/**, and must never be set in Secret Manager or in Hostinger.",
+  "README": "TEST VECTORS ONLY. The two keys below (\"key\" and \"wrongKey\") are TEST keys generated by … for this file alone. … they must NEVER be set in Google Secret Manager as EBAY_CALLBACK_KEY, nor in the Hostinger environment as NIVADESK_EBAY_CALLBACK_KEY. …",
   "keyLabel": "TEST-KEY-NOT-A-SECRET",
-  "key": "<64 hex — a test key>",
-  "relayVectors":  [ { "name": "…", "timestampMs": 0, "body": "<exact bytes>", "signature": "<64 hex>" } ],
-  "ticketVectors": [ { "name": "…", "state": "…", "nonce": "…", "expMs": 0, "jti": "…", "ticket": "nv1.…", "cookieName": "__Host-nv_ebay_ticket_…" } ]
+  "canonical": { "relaySignature": "…", "ticketKey": "…", "nonceTag": "…", "ticket": "…", "cookieName": "…" },
+  "key":      "<64 hex — a test key>",
+  "wrongKey": "<64 hex — a second test key, so 'a wrong key' is a vector and not a mutation>",
+  "clock": { "nowMs": 0, "skewMs": 300000, "outsideMs": 360000 },
+  "flow":  { "state": "…", "nonce": "…", "code": "…", "connectRid": "…", "disposeRid": "…", "ticketJti": "…" },
+  "relayVectors":  [ { "id": "relay-connect-valid", "envelope": "connect", "keyUsed": "key", "timestampMs": 0, "nowMs": 0,
+                       "body": "<exact bytes sent>", "signedBody": "<exact bytes signed>", "signature": "<64 hex>",
+                       "expect": "ok | unsigned | skew", "routeReproduces": true } ],
+  "ticketVectors": [ { "id": "ticket-valid", "keyUsed": "key", "state": "…", "nonce": "…", "expMs": 0, "jti": "…",
+                       "nonceTag": "…", "ticket": "nv1.…", "verifyAtMs": 0, "expect": "ok | mac | expired | state | nonce",
+                       "cookieName": "__Host-nv_ebay_ticket_…", "nonceCookieName": "__Host-nv_ebay_nonce_…" } ]
 }
 ```
 
-Both trees consume it: `ebay-connect.test.js` checks the function's `checkSignature` and its ticket minter
-against the vectors; `check-ebay-relay-vectors.mjs` checks the route's signer, its ticket verifier and its
-cookie-name derivation against the same file. The script's `NOTE` — "a vector file now exists … so the two
-do not drift apart silently" — is deleted, because the file exists and is consumed.
+The five cases the transport needs are `relay-connect-valid`, `relay-wrong-key`, `relay-swapped-body`,
+`relay-stale-timestamp` and `relay-future-timestamp`, plus `relay-dispose-valid` so the *other* envelope's
+bytes are frozen too. Two of them are worth reading twice. **`relay-swapped-body` is not a broken
+signature**: its `signature` is the valid vector's, over the valid bytes, presented over a body whose
+`code` was changed — which is what "the signature binds the body" means, frozen. And the **two skew
+vectors carry the same signature over the same bytes as the valid one**; only the clock moved, and the
+suite proves it by re-checking each of them at its *own* timestamp, where both answer `ok`. Without that,
+a skew vector could be quietly proving something else.
 
-**It must never skip again**, and that is enforced rather than promised: a source pin asserts the vector
-cases contain no `skip`, no `todo` and no early `return`, and a grep pin asserts the fixture's key appears
-nowhere outside `functions/test/**` and `studioflow-web/scripts/**` and that `keyLabel` is intact.
+Both trees consume it. `ebay-connect.test.js` runs every relay vector through the function's own
+`checkSignature` (`ok`/`unsigned`/`skew`, which a uniform 401 cannot tell apart) **and** through the real
+`ebayOAuthCallback` on the wire, where the four bad ones are the same eight bytes and the two good ones get
+as far as the state and the disposal; and it re-mints every ticket vector with the real minter, byte for
+byte, with `crypto.randomBytes` stubbed for the length of the `jti` and for the length of one call — the
+only stub in any of this, and without it the real minter cannot be asked for the same ticket twice.
+`check-ebay-relay-vectors.mjs` drives the **real route** with `Date.now` and the eight random bytes of the
+rid frozen to the vector's own, then compares the `x-nivadesk-signature` header it emitted with the
+committed one character for character; and it runs every ticket vector through the route's real verifier
+and the cookie-name derivation. Neither side re-implements the other, and neither re-implements the
+fixture.
+
+**It must never skip again**, and that is enforced rather than promised. A missing fixture is a
+**failure**: the relay script prints one `FAIL` and exits 1 before it compiles anything, and the four
+fixture cases in `ebay-connect.test.js` fail with `ENOENT`. A source pin asserts the vector cases contain
+no `skip`, no `todo` and no early `return`, and that the relay script's *code* — comments stripped, so
+prose about the skip that ended cannot keep it green — contains no `SKIP`. A grep pin walks the whole
+repository and asserts both fixture keys appear in **no file** outside the fixture and its generator, that
+neither test holds the value rather than reading it, and that `keyLabel` and the README are intact.
+
+`generate-ebay-callback-vectors.mjs` is a **verifier by default**: the fixture's inputs are random once and
+read back for ever, every derived value is recomputed from the real implementations, and a difference is
+printed by name and refuses to overwrite without `--force`. It runs in CI as `npm run test:vectors`, ahead
+of the unit suite, so a drift is *named* rather than only failing.
 
 #### Test matrix
 
@@ -2410,7 +2465,7 @@ The twelve regressions are one named test each, and the name is the contract.
 | 10 | `log: a rid cannot inject a state, a code, a nonce or a ticket` | `ebay-connect.test.js` | `rid` set in turn to the code, the state, the nonce and a whole ticket → 400 with no `rid` in the body, nothing logged with a rid, log pin green. Web side: the route mints its own rid and accepts none, asserted in source |
 | 11 | `ticket: two flows in one browser do not collide` | relay script | Two begins → two cookie pairs with different names, all four present at once; completing the FIRST consent verifies against ticket₁, posts a connect envelope naming state₁, lands `connected`, clears only flow 1's pair and leaves flow 2's intact |
 | 12 | `ticket: a cross-site plant sets no cookie` | relay script | `POST /ebay/ticket` with a **valid** ticket and (a) `Sec-Fetch-Site: cross-site`, (b) `Origin: https://evil.example`, (c) no `Origin` and no `Sec-Fetch-Site`, (d) `content-type: text/plain` with a JSON-shaped body → 400 and **no `Set-Cookie`** in all four; `blocked` counter incremented |
-| V | `vectors: the committed signature and ticket vectors reproduce on both sides` | `ebay-connect.test.js` + relay script | Every `relayVectors` entry reproduces under the function's verifier and the route's signer; every `ticketVectors` entry reproduces under the function's minter, the route's verifier and the route's cookie-name derivation. **No skip, no todo, no early return** — pinned |
+| V | `vectors: the committed signature and ticket vectors reproduce on both sides` | `ebay-connect.test.js` + relay script | Every `relayVectors` entry reproduces under the function's verifier (`ok`/`unsigned`/`skew`), on the wire through the real `ebayOAuthCallback`, and under the route's own signer driven with the clock and the rid frozen; every `ticketVectors` entry reproduces byte for byte under the function's minter and answers its committed class under the route's verifier, with the cookie name derived the same way on all three sides. **A missing fixture fails; no skip, no todo, no early return, and no `SKIP` in the relay script's code** — pinned. The fixture's two keys appear in no other file in the repository — pinned by a walk of the whole tree |
 
 Supporting cases, added to the existing suites:
 

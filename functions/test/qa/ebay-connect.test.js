@@ -14,7 +14,7 @@ const assert = require("assert");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { buildEbay, connect, callbackPost, disposePost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
+const { buildEbay, connect, callbackPost, disposePost, signedCallback, callbackRid, fakeRes, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
 const { decryptToken } = require("../../security/tokenBox");
 const hashing = require("../../commerce/ebay/hashing");
 const realOAuth = require("../../commerce/ebay/oauth");
@@ -847,6 +847,228 @@ const said = (res) => JSON.stringify(res.payload);
     const mismatch = captured.slice(mark).find((l) => l.includes("ebay callback dispose window="));
     assert.ok(mismatch && /spent=0 refused=2 /.test(mismatch), String(mismatch));
   });
+
+  // ---- VECTOR CASES BEGIN --------------------------------------------------
+  // The committed vectors (design §5.5, "The committed signature vectors — the
+  // skip ends here"). §5.4 planned this file and it was never written, blocked
+  // on one question: who mints the fixture key and where is it recorded? The
+  // fixture answers it by minting the key inside itself and saying so on its
+  // face; nothing outside `functions/test/**` and `studioflow-web/scripts/**`
+  // may hold that value, and the fifth case below proves it by grepping the
+  // repository.
+  //
+  // Why this exists beside `check-ebay-relay-vectors.mjs`, which already runs
+  // the two implementations against each other: that check is SYMMETRIC. It
+  // proves the route and the function agree, and it stays green just as happily
+  // if both of them move together. It is also why the `macOf`/`tagOf` helpers
+  // above cannot do this job — they are a second implementation living in the
+  // test, so they move with whoever edits them. A frozen answer is the only
+  // thing that notices a matched pair of edits, and there are two canonical
+  // strings to keep still now: the relay signature and the ticket.
+  //
+  // There is no SKIP path in any of this. A missing fixture is four failing
+  // cases, and the sixth case pins that neither this file nor the relay script
+  // can report green without having read it.
+  const VECTOR_PATH = path.join(__dirname, "..", "fixtures", "ebay-callback-signature-vectors.json");
+  const RELAY_SCRIPT = path.join(__dirname, "..", "..", "..", "studioflow-web", "scripts", "check-ebay-relay-vectors.mjs");
+  // No try/catch and no default: every case that needs the fixture reads it, and
+  // an unreadable one throws ENOENT into that case's own FAIL line.
+  const readVectors = () => JSON.parse(fs.readFileSync(VECTOR_PATH, "utf8"));
+  /** The real minter, asked for the same ticket twice — the one stub in here. */
+  const mintWithJti = (fns, state, nonce, expMs, jti) => {
+    const realRandomBytes = crypto.randomBytes;
+    const fixed = Buffer.from(jti, "base64url");
+    crypto.randomBytes = (size) => (size === fixed.length ? Buffer.from(fixed) : realRandomBytes(size));
+    try { return fns._internal.mintTicket(state, nonce, expMs); } finally { crypto.randomBytes = realRandomBytes; }
+  };
+
+  await check("VECTORS — the fixture is committed, mints its own key inside itself, and says on its face that the key is a test key", async () => {
+    const v = readVectors();
+    assert.strictEqual(v.keyLabel, "TEST-KEY-NOT-A-SECRET", "the label is the thing a reader sees first");
+    assert.ok(v.README.startsWith("TEST VECTORS ONLY."), v.README.slice(0, 40));
+    // The README must name both places the value must never be put, because a
+    // 64-hex string in a committed file is exactly the shape of a mistake.
+    assert.ok(v.README.includes("EBAY_CALLBACK_KEY") && v.README.includes("NIVADESK_EBAY_CALLBACK_KEY"));
+    assert.ok(/NEVER/.test(v.README), "and say never, in a word nobody can read past");
+    assert.ok(/^[0-9a-f]{64}$/.test(v.key) && /^[0-9a-f]{64}$/.test(v.wrongKey), "32 bytes each, as hex");
+    assert.notStrictEqual(v.key, v.wrongKey);
+    assert.strictEqual(v.generatedBy, "functions/test/fixtures/generate-ebay-callback-vectors.mjs");
+    assert.deepStrictEqual(v.consumedBy.slice().sort(), ["functions/test/qa/ebay-connect.test.js", "studioflow-web/scripts/check-ebay-relay-vectors.mjs"]);
+    // The five cases the ticket named, plus the second envelope, by id.
+    assert.deepStrictEqual(v.relayVectors.map((r) => r.id).sort(),
+      ["relay-connect-valid", "relay-dispose-valid", "relay-future-timestamp", "relay-stale-timestamp", "relay-swapped-body", "relay-wrong-key"]);
+    assert.deepStrictEqual(v.relayVectors.map((r) => r.expect).sort(), ["ok", "ok", "skew", "skew", "unsigned", "unsigned"]);
+    assert.ok(v.ticketVectors.length >= 4 && v.ticketVectors.some((t) => t.expect === "ok"));
+    // A vector with no frozen answer in it is not a vector.
+    for (const r of v.relayVectors) assert.ok(/^[0-9a-f]{64}$/.test(r.signature), r.id);
+    for (const t of v.ticketVectors) assert.ok(TICKET_PATTERN.test(t.ticket), t.id);
+  });
+
+  await check("VECTORS — every committed relay vector reproduces under the function's OWN verifier: valid, wrong key, swapped body, stale, future", async () => {
+    const v = readVectors();
+    watch(v.flow.code);
+    const { fns, switches, nowRef } = buildEbay();
+    switches.callbackKey = v.key;
+    for (const vector of v.relayVectors) {
+      // The verifier always holds the FIXTURE key. What varies is what the
+      // caller presented — which is the whole point of the wrong-key case.
+      nowRef.value = vector.nowMs;
+      const verdict = fns._internal.checkSignature(
+        v.key,
+        { "x-nivadesk-timestamp": String(vector.timestampMs), "x-nivadesk-signature": `v1=${vector.signature}` },
+        Buffer.from(vector.body, "utf8")
+      );
+      assert.strictEqual(verdict, vector.expect, `${vector.id}: ${vector.name}`);
+    }
+    // The two skew vectors are the same signature over the same bytes as the
+    // valid one; only the clock moved. So the window is what refused them, and
+    // the vector is not quietly proving something else.
+    const stale = v.relayVectors.find((r) => r.id === "relay-stale-timestamp");
+    const future = v.relayVectors.find((r) => r.id === "relay-future-timestamp");
+    for (const vector of [stale, future]) {
+      nowRef.value = vector.timestampMs;   // move the clock to the vector's own moment
+      assert.strictEqual(fns._internal.checkSignature(v.key,
+        { "x-nivadesk-timestamp": String(vector.timestampMs), "x-nivadesk-signature": `v1=${vector.signature}` },
+        Buffer.from(vector.body, "utf8")), "ok", `${vector.id} is a GOOD signature outside the window`);
+    }
+    for (const line of captured) {
+      assert.ok(!line.includes(v.key) && !line.includes(v.wrongKey), `a log line carried a fixture key: ${line.slice(0, 120)}`);
+    }
+  });
+
+  await check("VECTORS — and on the wire: both valid envelopes pass the 401 wall, and the other four are the same eight bytes", async () => {
+    const v = readVectors();
+    const { fns, switches, nowRef, calls } = buildEbay();
+    switches.callbackKey = v.key;
+    const deliver = async (vector) => {
+      nowRef.value = vector.nowMs;
+      const res = fakeRes();
+      await fns.ebayOAuthCallback({
+        method: "POST", originalUrl: "/ebayOAuthCallback",
+        headers: { "content-type": "application/json", "x-nivadesk-timestamp": String(vector.timestampMs), "x-nivadesk-signature": `v1=${vector.signature}` },
+        rawBody: Buffer.from(vector.body, "utf8"),
+        body: JSON.parse(vector.body)
+      }, res);
+      return res;
+    };
+    for (const vector of v.relayVectors.filter((r) => r.expect !== "ok")) {
+      const res = await deliver(vector);
+      assert.strictEqual(res.statusCode, 401, vector.id);
+      assert.strictEqual(JSON.stringify(res.payload), JSON.stringify({ ok: false }), `${vector.id} answers the same eight bytes as every other refusal`);
+    }
+    // The connect envelope is accepted and gets as far as the state it names,
+    // which was never minted — so `state`, not 401, is the proof the signature
+    // was believed.
+    const connect = await deliver(v.relayVectors.find((r) => r.id === "relay-connect-valid"));
+    assert.strictEqual(connect.statusCode, 200);
+    assert.strictEqual(connect.payload.reason, "state", said(connect));
+    assert.strictEqual(connect.payload.rid, v.flow.connectRid, "the rid it echoes is the one the vector's body carries");
+    // And the dispose envelope reaches the disposal: one token request with the
+    // vector's own code, nothing kept.
+    const before = calls.codes.length;
+    const dispose = await deliver(v.relayVectors.find((r) => r.id === "relay-dispose-valid"));
+    assert.strictEqual(dispose.statusCode, 200);
+    assert.strictEqual(dispose.payload.reason, "browser", said(dispose));
+    assert.deepStrictEqual(calls.codes.slice(before), [v.flow.code], "the disposal presented the vector's code once");
+    assert.strictEqual(calls.identities, 0, "and asked for no identity");
+  });
+
+  await check("VECTORS — every committed ticket reproduces BYTE FOR BYTE under the function's own minter", async () => {
+    const v = readVectors();
+    const { fns, switches } = buildEbay();
+    for (const vector of v.ticketVectors.filter((t) => t.mintedByTheRealMinter)) {
+      switches.callbackKey = vector.keyUsed === "key" ? v.key : v.wrongKey;
+      const minted = mintWithJti(fns, vector.state, vector.nonce, vector.expMs, vector.jti);
+      assert.strictEqual(minted, vector.ticket, `${vector.id}: ${vector.name}`);
+    }
+    switches.callbackKey = v.key;
+    // The derived ones are derived, not minted, and the fixture must not have
+    // quietly turned one of them into something else.
+    const valid = v.ticketVectors.find((t) => t.id === "ticket-valid");
+    const bent = v.ticketVectors.find((t) => t.id === "ticket-bent-mac");
+    assert.strictEqual(bent.ticket.slice(0, -1), valid.ticket.slice(0, -1), "the bent ticket differs from the valid one in its last character only");
+    assert.notStrictEqual(bent.ticket, valid.ticket);
+    assert.ok(TICKET_PATTERN.test(bent.ticket), "and still passes the shape check, so what refuses it is the MAC");
+    for (const id of ["ticket-other-state", "ticket-other-nonce"]) {
+      assert.strictEqual(v.ticketVectors.find((t) => t.id === id).ticket, valid.ticket, `${id} offers the VALID ticket — what changes is what it is offered against`);
+    }
+    // The fields the web tier reads out of a ticket, frozen: the tag is keyed
+    // over the nonce and is not the value `nonceHash` compares, and the cookie
+    // name is the state's own first sixteen characters.
+    assert.strictEqual(ticketParts(valid.ticket).tag, valid.nonceTag);
+    assert.strictEqual(ticketParts(valid.ticket).expMs, valid.expMs);
+    assert.strictEqual(ticketParts(valid.ticket).jti, valid.jti);
+    assert.strictEqual(valid.cookieName, `__Host-nv_ebay_ticket_${valid.state.slice(0, 16)}`);
+    assert.strictEqual(valid.nonceCookieName, `__Host-nv_ebay_nonce_${valid.state.slice(0, 16)}`);
+    assert.ok(!valid.ticket.includes(valid.nonce), "and the ticket carries the nonce nowhere");
+    assert.ok(!valid.ticket.includes(crypto.createHash("sha256").update(valid.nonce).digest("hex")));
+  });
+
+  await check("VECTORS — the fixture's two keys appear in NO file in this repository outside the fixture, its generator and its two tests", async () => {
+    const v = readVectors();
+    const repoRoot = path.join(__dirname, "..", "..", "..");
+    const allowed = new Set([
+      "functions/test/fixtures/ebay-callback-signature-vectors.json",
+      "functions/test/fixtures/generate-ebay-callback-vectors.mjs"
+    ]);
+    const skipDir = new Set(["node_modules", ".git", ".next", "build", "dist", "out", "coverage", "DerivedData", ".gradle", ".idea", "Pods", ".firebase", "app-store-ready"]);
+    const skipExt = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".mp4", ".mov", ".ico", ".icns", ".woff", ".woff2", ".ttf", ".otf", ".jar", ".keystore", ".p8", ".p12", ".xcuserstate"]);
+    const offenders = [];
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { if (!skipDir.has(entry.name)) walk(full); continue; }
+        if (!entry.isFile()) continue;
+        if (skipExt.has(path.extname(entry.name).toLowerCase())) continue;
+        const rel = path.relative(repoRoot, full);
+        let text = "";
+        try { if (fs.statSync(full).size > 4 * 1024 * 1024) continue; text = fs.readFileSync(full, "utf8"); } catch { continue; }
+        if (!text.includes(v.key) && !text.includes(v.wrongKey)) continue;
+        // The two tests may hold the PATH and the label; they must never hold
+        // the value, and they do not — they read it out of the fixture.
+        if (!allowed.has(rel)) offenders.push(rel);
+      }
+    };
+    walk(repoRoot);
+    assert.deepStrictEqual(offenders, [], `the test key escaped the fixture: ${offenders.join(", ")}`);
+    // The other half of the same promise: this file and the relay script name
+    // the fixture and never the value.
+    for (const file of [__filename, RELAY_SCRIPT]) {
+      const text = fs.readFileSync(file, "utf8");
+      assert.ok(!text.includes(v.key) && !text.includes(v.wrongKey), `${path.basename(file)} holds the key value instead of reading it`);
+      assert.ok(text.includes("ebay-callback-signature-vectors.json"), `${path.basename(file)} does not name the fixture at all`);
+    }
+  });
+
+  await check("VECTORS — there is no skip left: neither this file nor the relay script can report green without reading the fixture", async () => {
+    const self = fs.readFileSync(__filename, "utf8");
+    const block = self.slice(self.indexOf("// ---- VECTOR CASES BEGIN"), self.indexOf("// ---- VECTOR CASES END"));
+    assert.ok(block.length > 2000, "the vector block was not found in this file");
+    // No skip, no todo, no early return — the three ways a case reports green
+    // for work nobody did. The pin reads the CODE: comment lines and string
+    // literals are removed first, so prose about the skip that ended cannot
+    // trip it and a real `.skip(` cannot hide inside a message.
+    const code = block.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n")
+      .replace(/`[^`]*`/g, "``").replace(/"[^"]*"/g, "\"\"").replace(/'[^']*'/g, "''")
+      .replace(/skipDir|skipExt/g, "");
+    assert.ok(!/\bskip\b/i.test(code), "a skip appeared in the vector cases");
+    assert.ok(!/\btodo\b/i.test(code), "a todo appeared in the vector cases");
+    assert.ok(!/^\s*return;\s*$/m.test(code), "an early return appeared in the vector cases");
+    // The relay script's SKIP line is gone, and a missing fixture exits non-zero
+    // there rather than printing a note.
+    const relay = fs.readFileSync(RELAY_SCRIPT, "utf8");
+    // Its CODE, not its prose: that script explains at length that the skip is
+    // gone, and saying so must not be what keeps this green.
+    const relayCode = relay.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+    assert.ok(!/SKIP/.test(relayCode), "the relay script still has a SKIP path");
+    assert.ok(/existsSync\(vectorPath\)/.test(relay) && /process\.exit\(1\)/.test(relay),
+      "the relay script no longer fails on a missing fixture");
+    // And the fixture is committed, not generated at test time by someone's
+    // local run: the generator is a verifier by default.
+    const generator = fs.readFileSync(path.join(__dirname, "..", "fixtures", "generate-ebay-callback-vectors.mjs"), "utf8");
+    assert.ok(/--force/.test(generator) && /DRIFT/.test(generator), "the generator would overwrite a drifted fixture silently");
+  });
+  // ---- VECTOR CASES END ----------------------------------------------------
 
   await check("SOURCE PIN — the dispose branch reads no state, touches no connection and asks for no identity", async () => {
     const source = fs.readFileSync(path.join(__dirname, "../../ebayConnector.js"), "utf8");

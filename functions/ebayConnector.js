@@ -1783,6 +1783,11 @@ function createEbayConnectorFunctions(deps) {
     previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
     reconcileEbayConnections, reconcileEbayConnectionsNightly, reconcileEbayDeletions, ebayNotifications, revealRestrictedCustomer,
     _internal: {
+      // The two canonical strings of §5.4/§5.5, reachable by the committed vector
+      // fixture and by nothing else. They are exposed rather than re-implemented
+      // in a test on purpose: a test that writes its own HMAC asserts the test's
+      // arithmetic, not this file's ("tests that assert the bug").
+      callbackDigest, checkSignature, mintTicket,
       applyEbayOrder, reconcileConnection, reconcileConnectionNightly, runSweep, eligibleRows, clientFor, refreshWithLock, recordTokenFailure, storeCredentials, credentialsRef,
       processEbayCommerceTask, processEbayBuyerDeletion, reconcileDeletionRequests, handleNotificationRequest, signingKeyFor, resetCaches,
       publicView, settingsOf, marketplacesOf, clampSinceDays, connectionDocId, ebayOrderDocId, deletionPatch, limits,

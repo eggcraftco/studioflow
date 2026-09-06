@@ -2,7 +2,10 @@
 # touches them. Two jobs because they need different things:
 #
 #   unit      test/qa + test/inventory against the hand-built fake Firestore —
-#             no emulator, no Java, seconds.
+#             no emulator, no Java, seconds. It first re-derives the committed
+#             signature/ticket vectors (§5.5) from the real implementations, so a
+#             canonical string that moved on BOTH sides at once is named rather
+#             than only failing.
 #   emulator  the Firestore security-rules suites (test/qa/*.test.mjs) and the
 #             end-to-end suites (test/e2e) against a real Firestore emulator —
 #             the only tier that can catch a document that maps fine and stores
@@ -86,6 +89,11 @@ jobs:
           cache: npm
           cache-dependency-path: functions/package-lock.json
       - run: npm ci
+      # The committed vectors, verified before the suites that read them: the
+      # generator recomputes every frozen answer from the real implementations
+      # and exits non-zero if one moved. `npm test` would go red too, but this
+      # step names WHICH value drifted, which the assertion cannot.
+      - run: npm run test:vectors
       - run: npm test
 
   relay:

@@ -18,8 +18,10 @@ From `ebay-connector`, the web half only:
 
 | Path | What it is |
 |---|---|
-| `app/ebay/callback/route.ts` | The accepted URL. Reads the browser nonce from a cookie and sends `code`, `state` and that nonce to the Cloud Function in a **signed POST body** — never a URL (design §5.4). It forwards no eBay parameter, refuses anything that is not a callback, and turns the function's JSON answer into the seller-facing redirect |
-| `app/ebay/start/page.tsx`, `EbayStartContent.tsx` | The native hand-off: a signed-in browser claims the state, sets the cookie, redirects to eBay |
+| `app/ebay/callback/route.ts` | The accepted URL. Verifies the browser-binding **ticket** (§5.5) and, only then, sends `code`, `state` and the cookie nonce to the Cloud Function in a **signed POST body** — never a URL (design §5.4). A browser that holds no ticket gets the strictly weaker **dispose** envelope, which names no state. It forwards no eBay parameter, refuses anything that is not a callback, and turns the function's JSON answer into the seller-facing redirect |
+| `app/ebay/ticket/route.ts` | **New with §5.5, and it ships in the same deploy or nothing works.** The sealing route: the client hands it the ticket `beginEbayConnect` returned, it verifies it and answers the one `Set-Cookie` that seals it `HttpOnly`. Client JavaScript cannot set an `HttpOnly` cookie, so there is no other way to write that half; and the callers refuse to send the seller to eBay when it answers anything but 204 |
+| `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts` | The two cookie NAMES (derived identically by three parties) and the ticket verifier. `ebayTicket.ts` is server-only — it reads `node:crypto` and the relay key |
+| `app/ebay/start/page.tsx`, `EbayStartContent.tsx` | The native hand-off: a signed-in browser claims the state, seals the ticket, sets the nonce cookie, redirects to eBay |
 | `app/settings/EbayIntegrationSection.tsx` and the registry, language and card changes | The eBay screen and the grid card |
 
 The server half is **not** part of this deploy. Cloud Functions ship by name, and no eBay function is
@@ -50,26 +52,36 @@ watching.
 | 2 | The callback is dynamic, never cached | build output must list `ƒ /ebay/callback`, not `○` | **done — `ƒ /ebay/callback`** |
 | 3 | No open redirect | the redirect target is a module constant; no query parameter reaches `NextResponse.redirect` | **done by construction** |
 | 4 | The route puts no value in a URL | it builds a JSON body from `code`, `state` and the cookie nonce and POSTs it signed; `NextResponse.redirect` only ever receives a module constant plus `ebay`/`reason` from a fixed vocabulary | **done, commit `53f63d12`** — the built route was driven with `fetch` captured and the request it made carried no query string |
-| 5 | A visit that is not a callback is refused at the edge | no `code` and no `error` → 302 to the settings page with one sentence, cookie cleared, nothing forwarded | **done, commit 46a98b8d** |
-| 6 | Cookie flags | `Secure`, `SameSite=Lax`, `Path=/ebay/callback`, `Max-Age=600`, and cleared on the landings whose answer proves the state was **consumed** — never on a bare visit, a decline or an `unavailable`, because a `Set-Cookie` on those is a link's free way to destroy someone's in-flight connect (design §5.4) | **verified in `lib/studioflow/ebay.ts`, and the landings that do and do not clear it are executed by `npm run test:relay`** |
+| 5 | A visit that is not a callback is refused at the edge | no `code` and no `error` → 302 to the settings page with one sentence, nothing forwarded, and — **corrected since this row was written** — **no cookie cleared**: a bare visit consumed nothing, so a `Set-Cookie` there would be a free way for any link to destroy a seller's in-flight connect | **done, commit 46a98b8d; the "no cookie cleared" half is executed by `npm run test:relay`** |
+| 6 | Cookie flags — **rewritten by §5.5; the row this replaced described one cookie and the wrong path** | There are now **two** cookies per flow, and the flow's tag (the state's first sixteen characters) is in the NAME, so a seller who presses Connect twice no longer overwrites the first flow's pair with the second's. Both take the **`__Host-` prefix**, which is the change that matters: `Path=/ebay/callback` was a request-matching rule and not a boundary, and nivadesk.app fronts a Cloudflare-for-SaaS Worker with a catch-all route, so a `Domain=nivadesk.app` cookie of the same name written from any `*.nivadesk.app` origin would arrive beside the host-only one with no defined precedence. `__Host-` forbids `Domain`, forbids any `Path` but `/`, and requires `Secure`. So: `__Host-nv_ebay_nonce_<tag>` — `Secure; SameSite=Lax; Path=/; Max-Age=600`, written by client JavaScript, therefore **not** `HttpOnly`; and `__Host-nv_ebay_ticket_<tag>` — `Max-Age=<the ticket's own remaining life>; Path=/; Secure; HttpOnly; SameSite=Lax`, written **only** by `POST /ebay/ticket`. Clearing changed with them: a landing clears **this flow's pair and only this flow's**, and the disposal landing clears **nothing at all**, because whatever that browser is holding belongs to some other flow (a `Set-Cookie` there would be a link's free way to destroy someone's in-flight connect) | **verified in `lib/studioflow/ebay.ts` and `lib/studioflow/ebayFlow.ts`; the exact `Set-Cookie` attribute set, character for character, and every landing that does and does not clear, are executed by `npm run test:relay`** |
 | 7 | No secret in the client bundle | grep the **client** chunks for `EBAY_`, `CLIENT_SECRET`, `CERT`, `TOKEN_KEY`, `NIVADESK_EBAY_CALLBACK_KEY` and the literal `x-nivadesk-signature` | **the §5.4 pair is clean** on the current build (no `NIVADESK_EBAY_CALLBACK_KEY`, no `x-nivadesk-signature` in `.next/static`); the older four are re-run on the deploy build |
 | 7b | The key was **not inlined at build time** | grep the **server** chunk for the route: the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` must still be **present**. If Next replaced it statically the name vanishes and the value takes its place, so check 7 would pass in exactly the failure case. `export const runtime = "nodejs"` in the route is what prevents it | **done** — `.next/server/app/ebay/callback/route.js` still contains the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` |
 | 8 | The eBay screen degrades when the server has no eBay functions | open the settings section against production, where the callables do not exist: it must say the connector is not set up, not throw | run against the built app before the rsync |
 | 9 | Nothing else changed on the site | diff the publish repository after the rsync, and expect only eBay files, the registry, the language tables and the build output | run at deploy time |
-| 10 | `npm run test:relay` green — **and it is a CI job now, not a thing to remember** (`functions-tests.yml`, job `relay`) | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, an absent cookie posts `nonce:""` and burns the state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`, no early return on an absent nonce cookie) | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It does **not** read a committed vector file; see below |
+| 10 | `npm run test:relay` green — **and it is a CI job now, not a thing to remember** (`functions-tests.yml`, job `relay`) | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, a browser without the binding posts a **dispose** envelope that names no state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`). **And, since §5.5, the committed vectors**: the route's signer and its ticket verifier against a frozen fixture | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It **does** read the committed vector file now, and fails if it is missing; see below |
 
-**Check 10 was the one gap in this list, and it is now closed — but not in the way design §5.4 planned,
-so the difference is stated.** The plan was a committed vector file
-(`functions/test/fixtures/ebay-callback-signature-vectors.json`) checked by both sides. That file is still
-unwritten and still blocked on a decision rather than effort: a committed vector needs a fixed HMAC key,
-and a 64-hex value in a committed file sits badly against this project's no-secret-values rule even when
-the value is meaningless, so the **owner** has to say who mints that fixture key and where it is recorded.
+**Check 10 was the one gap in this list. It is now closed twice over, and the second half is what this
+revision adds.** The plan was a committed vector file
+(`functions/test/fixtures/ebay-callback-signature-vectors.json`) checked by both sides, and the earlier
+revision of this paragraph said it was blocked on an owner decision: *a committed vector needs a fixed HMAC
+key, and a 64-hex value in a committed file sits badly against this project's no-secret-values rule even
+when the value is meaningless.* **There is nothing here for the operator to decide, and that sentence is
+withdrawn.** The file is written, and it answers the question about itself: it **mints its own key inside
+itself**, labels it `TEST-KEY-NOT-A-SECRET`, and carries a README saying in as many words that the value
+must never be set in Secret Manager as `EBAY_CALLBACK_KEY` nor in Hostinger as
+`NIVADESK_EBAY_CALLBACK_KEY`. A test in `ebay-connect.test.js` walks the whole repository and fails if
+either fixture key appears in any file but the fixture and its generator. **No operator action, no new
+value to mint, no new place to record one.**
 
-What the script does instead is the thing the vector was a proxy for: it runs **both** implementations
-against each other. It compiles the real `app/ebay/callback/route.ts`, drives it with `fetch` captured, and
-hands the request it produced to the real `ebayOAuthCallback` through the functions qa harness, under a key
-minted per run and written nowhere. That is a stronger check than a static triple — it exercises the route's
-decisions as well as its arithmetic.
+The script also does the thing the vector was a proxy for, and both halves matter for different reasons.
+It compiles the real `app/ebay/callback/route.ts`, drives it with `fetch` captured, and hands the request
+it produced to the real `ebayOAuthCallback` through the functions qa harness, under a key minted per run
+and written nowhere — which exercises the route's decisions as well as its arithmetic. But that check is
+**symmetric**: it proves the two sides agree with each other, and it stays green if both of them move
+together, which is one commit's work for anyone editing a canonical string. The fixture is the asymmetric
+half: a frozen answer neither side can move. Five cases carry the transport — a valid signature, a wrong
+key, a swapped body, a stale timestamp and a future timestamp — plus the dispose envelope's bytes and six
+ticket cases.
 
 **It now runs in CI, and the sentence that used to say so was false.** `.github/workflows/functions-tests.yml`
 gained a third job, `relay`, which installs the web tree alone (the functions qa harness pulls in no
@@ -79,18 +91,31 @@ and `firebase.json`, so **a change to `app/ebay/callback/route.ts` fired no work
 most likely to change was covered by nothing automatic, and the failure it would cause is silent and
 production-only (the canonical string drifting between the two trees, seen as an opaque 401 →
 `unavailable` on every seller's connect). The list now carries `studioflow-web/app/ebay/**`,
-`lib/studioflow/ebay.ts`, the script itself and `studioflow-web/package.json`. Every run prints a `SKIP` line naming the vector file as the thing it does not cover, so nobody
-reads "green" as more than it is. The canonical string, for whoever writes that file, is
-`HMAC-SHA256(key, "v1." + timestampMs + "." + rawBodyBytes)` as lowercase hex.
+`lib/studioflow/ebay.ts`, `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts`, both scripts and
+`studioflow-web/package.json`. **The `SKIP` line that used to print on every run is gone**, and it cannot
+come back: a missing fixture is now one `FAIL` and a non-zero exit before the script compiles anything, and
+a source pin in `ebay-connect.test.js` asserts the relay script's code contains no `SKIP` and that the
+vector cases contain no `skip`, no `todo` and no early `return`. The canonical strings are recorded in the
+fixture itself: `HMAC-SHA256(key, "v1." + timestampMs + "." + rawBodyBytes)` as lowercase hex for the
+relay, and `nv1.<state>.<nonceTag>.<expMs>.<jti>.<mac>` under a ticket key derived as
+`HMAC-SHA256(key, "nivadesk/ebay/ticket/v1")` — **derived, so there is still no sixth secret.**
+`functions/test/fixtures/generate-ebay-callback-vectors.mjs` re-derives every frozen value from the real
+implementations and refuses to overwrite a drifted one without `--force`; it runs in CI as
+`npm run test:vectors`.
 
-**One property stated rather than fixed.** The nonce cookie is written by the browser with
-`document.cookie`, so it is not `HttpOnly` and it cannot be: the value is returned to the client as JSON
-and written from client JavaScript. It defends against a phished foreign seller, not against script
-running on our own origin — and `Path=/ebay/callback` does **not** change that, because a path is a
-request-matching rule, not a security boundary, and same-origin script under a matching path reads the
-cookie freely. What is true: it lives 600 seconds, it is single use, and it is burned server-side.
-Making it `HttpOnly` needs a server route to mint it, which is a change to the connect flow (the native
-hand-off included), not to this deploy.
+**One property that was stated rather than fixed, and then fixed.** This paragraph used to end: *making it
+`HttpOnly` needs a server route to mint it, which is a change to the connect flow (the native hand-off
+included), not to this deploy.* §5.5 made that change, and the server route is `POST /ebay/ticket`, which
+ships in this deploy — so the paragraph is rewritten rather than left standing.
+
+What is still true: the **nonce** cookie is written by the browser with `document.cookie`, so it is not
+`HttpOnly` and cannot be — the value is returned to the client as JSON. It lives 600 seconds, it is single
+use, and it is burned server-side. What changed: it is no longer the only thing the callback checks. Beside
+it there is now a **ticket** cookie, `HttpOnly`, written only by our own origin, carrying a MAC over this
+flow's state and a keyed tag over this flow's nonce. Script on nivadesk.app can still read the nonce; it
+cannot read the ticket, and it cannot make the callback route sign a `connect` envelope without one. Both
+cookies take the `__Host-` prefix, which is what a matching path never was: no other origin can set those
+names at all.
 
 ## 4. Order of operations
 
@@ -114,7 +139,7 @@ key is never sent on the wire either, because the web side signs and the functio
 | Hostinger `NIVADESK_EBAY_CALLBACK_KEY` | Function `EBAY_CALLBACK_KEY` (secret **and** marker **and** deploy) | Result |
 |---|---|---|
 | set | set, same value | The only combination that can complete a connection. |
-| **unset**, or shorter than 32 characters | anything | The route makes **no call at all**. The seller lands on `…&ebay=error&reason=unavailable` → "eBay did not complete the connection. Try again." The Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. **No state is consumed and no code is spent — and the second is the cost: see below.** |
+| **unset**, or shorter than 32 characters | anything | **Since §5.5 the seller never reaches eBay at all, and that is the important half.** `POST /ebay/ticket` reads the same value and answers **503** without it; `sealEbayTicket` returns false; the Connect button stops with "eBay did not complete the connection. Try again." and never navigates to `authorizeUrl`. **No authorization code is ever minted**, so the residual below — a live code sitting in Hostinger's access log — does not open for a web-origin flow at all. If a code does land anyway (a stale tab, a bookmarked callback, a native flow begun before the outage), the callback route then makes **no call at all**, the seller lands on `…&ebay=error&reason=unavailable`, and the Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. **No state is consumed and no code is spent — and the second is still the cost for that narrower case: see below.** |
 | set | **unset**, or the marker not committed, or the functions not deployed | The route signs and POSTs. An unconfigured function answers **401** — deliberately identical to a wrong key, so the status cannot be used to ask whether the secret exists — and an undeployed one is simply unreachable. Seller sees `reason=unavailable`; Hostinger logs `ebay callback relay rid=<rid> status=401` or `… unreachable`; Google logs `ebay callback: EBAY_CALLBACK_KEY not configured` when the function is there — **once a minute per instance, not once per request** (§5.4: that line is reachable without a key, so it is throttled; look for its presence, never count it). **No state is consumed — the cost, not the comfort: see below.** |
 | set, same value | set, same value, but the **web host's clock is more than five minutes off** Google's | The signature is never even compared: the function refuses on the timestamp window and answers the **same 401** as a wrong key. Hostinger logs `ebay callback relay rid=<rid> status=401`; Google logs `ebay callback: relay timestamp outside the five-minute window` — a different ops line from `rejected unsigned request`, which is the only way to tell this row from the one below. Without that line an operator re-mints the key, sets both halves, redeploys, and is still at 401 with nothing left to check. **No state is consumed.** |
 | set | set, **different value** (a half-finished rotation) | The signature does not verify: 401, seller `reason=unavailable`, `ebay callback relay rid=<rid> status=401` on Hostinger and `ebay callback: rejected unsigned request` on Google. The rid is the only value in either line, and it is minted by the web side for exactly this trace. **No state is consumed — the cost, not the comfort: see below.** This is the realistic steady-state row: a rotation where Hostinger already has the new value and Secret Manager does not. |
@@ -176,6 +201,13 @@ a rule for the rollout and for every later rotation, not an incident.
 
 ### 4.3 The order itself
 
+**The two web routes are one deploy and cannot be split**, and it is worth saying because §5.5 added the
+second one after this plan was written. `/ebay/callback` and `/ebay/ticket` are two files in the same Next
+build, so they arrive together by construction — but they also *depend* on each other: the callback signs a
+`connect` envelope only for a browser holding a ticket, and only `/ebay/ticket` can write that cookie. A
+site with the callback and no sealing route would refuse every consent with `reason=browser`; a site with
+the sealing route and Round 166's callback would seal a cookie nothing reads. Step 5 below probes both.
+
 **The web route ships before the functions, and that is a safety property, not a preference.** Today's
 live site still runs Round 166's route, which forwards the seller's browser to `ebayOAuthCallback` as a
 **GET** (`docs/ebay-web-deploy-round-166.md`). The new function answers any non-POST with `405
@@ -200,7 +232,9 @@ for the next time this pair moves.)
    the first moment a genuine code and a genuine nonce exist.
 3. **Web deploy** — build from the eBay worktree, rsync, commit, push, wait for Hostinger, confirm the
    chunk hash changed. This is the deploy that replaces Round 166's redirect-forwarding route with the
-   §5.4 signed POST.
+   §5.4 signed POST **and adds §5.5's sealing route `POST /ebay/ticket`**. Confirm both are dynamic in the
+   build manifest (`ƒ /ebay/callback`, `ƒ /ebay/ticket`); a `○` on either means it was prerendered and the
+   per-request `process.env` read is gone.
 4. **Prove the runtime environment**, immediately and before anything else depends on it. Every other
    environment value this web tree reads is `NEXT_PUBLIC_*`, inlined at build; this one is not, and the
    project's own precedent runs the wrong way (the web-push VAPID key had to go into Hostinger's *build*

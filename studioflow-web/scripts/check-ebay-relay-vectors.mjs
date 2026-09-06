@@ -13,22 +13,27 @@
 // side of either canonical string would have broken OAuth silently, in
 // production only, with an opaque 401 → `unavailable` as the entire symptom.
 //
-// Design §5.4 planned a committed vector file for that. This does something
-// stronger and needs no committed key: it compiles the REAL routes, drives them
-// with `fetch` captured, and hands the request they produced to the REAL
-// `ebayOAuthCallback` through the functions qa harness, under a key minted per
-// run and written nowhere. Neither side re-implements the other — that is this
-// repo's "tests that assert the bug" lesson applied across the two trees, and it
-// is why the check is an execution rather than a pair of greps.
+// Design §5.4 planned a committed vector file for that, and §5.5 wrote it. Both
+// halves now run, and they answer different questions:
+//
+//   * the EXECUTION (most of this file): it compiles the REAL routes, drives them
+//     with `fetch` captured, and hands the request they produced to the REAL
+//     `ebayOAuthCallback` through the functions qa harness, under a key minted
+//     per run and written nowhere. Neither side re-implements the other — this
+//     repo's "tests that assert the bug" lesson applied across the two trees.
+//   * the FIXTURE (section 2b): `functions/test/fixtures/ebay-callback-signature-vectors.json`,
+//     committed, under a test key the fixture mints inside itself. The execution
+//     is symmetric — it proves the two sides AGREE, and stays green if both of
+//     them move together. The frozen answer is what notices that.
+//
+// A missing fixture is a FAILURE of this script, not a note on it. The `SKIP`
+// line this file used to print is gone, and `ebay-connect.test.js` pins that it
+// cannot come back.
 //
 // The one re-implementation is deliberate and is fenced: `forge()` mints
 // ADVERSARIAL tickets — expired, bent, signed under the wrong key — which no
 // honest minter can produce. It is checked against both real implementations
 // before anything trusts it ("the forger agrees with both real sides").
-//
-// The vector file itself (`functions/test/fixtures/ebay-callback-signature-vectors.json`)
-// is still unwritten and still blocked on who mints its fixture key; this script
-// says so out loud rather than reporting green for work nobody has done.
 //
 // This script stops at the BYTES the routes produce. The ten cases the operator's
 // report cites by id — EBAY-REG-01 … 10 — carry those bytes into the function and
@@ -37,7 +42,7 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -47,6 +52,17 @@ const callbackPath = path.join(webRoot, "app", "ebay", "callback", "route.ts");
 const ticketRoutePath = path.join(webRoot, "app", "ebay", "ticket", "route.ts");
 const flowPath = path.join(webRoot, "lib", "studioflow", "ebayFlow.ts");
 const vectorPath = path.join(repoRoot, "functions", "test", "fixtures", "ebay-callback-signature-vectors.json");
+
+// Read FIRST, and with no `catch` that lets the run continue: the fixture is
+// committed, so its absence is a broken checkout or a deleted file, and either
+// way this script must go red rather than quietly cover less ground.
+if (!existsSync(vectorPath)) {
+  console.log(`FAIL  the committed vector fixture is missing: ${vectorPath}`);
+  console.log("      It is committed on purpose (design §5.5). Restore it, or regenerate with:");
+  console.log("      node functions/test/fixtures/generate-ebay-callback-vectors.mjs");
+  process.exit(1);
+}
+const vectors = JSON.parse(readFileSync(vectorPath, "utf8"));
 
 let failures = 0;
 const ok = (name) => console.log(`PASS  ${name}`);
@@ -122,6 +138,14 @@ try {
   const route = webRequire(path.join(outDir, "app", "ebay", "callback", "route.js"));
   const ticketRoute = webRequire(path.join(outDir, "app", "ebay", "ticket", "route.js"));
   const flow = webRequire(path.join(outDir, "lib", "studioflow", "ebayFlow.js"));
+  // The verifier the two routes share, compiled as a side effect of compiling
+  // them. Section 2b runs the committed ticket vectors through this, which is
+  // the same function `GET /ebay/callback` and `POST /ebay/ticket` both call.
+  const ticketLib = webRequire(path.join(outDir, "lib", "studioflow", "ebayTicket.js"));
+  // The builtin the COMPILED route calls through (`node_crypto_1.randomBytes`),
+  // so section 2b can freeze the rid the route mints. Patched around one call
+  // and restored in a `finally`; nothing else in this file reads it.
+  const nodeCrypto = webRequire("node:crypto");
   const harness = functionsRequire(path.join(repoRoot, "functions", "test", "qa", "helpers", "ebayHarness.js"));
 
   // One key, minted here, held in memory, in no file and no commit. The web half
@@ -484,22 +508,138 @@ try {
       store.read(`ebayConnectStates/${fourth.state}`).used === false);
   }
   process.env.NIVADESK_EBAY_CALLBACK_KEY = KEY;
+
+  // ---- 2b. The committed vectors, on this side of the boundary --------------
+  // Everything above proves the two implementations agree with EACH OTHER. This
+  // proves they agree with a frozen answer, which is the only thing that catches
+  // a change that moves both of them together. The fixture is read at the top of
+  // this file; a missing one exits non-zero there.
+  //
+  // The route signs what it builds and stamps its own clock, so it cannot be
+  // handed a body to sign. It is driven instead with the two values that make its
+  // output non-deterministic frozen to the vector's own — `Date.now` and the
+  // eight random bytes of the rid — and then the header it emitted is compared
+  // with the fixture, character for character. That is the route's signer
+  // checked against the vector, not a re-implementation of it.
+  check("the fixture says on its face that its key is a test key, and mints it inside itself",
+    vectors.keyLabel === "TEST-KEY-NOT-A-SECRET" && /^TEST VECTORS ONLY\./.test(vectors.README)
+    && /^[0-9a-f]{64}$/.test(vectors.key) && vectors.key !== vectors.wrongKey,
+    `${vectors.keyLabel} ${String(vectors.README).slice(0, 40)}`);
+
+  const ticketKeyOf = (key) => ticketLib.ebayTicketKey(key);
+  /** Drive the real callback route with the clock and the rid frozen. */
+  async function relayFrozen(url, cookie, answer, { nowMs, rid }) {
+    const realNow = Date.now;
+    const realRandomBytes = nodeCrypto.randomBytes;
+    const ridBytes = Buffer.from(rid, "hex");
+    Date.now = () => nowMs;
+    nodeCrypto.randomBytes = (size) => (size === ridBytes.length ? Buffer.from(ridBytes) : realRandomBytes(size));
+    try { return await relay(url, cookie, answer); } finally {
+      Date.now = realNow;
+      nodeCrypto.randomBytes = realRandomBytes;
+    }
+  }
+
+  process.env.NIVADESK_EBAY_CALLBACK_KEY = vectors.key;
+  const vectorTicket = vectors.ticketVectors.find((t) => t.id === "ticket-valid");
+  const vectorCookie = `${vectorTicket.nonceCookieName}=${encodeURIComponent(vectors.flow.nonce)}; ${vectorTicket.cookieName}=${vectorTicket.ticket}`;
+  const vectorUrl = `https://nivadesk.app/ebay/callback?code=${encodeURIComponent(vectors.flow.code)}&state=${encodeURIComponent(vectors.flow.state)}`;
+
+  for (const vector of vectors.relayVectors) {
+    // A dispose vector is produced by a browser holding nothing; a connect
+    // vector by one holding the fixture's own ticket and nonce.
+    const produced = await relayFrozen(
+      vector.envelope === "dispose" ? vectorUrl : vectorUrl,
+      vector.envelope === "dispose" ? "" : vectorCookie,
+      { status: 200, body: { ok: true, outcome: "connected", rid: vector.rid } },
+      { nowMs: vector.timestampMs, rid: vector.rid }
+    );
+    if (!produced.sent) { check(`${vector.id}: the route produced a request at all`, false, "no request was made"); continue; }
+    const headers = produced.sent.init.headers;
+    check(`${vector.id}: the route builds the exact bytes this vector's signature covers — a signature is over bytes, so key order is part of the contract`,
+      produced.sent.init.body === vector.signedBody, `${produced.sent.init.body.slice(0, 90)}`);
+    check(`${vector.id}: it stamps the vector's own timestamp`,
+      headers["x-nivadesk-timestamp"] === String(vector.timestampMs), String(headers["x-nivadesk-timestamp"]));
+    if (vector.routeReproduces) {
+      check(`${vector.id}: and the signature it emits IS the committed one — ${vector.name}`,
+        headers["x-nivadesk-signature"] === `v1=${vector.signature}`, String(headers["x-nivadesk-signature"]));
+    } else {
+      // The wrong-key vector is the one this side cannot produce at all: the
+      // route holds the fixture key, so a signature under the other test key is
+      // exactly what it must NOT emit.
+      check(`${vector.id}: the route's own signer cannot produce it, which is what makes it a negative vector`,
+        headers["x-nivadesk-signature"] !== `v1=${vector.signature}`, String(headers["x-nivadesk-signature"]));
+    }
+  }
+
+  // The swapped-body vector is negative in a different way, and it is worth
+  // saying which: its signature is a GOOD one — the valid vector's, over the
+  // valid bytes — presented over a body whose code was changed. So the route
+  // reproduces the signature and the vector's own `body` is the thing that does
+  // not belong to it. That is what "the signature binds the body" means, frozen.
+  const swapVector = vectors.relayVectors.find((v) => v.id === "relay-swapped-body");
+  const validVector = vectors.relayVectors.find((v) => v.id === "relay-connect-valid");
+  check("the swapped-body vector is a valid signature over OTHER bytes, not a broken signature",
+    swapVector.signature === validVector.signature && swapVector.signedBody === validVector.body
+    && swapVector.body !== swapVector.signedBody && JSON.parse(swapVector.body).code === vectors.flow.swappedCode,
+    `${swapVector.signature === validVector.signature} ${swapVector.body === swapVector.signedBody}`);
+
+  // The bodies the fixture froze are the two envelopes, and the dispose one must
+  // still name nothing: the property §5.5 exists for, asserted against a value
+  // committed to a file rather than against this run's own output.
+  const disposeVector = vectors.relayVectors.find((v) => v.id === "relay-dispose-valid");
+  const disposeParsed = JSON.parse(disposeVector.body);
+  check("the committed dispose envelope carries no state and no nonce",
+    disposeParsed.op === "dispose" && disposeParsed.state === undefined && disposeParsed.nonce === undefined,
+    disposeVector.body);
+  const connectParsed = JSON.parse(vectors.relayVectors.find((v) => v.id === "relay-connect-valid").body);
+  check("…and the committed connect envelope carries both, plus no op",
+    connectParsed.op === undefined && connectParsed.state === vectors.flow.state && connectParsed.nonce === vectors.flow.nonce);
+
+  // The ticket verifier, against the same file. Every vector goes through the
+  // same call the route makes, and its class is compared with the frozen one.
+  for (const vector of vectors.ticketVectors) {
+    const verdict = ticketLib.verifyEbayTicketForFlow(
+      ticketKeyOf(vectors.key), vector.ticket,
+      vector.queryState || vector.state, vector.nonceOffered || vector.nonce, vector.verifyAtMs
+    );
+    check(`${vector.id}: this side's verifier answers ${vector.expect} — ${vector.name}`,
+      (verdict.ok ? "ok" : verdict.failure) === vector.expect, JSON.stringify(verdict));
+    check(`${vector.id}: and the cookie name derives from the state the same way on all three sides`,
+      flow.ebayTicketCookieName(vector.state) === vector.cookieName
+      && flow.ebayNonceCookieName(vector.state) === vector.nonceCookieName,
+      `${flow.ebayTicketCookieName(vector.state)} ${vector.cookieName}`);
+  }
+  const verifiedVector = ticketLib.verifyEbayTicketForFlow(ticketKeyOf(vectors.key), vectorTicket.ticket, vectorTicket.state, vectorTicket.nonce, vectorTicket.verifyAtMs);
+  check("the committed ticket's fields are read back exactly: its state, its expiry and its jti",
+    verifiedVector.ok && verifiedVector.state === vectors.flow.state
+    && verifiedVector.expMs === vectorTicket.expMs && verifiedVector.jti === vectorTicket.jti,
+    JSON.stringify(verifiedVector));
+  // …and the sealing route accepts it, so the fixture is a ticket this system
+  // would really put in a browser and not only a string that verifies.
+  const sealedVector = await (async () => {
+    const realNow = Date.now;
+    Date.now = () => vectorTicket.verifyAtMs;
+    try { return await seal(vectorTicket.ticket); } finally { Date.now = realNow; }
+  })();
+  check("the sealing route seals the committed ticket, under the committed cookie name",
+    sealedVector.status === 204 && (sealedVector.setCookie[0] || "").startsWith(`${vectorTicket.cookieName}=${vectorTicket.ticket};`),
+    `${sealedVector.status} ${JSON.stringify(sealedVector.setCookie)}`);
+  process.env.NIVADESK_EBAY_CALLBACK_KEY = KEY;
 } finally {
   rmSync(outDir, { recursive: true, force: true });
 }
 
 // ---- 3. What this script does NOT cover, said out loud ----------------------
-let vectorFile = null;
-try { vectorFile = readFileSync(vectorPath, "utf8"); } catch { vectorFile = null; }
-if (vectorFile) {
-  console.log("NOTE  a vector file now exists at functions/test/fixtures/ebay-callback-signature-vectors.json —");
-  console.log("      §5.5 says the function's minter and this side's verifier are both checked against it. This");
-  console.log("      script checks the implementations against each other directly and does not read the file.");
-} else {
-  console.log("SKIP  the committed signature and ticket vectors (design §5.4, §5.5) are still unwritten: they need a");
-  console.log("      fixed fixture key, and who mints that key is an owner decision (deploy plan check 10). The");
-  console.log("      cross-boundary checks above cover what they were for, with a key minted per run, written nowhere.");
-}
+// The committed vectors used to be this list's only entry, and section 2b is
+// where they went. What is left is the half neither this script nor the fixture
+// can reach: the ten cited regressions carry the bytes INTO the function and
+// assert what is left afterwards (`check-ebay-callback-regressions.mjs`), and
+// the emulator tier is where `firestore.rules` and a real transaction are.
+console.log(`NOTE  the committed vectors ran above, from ${path.relative(repoRoot, vectorPath)},`);
+console.log(`      under its own test key (${vectors.keyLabel}). The function's half of the same file is checked by`);
+console.log("      functions/test/qa/ebay-connect.test.js. What still lives elsewhere: the ten cited regressions");
+console.log("      (npm run test:ebay-regressions) and the emulator tier (firestore.rules, a real transaction).");
 
 if (failures) { console.log(`\n${failures} FAILED`); process.exit(1); }
 console.log("\n✅ EBAY RELAY GEÇTİ");
