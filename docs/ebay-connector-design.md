@@ -553,8 +553,11 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
   account, orders and buyer addresses would land in B. Server-side binding to `companyId+uid` does not
   stop that because the *attacker* is that uid. The nonce lives only in the browser that called
   `beginEbayConnect`; a phished browser has no cookie, the callback carries an empty nonce, the state is
-  burned with `reason=browser` — and it is burned **at the moment of consent**, which is why the web
-  route forwards an absent cookie instead of refusing it (§5.4, *The burn*). PKCE would not help (verifier server-held) and eBay offers none.
+  burned with `reason=browser` **and eBay's code is redeemed and thrown away** — and it is the second of
+  those that ends the attack, because a code is bound to the application and not to the state that
+  fetched it. That is why the web route forwards an absent cookie instead of refusing it (§5.4, *The
+  burn, and the spend*): only the function can spend the code. PKCE would bind the code to the request
+  that fetched it; the verifier is server-held and eBay offers none for this flow.
 - `beginEbayConnect`: refuse `failed-precondition "eBay is not configured on this server yet."` when
   the client id is blank; refuse when the connector flag is off. Mint `nonce = base64url(randomBytes(24))`,
   write the state doc (§4.5) with `nonceHash` and `origin` (`"web"` by default, `"native"` when
@@ -593,8 +596,10 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
 `window.location.href = authorizeUrl`. `app/ebay/callback/route.ts` reads `nv_ebay_nonce` from `request.cookies` and sends `code`, `state` and
 that nonce — the empty string when there is no cookie — to the function in a **signed POST body**, never
 a URL (**§5.4**, which supersedes the forwarding this paragraph used to describe). An absent cookie is
-**not** refused on the web side: the request must reach the function so the state is burned at the moment
-of consent (§5.4, *The burn*). It expires the cookie on every response. The cookie is first-party to
+**not** refused on the web side: the request must reach the function so the state is burned **and the code
+spent** at the moment of consent (§5.4, *The burn, and the spend*). It expires the cookie on the landings
+whose answer proves the state was consumed, and on no others — clearing it on a landing that consumed
+nothing let any link break a seller's in-flight connect (§5.4). The cookie is first-party to
 `nivadesk.app` and `SameSite=Lax` survives the top-level GET redirect from eBay. It is scoped to the
 callback path, which is a request-matching rule and **not** a security boundary: it is written from
 client JavaScript, so it cannot be `HttpOnly`, and any script running on `nivadesk.app` can read it
@@ -625,7 +630,8 @@ adversarial list (§14.3) claims exactly: cross-workspace state, state replay, e
 **Supersedes** the last two lines of the §5 diagram, the forwarding paragraph in §5.1, the
 `ebayOAuthCallback` row in §3 (GET → POST) and the `connectRedirect` bullet at the end of §5.
 §4.5 is **not** superseded: its single-use transaction, including "the state is **also** burned" on an
-absent or wrong nonce, stands word for word and is load-bearing here (see *The burn* below).
+absent or wrong nonce, stands word for word and is load-bearing here (see *The burn, and the spend* below,
+which adds the step §4.5 never had: the refusal also redeems the code).
 Everything else in §5, §5.1, §5.2 and §5.3 stands.
 
 #### Why this section exists
@@ -785,13 +791,13 @@ that **consumed** it and on no others (below).
    time. (This step used to instruct one. For a base64url nonce both readings are the identity, so
    nothing was at risk, but a second decode is wrong in principle and throws `URIError` on a stray `%`.)
    Absent, empty or longer than 200 characters → the body carries `nonce: ""`. **This is not a refusal
-   and never was one:** an absent cookie must reach the function so the state is burned. See *The burn*.
+   and never was one:** an absent cookie must reach the function so the state is burned and the code is spent. See *The burn, and the spend*.
 4. `NIVADESK_EBAY_CALLBACK_KEY` present **and at least 32 characters** → else
    `?ebay=error&reason=unavailable`. **No call**, plus one ops log line naming the variable and which
    check failed by name (`not configured` / `shorter than 32 characters`) and nothing else. The length
    floor is the same one the function applies; without it a truncated paste on Hostinger produces a
    signed POST that dies as an opaque 401 with no ops line naming a cause. This is the **one** step that
-   refuses without posting, and it suspends the burn while it lasts — see *The burn*, last two
+   refuses without posting, and it leaves the code unspent while it lasts — see *The burn, and the spend*, last two
    paragraphs, and the operator action in the deploy plan §4.2.
 5. Mint `rid`, serialise once, sign, POST, with a **45-second** abort (below).
 6. 200 + JSON + a known `outcome`/`reason` → redirect accordingly. Anything else →
@@ -1293,13 +1299,14 @@ Removed, not kept as a fallback:
    invented state must answer 200 `reason=state`, not 401.
 5. Only then the first sandbox OAuth attempt, under its own approval.
 
-If the two values ever disagree, every connect attempt ends at `reason=unavailable` and no state is
+If the two values ever disagree, every connect attempt ends at `reason=unavailable` and nothing is
 consumed; the same holds if either side is unconfigured — 401 on the function, no call from the web. The
-failure mode of a rotation mistake is downtime for the connection — **and a suspended browser binding for
-the states minted while it lasts**, because an unconsumed state is exactly what *The burn* says must not
-survive a consent. Not an open door: B still needs the code, and the code is only in Hostinger's access
-log (residual 1). But not nothing either, which is why the rotation procedure ends with expiring the
-outstanding states rather than simply restoring the key (deploy plan §4.2).
+failure mode of a rotation mistake is downtime for the connection — **and, for every consent that lands
+while it lasts, an authorization code nobody presented**, sitting in Hostinger's access log and redeemable
+against a state the attacker mints later (*The burn, and the spend*). The unburned state is not the
+damage. Not an open door — the exchange still needs `EBAY_CLIENT_SECRET`, which is not on Hostinger — but
+not nothing either, which is why the rotation procedure ends by telling those sellers to reconnect and
+recording that nothing on our side can invalidate a code we never presented (deploy plan §4.2).
 
 #### Test matrix
 

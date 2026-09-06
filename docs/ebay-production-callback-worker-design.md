@@ -97,7 +97,7 @@ Instead the Worker mints and owns its own cookie on its own host:
 | `Secure` | yes | Never leaves over plaintext |
 | `HttpOnly` | **yes** | Today's cookie is written with `document.cookie` and is therefore readable by script; on the connect host nothing but the Worker needs it, so script access is removed |
 | `SameSite` | `Lax` | Survives eBay's top-level redirect back, refuses cross-site sub-requests |
-| Lifetime | minutes, and cleared on every callback | Single use in practice as well as in intent |
+| Lifetime | minutes, and cleared on the callbacks that **consumed** it | Single use in practice as well as in intent. Not on every callback: clearing on a landing that consumed nothing lets any link the seller opens destroy an in-flight connect, which is the defect fixed in today's route (`ebay-connector-design.md` §5.4) and must not be reintroduced here |
 
 **Who mints the value.** The backend stays the authority: it mints the value, stores only its
 `sha256`, and hands the value to the Worker over the server-to-server call at start. The Worker's job
