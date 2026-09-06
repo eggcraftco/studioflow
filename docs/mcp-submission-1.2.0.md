@@ -30,7 +30,14 @@ reading the handlers — which is how we found that **two hints we shipped were 
 
 ## 2. What is already in this branch
 
-All of it is dormant with the flags off, and all of it is pinned by tests (`§2.6`).
+All of it is dormant with the flags off, and all of it is pinned by tests (`§2.6`). "Dormant" is a
+claim about the wire, and it is checked in both halves: `tools/list` is byte-identical in all four
+non-orchestrator flag states (`test/fixtures/mcp/tools-list-full.json`), and the OAuth surface —
+what a connection is MINTED with and what the 401 challenge asks for — is byte-identical too, because
+the widened default that §5.4 describes is itself behind `NIVADESK_MCP_ORCHESTRATOR`
+(`mcp-scope-enforcement.test.js`, "flag off, the OAuth surface mints and challenges exactly what
+1.1.1 does"). It was not, for four days: the mint sites and the challenge widened unconditionally, so
+a deploy with the flag off would have changed what every new connection recorded.
 
 ### 2.1 One registry, four literal booleans, one reason each
 
@@ -158,9 +165,14 @@ return exactly what they return today; none of their shapes changes.
   annotation values and advertised scopes. That is not a promise, it is a fixture:
   `test/fixtures/mcp/tools-list-full.json`, four states recorded before the orchestrator existed.
 - The OAuth and discovery surface: `mcp.nivadesk.app`, the `.well-known` routes, dynamic client
-  registration only, PKCE, the redirect-URI registry, the 401 challenge with
-  `scope="orders.read notes.read finance.read"` (**no new scope names in 1.2.0**), 405 on an SSE GET,
-  202 on notifications, the `openai-apps-challenge` file.
+  registration only, PKCE, the redirect-URI registry, 405 on an SSE GET, 202 on notifications, the
+  `openai-apps-challenge` file. **No new scope names in 1.2.0** — the metadata and the registration
+  response have advertised the same six since before this branch, verified by replaying the
+  merge-base tree. What DOES change, and only when the flag goes on, is which of those six a
+  connection is minted with and which the 401 challenge asks for: flag off, the challenge is
+  `scope="orders.read notes.read finance.read"` and the default mint is `orders.read orders.write`,
+  exactly as 1.1.1 serves them; flag on, both name all six. See §5.4, and
+  `mcp-scope-enforcement.test.js` pins both states.
 - The `attach_bank_receipt` flow: one confident match attaches; several return candidates plus an
   `inboxPath`; the second call passes `transactionId` + `inboxPath` with no re-upload; no match with an
   amount queues the receipt; owner-only; `_meta["openai/fileParams"]: ["receipt"]`.
@@ -237,38 +249,49 @@ enforcement of it now has ONE rule, stated in orchestrator/context.js and applie
   `scopes` in the dispatcher, so `get_financial_overview` can no longer answer a token that
   `get_commerce_overview` refuses.
 
-**Flag-gated, deliberately.** The dispatcher's gate runs only under `NIVADESK_MCP_ORCHESTRATOR`.
-Enforcing scope on the 19 is a behaviour change, and a live connection whose token was minted with the
-old default would begin to be refused — that belongs to the operator's 1.2.0 flip, beside the annotation
-corrections, not to a merge. Flag off, nothing about scope changes and the tools-list snapshot proves
-the wire is unmoved.
+**Flag-gated, deliberately — and that now covers the mint and the challenge too.** The dispatcher's
+gate runs only under `NIVADESK_MCP_ORCHESTRATOR`. Enforcing scope on the 19 is a behaviour change, and
+a live connection whose token was minted with the old default would begin to be refused — that belongs
+to the operator's 1.2.0 flip, beside the annotation corrections, not to a merge. Flag off, nothing
+about scope changes: the tools-list snapshot proves the listing is unmoved, and
+`mcp-scope-enforcement.test.js` proves the OAuth surface is too.
 
-**The default grant now covers the listing.** `tools/list` is one document served before any token
-exists and cannot be filtered per connection, so everything it advertises must be inside the grant this
-server mints when a client asks for none. Three places used to answer that question and disagreed: the
-registration response promised all six scopes, the `WWW-Authenticate` challenge asked for all six, and
+**The default grant covers the listing — on the same switch as the enforcement it exists for.**
+`tools/list` is one document served before any token exists and cannot be filtered per connection, so
+everything it advertises must be inside the grant this server mints when a client asks for none. Three
+places used to answer that question and disagreed: the registration response promised all six scopes,
+the `WWW-Authenticate` challenge asked for three read scopes, and
 `chatgptOAuthAuthorize`/`chatgptOAuthApprove` issued `orders.read orders.write` — which would have made
 six advertised capabilities uncallable the moment enforcement became real. There is one answer now,
-`nvOAuthDefaultScope()` = the registry's `SCOPES_SUPPORTED`, and the connect page no longer sends a
-default of its own. A client that names its scopes still gets exactly those. The function's 401
-`WWW-Authenticate` challenge named a fourth list — three read scopes — so a client that took it at its
-word would have asked for a grant that could not call `create_order`; it names the same list now, which
-is the string studioflow-web's proxy already emitted when the function set no header.
+`nvOAuthMintDefaultScope()`, and the connect page no longer sends a default of its own. A client that
+names its scopes still gets exactly those.
+
+The widening is behind the flag, which the first version of this section got wrong. With the flag off
+nothing enforces scope, so a wider default changes nothing a caller can DO and everything a connection
+RECORDS: every connection minted after such a deploy — including the one OpenAI's reviewer creates —
+would store `notes.write`, `tasks.write` and `finance.read` it did not carry before, invisibly, until
+flip day. An access token lives thirty days, so turning the flag back off would not take those grants
+back. Flag off, this server mints `orders.read orders.write` and challenges with
+`orders.read notes.read finance.read`, byte for byte what 1.1.1 serves. Flag on, both are the
+registry's `SCOPES_SUPPORTED` — the same list the metadata and the registration response have always
+advertised, and the string studioflow-web's proxy already emits when the function sets no header.
 
 **Half of that fix is a web deploy, and it is not optional (blocking).** The connect page is
 `studioflow-web/app/chatgpt/connect/ChatGPTConnectClient.tsx` in this worktree, and the page that is
 LIVE still reads `scope: params.get("scope") ?? "orders.read orders.write"`. When ChatGPT names no
 scope, that live page names two — so the server never reaches its own default and the connection is
-minted narrow whatever `nvOAuthDefaultScope()` says. Deploying the function alone corrects the
-challenge, the metadata and the registration response and leaves the actual mint site overriding all
-three: the same defect as this bullet, with one fewer place to look for it. The web deploy goes out
-**before or with** the flag flip — see the new step in §6. Nothing else on this branch needs a web
-deploy, which is precisely why it is easy to miss.
+minted narrow whatever `nvOAuthMintDefaultScope()` says. The web deploy goes out **before or with**
+the flag flip — see the new step in §6. Nothing else on this branch needs a web deploy, which is
+precisely why it is easy to miss. Until the flip, the live page and the flag-off server agree
+(`orders.read orders.write`), so deploying the function alone changes nothing — which is the point of
+putting the widening behind the flag.
 
-**Flip-day, stated plainly.** A token minted before this change with only `orders.read orders.write`
-will be refused on the finance and notes tools the moment the flag goes on. The refusal names the
-missing scope and tells the user to reconnect, which re-mints the grant at full width. Check the live
-token records before flipping.
+**Flip-day, stated plainly.** Every token minted before the flip carries `orders.read orders.write`
+and will be refused on the finance and notes tools the moment the flag goes on — including the ones
+minted between this deploy and the flip, because the default widens with the flag rather than ahead of
+it. The refusal names the missing scope and tells the user to reconnect, which re-mints the grant at
+full width. Check the live token records before flipping, and expect to reconnect the review
+connection.
 
 Related, and it gets worse the day this is enforced: `create_inventory_item` advertises `orders.read`
 today — a write tool advertising a read scope. While nothing checked scope that was a wire inaccuracy.
@@ -351,7 +374,8 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 3. **Deploy the web connect page** (§5.4). It is the only web change on this branch and the flag flip is
    half-done without it: the live page still names `orders.read orders.write` when ChatGPT names none,
    which overrides the server's own default and mints exactly the narrow token that flip-day then
-   refuses. Before or with step 4, never after.
+   refuses. Before or with step 4, never after. (Deploying it EARLY is harmless: with the flag off the
+   server's own default is the same two scopes.)
 4. Set the chosen flags on `chatgptMcp` and deploy it (functions only, from a clean main checkout —
    remember the branch-divergence rule: a blind `firebase deploy --only functions` from a save branch has
    pushed stale functions before).
@@ -359,7 +383,9 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    and diff it against the registry projection for those exact flags. The current fixture has no
    all-three-flags state; generate the one that matches what was deployed.
 6. Re-run the five 1.1.1 review test cases on the review account: customer named exactly
-   "OpenAI Review Test Customer", ESET row `demo-acc_demo006` reset to no receipt.
+   "OpenAI Review Test Customer", ESET row `demo-acc_demo006` reset to no receipt. Reconnect the review
+   connection after step 4: its grant was minted before the flip and carries two scopes, which the
+   finance and notes tools now refuse (§5.4, flip-day).
 7. Add the new review cases: `get_business_attention_summary`, `get_commerce_overview` and
    `get_integration_health` on the review workspace — manual orders only, so the reviewer sees channels
    named as not connected instead of zeros — plus one `update_order_status` on an order with automatic

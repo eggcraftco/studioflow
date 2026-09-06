@@ -144,36 +144,73 @@ check("enforcement ships with the submission flag, not under the reviewer", () =
 
 // ---- the default grant covers the listing it is served alongside -------------
 
-check("a connection minted with no explicit scope can call everything tools/list advertises", () => {
-  const api = require("../../index");
-  const granted = context.scopeSet(api._nvOAuthDefaultScope());
-  assert.deepStrictEqual([...granted].sort(), [...registry.SCOPES_SUPPORTED].sort());
+/** What this deployment mints, challenges with and advertises, in one flag state. */
+function oauthStrings(flagOn) {
+  const script = `
+    const api = require(${JSON.stringify(INDEX)});
+    console.log(JSON.stringify({
+      mint: api._nvOAuthMintDefaultScope(),
+      challenge: api._nvMcpChallengeScope(),
+      advertised: api._nvOAuthDefaultScope()
+    }));
+  `;
+  const env = { ...process.env };
+  if (flagOn) env.NIVADESK_MCP_ORCHESTRATOR = "1"; else delete env.NIVADESK_MCP_ORCHESTRATOR;
+  const out = execFileSync(process.execPath, ["-e", script], { cwd: FUNCTIONS_DIR, env, maxBuffer: 16 * 1024 * 1024 }).toString();
+  return JSON.parse(out.trim().split("\n").pop());
+}
+
+check("flag off, the OAuth surface mints and challenges exactly what 1.1.1 does", () => {
+  // The half of "all of it is dormant with the flags off" that was not true.
+  // Nothing enforces scope while the flag is off, so widening the default
+  // changed nothing a caller could DO and everything a connection RECORDED:
+  // every connection minted after the deploy — the reviewer's included — would
+  // have stored notes.write, tasks.write and finance.read it did not carry
+  // before, invisibly until flip day, and a thirty-day access token means
+  // turning the flag back off would not take them back.
+  const off = oauthStrings(false);
+  assert.strictEqual(off.mint, "orders.read orders.write", "a deploy with the flag off changes what the live OAuth surface mints");
+  assert.strictEqual(off.challenge, "orders.read notes.read finance.read", "a deploy with the flag off changes the 401 challenge");
+  // The one thing that does NOT move with the flag, because it never did: the
+  // metadata and the registration response have always named all six.
+  assert.strictEqual(off.advertised, "orders.read orders.write notes.read notes.write finance.read tasks.write");
+});
+
+check("flag on, a connection minted with no explicit scope can call everything tools/list advertises", () => {
+  const on = oauthStrings(true);
+  assert.deepStrictEqual([...context.scopeSet(on.mint)].sort(), [...registry.SCOPES_SUPPORTED].sort());
+  assert.strictEqual(on.challenge, on.mint, "a client that takes WWW-Authenticate at its word must ask for the grant the listing needs");
   for (const entry of registry.publishedEntries({ emailReceipts: true, inventory: true, orchestrator: true })) {
-    const missing = context.missingScopes({ authType: "chatgpt_oauth", scope: api._nvOAuthDefaultScope() }, entry.scopes);
+    const missing = context.missingScopes({ authType: "chatgpt_oauth", scope: on.mint }, entry.scopes);
     assert.deepStrictEqual(missing, [], `${entry.name} is advertised but a default-scope connection cannot call it`);
   }
+  // The exact bytes the OAuth metadata documents have always advertised.
+  assert.strictEqual(on.advertised, "orders.read orders.write notes.read notes.write finance.read tasks.write");
 });
 
-check("the 401 challenge asks for the grant the listing needs", () => {
-  // A client that takes WWW-Authenticate at its word asks for exactly what it
-  // names. This header named three read scopes, so a connection built from it
-  // could not call create_order or add_order_note — the fourth place with its
-  // own opinion about what a connection gets. studioflow-web's proxy already
-  // emits the full list when the function sets no header of its own.
-  const challenge = indexSource.slice(
-    indexSource.indexOf("function nvSendMcpOAuthChallenge("),
-    indexSource.indexOf("\n}\n", indexSource.indexOf("function nvSendMcpOAuthChallenge("))
-  );
-  assert.ok(/scope="\$\{nvOAuthDefaultScope\(\)\}"/.test(challenge),
-    "the challenge names a scope list of its own again");
-});
-
-check("no mint site invents a narrower grant of its own", () => {
+check("one place decides the mint, one decides the challenge, and both are the flag's", () => {
   // Three places used to answer "what does this connection get?" and they did
-  // not agree: registration promised six, the challenge asked for six, and
-  // authorize/approve issued two.
-  const mintSites = indexSource.match(/scope[^\n]*"orders\.read orders\.write"/g) || [];
-  assert.deepStrictEqual(mintSites, [], `a hand-typed default grant is back: ${mintSites.join(" | ")}`);
+  // not agree: registration promised six, the challenge asked for three, and
+  // authorize/approve issued two. The pre-1.2.0 strings survive in exactly two
+  // places — the flag-off branch of each function — and nowhere else.
+  const literals = indexSource.split("\n")
+    .filter((row) => /"orders\.read orders\.write"|"orders\.read notes\.read finance\.read"/.test(row))
+    // Prose about the old strings is not a mint site.
+    .filter((row) => !/^\s*(\*|\/\/|\/\*)/.test(row))
+    .map((row) => row.trim());
+  assert.deepStrictEqual(
+    literals,
+    [
+      'const NV_OAUTH_MINT_SCOPE_1_1_1 = "orders.read orders.write";',
+      'const NV_OAUTH_CHALLENGE_SCOPE_1_1_1 = "orders.read notes.read finance.read";'
+    ],
+    `a hand-typed grant is back somewhere else: ${literals.join(" | ")}`
+  );
+  for (const [fn, call] of [["chatgptOAuthApprove", "nvOAuthMintDefaultScope()"], ["nvOAuthExtractScope", "nvOAuthMintDefaultScope()"], ["nvSendMcpOAuthChallenge", "nvMcpChallengeScope()"]]) {
+    const start = indexSource.indexOf(fn === "chatgptOAuthApprove" ? "exports.chatgptOAuthApprove" : `function ${fn}(`);
+    const body = indexSource.slice(start, indexSource.indexOf("\n}\n", start));
+    assert.ok(body.includes(call), `${fn} no longer asks ${call} for its default`);
+  }
   const web = path.join(FUNCTIONS_DIR, "..", "studioflow-web", "app", "chatgpt", "connect");
   for (const file of ["ChatGPTConnectClient.tsx", "page.tsx"]) {
     const source = fs.readFileSync(path.join(web, file), "utf8");
@@ -182,23 +219,6 @@ check("no mint site invents a narrower grant of its own", () => {
       `${file} still sends a grant the connect page invented; the server owns the default`
     );
   }
-});
-
-check("the advertised metadata and the registry are one list", () => {
-  const script = `
-    const api = require(${JSON.stringify(INDEX)});
-    const registry = require(${JSON.stringify(path.join(FUNCTIONS_DIR, "orchestrator", "registry.js"))});
-    console.log(JSON.stringify({ default: api._nvOAuthDefaultScope(), supported: registry.SCOPES_SUPPORTED }));
-  `;
-  const out = execFileSync(process.execPath, ["-e", script], {
-    cwd: FUNCTIONS_DIR,
-    env: { ...process.env, NIVADESK_MCP_ORCHESTRATOR: "1" },
-    maxBuffer: 16 * 1024 * 1024
-  }).toString();
-  const served = JSON.parse(out.trim().split("\n").pop());
-  assert.strictEqual(served.default, served.supported.join(" "));
-  // The exact bytes the OAuth metadata documents have always advertised.
-  assert.strictEqual(served.default, "orders.read orders.write notes.read notes.write finance.read tasks.write");
 });
 
 console.log(failures === 0 ? "\nAll scope checks passed." : `\n${failures} check(s) failed.`);

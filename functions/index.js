@@ -20433,6 +20433,8 @@ exports._nvMcpPiiLoggedActions = nvMcpPiiLoggedActions;
 // dispatch that would then go looking for Firestore.
 exports._nvMcpAssertScope = nvMcpAssertScope;
 exports._nvOAuthDefaultScope = nvOAuthDefaultScope;
+exports._nvOAuthMintDefaultScope = nvOAuthMintDefaultScope;
+exports._nvMcpChallengeScope = nvMcpChallengeScope;
 // The served discovery surface itself, so a test can snapshot exactly what
 // tools/list returns instead of re-deriving it from the source text.
 exports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;
@@ -25331,26 +25333,72 @@ function nvOAuthExtractRedirectUri(req) {
 }
 
 /**
- * The grant a client gets when it asks for none.
- *
- * It is the list the metadata advertises, and nothing else. Three places used
- * to answer this question and they did not agree: the registration response
- * promised the client all six scopes, the WWW-Authenticate challenge asked for
- * all six, and these two mint sites then issued "orders.read orders.write" —
- * which is smaller than the tools/list every client is served, so a token
- * minted by default could not call the finance tools the same server advertises
- * to it. tools/list is one document served before any token exists and cannot
- * be filtered per connection, so the fix is on this side: what the server mints
- * by default must cover what the server advertises.
- *
- * A client that DOES name its scopes still gets exactly those.
+ * Every scope this server advertises: the registry's SCOPES_SUPPORTED, which is
+ * what both `.well-known` documents and the dynamic-registration response have
+ * always named. Not flag-dependent, because none of those three moved.
  */
 function nvOAuthDefaultScope() {
   return nvMcpRegistry.SCOPES_SUPPORTED.join(" ");
 }
 
+/**
+ * What 1.1.1 mints and challenges with. Kept verbatim, because "flag off, the
+ * wire is unmoved" has to be true of the OAuth surface too and not only of
+ * tools/list.
+ */
+const NV_OAUTH_MINT_SCOPE_1_1_1 = "orders.read orders.write";
+const NV_OAUTH_CHALLENGE_SCOPE_1_1_1 = "orders.read notes.read finance.read";
+
+/**
+ * The grant a client gets when it asks for none — and the one place that
+ * decides it.
+ *
+ * Three places used to answer this question and they did not agree: the
+ * registration response promised all six scopes, the WWW-Authenticate challenge
+ * asked for three read scopes, and the two mint sites issued
+ * "orders.read orders.write" — smaller than the tools/list every client is
+ * served, so a token minted by default could not call the finance tools the
+ * same server advertises to it. tools/list is one document served before any
+ * token exists and cannot be filtered per connection, so what the server mints
+ * by default must cover what the server advertises.
+ *
+ * BEHIND THE SUBMISSION FLAG, like the enforcement it exists for.
+ *
+ * Widening the default is not cosmetic: with the flag off nothing enforces
+ * scope (nvChatGPTDispatchAction gates nvMcpAssertScope on NV_MCP_ORCHESTRATOR),
+ * so a widened grant changes nothing a caller can DO and everything a
+ * connection RECORDS. Every connection minted after such a deploy — including
+ * the one OpenAI's reviewer creates — would store `notes.write`, `tasks.write`
+ * and `finance.read` it did not carry before, invisibly, until flip day; and
+ * because an access token lives thirty days, turning the flag back off would
+ * not take those grants back. The branch's rule is that everything new is
+ * behind the flag and default off, and this was the one place it was not.
+ *
+ * So the two halves ship on one switch: the mint default widens at the same
+ * moment `nvMcpAssertScope` starts running, which is also the moment the connect
+ * page stops sending a default of its own (§5.4's blocking web deploy). Flag
+ * off, this server mints and challenges exactly what 1.1.1 does.
+ *
+ * The consequence, stated plainly for the operator: a connection made between
+ * this deploy and the flip carries two scopes, and on flip day it is refused on
+ * the finance and notes tools until the user reconnects. That was already true
+ * of every connection minted before the deploy; this makes the population
+ * bigger rather than different, and the refusal names the missing scope and
+ * says to reconnect.
+ *
+ * A client that DOES name its scopes still gets exactly those, in both states.
+ */
+function nvOAuthMintDefaultScope() {
+  return NV_MCP_ORCHESTRATOR ? nvOAuthDefaultScope() : NV_OAUTH_MINT_SCOPE_1_1_1;
+}
+
+/** The scope list the 401 challenge asks for. Same switch, same reason. */
+function nvMcpChallengeScope() {
+  return NV_MCP_ORCHESTRATOR ? nvOAuthDefaultScope() : NV_OAUTH_CHALLENGE_SCOPE_1_1_1;
+}
+
 function nvOAuthExtractScope(req) {
-  return nvCleanString(req.query?.scope || req.body?.scope || nvOAuthDefaultScope(), 500);
+  return nvCleanString(req.query?.scope || req.body?.scope || nvOAuthMintDefaultScope(), 500);
 }
 
 function nvOAuthExtractState(req) {
@@ -25819,7 +25867,7 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const clientId = nvCleanString(body.client_id || body.clientId || "", 500);
     const redirectUri = nvSafeOAuthUri(body.redirect_uri || body.redirectUri || "");
-    const scope = nvCleanString(body.scope || nvOAuthDefaultScope(), 500);
+    const scope = nvCleanString(body.scope || nvOAuthMintDefaultScope(), 500);
     const state = nvCleanString(body.state || "", 2000);
     const codeChallenge = nvCleanString(body.code_challenge || body.codeChallenge || "", 500);
     const codeChallengeMethod = nvCleanString(body.code_challenge_method || body.codeChallengeMethod || "", 50);
@@ -27121,16 +27169,16 @@ function nvMcpProtectedResourceMetadataUrl() {
 
 function nvSendMcpOAuthChallenge(res, message = "Authentication required.") {
   const metadataUrl = nvMcpProtectedResourceMetadataUrl();
-  // The same list everywhere else: the metadata's scopes_supported, which is
-  // what the default grant mints and what the listing needs. This header used
-  // to name three read scopes, so a client that took the challenge at its word
-  // asked for a grant that could not call create_order or add_order_note — the
-  // fourth place with its own opinion about what a connection gets. (The web
-  // proxy in studioflow-web already emits exactly this string when the
-  // function sets no header of its own.)
+  // Flag on: the same list everywhere else — the metadata's scopes_supported,
+  // which is what the default grant then mints and what the listing needs. The
+  // header used to name three read scopes on its own, so a client that took the
+  // challenge at its word asked for a grant that could not call create_order or
+  // add_order_note. Flag off: the 1.1.1 string, because the 401 a reviewer's
+  // client meets must not change under it either. (The web proxy in
+  // studioflow-web emits the full list when the function sets no header.)
   res.set(
     "WWW-Authenticate",
-    `Bearer resource_metadata="${metadataUrl}", scope="${nvOAuthDefaultScope()}"`
+    `Bearer resource_metadata="${metadataUrl}", scope="${nvMcpChallengeScope()}"`
   );
   res.status(401).json(nvMcpJsonRpcError(null, -32001, message));
 }
