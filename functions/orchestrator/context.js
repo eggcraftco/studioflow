@@ -12,11 +12,26 @@
  *
  * Three rules that are easy to get wrong and are therefore written down:
  *
- * 1. **The company document is read for this request.** A gateway that caches
+ * 1. **The company document is read for THIS request.** A gateway that caches
  *    it keeps serving a member whose access was revoked. `loadCompany` is
- *    injected and must return a document read during the current request; a
+ *    injected and must return a document read during the current request — a
+ *    caller that has already read one FOR THIS REQUEST may return that, and
+ *    the MCP adapter does: nvRequireChatGPTWorkspaceAccessWithOAuth read it
+ *    moments earlier in the same call, and a second `get` would buy the same
+ *    bytes twice. What is forbidden is a document held ACROSS requests, and
+ *    the adapter's closure cannot hold one.
+ *
+ *    This paragraph used to promise a safeguard that does not exist: "a
  *    caller-supplied snapshot is accepted only as `companyDataHint`, for
- *    display, and no gate reads it.
+ *    display, and no gate reads it". `resolveContext` has never taken such a
+ *    parameter, and adding one would have made the rule weaker rather than
+ *    stronger — it has only two honest shapes, a second read of bytes already
+ *    in hand, or a display-only field no gate reads and no caller sets. So
+ *    what the code actually guarantees is written down instead: every gate
+ *    below reads the document `loadCompany` returned on THIS call, and nothing
+ *    a caller passed in alongside it. The WhatsApp gateway copying this
+ *    pattern needs no new parameter either — it returns the document it read
+ *    for the message it is answering.
  * 2. **A supplied `companyId` is a lookup key, never a grant.** The MCP path
  *    falls back to the argument when the OAuth token carries no workspace
  *    (`oauth.companyId || companyId`), so the argument does reach here — and

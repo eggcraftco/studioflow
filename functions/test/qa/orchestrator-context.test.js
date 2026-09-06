@@ -246,6 +246,51 @@ checkAsync("only the domains a capability declares are read", async () => {
   assert.deepStrictEqual(requested, ["settings", "inventory"], "an inventory search must not drag orders and connections in behind it");
 });
 
+checkAsync("every gate reads the document loadCompany returned for this call, and nothing the caller passed with it", async () => {
+  // context.js rule 1. The header used to promise a `companyDataHint`
+  // parameter — "a caller-supplied snapshot is accepted only as
+  // companyDataHint, for display, and no gate reads it" — that resolveContext
+  // has never taken. The rule it should have stated is this one, and it is
+  // worth a test rather than a sentence: the caller here hands in a snapshot
+  // that would make it the owner of everything, and the document read for this
+  // request says it is a member with nothing.
+  let loads = 0;
+  const readForThisRequest = { ownerUid: "u_owner", members: { u_member: true }, memberAccess: { u_member: {} } };
+  const loadCompany = async () => { loads += 1; return { companyData: readForThisRequest, settings: fixtures.settings }; };
+  const orchestrator = createOrchestrator({
+    ...deps(),
+    loadCompany,
+    loaders: { loadCompany, snapshotFor: async () => fixtures.mixedSnapshot() },
+    flags: { orchestrator: true }
+  });
+
+  const forged = { ownerUid: "u_member", members: { u_member: true }, memberAccess: { u_member: { orders: true, bankFeed: true, financialInfo: true } } };
+  const ctx = await orchestrator.resolveContext({
+    uid: "u_member",
+    companyId: "co_1",
+    scope: "orders.read finance.read",
+    // Both spellings a caller might reach for, including the one the header
+    // used to promise.
+    companyData: forged,
+    companyDataHint: forged
+  });
+
+  assert.strictEqual(ctx.companyData, readForThisRequest, "the context carries a document the caller supplied");
+  assert.strictEqual(ctx.isOwner, false, "a caller-supplied snapshot made its holder the owner");
+  assert.strictEqual(ctx.areas.orders, false);
+  assert.strictEqual(ctx.areas.bankFeed, false);
+  assert.strictEqual(ctx.financialInfo, false);
+  assert.throws(
+    () => context.assertCapability(ctx, registry.entryFor("get_banking_attention_summary")),
+    /Bank Spending is not enabled/
+  );
+
+  // And it is read again on the next call rather than carried over: that is
+  // the whole of what "for THIS request" buys.
+  await orchestrator.resolveContext({ uid: "u_member", companyId: "co_1", scope: "orders.read" });
+  assert.strictEqual(loads, 2, "the company document was not re-read for the second request");
+});
+
 (async () => {
   for (const [name, run] of asyncChecks) {
     try { await run(); console.log("PASS ", name); }

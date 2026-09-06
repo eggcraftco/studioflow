@@ -587,9 +587,12 @@ Three corrections to revision 1's version of this block:
 1. **`companyData` is read inside `resolveContext`, per run, and a caller-supplied snapshot is ignored
    for authorization.** Revision 1 took `companyData` as an input, which means a gateway that caches the
    company document keeps serving a member whose access was revoked — and WA §13, scenario 3 and §85.11
-   all require the revocation to bite on the next request. The loader re-reads `companies/{cid}`; a
-   caller may pass a snapshot only as `ctx.companyDataHint` for display, never for a gate, and a test
-   asserts no gate reads it.
+   all require the revocation to bite on the next request. `resolveContext` takes no caller-supplied
+   snapshot at all: injected `loadCompany` must return a document read DURING this request (a caller
+   that already read one for the same request may return it, which is what the MCP adapter does), and
+   every gate reads that document. `snapshot.companyDataHint` is a different thing with a confusingly
+   similar name — `loaders.snapshotFor` puts `ctx.companyData` there for the handlers to display, after
+   the gates have already run. A test asserts that a snapshot passed in by the caller reaches no gate.
 2. **`companyId` is the caller's resolved authority when the caller has one, and is membership-checked in
    every other case.** Revision 1 said it "never comes from tool arguments". That is overstated:
    `nvRequireChatGPTWorkspaceAccessWithOAuth` uses `oauth.companyId || companyId` (index.js:25448), so a
