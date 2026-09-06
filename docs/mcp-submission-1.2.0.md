@@ -69,14 +69,20 @@ reasoning rather than our conclusion:
 - `openWorldHint` — the call reaches outside NivaDesk: a URL fetch, a third-party API, a provider
   mutation — whether the handler does it or a trigger the workspace configured does it in consequence.
 
-### 2.3 Ten cross-channel read capabilities
+### 2.3 Two cross-channel read capabilities
 
-`search_inventory`, `get_business_attention_summary`, `get_commerce_overview`,
-`search_commerce_orders`, `get_channel_performance`, `get_inventory_overview`,
-`get_payout_reconciliation_overview`, `get_integration_health`, `get_accounting_sync_status`,
-`get_banking_attention_summary`.
+`search_inventory` and `search_commerce_orders`.
 
-The first of them is also published by `NIVADESK_MCP_INVENTORY` on its own, where an older handler
+The design proposed ten. On 6 September 2026 the operator reduced the flagged set for this release to
+order search, customer search and the workspace's ONE inventory search: every banking capability,
+marketplace payouts, the sales and per-channel money summaries, the inventory valuation, the connection
+roster and the accounting sync status came out. "Out" means the registry has no row for them and the
+dispatcher publishes and runs nothing for them — not a flag left off — so no flag state can list or call
+one. `functions/test/qa/mcp-reduced-surface.test.js` is the standing proof, over all eight flag
+combinations. The modules stay on disk, unreachable, so reviving one is a decision (registry row, schema,
+dispatcher case, handler) rather than a merge.
+
+The first of the two is also published by `NIVADESK_MCP_INVENTORY` on its own, where an older handler
 answers it. It was a separate capability called `search_inventory_items` until §5.1 was closed.
 
 They live in `functions/orchestrator/` as pure functions over a loaded snapshot, with the MCP tools as
@@ -133,8 +139,8 @@ Nothing changes until a flag is set to `"1"` in the deployed function's environm
 | none (today) | **19** | — |
 | `NIVADESK_MCP_EMAIL_RECEIPTS` | 19 | `attach_bank_receipt` gains `receiptUrl` / `emailReceipt` inputs and two description sentences |
 | `NIVADESK_MCP_INVENTORY` | **21** | adds `search_inventory`, `create_inventory_item`; one sentence appended to `attach_bank_receipt`'s description |
-| `NIVADESK_MCP_ORCHESTRATOR` | **29** | adds the ten read tools — one of which is `search_inventory`, with the filters and the freshness block; **two annotation corrections** (§3.1); two extra `initialize.instructions` lines |
-| inventory + orchestrator | **30** | all of the above, and **not 31**: `search_inventory` is the one tool both flags publish, so it is listed once (§5.1) |
+| `NIVADESK_MCP_ORCHESTRATOR` | **21** | adds the two read tools the reduction kept — `search_inventory` (with the filters and the freshness block) and `search_commerce_orders`; **two annotation corrections** (§3.1); two extra `initialize.instructions` lines |
+| inventory + orchestrator | **22** | all of the above, and **not 23**: `search_inventory` is the one tool both flags publish, so it is listed once (§5.1) |
 
 ### 3.1 The two annotation corrections — the headline of the release notes, not a footnote
 
@@ -157,7 +163,7 @@ of the table that ships was the half nothing structural checked.
 
 ### 3.2 Result shape
 
-The ten new tools return the envelope described in §2.3 inside `structuredContent`. The existing 19
+The two new tools return the envelope described in §2.3 inside `structuredContent`. The existing 19
 return exactly what they return today; none of their shapes changes.
 
 ---
@@ -290,9 +296,9 @@ enforcement of it now has ONE rule, stated in orchestrator/context.js and applie
   whether a string happens to be empty. Role, area, financial and bankFeed gates apply to them exactly
   as before. The list is closed the safe way round: an auth type nobody has named is treated as a token
   and must carry its scopes.
-- **All 29 tools, not just the ten.** `nvMcpAssertScope` applies the same function over the registry's
-  `scopes` in the dispatcher, so `get_financial_overview` can no longer answer a token that
-  `get_commerce_overview` refuses.
+- **Every published tool, not just the flagged ones.** `nvMcpAssertScope` applies the same function over
+  the registry's `scopes` in the dispatcher, so `get_financial_overview` can no longer answer a token
+  that a flagged capability refuses.
 
 **Flag-gated, deliberately — and that now covers the mint and the challenge too.** The dispatcher's
 gate runs only under `NIVADESK_MCP_ORCHESTRATOR`. Enforcing scope on the 19 is a behaviour change, and
@@ -364,7 +370,7 @@ in this submission rather than in a merge — and it belongs with the flag, not 
   `nvMcpPiiAccessEntry` reads it. `whatsapp` is NOT added: the channel does not exist yet, and a
   source nothing can write is a vocabulary entry pretending to be a control. It goes in with CH-3.
 - **Done: a row with no subject says it read a set.** `search_orders` without an `orderId`,
-  `search_commerce_orders` and `get_banking_attention_summary` take no record id because they read a
+  and `search_commerce_orders` take no record id because they read a
   SET, and `subject.id: ""` with nothing said reads as a subject that went missing. The row now
   carries `subject=set` in its note — the convention `run()` already uses for the marketplace-block
   rows — while a read that names a record still names it. `run()` files its own row the same way now,
@@ -379,10 +385,10 @@ in this submission rather than in a merge — and it belongs with the flag, not 
 - **Done, behind the flag: the two bank tools now record the read.** `get_bank_spending_summary`
   returns `topMerchants[].merchant` and `recurringSubscriptions[].merchant`; `search_bank_transactions`
   returns `merchant: tx.counterparty`. A person-to-person payment puts a person in that field, both
-  declared `pii: ["name"]`, and neither read was recorded — while `get_banking_attention_summary`, which
-  reads the same collection and declares the same category, does. The newest door to bank counterparty
-  names was audited and the two oldest were not, which is the "one body of data, two doors" objection
-  §5.4 settles for scope and this branch settles for inventory.
+  declared `pii: ["name"]`, and neither read was recorded — while `search_commerce_orders`, the newest
+  read on this surface that hands over a person, does. The newest door to people was audited and the two
+  oldest were not, which is the "one body of data, two doors" objection §5.4 settles for scope and this
+  branch settles for inventory.
 
   The argument for leaving it open was that turning a write on for the live 1.1.1 connection is the
   operator's call, not a merge's. That is right about the risk and wrong about the remedy: every other
@@ -406,7 +412,7 @@ in this submission rather than in a merge — and it belongs with the flag, not 
   `loaders.projectOrderForAssistant` hands each audited outbound decision back to its caller (it stays
   pure and writes nothing) and `run()` files it through an injected `recordPiiBlock` — one row per
   provider and reason, carrying `recordCount`, rather than one per order over a read of up to a
-  thousand. Before this, a block by one of the ten read capabilities left no trace while the same block
+  thousand. Before this, a block by one of the flagged read capabilities left no trace while the same block
   by `search_orders` left one, which is the failure privacy/outbound.js's third rule names: a block
   nobody can see is indistinguishable from a feature that quietly does not work.
 - The orchestrator's audit record needs its collection (`companies/{cid}/assistantAudit`), a retention
@@ -422,10 +428,10 @@ the bump, because it is on the wire and the review connection is live on the cur
 ### 5.7 The `readOnlyHint` carve-out (a position to sign off, not a bug)
 
 Six live read tools (`search_orders`, `get_order_detail`, `get_order_financials`,
-`get_dashboard_summary`, `get_financial_overview`, `get_extra_spending_overview`) and two of the new ones
-(`search_commerce_orders`, `get_banking_attention_summary`) write one `piiAccessLog` row per call,
+`get_dashboard_summary`, `get_financial_overview`, `get_extra_spending_overview`) and one of the new ones
+(`search_commerce_orders`) write one `piiAccessLog` row per call,
 recording that a person's details were shown to an assistant. We call them read-only and say so in each
-tool's own `readOnlyHint` justification. The alternative — flipping eight `readOnlyHint`s to `false` — is defensible
+tool's own `readOnlyHint` justification. The alternative — flipping seven `readOnlyHint`s to `false` — is defensible
 under a literal reading of "changes no persistent state" and would make every read tool look mutating to
 the model. Recommendation: keep the carve-out, disclosed on each tool. The operator signs this off,
 because it is the one annotation position a reviewer could reasonably disagree with.
@@ -460,10 +466,10 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    "OpenAI Review Test Customer", ESET row `demo-acc_demo006` reset to no receipt. Reconnect the review
    connection after step 4: its grant was minted before the flip and carries two scopes, which the
    finance and notes tools now refuse (§5.4, flip-day).
-7. Add the new review cases: `get_business_attention_summary`, `get_commerce_overview` and
-   `get_integration_health` on the review workspace — manual orders only, so the reviewer sees channels
-   named as not connected instead of zeros — plus one `update_order_status` on an order with automatic
-   updates **off**, so the notification boundary can be demonstrated without mailing a test address.
+7. Add the new review cases: `search_commerce_orders` and `search_inventory` on the review workspace —
+   manual orders only, so the reviewer sees channels named as not connected instead of zeros — plus one
+   `update_order_status` on an order with automatic updates **off**, so the notification boundary can be
+   demonstrated without mailing a test address.
 8. Guide: move the Step B bullets, rebuild the corpus, deploy the seven assistant functions, probe the
    live bot with one question per new capability.
 9. Submit 1.2.0 with the release notes below.
@@ -492,12 +498,11 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 > no outbound message; open-world means the call reaches outside NivaDesk, whether directly or through a
 > trigger the workspace configured.
 >
-> **New in this version:** ten read-only tools that answer across a workspace's sales channels, stock,
-> payouts, connection health, accounting preparation and bank feed. Every one of them reports how fresh
-> its data is and what it could not include; a channel the workspace has not connected is named as not
-> connected rather than counted as zero, and amounts in other currencies are listed separately rather
-> than converted. None of them writes anything, calls a shop, marketplace or bank, or modifies an
-> external provider.
+> **New in this version:** two read-only tools — one that searches orders across a workspace's sales
+> channels and one that searches its stock. Both report how fresh their data is and what they could not
+> include; a channel the workspace has not connected is named as not connected rather than counted as
+> zero, and amounts in other currencies are listed separately rather than converted. Neither writes
+> anything, calls a shop, marketplace or bank, or modifies an external provider.
 >
 > **Unchanged:** the OAuth and discovery surface, the scope names, the workspace and role model, and the
 > behaviour of the tools from 1.1.1.

@@ -179,9 +179,11 @@ line for line. `orchestrator-context.test.js` drives both sides over every combi
 and both roles and fails on the first divergence — because for three lines the claim had quietly stopped
 being true. `banking`, `payouts` and `accounting` carried `&& !ctx.workflowOnly`, which no capability and
 no app guard has (`nvRequireBankFeedAccess` is owner OR the bankFeed area, full stop), so a workflow-only
-member granted Bank Spending was told "banking items are not included for your role" by
-`get_business_attention_summary` and answered in full by `get_banking_attention_summary` in the same
-session. Strict in one place only is not safe; it is just a second answer. The right narrowing for that
+member granted Bank Spending was told "banking items are not included for your role" by the business
+attention summary and answered in full by the banking one, in the same session. (Both capabilities are
+out of this release — §8.1 — so `sectionAccess` currently has no published caller at all; the predicate
+stays, and `orchestrator-context.test.js` still holds the two lines whose data IS published, `orders`
+and `shipping`, to `search_commerce_orders`.) Strict in one place only is not safe; it is just a second answer. The right narrowing for that
 role is the one `loaders.js` already applies — every order not assigned to them is dropped before a
 section is built — not a term bolted onto one of the two predicates.
 
@@ -274,14 +276,14 @@ annotation can never disagree about the same tool:
 | plus `effects` includes `external_fetch` or `ocr` | adds `file_upload` | the tool takes a document off the caller |
 
 Worked examples over the full registry (`registry.publishedForChannel({ flags, channelProfile })`), each
-measured against the projection rather than reasoned about — with all three flags on the table is 30
+measured against the projection rather than reasoned about — with all three flags on the table is 22
 entries, of which 10 are writes:
 
 | binding | gets | does not get |
 |---------|------|--------------|
-| `["read"]`, level 1 | **20** entries: every read tool, including all ten orchestrator capabilities | all ten writes: `create_order`, `update_order_status`, `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, `attach_bank_receipt`, `create_inventory_item` |
-| all four kinds, level 1 | **26** entries: the 20 reads **plus six writes** — `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, every one of them `internal_write`, class B, `minAssurance: 1` | `attach_bank_receipt`/`create_inventory_item` (level 2), `create_order`/`update_order_status` (level 3) |
-| `["read","internal_write","file_upload"]`, level 3 | **28** entries: the 20 reads, the six note writes, **and both** `attach_bank_receipt` and `create_inventory_item` | `create_order`, `update_order_status` — those need `external_write` because they can e-mail the buyer |
+| `["read"]`, level 1 | **12** entries: every read tool, including both orchestrator capabilities | all ten writes: `create_order`, `update_order_status`, `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, `attach_bank_receipt`, `create_inventory_item` |
+| all four kinds, level 1 | **18** entries: the 12 reads **plus six writes** — `add_order_note`, `create_note`, `append_note`, `update_note`, `pin_note`, `archive_note`, every one of them `internal_write`, class B, `minAssurance: 1` | `attach_bank_receipt`/`create_inventory_item` (level 2), `create_order`/`update_order_status` (level 3) |
+| `["read","internal_write","file_upload"]`, level 3 | **20** entries: the 12 reads, the six note writes, **and both** `attach_bank_receipt` and `create_inventory_item` | `create_order`, `update_order_status` — those need `external_write` because they can e-mail the buyer |
 
 Row two used to read "reads and nothing else", which is where a gateway author sizing a beta would have
 been misled: allowing `internal_write` at level 1 hands over six writes, because nothing else gates them
@@ -301,7 +303,7 @@ inbox. A read-only WhatsApp beta cannot call it by accident, and a level-1 bindi
 
 ```js
 const envelope = await nivaOrchestrator.run({
-  capability: "get_business_attention_summary",
+  capability: "search_commerce_orders",
   args: { horizonDays: 2 },
   ctx,
   request: {
@@ -329,7 +331,7 @@ to the process that was not allowed to ask for it.
 
 ### 5.2 Same handler, same semantics
 
-`run("get_commerce_overview")` from WhatsApp executes the same code, the same gates, the same rounding
+`run("search_commerce_orders")` from WhatsApp executes the same code, the same gates, the same rounding
 and the same freshness rules as from ChatGPT. The figures are identical by construction; only the
 rendering differs (§7). When write capabilities are adapted behind `run()` in CH-4 they inherit the same
 property — including the customer notification that makes `update_order_status` an external write.
@@ -344,7 +346,7 @@ answer has started keeping its own truth.
 
 **What was released.** `recordPiiAccess` is called before dispatch for any capability whose registry
 entry sets `piiAccessLogged: true` (today: `search_commerce_orders` → name, e-mail, subject `order`;
-`get_banking_attention_summary` → counterparty name, subject `bank_transaction`), with
+`search_commerce_orders` → buyer name and e-mail, subject `order`), with
 `source: ctx.channel.type`. The row's `categories` come from the entry's `pii` and its `subject.kind`
 from the entry's `piiSubject` — the registry is the only list, so a channel cannot describe a read
 differently from the way the MCP dispatcher describes it. That claim was false while `run()` keyed on
@@ -419,7 +421,7 @@ a failed audit write never fails the answer, and never silently swallows the ans
 ```js
 {
   ok: true,
-  action: "get_commerce_overview",   // the capability name
+  action: "search_commerce_orders", // the capability name
   state: "completed",                // §6.2
   data: { … },                       // the capability's own structure — the only place figures live
   freshness: { ordersLastSync, financeLastSync, inventoryLastSync, sources: [ … ] },
@@ -447,9 +449,9 @@ data.
 
 `loader_cap_reached` and `result_truncated` are different facts and are not interchangeable. The first
 means a READ stopped at its cap, and it sets `partial: true`; the second means the caller asked for a
-page and got one, and it does not. **All four** capabilities that take a `limit` raise it —
-`search_commerce_orders`, `search_inventory`, `get_business_attention_summary` and
-`get_banking_attention_summary`. Two of them did not for a while, which made the code mean "whichever
+page and got one, and it does not. **Every** capability that takes a `limit` raises it — in this release
+`search_commerce_orders` and `search_inventory`; the two attention summaries that also paged are out of
+it. Two of the four did not raise it for a while, which made the code mean "whichever
 author remembered", so the condition lives in `envelope.pageWarning` and `orchestrator-contract.test.js`
 counts `Number(args.limit)` against `envelope.pageWarning(` per file: a fifth paging capability fails the
 suite rather than a reviewer. (`entityRefs` is bounded separately, and says nothing, because it is an
@@ -603,7 +605,12 @@ failed every deployed function's cold start over a mistake in a tool description
 where `LIVE_HINT_EXEMPTIONS` names the tool, the hint and the reason. `CAPABILITY_KINDS`, `RISK_CLASSES` and `EFFECT_KINDS` are closed lists for the same
 reason the warning codes are.
 
-### 8.1 The ten capabilities `run()` serves today
+### 8.1 The capabilities `run()` serves today
+
+The design proposed ten. Eight came out of this release on 6 September 2026 — every banking capability,
+marketplace payouts, the sales and per-channel money summaries, the inventory valuation, the connection
+roster and the accounting sync status — and "out" means no registry row and no dispatch, so a gateway
+cannot reach one under any flag. What a second channel may call is the two rows below.
 
 All are reads: class A, assurance 1, no outward effect — which is why a level-1 read binding may call
 every one of them.
@@ -611,15 +618,7 @@ every one of them.
 | capability | scopes | gates | PII | domains read |
 |------------|--------|-------|-----|--------------|
 | `search_inventory` | orders.read | orders + inventory | — | settings inventory |
-| `get_business_attention_summary` | orders.read finance.read | orders | — | settings orders production inventory bank receiptInbox payouts connections commerceHealth review accounting |
-| `get_commerce_overview` | orders.read finance.read | orders + financial | — | settings orders payouts connections commerceHealth |
 | `search_commerce_orders` | orders.read | orders | name, e-mail | settings orders connections commerceHealth |
-| `get_channel_performance` | orders.read finance.read | orders + financial | — | settings orders payouts connections commerceHealth |
-| `get_inventory_overview` | orders.read | orders + inventory | — | settings inventory |
-| `get_payout_reconciliation_overview` | finance.read | bankFeed | — | settings payouts bank connections |
-| `get_integration_health` | orders.read | orders | — | orders connections commerceHealth review |
-| `get_accounting_sync_status` | finance.read | accountingReader | — | settings connections accounting bank |
-| `get_banking_attention_summary` | finance.read | bankFeed | name | settings bank receiptInbox connections |
 
 `search_inventory` is the one capability in this table that is **not** gated by the orchestrator flag
 alone: its registry row names both `inventory` and `orchestrator`, so either flag publishes it. That is
@@ -679,9 +678,12 @@ role." The gate is now `areas.bankFeed` alone, which is the question the rules f
 A collection a caller may not read has **no key** on the snapshot, which is a third state distinct from
 the empty array a read collection gets. `payouts.payoutFeedState` asks visibility FIRST and of both
 providers, so a refused caller is told `connection_not_visible` rather than handed `count: 0` — a zero is
-a claim that somebody looked. `get_channel_performance` carries that reason through to its per-channel
+a claim that somebody looked. `get_channel_performance` carried that reason through to its per-channel
 `settlement` row instead of flattening it to `no_payout_feed_for_this_provider`, which would turn a fact
-about the caller's role into a claim about the workspace.
+about the caller's role into a claim about the workspace. (That capability, and every other named in this
+section, is out of this release — §8.1. The domain gate and its table stay, and no published capability
+declares `payouts` at all, which `orchestrator-loaders.test.js` asserts and re-opens this section's checks
+the moment one does.)
 
 The gate is a TABLE, `loaders.DOMAIN_GATES`, with a row for every domain in `DOMAINS`: either a predicate
 naming the grant it asks for, or `open: true` with the reason it is open written beside it. A domain with

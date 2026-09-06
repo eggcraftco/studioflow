@@ -24470,9 +24470,10 @@ function nvMcpAvailableActions() {
  * and filed everything under `subject.kind: "order"`, so the log claimed a
  * bank-counterparty read had exposed a phone number and a postal address.
  *
- * Both orchestrator reads are dispatched through this switch, so this is the
- * one place their row is written — the orchestrator itself is built WITHOUT
- * recordPiiAccess on this surface so a single call cannot file two rows.
+ * The orchestrator read that hands over people, `search_commerce_orders`, is
+ * dispatched through this switch, so this is the one place its row is written —
+ * the orchestrator itself is built WITHOUT recordPiiAccess on this surface so a
+ * single call cannot file two rows.
  */
 function nvMcpPiiLoggedActions() {
   return new Set(nvMcpRegistry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged === true && nvMcpPiiLogFlagOn(entry)).map((entry) => entry.name));
@@ -24482,9 +24483,8 @@ function nvMcpPiiLoggedActions() {
  * Whether the flag an entry's access-log row waits on is on.
  *
  * `get_bank_spending_summary` and `search_bank_transactions` hand over a
- * counterparty's name and did not record the read, while
- * `get_banking_attention_summary` — the newest door to the same data —
- * declares the same `pii: ["name"]` and does. "Every PII path writes its
+ * counterparty's name and did not record the read, while `search_commerce_orders`
+ * declares `pii: ["name", "email"]` and does. "Every PII path writes its
  * access-log row" was false, and the argument for leaving it false was that
  * turning a write on for a live 1.1.1 connection is an operator's decision
  * rather than a merge's. That argument is right about the risk and wrong about
@@ -24531,9 +24531,9 @@ function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
   const requested = String(action || "").trim();
   const entry = nvMcpRegistry.entryFor(requested);
   if (!entry || entry.piiAccessLogged !== true || !nvMcpPiiLogFlagOn(entry)) return null;
-  // One record, or a set of them. `search_orders` with no orderId,
-  // `search_commerce_orders` and `get_banking_attention_summary` name no
-  // subject because they HAVE none — they read a set — and an empty id with
+  // One record, or a set of them. `search_orders` with no orderId and
+  // `search_commerce_orders` name no subject because they HAVE none — they
+  // read a set — and an empty id with
   // nothing said reads as a row whose subject went missing. accessLog's own
   // convention for this is the one `run()` uses for the marketplace-block rows:
   // the id is empty on purpose, and the row says so.
@@ -24670,22 +24670,20 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
         : nvChatGPTSearchInventory(context, args);
     case "create_inventory_item":
       return nvChatGPTCreateInventoryItem(context, args);
-    // The orchestrator capabilities: one line each, because the work is in
+    // The orchestrator capability, because the work is in
     // functions/orchestrator/ where a second channel can reach it.
     // `search_inventory_items` is deliberately absent: it is an internal alias
     // of `search_inventory` (orchestrator/index.js CAPABILITY_ALIASES), not a
     // published tool, and a dispatcher case for a name the listing does not
     // carry is exactly the list-versus-dispatcher split this switch was
     // rewritten to close.
-    case "get_business_attention_summary":
-    case "get_commerce_overview":
+    //
+    // The eight cases that stood here — attention, commerce and channel money,
+    // the inventory valuation, payouts, connection health, accounting sync and
+    // banking attention — were removed with their registry rows on 6 September
+    // 2026. A case with no registry row is precisely the split above, one
+    // direction along: the tool would be unlisted and still callable.
     case "search_commerce_orders":
-    case "get_channel_performance":
-    case "get_inventory_overview":
-    case "get_payout_reconciliation_overview":
-    case "get_integration_health":
-    case "get_accounting_sync_status":
-    case "get_banking_attention_summary":
       return nvChatGPTOrchestratorRun(context, requested, args);
     default:
       throw new HttpsError(
@@ -26356,14 +26354,14 @@ const NV_MCP_FLAGS = {
  * assistant was shown people" but "a marketplace's buyer data was refused".
  * The dispatcher cannot write that one — it runs before any read and does not
  * know which orders the policy blocked — so without this injection a block made
- * by the ten read capabilities would leave no trace at all, while the same
+ * by the orchestrator read capabilities would leave no trace at all, while the same
  * block made by search_orders leaves one (nvSafeOrderForChatGPT).
  * privacy/outbound.js states the rule that would have broken: a block nobody
  * can see is indistinguishable from a feature that quietly does not work.
  */
 const nvOrchestratorModule = require("./orchestrator");
 // The scope rule itself, pure and shared: nvMcpAssertScope applies it to the 19
-// legacy tools and assertCapability applies it to the ten, out of one function
+// legacy tools and assertCapability applies it to the orchestrator ones, out of one function
 // over one table, so the two halves of the surface cannot enforce differently.
 const nvOrchestratorContext = require("./orchestrator/context");
 const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
@@ -27068,48 +27066,17 @@ function nvMcpOrderToolSchemas() {
       }
     ] : []),
     // The 1.2.0 read capabilities. Off by default: the listing OpenAI is
-    // reviewing must not gain nine tools because somebody merged a branch. The
+    // reviewing must not gain a tool because somebody merged a branch. The
     // operator flips NIVADESK_MCP_ORCHESTRATOR as part of a submission.
+    //
+    // There is ONE entry here, and `search_inventory` above is the other half
+    // of the flagged surface. The scope reduction of 6 September 2026 took the
+    // other eight out of the release: every banking capability, marketplace
+    // payouts, the sales and channel money summaries, the inventory valuation
+    // and the accounting sync status. "Out" is not a flag left off — they have
+    // no registry row, no schema here and no dispatcher case, so no flag state
+    // can list or run them (test/qa/mcp-reduced-surface.test.js).
     ...(NV_MCP_ORCHESTRATOR ? [
-      {
-        name: "get_business_attention_summary",
-        title: "What needs attention today",
-        description: "Answer \"what should I look at today?\" for the whole workspace: overdue and soon-due orders, outstanding payments, estimates waiting for a customer's answer, work finished but not shipped, low stock, bank transactions missing receipts or a category, unmatched marketplace payouts, accounting items and connections that need reconnecting. Every item says why it is there and how long it has been true. Prefer this over calling several read tools when the user asks a broad \"what's going on\" question. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            horizonDays: { type: "integer", minimum: 1, maximum: 30, description: "How far ahead \"due soon\" looks. Default 7." },
-            domains: {
-              type: "array",
-              description: "Limit the answer to these areas. Omit for all of them.",
-              items: { type: "string", enum: ["orders", "shipping", "payments", "inventory", "banking", "payouts", "accounting", "integrations"] }
-            },
-            limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum items to return (default 20)." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_business_attention_summary", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_commerce_overview",
-        title: "Sales overview across channels",
-        description: "Orders, gross sales, refunds, VAT, known and estimated platform fees, fulfilment state and a per-channel breakdown for a date range, across every shop the workspace sells through. Amounts are reported in the workspace currency with other currencies listed separately and never converted. Marketplace payouts are reported beside sales, never added to them — a sale, its payout and the bank deposit are the same money seen three times. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["fromDate", "toDate"],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            source: { type: "string", enum: ["all", "manual", "shopify", "etsy", "woocommerce", "square", "amazon", "ebay", "faire"], description: "Limit to one channel. Default all." },
-            manualSource: { type: "string", description: "With source \"manual\", narrow to where it came from — e.g. website, wix, zapier, chatgpt." },
-            fromDate: { type: "string", description: "First day of the range, YYYY-MM-DD (inclusive, UTC)." },
-            toDate: { type: "string", description: "Last day of the range, YYYY-MM-DD (inclusive, UTC)." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_commerce_overview", NV_MCP_FLAGS)
-      },
       {
         name: "search_commerce_orders",
         title: "Search orders across channels",
@@ -27134,106 +27101,6 @@ function nvMcpOrderToolSchemas() {
           }
         },
         annotations: nvMcpRegistry.annotationsFor("search_commerce_orders", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_channel_performance",
-        title: "Compare sales channels",
-        description: "Compare channels over a date range: order count, gross, refunds, average order value, known and estimated fees, tax, settlement state and fulfilment, per currency. Profit is only given as a definite number when every order in that bucket has a cost figure; otherwise it is labelled an estimate with its coverage, or reported as unavailable. Do not present an estimate as a definite margin. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["fromDate", "toDate"],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            fromDate: { type: "string", description: "First day of the range, YYYY-MM-DD." },
-            toDate: { type: "string", description: "Last day of the range, YYYY-MM-DD." },
-            channels: { type: "array", description: "Limit the comparison to these channels.", items: { type: "string", enum: ["shopify", "woocommerce", "etsy", "square", "amazon", "ebay", "manual", "faire"] } }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_channel_performance", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_inventory_overview",
-        title: "Inventory overview",
-        description: "Stock at a glance: how many items, how many at or below their low-stock level, what is reserved for orders, what is incoming, and what the shelf is worth. Items belonging to customers are counted separately and never valued as the workshop's own. Channel allocation and oversell risk are reported as unavailable because NivaDesk does not map stock to shop listings yet — say so rather than reporting zero. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            location: { type: "string", description: "Only items kept in this location." },
-            category: { type: "string", description: "Only items in this category." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_inventory_overview", NV_MCP_FLAGS)
-      },
-      // `search_inventory_items` stood here, as a second published "Search
-      // inventory" beside the one above. There is one now; this block's schema
-      // moved up to `search_inventory`, which the orchestrator answers whenever
-      // this flag is on.
-      {
-        name: "get_payout_reconciliation_overview",
-        title: "Marketplace payouts against the bank",
-        description: "Which processor payouts have been matched to a bank line and which have not: matched, matched with a difference, unmatched, and the ones where more than one bank row is an equally good candidate. Call it when money \"is missing\" or a payout does not appear on the statement. Describe a match as matched with a bank line — it is an operational link, not an accountant's reconciliation. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            provider: { type: "string", enum: ["all", "square", "paypal", "amazon", "ebay", "shopify", "etsy", "faire"], description: "Limit to one processor. Default all." },
-            fromDate: { type: "string", description: "First arrival day of the range, YYYY-MM-DD." },
-            toDate: { type: "string", description: "Last arrival day of the range, YYYY-MM-DD." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_payout_reconciliation_overview", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_integration_health",
-        title: "Connection health",
-        description: "Answer \"is anything wrong with my connections?\": per connection, the account, whether authorisation still holds, how fresh orders and finance are, pending retries, dead letters, orders held for review, and whether the connection needs reconnecting. A connection whose status this server cannot read is reported as not visible, not as broken — and its orders are still counted elsewhere. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            provider: { type: "string", description: "Limit to one provider, e.g. shopify, etsy, woocommerce, square, amazon, ebay." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_integration_health", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_accounting_sync_status",
-        title: "Accounting sync status",
-        description: "What the accounting connectors (QuickBooks, Xero, Pandle) are doing: which one is the primary writer, whether two of them conflict, what still needs attention, and how many bank transactions are ready to be prepared. NivaDesk prepares records but does not post to the ledger yet, so the posting counters are reported as unavailable — never tell the user their books are filed or reconciled. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_accounting_sync_status", NV_MCP_FLAGS)
-      },
-      {
-        name: "get_banking_attention_summary",
-        title: "What needs attention in Banking",
-        description: "The bank feed's own to-do list: transactions with no receipt or no category, likely duplicate charges, charges much larger than usual for that supplier, recurring payments whose price changed or which have stopped arriving, transfers between the owner's own accounts, unmatched payouts, and the connection's own state. Items are grouped, so eight missing receipts are one item with a count, not eight alerts. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            fromDate: { type: "string", description: "First booking day to consider, YYYY-MM-DD." },
-            toDate: { type: "string", description: "Last booking day to consider, YYYY-MM-DD." },
-            limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum items to return (default 20)." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("get_banking_attention_summary", NV_MCP_FLAGS)
       }
     ] : [])
   ];
@@ -27255,7 +27122,7 @@ function nvMcpInitializeResult(requestedProtocolVersion) {
       "Never reveal data from another workspace. Use the workspace selected during NivaDesk sign-in automatically; do not ask the user for companyId.",
       "Respect workspace roles: view-only and workflow-only users cannot create or update orders. Personal note tools only affect the connected user own Notes area; collaboration is not changed automatically.",
       ...(NV_MCP_ORCHESTRATOR ? [
-        "Cross-channel reads are available for sales, inventory, marketplace payouts, connection health, accounting status and banking attention. Every one of them reports how fresh its data is and what it could not include: never present a figure marked stale or partial as if it were live and complete, and never turn an unavailable metric into a zero.",
+        "Cross-channel reads are available for orders and inventory. Both report how fresh their data is and what they could not include: never present a row marked stale or partial as if it were live and complete, and never turn an unavailable field into a zero.",
         "Creating or updating an order can send that customer an e-mail or SMS, because the workspace's own notification rules run on the change. Say so before you do it."
       ] : [])
     ].join("\n")

@@ -126,29 +126,96 @@ checkAsync("a companyId in the arguments is a lookup key, never a grant", async 
   await assert.rejects(() => orchestrator.resolveContext({ uid: "u_outsider", companyId: "someone_elses_workspace" }), /do not have access/);
 });
 
+/**
+ * Each permission field a registry row can carry, the grant that withholding it
+ * means, and the sentence assertCapability owes the caller when it is missing.
+ *
+ * This drives the gate check off the REGISTRY instead of a written-out list of
+ * capability/override pairs. The list that stood here named seven capabilities,
+ * five of which the 6 September 2026 scope reduction removed — so five of its
+ * seven rows called `registry.entryFor` on a name that returns null, and
+ * `assertCapability(ctx, null)` throws "Unknown capability", which matched no
+ * expected message and failed. Worse than failing: had any of those regexes
+ * been loose enough to match, the row would have passed while testing nothing.
+ * A gate table keyed on permission FIELDS covers whatever the registry holds,
+ * including capabilities that do not exist yet.
+ */
+/**
+ * The capabilities `assertCapability` actually governs: the orchestrator's own
+ * dispatch set, read from the module rather than listed here.
+ *
+ * Not "everything the registry publishes" — the 19 legacy tools are gated by the
+ * nvRequire* guards in index.js and never reach this function, so sweeping them
+ * into these loops asserts that assertCapability refuses a tool it was never
+ * asked about. mcp-reduced-surface.test.js holds this set and the registry to
+ * each other in both directions, so reading it here cannot drift from what is
+ * published.
+ */
+const GOVERNED = require("../../orchestrator").CAPABILITY_NAMES;
+
+const GATE_WITHHOLDINGS = [
+  { field: "ownerOnly", withhold: () => ({ isOwner: false }), expect: /workspace owner/ },
+  { field: "financial", withhold: () => ({ financialInfo: false }), expect: /financial information/ },
+  { field: "bankFeed", withhold: () => ({ areas: { orders: true, dashboard: true, customers: true, bankFeed: false } }), expect: /Bank Spending/ },
+  { field: "accountingReader", withhold: () => ({ accountingReader: false }), expect: /Accounting/ },
+  { field: "inventory", withhold: () => ({ inventoryAccess: false }), expect: /Inventory/ }
+];
+
 check("each capability's gate is the workspace area it belongs to", () => {
-  const cases = [
-    ["get_commerce_overview", { financialInfo: false }, /financial information/],
-    ["get_channel_performance", { financialInfo: false }, /financial information/],
-    ["search_commerce_orders", { areas: { orders: false, bankFeed: true } }, /does not include orders/],
-    ["get_payout_reconciliation_overview", { areas: { orders: true, bankFeed: false } }, /Bank Spending/],
-    ["get_banking_attention_summary", { areas: { orders: true, bankFeed: false } }, /Bank Spending/],
-    ["get_accounting_sync_status", { accountingReader: false }, /Accounting/],
-    ["get_inventory_overview", { inventoryAccess: false }, /Inventory/]
-  ];
-  for (const [name, override, expected] of cases) {
-    const ctx = fixtures.ownerContext({ isOwner: false, ...override });
-    assert.throws(() => context.assertCapability(ctx, registry.entryFor(name)), expected, `${name} was not gated`);
+  const published = GOVERNED.map((name) => registry.entryFor(name));
+  let gatesChecked = 0;
+  for (const entry of published) {
+    const permission = entry.permission || {};
+    // The area gate, which names its area rather than being a boolean.
+    if (permission.area) {
+      const ctx = fixtures.ownerContext({
+        isOwner: false,
+        areas: { ...fixtures.ownerContext().areas, [permission.area]: false }
+      });
+      assert.throws(() => context.assertCapability(ctx, entry),
+        new RegExp(`does not include ${permission.area}`), `${entry.name}: the ${permission.area} area gate did not fire`);
+      gatesChecked += 1;
+    }
+    for (const gate of GATE_WITHHOLDINGS) {
+      if (permission[gate.field] !== true) continue;
+      const ctx = fixtures.ownerContext({ isOwner: false, ...gate.withhold() });
+      assert.throws(() => context.assertCapability(ctx, entry), gate.expect,
+        `${entry.name}: permission.${gate.field} did not gate the call`);
+      gatesChecked += 1;
+    }
+    // And with every grant held, the same capability answers — so the check
+    // above is a gate firing rather than a capability that always refuses.
+    assert.doesNotThrow(() => context.assertCapability(fixtures.ownerContext(), entry),
+      `${entry.name} refuses an owner holding every grant`);
   }
+  assert.ok(gatesChecked >= published.length,
+    `only ${gatesChecked} gate(s) fired across ${published.length} published capabilities`);
 });
 
 check("the accounting gate is stricter than the bankFeed area, and is not substituted for it", () => {
   // A custom role can be granted the bankFeed AREA without the explicit
   // per-member bank grant the accounting callables ask for. The assistant must
   // use the same, stricter predicate the callables use.
+  //
+  // The two capabilities this was demonstrated on — get_accounting_sync_status
+  // and get_banking_attention_summary — are both out of the release, so there
+  // is no published capability left carrying either gate. The RULE still lives
+  // in assertCapability and is what a future accounting capability will be held
+  // to, so it is checked directly on the predicate rather than deleted with the
+  // capabilities that happened to be its first callers.
   const ctx = fixtures.ownerContext({ isOwner: false, areas: { orders: true, bankFeed: true }, accountingReader: false });
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_accounting_sync_status")), /Accounting/);
-  assert.doesNotThrow(() => context.assertCapability(ctx, registry.entryFor("get_banking_attention_summary")));
+  const accountingEntry = { name: "probe", scopes: ["finance.read"], permission: { accountingReader: true } };
+  const bankEntry = { name: "probe", scopes: ["finance.read"], permission: { bankFeed: true } };
+  assert.throws(() => context.assertCapability(ctx, accountingEntry), /Accounting/,
+    "the bankFeed area was accepted in place of the accounting reader grant");
+  assert.doesNotThrow(() => context.assertCapability(ctx, bankEntry),
+    "the accounting grant was demanded of a capability that only asks for the bank feed");
+  // And no published capability quietly carries one gate while meaning the other.
+  for (const name of GOVERNED) {
+    const permission = registry.entryFor(name).permission || {};
+    assert.ok(!(permission.accountingReader && permission.bankFeed),
+      `${name} carries both the accounting and the bank-feed gate; say which one owns its data`);
+  }
 });
 
 check("the inventory section is gated by the inventory predicate, not by the orders area", () => {
@@ -162,8 +229,15 @@ check("the inventory section is gated by the inventory predicate, not by the ord
     areas: { orders: true, dashboard: true, customers: true, bankFeed: true },
     inventoryAccess: false
   });
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_inventory_overview")), /Inventory/);
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("search_inventory")), /Inventory/);
+  // get_inventory_overview stood beside search_inventory here and is out of the
+  // release; the surviving inventory capability carries the same gate, and it
+  // is read from the registry so a second one arriving is covered too.
+  const inventoryTools = GOVERNED.filter((name) => (registry.entryFor(name).permission || {}).inventory === true);
+  assert.deepStrictEqual(inventoryTools, ["search_inventory"],
+    "the set of inventory-gated capabilities changed; this check should cover all of them");
+  for (const name of inventoryTools) {
+    assert.throws(() => context.assertCapability(ctx, registry.entryFor(name)), /Inventory/, `${name} was not inventory-gated`);
+  }
   const sections = context.sectionAccess(ctx);
   assert.strictEqual(sections.inventory, false, "the summary opened a section both inventory tools refuse");
   // Everything the orders area really does grant is untouched.
@@ -173,18 +247,27 @@ check("the inventory section is gated by the inventory predicate, not by the ord
 });
 
 check("a token without the scope a capability asks for cannot call it", () => {
-  const ctx = fixtures.ownerContext({ scope: ["notes.read"] });
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_commerce_overview")), /scope/);
-  const withScope = fixtures.ownerContext({ scope: ["orders.read", "finance.read"] });
-  assert.doesNotThrow(() => context.assertCapability(withScope, registry.entryFor("get_commerce_overview")));
+  // Over every published capability, with the scope each one declares, rather
+  // than on the single capability that used to be named here.
+  for (const name of GOVERNED) {
+    const entry = registry.entryFor(name);
+    const wrong = fixtures.ownerContext({ scope: ["notes.read"] });
+    assert.throws(() => context.assertCapability(wrong, entry), /scope/, `${name} answered a token holding only notes.read`);
+    const withScope = fixtures.ownerContext({ scope: entry.scopes });
+    assert.doesNotThrow(() => context.assertCapability(withScope, entry),
+      `${name} refused a token granted exactly the scopes it asks for`);
+  }
 });
 
 check("the plan entitlement for the ChatGPT connection is honoured", () => {
-  const ctx = fixtures.ownerContext({ entitlements: { chatgptAppEnabled: false } });
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_commerce_overview")), /plan/);
-  // The same workspace over WhatsApp is not gated by the ChatGPT entitlement.
-  const wa = fixtures.ownerContext({ entitlements: { chatgptAppEnabled: false }, channel: { type: "whatsapp", profile: null } });
-  assert.doesNotThrow(() => context.assertCapability(wa, registry.entryFor("get_commerce_overview")));
+  for (const name of GOVERNED) {
+    const entry = registry.entryFor(name);
+    const ctx = fixtures.ownerContext({ entitlements: { chatgptAppEnabled: false } });
+    assert.throws(() => context.assertCapability(ctx, entry), /plan/, `${name} answered a workspace whose plan excludes the connection`);
+    // The same workspace over WhatsApp is not gated by the ChatGPT entitlement.
+    const wa = fixtures.ownerContext({ entitlements: { chatgptAppEnabled: false }, channel: { type: "whatsapp", profile: null } });
+    assert.doesNotThrow(() => context.assertCapability(wa, entry), `${name} applied the ChatGPT entitlement to a WhatsApp binding`);
+  }
 });
 
 checkAsync("the role is whatever the app's resolver says, not what the members map looks like", async () => {
@@ -254,17 +337,44 @@ check("every section line is the SAME predicate as the capability that owns the 
   // answered in full by the banking tool, in one session.
   //
   // A claim of parity is checkable, so it is checked, over every combination of
-  // the four grants and both roles rather than at one example. `SECTION_OWNERS`
-  // names the owning capability per section; assertCapability is the other side.
+  // the four grants and both roles rather than at one example.
+  //
+  // WHAT THE 6 SEPTEMBER 2026 REDUCTION DID TO THIS CHECK. `SECTION_OWNERS`
+  // lived in context.js and named an owning capability for all eight sections.
+  // Six of those capabilities are no longer in the release, so six of its rows
+  // named something `registry.entryFor` returns null for — a parity claim with
+  // nothing on the other side of it. The table is gone from context.js and the
+  // owner mapping lives here, in the test that is the only thing that ever read
+  // it, with each owner VERIFIED against the registry rather than asserted.
+  //
+  // The sections whose owner went out of the release are not skipped quietly:
+  // `sectionAccess` has exactly one caller, `attention.js`, and that module has
+  // no registry row and nothing on the live require graph reaches it
+  // (test/qa/mcp-reduced-surface.test.js). So those six lines cannot reach any
+  // client at all, and that — not a weaker version of the parity claim — is
+  // what is asserted about them below.
+  const SECTION_OWNERS = { orders: "search_commerce_orders", shipping: "search_commerce_orders" };
+  const UNOWNED_IN_THIS_RELEASE = {
+    payments: "get_commerce_overview", inventory: "get_inventory_overview",
+    banking: "get_banking_attention_summary", payouts: "get_payout_reconciliation_overview",
+    accounting: "get_accounting_sync_status", integrations: "get_integration_health"
+  };
+  for (const [section, capability] of Object.entries(SECTION_OWNERS)) {
+    assert.ok(registry.entryFor(capability),
+      `SECTION_OWNERS names ${capability} for "${section}", and the registry does not have it`);
+  }
+  for (const [section, capability] of Object.entries(UNOWNED_IN_THIS_RELEASE)) {
+    assert.strictEqual(registry.entryFor(capability), null,
+      `"${section}" owner ${capability} is published again: move it into SECTION_OWNERS so its line is held to the capability's gate`);
+  }
   const GRANTS = ["bankFeed", "financialInfo", "accountingReader", "inventoryAccess"];
   let combinations = 0;
   for (let mask = 0; mask < (1 << GRANTS.length); mask += 1) {
     for (const workflowOnly of [false, true]) {
       const held = new Set(GRANTS.filter((_, index) => (mask & (1 << index)) !== 0));
       // The orders area is held throughout: without it nothing reaches
-      // get_business_attention_summary, which is the only caller of
-      // sectionAccess, so the population under test is exactly the population
-      // this function is evaluated over.
+      // attention.js, the only caller of sectionAccess, so the population under
+      // test is exactly the population this function is evaluated over.
       const ctx = fixtures.ownerContext({
         isOwner: false,
         role: workflowOnly ? "workflowOnly" : "member",
@@ -276,9 +386,8 @@ check("every section line is the SAME predicate as the capability that owns the 
         inventoryAccess: held.has("inventoryAccess")
       });
       const sections = context.sectionAccess(ctx);
-      for (const [section, capability] of Object.entries(context.SECTION_OWNERS)) {
+      for (const [section, capability] of Object.entries(SECTION_OWNERS)) {
         const entry = registry.entryFor(capability);
-        assert.ok(entry, `SECTION_OWNERS names ${capability}, which is not in the registry`);
         let allowed = true;
         try { context.assertCapability(ctx, entry); } catch (error) { allowed = false; }
         assert.strictEqual(sections[section], allowed,
@@ -289,11 +398,12 @@ check("every section line is the SAME predicate as the capability that owns the 
     }
   }
   assert.strictEqual(combinations, 32, "the cross-product stopped covering every grant combination");
-  // And every section has an owner: a section nobody owns is a predicate with
-  // nothing to be the same as.
+  // And every section is accounted for: one of the two lists above, and no
+  // third state. A section added without saying who owns its data is a
+  // predicate nothing is holding to anything.
   assert.deepStrictEqual(
     Object.keys(context.sectionAccess(fixtures.ownerContext())).sort(),
-    Object.keys(context.SECTION_OWNERS).sort(),
+    [...Object.keys(SECTION_OWNERS), ...Object.keys(UNOWNED_IN_THIS_RELEASE)].sort(),
     "a section was added or removed without saying which capability owns its data"
   );
 });
@@ -307,11 +417,22 @@ check("the workflow-only member the summary contradicted gets one answer now", (
     areas: { orders: true, dashboard: false, customers: false, bankFeed: true }
   });
   const sections = context.sectionAccess(ctx);
-  for (const [section, capability] of [["banking", "get_banking_attention_summary"], ["payouts", "get_payout_reconciliation_overview"], ["accounting", "get_accounting_sync_status"]]) {
-    assert.doesNotThrow(() => context.assertCapability(ctx, registry.entryFor(capability)),
-      `${capability} refuses this member, so the section must be closed rather than the capability opened`);
+  // The three capabilities that made the contradiction visible — the banking
+  // summary, the payout overview and the accounting status — are all out of the
+  // release. What was WRONG was never those three tools: it was that
+  // sectionAccess carried `&& !ctx.workflowOnly` where the gate it claimed to
+  // copy carried only `permission.bankFeed` / `permission.accountingReader`. So
+  // the check keeps the member and keeps the finding, and states it against the
+  // gate rather than against capabilities that no longer exist to disagree.
+  for (const [section, permission] of [
+    ["banking", { bankFeed: true }],
+    ["payouts", { bankFeed: true }],
+    ["accounting", { accountingReader: true }]
+  ]) {
+    assert.doesNotThrow(() => context.assertCapability(ctx, { name: section, scopes: ["finance.read"], permission }),
+      `the ${section} gate refuses this member, so the section must be closed rather than the capability opened`);
     assert.strictEqual(sections[section], true,
-      `the summary reports "${section}" as not permitted while ${capability} answers in full`);
+      `the summary reports "${section}" as not permitted while its own gate lets this member through`);
   }
   // The grants this member does NOT hold are still closed, so the fix is not
   // "open everything to workflow-only".
@@ -330,7 +451,7 @@ checkAsync("an unknown capability, and a capability whose flag is off, are both 
     flags: {},
     loaders: { loadCompany: deps().loadCompany, snapshotFor: async () => snapshot }
   });
-  await assert.rejects(() => off.run({ capability: "get_commerce_overview", args: {}, ctx }), /not switched on/);
+  await assert.rejects(() => off.run({ capability: "search_commerce_orders", args: {}, ctx }), /not switched on/);
   assert.deepStrictEqual(off.listCapabilities(), [], "with the flag off the orchestrator publishes nothing");
 });
 
@@ -346,7 +467,11 @@ checkAsync("permission is checked BEFORE anything is read", async () => {
     loaders: { loadCompany, snapshotFor: async () => { readAttempted = true; return fixtures.mixedSnapshot(); } }
   });
   const ctx = await orchestrator.resolveContext({ uid: "u_view", companyId: "co_1", scope: "orders.read finance.read" });
-  await assert.rejects(() => orchestrator.run({ capability: "get_commerce_overview", args: {}, ctx }), /financial information/);
+  // The vehicle was get_commerce_overview and its `permission.financial` gate,
+  // which the reduction removed with the capability. `search_inventory` is
+  // published and carries `permission.inventory`, and a member holding only the
+  // orders area is refused by it — the same gate-before-read shape.
+  await assert.rejects(() => orchestrator.run({ capability: "search_inventory", args: {}, ctx }), /Inventory/);
   assert.strictEqual(readAttempted, false, "the loader ran despite the refusal");
 });
 
@@ -403,9 +528,18 @@ checkAsync("every gate reads the document loadCompany returned for this call, an
   assert.strictEqual(ctx.areas.orders, false);
   assert.strictEqual(ctx.areas.bankFeed, false);
   assert.strictEqual(ctx.financialInfo, false);
+  // The refusal is taken on the gate rather than on a named capability: the one
+  // that stood here, get_banking_attention_summary, is out of the release, and
+  // the claim being made is about where `ctx.areas` came from, not about which
+  // tool asked.
   assert.throws(
-    () => context.assertCapability(ctx, registry.entryFor("get_banking_attention_summary")),
+    () => context.assertCapability(ctx, { name: "probe", scopes: ["finance.read"], permission: { bankFeed: true } }),
     /Bank Spending is not enabled/
+  );
+  // And on a capability that IS published, over the area it declares.
+  assert.throws(
+    () => context.assertCapability(ctx, registry.entryFor("search_commerce_orders")),
+    /does not include orders/
   );
 
   // And it is read again on the next call rather than carried over: that is

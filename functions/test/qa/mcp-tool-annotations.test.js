@@ -156,7 +156,7 @@ check("a read tool that hands over people discloses its access-log row", () => {
   }
 });
 
-check("the dispatcher's PII list is the registry's, and it is still these eight tools", () => {
+check("the dispatcher's PII list is the registry's, and it is still these nine tools", () => {
   // There were two lists: a hand-written MCP_ACTIONS_READING_PII in index.js
   // and `piiAccessLogged` here, kept in step by the version of this check that
   // parsed the Set out of the source. There is one list now — the dispatcher
@@ -174,7 +174,6 @@ check("the dispatcher's PII list is the registry's, and it is still these eight 
   const logged = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged).map((entry) => entry.name).sort();
   assert.deepStrictEqual(logged, [
     "get_bank_spending_summary",
-    "get_banking_attention_summary",
     "get_dashboard_summary",
     "get_extra_spending_overview",
     "get_financial_overview",
@@ -186,8 +185,8 @@ check("the dispatcher's PII list is the registry's, and it is still these eight 
   ]);
   // Every tool that hands over a person records the read. The two bank tools
   // were the exception — `pii: ["name"]` with `piiAccessLogged: false` — while
-  // get_banking_attention_summary, the newest door to the same counterparty
-  // names, logged. There is no exception now.
+  // `search_commerce_orders`, the newest door to a customer's name and e-mail,
+  // logged. There is no exception now.
   for (const entry of registry.TOOL_REGISTRY) {
     if (entry.pii.length === 0) continue;
     assert.strictEqual(entry.piiAccessLogged, true,
@@ -525,6 +524,24 @@ function servedTools(flags) {
     }
   }).toString();
   return JSON.parse(out.trim().split("\n").pop());
+}
+
+// `--write` re-records the two ORCHESTRATOR states only, and refuses the other
+// two. The "off" and "inventory" recordings are the evidence that the listing
+// the 1.1.1 connection is served did not move; a --write that regenerated them
+// would overwrite the finding with whatever the code now does, which is the one
+// thing a parity fixture must never be able to do. When the flagged surface
+// changes — as it did on 6 September 2026, from ten capabilities to two — this
+// is how the fixture follows it.
+if (process.argv.includes("--write")) {
+  const next = { ...fixture, states: { ...fixture.states } };
+  for (const label of ["orchestrator", "inventory+orchestrator"]) {
+    next.states[label] = { ...fixture.states[label], tools: servedTools(FLAG_STATES[label]) };
+  }
+  fs.writeFileSync(FIXTURE, `${JSON.stringify(next, null, 2)}\n`);
+  console.log(`re-recorded the orchestrator states (${next.states.orchestrator.tools.length} and ${next.states["inventory+orchestrator"].tools.length} tools)`);
+  console.log("\"off\" and \"inventory\" were NOT touched: they are the reviewed 1.1.1 listing");
+  process.exit(0);
 }
 
 for (const [label, flags] of Object.entries(FLAG_STATES)) {

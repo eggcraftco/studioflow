@@ -290,17 +290,29 @@ const REFUSALS = {
 };
 
 check("a refused caller is told, in the words the caller reads", async () => {
-  // Two shapes of refusal, and every gated domain produces at least one of
-  // them. A capability whose whole subject is the gated domain refuses at the
-  // door; a capability with a SECTION over it answers and names the section it
-  // left out. Silence is neither, and silence reads as "nothing to report".
+  // Two shapes of refusal, and every gated domain a capability can reach
+  // produces at least one of them. A capability whose whole subject is the
+  // gated domain refuses at the door; a capability with a SECTION over it
+  // answers and names the section it left out. Silence is neither, and silence
+  // reads as "nothing to report".
+  //
+  // A gated domain NO published capability declares is a third case, and it
+  // arrived with the 6 September 2026 reduction: `bank`, `receiptInbox`,
+  // `payouts` and `accounting` are gated in the loader and nothing on this
+  // surface asks for them any more. There is no refusal to word because there
+  // is no read to refuse, and demanding one would be demanding a sentence about
+  // an answer nobody can ask for. Which domains those are is asserted below,
+  // from the registry, so this cannot quietly become an excuse for a domain a
+  // capability really does declare.
   const said = new Set();
+  const unreachable = [];
   for (const domain of DOMAINS) {
     const gate = DOMAIN_GATES[domain] || {};
     if (gate.open === true) continue;
     assert.strictEqual(typeof gate.allows, "function", `${domain} has no row in DOMAIN_GATES`);
     const opening = grantsThatOpen(domain);
     const ctx = contextWith(...Object.keys(GRANTS).filter((grant) => !opening.includes(grant)));
+    if (capabilitiesDeclaring(domain).length === 0) { unreachable.push(domain); continue; }
     let toldSomewhere = false;
     for (const capability of capabilitiesDeclaring(domain)) {
       const entry = registry.entryFor(capability);
@@ -345,61 +357,67 @@ check("a refused caller is told, in the words the caller reads", async () => {
     assert.ok(toldSomewhere,
       `${domain} is refused in silence: no capability that declares it either refuses the caller or names the section`);
   }
-  assert.ok(said.size >= 5, `only ${said.size} refusals were observed across the gated domains`);
+  assert.deepStrictEqual(unreachable.sort(), ["accounting", "bank", "payouts", "receiptInbox"],
+    "a gated domain became unreachable, or a capability started declaring one that was — either way this check's exemption list is wrong");
+  assert.ok(said.size >= 1, "no refusal was observed at all, so the wording above is not under test");
 });
 
-check("payouts: neither provider's money reaches a member the rules file refuses", async () => {
-  // The finding itself, kept as a case because a rule proved over a
-  // cross-product is easy to satisfy accidentally and these are the sentences
-  // that have to stay true. The predicate is firestore.rules' own: BOTH payout
-  // collections are `allow read: if canReadBankFeed(companyId)`, which is owner
-  // OR memberAccess.bankFeed — financialInfo is not in it. So a member with
-  // financial access and no Banking reads neither collection, gets no figure
-  // out of either, and is TOLD the feed cannot be seen from here rather than
-  // being shown a zero.
+check("no published capability can read a payout, bank or accounting collection at all", async () => {
+  // What this check used to be, and why it is now stronger.
   //
-  // Both capabilities are driven, because they emit the money in two different
-  // shapes: `data.settlements.<provider>` from the overview, and a per-channel
-  // `settlement` row from get_channel_performance — which had no gate of any
-  // kind and is how Square money reached this member after the PayPal half was
-  // closed.
-  const ctx = contextWith("financialInfo");
-  const { domains, snapshot } = await domainsRead("get_commerce_overview", ctx);
-  assert.ok(!domains.has("payouts"), "a payout collection was read for a member without Banking");
-  assert.strictEqual(snapshot.payouts, undefined, "the payout collections were read for a member without Banking");
-
-  const overview = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
-  const performance = HANDLERS.get_channel_performance(snapshot, {}, ctx, { nowMs: fixtures.NOW });
-  for (const [label, result] of [["get_commerce_overview", overview], ["get_channel_performance", performance]]) {
-    const serialised = JSON.stringify(result.data);
-    // 4200.55 is the seeded PayPal payout; 10 is the seeded Square one, so it
-    // is checked through the fields that would carry it rather than by string.
-    assert.ok(!serialised.includes("4200.55"), `${label}: the PayPal payout amount is in the answer`);
+  // It pinned a finding: a member with the orders area and financial access and
+  // NO Banking had companies/{cid}/paypalPayouts read for them, and
+  // `commerce.settlementTotals` published its count, gross, fee and net under
+  // `data.settlements.paypal` — while get_payout_reconciliation_overview
+  // refused that same person outright. Gating the domain fixed the PayPal half
+  // and left the Square half standing, because get_channel_performance had no
+  // gate of any kind.
+  //
+  // All three of those capabilities left the release on 6 September 2026, along
+  // with every other one that reported money. So the assertion is no longer
+  // "the gate holds for a member without Banking" — it is that the money is not
+  // reachable from this surface AT ALL: no published capability declares those
+  // domains, and driving every one of them as an OWNER, the caller who holds
+  // every grant there is, touches none of those collections.
+  //
+  // Read as an owner on purpose: a gate that refuses a member proves the gate,
+  // and this is proving something else — that there is nothing behind it to
+  // read. If a money capability is ever published again, its own domain gate
+  // comes back with it and this check turns red, which is the right place for
+  // that decision to surface.
+  const MONEY_COLLECTIONS = ["squarePayouts", "paypalPayouts", "bankTransactions", "bankVendors", "bankReceiptInbox", "accountingAttention", "pandleConnection"];
+  const owner = fixtures.ownerContext({ companyId: CID });
+  assert.ok(CAPABILITY_NAMES.length > 0, "nothing is published, so this check covers nothing");
+  for (const capability of CAPABILITY_NAMES) {
+    const { db, reads } = recorder(SEED);
+    const loaders = loadersModule.createLoaders({ db, now: () => fixtures.NOW });
+    const entry = registry.entryFor(capability);
+    const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], owner, { settings: fixtures.settings });
+    for (const path of reads) {
+      const segments = path.split("/");
+      const name = segments[0] === "companies" ? segments[2] : segments[0];
+      assert.ok(!MONEY_COLLECTIONS.includes(name),
+        `${capability} read ${path} for an owner: a money collection is reachable from the published surface again`);
+    }
+    assert.strictEqual(snapshot.payouts, undefined, `${capability} was handed a payout feed`);
+    assert.strictEqual(snapshot.bankRows, undefined, `${capability} was handed bank transactions`);
+    // And the fixture really would have shown it: the same recorder reads the
+    // seeded PayPal payout when a domain asks for it.
+    const proof = recorder(SEED);
+    const feed = await loadersModule.createLoaders({ db: proof.db, now: () => fixtures.NOW })
+      .snapshotFor(["settings", "payouts"], owner, { settings: fixtures.settings });
+    assert.ok(Array.isArray(feed.payouts.paypal) && feed.payouts.paypal.length > 0,
+      "the payout seed no longer loads even when a domain asks for it, so the absence above proves nothing");
   }
-  assert.ok(overview.data.settlements.others.some((row) => row.provider === "paypal" && row.reason === "connection_not_visible"),
-    "the answer must say the PayPal feed cannot be seen from here, not guess that it is missing");
-  assert.ok(overview.data.settlements.others.some((row) => row.provider === "square" && row.reason === "connection_not_visible"),
-    "Square is money out of the same collection: its refusal must read the same way");
-  assert.strictEqual(overview.data.settlements.square, undefined, "Square settlement totals were published to a member without Banking");
 
-  const squareRow = performance.data.channels.find((row) => row.channel === "square");
-  assert.deepStrictEqual(squareRow.settlement, { available: false, reason: "connection_not_visible" },
-    "get_channel_performance published a Square settlement row to a member without Banking");
-  // A refused provider is not the same statement as an unsupported one, and
-  // flattening the two would make this check pass while saying the wrong thing.
-  const faireRow = performance.data.channels.find((row) => row.channel === "faire");
-  assert.strictEqual(faireRow.settlement.reason, "provider_not_supported",
-    "a provider NivaDesk has no payout feed for must not be reported as one the caller may not see");
-
-  // And with Banking, the same reads produce both feeds — a gate that never
-  // opens would satisfy every check above.
-  const banking = contextWith("financialInfo", "bankFeed");
-  const withBank = await domainsRead("get_commerce_overview", banking);
-  assert.ok(Array.isArray(withBank.snapshot.payouts.paypal), "a member with Banking lost the PayPal feed");
-  assert.ok(Array.isArray(withBank.snapshot.payouts.square), "a member with Banking lost the Square feed");
-  const allowed = HANDLERS.get_channel_performance(withBank.snapshot, {}, banking, { nowMs: fixtures.NOW });
-  assert.strictEqual(allowed.data.channels.find((row) => row.channel === "square").settlement.available, true,
-    "a member with Banking lost the Square settlement row");
+  // The registry side of the same statement, said directly: no published row
+  // asks for money.
+  for (const name of CAPABILITY_NAMES) {
+    const declared = registry.entryFor(name).domainNeeds || [];
+    for (const domain of ["payouts", "bank", "receiptInbox", "accounting"]) {
+      assert.ok(!declared.includes(domain), `${name} declares the ${domain} domain again`);
+    }
+  }
 });
 
 (async () => {

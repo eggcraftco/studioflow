@@ -10,7 +10,7 @@
 // `untrusted.safeText` at each of its own call sites. A reviewer poisoned every
 // string source in a workspace with one 330-character payload — a newline, a
 // right-to-left override, a zero-width space — and found EIGHT of the ten
-// capabilities repeating it back, plus two leaks that were in no capability at
+// capabilities of the day repeating it back, plus two leaks that were in no capability at
 // all: `envelope.warning` bounded nothing, and `freshness.build` interpolates a
 // bank connection's own provider key into four sentences, one of which was
 // quoted into a rendered summary line. The lesson the reviewer named is the
@@ -159,10 +159,15 @@ const GROUP = { capabilities: ["read"], security: { assurance_level: 1, pii_leve
  */
 const CAPABILITIES = orchestratorFor().listCapabilities();
 
-check("the capabilities under test come from the registry, and there are ten of them", () => {
+check("the capabilities under test come from the registry, and there is at least one", () => {
   assert.deepStrictEqual([...CAPABILITIES].sort(), [...orchestratorModule.CAPABILITY_NAMES].sort(),
     "the registry projection and the handler table disagree about what this deployment publishes");
-  assert.strictEqual(CAPABILITIES.length, 10, `expected ten orchestrator capabilities, found ${CAPABILITIES.length}`);
+  // A count, not a number: the 6 September 2026 reduction cut this surface from
+  // ten capabilities to two, and a literal "10" here would have been exactly
+  // the hand-maintained list the header refuses. What must hold is that the
+  // enumeration is not EMPTY — an empty list would let every assertion below
+  // pass over nothing.
+  assert.ok(CAPABILITIES.length > 0, "the registry publishes no orchestrator capability at all, so nothing below is under test");
   // And the enumeration is live: every name has a registry row that this
   // deployment's flags publish.
   for (const name of CAPABILITIES) {
@@ -193,7 +198,7 @@ check("the checker can see a violation when there is one", () => {
 });
 
 check("every capability, every field of the envelope, over a workspace where every string is poisoned", async () => {
-  // The whole point of this file. Ten capabilities from the registry, each run
+  // The whole point of this file. Every capability from the registry, each run
   // twice — with no arguments and with poisoned ones — over a snapshot whose
   // every provider-, bank-, ledger- and buyer-authored string is the payload.
   const orchestrator = orchestratorFor();
@@ -297,8 +302,8 @@ check("the workspace these answers are built from is hostile in every domain", a
   const bad = violationsIn({ action: "", data: snapshot, warnings: [], freshness: {}, entityRefs: [], suggestedActions: [], summary: { lines: [] } }, "the snapshot");
   assert.ok(bad.length >= 50, `the fixture only breaks the invariant ${bad.length} times — it has stopped being hostile`);
 
-  // And a fact worth recording rather than asserting: today the ten handlers
-  // ALSO bound their own strings, so their raw output is already clean before
+  // And a fact worth recording rather than asserting: today's handlers
+  // ALSO bind their own strings, so their raw output is already clean before
   // `finish` sees it. That is belt and braces, not the reason the envelopes are
   // clean — it is what a reviewer had to fix capability by capability, and it
   // is exactly what an eleventh capability would not know to do. The check

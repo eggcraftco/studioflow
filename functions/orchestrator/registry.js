@@ -597,7 +597,8 @@ const TOOL_REGISTRY = [
     //
     // Two flags, because both surfaces need this one search: `inventory` alone
     // publishes it beside `create_inventory_item`, and `orchestrator` alone
-    // publishes it as one of the ten read capabilities.
+    // publishes it as one of the two read capabilities the reduced 1.2.0
+    // surface carries.
     name: "search_inventory",
     title: "Search inventory",
     domain: "inventory",
@@ -653,75 +654,21 @@ const TOOL_REGISTRY = [
   },
 
   /* ------------------------------------------------------------------ *
-   * The 1.2.0 read capabilities (§11–§12), all behind NIVADESK_MCP_ORCHESTRATOR.
+   * The 1.2.0 read capabilities, behind NIVADESK_MCP_ORCHESTRATOR.
    *
-   * Every one of them is the same four values — true / false / true / false —
-   * and that is not a copy-paste: they are pure reads over existing helpers,
-   * they write nothing, and calling one twice with the same arguments returns
-   * the same answer over the same data. What differs between them is which
-   * gate they sit behind and whether they hand over a person, and those are
-   * the fields directly below the hints.
+   * There is one row here, and the workspace's inventory search above is the
+   * other half of the set: the scope reduction of 6 September 2026 cut this
+   * block from ten capabilities to the two the operator kept — order search,
+   * and ONE inventory search. Everything that reported money, payouts,
+   * accounting or banking state came out of the release entirely: no registry
+   * row, nothing published under any flag, nothing dispatched. The modules
+   * behind them are still on disk and are unreachable, which
+   * test/qa/mcp-reduced-surface.test.js is the standing proof of.
    *
    * `domainNeeds` is what the loader is allowed to read for that capability —
-   * the reason a notes-shaped question does not drag four connection
+   * the reason an order-shaped question does not drag four connection
    * collections in behind it.
    * ------------------------------------------------------------------ */
-  {
-    name: "get_business_attention_summary",
-    title: "What needs attention today",
-    domain: "attention",
-    flag: "orchestrator",
-    scopes: ["orders.read", "finance.read"],
-    permission: { guard: "orchestrator.assertCapability", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    // Nobody is named here, and that is enforced rather than hoped for. This
-    // capability emits the same banking findings as get_banking_attention_summary
-    // but asks for them with `revealCounterparty: false`, so a recurring-spend
-    // group carries its transaction ids and no merchant label — and a merchant
-    // is a person whenever the payment was person to person. The order items
-    // follow the same rule: the title names the order, never the buyer. The
-    // caller is told WHICH, and asks the banking capability WHO, which is the
-    // read that declares pii and files the access-log row.
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "orders", "production", "inventory", "bank", "receiptInbox", "payouts", "connections", "commerceHealth", "review", "accounting"],
-    justification: {
-      readOnlyHint: "Because every detector runs over documents the loader read and writes nothing back: the accounting queue is read through its own reader, never through store.openAttention, which would create or bump an attention document on each call.",
-      destructiveHint: "Because nothing is overwritten, moved or deleted; the answer is assembled in memory and discarded.",
-      idempotentHint: "Because the detectors are deterministic over the same data, and a grouped item keeps its attentionId across days so a repeat call does not mint new items.",
-      openWorldHint: "Because it reads NivaDesk's own collections only: no provider API is called, no URL is fetched and no message leaves the workspace."
-    }
-  },
-  {
-    name: "get_commerce_overview",
-    title: "Sales overview across channels",
-    domain: "commerce",
-    flag: "orchestrator",
-    scopes: ["orders.read", "finance.read"],
-    permission: { guard: "orchestrator.assertCapability", area: "orders", write: false, financial: true, bankFeed: false, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "orders", "payouts", "connections", "commerceHealth"],
-    justification: {
-      readOnlyHint: "Because it totals orders and payouts in memory through finance/engine.js and writes nothing: the money is recomputed on every call rather than stamped back onto the order.",
-      destructiveHint: "Because no order, payout or setting is changed by reading them.",
-      idempotentHint: "Because the same range over the same orders produces the same totals; only generatedAt moves, and that is metadata about the read.",
-      openWorldHint: "Because the figures come from orders and payouts already stored in NivaDesk; no shop, marketplace or bank is contacted to answer it."
-    }
-  },
   {
     name: "search_commerce_orders",
     title: "Search orders across channels",
@@ -748,156 +695,6 @@ const TOOL_REGISTRY = [
       destructiveHint: "Because searching cannot alter an order: no field is written and no row is removed.",
       idempotentHint: "Because the same filters over the same orders return the same rows in the same order.",
       openWorldHint: "Because it searches NivaDesk's own order collection; the provider is never queried, even for an order that came from one."
-    }
-  },
-  {
-    name: "get_channel_performance",
-    title: "Compare sales channels",
-    domain: "commerce",
-    flag: "orchestrator",
-    scopes: ["orders.read", "finance.read"],
-    permission: { guard: "orchestrator.assertCapability", area: "orders", write: false, financial: true, bankFeed: false, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "orders", "payouts", "connections", "commerceHealth"],
-    justification: {
-      readOnlyHint: "Because it groups the same recomputed order figures by channel and writes nothing back to any order or connection.",
-      destructiveHint: "Because comparing channels changes none of them.",
-      idempotentHint: "Because the same range produces the same per-channel figures, including the cost-coverage ratio that decides whether profit is reported as a definite number.",
-      openWorldHint: "Because every figure comes from stored orders and payouts; no channel API is called to build the comparison."
-    }
-  },
-  {
-    name: "get_inventory_overview",
-    title: "Inventory overview",
-    domain: "inventory",
-    flag: "orchestrator",
-    scopes: ["orders.read"],
-    permission: { guard: "nvRequireInventoryAccess", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false, inventory: true },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "inventory"],
-    justification: {
-      readOnlyHint: "Because it counts stock through the same pure summarize() the Inventory screen uses and writes no item, movement or ledger row.",
-      destructiveHint: "Because counting stock cannot change it: no quantity, reservation or valuation is touched.",
-      idempotentHint: "Because the same shelf produces the same counts and value on every call.",
-      openWorldHint: "Because inventory has no external connector at all: the numbers come from NivaDesk's own items and nothing is fetched."
-    }
-  },
-  // `search_inventory_items` used to be registered here, beside
-  // get_inventory_overview, as a second published inventory search. It is now
-  // the `search_inventory` entry above — one row, one published name — and the
-  // old name survives only as an internal alias in orchestrator/index.js.
-  {
-    name: "get_payout_reconciliation_overview",
-    title: "Marketplace payouts against the bank",
-    domain: "banking",
-    flag: "orchestrator",
-    scopes: ["finance.read"],
-    permission: { guard: "nvRequireBankFeedAccess", area: null, write: false, financial: false, bankFeed: true, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "payouts", "bank", "connections"],
-    justification: {
-      readOnlyHint: "Because it scores candidate bank rows with the pure settlements scorer and reports the result: it never calls the matcher that writes bankMatch onto a payout and settlement onto a transaction.",
-      destructiveHint: "Because no payout is matched, unmatched or relabelled by asking about it.",
-      idempotentHint: "Because scoring the same payouts against the same bank rows yields the same counts, and a second call still writes no match.",
-      openWorldHint: "Because payouts and bank rows are already in NivaDesk; neither the processor nor the bank is contacted to answer the question."
-    }
-  },
-  {
-    name: "get_integration_health",
-    title: "Connection health",
-    domain: "integrations",
-    flag: "orchestrator",
-    scopes: ["orders.read"],
-    permission: { guard: "orchestrator.assertCapability", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["orders", "connections", "commerceHealth", "review"],
-    justification: {
-      readOnlyHint: "Because it reads connection documents and health records and writes nothing: reporting that a connection needs reauthorisation does not attempt the reauthorisation.",
-      destructiveHint: "Because no connection is disconnected, retried or reset by reporting its state.",
-      idempotentHint: "Because the same stored health records produce the same rows, and no counter is incremented by the read.",
-      openWorldHint: "Because freshness is read from NivaDesk's own health documents rather than by pinging each provider, which is also why an Amazon connection this project cannot see is reported as not visible instead of as broken."
-    }
-  },
-  {
-    name: "get_accounting_sync_status",
-    title: "Accounting sync status",
-    domain: "accounting",
-    flag: "orchestrator",
-    scopes: ["finance.read"],
-    permission: { guard: "accountingReaderCanRead", area: null, write: false, financial: false, bankFeed: false, ownerOnly: false, accountingReader: true },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "connections", "accounting", "bank"],
-    justification: {
-      readOnlyHint: "Because the open accounting items are read from the attention collection rather than opened through store.openAttention, which would write a document and bump an occurrence counter on every call.",
-      destructiveHint: "Because nothing in the accounting state is resolved, ignored or retried by reading it.",
-      idempotentHint: "Because the same connections and attention rows produce the same status, and the read cannot advance a posting through its state machine.",
-      openWorldHint: "Because QuickBooks, Xero and Pandle are not called: the answer is the state NivaDesk already stored, which is why it says posting is not switched on rather than reporting zero failures."
-    }
-  },
-  {
-    name: "get_banking_attention_summary",
-    title: "What needs attention in Banking",
-    domain: "banking",
-    flag: "orchestrator",
-    scopes: ["finance.read"],
-    permission: { guard: "nvRequireBankFeedAccess", area: null, write: false, financial: false, bankFeed: true, ownerOnly: false },
-    riskClass: "A",
-    minAssurance: 1,
-    // A bank row's counterparty is a person whenever the payment was person to
-    // person, and a recurring-spend group is titled with that same text.
-    pii: ["name"],
-    piiAccessLogged: true,
-    piiSubject: "bank_transaction",
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "bank", "receiptInbox", "connections"],
-    justification: {
-      readOnlyHint: "Because the duplicate, recurring, transfer and unusual-charge rules are pure functions over rows the loader read; the only write on the path is the piiAccessLog row, recording that a counterparty name was shown to an assistant.",
-      destructiveHint: "Because no transaction is categorised, linked, dismissed or marked reviewed by reporting it.",
-      idempotentHint: "Because the same rows produce the same grouped items with the same attentionId, so a second call does not create a second alert for the same eight receipts.",
-      openWorldHint: "Because it reads bank rows already imported into NivaDesk; the bank is not contacted and no sync is triggered."
     }
   }
 ];
@@ -936,7 +733,8 @@ function normalizeFlags(flags = {}) {
  * alone publishes it beside `create_inventory_item` (whose description tells
  * the model to search before it adds, so a create tool with no search beside it
  * is a duplicate-maker), and the orchestrator flag alone publishes it as one of
- * the ten read capabilities. What it must never be is TWO tools — see
+ * the two read capabilities the reduced 1.2.0 surface carries. What it must
+ * never be is TWO tools — see
  * docs/mcp-inventory-search-decision.md and the invariant in
  * test/qa/mcp-one-inventory-search.test.js.
  */

@@ -302,7 +302,7 @@ check("a block made by an orchestrator capability is recorded too", async () => 
   // loaders.projectOrderForAssistant applies the same redactForChannel the live
   // path applies and dropped the audit half — correctly, since the module is
   // pure — while nothing else on that path wrote it. So once an Amazon or eBay
-  // connector lands, a block made by one of the ten read capabilities would
+  // connector lands, a block made by one of the orchestrator read capabilities would
   // have left no trace at all, and the same block made by search_orders would
   // have left one.
   const { createOrchestrator } = require("../../orchestrator");

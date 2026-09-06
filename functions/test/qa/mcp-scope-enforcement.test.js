@@ -8,10 +8,10 @@
 //      if the token names scopes and one is missing", so a token carrying NO
 //      scope string passed every gate — while context.js's header claimed
 //      "Scopes are enforced, not just carried".
-//   2. HALF A SURFACE. Only the ten orchestrator capabilities were checked at
-//      all; the 19 tools dispatched through nvChatGPTDispatchAction were not,
-//      so `get_financial_overview` answered a token with no finance.read while
-//      `get_commerce_overview` refused the same token.
+//   2. HALF A SURFACE. Only the orchestrator capabilities were checked at all;
+//      the 19 tools dispatched through nvChatGPTDispatchAction were not, so
+//      `get_financial_overview` answered a token with no finance.read while a
+//      flagged capability refused the same token.
 //   3. A DEFAULT SMALLER THAN THE LISTING. tools/list is one document served
 //      before any token exists and advertises tools needing finance.read and
 //      notes.*; the mint sites defaulted to "orders.read orders.write", so a
@@ -39,14 +39,24 @@ const check = (name, run) => {
 
 // ---- the rule itself ---------------------------------------------------------
 
+// Every capability the flags can publish, read from the registry rather than
+// typed out. The three names this file used as vehicles — get_commerce_overview,
+// get_inventory_overview, get_banking_attention_summary — were removed from the
+// release on 6 September 2026, and a scope test that names its subjects by hand
+// stops testing the surface the moment the surface changes.
+const FLAGGED = registry.publishedNames({ inventory: true, orchestrator: true })
+  .filter((name) => !registry.publishedNames({}).includes(name))
+  .map((name) => registry.entryFor(name));
+
 check("a delegated token that carries no scope may do nothing", () => {
   // The fail-open branch. An empty grant is not every grant.
   const empty = fixtures.ownerContext({ scope: [] });
-  for (const name of ["get_commerce_overview", "get_inventory_overview", "get_banking_attention_summary"]) {
+  assert.ok(FLAGGED.length > 0, "no flagged capability to check the empty grant against");
+  for (const entry of FLAGGED) {
     assert.throws(
-      () => context.assertCapability(empty, registry.entryFor(name)),
+      () => context.assertCapability(empty, entry),
       /not granted any scope/,
-      `${name} answered a token that was granted nothing`
+      `${entry.name} answered a token that was granted nothing`
     );
   }
   assert.deepStrictEqual(
@@ -76,19 +86,49 @@ check("a member signed in with their own ID token is not scope-checked", () => {
     if (!entry.domainNeeds) continue;
     assert.doesNotThrow(() => context.assertCapability(session, entry), `${name} demanded a scope of a first-party session`);
   }
-  // The gates that are not about scope still apply to them.
-  const noBank = fixtures.ownerContext({ authType: "firebase_session", scope: [], isOwner: false, areas: { orders: true, bankFeed: false } });
-  assert.throws(() => context.assertCapability(noBank, registry.entryFor("get_banking_attention_summary")), /Bank Spending/);
+  // The gates that are not about scope still apply to them. The vehicle used to
+  // be the bankFeed gate on get_banking_attention_summary; no capability in the
+  // reduced release carries that gate, so the check moves to one that is still
+  // published — `search_inventory`, whose `permission.inventory` is the same
+  // shape of area gate and is the app's own nvRequireInventoryAccess.
+  const noInventory = fixtures.ownerContext({
+    authType: "firebase_session", scope: [], isOwner: false,
+    areas: { orders: true }, inventoryAccess: false
+  });
+  assert.throws(() => context.assertCapability(noInventory, registry.entryFor("search_inventory")), /Inventory is not enabled/);
 });
 
 check("a token missing one scope is refused, and told which", () => {
-  const ctx = fixtures.ownerContext({ scope: ["orders.read", "orders.write"] });
-  assert.throws(
-    () => context.assertCapability(ctx, registry.entryFor("get_commerce_overview")),
-    /was not granted the finance\.read scope/
+  // A partial grant, not an empty one: the caller holds a scope and is missing
+  // a different one. get_commerce_overview (orders.read + finance.read) carried
+  // this check and is out of the release; every capability the flags publish now
+  // asks for a single scope, so the two-scope case is taken where it still
+  // exists — the legacy table — through the SAME pure rule assertCapability
+  // uses, and the one-scope case is taken on the flagged surface.
+  const twoScope = registry.TOOL_REGISTRY.find((entry) => entry.scopes.length > 1);
+  assert.ok(twoScope, "no tool asks for two scopes; this check has nothing to hold");
+  const held = twoScope.scopes[0];
+  const withheld = twoScope.scopes[1];
+  assert.deepStrictEqual(
+    context.missingScopes({ authType: "chatgpt_oauth", scope: [held] }, twoScope.scopes),
+    [withheld],
+    `${twoScope.name}: a grant holding ${held} should still be missing ${withheld}`
   );
-  const full = fixtures.ownerContext({ scope: ["orders.read", "finance.read"] });
-  assert.doesNotThrow(() => context.assertCapability(full, registry.entryFor("get_commerce_overview")));
+  assert.throws(
+    () => context.assertCapability(fixtures.ownerContext({ scope: [held] }), twoScope),
+    new RegExp(`was not granted the ${withheld.replace(".", "\\.")} scope`)
+  );
+  assert.doesNotThrow(() => context.assertCapability(fixtures.ownerContext({ scope: twoScope.scopes }), twoScope));
+
+  // And on the flagged surface, where one scope is the whole ask.
+  for (const entry of FLAGGED) {
+    const wrong = fixtures.ownerContext({ scope: ["notes.read"] });
+    assert.throws(
+      () => context.assertCapability(wrong, entry),
+      new RegExp(`was not granted the ${entry.scopes[0].replace(".", "\\.")} scope`),
+      `${entry.name} answered a token granted only notes.read`
+    );
+  }
 });
 
 // ---- the same rule over the whole surface ------------------------------------
@@ -104,7 +144,7 @@ check("the dispatcher applies the rule to the 19 legacy tools too", () => {
     "a legacy finance tool still answers a token with no finance grant"
   );
   assert.throws(
-    () => api._nvMcpAssertScope(token("orders.read orders.write"), "get_commerce_overview"),
+    () => api._nvMcpAssertScope(token("orders.read orders.write"), "get_dashboard_summary"),
     /finance\.read/
   );
   assert.throws(() => api._nvMcpAssertScope(token(""), "search_orders"), /not granted any scope/);

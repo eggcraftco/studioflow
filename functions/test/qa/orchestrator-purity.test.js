@@ -113,17 +113,19 @@ check("capability output carries no field that looks like a credential", () => {
   snapshot.reviewQueue = [];
   snapshot.heldOrders = [];
 
-  const capabilities = [
-    ["get_commerce_overview", require("../../orchestrator/commerce").commerceOverview, { fromDate: "2026-09-01", toDate: "2026-09-30" }],
-    ["search_commerce_orders", require("../../orchestrator/commerce").searchCommerceOrders, {}],
-    ["get_channel_performance", require("../../orchestrator/commerce").channelPerformance, { fromDate: "2026-09-01", toDate: "2026-09-30" }],
-    ["get_integration_health", require("../../orchestrator/integrationHealth").integrationHealth, {}],
-    ["get_accounting_sync_status", require("../../orchestrator/accountingStatus").accountingSyncStatus, {}],
-    ["get_payout_reconciliation_overview", require("../../orchestrator/payouts").payoutReconciliation, {}],
-    ["get_inventory_overview", require("../../orchestrator/inventory").inventoryOverview, {}],
-    ["get_business_attention_summary", require("../../orchestrator/attention").businessAttentionSummary, {}],
-    ["get_banking_attention_summary", require("../../orchestrator/attention").bankingAttentionSummary, {}]
-  ];
+  // From the handler table, not from a list here: a capability whose output was
+  // never checked for credential-shaped keys is exactly the one that leaks.
+  // `HANDLERS` is the dispatch half of the registry, so this covers whatever
+  // the deployment can actually run — two capabilities since the 6 September
+  // 2026 reduction, and whatever is added next without anybody editing this.
+  const { HANDLERS } = require("../../orchestrator");
+  const ARGS = { search_commerce_orders: {}, search_inventory: {} };
+  const capabilities = Object.entries(HANDLERS).map(([name, handler]) => {
+    assert.ok(Object.prototype.hasOwnProperty.call(ARGS, name),
+      `${name} is dispatchable and this check does not know what to call it with`);
+    return [name, handler, ARGS[name]];
+  });
+  assert.ok(capabilities.length > 0, "no capability is dispatchable, so this check covers nothing");
 
   for (const [name, handler, args] of capabilities) {
     const result = handler(snapshot, args, ctx, { nowMs: snapshot.nowMs });

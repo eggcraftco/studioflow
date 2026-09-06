@@ -100,9 +100,12 @@ field by field against what the deployed tree writes. See §6 for what this docu
 cover.
 
 In particular, **no tool that does not exist in production appears with the flags off.** The candidate
-serves 19 tools; production serves the same 19. The ten orchestrator capabilities, `search_inventory`
-and `create_inventory_item` are all absent from the flags-off listing, which is the operator's invariant
-holding rather than being tested and excused.
+serves 19 tools; production serves the same 19. The flagged capabilities — `search_commerce_orders`,
+`search_inventory` and `create_inventory_item` — are all absent from the flags-off listing, which is the
+operator's invariant holding rather than being tested and excused. (This was written when the flagged set
+was ten capabilities. The scope reduction of 6 September 2026 took eight of them out of the release
+entirely, so they are absent from every listing in every flag state, not only from this one; the verdict
+above is unaffected, and the capture was re-run against the reduced tree to confirm it.)
 
 ### 3.1 The comparison in full
 

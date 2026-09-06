@@ -85,8 +85,8 @@ check("every permission.area a row names is an area a context can actually hold"
   // seven notes tools on `area: "notes"` and the three finance tools on
   // `area: "financialInfo"`, against an `areas` object with four keys.
   //
-  // It failed closed, and it was harmless only by accident — none of the ten has
-  // a HANDLERS entry, so the gate is never reached for them today. This table
+  // It failed closed, and it was harmless only by accident — none of those tools
+  // has a HANDLERS entry, so the gate is never reached for them today. This table
   // exists so a second channel can route the SAME rows through the SAME gate,
   // and the first time the WhatsApp gateway does, every notes tool is denied to
   // everyone with "Your workspace access does not include notes."
@@ -139,9 +139,34 @@ check("§4.2's worked examples are what the projection actually returns, set for
   const NOTE_WRITES = ["add_order_note", "create_note", "append_note", "update_note", "pin_note", "archive_note"];
   const FILE_WRITES = ["attach_bank_receipt", "create_inventory_item"];
 
-  assert.strictEqual(everything.length, 30, "§4.2 quotes 30 published entries with every flag on");
-  assert.strictEqual(writes.length, 10, "§4.2 quotes 10 writes");
-  assert.strictEqual(reads.length, 20, "§4.2's first row quotes 20 read entries");
+  // The three counts come out of the DOCUMENT and are compared with the
+  // registry, rather than being retyped here as literals beside it. They were
+  // literals — 30/10/20 — and the 6 September 2026 scope reduction moved the
+  // published table to 22, so the test and the page it certifies went stale
+  // together and this check failed with a number nobody could trace to a
+  // sentence. A count that only exists in the paragraph a gateway author reads
+  // is the one worth parsing.
+  const quoted = (pattern, what) => {
+    const found = DOC.match(pattern);
+    assert.ok(found, `§4.2 no longer states ${what}`);
+    return Number(found[1]);
+  };
+  assert.strictEqual(everything.length,
+    quoted(/all three flags on the table is (\d+)\s*\n?entries/, "how many entries the full table holds"),
+    "§4.2's entry count is not what the registry publishes");
+  assert.strictEqual(writes.length,
+    quoted(/entries, of which (\d+) are writes/, "how many of them are writes"),
+    "§4.2's write count is not what the registry holds");
+  assert.strictEqual(reads.length,
+    quoted(/\| `\["read"\]`, level 1 \| \*\*(\d+)\*\* entries/, "how many entries a read-only binding gets"),
+    "§4.2's first row is not the number of read entries");
+  // And the other two rows, which are the first row plus a named set of writes.
+  assert.strictEqual(reads.length + NOTE_WRITES.length,
+    quoted(/\| all four kinds, level 1 \| \*\*(\d+)\*\* entries/, "the all-kinds row"),
+    "§4.2's all-kinds row does not equal the reads plus the six note writes");
+  assert.strictEqual(reads.length + NOTE_WRITES.length + FILE_WRITES.length,
+    quoted(/\| `\["read","internal_write","file_upload"\]`, level 3 \| \*\*(\d+)\*\* entries/, "the level-3 row"),
+    "§4.2's level-3 row does not equal the reads plus the note and file writes");
 
   const rows = [
     ["`[\"read\"]`, level 1", project(["read"], 1), reads],
@@ -176,8 +201,10 @@ check("§4.2's worked examples are what the projection actually returns, set for
   for (const name of NOTE_WRITES) {
     assert.ok(section.includes(`\`${name}\``), `§4.2 does not name ${name}, which a level-1 binding gets`);
   }
-  assert.ok(/\*\*26\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the level-1 projection");
-  assert.ok(/\*\*28\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the level-3 projection");
+  // The two projection sizes the rows quote are checked against the registry at
+  // the top of this function, by parsing them out of the page. Re-asserting the
+  // literals 26 and 28 here was a second copy of the same numbers that had to be
+  // edited in step with the first — and was not, when the reduction moved them.
   assert.ok(/\*\*20\*\* entries/.test(section), "§4.2 no longer quotes the measured size of the read-only projection");
 });
 
@@ -305,10 +332,13 @@ check("listCapabilities is the flag projection for MCP and the binding projectio
 checkAsync("two channels get the same figures, and only the presentation differs", async () => {
   const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);
-  const args = { fromDate: "2026-09-01", toDate: "2026-09-30" };
+  // get_commerce_overview carried this and is out of the release;
+  // search_commerce_orders is published and returns per-order money and a
+  // customer, which is what makes the two channels comparable at all.
+  const args = {};
 
-  const fromMcp = await instance.run({ capability: "get_commerce_overview", args, ctx: fixtures.ownerContext() });
-  const fromWhatsApp = await instance.run({ capability: "get_commerce_overview", args, ctx: waContext() });
+  const fromMcp = await instance.run({ capability: "search_commerce_orders", args, ctx: fixtures.ownerContext() });
+  const fromWhatsApp = await instance.run({ capability: "search_commerce_orders", args, ctx: waContext() });
 
   assert.deepStrictEqual(fromWhatsApp.data, fromMcp.data, "the money differs between channels");
   assert.deepStrictEqual(fromWhatsApp.warnings, fromMcp.warnings, "one channel is told less than the other");
@@ -334,9 +364,13 @@ checkAsync("a group thread sees the answer without the person and without the mo
       profile: { capabilities: ["read"], security: { assurance_level: 1, pii_level: "none", financial_data_allowed: false } }
     }
   });
-  const result = await instance.run({ capability: "get_commerce_overview", args: {}, ctx: group });
-  assert.strictEqual(result.data.sales.restricted, true, "a shared thread was shown the takings");
-  assert.strictEqual(result.data.sales.reason, "channel_financial_policy");
+  const result = await instance.run({ capability: "search_commerce_orders", args: {}, ctx: group });
+  const row = result.data.orders[0];
+  assert.ok(row, "the fixture returned no order, so this check proves nothing");
+  assert.strictEqual(row.totals.restricted, true, "a shared thread was shown the takings");
+  assert.strictEqual(row.totals.reason, "channel_financial_policy");
+  assert.strictEqual(row.customer.restricted, true, "a shared thread was shown the buyer");
+  assert.strictEqual(row.customer.reason, "channel_pii_policy");
 });
 
 /** Any amount written the way a person writes one. */
@@ -354,50 +388,79 @@ checkAsync("a group thread gets no money in a SENTENCE either, and keeps the cou
   // that only replaces fields called `totals` or `sales` misses the detector
   // that formatted the same figure into free text — "420 GBP still
   // outstanding" — and the entityRef whose label is a counterparty's name.
-  const snapshot = fixtures.attentionSnapshot();
+  // Both attention summaries carried this and are out of the release. The rule
+  // is `envelope.applyChannelProfile`'s, not any capability's, so it is taken
+  // twice: end to end over the capability that is published and still returns
+  // money and a person, and directly over the shapes §6.4 names — a free-text
+  // amount, a fact row, and a count that must survive.
+  const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);
-  const result = await instance.run({ capability: "get_business_attention_summary", args: {}, ctx: groupContext() });
+  const result = await instance.run({ capability: "search_commerce_orders", args: {}, ctx: groupContext() });
 
   const everything = JSON.stringify({ data: result.data, entityRefs: result.entityRefs, summary: result.summary });
   assert.ok(!MONEY_IN(everything), `an amount reached a shared thread: ${everything.slice(0, 300)}`);
 
-  const late = result.data.items.find((item) => item.reasons.includes("payment_outstanding"));
-  assert.ok(late, "the finding itself must survive: the thread is told to look, not told how much");
-  assert.ok(/withheld/.test(late.reason), `the sentence must say the figure was withheld, got: ${late.reason}`);
-
   // The other direction: a shared thread may see how MANY, and losing that
   // would be the redaction destroying what it is allowed to show.
-  const counted = result.data.items.find((item) => item.facts.some((fact) => fact.key === "count"));
-  assert.ok(counted, "no grouped item survived at all");
-  assert.strictEqual(typeof counted.facts.find((fact) => fact.key === "count").value, "number",
-    "the count was redacted because its field is called `value`");
-  const amountFact = result.data.items.flatMap((item) => item.facts).find((fact) => fact.key === "amount");
-  if (amountFact) assert.strictEqual(amountFact.value.restricted, true, "an amount fact survived as a number");
+  assert.strictEqual(typeof result.data.count, "number", "the count was redacted with the money");
+  assert.strictEqual(typeof result.data.matched, "number", "the match total was redacted with the money");
+  assert.ok(result.data.orders.length > 0, "every row was redacted away");
+
+  // The sentence and the fact row, over the profile itself.
+  const profile = { security: { pii_level: "none", financial_data_allowed: false } };
+  const scrubbed = envelope.applyChannelProfile({
+    line: "420 GBP still outstanding on this order",
+    facts: [{ key: "amount", value: { cost: 420, currency: "GBP" } }, { key: "count", value: 8 }],
+    refs: [envelope.entityRef("bankTransaction", "t_4", "Margaret Ellison")]
+  }, profile);
+  assert.ok(!MONEY_IN(scrubbed.line), `an amount survived in free text: ${scrubbed.line}`);
+  assert.ok(/withheld/i.test(scrubbed.line), `the sentence must say the figure was withheld, got: ${scrubbed.line}`);
+  assert.strictEqual(scrubbed.facts[0].value.restricted, true, "an amount fact survived as a number");
+  assert.strictEqual(scrubbed.facts[1].value, 8, "the count was redacted because its field is called `value`");
 });
 
-checkAsync("a group thread is told which bank row, never who was paid", async () => {
-  const snapshot = fixtures.attentionSnapshot();
-  snapshot.bankRows = [
-    { id: "t_1", amount: -400, currency: "GBP", bookingDate: "2026-06-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
-    { id: "t_2", amount: -400, currency: "GBP", bookingDate: "2026-07-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
-    { id: "t_3", amount: -400, currency: "GBP", bookingDate: "2026-08-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" },
-    { id: "t_4", amount: -450, currency: "GBP", bookingDate: "2026-09-01", counterparty: "Margaret Ellison", description: "STANDING ORDER", hasReceipt: true, category: "Rent" }
-  ];
-  const instance = orchestratorOver(snapshot);
-  const result = await instance.run({ capability: "get_banking_attention_summary", args: {}, ctx: groupContext() });
-  const everything = JSON.stringify({ data: result.data, entityRefs: result.entityRefs });
-  assert.ok(!everything.includes("Margaret Ellison"), "a counterparty's name reached a shared thread");
-  const ref = result.data.items.flatMap((item) => item.entityRefs).find((row) => row.id === "t_4");
-  assert.ok(ref, "the row itself must still be identified");
-  assert.strictEqual(ref.labelRestricted, true, "the label has to say it was withheld, not merely be empty");
+checkAsync("a group thread is told which entity, never who the person is", async () => {
+  // get_banking_attention_summary and its counterparty names are out of the
+  // release, and no published capability labels an entityRef with a person. The
+  // promise is `envelope.applyChannelProfile`'s — the id stays so the thread can
+  // say WHICH row, and the label is withheld rather than merely blank — so it is
+  // taken on the function, over every entity type §6.4 calls person-labelled.
+  const profile = { security: { pii_level: "none", financial_data_allowed: false } };
+  for (const type of envelope.PII_LABEL_TYPES) {
+    const scrubbed = envelope.applyChannelProfile(
+      { refs: [envelope.entityRef(type, "t_4", "Margaret Ellison")] }, profile);
+    const ref = scrubbed.refs[0];
+    assert.ok(!JSON.stringify(ref).includes("Margaret Ellison"), `a ${type} label reached a shared thread`);
+    assert.strictEqual(ref.id, "t_4", "the row itself must still be identified");
+    assert.strictEqual(ref.labelRestricted, true, "the label has to say it was withheld, not merely be empty");
+  }
+  // And end to end: the refs a published capability emits carry no person.
+  const snapshot = fixtures.mixedSnapshot();
+  const result = await orchestratorOver(snapshot).run({ capability: "search_commerce_orders", args: {}, ctx: groupContext() });
+  for (const ref of result.entityRefs) {
+    assert.ok(!envelope.PII_LABEL_TYPES.includes(ref.type) || ref.labelRestricted === true,
+      `a ${ref.type} ref reached a shared thread with its label intact`);
+  }
 });
 
 checkAsync("a one-to-one thread that allows both still gets both", async () => {
-  const snapshot = fixtures.attentionSnapshot();
+  const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);
-  const result = await instance.run({ capability: "get_business_attention_summary", args: {}, ctx: waContext() });
-  const late = result.data.items.find((item) => item.reasons.includes("payment_outstanding"));
-  assert.ok(MONEY_IN(late.reason), "the redaction is following the channel, not the capability");
+  const result = await instance.run({ capability: "search_commerce_orders", args: {}, ctx: waContext() });
+  const row = result.data.orders[0];
+  assert.strictEqual(row.totals.restricted, undefined, "the redaction is following the capability, not the channel");
+  assert.strictEqual(typeof row.totals.grandTotal, "number", "a one-to-one thread lost the money it is allowed");
+  // The buyer is withheld only by the CHANNEL policy here. This fixture records
+  // no customer on the first order, so the assertion is on the reason rather
+  // than on the flag: "not_recorded" is the capability saying there is nobody,
+  // and "channel_pii_policy" would be a one-to-one thread being redacted like a
+  // group one.
+  assert.notStrictEqual(row.customer.reason, "channel_pii_policy",
+    "a one-to-one thread was redacted as though it were a shared one");
+  for (const other of result.data.orders) {
+    assert.notStrictEqual(other.customer.reason, "channel_pii_policy",
+      `${other.orderId}: a one-to-one thread lost the buyer it is allowed`);
+  }
 });
 
 checkAsync("an unknown capability and a capability behind an off flag are both refused, by code", async () => {
@@ -415,7 +478,7 @@ checkAsync("an unknown capability and a capability behind an off flag are both r
     loaders: { loadCompany: async () => ({ companyData: {}, settings: {} }), snapshotFor: async () => snapshot }
   });
   await assert.rejects(
-    () => off.run({ capability: "get_commerce_overview", args: {}, ctx: waContext() }),
+    () => off.run({ capability: "search_commerce_orders", args: {}, ctx: waContext() }),
     (error) => error.code === "failed-precondition"
   );
 });
@@ -483,7 +546,8 @@ checkAsync("both channels decide 'does this read log?' from the same registry fi
     assert.deepStrictEqual(registry.entryFor(name).pii, [],
       `${name} declares pii categories and no access-log row: the two predicates disagree again`);
   }
-  await instance.run({ capability: "get_commerce_overview", args: {}, ctx: waContext() });
+  assert.ok(quiet.length > 0, "every dispatchable capability logs a row, so this proves nothing");
+  for (const name of quiet) await instance.run({ capability: name, args: {}, ctx: waContext() });
   assert.deepStrictEqual(rows, []);
 });
 
@@ -491,8 +555,12 @@ checkAsync("a capability that names nobody files no PII row", async () => {
   const snapshot = fixtures.mixedSnapshot();
   const piiRows = [];
   const instance = orchestratorOver(snapshot, { recordPiiAccess: async (row) => { piiRows.push(row); } });
-  await instance.run({ capability: "get_commerce_overview", args: {}, ctx: waContext() });
-  assert.deepStrictEqual(piiRows, [], "a totals answer logged an access to a person");
+  // `search_inventory` declares `pii: []`: a shelf is not a person. It replaces
+  // get_commerce_overview, which named nobody for the same reason and is out of
+  // the release.
+  assert.deepStrictEqual(registry.entryFor("search_inventory").pii, []);
+  await instance.run({ capability: "search_inventory", args: {}, ctx: waContext() });
+  assert.deepStrictEqual(piiRows, [], "an answer that names nobody logged an access to a person");
 });
 
 checkAsync("a channel that injects no hooks still gets an answer (this is MCP)", async () => {
@@ -557,7 +625,12 @@ check("every capability that pages says so — four out of four, not whichever a
       `orchestrator/${file}: ${reads} capabilit(ies) take a limit and ${says} raise result_truncated`);
     pagingSites += reads;
   }
-  assert.strictEqual(pagingSites, 4, `expected four paging capabilities, found ${pagingSites}`);
+  // The literal `4` stood here. It was a second statement of what the per-file
+  // `says === reads` invariant above already enforces — a fifth paging
+  // capability fails that assertion in its own file, with the file named — and
+  // it counted sites across every module on disk, including the ones the
+  // 6 September 2026 reduction orphaned, so it measured a surface nobody serves.
+  assert.ok(pagingSites > 0, "no capability reads args.limit; this scan has stopped finding the sites it checks");
 
   // And behaviourally, over real snapshots, with a page of one out of many.
   const inventoryShelf = {
@@ -567,12 +640,17 @@ check("every capability that pages says so — four out of four, not whichever a
       { id: "b", name: "B", trackingType: "quantity", status: "available", quantity: { onHand: 5, reserved: 0 } }
     ]
   };
-  const cases = [
-    ["get_business_attention_summary", fixtures.attentionSnapshot()],
-    ["get_banking_attention_summary", fixtures.attentionSnapshot()],
-    ["search_commerce_orders", fixtures.mixedSnapshot()],
-    ["search_inventory", inventoryShelf]
-  ];
+  // The behavioural half covers what the release can DISPATCH, and the coverage
+  // is asserted rather than assumed: the list used to name four capabilities,
+  // two of which (both attention summaries) the reduction removed, and calling
+  // `HANDLERS[name]` on a name with no handler threw before any of it ran.
+  const SNAPSHOTS = {
+    search_commerce_orders: fixtures.mixedSnapshot(),
+    search_inventory: inventoryShelf
+  };
+  assert.deepStrictEqual(Object.keys(SNAPSHOTS).slice().sort(), CAPABILITY_NAMES.slice().sort(),
+    "a dispatchable capability has no snapshot here: give it one, or say why it cannot page");
+  const cases = CAPABILITY_NAMES.map((name) => [name, SNAPSHOTS[name]]);
   const ctx = fixtures.ownerContext();
   for (const [name, snapshot] of cases) {
     const paged = HANDLERS[name](snapshot, { limit: 1 }, ctx, { nowMs: fixtures.NOW });
@@ -626,7 +704,7 @@ check("§8.1's scopes and domains are the registry's, capability by capability",
 
 // §2 is the wiring instruction. A dep that appears in run() and not in the
 // table is a hook a channel silently does not inject — which is how marketplace
-// PII blocks came to be unrecorded on ten capabilities.
+// PII blocks came to be unrecorded on every orchestrator capability at once.
 check("§2 names every dep the orchestrator reads", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "..", "orchestrator", "index.js"), "utf8");
   const used = new Set([...source.matchAll(/\bdeps\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((match) => match[1]));
@@ -646,7 +724,7 @@ check("the loader caps a channel is told about are the caps it will hit", () => 
 // The document told the WhatsApp gateway to send `scope: ""` and said it meant
 // "not scope-limited". Since the scope rule became real that is exactly
 // backwards — an empty grant is a caller that was granted nothing — so a
-// gateway built from §3 was refused on all ten capabilities, with a message
+// gateway built from §3 was refused on every capability, with a message
 // telling a WhatsApp user to reconnect in ChatGPT.
 //
 // The behaviour is pinned in mcp-scope-enforcement; the document is the thing
@@ -669,7 +747,12 @@ check("§3.1 names the first-party auth types the code actually exempts", () => 
 });
 
 check("a channel the code has not been told about is refused, and the document says so", () => {
-  const entry = registry.entryFor("get_business_attention_summary");
+  // Any published capability serves: the claim is about the auth type, not the
+  // tool. It named get_business_attention_summary, which the 6 September 2026
+  // reduction removed, and `assertCapability(ctx, null)` throws invalid-argument
+  // rather than permission-denied — so the check reported "an undeclared auth
+  // type is no longer refused" when what had gone was the capability.
+  const entry = registry.entryFor(CAPABILITY_NAMES[0]);
   const ctx = fixtures.ownerContext({ authType: "whatsapp_binding", scope: [] });
   assert(!contextModule.FIRST_PARTY_AUTH_TYPES.includes("whatsapp_binding"),
     "whatsapp_binding is first party now — rewrite §3.1 and move it out of the §9 reserved list");

@@ -14,10 +14,10 @@
 // `search_inventory_items`. A published tool counts as an inventory search when
 // its name or title says both "search-ish" and "stock-ish": that is the pair of
 // words a user reads in a client's tool picker, and two entries that read the
-// same way are the problem whatever they are called. `get_inventory_overview`
-// is not one (no search verb) and `create_inventory_item` is not one (create is
-// not a search verb) — both are asserted below, so the predicate is shown to
-// discriminate rather than merely to pass.
+// same way are the problem whatever they are called. `create_inventory_item`
+// is not one (create is not a search verb) and `search_orders` is not one (no
+// stock word) — both are asserted below, one for each half of the predicate, so
+// it is shown to discriminate rather than merely to pass.
 //
 // Run: node test/qa/mcp-one-inventory-search.test.js
 const assert = require("assert");
@@ -92,12 +92,15 @@ check("the predicate catches an inventory search and nothing else on the shelf",
   const byName = new Map(all.map((tool) => [tool.name, tool]));
   assert.ok(byName.has("search_inventory"), "the fully-flagged listing has no inventory search at all");
   assert.strictEqual(isInventorySearch(byName.get("search_inventory")), true);
-  // Two neighbours that must NOT trip it, or "exactly one" would be a
-  // tautology rather than a constraint.
-  assert.strictEqual(isInventorySearch(byName.get("get_inventory_overview")), false,
-    "the overview is not a search; if the predicate counts it, the counts below mean nothing");
+  // Two neighbours that must NOT trip it, one for each half of the predicate,
+  // or "exactly one" would be a tautology rather than a constraint.
+  // (`get_inventory_overview` stood here as the no-search-verb case until the
+  // 6 September 2026 reduction took it out of the release; `create_inventory_item`
+  // is the same case and is still published.)
   assert.strictEqual(isInventorySearch(byName.get("create_inventory_item")), false,
     "adding an item is not a search");
+  assert.strictEqual(isInventorySearch(byName.get("search_orders")), false,
+    "an order search is a search of something else; if the predicate counts it, the counts below mean nothing");
   // And a hypothetical second one, named nothing like the first, IS caught.
   assert.strictEqual(isInventorySearch({ name: "find_stock_rows", title: "Find stock" }), true,
     "the next duplicate will not be called search_inventory_items");

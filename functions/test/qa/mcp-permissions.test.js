@@ -116,19 +116,29 @@ check("an invented tool name is refused", async () => {
 });
 
 // ---- what the access log claims about a read -------------------------------
+const registryModule = require("../../orchestrator/registry");
+
 check("the access-log row says what the tool actually hands over", () => {
   // The row used to be built inline with categories name/email/phone/address
-  // for every action and a subject kind guessed from the tool's NAME. So the
-  // banking summary — which declares pii ["name"], because a bank row's
-  // counterparty is a person only when the payment was person to person —
-  // filed a row claiming a phone number and a postal address had been handed
-  // over, under subject.kind "order". In a collection nothing ever deletes.
+  // for every action and a subject kind guessed from the tool's NAME, rather
+  // than from what the tool declares. The vehicle for that was the banking
+  // summary, which is out of the release; the claim is unchanged and is now
+  // made over the registry, so it covers whatever declares a row rather than
+  // the two examples that happened to be typed here.
   const piiEntry = api._nvMcpPiiAccessEntry;
   const context = { companyId: "acme", uid: "member-uid", email: "m@example.com" };
 
-  const banking = piiEntry("get_banking_attention_summary", context, {});
-  assert.deepStrictEqual(banking.categories, ["name"]);
-  assert.strictEqual(banking.subject.kind, "bank_transaction");
+  for (const entry of registryModule.TOOL_REGISTRY) {
+    const row = piiEntry(entry.name, context, {});
+    if (!api._nvMcpPiiLoggedActions().has(entry.name)) {
+      assert.strictEqual(row, null, `${entry.name} files a row it does not declare`);
+      continue;
+    }
+    assert.deepStrictEqual(row.categories, entry.pii,
+      `${entry.name}: the row claims ${row.categories.join(", ")} and the registry declares ${entry.pii.join(", ")}`);
+    assert.strictEqual(row.subject.kind, entry.piiSubject,
+      `${entry.name}: the row files a ${row.subject.kind} and the registry declares a ${entry.piiSubject}`);
+  }
 
   const commerce = piiEntry("search_commerce_orders", context, {});
   assert.deepStrictEqual(commerce.categories, ["name", "email"]);
@@ -144,7 +154,6 @@ check("the access-log row says what the tool actually hands over", () => {
   assert.strictEqual(detail.actorRole, "chatgpt_connection");
 
   // A tool that hands over nobody files nothing.
-  assert.strictEqual(piiEntry("get_commerce_overview", context, {}), null);
   assert.strictEqual(piiEntry("create_order", context, {}), null);
   assert.strictEqual(piiEntry("not_a_tool", context, {}), null);
 });
@@ -292,16 +301,33 @@ check("a workflow-only member on a custom role is workflow-only to the orchestra
   // accounting, which held only because sectionAccess carried an extra
   // `&& !ctx.workflowOnly` that no capability and no app guard has. That made
   // the summary the STRICT door: this very member is handed money by
-  // get_order_financials and get_commerce_overview, because the app's
-  // nvRoleCanAccessFinancialInfo takes the custom-role branch and reads the
-  // role's own access map rather than its base role — so `ctx.financialInfo` is
-  // genuinely true here. One predicate per body of data, whichever way it falls.
-  for (const [section, capability] of Object.entries(contextModule.SECTION_OWNERS)) {
+  // get_order_financials, because the app's nvRoleCanAccessFinancialInfo takes
+  // the custom-role branch and reads the role's own access map rather than its
+  // base role — so `ctx.financialInfo` is genuinely true here. One predicate
+  // per body of data, whichever way it falls.
+  //
+  // It read `contextModule.SECTION_OWNERS`, a table of eight section→capability
+  // rows six of which named capabilities the 6 September 2026 scope reduction
+  // removed. The owning capability is taken from the orchestrator's own dispatch
+  // set now, so this compares sections against capabilities that exist; the full
+  // cross-product of grants lives in orchestrator-context.test.js.
+  let compared = 0;
+  for (const name of require("../../orchestrator").CAPABILITY_NAMES) {
+    const entry = registry.entryFor(name);
+    const permission = entry.permission || {};
+    // Only a capability whose WHOLE gate is one workspace area can stand for
+    // that area's section. `search_inventory` is gated on the orders area AND
+    // `permission.inventory`, so it refuses a member the orders section is open
+    // to — correctly, and it owns `sections.inventory`, not `sections.orders`.
+    const extra = ["ownerOnly", "financial", "bankFeed", "accountingReader", "inventory"].filter((key) => permission[key] === true);
+    if (!permission.area || extra.length > 0) continue;
     let allowed = true;
-    try { contextModule.assertCapability(ctxOut, registry.entryFor(capability)); } catch (error) { allowed = false; }
-    assert.strictEqual(sections[section], allowed,
-      `section "${section}" says ${sections[section]} while ${capability} says ${allowed}`);
+    try { contextModule.assertCapability(ctxOut, entry); } catch (error) { allowed = false; }
+    assert.strictEqual(sections[permission.area], allowed,
+      `section "${permission.area}" says ${sections[permission.area]} while ${name} says ${allowed}`);
+    compared += 1;
   }
+  assert.ok(compared > 0, "no published capability's gate is a plain workspace area; this comparison covered nothing");
 
   // The grants this custom role does not carry stay shut — the reconciliation
   // is "match the capability", not "open everything to workflow-only".

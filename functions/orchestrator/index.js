@@ -25,12 +25,15 @@ const envelope = require("./envelope");
 const render = require("./render");
 const loadersModule = require("./loaders");
 
+// Only the modules the reduced 1.2.0 surface can reach. `attention.js`,
+// `payouts.js`, `integrationHealth.js`, `accountingStatus.js` and the money
+// half of `commerce.js` are still on disk and are required by nothing on this
+// path: the scope reduction of 6 September 2026 took every banking, payout,
+// accounting and financial-summary capability out of the release, and "out"
+// means no registry row and no dispatch, not a flag left off. Requiring a dead
+// module here would be the first step back to publishing it.
 const commerce = require("./commerce");
 const inventory = require("./inventory");
-const payouts = require("./payouts");
-const integrationHealth = require("./integrationHealth");
-const accountingStatus = require("./accountingStatus");
-const attention = require("./attention");
 
 /**
  * capability name → the pure function behind it.
@@ -38,20 +41,19 @@ const attention = require("./attention");
  * The key order is the registry's order, because `listCapabilities()` returns
  * registry order and the contract test compares the two. `search_inventory`
  * comes first for that reason and no other: its registry row sits with the
- * inventory tools, ahead of the nine capabilities only the orchestrator flag
+ * inventory tools, ahead of the one capability only the orchestrator flag
  * publishes.
+ *
+ * This map is the dispatch half of the reduction, and it is deliberately the
+ * SHORTER of the two lists it has to agree with: a capability with no registry
+ * row can never be published, and a capability with no entry here can never be
+ * run. Both halves are asserted against the registry in
+ * test/qa/mcp-reduced-surface.test.js, so a removed name cannot come back
+ * through either door on its own.
  */
 const HANDLERS = Object.freeze({
   search_inventory: inventory.searchInventoryItems,
-  get_business_attention_summary: attention.businessAttentionSummary,
-  get_commerce_overview: commerce.commerceOverview,
-  search_commerce_orders: commerce.searchCommerceOrders,
-  get_channel_performance: commerce.channelPerformance,
-  get_inventory_overview: inventory.inventoryOverview,
-  get_payout_reconciliation_overview: payouts.payoutReconciliation,
-  get_integration_health: integrationHealth.integrationHealth,
-  get_accounting_sync_status: accountingStatus.accountingSyncStatus,
-  get_banking_attention_summary: attention.bankingAttentionSummary
+  search_commerce_orders: commerce.searchCommerceOrders
 });
 
 const CAPABILITY_NAMES = Object.freeze(Object.keys(HANDLERS));
@@ -178,7 +180,7 @@ function createOrchestrator(deps = {}) {
     // second predicate over one registry, while the contract document claimed
     // in so many words that "the registry is the only list, so a channel cannot
     // describe a read differently from the way the MCP dispatcher describes
-    // it". The two agree on today's ten orchestrator entries and disagree on
+    // it". The two agree on today's orchestrator entries and disagree on
     // `get_bank_spending_summary` and `search_bank_transactions`, so the first
     // orchestrator capability to copy that shape would have logged on WhatsApp
     // and not on MCP.
@@ -213,7 +215,7 @@ function createOrchestrator(deps = {}) {
     // RECORDED ... a block nobody can see is indistinguishable from a feature
     // that quietly does not work." The loader applies redactForChannel and,
     // being pure, cannot write the audit row; nothing else on this path did,
-    // so a marketplace block made by one of these ten reads left no trace at
+    // so a marketplace block made by one of these reads left no trace at
     // all, while the same block made by search_orders left one.
     //
     // One row per provider and reason, carrying `recordCount`, rather than one

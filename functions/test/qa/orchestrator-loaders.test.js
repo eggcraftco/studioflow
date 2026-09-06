@@ -89,88 +89,35 @@ const COLLECTION_DOMAIN = {
   pandleConnection: "accounting"
 };
 
-check("a commerce capability reads no bank transactions", async () => {
-  for (const capability of ["get_commerce_overview", "get_channel_performance"]) {
+check("no published capability reads a bank transaction", async () => {
+  // This was two commerce capabilities that declared `payouts` and not `bank`,
+  // and read the payouts they declared. The 6 September 2026 reduction removed
+  // both of them, and every other capability that declared either domain — so
+  // the statement is now about the whole published set rather than about two
+  // members of it, and it is stronger for it.
+  for (const capability of CAPABILITY_NAMES) {
     const { reads, entry } = await snapshotOf(capability);
-    assert.ok(!entry.domainNeeds.includes("bank"), `${capability} is not supposed to declare bank`);
+    assert.ok(!entry.domainNeeds.includes("bank"), `${capability} declares the bank domain again`);
     assert.ok(!touched(reads, "bankTransactions"),
-      `${capability} read companies/${CID}/bankTransactions without declaring the bank domain`);
-    assert.ok(touched(reads, "squarePayouts"), `${capability} still reads the payouts it declared`);
+      `${capability} read companies/${CID}/bankTransactions`);
   }
-});
-
-check("payouts without the bank domain report no bank rows rather than borrowing them", async () => {
-  // Seeded so the old branch would have produced a populated payoutBankRows:
-  // an unmatched payout whose settlement window contains a credit.
-  const seed = {
-    [`companies/${CID}/bankTransactions`]: [
-      { id: "tx_1", amount: 120, bookingDate: "2026-09-02", currency: "GBP" }
-    ],
-    [`companies/${CID}/squarePayouts`]: [
-      { id: "po_1", amount: 120, currency: "GBP", arrivalDate: "2026-09-02", status: "PAID" }
-    ]
-  };
-  const { snapshot } = await snapshotOf("get_commerce_overview", {}, seed);
-  assert.deepStrictEqual(snapshot.payoutBankRows, [],
-    "a capability that may not read the bank feed must not be handed rows out of it");
-  assert.strictEqual(snapshot.bankRows, undefined);
-});
-
-check("the reconciliation capability, which does declare bank, still gets its rows", async () => {
-  // The fix must not take the bank half away from the one tool whose whole job
-  // is matching a payout against a bank line.
-  const seed = {
-    [`companies/${CID}/bankTransactions`]: [
-      { id: "tx_1", amount: 120, bookingDate: "2026-09-02", currency: "GBP" }
-    ],
-    [`companies/${CID}/squarePayouts`]: [
-      { id: "po_1", amount: 120, currency: "GBP", arrivalDate: "2026-09-02", status: "PAID" }
-    ]
-  };
-  const { snapshot, reads } = await snapshotOf("get_payout_reconciliation_overview", {}, seed);
-  assert.ok(touched(reads, "bankTransactions"));
-  assert.strictEqual((snapshot.bankRows || []).length, 1);
-  assert.strictEqual(snapshot.payoutBankRows.length, 1, "the settlement window still selects the bank row");
-});
-
-check("a member without Banking has no bank documents read for them", async () => {
-  // get_business_attention_summary declares bank and receiptInbox and is gated
-  // on the ORDERS area, so a member without Banking reaches the loader. Their
-  // banking section is reported not_permitted; the rows behind it used to be
-  // read anyway and thrown away.
-  const { reads } = await snapshotOf("get_business_attention_summary", {
-    isOwner: false,
-    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
-    accountingReader: false
-  });
-  for (const name of ["bankTransactions", "bankVendors", "bankReceiptInbox"]) {
-    assert.ok(!touched(reads, name), `${name} was read for a member without the Banking area`);
-  }
-  assert.ok(touched(reads, "siparisler"), "the orders they can see are still read");
-});
-
-check("the accounting reader keeps the bank rows the readiness figure is counted over", async () => {
-  // Not the same predicate as the Banking area: a custom role's access map
-  // replaces memberAccess, so the explicit bank grant the accounting callables
-  // ask for can be true while the area map says no. Gating this read on the
-  // area would have reported "0 transactions ready" as a fact.
-  const { reads } = await snapshotOf("get_accounting_sync_status", {
-    isOwner: false,
-    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
-    accountingReader: true
-  });
-  assert.ok(touched(reads, "bankTransactions"));
-  assert.ok(touched(reads, "accountingAttention"));
 });
 
 check("a member who may not open the shelf has no inventory read for them", async () => {
-  const { reads, snapshot } = await snapshotOf("get_business_attention_summary", {
+  // The capability's own gate refuses this caller before run() reaches the
+  // loader, so this is the second line rather than the first: even asked
+  // directly, the loader does not read a shelf the caller may not open.
+  const { reads, snapshot } = await snapshotOf("search_inventory", {
     isOwner: false,
     areas: { orders: true, dashboard: true, customers: true, bankFeed: true },
     inventoryAccess: false
   });
   assert.ok(!touched(reads, "inventoryItems"));
   assert.strictEqual(snapshot.inventoryItems, undefined);
+  // And with the grant, the same read happens — a gate that never opens would
+  // satisfy the two lines above.
+  const open = await snapshotOf("search_inventory", { inventoryAccess: true });
+  assert.ok(touched(open.reads, "inventoryItems"), "the shelf is unreadable even to a caller who holds the grant");
 });
 
 check("every collection a capability reads belongs to a domain it declared", async () => {
@@ -277,9 +224,30 @@ check("a read that hits its cap says so, in the flag and in the answer", async (
       assert.strictEqual(built.partial, true, `${capability} raised loader_cap_reached without going partial`);
     }
   }
-  // And every cap is reachable by some capability, or the flag is decoration.
-  assert.deepStrictEqual([...seen].sort(), Object.keys(envelope.CAP_WARNINGS).sort(),
-    "a cap no capability can hit is a cap nobody needs");
+  // Every cap the published capabilities can reach is reached, and every cap
+  // they cannot is one whose DOMAIN nothing declares — derived from the
+  // registry, not listed here, so a capability that stops declaring a domain
+  // moves the expectation with it.
+  //
+  // This used to compare `seen` against every cap there is, which held while
+  // ten capabilities between them declared all eleven domains. Since the
+  // 6 September 2026 reduction the published set declares five, and the caps
+  // behind bank, payouts, receiptInbox and accounting are unreachable — the
+  // flags stay because `loaders.js` still writes them and `CAP_WARNINGS` still
+  // has to have a sentence for each, which the check above pins.
+  const CAP_DOMAIN = {
+    ordersCapped: "orders", bankCapped: "bank", vendorsCapped: "bank", inventoryCapped: "inventory",
+    payoutsCapped: "payouts", reviewCapped: "review", attentionCapped: "accounting",
+    inboxCapped: "receiptInbox", connectionsCapped: "connections", commerceHealthCapped: "commerceHealth"
+  };
+  const declared = new Set(CAPABILITY_NAMES.flatMap((name) => registry.entryFor(name).domainNeeds || []));
+  const reachable = Object.keys(envelope.CAP_WARNINGS).filter((flag) => {
+    assert.ok(CAP_DOMAIN[flag], `${flag} has no domain in this test's map`);
+    return declared.has(CAP_DOMAIN[flag]);
+  });
+  assert.ok(reachable.length > 0, "no cap is reachable at all, so the loop above proves nothing");
+  assert.deepStrictEqual([...seen].sort(), reachable.sort(),
+    "a cap a published capability can hit went unannounced, or one it cannot hit was raised");
 });
 
 check("every .limit() the loader issues is one of the caps that has a sentence", () => {
@@ -311,64 +279,37 @@ check("every .limit() the loader issues is one of the caps that has a sentence",
   }
 });
 
-check("a member without Banking gets NEITHER payout collection read for them", async () => {
-  // The domain was gated as a union — bankFeed OR financialInfo — argued from
-  // where each document is WRITTEN: Square's payouts ride a commerce
-  // connection, PayPal's are written off a `bankConnections` document
-  // (bankFeed.js paypalConnect). Provenance is not permission, and
-  // firestore.rules gates the two collections identically:
+check("no capability in this release reads a payout collection, for anybody", async () => {
+  // Three checks stood here, and all three drove the payouts DOMAIN through a
+  // capability that declared it: get_commerce_overview (a member holding money
+  // but not Banking), get_payout_reconciliation_overview (the owner) and
+  // get_business_attention_summary (a member holding neither). The 6 September
+  // 2026 scope reduction removed all three capabilities, so each one called
+  // `registry.entryFor` on a name that is now null.
   //
-  //   match /companies/{cid}/squarePayouts/{document=**} {
-  //     allow read: if canReadBankFeed(companyId);
-  //   }
-  //
-  // where `canReadBankFeed` is owner OR memberAccess.bankFeed — financialInfo
-  // is not in it. So the union read `squarePayouts` for a member the client is
-  // refused it for, and `commerce.settlementTotals` published its
-  // count/gross/fee/net, while get_payout_reconciliation_overview refused that
-  // same person outright.
-  const financialNoBank = {
-    isOwner: false,
-    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
-    financialInfo: true,
-    accountingReader: false
-  };
-  const { reads, snapshot } = await snapshotOf("get_commerce_overview", financialNoBank, {
-    [`companies/${CID}/paypalPayouts`]: [{ id: "pp_1", provider: "paypal", status: "PAID", amount: 4200.55, currency: "GBP", arrivalDate: "2026-09-02", totals: { gross: 4400, fee: -199.45, net: 4200.55 } }],
-    [`companies/${CID}/squarePayouts`]: [{ id: "sq_1", provider: "square", status: "PAID", amount: 10, currency: "GBP", arrivalDate: "2026-09-02", totals: { gross: 10, fee: 0, net: 10 } }]
-  });
-  assert.ok(!touched(reads, "paypalPayouts"), "the PayPal payout collection was read for a member without Banking");
-  assert.ok(!touched(reads, "squarePayouts"), "the Square payout collection was read for a member the rules file refuses it to");
-  assert.strictEqual(snapshot.payouts, undefined, "a collection nobody read must not look like a collection that was empty");
+  // The finding they encode is still in loaders.js and still right: the payouts
+  // domain is gated on `bankFeed` ALONE, never on a union with financialInfo,
+  // because firestore.rules gates squarePayouts and paypalPayouts on
+  // `canReadBankFeed` — owner OR memberAccess.bankFeed — and provenance is not
+  // permission. What can no longer be tested is a capability reaching it, and
+  // the reason is worth asserting in its place: nothing declares the domain, so
+  // the collections are unreachable from this surface however the caller is
+  // graded. That is derived from the registry, so the day a capability declares
+  // `payouts` again this check fails and the gate test comes back with it.
+  const declaring = CAPABILITY_NAMES.filter((name) => (registry.entryFor(name).domainNeeds || []).includes("payouts"));
+  assert.deepStrictEqual(declaring, [],
+    `${declaring.join(", ")} declares the payouts domain again; restore the bankFeed-alone gate checks with it`);
 
-  // And neither provider's money reaches the answer.
-  const ctx = fixtures.ownerContext({ companyId: CID, ...financialNoBank });
-  const result = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
-  for (const provider of ["paypal", "square"]) {
-    assert.strictEqual(result.data.settlements[provider], undefined,
-      `data.settlements still carries ${JSON.stringify(result.data.settlements[provider])} for ${provider}`);
-    assert.ok(result.data.settlements.others.some((row) => row.provider === provider && row.reason === "connection_not_visible"),
-      `the answer must say the ${provider} feed cannot be seen from here, not guess that it is missing`);
-  }
-});
-
-check("the owner still gets both payout feeds", async () => {
-  const { reads, snapshot } = await snapshotOf("get_payout_reconciliation_overview");
-  assert.ok(touched(reads, "paypalPayouts"));
-  assert.ok(touched(reads, "squarePayouts"));
-  assert.deepStrictEqual(Object.keys(snapshot.payouts).sort(), ["paypal", "square"]);
-});
-
-check("a member with neither Banking nor financial access has no payout read at all", async () => {
-  const { reads } = await snapshotOf("get_business_attention_summary", {
-    isOwner: false,
-    areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
-    financialInfo: false,
-    accountingReader: false,
-    inventoryAccess: false
-  });
-  for (const name of ["squarePayouts", "paypalPayouts"]) {
-    assert.ok(!touched(reads, name), `${name} was read for a member who can see neither payouts nor money`);
+  // Not an argument from the declaration alone — the loader is run for every
+  // published capability, as an OWNER holding every grant, and no payout
+  // collection is touched by any of them.
+  for (const name of CAPABILITY_NAMES) {
+    const { reads, snapshot } = await snapshotOf(name);
+    for (const collection of ["squarePayouts", "paypalPayouts"]) {
+      assert.ok(!touched(reads, collection), `${name} read ${collection}`);
+    }
+    assert.strictEqual(snapshot.payouts, undefined,
+      `${name}: a collection nobody read must not look like a collection that was empty`);
   }
 });
 

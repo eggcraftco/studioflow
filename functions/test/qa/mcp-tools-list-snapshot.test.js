@@ -30,6 +30,14 @@ const { execFileSync } = require("child_process");
 const FUNCTIONS_DIR = path.join(__dirname, "..", "..");
 const INDEX = path.join(FUNCTIONS_DIR, "index.js");
 const FIXTURE = path.join(FUNCTIONS_DIR, "test", "fixtures", "mcp", "tools-list-full.json");
+// How many capabilities the flag adds is READ FROM THE REGISTRY, never counted
+// out here. The scope reduction of 6 September 2026 took the flagged set from
+// ten down to two, and a literal `+ 10` in this file was one of the places that
+// said ten after it was two — a hand-written count of a published surface is a
+// second registry that nothing updates.
+const registry = require("../../orchestrator/registry");
+const ORCHESTRATOR_ADDS = registry.publishedNames({ orchestrator: true })
+  .filter((name) => !registry.publishedNames({}).includes(name));
 const fixture = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
 
 let failures = 0;
@@ -134,7 +142,8 @@ check("with the flag on, the list only GAINS tools — nothing is removed or reo
   const before = listings.off.tools.map((tool) => tool.name);
   const after = listings.orchestrator.tools.map((tool) => tool.name);
   assert.deepStrictEqual(after.slice(0, before.length), before, "the existing tools must keep their names and their order");
-  assert.strictEqual(after.length, before.length + 10, `expected ten new capabilities, got ${after.length - before.length}`);
+  assert.deepStrictEqual(after.slice(before.length), ORCHESTRATOR_ADDS,
+    `the flag adds ${after.length - before.length} tool(s); the registry publishes ${ORCHESTRATOR_ADDS.length}`);
 });
 
 check("the flag-on listing differs from the reviewed one ONLY by the new tools and the two known annotation corrections", () => {
@@ -155,7 +164,7 @@ check("the flag-on listing differs from the reviewed one ONLY by the new tools a
 check("every new capability is fully described: title, description, schema, annotations, scopes", () => {
   const existing = new Set(listings.off.tools.map((tool) => tool.name));
   const added = listings.orchestrator.tools.filter((tool) => !existing.has(tool.name));
-  assert.strictEqual(added.length, 10);
+  assert.deepStrictEqual(added.map((tool) => tool.name), ORCHESTRATOR_ADDS);
   for (const tool of added) {
     assert.ok(tool.title && tool.title.length > 3, `${tool.name} has no title`);
     assert.ok(tool.description && tool.description.length > 120, `${tool.name}: the description must tell the model when to use it (§21)`);

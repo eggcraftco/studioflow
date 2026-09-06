@@ -172,8 +172,8 @@ function scopeRefusal(missing = [], granted = []) {
  * a member entry stored as a bare string. Reading `members[uid].role ||
  * memberRoles[uid]` inline reproduces none of that: a workflow-only member on a
  * custom role comes back as a plain `member`, the assigned-orders filter in
- * loaders.js never runs, and `sectionAccess` opens payments, banking and
- * payouts to somebody the app restricts to their own work.
+ * loaders.js never runs, and the role that decides what a caller may see is
+ * the loosest one a workspace has.
  *
  * So the resolver is injected, and its absence is a wiring error rather than a
  * quiet fallback to the loosest answer a workspace can have.
@@ -294,55 +294,45 @@ function assertCapability(ctx, entry) {
  * role cannot see is NAMED and left empty — "Banking items are not included for
  * your role" — rather than silently missing, which reads as "nothing to report".
  *
- * Every line is the SAME predicate as the capability that owns that data, and
- * `SECTION_OWNERS` below names which capability that is, one per line, so the
- * claim is checkable instead of asserted. `orchestrator-context.test.js` drives
- * both sides over a cross-product of grants and fails on the first divergence.
+ * ONE CALLER, AND IT IS NOT IN THE RELEASE. `attention.js` is the only module
+ * that asks this question, and the 6 September 2026 scope reduction took both
+ * attention capabilities — and the commerce, inventory, payout, integration and
+ * accounting ones — out of the published surface entirely: no registry row, no
+ * schema, no dispatcher case. The module is still on disk and is unreachable
+ * (test/qa/mcp-reduced-surface.test.js is the standing proof), so this function
+ * still answers all eight sections for it and is left exactly as it was.
  *
- * `inventory` used to read `ctx.areas.orders`, which is looser than the gate on
- * get_inventory_overview and search_inventory (`permission.inventory` →
- * nvRequireInventoryAccess: owner, OR the orders area AND an order role that
- * can fully edit). A member who fell between those two predicates was refused
- * both inventory tools and then handed item names and on-hand levels by the
- * attention summary's `stock_low` item — the assistant as the looser door into
- * the same data, which is the thing accounting/core/access.js was written in
- * this branch to prevent. Two predicates over one body of data is the defect.
+ * A `SECTION_OWNERS` table stood here, naming the capability whose gate each
+ * line had to match, and orchestrator-context.test.js drove both sides over a
+ * cross-product of grants — the check that found three lines carrying an extra
+ * `&& !ctx.workflowOnly` their capability did not have. Six of its eight owners
+ * no longer exist, so the table named capabilities the registry does not have
+ * and the comparison had nothing to compare against; it is gone rather than
+ * left as a claim nothing can check. The two lines whose data IS still
+ * published — `orders` and `shipping`, owned by `search_commerce_orders` —
+ * are pinned directly in orchestrator-context.test.js.
  *
- * `banking`, `payouts` and `accounting` carried `&& !ctx.workflowOnly`, which
- * made this comment false for three of its eight lines in the STRICT direction:
- * get_banking_attention_summary and get_payout_reconciliation_overview carry
- * `permission.bankFeed` only, get_accounting_sync_status carries
- * `permission.accountingReader` only, and `assertCapability` has no workflowOnly
- * term at all — nor does the app's own `nvRequireBankFeedAccess`, which is
- * owner OR the bankFeed area and nothing else. A workflow-only member granted
- * Bank Spending (reachable: `workspaceMemberAccess` forces dashboard,
- * financialInfo, customers and cardFinancial false for that role and leaves
- * bankFeed alone) was told "banking items are not included for your role" by the
- * summary and then answered in full by the banking tool, in one session.
+ * If a capability that reads sections is ever published again, it arrives with
+ * a registry row, and the cross-product check comes back with it.
  *
- * Strict is not safe when it is only strict HERE: the extra term did not keep
- * anything from that member, it just made the assistant contradict itself. So
- * the three lines drop it and match their capability. Adding the term to
- * `assertCapability` instead would have been a THIRD predicate, one the product
- * does not have — the web client shows Banking to exactly the same member.
- *
- * `payments` is `ctx.financialInfo` alone for the same reason: the app's
- * `nvRoleCanAccessFinancialInfo` already returns false for a workflow-only
- * role, so `&& !ctx.workflowOnly` was a second copy of a rule that lives in one
- * place. A redundant term is a divergence waiting for the day the rule it
- * duplicates changes.
+ * The predicates themselves are unchanged, and each is the app's own:
+ *   payments      ctx.financialInfo   (nvRoleCanAccessFinancialInfo, which is
+ *                                      already false for a workflow-only role,
+ *                                      so a second `&& !ctx.workflowOnly` term
+ *                                      would be a duplicate of a rule that
+ *                                      lives in one place)
+ *   inventory     ctx.inventoryAccess (nvRequireInventoryAccess — stricter than
+ *                                      the orders area, which is what it read
+ *                                      while the attention summary was handing
+ *                                      the same shelf to a member both
+ *                                      inventory tools refuse)
+ *   banking       ctx.areas.bankFeed  (nvRequireBankFeedAccess: owner OR the
+ *   payouts       ctx.areas.bankFeed   bankFeed area, and nothing else)
+ *   accounting    ctx.accountingReader
+ *   orders        ctx.areas.orders
+ *   shipping      ctx.areas.orders
+ *   integrations  ctx.areas.orders
  */
-const SECTION_OWNERS = Object.freeze({
-  orders: "search_commerce_orders",
-  shipping: "search_commerce_orders",
-  payments: "get_commerce_overview",
-  inventory: "get_inventory_overview",
-  banking: "get_banking_attention_summary",
-  payouts: "get_payout_reconciliation_overview",
-  accounting: "get_accounting_sync_status",
-  integrations: "get_integration_health"
-});
-
 function sectionAccess(ctx) {
   return {
     orders: ctx.areas.orders === true,
@@ -358,6 +348,6 @@ function sectionAccess(ctx) {
 
 module.exports = {
   OrchestratorError, CHANNEL_TYPES, FIRST_PARTY_AUTH_TYPES,
-  resolveContext, assertCapability, sectionAccess, SECTION_OWNERS, AREA_KEYS, scopeSet,
+  resolveContext, assertCapability, sectionAccess, AREA_KEYS, scopeSet,
   scopeGateApplies, missingScopes, scopeRefusal
 };

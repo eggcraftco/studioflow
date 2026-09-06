@@ -1,6 +1,21 @@
 # NivaDesk ChatGPT MCP — orchestration design (v2 read layer)
 
 Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/Users/gocmen/Developer/studioflow-mcp`.
+
+> **Scope, 6 September 2026 — eight of the ten capabilities below are NOT in this release.** The
+> operator reduced the flagged set to order search and read, customer search and read, and the
+> workspace's ONE inventory search: `search_commerce_orders` and `search_inventory` ship behind
+> `NIVADESK_MCP_ORCHESTRATOR`. `get_business_attention_summary`, `get_commerce_overview`,
+> `get_channel_performance`, `get_inventory_overview`, `get_payout_reconciliation_overview`,
+> `get_integration_health`, `get_accounting_sync_status` and `get_banking_attention_summary` came out —
+> every banking capability, marketplace payouts, the sales and per-channel money summaries, the
+> inventory valuation, the connection roster and the accounting sync status. "Out" means the registry
+> has no row for them and the dispatcher publishes and runs nothing for them, so no flag state can list
+> or call one; `functions/test/qa/mcp-reduced-surface.test.js` proves it over all eight flag
+> combinations. Their modules stay on disk and unreachable. Everything this document says about how they
+> are DESIGNED is still accurate; what changed is which of them the release publishes, and this
+> document has not been rewritten around that — read it as the design, and §8.1 of
+> `docs/orchestrator-contract.md` as the surface.
 Spec: `NivaDesk_ChatGPT_MCP_Agentic_Orchestration_Expanded_2026-09-05-2.md` (§1–§93) and
 `NivaDesk_WhatsApp_AI_Channel_Implementation_Spec_2026-09-05.md` (cited as WA §n). Both read-only.
 
