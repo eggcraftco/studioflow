@@ -99,6 +99,28 @@ check("orders held for review are reported, not read and thrown away", () => {
     lines.map((row) => row.text).join(" | "));
 });
 
+check("a held order is shown by a row for every provider that has one, eBay included", () => {
+  // The eBay row hardcoded `reviewCount: { queue: 0, held: 0 }` while every
+  // other provider went through reviewCountsFor. `heldForReview.total` counts
+  // every held row and `unattributed` counts only the ones whose provider has
+  // no row — and "ebay" HAS a row — so a held eBay order would have been
+  // counted at the top, reported as attributed, and shown by nothing:
+  // total 1, unattributed 0, every row 0. That is finding 8's defect, one
+  // provider along.
+  const snapshot = fixtures.mixedSnapshot();
+  snapshot.heldOrders = [{ id: "ebay_1", provider: "ebay", reason: "plan_limit_reached" }];
+  const result = health.integrationHealth(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+  assert.strictEqual(rowFor(result, "ebay").reviewCount.held, 1, "the held eBay order is counted at the top and shown by no row");
+  assert.strictEqual(result.data.heldForReview.total, 1);
+  assert.strictEqual(result.data.heldForReview.unattributed, 0, "eBay has a row, so its held orders are attributed to it");
+
+  // Every held row must be visible somewhere: on a provider's row, or in
+  // `unattributed`. This is the invariant, not the eBay case.
+  const shown = result.data.connections.reduce((sum, row) => sum + row.reviewCount.held, 0);
+  assert.strictEqual(shown + result.data.heldForReview.unattributed, result.data.heldForReview.total,
+    "a held order counted at the top must be reported by a row or declared unattributed");
+});
+
 check("an empty workspace is not told it has six connections", () => {
   // The tool answers "is anything wrong with my connections?". Its headline
   // number counted placeholder rows — four unconnected commerce providers plus

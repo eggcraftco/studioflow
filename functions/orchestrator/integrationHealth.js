@@ -233,7 +233,16 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
       financeFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
       retries: 0,
       deadLetters: 0,
-      reviewCount: { queue: 0, held: 0 },
+      // Counted, not hardcoded — like the Amazon row above it. A held order
+      // carrying provider "ebay" lands in `heldForReview.total`, and
+      // `reportedProviders` is built from these rows, so "ebay" is in it and
+      // the order counts as attributed: total 1, unattributed 0, and with a
+      // hardcoded zero here, no row showing it. That is the exact shape of the
+      // defect finding 8 was written about, one provider along. Not reachable
+      // today (holdIntegrationOrder writes shopify, woocommerce and inbound,
+      // and there is no eBay connector), which is why it is a trap laid for
+      // the connector rather than a fact about it.
+      reviewCount: reviewCountsFor(snapshot, "ebay", null),
       lastSuccessfulSync: null,
       reconnectRequired: false,
       mode: "read_only"
