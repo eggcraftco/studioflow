@@ -22,6 +22,7 @@
  */
 
 const freshnessModule = require("./freshness");
+const untrusted = require("./untrusted");
 
 /** Lifecycle states. `queued` ≠ `completed` (§25). */
 const STATES = Object.freeze([
@@ -63,11 +64,28 @@ function warning(code, message, extra = {}) {
   return row;
 }
 
+/**
+ * A reference to one row, with its label bounded.
+ *
+ * The label is the most consistently untrusted string in an answer: a bank
+ * row's label is the counterparty's own name, an inventory row's is a product
+ * title somebody typed, and an order's is whatever the shop called it. It is
+ * shown to a model, so it is put through `untrusted.safeText` HERE rather than
+ * at each of the fifteen call sites — one place to read, and a new capability
+ * gets the bound without knowing it exists. The id keeps its value (it is a
+ * lookup key, and a ref whose id was filtered away cannot be opened) and loses
+ * only characters no identifier can carry.
+ */
 function entityRef(type, id, label = "", url = null) {
   if (!ENTITY_TYPES.includes(type)) {
     throw new TypeError(`Orchestrator entityRef type "${type}" is unknown.`);
   }
-  return { type, id: String(id || ""), label: String(label || ""), url: url ? String(url) : null };
+  return {
+    type,
+    id: untrusted.safeText(id, { max: 200 }),
+    label: untrusted.safeText(label, { max: 80 }),
+    url: url ? String(url) : null
+  };
 }
 
 /**

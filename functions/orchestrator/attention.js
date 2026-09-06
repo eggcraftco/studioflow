@@ -27,6 +27,7 @@ const orderView = require("./orderView");
 const insights = require("../bank/insights");
 const classification = require("../bank/classification");
 const contextModule = require("./context");
+const untrusted = require("./untrusted");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SEVERITIES = Object.freeze(["critical", "high", "medium", "low"]);
@@ -177,7 +178,12 @@ function mergeOrderItems(views, options) {
     if (found.length === 0) continue;
     const severity = found.reduce((acc, row) => highest(acc, row.severity), "low");
     const oldest = Math.min(...found.map((row) => row.createdAtMs || options.nowMs));
-    const label = view.orderNumber || view.projectNumber || view.id;
+    // The one provider-authored string this module writes into a rendered line.
+    // On a connector order `orderNumber` is whatever the shop sent, so it is
+    // taken as an IDENTIFIER or not at all: a value that is not
+    // reference-shaped falls back to NivaDesk's own id rather than being
+    // trimmed into a shorter version of whatever it was (untrusted.js).
+    const label = untrusted.safeOrderLabel(view);
     items.push({
       attentionId: sha1(`order_attention|order|${view.id}`),
       contentHash: sha1(found.map((row) => row.type).sort().join(",")),
