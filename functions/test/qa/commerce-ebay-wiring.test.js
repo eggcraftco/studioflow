@@ -12,13 +12,32 @@ const rules = fs.readFileSync(path.join(root, "../firestore.rules"), "utf8");
 let failures = 0;
 function check(name, fn) { try { fn(); console.log("PASS ", name); } catch (error) { failures += 1; console.log("FAIL ", name, "-", String(error.message).replace(/\s+/g, " ").slice(0, 300)); } }
 
-check("the four eBay secrets are declared only behind the marker, and EBAY_RUNTIME carries the dedicated identity beside them", () => {
+check("the five eBay secrets are declared only behind the marker, and EBAY_RUNTIME carries the dedicated identity beside them", () => {
   assert.ok(index.includes('const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));'));
-  assert.ok(/const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY\s*\?\s*\[defineSecret\("EBAY_CLIENT_ID"\), defineSecret\("EBAY_CLIENT_SECRET"\), defineSecret\("EBAY_TOKEN_KEY"\), defineSecret\("EBAY_HASH_KEY"\)\]\s*:\s*\[\];/.test(index));
+  // The fifth is EBAY_CALLBACK_KEY (§5.4): the key the web callback route signs
+  // its relay POST with. It is a NAME here and nowhere else — no value in any
+  // file, commit or log. Deploying without the marker mounts none of the five,
+  // so every relay POST answers 401 and no OAuth can complete: §5.4's rollout
+  // step 3 is what actually controls the mount.
+  assert.ok(/const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY\s*\?\s*\[defineSecret\("EBAY_CLIENT_ID"\), defineSecret\("EBAY_CLIENT_SECRET"\), defineSecret\("EBAY_TOKEN_KEY"\), defineSecret\("EBAY_HASH_KEY"\), defineSecret\("EBAY_CALLBACK_KEY"\)\]\s*:\s*\[\];/.test(index));
   assert.ok(index.includes('const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";'));
-  assert.ok(index.includes("const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};"));
+  assert.ok(index.includes("const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};"), "the fifth secret rides the dedicated identity, never the default compute account");
   assert.ok(index.includes('const ebaySecretValue = (name) => process.env[name] || "";'));
+  assert.ok(index.includes('callbackKey: () => ebaySecretValue("EBAY_CALLBACK_KEY"),'), "read at call time, like the other four");
   assert.ok(!fs.existsSync(path.join(root, ".ebay-secrets-ready")), "the marker must not be committed by the connector work — it is the owner's step after the secrets and the service account exist");
+});
+
+check("the callback is POST-only, signed, JSON-answering and instance-capped (§5.4)", () => {
+  const from = connector.indexOf("const ebayOAuthCallback = onRequest(");
+  const to = connector.indexOf("// ---- 3. reading and managing a connection", from);
+  assert.ok(from > 0 && to > from, "the handler was found");
+  const body = connector.slice(from, to);
+  assert.ok(/maxInstances: 10/.test(body), "a bounded bill for an unkeyed flood on a public endpoint whose only control is the shared key");
+  assert.ok(/timeoutSeconds: 120/.test(body), "the long budget stays: the state burns BEFORE the exchange, so cutting it short would strand a burned state");
+  assert.ok(!/req\.query/.test(body) && !/res\.redirect/.test(body), "no query read, no redirect — the browser never meets this host");
+  assert.ok(!/req\.rawBody\s*\|\|/.test(body), "never the re-serialised fallback: it breaks an exact-bytes HMAC silently");
+  assert.ok(connector.includes("crypto.timingSafeEqual(offered, expected)"), "the digests are compared in constant time");
+  assert.ok(!connector.includes("function connectRedirect"), "connectRedirect had exactly one caller and went with it");
 });
 
 check("the connector ships gated off: the runtime switch is read once, and every trigger spreads EBAY_RUNTIME", () => {

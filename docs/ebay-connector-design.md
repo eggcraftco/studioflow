@@ -124,8 +124,9 @@ marker, the switch and the flag (§9); the challenge GET is always answered.
    endpoint URL is registered in the portal (§15 order of owner actions).
 2. **Runtime switch (deploy-time param).** `NIVADESK_EBAY_CONNECTOR="1"` read once at module load
    (the `NIVADESK_MALWARE_SCAN` precedent, `index.js` ~34123). Off ⇒ `beginEbayConnect` throws
-   `failed-precondition "eBay is not enabled on this server yet."`, `ebayOAuthCallback` redirects
-   `reason=disabled`, `reconcileEbayConnections`/`reconcileEbayConnectionsNightly` log
+   `failed-precondition "eBay is not enabled on this server yet."`, `ebayOAuthCallback` answers
+   `reason=disabled` — to a **signed** caller only; an unsigned one gets 401 and learns nothing about the
+   switch (§5.4) — `reconcileEbayConnections`/`reconcileEbayConnectionsNightly` log
    `"ebay reconcile sweep: connector off"` and return before reading any connection,
    `syncEbayNow`/`runEbayImport`/`previewEbayImport` throw `failed-precondition`, order-topic tasks are
    recorded `skipped connector_off` by the worker without a fetch, and `ebayNotifications` still answers
@@ -1037,8 +1038,11 @@ Removed, not kept as a fallback:
   is **deleted**, not left as dead code, and `cancelled` is not in the function's response vocabulary. The
   qa case at `ebay-connect.test.js:71-72` that asserts it against the function is **deleted with it** and
   replaced by a source assertion in `check-ebay-relay-vectors.mjs` (below): the *route* contains the
-  decline branch and the *function's* source contains no `"cancelled"` literal. §5's `ebayOAuthCallback`
-  bullet is corrected in the same commit to stop attributing the decline to the function.
+  decline branch. The matching function-side assertion is scoped to **`ebayOAuthCallback`'s body**, not to
+  the file — `functions/ebayConnector.js` legitimately carries a `"cancelled"` literal elsewhere
+  (`envelope.order.platform_status === "cancelled"` in `applyEbayOrder`), so a file-wide pin would fail on
+  correct code. It is pinned in `ebay-connect.test.js`'s source-pin case. §5's `ebayOAuthCallback` bullet
+  is corrected in the same commit to stop attributing the decline to the function.
 
 #### Rollout order (the marker gates the mount, and the web runtime is verified before it is trusted)
 
@@ -1131,7 +1135,7 @@ work in this change.** `functions/test/qa/helpers/ebayHarness.js` is **not** rea
 | 25 | `code` of 4097 characters; `nonce` of 201 characters | 400 `{"ok":false,"rid"}` |
 | 26 | **Log pin** | `console.log/warn/error` captured across the whole suite. Assert that no captured line contains the code, the state, the nonce or the signature of any case above — **and also that it contains none of their first 8 characters**, which is what catches a truncated echo like `JSON.parse`'s ten-character prefix. Assert additionally that the only `rid` appearing in any line is one that matches `/^[0-9a-f]{16}$/` |
 | 27 | **Response pin** | `JSON.stringify(res.payload)` for every case contains no code, state or nonce value, and no 8-character prefix of one. The rid is checked against the shape, not against a fixture value — case 23 is the reason |
-| 28 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read, no `res.redirect` call, no `JSON.stringify(req.body)`, no `req.rawBody ||` fallback, and no `error.message` / `error.stack` passed to a `console.*` call; it does contain `req.originalUrl` (the stated query-string mechanism) and `req.rawBody`; and the file contains no `"cancelled"` literal |
+| 28 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read, no `res.redirect` call, no `JSON.stringify(req.body)`, no `req.rawBody \|\|` fallback, no `"cancelled"` literal, and exactly one `console.*` call carrying an `error.message` — the `ebayOAuthCallback failed:` line §14.1 pins to eBay's own `error`/`error_description` — with no `error.stack` anywhere; it does contain `req.originalUrl` (the stated query-string mechanism) and `req.rawBody`; and the file still contains `crypto.timingSafeEqual` and no `connectRedirect`. Scoped to the handler, **not** the file: `applyEbayOrder` compares `platform_status === "cancelled"` and must keep doing so |
 
 **qa — `commerce-ebay-wiring.test.js`:** `EBAY_SECRET_PARAMS` now names **five** secrets including
 `EBAY_CALLBACK_KEY` (the existing row says four and must be updated); the array is still built **only**

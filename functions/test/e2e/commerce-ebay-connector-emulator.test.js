@@ -18,6 +18,9 @@ process.env.EBAY_CLIENT_ID = "EGGcraft-app-SBX-test";
 process.env.EBAY_CLIENT_SECRET = "SBX-test-secret";
 process.env.EBAY_TOKEN_KEY = crypto.randomBytes(32).toString("hex");
 process.env.EBAY_HASH_KEY = crypto.randomBytes(32).toString("hex");
+// The fifth eBay secret (§5.4): the key the web callback route signs its relay
+// POST with. Minted per run, like the other two — no value in any file.
+process.env.EBAY_CALLBACK_KEY = crypto.randomBytes(32).toString("hex");
 process.env.NIVADESK_EBAY_CONNECTOR = "1";
 process.env.NIVADESK_EBAY_ENVIRONMENT = "sandbox";
 process.env.NIVADESK_EBAY_RUNAME = "EGGcraft-EGGcraft-sandbox-abc";
@@ -110,7 +113,23 @@ async function wipe() {
   await db.collection("appConfig").doc("commerce").delete();
 }
 async function setFlags(doc) { await db.collection("appConfig").doc("commerce").set(doc); flags.resetCommerceFlagCache(); }
-async function callback(state, { code = "good-code", nonce } = {}) { const res = fakeResponse(); await index.ebayOAuthCallback({ method: "GET", query: { state, code, ...(nonce ? { nonce } : {}) }, headers: {} }, res); return res; }
+// The callback is a signed server-to-server POST (§5.4): the body is serialised
+// once and the signature is taken over those exact bytes, with `body` parsed
+// BACK from them — never the reverse, or a body-swap would go green while
+// proving nothing about the bytes Cloud Run actually receives.
+async function callback(state, { code = "good-code", nonce = "", key = process.env.EBAY_CALLBACK_KEY, sign = true, rid = null } = {}) {
+  const raw = JSON.stringify({ v: 1, rid: rid === null ? crypto.randomBytes(8).toString("hex") : rid, code, state, nonce });
+  const buffer = Buffer.from(raw, "utf8");
+  const ts = String(Date.now());
+  const digest = crypto.createHmac("sha256", key).update(`v1.${ts}.`, "utf8").update(buffer).digest("hex");
+  const res = fakeResponse();
+  await index.ebayOAuthCallback({
+    method: "POST", originalUrl: "/ebayOAuthCallback",
+    headers: { "content-type": "application/json", "x-nivadesk-timestamp": ts, ...(sign ? { "x-nivadesk-signature": `v1=${digest}` } : {}) },
+    rawBody: buffer, body: JSON.parse(raw)
+  }, res);
+  return res;
+}
 async function connect() { const begun = await index.beginEbayConnect.run({ auth, data: { companyId: COMPANY }, rawRequest: {} }); const res = await callback(begun.state, { nonce: begun.nonce }); return { begun, res }; }
 const conn = async () => (await connRef().get()).data();
 const orderCount = async () => (await db.collection("siparisler").where("companyId", "==", COMPANY).get()).size;
@@ -123,7 +142,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
   await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: {} } });
   let state = "";
 
-  await check("#1 begin writes a state with a TTL twin and the nonce's hash; a forged state is refused; the right state without the nonce is refused AND burned; the valid callback connects", async () => {
+  await check("#1 begin writes a state with a TTL twin and the nonce's hash; an UNSIGNED relay POST is 401 and burns nothing; a forged state is refused; the right state without the nonce is refused AND burned; the signed callback connects", async () => {
     const out = await index.beginEbayConnect.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
     const url = new URL(out.authorizeUrl);
     assert.strictEqual(url.origin, "https://auth.sandbox.ebay.com"); assert.strictEqual(url.searchParams.get("redirect_uri"), "EGGcraft-EGGcraft-sandbox-abc"); assert.strictEqual(url.searchParams.get("state"), out.state);
@@ -131,16 +150,25 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     const row = (await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data();
     assert.ok(row.expireAt && row.nonceHash && !JSON.stringify(row).includes(out.nonce)); assert.strictEqual(row.companyId, COMPANY); assert.strictEqual(row.environment, "sandbox");
     await assert.rejects(index.beginEbayConnect.run({ auth: memberAuth, data: { companyId: COMPANY }, rawRequest: {} }), /owner/i, "a member cannot begin");
+    // Unsigned first: the 401 must land before anything stateful is touched, so
+    // the state that survives it can still complete the flow below.
+    const unsigned = await callback(out.state, { nonce: out.nonce, sign: false });
+    assert.strictEqual(unsigned.statusCode, 401); assert.deepStrictEqual(unsigned.payload, { ok: false });
+    assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data().used, false, "an unsigned POST reads no state and burns none");
     const forged = await callback("forged-state-value-00000000", { nonce: "x" });
-    assert.ok(forged.redirectedTo.includes("reason=state"), forged.redirectedTo);
+    assert.strictEqual(forged.payload.reason, "state", JSON.stringify(forged.payload));
+    // The absent-cookie case: the web route posts nonce:"" and the state is
+    // consumed anyway — that burn is the whole of §5's defence.
     const phished = await callback(out.state);
-    assert.ok(phished.redirectedTo.includes("reason=browser"), phished.redirectedTo);
+    assert.strictEqual(phished.payload.reason, "browser", JSON.stringify(phished.payload));
+    assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data().used, true, "burned on an absent nonce");
     const again = await callback(out.state, { nonce: out.nonce });
-    assert.ok(again.redirectedTo.includes("reason=state"), "burned");
+    assert.strictEqual(again.payload.reason, "state", "burned");
     assert.strictEqual(ebay.exchanges, 0, "no code was exchanged for a phished state");
     const { begun, res } = await connect();
     state = begun.state;
-    assert.strictEqual(res.statusCode, 302); assert.ok(res.redirectedTo.includes("section=ebay") && res.redirectedTo.includes("ebay=connected"), res.redirectedTo);
+    assert.strictEqual(res.statusCode, 200); assert.strictEqual(res.payload.ok, true); assert.strictEqual(res.payload.outcome, "connected");
+    assert.strictEqual(res.redirectedTo, "", "the function answers JSON; the redirect belongs to the web route");
     const c = await conn();
     assert.strictEqual(c.status, "connected"); assert.strictEqual(c.environment, "sandbox"); assert.strictEqual(c.sellerUsername, "eggcraft_uk"); assert.strictEqual(c.readOnly, true);
     assert.deepStrictEqual(c.scopes, ["https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"]);
@@ -162,7 +190,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     const begun = await index.beginEbayConnect.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
     await db.collection(eb.STATE_COLLECTION).doc(begun.state).set({ environment: "production" }, { merge: true });
     const res = await callback(begun.state, { nonce: begun.nonce });
-    assert.ok(res.redirectedTo.includes("reason=environment"), res.redirectedTo);
+    assert.strictEqual(res.payload.reason, "environment", JSON.stringify(res.payload));
     await connRef().set({ environment: "production" }, { merge: true });
     const calls = ebay.calls.length;
     const sweep = await eb.runSweep("sweep");
@@ -308,7 +336,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     await assert.rejects(index.syncEbayNow.run({ auth, data: { companyId: COMPANY, connectionId: connId }, rawRequest: {} }), /not connected/);
     ebay.refuseRefresh = null;
     const { res } = await connect();
-    assert.ok(res.redirectedTo.includes("ebay=connected"));
+    assert.strictEqual(res.payload.outcome, "connected", JSON.stringify(res.payload));
     c = await conn();
     assert.strictEqual(c.status, "connected"); assert.strictEqual(c.importState, "done", "the reconnect kept the import state"); assert.ok(c.catchUpDueFromMs > 0, "and owes a catch-up");
     ebay.refuseOrders = Object.assign(new Error("ebay_http_429"), { status: 429, errorClass: "transient", retryAfter: "60" });

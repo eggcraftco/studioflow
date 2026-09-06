@@ -12,7 +12,11 @@ const flagsModule = require("../../../commerce/flags");
 
 const TOKEN_KEY = crypto.randomBytes(32).toString("hex");
 const HASH_KEY = crypto.randomBytes(32).toString("hex");
+// The relay key the callback POST is signed with (§5.4). Minted per run like the
+// other two: it has no production meaning, is in no file and is in no commit.
+const CALLBACK_KEY = crypto.randomBytes(32).toString("hex");
 const passthrough = (_options, handler) => handler;
+const harnessClocks = new WeakMap();   // fns → the nowRef the connector reads
 
 /** A fixture order in the Sell Fulfillment shape, with a real person on it. */
 function ebayOrder(id, { lastModifiedDate = "2026-09-02T10:30:00.000Z", creationDate = "2026-09-02T09:00:00.000Z", paymentStatus = "PAID", fulfillmentStatus = "NOT_STARTED", cancelState = "NONE_REQUESTED", marketplace = "EBAY_GB", total = "116.00", username = "ada_l", extra = {} } = {}) {
@@ -66,7 +70,9 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
   store.write("companies/c1", { ownerUid: "u1", companyName: "Acme", memberAccess });
   store.write("companySettings/c1", { defaultDeliveryTime: 14 });
   const calls = { pushes: [], held: [], enqueued: [], piiLog: [], exchanges: 0, refreshes: 0, identities: 0, appTokens: 0 };
-  const switches = { connectorOn };
+  // `callbackKey` is a switch so a test can blank it or truncate it and watch the
+  // handler fail closed — with the SAME 401 a wrong key gets (§5.4).
+  const switches = { connectorOn, callbackKey: CALLBACK_KEY };
   const oauth = {
     ...realOAuth,
     exchangeCode: async ({ code }) => { calls.exchanges += 1; if (code !== "good-code") throw Object.assign(new Error("ebay_oauth_http_400: invalid_grant"), { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${calls.exchanges}`, expires_in: 7200, refresh_token: `rt_${calls.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token", scope: realOAuth.SCOPES.join(" ") }; },
@@ -77,7 +83,7 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
   };
   const fns = createEbayConnectorFunctions({
     admin, HttpsError: FakeHttpsError, onCall: passthrough, onRequest: passthrough, onSchedule: passthrough,
-    clientId: () => (configured ? "app-id" : ""), clientSecret: () => "app-secret", tokenKey: () => TOKEN_KEY, hashKey: () => HASH_KEY,
+    clientId: () => (configured ? "app-id" : ""), clientSecret: () => "app-secret", tokenKey: () => TOKEN_KEY, hashKey: () => HASH_KEY, callbackKey: () => switches.callbackKey,
     environment: () => environment, ruName: () => "EGGcraft-sandbox-ru", deletionToken: () => "nivadesk_ebay_deletion-token_0123456789", deletionEndpointUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications",
     dailyCap: () => 5000, connectorEnabled: () => switches.connectorOn,
     encryptToken: tokenBox.encryptToken, decryptToken: tokenBox.decryptToken,
@@ -97,22 +103,62 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
     notificationVerifier: ({ signature }) => signature === "valid-signature",
     now: () => nowRef.value
   });
-  return { fns, store, admin, calls, ebay, nowRef, oauth, switches, TOKEN_KEY, HASH_KEY };
+  harnessClocks.set(fns, nowRef);
+  return { fns, store, admin, calls, ebay, nowRef, oauth, switches, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };
 }
 
 function fakeRes() {
-  const res = { statusCode: 200, payload: null, body: null, redirectedTo: "", contentType: "" };
+  const res = { statusCode: 200, payload: null, body: null, redirectedTo: "", contentType: "", headers: {} };
   res.status = (c) => { res.statusCode = c; return res; }; res.json = (p) => { res.payload = p; return res; }; res.send = (b) => { res.body = b; return res; }; res.type = (t) => { res.contentType = t; return res; };
+  res.set = (k, v) => { res.headers[String(k).toLowerCase()] = v; return res; };
   res.redirect = (code, url) => { res.statusCode = code; res.redirectedTo = url; return res; };
   return res;
+}
+
+function callbackRid() { return crypto.randomBytes(8).toString("hex"); }
+// The connector reads a frozen test clock, and the signature carries a timestamp
+// the connector checks against it (±5 min). So a relay POST is stamped with the
+// clock of the connector it is aimed at, not with the wall clock.
+const clockOf = (fns) => (harnessClocks.get(fns) || { value: Date.now() }).value;
+
+/**
+ * One signed relay POST (§5.4). The body is serialised ONCE and the signature is
+ * taken over those exact bytes; `body` is then parsed BACK from them, never the
+ * reverse — if the literal were the body and rawBody a re-serialisation, a
+ * body-swap test would go green while proving nothing about the Cloud Run path,
+ * where key order and escaping need not match any re-serialisation of ours.
+ */
+async function signedCallback(fns, fields, { key = CALLBACK_KEY, timestampMs = null, method = "POST", originalUrl = "/ebayOAuthCallback", rawBody = null, signOver = null, omitRawBody = false, omitSignature = false, signature = null, timestampHeader = null, headers = {} } = {}) {
+  if (timestampMs === null) timestampMs = clockOf(fns);
+  const raw = rawBody === null ? JSON.stringify(fields) : rawBody;
+  const buffer = Buffer.from(raw, "utf8");
+  const ts = timestampHeader === null ? String(timestampMs) : timestampHeader;
+  // `signOver` signs one body and sends another: the body-swap case.
+  const digest = crypto.createHmac("sha256", key).update(`v1.${ts}.`, "utf8").update(signOver === null ? buffer : Buffer.from(signOver, "utf8")).digest("hex");
+  let parsed = null;
+  try { parsed = JSON.parse(raw); } catch { parsed = null; }
+  const req = {
+    method, originalUrl,
+    headers: { "content-type": "application/json", "x-nivadesk-timestamp": ts, ...(omitSignature ? {} : { "x-nivadesk-signature": signature === null ? `v1=${digest}` : signature }), ...headers },
+    ...(omitRawBody ? {} : { rawBody: buffer }),
+    body: parsed
+  };
+  const res = fakeRes();
+  await fns.ebayOAuthCallback(req, res);
+  return res;
+}
+
+/** The relay POST the web route would send for a browser that kept its nonce. */
+async function callbackPost(fns, { state, code = "good-code", nonce = "", rid = null, ...rest } = {}) {
+  const fields = { v: 1, rid: rid === null ? callbackRid() : rid, code, state, nonce };
+  return signedCallback(fns, fields, rest);
 }
 
 /** Begin + callback with the browser nonce forwarded: a connected seller. */
 async function connect(fns, { auth = { uid: "u1" } } = {}) {
   const begun = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
-  const res = fakeRes();
-  await fns.ebayOAuthCallback({ method: "GET", query: { state: begun.state, code: "good-code", nonce: begun.nonce } }, res);
+  const res = await callbackPost(fns, { state: begun.state, code: "good-code", nonce: begun.nonce });
   return { begun, res, connectionId: "c1__ebayuser_xxx" };
 }
 
-module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, TOKEN_KEY, HASH_KEY };
+module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, callbackPost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };

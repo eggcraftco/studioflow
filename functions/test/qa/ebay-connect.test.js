@@ -4,14 +4,37 @@
 // Identity API; credentials in their own boxed document; one refresh at a
 // time; a seller marked reconnect_required ONLY for an auth-class failure; and
 // a public view that never carries a token, a box or a hash.
+//
+// The callback is a SIGNED POST (§5.4), not a browser GET: eBay lands on the web
+// route, the route relays. So these cases also pin the transport — 405 for a
+// GET, 401 for anything unsigned, wrongly signed, stale or key-less, 400 for a
+// malformed envelope — and pin that no code, state or nonce reaches a log line
+// or a response body on ANY path, error paths included.
 const assert = require("assert");
-const { buildEbay, connect, fakeRes, TOKEN_KEY, HASH_KEY } = require("./helpers/ebayHarness");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const { buildEbay, connect, callbackPost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY } = require("./helpers/ebayHarness");
 const { decryptToken } = require("../../security/tokenBox");
 const hashing = require("../../commerce/ebay/hashing");
 const { STATE_TTL_MS, TOKEN_REFRESH_AHEAD_MS } = require("../../ebayConnector");
+
+// Everything the suite says out loud, teed into one list for the log pin below.
+const captured = [];
+const realConsole = { log: console.log, warn: console.warn, error: console.error };
+for (const level of ["log", "warn", "error"]) {
+  console[level] = (...args) => { captured.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")); realConsole[level](...args); };
+}
+// Values the pin hunts for. Distinctive on purpose: a generic "code" would make
+// the pin pass by accident, and the eight-character prefixes catch a truncated
+// echo like JSON.parse's ten-character quote of the body.
+const secretsSeen = [];
+const watch = (...values) => { for (const v of values) if (typeof v === "string" && v.length >= 8) secretsSeen.push(v); };
+
 let failures = 0;
 function check(name, fn) { return Promise.resolve().then(fn).then(() => console.log("PASS ", name)).catch((error) => { failures += 1; console.log("FAIL ", name, "-", String(error.message).replace(/\s+/g, " ").slice(0, 320)); }); }
 const auth = { uid: "u1" };
+const said = (res) => JSON.stringify(res.payload);
 
 (async () => {
   await check("begin hands the owner the consent URL, a state document with the nonce's HASH, and the nonce itself only to the browser", async () => {
@@ -39,7 +62,9 @@ const auth = { uid: "u1" };
   await check("a valid callback (nonce forwarded) connects the seller the Identity API names, boxes both tokens in credentials/current, and proves only orders.read", async () => {
     const { fns, store, calls } = buildEbay();
     const { res, connectionId } = await connect(fns);
-    assert.strictEqual(res.statusCode, 302); assert.ok(res.redirectedTo.includes("section=ebay") && res.redirectedTo.includes("ebay=connected"), res.redirectedTo);
+    assert.strictEqual(res.statusCode, 200); assert.strictEqual(res.payload.ok, true); assert.strictEqual(res.payload.outcome, "connected"); assert.ok(/^[0-9a-f]{16}$/.test(res.payload.rid), said(res));
+    assert.strictEqual(res.redirectedTo, "", "the function answers JSON; the redirect is the web route's");
+    assert.strictEqual(res.headers["cache-control"], "no-store");
     const conn = store.read(`ebayConnections/${connectionId}`);
     assert.strictEqual(conn.companyId, "c1"); assert.strictEqual(conn.status, "connected"); assert.strictEqual(conn.sellerUserId, "ebayuser_xxx"); assert.strictEqual(conn.sellerUsername, "eggcraft_uk");
     assert.strictEqual(conn.environment, "sandbox"); assert.strictEqual(conn.readOnly, true); assert.strictEqual(conn.hasCredentials, true);
@@ -56,33 +81,49 @@ const auth = { uid: "u1" };
     assert.strictEqual(store.read(`ebayConnectStates/${(await (async () => { const s = store.paths("ebayConnectStates/"); return s[0].split("/")[1]; })())}`).connectionId, connectionId);
   });
 
-  await check("a replayed state, an expired state, an unknown state and a cancelled consent", async () => {
+  await check("a replayed state, an expired state, an unknown state, a missing code — and a replayed SIGNED POST, which the state stops, not the signature", async () => {
     const { fns, nowRef, calls } = buildEbay();
     const { begun } = await connect(fns);
-    const replay = fakeRes(); await fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code", nonce: begun.nonce } }, replay);
-    assert.ok(replay.redirectedTo.includes("ebay=error") && replay.redirectedTo.includes("reason=state"), replay.redirectedTo);
+    watch(begun.state, begun.nonce);
+    const replay = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(replay.statusCode, 200); assert.strictEqual(replay.payload.reason, "state", said(replay));
     assert.strictEqual(calls.exchanges, 1, "no second exchange");
     const expiring = await fns.beginEbayConnect({ auth, data: {} });
     nowRef.value += STATE_TTL_MS + 1000;
-    const expired = fakeRes(); await fns.ebayOAuthCallback({ query: { state: expiring.state, code: "good-code", nonce: expiring.nonce } }, expired);
-    assert.ok(expired.redirectedTo.includes("reason=state"));
-    const unknown = fakeRes(); await fns.ebayOAuthCallback({ query: { state: "invented", code: "x", nonce: "y" } }, unknown);
-    assert.ok(unknown.redirectedTo.includes("reason=state"));
-    const cancelled = fakeRes(); await fns.ebayOAuthCallback({ query: { error: "access_denied", state: begun.state } }, cancelled);
-    assert.ok(cancelled.redirectedTo.includes("ebay=cancelled"));
-    const missing = fakeRes(); await fns.ebayOAuthCallback({ query: { state: begun.state } }, missing);
-    assert.ok(missing.redirectedTo.includes("reason=missing_code"));
+    const expired = await callbackPost(fns, { state: expiring.state, nonce: expiring.nonce });
+    assert.strictEqual(expired.payload.reason, "state");
+    const unknown = await callbackPost(fns, { state: "invented-state-0000000000", code: "x", nonce: "y" });
+    assert.strictEqual(unknown.statusCode, 200); assert.strictEqual(unknown.payload.reason, "state", said(unknown));
+    const missing = await callbackPost(fns, { state: begun.state, code: "" });
+    assert.strictEqual(missing.statusCode, 200); assert.strictEqual(missing.payload.reason, "missing_code", said(missing));
+    // The same signed bytes twice: the second one verifies and still loses.
+    const fresh = await fns.beginEbayConnect({ auth, data: {} });
+    const fields = { v: 1, rid: callbackRid(), code: "good-code", state: fresh.state, nonce: fresh.nonce };
+    const first = await signedCallback(fns, fields);
+    const second = await signedCallback(fns, fields);
+    assert.strictEqual(first.payload.outcome, "connected", said(first));
+    assert.strictEqual(second.payload.reason, "state", "replay is stopped by the single-use state, not by the HMAC");
   });
 
   await check("a callback without the browser's nonce is refused with reason=browser AND the state is burned — a second try with the right nonce cannot follow", async () => {
     const { fns, calls, store } = buildEbay();
     const begun = await fns.beginEbayConnect({ auth, data: {} });
-    const phished = fakeRes(); await fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code" } }, phished);
-    assert.ok(phished.redirectedTo.includes("reason=browser"), phished.redirectedTo);
-    const wrong = fakeRes(); await fns.ebayOAuthCallback({ query: { state: (await fns.beginEbayConnect({ auth, data: {} })).state, code: "good-code", nonce: "not-the-nonce" } }, wrong);
-    assert.ok(wrong.redirectedTo.includes("reason=browser"));
-    const again = fakeRes(); await fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code", nonce: begun.nonce } }, again);
-    assert.ok(again.redirectedTo.includes("reason=state"), "burned");
+    watch(begun.state, begun.nonce);
+    // The §5 attack: the seller has no cookie, so the web route posts nonce:"".
+    // It must still reach here, because the burn is what kills the attacker's state.
+    const phished = await callbackPost(fns, { state: begun.state, nonce: "" });
+    assert.strictEqual(phished.payload.reason, "browser", said(phished));
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, true, "burned on an ABSENT nonce, not only a wrong one");
+    const noKeyAtAll = await fns.beginEbayConnect({ auth, data: {} });
+    const omitted = await signedCallback(fns, { v: 1, rid: callbackRid(), code: "good-code", state: noKeyAtAll.state });
+    assert.strictEqual(omitted.payload.reason, "browser", "no nonce key in the body is the same as an empty one");
+    assert.strictEqual(store.read(`ebayConnectStates/${noKeyAtAll.state}`).used, true);
+    const other = await fns.beginEbayConnect({ auth, data: {} });
+    const wrong = await callbackPost(fns, { state: other.state, nonce: "not-the-nonce" });
+    assert.strictEqual(wrong.payload.reason, "browser");
+    assert.strictEqual(store.read(`ebayConnectStates/${other.state}`).used, true);
+    const again = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(again.payload.reason, "state", "burned");
     assert.strictEqual(calls.exchanges, 0, "no code was ever exchanged");
     assert.strictEqual(store.paths("ebayConnections/").length, 0, "no connection, no credentials");
   });
@@ -92,24 +133,195 @@ const auth = { uid: "u1" };
     const begun = await sandbox.fns.beginEbayConnect({ auth, data: {} });
     const production = buildEbay({ environment: "production" });
     production.store.write(`ebayConnectStates/${begun.state}`, sandbox.store.read(`ebayConnectStates/${begun.state}`));
-    const res = fakeRes(); await production.fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code", nonce: begun.nonce } }, res);
-    assert.ok(res.redirectedTo.includes("reason=environment"), res.redirectedTo);
+    const res = await callbackPost(production.fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(res.payload.reason, "environment", said(res));
     assert.strictEqual(production.calls.exchanges, 0);
   });
 
-  await check("the connector switch off answers reason=disabled; an identity 403 answers no_seller; a bad code answers token", async () => {
+  await check("the connector switch off answers reason=disabled to a SIGNED caller and 401 to an unsigned one; an identity 403 answers no_seller; a bad code answers token", async () => {
     const off = buildEbay({ connectorOn: false });
-    const res = fakeRes(); await off.fns.ebayOAuthCallback({ query: { state: "s", code: "c", nonce: "n" } }, res);
-    assert.ok(res.redirectedTo.includes("reason=disabled"));
+    const res = await callbackPost(off.fns, { state: "state-that-does-not-exist", code: "c", nonce: "n" });
+    assert.strictEqual(res.statusCode, 200); assert.strictEqual(res.payload.reason, "disabled", said(res));
+    // The gate sits behind the signature: whether the connector is on is not a
+    // fact an unauthenticated caller may read.
+    const dark = await signedCallback(off.fns, { v: 1, rid: callbackRid(), code: "c", state: "state-that-does-not-exist", nonce: "n" }, { omitSignature: true });
+    assert.strictEqual(dark.statusCode, 401); assert.deepStrictEqual(dark.payload, { ok: false }, said(dark));
     const noSeller = buildEbay({ oauth: { fetchIdentity: async () => { throw Object.assign(new Error("ebay_identity_http_403"), { status: 403, errorClass: "permission", code: "no_seller" }); } } });
     const begun = await noSeller.fns.beginEbayConnect({ auth, data: {} });
-    const r2 = fakeRes(); await noSeller.fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code", nonce: begun.nonce } }, r2);
-    assert.ok(r2.redirectedTo.includes("reason=no_seller"), r2.redirectedTo);
+    const r2 = await callbackPost(noSeller.fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(r2.payload.reason, "no_seller", said(r2));
     assert.strictEqual(noSeller.store.paths("ebayConnections/").length, 0, "nothing stored for a seller we cannot name");
     const bad = buildEbay();
     const b = await bad.fns.beginEbayConnect({ auth, data: {} });
-    const r3 = fakeRes(); await bad.fns.ebayOAuthCallback({ query: { state: b.state, code: "bad-code", nonce: b.nonce } }, r3);
-    assert.ok(r3.redirectedTo.includes("reason=token"), r3.redirectedTo);
+    const r3 = await callbackPost(bad.fns, { state: b.state, code: "bad-code", nonce: b.nonce });
+    assert.strictEqual(r3.payload.reason, "token", said(r3));
+  });
+
+  // ---- §5.4: the transport ---------------------------------------------------
+  await check("the function takes POST only — a GET answers 405, touches no state and reads no body", async () => {
+    const { fns, store, calls } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    watch(begun.state, begun.nonce);
+    for (const method of ["GET", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]) {
+      const res = await callbackPost(fns, { state: begun.state, nonce: begun.nonce, method });
+      assert.strictEqual(res.statusCode, 405, method);
+      assert.deepStrictEqual(res.payload, { ok: false }, method);
+      assert.strictEqual(res.redirectedTo, "", "405 is an answer, not a redirect");
+    }
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "a GET must not burn a state");
+    assert.strictEqual(calls.exchanges, 0);
+  });
+
+  await check("a query string is refused with 400 before the body is read — the mechanism is originalUrl, never req.query", async () => {
+    const { fns, store } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const res = await callbackPost(fns, { state: begun.state, nonce: begun.nonce, originalUrl: "/ebayOAuthCallback?code=leaked" });
+    assert.strictEqual(res.statusCode, 400); assert.deepStrictEqual(res.payload, { ok: false }, said(res));
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "nothing stateful was touched");
+  });
+
+  await check("an unconfigured or truncated EBAY_CALLBACK_KEY fails closed — with the SAME 401 a wrong key gets, so the status is no configuration oracle, and no state is touched", async () => {
+    // §5.4 settles this deliberately: 503 here would be an unauthenticated
+    // oracle for whether the secret exists, so an unconfigured key answers 401,
+    // identically to a wrong one. The distinction lives only in the ops log.
+    const { fns, store, switches } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    watch(begun.state, begun.nonce);
+    switches.callbackKey = "";
+    const blank = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(blank.statusCode, 401); assert.deepStrictEqual(blank.payload, { ok: false }, said(blank));
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "an unconfigured key burns nothing");
+    switches.callbackKey = "a".repeat(31);
+    const short = await callbackPost(fns, { state: begun.state, nonce: begun.nonce, key: "a".repeat(31) });
+    assert.strictEqual(short.statusCode, 401, "the 32-character floor is enforced, not assumed");
+    switches.callbackKey = CALLBACK_KEY;
+    const wrongKey = await callbackPost(fns, { state: begun.state, nonce: begun.nonce, key: crypto.randomBytes(32).toString("hex") });
+    assert.strictEqual(wrongKey.statusCode, 401);
+    assert.strictEqual(JSON.stringify(blank.payload), JSON.stringify(wrongKey.payload), "byte-identical to a wrong key");
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false);
+    // …and the same state still connects once the key is right: nothing was consumed.
+    const good = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(good.payload.outcome, "connected", said(good));
+  });
+
+  await check("every unauthenticated shape is 401 with a bare body: no signature, wrong key, swapped body, stale or future timestamp, no rawBody", async () => {
+    const { fns, nowRef, store } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    watch(begun.state, begun.nonce);
+    const fields = { v: 1, rid: callbackRid(), code: "good-code", state: begun.state, nonce: begun.nonce };
+    const bare = (res, what) => { assert.strictEqual(res.statusCode, 401, what); assert.deepStrictEqual(res.payload, { ok: false }, what); };
+    bare(await signedCallback(fns, fields, { omitSignature: true }), "no signature header");
+    bare(await signedCallback(fns, fields, { signature: "v2=deadbeef" }), "wrong version prefix");
+    bare(await signedCallback(fns, fields, { signature: `v1=${"z".repeat(64)}` }), "non-hex digest");
+    bare(await signedCallback(fns, fields, { signature: "v1=abc" }), "short digest — timingSafeEqual is length-guarded, not thrown through");
+    bare(await signedCallback(fns, fields, { key: crypto.randomBytes(32).toString("hex") }), "a rotated-away key");
+    // Signed over one body, sent as another: the signature binds THIS body, so a
+    // captured request cannot be re-pointed at a different code.
+    const swapped = JSON.stringify({ ...fields, code: "attacker-code" });
+    bare(await signedCallback(fns, fields, { rawBody: swapped, signOver: JSON.stringify(fields) }), "body swapped after signing");
+    bare(await signedCallback(fns, fields, { timestampMs: nowRef.value - 6 * 60 * 1000 }), "six minutes stale");
+    bare(await signedCallback(fns, fields, { timestampMs: nowRef.value + 6 * 60 * 1000 }), "six minutes in the future — the window is real in both directions");
+    bare(await signedCallback(fns, fields, { timestampHeader: "" }), "no timestamp");
+    bare(await signedCallback(fns, fields, { timestampHeader: "not-a-number" }), "non-numeric timestamp");
+    bare(await signedCallback(fns, fields, { timestampHeader: "-1757160000123" }), "negative timestamp");
+    bare(await signedCallback(fns, fields, { omitRawBody: true }), "no rawBody — a request with no bytes cannot be authenticated, and is never guessed at from req.body");
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "not one of them reached the transaction");
+    // Four minutes either way is inside the window, and the state is consumed.
+    const early = await signedCallback(fns, fields, { timestampMs: nowRef.value - 4 * 60 * 1000 });
+    assert.strictEqual(early.payload.outcome, "connected", said(early));
+    const late = await fns.beginEbayConnect({ auth, data: {} });
+    const ahead = await callbackPost(fns, { state: late.state, nonce: late.nonce, timestampMs: nowRef.value + 4 * 60 * 1000 });
+    assert.strictEqual(ahead.payload.outcome, "connected", said(ahead));
+  });
+
+  await check("the envelope is refused with 400 and no rid: an oversized body, a non-JSON body, an array, v:2, and every rid that is not sixteen lowercase hex", async () => {
+    const { fns, store } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const ridless = (res, what) => { assert.strictEqual(res.statusCode, 400, what); assert.deepStrictEqual(res.payload, { ok: false }, what); };
+    const big = JSON.stringify({ v: 1, rid: callbackRid(), code: "x".repeat(9000), state: begun.state, nonce: "" });
+    ridless(await signedCallback(fns, null, { rawBody: big }), "signed 9 KB body");
+    ridless(await signedCallback(fns, null, { rawBody: big, omitSignature: true }), "unsigned 9 KB body — the cap is ahead of the HMAC, so it bounds the work the HMAC does");
+    ridless(await signedCallback(fns, null, { rawBody: "AUTHCODE_v4x_not_json" }), "non-JSON");
+    ridless(await signedCallback(fns, null, { rawBody: "[1,2,3]" }), "a JSON array is not a body");
+    ridless(await signedCallback(fns, null, { rawBody: "null" }), "null is not a body");
+    ridless(await signedCallback(fns, { v: 2, rid: callbackRid(), code: "c", state: begun.state, nonce: "" }), "v:2");
+    for (const rid of [undefined, "", "0123456789abcde", "0123456789abcdef0", "0123456789ABCDEF", "gggggggggggggggg", "0123456\n89abcdef"]) {
+      const res = await signedCallback(fns, { v: 1, ...(rid === undefined ? {} : { rid }), code: "good-code", state: begun.state, nonce: begun.nonce });
+      ridless(res, `rid ${JSON.stringify(rid)}`);
+      assert.strictEqual("rid" in res.payload, false, "a rid that failed its shape is never echoed");
+    }
+    // A rid set to the code or the state: shaped before it is logged or echoed.
+    for (const rid of ["good-code", begun.state]) {
+      const res = await signedCallback(fns, { v: 1, rid, code: "good-code", state: begun.state, nonce: begun.nonce });
+      ridless(res, "rid pointed at a value");
+    }
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "no envelope refusal reached the transaction");
+  });
+
+  await check("a malformed state, an over-long code and an over-long nonce are 400 WITH the rid — and a path-shaped state never reaches states().doc()", async () => {
+    const { fns, store } = buildEbay();
+    const before = store.paths("ebayConnectStates/").length;
+    const shaped = async (fields) => { const rid = callbackRid(); const res = await signedCallback(fns, { v: 1, rid, ...fields }); return { res, rid }; };
+    // Firestore's own documentPath error embeds the rejected path, and an id may
+    // be 1500 bytes — so neither .doc() nor a length check is the filter. §4.5's
+    // regex is, and it has to be applied on THIS side.
+    for (const state of ["abc/def", "a//b", "x".repeat(1600), "short", "has space", "../../etc"]) {
+      const { res, rid } = await shaped({ code: "good-code", state, nonce: "" });
+      assert.strictEqual(res.statusCode, 400, state.slice(0, 12));
+      assert.deepStrictEqual(res.payload, { ok: false, rid }, state.slice(0, 12));
+    }
+    const long = await shaped({ code: "x".repeat(4097), state: "a-perfectly-good-state-value", nonce: "" });
+    assert.strictEqual(long.res.statusCode, 400); assert.deepStrictEqual(long.res.payload, { ok: false, rid: long.rid });
+    const nonce = await shaped({ code: "good-code", state: "a-perfectly-good-state-value", nonce: "n".repeat(201) });
+    assert.strictEqual(nonce.res.statusCode, 400); assert.deepStrictEqual(nonce.res.payload, { ok: false, rid: nonce.rid });
+    const notAString = await shaped({ code: "good-code", state: "a-perfectly-good-state-value", nonce: 42 });
+    assert.strictEqual(notAString.res.statusCode, 400);
+    assert.strictEqual(store.paths("ebayConnectStates/").length, before, "no state document was created, read into or written by a malformed request");
+  });
+
+  await check("RESPONSE PIN — no answer echoes a code, a state or a nonce back, and the only rid it carries is a shaped one", async () => {
+    const { fns } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const CODE = "AUTHCODE-9b2e-never-echoed";
+    const answers = [];
+    answers.push(await callbackPost(fns, { state: begun.state, code: CODE, nonce: begun.nonce, method: "GET" }));
+    answers.push(await callbackPost(fns, { state: begun.state, code: CODE, nonce: begun.nonce, omitSignature: true }));
+    answers.push(await signedCallback(fns, { v: 1, rid: CODE, code: CODE, state: begun.state, nonce: begun.nonce }));
+    answers.push(await signedCallback(fns, { v: 1, rid: callbackRid(), code: CODE, state: "abc/def", nonce: begun.nonce }));
+    answers.push(await callbackPost(fns, { state: "invented-state-0000000000", code: CODE, nonce: "wrong" }));
+    answers.push(await callbackPost(fns, { state: begun.state, code: CODE, nonce: "wrong-nonce-entirely" }));
+    for (const res of answers) {
+      const text = JSON.stringify(res.payload);
+      for (const value of [CODE, begun.state, begun.nonce]) {
+        assert.ok(!text.includes(value), text);
+        assert.ok(!text.includes(value.slice(0, 8)), text);
+      }
+      if (res.payload && res.payload.rid !== undefined) assert.ok(/^[0-9a-f]{16}$/.test(res.payload.rid), text);
+    }
+  });
+
+  await check("SOURCE PIN — the handler reads no req.query, redirects nothing, never re-serialises req.body, logs no error message but the pinned one, and is capped at ten instances", async () => {
+    const source = fs.readFileSync(path.join(__dirname, "../../ebayConnector.js"), "utf8");
+    const from = source.indexOf("const ebayOAuthCallback = onRequest(");
+    const to = source.indexOf("// ---- 3. reading and managing a connection", from);
+    assert.ok(from > 0 && to > from, "the handler was found");
+    const body = source.slice(from, to);
+    assert.ok(!/req\.query/.test(body), "req.query is never read — Firebase always populates it, so reading it proves nothing and is the habit that leaked the code");
+    assert.ok(!/res\.redirect/.test(body), "the function answers JSON; the redirect is the web route's");
+    assert.ok(!/JSON\.stringify\(req\.body\)/.test(body) && !/req\.rawBody\s*\|\|/.test(body), "no re-serialised fallback: it breaks an exact-bytes HMAC silently");
+    assert.ok(!/"cancelled"/.test(body), "the decline never reaches the function — the POST body has no error field");
+    assert.ok(body.includes("req.originalUrl") && body.includes("req.rawBody"), "the stated query-string mechanism and the raw bytes");
+    assert.ok(/maxInstances: 10/.test(body), "a bounded bill for an unkeyed flood");
+    // One console line in this handler may carry an error message: §14.1 pins
+    // EbayOAuthError's message to eBay's own error / error_description.
+    const consoleLines = body.split("\n").filter((l) => /console\.(log|warn|error)\(/.test(l));
+    const withMessage = consoleLines.filter((l) => /error\??\.(message|stack)/.test(l));
+    assert.deepStrictEqual(withMessage.length, 1, withMessage.join(" | "));
+    assert.ok(withMessage[0].includes('console.error("ebayOAuthCallback failed:"'), withMessage[0]);
+    assert.ok(!/error\??\.stack/.test(body), "no stack anywhere");
+    assert.ok(source.includes("crypto.timingSafeEqual(offered, expected)"), "the digests are compared in constant time");
+    assert.ok(!source.includes("function connectRedirect"), "connectRedirect had one caller and is gone");
+    assert.ok(source.includes("appReturnUrl()"), "appReturnUrl stays — beginEbayConnect derives the native startUrl from it");
   });
 
   await check("claimEbayConnectState answers only the uid that began the flow, once", async () => {
@@ -120,8 +332,8 @@ const auth = { uid: "u1" };
     const claimed = await fns.claimEbayConnectState({ auth, data: { state: begun.state } });
     assert.ok(claimed.nonce && claimed.authorizeUrl.startsWith("https://auth.sandbox.ebay.com/"));
     await assert.rejects(fns.claimEbayConnectState({ auth, data: { state: begun.state } }), /expired or was already used/);
-    const res = fakeRes(); await fns.ebayOAuthCallback({ query: { state: begun.state, code: "good-code", nonce: claimed.nonce } }, res);
-    assert.ok(res.redirectedTo.includes("ebay=connected"), "the claimed nonce is the one the callback accepts");
+    const res = await callbackPost(fns, { state: begun.state, nonce: claimed.nonce });
+    assert.strictEqual(res.payload.outcome, "connected", "the claimed nonce is the one the callback accepts");
   });
 
   await check("a connection id carries the workspace; another workspace's id is refused (the isolation boundary)", async () => {
@@ -146,7 +358,7 @@ const auth = { uid: "u1" };
     store.write(`commerceCursors/ebay__${connectionId}__order`, { watermarkMs: nowRef.value - 3600000 });
     nowRef.value += 60000;
     const { res } = await connect(fns);
-    assert.ok(res.redirectedTo.includes("ebay=connected"));
+    assert.strictEqual(res.payload.outcome, "connected", said(res));
     const conn = store.read(`ebayConnections/${connectionId}`);
     assert.strictEqual(conn.status, "connected"); assert.strictEqual(conn.lastErrorCode, "");
     assert.strictEqual(conn.connectedAtMs, firstConnectedAt); assert.strictEqual(conn.settings.includeUnpaid, true); assert.strictEqual(conn.importState, "done"); assert.deepStrictEqual(conn.importCursor, { sinceMs: 1, untilMs: 2, failedIds: [] });
@@ -283,6 +495,35 @@ const auth = { uid: "u1" };
     assert.deepStrictEqual(limited, { ok: true, healthy: false, reason: "rate_limited" });
     store.write(`ebayConnections/${connectionId}`, { ...store.read(`ebayConnections/${connectionId}`), status: "reconnect_required", lastErrorCode: "credentials_rejected" });
     assert.deepStrictEqual(await fns.verifyEbayConnection({ auth, data: { connectionId } }), { ok: true, healthy: false, reason: "credentials_rejected" });
+  });
+
+  await check("LOG PIN — not one console line on any path carries a code, a state, a nonce, a signature, or even their first eight characters", async () => {
+    // The traps this pin exists for: JSON.parse quotes the body's first ten
+    // characters back in its message, and Firestore's .doc() embeds the rejected
+    // path in its own. Both are error MESSAGES, which is why none is ever logged.
+    const { fns } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const CODE = "AUTHCODE-4f1c-do-not-log-me";
+    watch(begun.state, begun.nonce, CODE);
+    await callbackPost(fns, { state: begun.state, code: CODE, nonce: begun.nonce, method: "GET" });
+    await callbackPost(fns, { state: begun.state, code: CODE, nonce: begun.nonce, originalUrl: `/ebayOAuthCallback?code=${CODE}` });
+    await callbackPost(fns, { state: begun.state, code: CODE, nonce: begun.nonce, omitSignature: true });
+    await signedCallback(fns, null, { rawBody: `${CODE}_not_json` });
+    await signedCallback(fns, null, { rawBody: JSON.stringify({ v: 1, rid: callbackRid(), code: CODE, state: "abc/def", nonce: begun.nonce }) });
+    await signedCallback(fns, { v: 1, rid: CODE, code: CODE, state: begun.state, nonce: begun.nonce });
+    await callbackPost(fns, { state: begun.state, code: "bad-code", nonce: begun.nonce });   // the exchange failure path
+    const seen = secretsSeen.concat([CODE]);
+    for (const line of captured) {
+      for (const value of seen) {
+        assert.ok(!line.includes(value), `a log line carried a value: ${line.slice(0, 120)}`);
+        assert.ok(!line.includes(value.slice(0, 8)), `a log line carried the first eight characters: ${line.slice(0, 120)}`);
+      }
+    }
+    // The only rid that may appear in a line is one that passed its shape check.
+    for (const line of captured.filter((l) => l.includes("rid="))) {
+      const rid = line.split("rid=")[1].split(/[\s"]/)[0];
+      assert.ok(/^[0-9a-f]{16}$/.test(rid), `an unshaped rid reached a log line: ${line.slice(0, 120)}`);
+    }
   });
 
   if (failures) { console.log(`\n${failures} FAILED`); process.exit(1); }

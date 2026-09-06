@@ -120,18 +120,21 @@ const SQUARE_TOKEN_KEY = defineSecret("SQUARE_TOKEN_KEY");
 const SQUARE_APP_ACCESS_TOKEN = defineSecret("SQUARE_APP_ACCESS_TOKEN");
 const SQUARE_ENVIRONMENT = defineSecret("SQUARE_ENVIRONMENT");
 const SQUARE_SECRETS = [SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_TOKEN_KEY, SQUARE_APP_ACCESS_TOKEN, SQUARE_ENVIRONMENT];
-// eBay connector (docs/ebay-connector-design.md §2, §3.2). The keyset, the key
-// the seller tokens are boxed under and the key that hashes buyer identifiers
-// are declared ONLY once the owner has created the four secrets and the
-// dedicated service account, and committed functions/.ebay-secrets-ready (the
-// Xero precedent). Until then EBAY_RUNTIME is empty: no secret is mounted, no
-// service account is named, and the CLI keeps deploying every other function.
+// eBay connector (docs/ebay-connector-design.md §2, §3.2, §5.4). The keyset, the
+// key the seller tokens are boxed under, the key that hashes buyer identifiers
+// and the key the web callback route signs its relay POST with are declared ONLY
+// once the owner has created the five secrets and the dedicated service account,
+// and committed functions/.ebay-secrets-ready (the Xero precedent). Until then
+// EBAY_RUNTIME is empty: no secret is mounted, no service account is named, and
+// the CLI keeps deploying every other function. Deploying without the marker
+// leaves EBAY_CALLBACK_KEY unmounted, so every relay POST answers 401 and no
+// OAuth can complete — §5.4's rollout step 3 is what makes the mount happen.
 // Every eBay trigger spreads EBAY_RUNTIME into its options so secrets and
 // identity travel together — the default compute account never holds EBAY_*.
 // Values arrive as plain environment variables either way.
 const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));
 const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY
-  ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY")]
+  ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY"), defineSecret("EBAY_CALLBACK_KEY")]
   : [];
 const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";
 const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};
@@ -6186,6 +6189,9 @@ const ebayExports = createEbayConnectorFunctions({
   clientSecret: () => ebaySecretValue("EBAY_CLIENT_SECRET"),
   tokenKey: () => ebaySecretValue("EBAY_TOKEN_KEY"),
   hashKey: () => ebaySecretValue("EBAY_HASH_KEY"),
+  // The shared key the web callback route signs its relay POST with (§5.4).
+  // Read at call time, like the rest: an unconfigured key refuses every POST.
+  callbackKey: () => ebaySecretValue("EBAY_CALLBACK_KEY"),
   // Non-secret configuration, sandbox by default; read at call time.
   environment: () => process.env.NIVADESK_EBAY_ENVIRONMENT || "sandbox",
   ruName: () => process.env.NIVADESK_EBAY_RUNAME || "",

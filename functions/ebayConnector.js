@@ -100,6 +100,21 @@ const DELETION_RETRY_AFTER_MS = 5 * 60 * 1000;
 const DELETION_MAX_BACKOFF_MS = 6 * 60 * 60 * 1000;
 const DELETION_RECONCILE_LIMIT = 50;
 const CONNECTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
+// The callback transport (§5.4). eBay lands the seller's browser on the web
+// route; the web route relays the code as a SIGNED POST, because Cloud Run
+// writes httpRequest.requestUrl — query string included — into Cloud Logging on
+// every request, and a code or a nonce in a query string is a code or a nonce in
+// the log. The body cap is checked BEFORE the HMAC, so it bounds the work the
+// signature check does; the state shape is checked BEFORE states().doc(), so a
+// path-shaped state can never reach Firestore's argument validator, whose error
+// message embeds the rejected path.
+const CALLBACK_MAX_BODY_BYTES = 8192;
+const CALLBACK_SKEW_MS = 5 * 60 * 1000;
+const CALLBACK_KEY_MIN_LENGTH = 32;
+const CALLBACK_MAX_CODE_LENGTH = 4096;
+const CALLBACK_MAX_NONCE_LENGTH = 200;
+const CALLBACK_RID_PATTERN = /^[0-9a-f]{16}$/;
+const CALLBACK_STATE_PATTERN = /^[A-Za-z0-9_-]{20,120}$/;
 
 function safeIdPart(value) { return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 120); }
 function connectionDocId(companyId, sellerUserId) { return `${safeIdPart(companyId)}__${safeIdPart(sellerUserId)}`; }
@@ -111,7 +126,7 @@ const n = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 function createEbayConnectorFunctions(deps) {
   const {
     admin, HttpsError, onCall, onRequest, onSchedule = null, onTaskDispatched = null,
-    clientId, clientSecret, tokenKey, hashKey, environment = () => "sandbox", ruName = () => "",
+    clientId, clientSecret, tokenKey, hashKey, callbackKey = () => "", environment = () => "sandbox", ruName = () => "",
     deletionToken = () => "", deletionEndpointUrl = () => "", dailyCap = () => quota.DEFAULT_DAILY_CAP,
     connectorEnabled = () => false,
     encryptToken, decryptToken,
@@ -221,11 +236,31 @@ function createEbayConnectorFunctions(deps) {
     return { ref: snap.ref, data };
   }
 
-  function connectRedirect(res, params) {
-    const url = new URL(appReturnUrl());
-    url.searchParams.set("section", "ebay");
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
-    res.redirect(302, url.toString());
+  // ---- the callback's transport (§5.4) ---------------------------------------
+  // The function answers JSON and never redirects: the seller's browser does not
+  // meet this host at all, and the web route turns an answer into a redirect.
+  function answerCallback(res, status, payload) {
+    if (typeof res.set === "function") res.set("cache-control", "no-store");
+    res.status(status).json(payload);
+  }
+  // HMAC-SHA256(key, "v1." + timestamp + "." + rawBody), over the bytes Cloud Run
+  // received — never over a re-serialisation of req.body, which would silently
+  // break an exact-bytes signature.
+  function callbackDigest(key, timestamp, rawBody) {
+    return crypto.createHmac("sha256", key).update(`v1.${timestamp}.`, "utf8").update(rawBody).digest("hex");
+  }
+  function signatureAccepted(key, headers, rawBody) {
+    const timestamp = String(headers["x-nivadesk-timestamp"] || "");
+    if (!/^\d{1,15}$/.test(timestamp)) return false;
+    if (Math.abs(now() - Number(timestamp)) > CALLBACK_SKEW_MS) return false;   // stale AND future
+    const presented = String(headers["x-nivadesk-signature"] || "");
+    if (!presented.startsWith("v1=")) return false;
+    const offered = Buffer.from(presented.slice(3), "utf8");
+    const expected = Buffer.from(callbackDigest(key, timestamp, rawBody), "utf8");
+    // timingSafeEqual throws on unequal lengths, so the length is guarded first;
+    // the length of a hex digest is public, and the comparison itself is constant time.
+    if (offered.length !== expected.length) return false;
+    return crypto.timingSafeEqual(offered, expected);
   }
 
   // ---- token failures, classified by body (§6) -------------------------------
@@ -392,14 +427,72 @@ function createEbayConnectorFunctions(deps) {
     return { ok: true, nonce, authorizeUrl: oauth.authorizeUrl({ environment: env(), clientId: clientId(), ruName: ruName(), state, scopes: Array.isArray(row.scopes) && row.scopes.length ? row.scopes : ebayOAuth.SCOPES }) };
   });
 
-  // ---- 2. callback: eBay sends the seller's browser back with a code ----------
-  const ebayOAuthCallback = onRequest({ region: "europe-west2", timeoutSeconds: 120 }, async (req, res) => {
-    const state = String(req.query?.state || "");
-    const code = String(req.query?.code || "");
-    const nonce = String(req.query?.nonce || "");
-    if (String(req.query?.error || "")) { connectRedirect(res, { ebay: "cancelled" }); return; }
-    if (!connectorOn()) { connectRedirect(res, { ebay: "error", reason: "disabled" }); return; }
-    if (!state || !code) { connectRedirect(res, { ebay: "error", reason: "missing_code" }); return; }
+  // ---- 2. callback: the web route relays eBay's code as a signed POST (§5.4) --
+  // The transport moved; not one decision did. eBay still sends the seller's
+  // browser to nivadesk.app, and everything after that is a server-to-server
+  // POST whose body is signed with EBAY_CALLBACK_KEY. GET answers 405: there is
+  // no live caller to keep working, and a GET would reopen the very hole this
+  // closes — a query string that Cloud Run copies into the log.
+  //
+  // The order is: method ▸ query ▸ rawBody ▸ key ▸ signature ▸ parse ▸ rid ▸
+  // gate ▸ presence ▸ shapes ▸ state transaction (the burn) ▸ exchange. The
+  // connector gate sits AFTER the signature on purpose: whether the connector is
+  // switched on is not a fact an unauthenticated caller may read.
+  //
+  // Nothing from the body reaches a log line on any path, error paths included.
+  // Two traps make that fail silently unless they are named: a caught error's
+  // message can carry the value that threw (JSON.parse echoes the body's first
+  // ten characters; Firestore's .doc() embeds the rejected path), and an UNCAUGHT
+  // throw is logged by the platform with its message and stack — the one channel
+  // these rules cannot govern. Hence: no error message, stack or object is ever
+  // passed to console.*, and the whole body sits inside one outermost try.
+  const ebayOAuthCallback = onRequest({ region: "europe-west2", timeoutSeconds: 120, maxInstances: 10 }, async (req, res) => {
+    let answered = false;
+    const answer = (status, payload) => { answered = true; answerCallback(res, status, payload); };
+    let rid = "";
+    let state = "";
+    let code = "";
+    let nonce = "";
+    try {
+    if (String(req.method || "").toUpperCase() !== "POST") { answer(405, { ok: false }); return; }
+    // Nothing in this contract puts a value in a URL. The parsed query object is
+    // deliberately never read — Firebase's Express layer always populates it, so
+    // its emptiness proves nothing, and reading it is the habit that leaked the
+    // code into Cloud Logging in the first place. The raw URL is the mechanism.
+    if (String(req.originalUrl || req.url || "").includes("?")) { console.warn("ebay callback: query string refused"); answer(400, { ok: false }); return; }
+    const rawBody = req.rawBody;
+    // A request with no raw bytes cannot be authenticated. It is never guessed at
+    // by re-serialising req.body: that breaks an exact-bytes HMAC silently.
+    if (!Buffer.isBuffer(rawBody)) { console.warn("ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
+    if (rawBody.length > CALLBACK_MAX_BODY_BYTES) { console.warn("ebay callback: body refused", rawBody.length); answer(400, { ok: false }); return; }
+    const key = String(callbackKey() || "");
+    // Fails closed — and closes it with the SAME status a wrong key gets, so the
+    // answer cannot be used as an unauthenticated oracle for whether the secret
+    // exists. The distinction lives only in this ops line (§5.4, "no 503").
+    if (key.length < CALLBACK_KEY_MIN_LENGTH) { console.error("ebay callback: EBAY_CALLBACK_KEY not configured"); answer(401, { ok: false }); return; }
+    if (!signatureAccepted(key, req.headers || {}, rawBody)) { console.warn("ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
+    let body = null;
+    try { body = JSON.parse(rawBody.toString("utf8")); } catch { body = null; }
+    // The parse error's message quotes the body back; the byte length is all the log gets.
+    if (!body || typeof body !== "object" || Array.isArray(body) || Number(body.v) !== 1) { console.warn("ebay callback: body refused", rawBody.length); answer(400, { ok: false }); return; }
+    // rid is caller-controlled: a signer could otherwise set it to the code and
+    // have us write that into the log under a field this design pre-approved for
+    // logging. It is shaped BEFORE it is logged, echoed or used in any way.
+    if (!CALLBACK_RID_PATTERN.test(String(body.rid || ""))) { console.warn("ebay callback: rid refused"); answer(400, { ok: false }); return; }
+    rid = String(body.rid);
+    if (!connectorOn()) { answer(200, { ok: false, outcome: "error", reason: "disabled", rid }); return; }
+    state = String(body.state || "");
+    code = String(body.code || "");
+    nonce = typeof body.nonce === "string" ? body.nonce : "";
+    // Absence is a seller-facing outcome and stays one; malformation is a
+    // protocol error. The web route checks both too, but this side is authoritative.
+    if (!state || !code) { answer(200, { ok: false, outcome: "error", reason: "missing_code", rid }); return; }
+    // The state shape is a security control, not tidiness: Firestore's argument
+    // validation puts the rejected path INTO the error message, and a document id
+    // may be 1500 bytes, so neither .doc() nor a length check is a filter.
+    if (!CALLBACK_STATE_PATTERN.test(state)) { console.warn(`ebay callback: field shape refused rid=${rid}`, "state"); answer(400, { ok: false, rid }); return; }
+    if (code.length > CALLBACK_MAX_CODE_LENGTH) { console.warn(`ebay callback: field shape refused rid=${rid}`, "code"); answer(400, { ok: false, rid }); return; }
+    if (typeof body.nonce !== "undefined" && (typeof body.nonce !== "string" || body.nonce.length > CALLBACK_MAX_NONCE_LENGTH)) { console.warn(`ebay callback: field shape refused rid=${rid}`, "nonce"); answer(400, { ok: false, rid }); return; }
     let verdict = { reason: "state", row: null };
     try {
       verdict = await db().runTransaction(async (tx) => {
@@ -414,8 +507,10 @@ function createEbayConnectorFunctions(deps) {
         if (String(row.environment || "sandbox") !== env()) return { reason: "environment" };
         return { reason: "", row };
       });
-    } catch (error) { console.error("ebayOAuthCallback state failed:", error?.message || error); verdict = { reason: "state" }; }
-    if (verdict.reason) { connectRedirect(res, { ebay: "error", reason: verdict.reason }); return; }
+      // A fixed string, the validated rid and the numeric gRPC status — never
+      // error.message, which for an argument error carries the path that threw.
+    } catch (error) { console.error(`ebay callback: state transaction failed rid=${rid} code=${Number(error?.code) || 0}`); verdict = { reason: "state" }; }
+    if (verdict.reason) { answer(200, { ok: false, outcome: "error", reason: verdict.reason, rid }); return; }
     const stateData = verdict.row;
     try {
       const tokens = await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateData.redirectRuName || ruName()), fetchImpl });
@@ -423,8 +518,8 @@ function createEbayConnectorFunctions(deps) {
       if (!accessToken || !String(tokens?.refresh_token || "")) throw classedError("ebay_token_incomplete", "validation", "token_request_invalid");
       let identity;
       try { identity = await oauth.fetchIdentity({ environment: env(), accessToken, fetchImpl }); }
-      catch (error) { if (error?.code === "no_seller" || Number(error?.status) === 403) { connectRedirect(res, { ebay: "error", reason: "no_seller" }); return; } throw error; }
-      if (!identity || !identity.userId) { connectRedirect(res, { ebay: "error", reason: "no_seller" }); return; }
+      catch (error) { if (error?.code === "no_seller" || Number(error?.status) === 403) { answer(200, { ok: false, outcome: "error", reason: "no_seller", rid }); return; } throw error; }
+      if (!identity || !identity.userId) { answer(200, { ok: false, outcome: "error", reason: "no_seller", rid }); return; }
       const companyId = String(stateData.companyId || "");
       const id = connectionDocId(companyId, identity.userId);
       const ref = connections().doc(id);
@@ -462,11 +557,20 @@ function createEbayConnectorFunctions(deps) {
       await states().doc(state).set({ connectionId: id }, { merge: true });
       await writeSyncEvent(ref, { type: existing ? "reconnected" : "connected", actor: String(stateData.uid || "") });
       await health.touchHealth(db(), { provider: "ebay", connectionId: id, companyId, kind: "success", now: now(), FieldValue }).catch(() => undefined);
-      connectRedirect(res, { ebay: "connected" });
+      answer(200, { ok: true, outcome: "connected", rid });
     } catch (error) {
+      // The one error message this handler may log: §14.1 pins EbayOAuthError's
+      // message to eBay's own error / error_description, so no code rides in it.
       console.error("ebayOAuthCallback failed:", String(error?.message || error).slice(0, 200));
       const cls = String(error?.errorClass || events.classifyError(error));
-      connectRedirect(res, { ebay: "error", reason: cls === "auth" ? "token" : "exchange" });
+      answer(200, { ok: false, outcome: "error", reason: cls === "auth" ? "token" : "exchange", rid });
+    }
+    } catch {
+      // The backstop, not a control: every expected condition is answered above
+      // it. A fixed string with no arguments — an unexpected throw is exactly the
+      // case where the message is most likely to be carrying the value.
+      console.error("ebay callback: refused");
+      if (!answered) answerCallback(res, 400, { ok: false });
     }
   });
 
