@@ -12,6 +12,10 @@ process.env.FIREBASE_CONFIG = process.env.FIREBASE_CONFIG || '{"projectId":"eggc
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8080";
 process.env.NIVADESK_TL_CLIENT_ID = "tl-test-id";
 process.env.NIVADESK_TL_CLIENT_SECRET = "tl-test-secret";
+// The sealing key for stored bank consents. The fixture below writes a legacy
+// plain-text refresh token, and the first sync seals it in place — which the
+// server refuses to do, and stops the sync, when no key is configured.
+process.env.NIVADESK_TL_TOKEN_KEY = require("crypto").randomBytes(32).toString("hex");
 
 const bank = { transactions: [], tokenCalls: 0, dataCalls: [] };
 function tx(id, amount, description, iso) {
@@ -45,7 +49,10 @@ const millis = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : nu
 
 (async () => {
   await db.recursiveDelete(company());
-  await company().set({ companyName: "Bank Co", ownerUid: OWNER, bankFeedEnabled: true });
+  // The server gates every bank callable on the workspace's billing plan, not on
+  // a flag — a Free or Starter owner is refused before anything is fetched. So
+  // the workspace under test is a paid one, the same shape the PayPal suite uses.
+  await company().set({ companyName: "Bank Co", ownerUid: OWNER, billingPlan: "pro_monthly", billingPlanName: "NivaDesk Pro", billingStatus: "active", billingProvider: "stripe" });
   await company().collection("bankConnections").doc(CONN).set({ status: "linked", providerName: "Test Bank", accounts: [{ id: ACCOUNT, name: "Current" }] });
   await company().collection("bankTokens").doc(CONN).set({ refreshToken: "rt-0" });
   bank.transactions = [tx("t1", -12.5, "CAFE NERO", "2026-09-01T10:00:00Z"), tx("t2", 250, "STRIPE PAYOUT", "2026-09-01T12:00:00Z")];

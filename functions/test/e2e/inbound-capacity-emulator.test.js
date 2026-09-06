@@ -33,7 +33,10 @@ async function check(name, fn) { try { await fn(); pass(name); } catch (error) {
 /** The smallest req/res pair an onRequest handler will accept. */
 function fakeRequest({ query = {}, body = {}, headers = {} } = {}) {
   const raw = Buffer.from(JSON.stringify(body));
-  return { method: "POST", query, body, headers, rawBody: raw, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
+  // Express's case-insensitive header read; the inbound handler uses it for the
+  // idempotency headers, so the smallest request has to carry it.
+  const get = (name) => { const key = String(name).toLowerCase(); const found = Object.keys(headers).find((k) => k.toLowerCase() === key); return found ? headers[found] : undefined; };
+  return { method: "POST", query, body, headers, get, header: get, rawBody: raw, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 }
 function fakeResponse() {
   const res = { statusCode: 200, payload: null, headers: {} };

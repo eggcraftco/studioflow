@@ -88,18 +88,21 @@ async function main() {
     const stored = (await db.collection("siparisler").doc(ORDER_ID).get()).data() || {};
     const finance = stored.finance;
     assert.ok(finance, "no finance block was written");
-    // The same order the golden vectors use: revenue 2300, margin 1100,
-    // VAT 183.33 under the margin scheme, net profit 697.67 after a 30 refund.
-    assert.strictEqual(finance.revenue, 2300);
+    // The golden vectors' composite order plus a 30 refund. Since engine
+    // version 4 a refund is added back into what the sale was WORTH (paid 1500
+    // + remaining 500 + receivables 300 + refunded 30 = 2330) and subtracted
+    // exactly once at the end, so: margin 1130, fee 3% = 69.9, VAT 188.33 on
+    // the margin, net profit 2330 − 188.33 − 1200 − 69.9 − 20 − 100 − 30 = 721.77.
+    assert.strictEqual(finance.revenue, 2330);
     assert.strictEqual(finance.directCost, 1200);
-    assert.strictEqual(finance.grossMargin, 1100);
+    assert.strictEqual(finance.grossMargin, 1130);
     assert.strictEqual(finance.otherExpenses, 100);
-    assert.strictEqual(finance.platformFee, 69);
+    assert.strictEqual(finance.platformFee, 69.9);
     assert.strictEqual(finance.method, "margin");
-    assert.strictEqual(finance.vatBase, 1100);
-    assert.strictEqual(finance.vatDue, 183.33);
+    assert.strictEqual(finance.vatBase, 1130);
+    assert.strictEqual(finance.vatDue, 188.33);
     assert.strictEqual(finance.refunded, 30);
-    assert.strictEqual(finance.netProfit, 697.67);
+    assert.strictEqual(finance.netProfit, 721.77);
     assert.deepStrictEqual(finance.orphanKeys, ["financialRemaining::Deposit"]);
   });
 
@@ -122,9 +125,9 @@ async function main() {
     await db.collection("siparisler").doc(ORDER_ID).update({ paidAmount: 1600 });
     await fire(ORDER_ID);
     const first = (await db.collection("siparisler").doc(ORDER_ID).get()).data().finance;
-    assert.strictEqual(first.revenue, 2400, "the extra 100 reached the revenue");
-    assert.strictEqual(first.grossMargin, 1200);
-    assert.strictEqual(first.vatDue, 200);
+    assert.strictEqual(first.revenue, 2430, "the extra 100 reached the revenue");
+    assert.strictEqual(first.grossMargin, 1230);
+    assert.strictEqual(first.vatDue, 205);
     await fire(ORDER_ID);
     const second = (await db.collection("siparisler").doc(ORDER_ID).get()).data().finance;
     assert.strictEqual(second.computedAtMs, first.computedAtMs, "it settled on the first pass");

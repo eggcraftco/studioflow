@@ -99,7 +99,11 @@ const rows = () => company().collection("bankTransactions");
     // The bank's own row for the same £250 landing two days after the withdrawal.
     const wdDate = paypal.transactions.find((t) => t.transaction_info.transaction_id === "WD1").transaction_info.transaction_initiation_date.slice(0, 10);
     await rows().doc("acc_hsbc_z1").set({ accountId: "acc_hsbc", connectionId: "bank_1", provider: "truelayer", status: "booked", amount: 250, currency: "GBP", bookingDate: wdDate, description: "PAYPAL PTE LTD", counterparty: "PayPal" });
-    paypal.transactions.push(tx("SALE2", "T0006", "5.00", 0));
+    // Yesterday, not "today": the fixture stamps every transaction at 10:15 UTC,
+    // so a same-day sale is in the future for any run before that hour, and the
+    // sweep — which searches up to Date.now() — correctly leaves it out. A day
+    // back it is always in the past and well inside the fourteen-day overlap.
+    paypal.transactions.push(tx("SALE2", "T0006", "5.00", 1));
     const out = await index.bankSyncTransactions.run({ auth, data: { companyId: COMPANY, force: true }, rawRequest: {} });
     assert.strictEqual(out.synced, 1); assert.ok(out.imported >= 2, JSON.stringify(out));
     assert.ok((await rows().doc(`${accountId}_SALE2`).get()).exists, "the new sale arrived through the sweep");
