@@ -405,6 +405,65 @@ Operator's conditional approval (in chat, 03:03 UTC): go if B4.4's full gate is 
 
 With B4.5 the whole "last deployed 1–5 Sep" group (B4.1–B4.5, 181 functions) is on the remediated tree: **228 of 414** deployed so far. Next per the plan: B5.1–B5.3 (callables last deployed in August), each on the operator's go; then a 24-hour soak before B6.
 
+## B5.1 — callables last deployed in August, chunk 1 (45 functions)
+
+Operator's conditional approval (in chat, 03:25 UTC): B5.1 → B5.2 → B5.3 each on the four conditions after the previous full gate; B4.5's gate was clean and all 228 deployed functions were error-free. These functions carry the September code delta on top of the dependency change (see §1b of the plan). Same seven steps.
+
+1–2: snapshot at 03:34:39, baseline probes at 03:34:42: 1 × 200, 44 × 401, 0 × 5xx.
+3: started 2026-09-06T03:36:28Z from `5667c788` (functions code identical to `4b44eef9`); "Deploy complete" 03:39:48 (3 min 20 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 03:39:48 all 45 services report a new Ready revision (table below).
+5: probes re-run at 03:39:51 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| acceptPersonalNoteCollaborationInvite | acceptpersonalnotecollaborationinvite-00029-bil | 401 | acceptpersonalnotecollaborationinvite-00030-huy | 401 |
+| appendClientFile | appendclientfile-00047-sup | 401 | appendclientfile-00048-rup | 401 |
+| applyRecipeToOrder | applyrecipetoorder-00001-cay | 401 | applyrecipetoorder-00002-puf | 401 |
+| approveWorkflowOrderDeletion | approveworkfloworderdeletion-00010-cer | 401 | approveworkfloworderdeletion-00011-bed | 401 |
+| assignSupportTicket | assignsupportticket-00001-yek | 401 | assignsupportticket-00002-cov | 401 |
+| cancelStocktake | cancelstocktake-00001-cid | 401 | cancelstocktake-00002-loy | 401 |
+| clearAllOrdersTax | clearallorderstax-00003-bev | 401 | clearallorderstax-00004-tox | 401 |
+| commitStocktake | commitstocktake-00001-sox | 401 | commitstocktake-00002-way | 401 |
+| consumeInventoryForOrder | consumeinventoryfororder-00001-jah | 401 | consumeinventoryfororder-00002-rap | 401 |
+| createOrderEstimate | createorderestimate-00003-vab | 401 | createorderestimate-00004-gap | 401 |
+| createOrderPortalLink | createorderportallink-00002-bey | 401 | createorderportallink-00003-rub | 401 |
+| createWebCustomer | createwebcustomer-00088-cet | 401 | createwebcustomer-00089-nuy | 401 |
+| createWorkspaceTicket | createworkspaceticket-00047-tov | 401 | createworkspaceticket-00048-ruk | 401 |
+| deleteInventoryCategory | deleteinventorycategory-00001-jip | 401 | deleteinventorycategory-00002-yif | 401 |
+| deleteInventoryItem | deleteinventoryitem-00001-qem | 401 | deleteinventoryitem-00002-fav | 401 |
+| deleteInventoryLocation | deleteinventorylocation-00001-mab | 401 | deleteinventorylocation-00002-por | 401 |
+| deleteInventoryRecipe | deleteinventoryrecipe-00001-yuf | 401 | deleteinventoryrecipe-00002-tob | 401 |
+| deleteLibraryFile | deletelibraryfile-00002-hez | 401 | deletelibraryfile-00003-qet | 401 |
+| deletePurchase | deletepurchase-00002-ric | 401 | deletepurchase-00003-sep | 401 |
+| deleteWebOrder | deleteweborder-00041-qeg | 401 | deleteweborder-00042-xeq | 401 |
+| ensureWorkflowAssignedOrderViews | ensureworkflowassignedorderviews-00017-waz | 401 | ensureworkflowassignedorderviews-00018-pij | 401 |
+| getClientDomainConfig | getclientdomainconfig-00002-fud | 401 | getclientdomainconfig-00003-jag | 401 |
+| getInventoryReport | getinventoryreport-00001-cud | 401 | getinventoryreport-00002-cot | 401 |
+| getInventorySummary | getinventorysummary-00004-qif | 401 | getinventorysummary-00005-jux | 401 |
+| getOrderEstimateRecord | getorderestimaterecord-00003-kiz | 401 | getorderestimaterecord-00004-mak | 401 |
+| getOrderInventory | getorderinventory-00002-had | 401 | getorderinventory-00003-qan | 401 |
+| getSettingsAuditLog | getsettingsauditlog-00002-xir | 401 | getsettingsauditlog-00003-rab | 401 |
+| getShopifyIntegrationsForWorkspace | getshopifyintegrationsforworkspace-00002-bup | 401 | getshopifyintegrationsforworkspace-00003-loz | 401 |
+| getStocktake | getstocktake-00001-poq | 401 | getstocktake-00002-leb | 401 |
+| getSupportTicketUnreadSummary | getsupportticketunreadsummary-00034-baf | 401 | getsupportticketunreadsummary-00035-zon | 401 |
+| getWebsiteAssistantConfig | getwebsiteassistantconfig-00002-mub | 401 | getwebsiteassistantconfig-00003-bil | 401 |
+| getWorkspaceBlockHeadings | getworkspaceblockheadings-00090-keq | 401 | getworkspaceblockheadings-00091-reb | 401 |
+| getWorkspaceCardLayout | getworkspacecardlayout-00101-jur | 401 | getworkspacecardlayout-00102-zoc | 401 |
+| getWorkspacePlanUsage | getworkspaceplanusage-00104-fav | 401 | getworkspaceplanusage-00105-map | 401 |
+| getWorkspaceSmsSettings | getworkspacesmssettings-00002-wus | 401 | getworkspacesmssettings-00003-suf | 401 |
+| googlePlayRtdnNotification | googleplayrtdnnotification-00008-mex | 200 | googleplayrtdnnotification-00009-rey | 200 |
+| indexWorkspaceFilesIntoLibrary | indexworkspacefilesintolibrary-00002-viv | 401 | indexworkspacefilesintolibrary-00003-xox | 401 |
+| linkLibraryFile | linklibraryfile-00001-son | 401 | linklibraryfile-00002-vat | 401 |
+| linkPurchaseToBankTransaction | linkpurchasetobanktransaction-00001-fic | 401 | linkpurchasetobanktransaction-00002-fod | 401 |
+| listHeldIntegrationOrders | listheldintegrationorders-00001-cew | 401 | listheldintegrationorders-00002-fic | 401 |
+| listInventoryCategories | listinventorycategories-00001-xek | 401 | listinventorycategories-00002-yas | 401 |
+| listInventoryItems | listinventoryitems-00004-mot | 401 | listinventoryitems-00005-baw | 401 |
+| listInventoryLocations | listinventorylocations-00001-xur | 401 | listinventorylocations-00002-wan | 401 |
+| listInventoryMovements | listinventorymovements-00001-map | 401 | listinventorymovements-00002-wuj | 401 |
+| listInventoryRecipes | listinventoryrecipes-00001-tan | 401 | listinventoryrecipes-00002-mod | 401 |
+
+6: fifteen-minute watch (03:36:28 → 03:52:00): _pending_.
+
 ## Rollback used
 
 None so far.
