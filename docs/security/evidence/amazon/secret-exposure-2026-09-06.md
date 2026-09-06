@@ -56,7 +56,17 @@ carrier independently, so the cost is delay rather than lost updates.
 
 ## What the operator does, in order
 
-Steps 1 and 2 are done. **Step 3 remains:**
+Steps 1, 2 and 3 are done: the operator entered the new value in 17TRACK on 6 September at about
+20:05 UTC.
+
+**What is still unproved is the end of the chain.** No real delivery has arrived since the deploy —
+the only requests in the log are the four synthetic ones — because 17TRACK only calls when a tracked
+parcel actually moves. Until a real delivery answers 200, the rotation is proved on our side and
+assumed on theirs. The next genuine callback is the proof, and it is being watched: a delivery that
+answers 401 means 17TRACK is still sending the old value or still putting it in the URL, and the
+answer is not to widen what we accept.
+
+The original instructions, kept because they are the procedure if this happens again:
 
 Read the new value once, from your own terminal, and put it into 17TRACK's webhook configuration **as
 a header**, `x-studioflow-token`:
