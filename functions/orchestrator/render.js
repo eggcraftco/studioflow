@@ -104,6 +104,12 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
   } else if (capability === "get_payout_reconciliation_overview") {
     if (readable(data.totals)) {
       lines.push(line("result", `${data.totals.matched} payout(s) matched with a bank line, ${data.totals.partial} matched with a difference, ${data.totals.unmatched} not matched.`));
+      // Set aside from the match counts for a good reason, and said out loud
+      // for a better one: money still at the processor is not money missing
+      // from the bank, but it is part of the answer to "where is my money".
+      if (data.totals.notMatchable > 0) {
+        lines.push(line("breakdown", `${data.totals.notMatchable} payout(s) have not left the processor yet, so they cannot be on a statement.`));
+      }
     } else {
       lines.push(line("result", "Payout matching figures are not shown in this channel."));
     }

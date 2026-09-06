@@ -104,7 +104,7 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   })();
 
   const warnings = [];
-  const totals = { matched: 0, partial: 0, unmatched: 0, needsReview: 0 };
+  const totals = { matched: 0, partial: 0, unmatched: 0, notMatchable: 0, needsReview: 0 };
   const providers = [];
   const unmatchedRows = [];
   let scanned = 0;
@@ -121,12 +121,27 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     }
     const list = (snapshot.payouts || {})[provider];
     const rows = (Array.isArray(list) ? list : []).filter((payout) => inRange(payout, bounds));
-    const row = { provider, available: true, matched: 0, partial: 0, unmatched: 0, needsReview: 0, unmatchedAmount: 0, currency: null, oldestUnmatchedAt: null };
+    const row = {
+      provider, available: true,
+      // Every payout in the range, so a reader can check that the states below
+      // account for all of them: inRange = matched + partial + unmatched +
+      // notMatchable.
+      inRange: rows.length,
+      matched: 0, partial: 0, unmatched: 0, notMatchable: 0, needsReview: 0,
+      unmatchedAmount: 0, currency: null, oldestUnmatchedAt: null
+    };
 
     for (const payout of rows) {
       const state = matchState(payout);
       if (state === "matched") { row.matched += 1; totals.matched += 1; continue; }
       if (state === "partial") { row.partial += 1; totals.partial += 1; continue; }
+      // Neither PAID nor SENT: the money has not left the processor, so it
+      // genuinely cannot be on a statement and does not belong in the match
+      // counts. It was also not counted ANYWHERE, so matched + partial +
+      // unmatched did not add up to the payouts in range and nothing said why.
+      // "Is any money missing?" deserves "three payouts have not been sent yet"
+      // as an answer, and silence is not one.
+      if (state === "not_matchable") { row.notMatchable += 1; totals.notMatchable += 1; continue; }
       if (state !== "unmatched") continue;
 
       row.unmatched += 1;

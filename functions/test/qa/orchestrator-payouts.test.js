@@ -81,6 +81,29 @@ check("scoring stops at the cap and says so instead of reporting a partial count
   assert.ok(result.warnings.some((row) => row.code === "needs_review_truncated"));
 });
 
+check("a payout that has not left the processor is counted, not silently dropped", () => {
+  // matchState returns "not_matchable" for anything outside PAID/SENT and the
+  // loop `continue`d past it without counting it anywhere, so a provider's
+  // matched + partial + unmatched did not add up to the payouts in range and
+  // neither the row nor a warning said how many had been set aside, or why.
+  const result = payouts.payoutReconciliation(snapshot({
+    payouts: {
+      square: [payout("po_paid"), payout("po_pending", { status: "PENDING" }), payout("po_failed", { status: "FAILED" })]
+    }
+  }), {}, ctx, { nowMs: NOW });
+
+  const square = result.data.providers.find((row) => row.provider === "square");
+  assert.strictEqual(square.notMatchable, 2, "pending and failed payouts have not stopped existing");
+  assert.strictEqual(result.data.totals.notMatchable, 2);
+  assert.strictEqual(square.matched + square.partial + square.unmatched + square.notMatchable, square.inRange,
+    "the states have to account for every payout in the range");
+
+  const render = require("../../orchestrator/render");
+  const lines = render.summaryFor({ action: "get_payout_reconciliation_overview", data: result.data, warnings: [], freshness: {} }, {});
+  assert.ok(lines.some((row) => /2 payout\(s\) have not left the processor/.test(row.text)),
+    `"is any money missing?" should be able to say this: ${lines.map((row) => row.text).join(" | ")}`);
+});
+
 check("unmatched payout money never appears as revenue", () => {
   const result = payouts.payoutReconciliation(snapshot(), {}, ctx, { nowMs: NOW });
   const keys = JSON.stringify(result.data);

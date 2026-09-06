@@ -1094,14 +1094,19 @@ unchanged.
 #### get_payout_reconciliation_overview (§11)
 
 Input: `{ provider?: "all"|"square"|"paypal"|…, fromDate?, toDate? }`. Output: `{ totals: { matched,
-partial, unmatched, needsReview }, settlementBasis: "arrivalDate", providers: [ { provider, available,
-matched, partial, unmatched, needsReview, unmatchedAmount, currency, oldestUnmatchedAt, freshness } ],
+partial, unmatched, notMatchable, needsReview }, settlementBasis: "arrivalDate", providers: [ { provider,
+available, inRange, matched, partial, unmatched, notMatchable, needsReview, unmatchedAmount, currency,
+oldestUnmatchedAt, freshness } ],
 unmatched: [ { payoutId, provider, amount, currency, arrivalDate, candidateCount } ] (≤25) }`.
 
 Sources: `companies/{cid}/squarePayouts` and `paypalPayouts` (`status`, `amount`, `currency`,
 `arrivalDate`, `totals{gross,fee,refunds,net}`, `bankMatch{transactionId,confidence,method,amountDelta}`).
 `matched` = `bankMatch.transactionId` set and `amountDelta === 0`; `partial` = matched with
-`amountDelta ≠ 0`; `unmatched` = status in `MATCHABLE_STATUSES` and no match.
+`amountDelta ≠ 0`; `unmatched` = status in `MATCHABLE_STATUSES` and no match; `notMatchable` = any other
+status, money that has not left the processor and therefore cannot be on a statement. Excluding those from
+the MATCH counts is right; dropping them from every counter was not, because
+`matched + partial + unmatched` then did not add up to the payouts in range and nothing said why.
+`inRange` is the total they account for, and the renderer says how many have not been sent yet.
 
 `needsReview` is not persisted today (the audit counter in `settlementMatch.matchProviderPayouts` is
 discarded), so it is computed here — but **not** by calling `suggestForPayout`, which reads Firestore per
