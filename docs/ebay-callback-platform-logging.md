@@ -112,13 +112,38 @@ site is a Node.js application on Cloud Startup, and **Hostinger's CDN is not ena
 nivadesk.app** — so there is no CDN layer holding a second copy of these request lines. The
 substantive answers are recorded below as they arrive.
 
-| Question | Answer | Received |
-|---|---|---|
-| 1. Path-level disable or redaction | — | — |
-| 2. Real retention | — | — |
-| 3. Who can read | — | — |
-| 4. Forwarded to other systems | — | — |
-| 5. Query-value masking | — | — |
+| Question | Answer, 2026-09-06 14:52 local, from Hostinger's assistant |
+|---|---|
+| 1. Path-level disable or redaction | **No.** "I found no customer-facing setting to disable, strip, or redact query strings for a specific path. I also found no site-wide access-log disable switch in the available controls. The access-log view records the complete request line, including the query string." |
+| 2. Real retention | **Not established.** "The 7-day panel filter is only the maximum selectable search window; it does not establish the actual backend retention period. I cannot substantiate a longer or shorter retention period from the customer-facing system." |
+| 3. Who can read | **Not disclosed.** "This is not disclosed in the available hosting controls. I cannot responsibly name internal roles or claim that access is audited without Hostinger's internal security and privacy documentation." |
+| 4. Forwarded to other systems | **Cannot confirm or deny.** "The available controls do not disclose whether access logs are copied to SIEM, analytics, backup, abuse-detection, or malware-scanning systems, nor the retention period of any such copies." |
+| 5. Query-value masking | **None available.** "I found no masking option at the hPanel access-log level. Since CDN is not enabled, there is no active CDN layer where masking could currently be configured. Application-level redaction would not remove the original query string from the hosting access log." |
 
-**An assistant's answer is not a policy answer.** Anything that decides the production gate must come
-from a human agent or Hostinger documentation, and is marked here with which of the two it was.
+Their own security conclusion, quoted: *"treat the OAuth authorization code as exposed to the hosting
+access-log system for an undocumented period and to an undocumented set of authorized internal
+systems."* They suggested `response_mode=form_post` if the provider supports it, PKCE, and redeeming
+the code immediately. eBay's OAuth documents neither `form_post` nor PKCE for this flow, so of those
+three only "redeem immediately" is available to us, and we already do.
+
+**An assistant's answer is not a policy answer.** A follow-up was sent the same minute asking for
+questions 2, 3 and 4 in writing from a human agent. That answer is still outstanding and will be
+added here when it arrives.
+
+## What this decides
+
+The operator's rule was: if Hostinger offers no path-level redaction or disable, **or** the retention
+and access answers are insufficient, the production callback moves to a Cloudflare Worker on
+`connect.nivadesk.app`. **Both conditions are met**, and the answer to question 4 makes it worse than
+a retention question: nobody can say whether copies exist elsewhere.
+
+So:
+
+- **Sandbox** — the residual is **accepted temporarily**, on the record, for sandbox traffic only. A
+  sandbox authorization code belongs to a test seller on eBay's sandbox, is single-use, expires
+  quickly, and is worthless without the application's client secret. The browser nonce is removed
+  from every URL by the POST remediation, so it is in no log at all.
+- **Production** — **blocked** until the callback is served by a Worker on `connect.nivadesk.app`,
+  and until synthetic values prove that no query string is retained on that path. The production
+  RuName is created only after that proof, because the RuName carries the accepted URL and pointing
+  it at Hostinger would be the thing we are avoiding.
