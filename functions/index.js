@@ -20425,6 +20425,10 @@ exports._nvSafeOrderForChatGPT = nvSafeOrderForChatGPT;
 exports._nvRequireOrdersArea = nvRequireOrdersArea;
 exports._nvMcpAvailableActions = nvMcpAvailableActions;
 exports._nvChatGPTDispatchAction = nvChatGPTDispatchAction;
+// The access-log row itself, so a test can assert what it CLAIMS about a read
+// instead of reading the call site and hoping. See test/qa/pii-access-log.
+exports._nvMcpPiiAccessEntry = nvMcpPiiAccessEntry;
+exports._nvMcpPiiLoggedActions = nvMcpPiiLoggedActions;
 // The served discovery surface itself, so a test can snapshot exactly what
 // tools/list returns instead of re-deriving it from the source text.
 exports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;
@@ -24432,23 +24436,55 @@ function nvMcpAvailableActions() {
   return actions;
 }
 
-/** The MCP actions that hand a workspace's own customer data to an assistant. */
-// Actions that put a person in front of the assistant. Stale on both sides
-// until September 2026: it listed list_customers and get_customer, which are
-// not dispatchable actions at all, and omitted the three order tools that
-// really do emit a buyer's name.
-const MCP_ACTIONS_READING_PII = new Set([
-  "search_orders", "get_order_detail",
-  "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview",
-  // The orchestrator reads that put a person in front of the assistant:
-  // search_commerce_orders returns buyer names and e-mail addresses, and the
-  // banking summary titles a recurring-payment group with the counterparty,
-  // which on a person-to-person payment is a person. Both are dispatched
-  // through this switch, so this is the one place the row is written — the
-  // orchestrator itself is built WITHOUT recordPiiAccess on this surface so a
-  // single call cannot file two rows.
-  "search_commerce_orders", "get_banking_attention_summary"
-]);
+/**
+ * The MCP actions that hand a workspace's own customer data to an assistant —
+ * from the registry, which is the only place that says so.
+ *
+ * This was a hand-written Set here and a `piiAccessLogged` field there: two
+ * lists, kept in step by a test. The list is one now (the test still checks the
+ * membership it pins, and would catch a registry edit that stops logging a
+ * tool). The registry entry also says WHICH categories the tool hands over and
+ * WHAT the subject is, which is what nvMcpPiiAccessEntry below builds the row
+ * from — the old inline row declared name/email/phone/address for every action
+ * and filed everything under `subject.kind: "order"`, so the log claimed a
+ * bank-counterparty read had exposed a phone number and a postal address.
+ *
+ * Both orchestrator reads are dispatched through this switch, so this is the
+ * one place their row is written — the orchestrator itself is built WITHOUT
+ * recordPiiAccess on this surface so a single call cannot file two rows.
+ */
+function nvMcpPiiLoggedActions() {
+  return new Set(nvMcpRegistry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged === true).map((entry) => entry.name));
+}
+
+/**
+ * The access-log row for one dispatched action, or null when the action files
+ * none.
+ *
+ * Pure and exported so the row can be tested for what it CLAIMS rather than by
+ * reading the call site. The categories are declared rather than derived,
+ * because the dispatcher has not read anything yet — but they are the
+ * registry's declaration for THAT tool, not a fixed four.
+ */
+function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
+  const requested = String(action || "").trim();
+  const entry = nvMcpRegistry.entryFor(requested);
+  if (!entry || entry.piiAccessLogged !== true) return null;
+  return {
+    companyId: String(context?.companyId || ""),
+    actorUid: String(context?.uid || ""),
+    actorEmail: String(context?.email || ""),
+    actorRole: "chatgpt_connection",
+    action: "assistant",
+    source: "mcp",
+    // What the tool is about. `requested.includes("customer") ? "customer" :
+    // "order"` guessed from the tool's NAME, which put a banking summary under
+    // "order"; the registry names it next to the categories.
+    subject: { kind: entry.piiSubject, id: String(args?.orderId || args?.customerId || "") },
+    categories: [...entry.pii],
+    note: `action=${requested}`
+  };
+}
 
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
   const requested = String(action || "").trim();
@@ -24463,21 +24499,8 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
   // and the one most likely to be questioned: the grant lasts thirty days and
   // the reader is not a person sitting at a screen. Logged before dispatch, so
   // the record exists whether or not the action then succeeds.
-  if (MCP_ACTIONS_READING_PII.has(requested)) {
-    recordPiiAccess({
-      companyId: String(context?.companyId || ""),
-      actorUid: String(context?.uid || ""),
-      actorEmail: String(context?.email || ""),
-      actorRole: "chatgpt_connection",
-      action: "assistant",
-      source: "mcp",
-      subject: { kind: requested.includes("customer") ? "customer" : "order", id: String(args?.orderId || args?.customerId || "") },
-      // Declared: the dispatcher has not read anything yet, and the categories
-      // are a property of the action rather than of a record it has in hand.
-      categories: ["name", "email", "phone", "address"],
-      note: `action=${requested}`
-    }).catch(() => undefined);
-  }
+  const piiEntry = nvMcpPiiAccessEntry(requested, context, args);
+  if (piiEntry) recordPiiAccess(piiEntry).catch(() => undefined);
 
   switch (requested) {
     case "create_order":
@@ -26143,8 +26166,8 @@ const NV_MCP_FLAGS = {
  * the loose door into data an owner thought was closed.
  *
  * recordPiiAccess is deliberately NOT injected: on this surface the dispatcher
- * already writes exactly one access-log row per call, from
- * MCP_ACTIONS_READING_PII, before dispatch. Injecting it here as well would
+ * already writes exactly one access-log row per call, from the registry's
+ * `piiAccessLogged` entries, before dispatch. Injecting it here as well would
  * file two rows for one read. The WhatsApp gateway, which has no such
  * dispatcher, will inject it.
  */

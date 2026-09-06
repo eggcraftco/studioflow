@@ -99,8 +99,9 @@ attention queue is READ, never opened through `store.openAttention`, which would
 on every call), they overwrite nothing, the same question over the same data gives the same answer, and
 none of them contacts a shop, a bank, a marketplace or an accounting provider. What differs between them is
 which gate they sit behind and whether they hand over a person: `search_commerce_orders` and
-`get_banking_attention_summary` do, and both are in the dispatcher's `MCP_ACTIONS_READING_PII` set, so
-each call files exactly one access-log row — the orchestrator itself is built without `recordPiiAccess` on
+`get_banking_attention_summary` do, and both declare `piiAccessLogged: true`, which is the one list the
+dispatcher derives its PII set from, so each call files exactly one access-log row — carrying that
+entry's own `pii` categories and its own `piiSubject`, not a fixed four and a guessed subject — the orchestrator itself is built without `recordPiiAccess` on
 this surface so a single call cannot file two. `functions/test/qa/orchestrator-purity.test.js` is what
 keeps the first half of that claim true: it fails the build if any module under `functions/orchestrator/`
 other than `loaders.js` can reach Firestore, if any of them imports or calls a writer, or if any of them
@@ -291,14 +292,16 @@ than an annotation, and the surface under review must not move on its own:
 1. **The two bank tools hand over a person's name without an access-log row.** `get_bank_spending_summary`
    and `search_bank_transactions` are honest `readOnlyHint: true` — they write nothing at all — but a
    person-to-person payment carries a person in `counterparty`, and `linkedOrderLabel` can carry a
-   customer's name. `MCP_ACTIONS_READING_PII` lists only the six order and finance tools, so these two
-   reads are not recorded. The registry declares `pii: ["name"], piiAccessLogged: false` so the gap is
-   written down rather than implied, and the test pins the flag to the dispatcher's own set so neither side
-   can drift. Closing it means adding two names to that set — a new write on a read path, which is a
-   decision for the same submission.
+   customer's name. Both declare `piiAccessLogged: false`, so these two reads are not recorded. The
+   registry declares `pii: ["name"], piiAccessLogged: false` so the gap is written down rather than
+   implied, and the test pins which tools log so neither the gap nor its closing can happen silently.
+   Closing it means flipping two flags — a new write on a read path, which is a decision for the same
+   submission.
 
    The 1.2.0 reads do not widen this gap. `get_banking_attention_summary` declares `pii: ["name"]`
-   **and** is in `MCP_ACTIONS_READING_PII`, so its counterparty labels are recorded.
+   **and** `piiAccessLogged: true`, so its counterparty labels are recorded — as `categories: ["name"]`
+   against `subject.kind: "bank_transaction"`, which is what the row now says rather than claiming a
+   phone number and a postal address on an order.
    `get_business_attention_summary` runs the same detectors with `revealCounterparty: false`: the
    grouped rows carry transaction ids and no merchant label, so the broad read declares no PII because
    it emits none. A test over the runtime pins it (`orchestrator-attention.test.js`), because

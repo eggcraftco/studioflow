@@ -156,19 +156,50 @@ check("a read tool that hands over people discloses its access-log row", () => {
   }
 });
 
-check("piiAccessLogged matches the dispatcher's own list", () => {
-  // MCP_ACTIONS_READING_PII decides which tools file a piiAccessLog row. The
-  // registry claims about the access log have to come from that set, not from
-  // an opinion about which tools feel sensitive.
-  const start = indexSource.indexOf("const MCP_ACTIONS_READING_PII = new Set([");
-  const end = indexSource.indexOf("]);", start);
-  assert.ok(start > 0 && end > start, "could not read MCP_ACTIONS_READING_PII");
-  const logged = new Set((indexSource.slice(start, end).match(/"([a-z_]+)"/g) || []).map((s) => s.slice(1, -1)));
+check("the dispatcher's PII list is the registry's, and it is still these eight tools", () => {
+  // There were two lists: a hand-written MCP_ACTIONS_READING_PII in index.js
+  // and `piiAccessLogged` here, kept in step by the version of this check that
+  // parsed the Set out of the source. There is one list now — the dispatcher
+  // derives it — so what is worth pinning has moved: WHICH tools log, named
+  // here, so a registry edit that quietly stops logging a tool handing over a
+  // person fails this test rather than the next audit.
+  assert.ok(
+    /nvMcpPiiLoggedActions[\s\S]{0,300}entry\.piiAccessLogged === true/.test(indexSource),
+    "the dispatcher no longer derives its PII list from the registry"
+  );
+  assert.ok(
+    !/MCP_ACTIONS_READING_PII\s*=\s*new Set\(\[/.test(indexSource),
+    "a second hand-written list of PII-logging actions is back in index.js"
+  );
+  const logged = registry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged).map((entry) => entry.name).sort();
+  assert.deepStrictEqual(logged, [
+    "get_banking_attention_summary",
+    "get_dashboard_summary",
+    "get_extra_spending_overview",
+    "get_financial_overview",
+    "get_order_detail",
+    "get_order_financials",
+    "search_commerce_orders",
+    "search_orders"
+  ]);
+});
+
+check("every access-logged tool names categories and a subject the access log will keep", () => {
+  // accessLog.worthLogging drops an entry with no categories, and accessEntry
+  // rewrites an unknown subject kind to "order". Either turns a row that was
+  // written into a row that says something else, or into no row at all.
+  const accessLog = require("../../privacy/accessLog");
   for (const entry of registry.TOOL_REGISTRY) {
-    assert.strictEqual(
-      entry.piiAccessLogged, logged.has(entry.name),
-      `${entry.name}: registry says piiAccessLogged=${entry.piiAccessLogged}, dispatcher says ${logged.has(entry.name)}`
-    );
+    if (!entry.piiAccessLogged) {
+      assert.strictEqual(entry.piiSubject, null, `${entry.name} names a subject but files no row`);
+      continue;
+    }
+    assert.ok(entry.pii.length > 0, `${entry.name} would be dropped by worthLogging`);
+    for (const category of entry.pii) {
+      assert.ok(accessLog.PII_CATEGORIES.includes(category), `${entry.name}: "${category}" is not an access-log category`);
+    }
+    assert.ok(accessLog.SUBJECT_KINDS.includes(entry.piiSubject),
+      `${entry.name}: subject kind "${entry.piiSubject}" would be silently rewritten to "order"`);
   }
 });
 

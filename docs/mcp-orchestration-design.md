@@ -688,10 +688,11 @@ run({ capability, args, ctx, request: { requestId, channelType, providerMessageI
 3. If `entry.pii.length`, `recordPiiAccess({ actorRole, action: "assistant", source: ctx.channel.type,
    categories: entry.pii, … })` (fire-and-forget, as today), with `actorRole` from the fixed vocabulary in
    §1.4.11 and `source` from the extended `ACCESS_SOURCES`. **This is the only PII-logging mechanism.**
-   The dispatcher's `MCP_ACTIONS_READING_PII` set (index.js:24429), which names six of the 19 by hand and
-   declares a fixed `["name","email","phone","address"]` regardless of what the call returns, is deleted
-   in the same change and those six tools get registry `pii` entries instead. Two mechanisms disagreeing
-   about which tools release personal data is worse than either alone.
+   The dispatcher's hand-written `MCP_ACTIONS_READING_PII` set is gone (September 2026): it named six of
+   the 19 by hand and declared a fixed `["name","email","phone","address"]` regardless of what the call
+   returns. The set is now derived from `piiAccessLogged`, and each row's `categories` and `subject.kind`
+   come from that entry's `pii` and `piiSubject`. Two mechanisms disagreeing about which tools release
+   personal data is worse than either alone.
 4. `loaders.snapshotFor(entry.domainNeeds, ctx)` — reads only what the capability declares; orders are
    redacted at the choke point (`redactForChannel(order, "assistant")`) before any pure module sees them.
 5. `handler(snapshot, args, ctx, { nowMs })` → `data`, plus per-capability warnings/refs/suggestions.
@@ -1763,9 +1764,10 @@ named explicitly (`available`, `partiallyReserved`, `reserved`, `incoming`, `use
    OAuth scope enforcement per tool, which also corrects `create_inventory_item` from `orders.read` to
    `orders.write` (§1.4.4).
 3. **Audit and access-log corrections**: `ACCESS_SOURCES` gains `rest` and `whatsapp`,
-   `chatgptWorkspaceAction` stops stamping its REST reads as `mcp`, `MCP_ACTIONS_READING_PII` is replaced
-   by the registry's `pii`, and the orchestrator audit record gets a named collection, retention and rules
-   entry (§2.4).
+   `chatgptWorkspaceAction` stops stamping its REST reads as `mcp`, and the orchestrator audit record gets
+   a named collection, retention and rules entry (§2.4). `MCP_ACTIONS_READING_PII` has already been
+   replaced by the registry's `pii`/`piiSubject`, on the merged branch rather than at the flag flip,
+   because it corrects what an audit row CLAIMS rather than adding one.
 4. **Discovery text**: serverInfo `1.2.0` and the rewritten `instructions` — both flag-gated so the live
    1.1.1 connection is unaffected until the operator deploys the submission (§1.4.6).
 5. **Nine new tools** with the descriptions above, plus the two inventory tools and the extended

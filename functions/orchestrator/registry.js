@@ -88,8 +88,19 @@ const EFFECT_KINDS = Object.freeze([
   "ocr"                 // a third-party OCR service reads the file
 ]);
 
-/** PII categories a tool can put in front of the assistant. */
+/**
+ * PII categories a tool can put in front of the assistant, and the kinds of
+ * subject an access-log row may name.
+ *
+ * SUBJECT_KINDS comes from privacy/accessLog.js — the module that normalises
+ * and writes the row — rather than being retyped here: a subject kind this
+ * table invented would be silently rewritten to "order" by `pick()` at write
+ * time, which is how the log came to file a bank-counterparty read as an order.
+ * That module is pure (no Firestore, no clock, no network), so importing it
+ * keeps this one pure too.
+ */
 const PII_KINDS = Object.freeze(["name", "email", "phone", "address"]);
+const { SUBJECT_KINDS: ACCESS_LOG_SUBJECT_KINDS } = require("../privacy/accessLog");
 
 /** Risk classes (A cheapest to E highest) used by the channel policy layer. */
 const RISK_CLASSES = Object.freeze(["A", "B", "C", "D", "E"]);
@@ -121,6 +132,7 @@ const TOOL_REGISTRY = [
     minAssurance: 3,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: ["customer_message"],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     // 1.1.1 shipped openWorldHint false. It is wrong, and this is the larger of
@@ -145,6 +157,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -167,6 +180,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -189,6 +203,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     liveAnnotations: null,
@@ -211,6 +226,7 @@ const TOOL_REGISTRY = [
     minAssurance: 3,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: ["customer_message"],
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     // 1.1.1 shipped openWorldHint false (wrong) and idempotentHint true (wrong
@@ -242,6 +258,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     liveAnnotations: null,
@@ -264,6 +281,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -286,6 +304,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -308,6 +327,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     liveAnnotations: null,
@@ -330,6 +350,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -352,6 +373,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -374,6 +396,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -396,6 +419,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -418,6 +442,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -440,6 +465,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -462,6 +488,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email", "phone", "address"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -484,11 +511,12 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     // A person-to-person payment carries a person's name in `counterparty`, and
     // linkedOrderLabel can carry a customer's. The dispatcher does not file a
-    // piiAccessLog row for this tool today (MCP_ACTIONS_READING_PII lists the
-    // six order/finance tools only) — see docs/mcp-tool-annotations.md, "open
-    // items". Declared here so the gap is visible rather than implied.
+    // piiAccessLog row for this tool today (`piiAccessLogged: false` below is
+    // what decides that) — see docs/mcp-tool-annotations.md, "open items".
+    // Declared here so the gap is visible rather than implied.
     pii: ["name"],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -511,6 +539,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name"],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -533,6 +562,7 @@ const TOOL_REGISTRY = [
     minAssurance: 2,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: ["external_fetch", "ocr"],
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     liveAnnotations: null,
@@ -555,6 +585,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -581,6 +612,7 @@ const TOOL_REGISTRY = [
     minAssurance: 2,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: ["external_fetch"],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     liveAnnotations: null,
@@ -626,6 +658,7 @@ const TOOL_REGISTRY = [
     // read that declares pii and files the access-log row.
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -649,6 +682,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -672,6 +706,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: ["name", "email"],
     piiAccessLogged: true,
+    piiSubject: "order",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -699,6 +734,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -722,6 +758,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -745,6 +782,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -768,6 +806,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -791,6 +830,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -814,6 +854,7 @@ const TOOL_REGISTRY = [
     minAssurance: 1,
     pii: [],
     piiAccessLogged: false,
+    piiSubject: null,
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -839,6 +880,7 @@ const TOOL_REGISTRY = [
     // person, and a recurring-spend group is titled with that same text.
     pii: ["name"],
     piiAccessLogged: true,
+    piiSubject: "bank_transaction",
     effects: [],
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
@@ -1078,13 +1120,26 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
     }
     if (typeof entry.piiAccessLogged !== "boolean") fail(`"${name}" must say whether its read is access-logged.`);
     if (entry.piiAccessLogged && entry.pii.length === 0) fail(`"${name}" logs a PII access but declares no pii categories.`);
+    // The row's own two fields. The dispatcher builds `categories` and
+    // `subject.kind` from these, so a wrong value here is a wrong claim in an
+    // audit trail that is never deleted: before this, every logged action
+    // declared name/email/phone/address and a subject kind guessed from the
+    // tool's name, which filed a bank-counterparty read as an order that had
+    // exposed a phone number and a postal address.
+    if (entry.piiAccessLogged) {
+      if (!ACCESS_LOG_SUBJECT_KINDS.includes(entry.piiSubject)) {
+        fail(`"${name}" logs a PII access but names no subject kind the access log accepts (got ${JSON.stringify(entry.piiSubject)}).`);
+      }
+    } else if (entry.piiSubject !== null) {
+      fail(`"${name}" names a PII subject kind but files no access-log row.`);
+    }
     if (entry.annotations.readOnlyHint === true && entry.piiAccessLogged) {
       if (!/piiAccessLog/.test(entry.justification.readOnlyHint)) {
         fail(`"${name}" is readOnlyHint true and writes an access-log row; its readOnlyHint justification must disclose that row.`);
       }
     }
     if (!entry.piiAccessLogged && /piiAccessLog/.test(entry.justification.readOnlyHint)) {
-      fail(`"${name}" claims an access-log row in its justification but is not in MCP_ACTIONS_READING_PII.`);
+      fail(`"${name}" claims an access-log row in its justification but declares piiAccessLogged: false.`);
     }
 
     // 5. Scopes: present, known, and never empty (an empty list would advertise

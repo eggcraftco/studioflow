@@ -250,7 +250,8 @@ function amountsByCurrency(rows) {
  * rather than a presentation one. A recurring-spend group is titled with the
  * merchant, and a merchant is a person whenever the payment was person to
  * person — which is why get_banking_attention_summary declares `pii: ["name"]`
- * and is listed in MCP_ACTIONS_READING_PII, so the read is recorded.
+ * with `piiAccessLogged: true`, so the read is recorded — and the row it files
+ * says "name" and nothing else, against subject kind `bank_transaction`.
  * get_business_attention_summary is the broad "what should I look at today?"
  * read, declares no PII and writes no access-log row, so it asks for the same
  * findings WITHOUT the names: it says which transactions, and the caller asks

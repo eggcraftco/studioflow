@@ -115,6 +115,52 @@ check("an invented tool name is refused", async () => {
   await assert.rejects(async () => dispatch(ctx("member"), "delete_everything", {}), /Unknown action/);
 });
 
+// ---- what the access log claims about a read -------------------------------
+check("the access-log row says what the tool actually hands over", () => {
+  // The row used to be built inline with categories name/email/phone/address
+  // for every action and a subject kind guessed from the tool's NAME. So the
+  // banking summary — which declares pii ["name"], because a bank row's
+  // counterparty is a person only when the payment was person to person —
+  // filed a row claiming a phone number and a postal address had been handed
+  // over, under subject.kind "order". In a collection nothing ever deletes.
+  const piiEntry = api._nvMcpPiiAccessEntry;
+  const context = { companyId: "acme", uid: "member-uid", email: "m@example.com" };
+
+  const banking = piiEntry("get_banking_attention_summary", context, {});
+  assert.deepStrictEqual(banking.categories, ["name"]);
+  assert.strictEqual(banking.subject.kind, "bank_transaction");
+
+  const commerce = piiEntry("search_commerce_orders", context, {});
+  assert.deepStrictEqual(commerce.categories, ["name", "email"]);
+  assert.strictEqual(commerce.subject.kind, "order");
+
+  // The six tools that were already logging keep the row they were writing:
+  // this corrects a claim, it does not move the live surface.
+  const detail = piiEntry("get_order_detail", context, { orderId: "o1" });
+  assert.deepStrictEqual(detail.categories, ["name", "email", "phone", "address"]);
+  assert.strictEqual(detail.subject.kind, "order");
+  assert.strictEqual(detail.subject.id, "o1");
+  assert.strictEqual(detail.action, "assistant");
+  assert.strictEqual(detail.actorRole, "chatgpt_connection");
+
+  // A tool that hands over nobody files nothing.
+  assert.strictEqual(piiEntry("get_commerce_overview", context, {}), null);
+  assert.strictEqual(piiEntry("create_order", context, {}), null);
+  assert.strictEqual(piiEntry("not_a_tool", context, {}), null);
+});
+
+check("every row the dispatcher would write survives the access log's own rules", () => {
+  const accessLog = require("../../privacy/accessLog");
+  const context = { companyId: "acme", uid: "member-uid", email: "m@example.com" };
+  for (const action of api._nvMcpPiiLoggedActions()) {
+    const built = api._nvMcpPiiAccessEntry(action, context, {});
+    const normalised = accessLog.accessEntry({ ...built, atMs: Date.now() });
+    assert.ok(accessLog.worthLogging(normalised), `${action}: the row would be dropped`);
+    assert.deepStrictEqual(normalised.categories, built.categories, `${action}: a category was rewritten`);
+    assert.strictEqual(normalised.subject.kind, built.subject.kind, `${action}: the subject kind was rewritten`);
+  }
+});
+
 check("the advertised tools are all really dispatchable", () => {
   // The other direction of the same drift: a name on the list with no case
   // behind it would fail at the call with a confusing error.

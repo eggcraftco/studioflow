@@ -220,7 +220,13 @@ merge.
 - `privacy/accessLog.js` `ACCESS_SOURCES` has no `rest` and no `whatsapp`, so those reads are filed as
   `unknown`. Add both.
 - `chatgptWorkspaceAction` stamps its REST reads as `mcp`.
-- `MCP_ACTIONS_READING_PII` duplicates the registry's `pii` field; the registry should be the only list.
+- ~~`MCP_ACTIONS_READING_PII` duplicates the registry's `pii` field; the registry should be the only
+  list.~~ **Done.** The dispatcher derives the set from `piiAccessLogged`, and builds each row's
+  `categories` from the entry's `pii` and `subject.kind` from its new `piiSubject`. Before that every
+  logged action declared name/email/phone/address and a subject kind guessed from the tool's name, so
+  the log claimed a bank-counterparty read had exposed a phone number and a postal address, filed as an
+  order. `assertRegistry` now refuses a logged entry with no valid subject kind and an unlogged entry
+  that names one.
 - The orchestrator's audit record needs its collection (`companies/{cid}/assistantAudit`), a retention
   rule and a Firestore rules entry — remembering that the `companies/{cid}` wildcard is a **deny list**:
   a new sensitive subcollection that is not named in all three places is readable by every member.
