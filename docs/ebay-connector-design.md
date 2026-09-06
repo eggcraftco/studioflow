@@ -761,17 +761,24 @@ one seller-facing outcome, `reason=unavailable`.
 #### Order of checks, and which side is authoritative
 
 **Web route, `GET /ebay/callback`** — in this order, stopping at the first that fires. Every branch
-clears the nonce cookie on its response and redirects to a module constant with only `section`, `ebay`
-and `reason` set from a fixed vocabulary; no value from the query ever reaches `NextResponse.redirect`.
+redirects to a module constant with only `section`, `ebay` and `reason` set from a fixed vocabulary; no
+value from the query ever reaches `NextResponse.redirect`. The nonce cookie is cleared on the landings
+that **consumed** it and on no others (below).
 
-1. `error` present → `?ebay=cancelled`. **No backend call.** eBay's declined URL points straight at the
-   settings page, so this is defence in depth; either way a decline never reaches the connector. This is
-   the **only** place `cancelled` is produced: the function's POST body has no `error` field and the
-   word is not in its vocabulary. **Presence is `params.has("error")`, not the truthiness of its value:**
-   `URLSearchParams.get` answers `""` — not `null` — for `?error=`, so a truthy test reads an empty
-   decline as "not a decline" and sends the seller down the `missing_code` path.
+1. `error` present **and no `code`** → `?ebay=cancelled`. **No backend call.** eBay's declined URL points
+   straight at the settings page, so this is defence in depth; either way a decline never reaches the
+   connector. This is the **only** place `cancelled` is produced: the function's POST body has no `error`
+   field and the word is not in its vocabulary. **Presence is `params.has("error")`, not the truthiness of
+   its value:** `URLSearchParams.get` answers `""` — not `null` — for `?error=`, so a truthy test reads an
+   empty decline as "not a decline" and sends the seller down the `missing_code` path. **A `code` wins
+   over an `error`:** `?code=X&error=y` is the one shaped query that carries a real code, and answering
+   `cancelled` to it left the code unspent and the state unburned — the single exception to "a shaped
+   callback always POSTs". eBay sends one or the other, so requiring the code to be absent costs nothing.
 2. `code` and `state` both present and shaped (`state` matches `/^[A-Za-z0-9_-]{20,120}$/`, `code` is
-   1–4096 characters) → else `?ebay=error&reason=missing_code`. **No call.**
+   1–4096 characters) → else `?ebay=error&reason=missing_code`. **No call.** The serialised body is then
+   checked against the function's **8192-byte** cap as well, over the exact bytes about to be sent: the
+   two sides otherwise measure in different units — 4096 *characters* here, 8192 *bytes* there — and a
+   multi-byte code this route accepted would land as an opaque 400 with nothing burned.
 3. Read the `nv_ebay_nonce` cookie. The mirror of `setEbayNonceCookie`'s `encodeURIComponent` is
    **already applied by `NextRequest.cookies`** — `next/dist/compiled/@edge-runtime/cookies`'s
    `parseCookie` calls `decodeURIComponent` on every value — so the route must **not** decode a second
@@ -786,7 +793,7 @@ and `reason` set from a fixed vocabulary; no value from the query ever reaches `
    signed POST that dies as an opaque 401 with no ops line naming a cause. This is the **one** step that
    refuses without posting, and it suspends the burn while it lasts — see *The burn*, last two
    paragraphs, and the operator action in the deploy plan §4.2.
-5. Mint `rid`, serialise once, sign, POST, with a 20-second abort.
+5. Mint `rid`, serialise once, sign, POST, with a **45-second** abort (below).
 6. 200 + JSON + a known `outcome`/`reason` → redirect accordingly. Anything else →
    `?ebay=error&reason=unavailable`, plus **one ops log line for every non-200 outcome**, not only the
    transport failures: `ebay callback relay rid=<rid> status=<n>`, `… unreachable`, `… timeout`. An
@@ -999,7 +1006,7 @@ reaches the screen.
 
 | Case | Where decided | Wire result | Seller sees | What is logged |
 |---|---|---|---|---|
-| eBay decline (`error=…`) | Web | 302 `ebay=cancelled`, no call | "eBay connection cancelled. Nothing was changed." | nothing by us |
+| eBay decline (`error=…` with no `code`) | Web | 302 `ebay=cancelled`, no call, **cookie untouched** | "eBay connection cancelled. Nothing was changed." | nothing by us |
 | Not a callback (no `code`, no `error`) | Web | 302 `reason=missing_code`, no call | "eBay did not complete the connection. Try again." | nothing by us |
 | Malformed `code`/`state` | Web | 302 `reason=missing_code`, no call | same | nothing by us |
 | **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned and the code redeemed and discarded** | "Finish connecting eBay in the same browser you started from." | nothing |
@@ -1024,7 +1031,7 @@ reaches the screen.
 | Unexpected throw anywhere in steps 1–10 | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: refused` — a fixed string and nothing else (see *Logging*) |
 | Function unreachable (DNS, TLS, refused) | Web | no HTTP result | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback relay rid=<rid> unreachable` |
 | Function answered non-200 | Web | — | same | `ebay callback relay rid=<rid> status=<n>` |
-| Function slow (web aborts at 20 s) | Web | aborted | same | `ebay callback relay rid=<rid> timeout` |
+| Function slow (web aborts at 45 s) | Web | aborted | same | `ebay callback relay rid=<rid> timeout` |
 | Connected | Function | 200 `outcome:"connected"` | "eBay account connected." | the existing `syncLog` row (`connected` / `reconnected`) and health touch |
 
 #### Logging — the rules, and the two traps that defeat them
@@ -1099,7 +1106,16 @@ are outside its reach entirely.
 
 #### Timeouts, and why the function keeps its long budget
 
-The web route aborts at **20 seconds**. The function keeps `timeoutSeconds: 120` — do **not** shorten it
+The web route aborts at **45 seconds**, and the number has a reason rather than being round. It was 20,
+which is a guess on the happy path of a flow a seller performs once: overrunning it does not stop the
+connection — the function finishes and the row appears — but it lands the seller on "eBay did not complete
+the connection. Try again." at the moment of first impression. The realistic worst case is a Cloud Run
+cold start on this bundle plus eBay's token and identity round trips (20 s apiece inside
+`commerce/ebay/oauth.js`), the credential box and five Firestore writes; on a refusal it is the
+redeem-and-discard token request instead. **It is not measured**, and this document does not pretend
+otherwise: deploy plan §4.3 step 9 records the p99 of the first sandbox connections beside the constant,
+and if Hostinger imposes a shorter request ceiling of its own, that ceiling is the number to write there.
+The function keeps `timeoutSeconds: 120` — do **not** shorten it
 to match. The state is burned inside the transaction *before* the exchange, so cutting the function short
 is precisely the thing that would leave a burned state with no connection. Letting it finish means a slow
 eBay still produces a connection row even after the seller's browser has been sent somewhere controlled.
@@ -1146,8 +1162,15 @@ find every word the route can redirect with. Same string, same translations, no 
 - The accepted URL registered in the eBay portal is unchanged. eBay is not told anything new and is not
   contacted about this.
 - The nonce cookie's transport attributes are unchanged: `nv_ebay_nonce`, `Secure`, `SameSite=Lax`,
-  `Path=/ebay/callback`, `Max-Age=600`, written by `setEbayNonceCookie`, cleared on every callback
-  response. **`HttpOnly` is absent from that list because the cookie structurally cannot have it**, not
+  `Path=/ebay/callback`, `Max-Age=600`, written by `setEbayNonceCookie`. What **did** change is *when* it
+  is cleared: on the landings whose answer proves the state was consumed (`connected`, `browser`,
+  `environment`, `no_seller`, `token`, `exchange`), and on no others. Clearing rides a top-level GET
+  response, so a `SameSite=Lax` `Set-Cookie` applies in exactly the context an attacker can create — a
+  link. Clearing on a landing that consumed nothing (a bare visit, a decline, an unavailable) let anyone
+  who got a seller to open `/ebay/callback` during the ten-minute window destroy the in-flight nonce, so
+  that eBay's genuine callback arrived cookie-less and the seller was told to finish in the browser they
+  were already in. It needs a click and the remedy is one more press of Connect, so it was a nuisance
+  rather than a compromise — but the clear bought nothing on those paths. **`HttpOnly` is absent from that list because the cookie structurally cannot have it**, not
   because it was forgotten — see the residuals below. The claim "scoped to the callback path so no other
   page can read it", which appears in §5.1, in `setEbayNonceCookie`'s JSDoc at
   `studioflow-web/lib/studioflow/ebay.ts:236-241` and in the deploy plan's stated-property paragraph, is

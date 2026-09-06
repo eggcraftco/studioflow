@@ -51,7 +51,7 @@ watching.
 | 3 | No open redirect | the redirect target is a module constant; no query parameter reaches `NextResponse.redirect` | **done by construction** |
 | 4 | The route puts no value in a URL | it builds a JSON body from `code`, `state` and the cookie nonce and POSTs it signed; `NextResponse.redirect` only ever receives a module constant plus `ebay`/`reason` from a fixed vocabulary | **done, commit `53f63d12`** — the built route was driven with `fetch` captured and the request it made carried no query string |
 | 5 | A visit that is not a callback is refused at the edge | no `code` and no `error` → 302 to the settings page with one sentence, cookie cleared, nothing forwarded | **done, commit 46a98b8d** |
-| 6 | Cookie flags | `Secure`, `SameSite=Lax`, `Path=/ebay/callback`, `Max-Age=600`, cleared on every callback | **verified in `lib/studioflow/ebay.ts`** |
+| 6 | Cookie flags | `Secure`, `SameSite=Lax`, `Path=/ebay/callback`, `Max-Age=600`, and cleared on the landings whose answer proves the state was **consumed** — never on a bare visit, a decline or an `unavailable`, because a `Set-Cookie` on those is a link's free way to destroy someone's in-flight connect (design §5.4) | **verified in `lib/studioflow/ebay.ts`, and the landings that do and do not clear it are executed by `npm run test:relay`** |
 | 7 | No secret in the client bundle | grep the **client** chunks for `EBAY_`, `CLIENT_SECRET`, `CERT`, `TOKEN_KEY`, `NIVADESK_EBAY_CALLBACK_KEY` and the literal `x-nivadesk-signature` | **the §5.4 pair is clean** on the current build (no `NIVADESK_EBAY_CALLBACK_KEY`, no `x-nivadesk-signature` in `.next/static`); the older four are re-run on the deploy build |
 | 7b | The key was **not inlined at build time** | grep the **server** chunk for the route: the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` must still be **present**. If Next replaced it statically the name vanishes and the value takes its place, so check 7 would pass in exactly the failure case. `export const runtime = "nodejs"` in the route is what prevents it | **done** — `.next/server/app/ebay/callback/route.js` still contains the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` |
 | 8 | The eBay screen degrades when the server has no eBay functions | open the settings section against production, where the callables do not exist: it must say the connector is not set up, not throw | run against the built app before the rsync |
@@ -213,7 +213,12 @@ for the next time this pair moves.)
    assumed: IAM → Audit Logs → Cloud Firestore API on `eggcraft-studio` — `DATA_READ` and `DATA_WRITE`
    must be unticked. Record the answer in `docs/ebay-callback-platform-logging.md` beside the Cloud Run
    finding, whichever way it comes out (design §5.4, residual 5).
-9. **Only then**, and under its own approval, the first sandbox OAuth connection. Sandbox only: the
+9. **Only then**, and under its own approval, the first sandbox OAuth connection. **Record the latency**
+   of each attempt (Hostinger's access log has the request duration; the function's own line has its
+   own): `RELAY_TIMEOUT_MS` in `app/ebay/callback/route.ts` is **45 s against the function's 120 s**, and
+   45 is reasoned, not measured — above a cold start plus eBay's two round trips, below a request ceiling
+   the platform has not told us about. Write the observed p99 into the constant's comment, and if
+   Hostinger cuts the request off before 45 s, that ceiling is the number instead. Sandbox only: the
    production accepted URL is blocked until the callback is served by a Cloudflare Worker on
    `connect.nivadesk.app`, because eBay puts the code in the query string of the first hop and
    Hostinger's access log keeps it (measured; no disable, no redaction, retention and readers

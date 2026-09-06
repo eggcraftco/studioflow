@@ -107,7 +107,13 @@ try {
     try {
       const request = new NextRequest(new URL(url), cookie ? { headers: { cookie } } : {});
       const response = await route.GET(request);
-      return { sent, location: response.headers.get("location") };
+      // The Set-Cookie is part of the contract: clearing the nonce on a landing
+      // that consumed nothing is a free way for a link to break an in-flight
+      // connect, so which landings clear it is checked, not assumed.
+      const cookies = typeof response.headers.getSetCookie === "function"
+        ? response.headers.getSetCookie()
+        : [response.headers.get("set-cookie")].filter(Boolean);
+      return { sent, location: response.headers.get("location"), cookies };
     } finally { globalThis.fetch = realFetch; }
   }
 
@@ -136,6 +142,9 @@ try {
     relayed.sent ? relayed.sent.target : "no request was made");
   check("and it redirects the seller to the settings page with a word from its own vocabulary",
     relayed.location === "https://nivadesk.app/settings?section=ebay&ebay=connected", String(relayed.location));
+  const clears = (r) => r.cookies.some((c) => /nv_ebay_nonce=;/.test(c) && /Max-Age=0/i.test(c));
+  check("a connected landing clears the nonce cookie: that flow really did consume it",
+    clears(relayed), JSON.stringify(relayed.cookies));
 
   // THE check this script exists for: the bytes the route signed, verified by the
   // function's own verifier. Two implementations, in two languages' trees, that
@@ -175,13 +184,49 @@ try {
   check("…and the code the refusal saw was spent, not left in the access log for a fresh-state replay",
     calls.codes.includes("good-code"), JSON.stringify(calls.codes));
 
+  check("…and that landing is the only kind that touches the cookie: a burn answer clears it too",
+    clears(await relay(`https://nivadesk.app/ebay/callback?code=good-code&state=${encodeURIComponent(third.state)}`, "",
+      { status: 200, body: { ok: false, outcome: "error", reason: "browser", rid: "0123456789abcdef" } })));
+
   // A decline never reaches the connector, and an empty error= is still a decline.
   for (const query of ["error=access_denied", "error="]) {
     const declined = await relay(`https://nivadesk.app/ebay/callback?${query}`, "", { status: 200, body: {} });
     check(`a decline (?${query}) is settled on our own domain: no call, and the seller is told nothing was changed`,
       declined.sent === null && declined.location === "https://nivadesk.app/settings?section=ebay&ebay=cancelled",
       `${declined.sent ? "a call was made" : "no call"} ${declined.location}`);
+    check(`…and it leaves the nonce cookie alone (?${query}): nothing was consumed, so a link cannot spend someone's in-flight connect`,
+      declined.cookies.length === 0, JSON.stringify(declined.cookies));
   }
+
+  // Not a callback at all: same rule, and this is the shape an attacker's link
+  // takes — https://nivadesk.app/ebay/callback with nothing on it.
+  const bare = await relay("https://nivadesk.app/ebay/callback", "nv_ebay_nonce=someone-elses-live-nonce", { status: 200, body: {} });
+  check("a bare visit makes no call, says missing_code, and does NOT clear the cookie of a flow it never touched",
+    bare.sent === null && bare.location === "https://nivadesk.app/settings?section=ebay&ebay=error&reason=missing_code" && bare.cookies.length === 0,
+    `${bare.location} ${JSON.stringify(bare.cookies)}`);
+
+  // A code alongside an error: the one shaped query with a real code in it that
+  // used to answer `cancelled` with nothing burned and nothing spent.
+  const both = await fns.beginEbayConnect({ auth: { uid: "u1" }, data: { companyId: "c1" } });
+  const withError = await relay(`https://nivadesk.app/ebay/callback?code=good-code&error=access_denied&state=${encodeURIComponent(both.state)}`,
+    `nv_ebay_nonce=${encodeURIComponent(both.nonce)}`, { status: 200, body: { ok: true, outcome: "connected", rid: "0123456789abcdef" } });
+  check("a callback carrying BOTH a code and an error takes the relay path — the code wins, so the burn has no exception",
+    withError.sent !== null && JSON.parse(withError.sent.init.body).code === "good-code",
+    withError.sent ? withError.sent.init.body.slice(0, 60) : "no request was made");
+  const bothDelivered = await deliver(withError.sent);
+  check("…and the function consumes that state like any other callback",
+    bothDelivered.payload.outcome === "connected" && store.read(`ebayConnectStates/${both.state}`).used === true,
+    JSON.stringify(bothDelivered.payload));
+
+  // The two shape checks, in the SAME unit: the function caps the body at 8192
+  // BYTES, so a code the route would accept by character count must be refused
+  // here rather than landing as an opaque 400 with nothing burned.
+  const wide = await fns.beginEbayConnect({ auth: { uid: "u1" }, data: { companyId: "c1" } });
+  const oversize = await relay(`https://nivadesk.app/ebay/callback?code=${encodeURIComponent("\u20ac".repeat(4000))}&state=${encodeURIComponent(wide.state)}`,
+    `nv_ebay_nonce=${encodeURIComponent(wide.nonce)}`, { status: 200, body: {} });
+  check("a 4000-character code that is 12000 bytes is refused HERE, in the function's own unit, not there as a 400",
+    oversize.sent === null && oversize.location === "https://nivadesk.app/settings?section=ebay&ebay=error&reason=missing_code",
+    `${oversize.sent ? "a call was made" : "no call"} ${oversize.location}`);
 
   // The key floor, exercised rather than asserted: a short key never calls.
   for (const bad of ["", "a".repeat(31)]) {

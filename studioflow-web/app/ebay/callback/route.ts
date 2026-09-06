@@ -41,8 +41,24 @@ const NONCE_COOKIE = "nv_ebay_nonce";
 const STATE_PATTERN = /^[A-Za-z0-9_-]{20,120}$/;
 const MAX_CODE_LENGTH = 4096;
 const MAX_NONCE_LENGTH = 200;
+// The function caps the BODY at 8192 bytes while capping `code` at 4096
+// characters, and those are different units: a multi-byte code this route
+// accepts can be an oversize 400 over there — a refusal with no burn, arrived at
+// by disagreement rather than by decision. Both checks are therefore made here,
+// in the function's own units, over the exact bytes that will be sent.
+const MAX_BODY_BYTES = 8192;
 const KEY_MIN_LENGTH = 32;
-const RELAY_TIMEOUT_MS = 20 * 1000;
+// Against the function's own 120 seconds. Overrunning this budget does not stop
+// the connection — the function finishes and the row appears — but it lands the
+// seller on "try again" at the moment of first impression, so it is set well
+// above the realistic worst case rather than at a round number: a Cloud Run cold
+// start on the functions bundle, eBay's token and identity round trips (20 s
+// apiece inside `commerce/ebay/oauth.js`), the credential box and five Firestore
+// writes; on a refusal, the redeem-and-discard token request instead.
+// It is NOT measured. Deploy plan §4.3 step 9 records the real p99 of the first
+// sandbox connections beside this constant, and if Hostinger imposes a shorter
+// request ceiling of its own, that ceiling is the number to write here.
+const RELAY_TIMEOUT_MS = 45 * 1000;
 
 // The seller-facing vocabulary: a union so nothing else can be spelled into a
 // redirect, and a set so the function's answer is checked against it before it
@@ -60,13 +76,27 @@ const FUNCTION_REASONS: ReadonlySet<string> = new Set<Reason>([
 // interpolated into this URL — only a word from the union above.
 const SETTINGS = "https://nivadesk.app/settings?section=ebay";
 
+// The answers that prove the function CONSUMED the state this cookie belongs to:
+// the burn happens before each of them. `connected` is the sixth.
+const CONSUMED: ReadonlySet<string> = new Set(["browser", "environment", "no_seller", "token", "exchange"]);
+
 function land(outcome: "connected" | "cancelled" | "error", reason?: Reason) {
   const url = reason ? `${SETTINGS}&ebay=${outcome}&reason=${reason}` : `${SETTINGS}&ebay=${outcome}`;
   const response = NextResponse.redirect(url, 302);
-  // Cleared on every path, the successful one included: the state is burned on
-  // the other side and a second attempt starts a fresh flow with a fresh nonce.
-  // Max-Age 0 under the Path it was written with, or the browser keeps it.
-  response.cookies.set(NONCE_COOKIE, "", { path: "/ebay/callback", maxAge: 0, sameSite: "lax", secure: true });
+  // Cleared exactly when the state it belongs to was consumed — never on a
+  // landing that consumed nothing. Clearing rides a top-level GET response, so a
+  // `SameSite=Lax` Set-Cookie applies in precisely the context an attacker can
+  // create: a link. Anyone who gets a seller to open /ebay/callback (or
+  // …?error=x, or a shaped query naming a state that is not theirs) during the
+  // ten-minute window would otherwise destroy the in-flight nonce, and eBay's
+  // genuine callback would then arrive cookie-less and be told to finish in the
+  // browser it is already in. Recovery is one more press of Connect, so this is
+  // a nuisance rather than a compromise — but the clear buys nothing on those
+  // paths, so the surface goes. Max-Age 0 under the Path it was written with, or
+  // the browser keeps it.
+  if (outcome === "connected" || (reason && CONSUMED.has(reason))) {
+    response.cookies.set(NONCE_COOKIE, "", { path: "/ebay/callback", maxAge: 0, sameSite: "lax", secure: true });
+  }
   return response;
 }
 
@@ -90,7 +120,14 @@ export async function GET(request: NextRequest) {
   // is the only place in the system that produces the word. eBay's declined URL
   // points straight at the settings page anyway, so this is defence in depth —
   // either way a decline never reaches the connector, and no call is made.
-  if (declined) return land("cancelled");
+  //
+  // A CODE WINS OVER AN ERROR, and that ordering is the point: `?code=X&error=y`
+  // was the single shaped query carrying a real code that took this branch, so
+  // it answered `cancelled` with the code unspent and the state unburned — the
+  // one exception to "a shaped callback always POSTs", stated absolutely in
+  // three places. eBay sends one or the other, so requiring the code to be
+  // absent costs nothing and removes the exception.
+  if (!code) return land("cancelled");
 
   // 2. Shaped like a callback? Malformed gets the same word absence gets, and
   // the same silence: nothing from the query is logged, here or anywhere below.
@@ -176,6 +213,10 @@ export async function GET(request: NextRequest) {
   // request cannot be re-pointed at a different code.
   const rid = randomBytes(8).toString("hex");
   const raw = JSON.stringify({ v: 1, rid, code, state, nonce });
+  // The function's 8192-BYTE body cap, applied to the exact bytes about to be
+  // sent. Without it the two shape checks disagree on units and a multi-byte
+  // code lands as an opaque 400 instead of a sentence.
+  if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return land("error", "missing_code");
   const timestamp = String(Date.now());
   const signature = createHmac("sha256", key)
     .update(`v1.${timestamp}.`, "utf8")
