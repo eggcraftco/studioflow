@@ -1164,9 +1164,15 @@ conflict: boolean, connections: [ { provider, mode, health, writeBoundaryDate, l
 postings: { prepared, approved, queued, synced, failed, conflict } each `{ value: 0, available: false,
 reason: "postings_not_implemented" }` while `accountingPostings` is never written (Faz 3–7),
 attention: [ { id, kind, severity, message, entityRefs } ], readiness: { ready, notReady: { uncategorised,
-split, needsInfo, unreviewed } } }`. Attention rows come from the **reader** on `refs(db,cid).attention`
+split, needsInfo, unreviewed }, mappingSource: "workspace"|"default" } }`. Attention rows come from the **reader** on `refs(db,cid).attention`
 filtered `status == "open"` (§2.1), never from `store.openAttention`. Readiness is per bank transaction
-using `pandle.js resolveMapping` rules and `BANK_REVIEW_STATUSES`. Gate:
+using `pandle.js resolveMapping` rules and `BANK_REVIEW_STATUSES`, against the workspace's own
+NivaDesk-category → ledger-account map — `companies/{cid}/pandleConnection/main.mappings`, the one
+document that map lives in. It is NOT on the accounting connection, and the QuickBooks/Xero
+`accountingMappings/{connId}` document is keyed by semantic account ("product_sales", "cogs") rather
+than by bank category, so it cannot answer this question. A workspace that has confirmed no map of its
+own is measured against `DEFAULT_MAPPINGS`, and `readiness.mappingSource` says which of the two answered
+— "ready to be prepared" is a claim about one specific map. Gate:
 `accountingReaderCanRead(companyData, uid)` (§1.4.12), the same predicate the accounting callables use —
 stricter than the bankFeed area and never substituted for it. The `phase` flag is what stops "0 failed"
 from reading as "all synced"; the renderer says "Ledger posting is not switched on yet; NivaDesk is

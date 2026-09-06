@@ -29,12 +29,30 @@ const POSTING_PHASES = Object.freeze(["prepared", "approved", "queued", "synced"
 
 const SEVERITY_FROM_STORED = Object.freeze({ error: "high", warning: "medium", info: "low" });
 
-/** Reasons a bank row is not ready to become a ledger record. */
-function readinessOf(rows = [], connection = null) {
-  const mappings = Array.isArray((connection || {}).mappings) && connection.mappings.length
-    ? connection.mappings
-    : DEFAULT_MAPPINGS;
-  const mapped = new Set(mappings.map((row) => String((row || {}).category || "")));
+/**
+ * Reasons a bank row is not ready to become a ledger record, measured against
+ * the workspace's own NivaDesk-category → ledger-account map.
+ *
+ * The parameter used to be the accounting CONNECTION, and the branch on
+ * `connection.mappings` could never be true. Two reasons, either one fatal: the
+ * loader projects an accountingConnections document down to
+ * `{id, provider, companyName, mode, status, writeBoundaryDate, lastSyncAtMs}`,
+ * and the mappings are not on that document in the first place. QuickBooks and
+ * Xero keep theirs in `companies/{cid}/accountingMappings/{connId}` keyed by
+ * semantic account ("product_sales", "cogs"), which is not a bank category at
+ * all; the map that resolves a bank CATEGORY is the Pandle one
+ * (`pandleConnection/main.mappings`, `[{category, nominalCode, taxCode}]`) —
+ * the same list `pandle.resolveMapping` reads.
+ *
+ * So every workspace was silently scored against the built-in map, and one that
+ * had confirmed its own was told rows are "ready to be prepared" against a map
+ * it does not use. The map is passed in now, the loader reads the document it
+ * really lives in, and the answer says which map the figure was measured
+ * against instead of implying there is only one.
+ */
+function readinessOf(rows = [], mappings = null) {
+  const custom = Array.isArray(mappings) && mappings.length > 0;
+  const mapped = new Set((custom ? mappings : DEFAULT_MAPPINGS).map((row) => String((row || {}).category || "")));
 
   const notReady = { uncategorised: 0, unmapped: 0, split: 0, needsInfo: 0, unreviewed: 0 };
   let ready = 0;
@@ -49,7 +67,9 @@ function readinessOf(rows = [], connection = null) {
     if (!mapped.has(category)) { notReady.unmapped += 1; continue; }
     ready += 1;
   }
-  return { ready, notReady };
+  // Which map produced the figure. "ready to be prepared" is a claim about a
+  // specific map, and the reader is entitled to know which one.
+  return { ready, notReady, mappingSource: custom ? "workspace" : "default" };
 }
 
 function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
@@ -77,7 +97,7 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     entityRefs: Array.isArray(row.entityRefs) ? row.entityRefs.slice(0, 5) : []
   }));
 
-  const readiness = readinessOf(snapshot.bankRows || [], connections[0] || null);
+  const readiness = readinessOf(snapshot.bankRows || [], snapshot.categoryMappings || null);
 
   const sources = connections.map((connection) => freshness.sourceRow({
     provider: String(connection.provider || "accounting"),

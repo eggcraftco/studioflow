@@ -190,6 +190,38 @@ check("readiness counts what is not ready, and why", () => {
   assert.strictEqual(result.data.readiness.notReady.needsInfo, 1);
 });
 
+check("readiness is measured against the workspace's own category map, and says which one", () => {
+  // readinessOf branched on `connection.mappings`, which can never exist: the
+  // loader projects an accountingConnections document to seven fields, none of
+  // them mappings, and the category map lives on pandleConnection/main. So
+  // every workspace was scored against the built-in map while the answer said
+  // "ready to be prepared" as a flat fact.
+  const workspaceMap = [{ category: "Materials", nominalCode: "500", taxCode: "ST" }];
+
+  const own = accountingSnapshot();
+  own.categoryMappings = workspaceMap;
+  const honoured = accounting.accountingSyncStatus(own, {}, ctx, { nowMs: NOW });
+  assert.strictEqual(honoured.data.readiness.mappingSource, "workspace");
+  assert.strictEqual(honoured.data.readiness.ready, 1, "the Materials row is mapped in this workspace's own map");
+
+  // "Software" is in the default map and NOT in this workspace's, so a reviewed
+  // Software row is unmapped here — the case the old code could never reach.
+  const narrow = accountingSnapshot();
+  narrow.bankRows = [{ id: "b4", amount: -30, currency: "GBP", bookingDate: "2026-09-03", category: "Software", reviewStatus: "reviewed", splits: 0, categoryAuto: false }];
+  narrow.categoryMappings = workspaceMap;
+  const scored = accounting.accountingSyncStatus(narrow, {}, ctx, { nowMs: NOW });
+  assert.strictEqual(scored.data.readiness.ready, 0, "a category the workspace has not mapped is not ready");
+  assert.strictEqual(scored.data.readiness.notReady.unmapped, 1);
+
+  // And a workspace with no map of its own is told which map answered.
+  const fallback = accounting.accountingSyncStatus(accountingSnapshot(), {}, ctx, { nowMs: NOW });
+  assert.strictEqual(fallback.data.readiness.mappingSource, "default");
+  const render = require("../../orchestrator/render");
+  const lines = render.summaryFor({ action: "get_accounting_sync_status", data: fallback.data, warnings: [], freshness: {} }, {});
+  assert.ok(lines.some((row) => /default category map/.test(row.text)),
+    "the sentence states the figure as fact; it has to name the map behind it");
+});
+
 check("two primary writers is a conflict, and it is reported as one", () => {
   const snapshot = accountingSnapshot();
   snapshot.connections.accounting = [

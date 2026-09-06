@@ -248,6 +248,30 @@ function createLoaders({ db, now = () => Date.now() }) {
   }
 
   /**
+   * The NivaDesk-category → ledger-account map, from the one document it lives
+   * in: `pandleConnection/main.mappings`, `[{category, nominalCode, taxCode}]`.
+   *
+   * Not the accounting connection — that document has no mappings field, and
+   * QuickBooks/Xero mappings (`accountingMappings/{connId}`) are keyed by
+   * semantic account rather than by bank category, so they cannot answer "is
+   * this bank row's category mapped?" at all. Null means the workspace has
+   * confirmed no map of its own and the default one applies, which the answer
+   * then says out loud.
+   */
+  async function loadCategoryMappings(companyId) {
+    const snap = await company(companyId).collection("pandleConnection").doc("main").get();
+    const rows = snap.exists ? (snap.data() || {}).mappings : null;
+    if (!Array.isArray(rows)) return null;
+    return rows
+      .map((row) => ({
+        category: String((row || {}).category || ""),
+        nominalCode: String((row || {}).nominalCode || ""),
+        taxCode: String((row || {}).taxCode || "")
+      }))
+      .filter((row) => row.category);
+  }
+
+  /**
    * The bank rows covering the settlement windows of the unmatched payouts, in
    * one pass. `settlementMatch.suggestForPayout` would do this with a Firestore
    * query per payout, from inside a module this design declares pure.
@@ -335,7 +359,13 @@ function createLoaders({ db, now = () => Date.now() }) {
       snapshot.reviewQueue = queue;
       snapshot.heldOrders = held;
     }
-    if (needs.has("accounting")) snapshot.accountingAttention = await loadAccountingAttention(companyId);
+    if (needs.has("accounting")) {
+      snapshot.accountingAttention = await loadAccountingAttention(companyId);
+      // The readiness figure is measured against this map; the accounting
+      // reader is the only caller allowed to see it, and the only one that
+      // reports readiness.
+      snapshot.categoryMappings = ctx && ctx.accountingReader ? await loadCategoryMappings(companyId) : null;
+    }
 
     return snapshot;
   }

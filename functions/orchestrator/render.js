@@ -113,7 +113,10 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
   } else if (capability === "get_accounting_sync_status") {
     lines.push(line("result", `${data.connections.length} accounting connection(s).`));
     lines.push(line("finance", "Ledger posting is not switched on yet; NivaDesk is preparing records only."));
-    lines.push(line("attention", `${data.readiness.ready} bank transaction(s) are ready to be prepared.`));
+    // Named map, because "ready" is a claim about one: a workspace that has
+    // confirmed its own category map is not being measured against ours.
+    const map = data.readiness.mappingSource === "workspace" ? "this workspace's category map" : "NivaDesk's default category map";
+    lines.push(line("attention", `${data.readiness.ready} bank transaction(s) are ready to be prepared, against ${map}.`));
   } else if (capability === "get_business_attention_summary" || capability === "get_banking_attention_summary") {
     lines.push(line("result", `${data.totalItems} item(s) need attention: ${data.counts.critical} critical, ${data.counts.high} high.`));
     for (const item of (data.items || []).slice(0, style === "compact" ? 5 : 10)) {
