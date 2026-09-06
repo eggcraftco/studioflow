@@ -582,6 +582,25 @@ With B5.3 the August group (B5.1–B5.3, 122 functions) is on the remediated tre
 
 **Soak start: 2026-09-06 04:28:31 UTC** (B5.3's gate was verified through the console after the gcloud credential expired, see above; the soak clock runs from the end of that gate). While the gcloud credential is expired the two-hourly checks run through the Logs Explorer and Cloud Scheduler pages in the operator's console session; a check that cannot be done is recorded as a gap, never as a clean result. No new batch until 2026-09-07 04:28 UTC at the earliest, and then only on the operator's go. Checks every two hours (errors and 5xx since the soak start across all 350 deployed functions, traffic by status class, the eight Scheduler jobs' state and next run, event-trigger executions), appended here; the 24-hour result subsection closes it.
 
+### Soak readback — 2026-09-06 10:29:50 UTC (six hours in)
+
+The gcloud credential works again, so this readback is from the CLI, and the watch script no longer
+sends any gcloud stderr to `/dev/null` — a failed query now prints `GAP` and is counted, so an empty
+result can no longer be mistaken for a clean one.
+
+| Check (all 350 deployed functions, since 2026-09-06 04:28:31 UTC) | Result |
+|---|---|
+| `severity>=ERROR` | 0 entries |
+| `httpRequest.status>=500` | 0 requests |
+| Positive control: all requests by status class | 240 requests — 239 2xx, 1 3xx, no 4xx, no 5xx |
+| Cloud Scheduler (europe-west2) | 19 jobs, all ENABLED, every one with a recent last attempt and a future next run |
+| Event-triggered functions, last two hours | stampOrderFinance 10, syncWorkflowSafeOrderView 10, notifyCustomerOnStatusChange 10 — all INFO |
+| Query gaps | 0 |
+
+Six of the twenty-four hours are clean on every axis: no errors, no 5xx, real traffic present, no
+scheduler drift, event triggers firing. The soak continues; the next batch (B6.1, B6.2 — the 64
+June/July functions) stays closed until 2026-09-07 04:28 UTC and the operator's go.
+
 ## Rollback used
 
 None so far.
