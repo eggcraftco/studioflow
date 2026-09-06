@@ -1,6 +1,6 @@
 {
   "recordedAt": "pre-orchestrator",
-  "note": "The four flag states WITHOUT the orchestrator flag were recorded from index.js at commit bc718e06, before the orchestrator capabilities existed. Read that scope exactly: bc718e06 is a commit on the mcp-orchestration branch, NOT the deployed 1.1.1 tree, so this fixture is evidence that the listing has not moved SINCE IT WAS RECORDED — it is not evidence that it equals what the review connection is served. Between the merge base (f753a8ca) and bc718e06 the branch added get_bank_spending_summary, search_bank_transactions and attach_bank_receipt, corrected six annotation values across four tools (update_order_status twice, update_note twice, pin_note once, archive_note once) and changed \"Lite\" to \"Starter\" in two descriptions; all of those are intended 1.2.0 changes, listed in docs/mcp-submission-1.2.0.md section 3. The operator diffs this fixture against the live listing once before the flip. The two orchestrator states were recorded with the flag on: they are the 1.2.0 proposal.",
+  "note": "The four flag states WITHOUT the orchestrator flag were recorded from index.js at commit bc718e06, before the orchestrator capabilities existed. Read that scope exactly: bc718e06 is a commit on the mcp-orchestration branch, NOT the deployed 1.1.1 tree, so this fixture is evidence that the listing has not moved SINCE IT WAS RECORDED — it is not evidence that it equals what the review connection is served. Between the merge base (f753a8ca) and bc718e06 the branch added get_bank_spending_summary, search_bank_transactions and attach_bank_receipt, corrected six annotation values across four tools (update_order_status twice, update_note twice, pin_note once, archive_note once) and changed \"Lite\" to \"Starter\" in two descriptions; all of those are intended 1.2.0 changes, listed in docs/mcp-submission-1.2.0.md section 3. The operator diffs this fixture against the live listing once before the flip. The two orchestrator states are a different kind of record: they are the 1.2.0 PROPOSAL, re-recorded whenever it deliberately changes, and they are compared by mcp-tools-list-snapshot.test.js like the other four. They were compared by nothing until 6 Sep 2026 and went stale: the inventory+orchestrator state carried 31 tools including both search_inventory and search_inventory_items — the duplicate inventory search 70c474fd removed — while the builder produced 30. Both were re-recorded then (29 and 30 tools, search_inventory only). Re-record with: node test/qa/mcp-tools-list-snapshot.test.js --write, which touches ONLY those two states; the four flag-off recordings are evidence about a pre-orchestrator listing and regenerating them would destroy the only thing they prove.",
   "states": {
     "off": {
       "tools": [
@@ -6195,6 +6195,85 @@
           ]
         },
         {
+          "name": "search_inventory",
+          "title": "Search inventory",
+          "description": "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {
+              "companyId": {
+                "type": "string",
+                "description": "Optional. Usually omit this; the connected workspace is used automatically."
+              },
+              "query": {
+                "type": "string",
+                "description": "Part of a name, SKU, serial number, brand, model, category or location."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "partiallyReserved",
+                  "reserved",
+                  "incoming",
+                  "used",
+                  "sold",
+                  "removed",
+                  "archived"
+                ]
+              },
+              "lowStock": {
+                "type": "boolean",
+                "description": "Only items at or below their low-stock level."
+              },
+              "reserved": {
+                "type": "boolean",
+                "description": "Only items being held for an order."
+              },
+              "location": {
+                "type": "string",
+                "description": "Only items kept here."
+              },
+              "category": {
+                "type": "string",
+                "description": "Only items in this category."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "Maximum items to return (default 20)."
+              }
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "securitySchemes": [
+            {
+              "type": "oauth2",
+              "scopes": [
+                "orders.read"
+              ]
+            }
+          ],
+          "_meta": {
+            "securitySchemes": [
+              {
+                "type": "oauth2",
+                "scopes": [
+                  "orders.read"
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "get_business_attention_summary",
           "title": "What needs attention today",
           "description": "Answer \"what should I look at today?\" for the whole workspace: overdue and soon-due orders, outstanding payments, estimates waiting for a customer's answer, work finished but not shipped, low stock, bank transactions missing receipts or a category, unmatched marketplace payouts, accounting items and connections that need reconnecting. Every item says why it is there and how long it has been true. Prefer this over calling several read tools when the user asks a broad \"what's going on\" question. Do not ask for companyId.",
@@ -6539,85 +6618,6 @@
               "category": {
                 "type": "string",
                 "description": "Only items in this category."
-              }
-            }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          },
-          "securitySchemes": [
-            {
-              "type": "oauth2",
-              "scopes": [
-                "orders.read"
-              ]
-            }
-          ],
-          "_meta": {
-            "securitySchemes": [
-              {
-                "type": "oauth2",
-                "scopes": [
-                  "orders.read"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "search_inventory_items",
-          "title": "Search inventory",
-          "description": "Search stock by name, SKU, serial number, brand, category or location, and filter by status, low stock, reserved or location. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [],
-            "properties": {
-              "companyId": {
-                "type": "string",
-                "description": "Optional. Usually omit this; the connected workspace is used automatically."
-              },
-              "query": {
-                "type": "string",
-                "description": "Part of a name, SKU, serial number, brand, category or location."
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "available",
-                  "partiallyReserved",
-                  "reserved",
-                  "incoming",
-                  "used",
-                  "sold",
-                  "removed",
-                  "archived"
-                ]
-              },
-              "lowStock": {
-                "type": "boolean",
-                "description": "Only items at or below their low-stock level."
-              },
-              "reserved": {
-                "type": "boolean",
-                "description": "Only items being held for an order."
-              },
-              "location": {
-                "type": "string",
-                "description": "Only items kept here."
-              },
-              "category": {
-                "type": "string",
-                "description": "Only items in this category."
-              },
-              "limit": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 50,
-                "description": "Maximum items to return (default 20)."
               }
             }
           },
@@ -7999,7 +7999,7 @@
         {
           "name": "search_inventory",
           "title": "Search inventory",
-          "description": "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
+          "description": "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -8011,13 +8011,42 @@
               },
               "query": {
                 "type": "string",
-                "description": "What to look for — part of a name, SKU, serial number, brand or location."
+                "description": "Part of a name, SKU, serial number, brand, model, category or location."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "partiallyReserved",
+                  "reserved",
+                  "incoming",
+                  "used",
+                  "sold",
+                  "removed",
+                  "archived"
+                ]
+              },
+              "lowStock": {
+                "type": "boolean",
+                "description": "Only items at or below their low-stock level."
+              },
+              "reserved": {
+                "type": "boolean",
+                "description": "Only items being held for an order."
+              },
+              "location": {
+                "type": "string",
+                "description": "Only items kept here."
+              },
+              "category": {
+                "type": "string",
+                "description": "Only items in this category."
               },
               "limit": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 25,
-                "description": "Max items to return (default 10)."
+                "maximum": 50,
+                "description": "Maximum items to return (default 20)."
               }
             }
           },
@@ -8532,85 +8561,6 @@
               "category": {
                 "type": "string",
                 "description": "Only items in this category."
-              }
-            }
-          },
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          },
-          "securitySchemes": [
-            {
-              "type": "oauth2",
-              "scopes": [
-                "orders.read"
-              ]
-            }
-          ],
-          "_meta": {
-            "securitySchemes": [
-              {
-                "type": "oauth2",
-                "scopes": [
-                  "orders.read"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "search_inventory_items",
-          "title": "Search inventory",
-          "description": "Search stock by name, SKU, serial number, brand, category or location, and filter by status, low stock, reserved or location. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [],
-            "properties": {
-              "companyId": {
-                "type": "string",
-                "description": "Optional. Usually omit this; the connected workspace is used automatically."
-              },
-              "query": {
-                "type": "string",
-                "description": "Part of a name, SKU, serial number, brand, category or location."
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "available",
-                  "partiallyReserved",
-                  "reserved",
-                  "incoming",
-                  "used",
-                  "sold",
-                  "removed",
-                  "archived"
-                ]
-              },
-              "lowStock": {
-                "type": "boolean",
-                "description": "Only items at or below their low-stock level."
-              },
-              "reserved": {
-                "type": "boolean",
-                "description": "Only items being held for an order."
-              },
-              "location": {
-                "type": "string",
-                "description": "Only items kept here."
-              },
-              "category": {
-                "type": "string",
-                "description": "Only items in this category."
-              },
-              "limit": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 50,
-                "description": "Maximum items to return (default 20)."
               }
             }
           },

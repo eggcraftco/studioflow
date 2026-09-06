@@ -234,8 +234,17 @@ The four flag states without the orchestrator flag are still compared byte-for-b
 built from the working tree after this change hashes to
 `7c838fb68a5b6e97571ec9605638913014e06931765e4b0dbe0bd53cbce64984`, which is the hash
 `docs/evidence/tools-list-production-015d5792.json` carries for the deployed listing — so **the surface
-OpenAI is reviewing did not move by a single byte.** Only the two orchestrator states of
-`test/fixtures/mcp/tools-list-annotations.json` were re-recorded, and the fixture's note says so.
+OpenAI is reviewing did not move by a single byte.**
+
+Two fixtures record the orchestrator states, and only one of them was re-recorded at the time:
+`test/fixtures/mcp/tools-list-annotations.json`, whose note says so. `tools-list-full.json` was left
+alone — and nothing compared its two orchestrator states, so it went on shipping the defect this section
+describes: 29 tools with `search_inventory_items` and no `search_inventory`, and an
+`inventory+orchestrator` state of **31** tools carrying both. That is the exact listing this decision
+removed, sitting in the repository as a recording of it, one `--write` away from coming back. Both states
+were re-recorded on 6 Sep 2026 (29 and 30 tools), `mcp-tools-list-snapshot.test.js` now compares them
+like the other four, and a check asserts neither offers two inventory searches. A fixture nothing reads
+is not evidence.
 
 ---
 

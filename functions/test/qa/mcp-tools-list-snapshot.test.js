@@ -10,7 +10,18 @@
 // whatever the code does today. If one of them fails, the reviewed surface
 // moved.
 //
+// The TWO orchestrator states are a different kind of record: they are the 1.2.0
+// proposal, re-recorded whenever it deliberately changes. They were compared by
+// nothing for a while, and went stale by exactly the defect 70c474fd says "can
+// never appear in a published listing again" — the `inventory+orchestrator`
+// state on disk carried 31 tools including BOTH `search_inventory` and
+// `search_inventory_items`, the duplicate this branch was written to remove,
+// while the builder produced 30. A fixture nothing reads records whatever was
+// true the day somebody wrote it, and a `--write` regeneration would have put
+// the defect back.
+//
 // Run: node test/qa/mcp-tools-list-snapshot.test.js
+//      node test/qa/mcp-tools-list-snapshot.test.js --write   (re-record)
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -58,6 +69,19 @@ function served(flags) {
 const listings = {};
 for (const [label, flags] of Object.entries(FLAG_STATES)) listings[label] = served(flags);
 
+// `--write` re-records the two ORCHESTRATOR states only. The four flag-off
+// states are evidence about a listing recorded before the orchestrator existed;
+// regenerating those would destroy the only thing they prove, so this refuses
+// to touch them and the checks below still compare them.
+if (process.argv.includes("--write")) {
+  const next = { ...fixture, states: { ...fixture.states } };
+  for (const label of ["orchestrator", "inventory+orchestrator"]) next.states[label] = listings[label];
+  fs.writeFileSync(FIXTURE, `${JSON.stringify(next, null, 2)}\n`);
+  console.log(`re-recorded the orchestrator states (${listings.orchestrator.tools.length} and ${listings["inventory+orchestrator"].tools.length} tools)`);
+  console.log("the four flag-off states were NOT touched: they are the pre-orchestrator recording");
+  process.exit(0);
+}
+
 for (const label of ["off", "emailReceipts", "inventory", "emailReceipts+inventory"]) {
   check(`the reviewed listing is byte-identical with the orchestrator flag off (${label})`, () => {
     const expected = fixture.states[label];
@@ -69,6 +93,35 @@ for (const label of ["off", "emailReceipts", "inventory", "emailReceipts+invento
     );
   });
 }
+
+for (const label of ["orchestrator", "inventory+orchestrator"]) {
+  check(`the recorded 1.2.0 proposal is what the builder serves (${label})`, () => {
+    // Nothing compared these two, so they aged into a record of the duplicate
+    // inventory search. A recording that nothing reads is not evidence; it is a
+    // trap for the next `--write`.
+    const expected = fixture.states[label];
+    assert.ok(expected, `no recording for flag state ${label}`);
+    assert.strictEqual(
+      JSON.stringify(listings[label]),
+      JSON.stringify(expected),
+      `${label}: the recorded 1.2.0 listing is not what the builder produces. If the change is intended, re-record with --write and say what moved in the fixture's note.`
+    );
+  });
+}
+
+check("neither recorded orchestrator state carries two inventory searches", () => {
+  // The defect itself, asserted against the FIXTURE rather than the builder —
+  // mcp-one-inventory-search.test.js already holds the builder to it, and the
+  // file on disk is what a reviewer diffs and what `--write` starts from.
+  for (const label of ["orchestrator", "inventory+orchestrator"]) {
+    const names = fixture.states[label].tools.map((tool) => tool.name);
+    assert.ok(!names.includes("search_inventory_items"),
+      `${label}: search_inventory_items is an internal alias and was never a published tool`);
+    const searches = names.filter((name) => /^search_inventor/.test(name));
+    assert.deepStrictEqual(searches, ["search_inventory"],
+      `${label}: the recorded listing offers ${searches.length} inventory searches over one collection`);
+  }
+});
 
 check("with the flag off, the nineteen reviewed tools are all that is served", () => {
   assert.strictEqual(listings.off.tools.length, 19);
