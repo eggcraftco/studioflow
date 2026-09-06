@@ -125,6 +125,22 @@ check("sections a role cannot see are named and empty, not silently missing", ()
   assert.ok(!result.data.items.some((item) => item.type === "receipt_missing"), "no banking item may leak through");
 });
 
+check("the reorder item is the workshop's own stock, never a customer's", () => {
+  // stock_low reads the same lowStockItems() the overview lists, so the list's
+  // disagreement with its own count arrived here too: a customer's watch, in
+  // for repair and low on a part, became something the workshop was told to
+  // reorder.
+  const snapshot = fixtures.attentionSnapshot();
+  snapshot.inventoryItems = [
+    ...snapshot.inventoryItems,
+    { id: "i_customer", name: "Customer's spring bars", trackingType: "quantity", quantity: { onHand: 1, reserved: 0 }, lowStockAt: 5, valuationCost: 1, status: "available", ownership: "customer" }
+  ];
+  const low = run(snapshot).data.items.find((item) => item.type === "stock_low");
+  assert.ok(low, "the workshop's own low item is still reported");
+  assert.deepStrictEqual(low.entityRefs.map((ref) => ref.id), ["i_low"]);
+  assert.strictEqual(low.facts.find((fact) => fact.key === "count").value, 1);
+});
+
 check("the domains argument filters the detectors, not just the rows they produce", () => {
   // o_late is overdue AND unpaid AND ready to ship. Asked about shipping, the
   // answer is about shipping: an order_overdue item is an answer about orders,

@@ -91,6 +91,12 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
     }
   } else if (capability === "get_inventory_overview") {
     lines.push(line("result", `${data.counts.items} inventory item(s), ${data.counts.lowStock} at or below their low-stock level.`));
+    // Said out loud rather than left to arithmetic: the headline is the
+    // workshop's own stock, and a customer's item is neither counted in it nor
+    // valued as an asset.
+    if (data.counts.customerOwned > 0) {
+      lines.push(line("breakdown", `${data.counts.customerOwned} item(s) belong to customers and are counted separately.`));
+    }
     if (readable(data.value)) lines.push(line("finance", `Stock value ${money(data.value.cost)} ${data.value.currency}.`));
     else if (withheld(data.value)) lines.push(line("finance", "Stock value is not shown in this channel."));
   } else if (capability === "search_inventory_items") {

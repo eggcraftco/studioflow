@@ -56,9 +56,21 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
   }
 
   const currency = money.workspaceCurrency(snapshot.settings || {});
+  // `items` used to be the raw row count while every other figure came from
+  // summarize(), which skips archived, sold, used, removed and customer-owned
+  // rows: two populations under one heading, so a workshop with one item on the
+  // shelf was told "5 inventory item(s), 1 at or below their low-stock level".
+  //
+  // `items` is now the workshop's own stock — on the shelf or on its way — and
+  // the other populations are named beside it, the way the valuation already
+  // named them. `matched` keeps the raw number under a heading that says what it
+  // is: rows this answer's filters selected, whatever their status. The four add
+  // up: matched = items + offShelf + customerOwned.
   const data = {
     counts: {
-      items: items.length,
+      items: summary.uniqueCount + summary.quantityCount + summary.incomingCount,
+      matched: items.length,
+      offShelf: summary.offShelfCount,
       lowStock: summary.lowStockCount,
       reserved: summary.reservedCount,
       incoming: summary.incomingCount,

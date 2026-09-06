@@ -1067,13 +1067,17 @@ shopify, etsy, woocommerce, inbound, square, amazon, ebay) → `not_supported`.
 
 #### get_inventory_overview (§11)
 
-Input: `{ location?, category? }`. Output: `{ counts: { items, lowStock, reserved, incoming, available,
-deadStock }, value: { cost, currency }, lowStock: [ { itemId, name, onHand, lowStockAt, supplierName } ]
+Input: `{ location?, category? }`. Output: `{ counts: { items, matched, offShelf, lowStock, reserved,
+incoming, available, customerOwned }, value: { cost, currency }, lowStock: [ { itemId, name, onHand, lowStockAt, supplierName } ]
 (≤25), reservedForOpenOrders: [...], channelAllocation: { supported: false, reason: "no_listing_mapping" },
 syncMismatch: { supported: false, … }, oversellRisk: { supported: false, … }, multiChannelListings: {
 supported: false, … }, sourceOfTruth: "nivadesk" }`. The numbers come from
 `inventoryMetrics.summarize(items, { nowMs })`, lifted from the `getInventorySummary` (inventory.js:546)
-and `getInventoryReport` (1033) closures; those callables are changed to call the pure module so the app
+and `getInventoryReport` (1033) closures; ONE population per heading — `items` is the workshop's own stock
+(on the shelf or incoming), `matched` is every row the filters selected whatever its status, and
+`matched = items + offShelf + customerOwned`. "Low stock" has one definition (`inventoryMetrics.isLowStock`)
+used by the count, the list and the `stock_low` attention item, so a customer's own item can never be in
+the list while being absent from the count beside it; those callables are changed to call the pure module so the app
 and the assistant cannot drift (parity test). No product↔listing mapping collection exists, so the four
 channel keys are `supported:false` with one `unsupported_metric` warning, not zeros. Inventory has no
 sync, so its freshness row is `state: "unsupported"` and `inventoryLastSync` is `null`.

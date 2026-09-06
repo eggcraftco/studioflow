@@ -90,6 +90,31 @@ check("low stock is the workspace's own threshold, worst first", () => {
   assert.strictEqual(result.data.counts.lowStock, 1);
 });
 
+check("the headline count and the low-stock list describe the same shelf", () => {
+  // counts.items was the raw row count while everything beside it came from
+  // summarize(), which skips archived, sold, used, removed and customer-owned
+  // rows — and the low-stock LIST skipped neither the customer's items nor the
+  // incoming ones. So the answer read "N inventory item(s), 1 at or below their
+  // low-stock level" beside a list of two, one of them a customer's own.
+  const shelf = [
+    ...items,
+    { id: "c2", name: "Customer's spring bars", trackingType: "quantity", quantity: { onHand: 1, reserved: 0 }, lowStockAt: 5, valuationCost: 1, status: "available", ownership: "customer" },
+    { id: "i2", name: "Incoming beads", trackingType: "quantity", quantity: { onHand: 0, reserved: 0 }, lowStockAt: 5, valuationCost: 1, status: "incoming" }
+  ];
+  const result = inventory.inventoryOverview({ ...snapshot(), inventoryItems: shelf }, {}, ctx, { nowMs: fixtures.NOW });
+  const counts = result.data.counts;
+
+  assert.strictEqual(result.data.lowStock.length, counts.lowStock,
+    "a list of two beside a count of one means one of them is wrong");
+  assert.deepStrictEqual(result.data.lowStock.map((row) => row.itemId), ["q1"],
+    "a customer's own item is not the workshop's to reorder, and incoming stock is not on the shelf yet");
+
+  assert.strictEqual(counts.items, 6, "the workshop's own stock: four on the shelf, two incoming");
+  assert.strictEqual(counts.matched, shelf.length, "the raw row count is still reported, under a name that says what it is");
+  assert.strictEqual(counts.items + counts.offShelf + counts.customerOwned, counts.matched,
+    "every row belongs to exactly one population, or the counts are describing two shelves");
+});
+
 check("the status filter uses the runtime's own statuses, not a paraphrase", () => {
   assert.deepStrictEqual(
     inventory.ITEM_STATUSES,

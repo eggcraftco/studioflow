@@ -20,6 +20,31 @@ const round = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 10
 const OFF_SHELF_STATUSES = Object.freeze(["sold", "used", "removed"]);
 
 /**
+ * One definition of "low stock", for the count AND for the list.
+ *
+ * There were two, and they disagreed. `summarize()` skips a customer's own item
+ * before it counts anything, and skips incoming stock before it reaches the
+ * threshold test; `lowStockItems()` did neither. So a customer's own item at one
+ * of five was in the reorder list, absent from the count printed beside it, and
+ * driving the `stock_low` attention item too — a suggestion to reorder
+ * something that is not the workshop's to reorder. Two implementations of one
+ * rule always end like this, so there is one.
+ */
+function isLowStock(item) {
+  const data = item || {};
+  const status = String(data.status || "available");
+  if (status === "archived") return false;
+  if (String(data.ownership) === "customer") return false;
+  if (OFF_SHELF_STATUSES.includes(status)) return false;
+  if (status === "incoming") return false;
+  // A one-off has no threshold to be below: there is one of it, or there is not.
+  if (String(data.trackingType) === "unique") return false;
+  const lowAt = Number(data.lowStockAt) || 0;
+  if (lowAt <= 0) return false;
+  return (Number((data.quantity || {}).onHand) || 0) <= lowAt;
+}
+
+/**
  * @param items  raw inventory item documents (with `id`)
  * @returns the same shape `getInventorySummary` returned, minus `monthlyChange`
  *          (which needs the movement ledger and therefore a read).
@@ -30,13 +55,19 @@ function summarize(items = []) {
     quantityCount: 0, quantityValue: 0,
     reservedValue: 0, reservedCount: 0,
     incomingCount: 0, incomingValue: 0,
+    // Rows that are not stock any more: archived, sold, used, removed. Counted
+    // rather than merely skipped, so every row the caller passed in lands in
+    // exactly one population and the shelf adds up.
+    offShelfCount: 0,
     lowStockCount: 0, customerOwnedCount: 0
   };
 
   for (const item of Array.isArray(items) ? items : []) {
     const data = item || {};
     const status = String(data.status || "available");
-    if (status === "archived") continue;
+    // Archived is tested first, as it always was: an archived row is out of
+    // every population, the customer's-own one included.
+    if (status === "archived") { summary.offShelfCount += 1; continue; }
     if (String(data.ownership) === "customer") { summary.customerOwnedCount += 1; continue; }
 
     const value = Number(data.valuationCost) || 0;
@@ -44,7 +75,7 @@ function summarize(items = []) {
     const onHand = isUnique ? 1 : Number((data.quantity || {}).onHand) || 0;
     const lineValue = isUnique ? value : round(value * onHand);
 
-    if (OFF_SHELF_STATUSES.includes(status)) continue;
+    if (OFF_SHELF_STATUSES.includes(status)) { summary.offShelfCount += 1; continue; }
 
     if (status === "incoming") {
       summary.incomingCount += 1;
@@ -59,8 +90,7 @@ function summarize(items = []) {
     } else {
       summary.quantityCount += 1;
       summary.quantityValue = round(summary.quantityValue + lineValue);
-      const lowAt = Number(data.lowStockAt) || 0;
-      if (lowAt > 0 && onHand <= lowAt) summary.lowStockCount += 1;
+      if (isLowStock(data)) summary.lowStockCount += 1;
     }
     if (status === "reserved" || status === "partiallyReserved") {
       summary.reservedCount += 1;
@@ -75,16 +105,7 @@ function summarize(items = []) {
 /** The items that are at or below their own low-stock threshold, worst first. */
 function lowStockItems(items = [], { limit = 25 } = {}) {
   return (Array.isArray(items) ? items : [])
-    .filter((item) => {
-      const data = item || {};
-      if (String(data.status || "") === "archived") return false;
-      if (OFF_SHELF_STATUSES.includes(String(data.status || ""))) return false;
-      if (String(data.trackingType) === "unique") return false;
-      const lowAt = Number(data.lowStockAt) || 0;
-      if (lowAt <= 0) return false;
-      const onHand = Number((data.quantity || {}).onHand) || 0;
-      return onHand <= lowAt;
-    })
+    .filter(isLowStock)
     .map((item) => ({
       itemId: String(item.id || ""),
       name: String(item.name || ""),
@@ -115,4 +136,4 @@ function reservedItems(items = [], { limit = 25 } = {}) {
     .slice(0, limit);
 }
 
-module.exports = { summarize, lowStockItems, reservedItems, OFF_SHELF_STATUSES };
+module.exports = { summarize, isLowStock, lowStockItems, reservedItems, OFF_SHELF_STATUSES };
