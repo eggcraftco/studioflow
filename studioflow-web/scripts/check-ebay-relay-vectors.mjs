@@ -145,6 +145,10 @@ try {
   const ticketLib = webRequire(path.join(outDir, "lib", "studioflow", "ebayTicket.js"));
   // The admission helpers both routes share, compiled the same way.
   const admission = webRequire(path.join(outDir, "lib", "studioflow", "ebayAdmission.js"));
+  // The callback route's spent-ticket memory, and it is the SAME module instance
+  // the compiled route holds — so clearing it here really clears the route's, and
+  // counting it really counts the route's.
+  const spend = webRequire(path.join(outDir, "lib", "studioflow", "ebayTicketSpend.js"));
   // The builtin the COMPILED route calls through (`node_crypto_1.randomBytes`),
   // so section 2b can freeze the rid the route mints. Patched around one call
   // and restored in a `finally`; nothing else in this file reads it.
@@ -358,6 +362,45 @@ try {
       `${flowD.nonceCookie}; ${flow.ebayTicketCookieName(flowD.begun.state)}=${stale}`);
   }
 
+  // 5 — the replayed ticket, which this file had no case for because the edge
+  // used to have nothing to say about it. The first landing signs the connect
+  // envelope; the SAME pair presented again is spent, and what goes out is a
+  // disposal naming nothing. The two Firestore documents still answer a replay
+  // authoritatively — this is about the request, which nothing here bounded: the
+  // connect path has no admission counter, so one captured cookie pair bought an
+  // unlimited number of signatures we minted and invocations we paid for.
+  const replayFlow = await browser();
+  const firstLanding = await relay(callbackUrl(replayFlow.begun.state), replayFlow.cookie, connected);
+  check("ticket: the first landing of a flow signs the CONNECT envelope, naming its own state",
+    firstLanding.sent !== null && bodyOf(firstLanding.sent).op === undefined
+    && bodyOf(firstLanding.sent).state === replayFlow.begun.state,
+    firstLanding.sent ? firstLanding.sent.init.body.slice(0, 80) : "no request was made");
+  const replayed = await relay(callbackUrl(replayFlow.begun.state), replayFlow.cookie, browserAnswer);
+  check("ticket: the same pair presented AGAIN signs no second connect envelope — the ticket is spent at the edge, before anything is signed",
+    replayed.sent !== null && bodyOf(replayed.sent).op === "dispose"
+    && bodyOf(replayed.sent).state === undefined && bodyOf(replayed.sent).nonce === undefined
+    && !String(replayed.sent.init.body).includes(replayFlow.begun.state),
+    replayed.sent ? replayed.sent.init.body.slice(0, 80) : "no request was made");
+  check("…and the seller reads the sentence a replay always produced: the spend changes what is signed, not what is said",
+    replayed.location === "https://nivadesk.app/settings?section=ebay&ebay=error&reason=state"
+    && clearsBoth(replayed, replayFlow.begun.state),
+    `${replayed.location} ${JSON.stringify(replayed.cookies)}`);
+
+  // The bound the spend carries, exercised rather than asserted: filling it past
+  // the cap forgets the tickets closest to expiry and keeps the one with the most
+  // life left, so the eviction cannot be used to un-spend a live ticket cheaply.
+  const spendAt = Date.now();
+  spend.forgetSpentTickets();
+  check("ticket spend: the first spend of a jti is allowed and the second is not",
+    spend.spendTicket("a-live-ticket", spendAt + 15 * 60 * 1000, spendAt) === true
+    && spend.spendTicket("a-live-ticket", spendAt + 15 * 60 * 1000, spendAt) === false);
+  for (let i = 0; i < 5000; i += 1) spend.spendTicket(`filler-${i}`, spendAt + 60 * 1000 + i, spendAt);
+  check("ticket spend: the map stays inside its cap, and the entry with the most life left is the last thing forgotten",
+    spend.spentTicketCount() <= spend.MAX_SPENT_TICKETS
+    && spend.spendTicket("a-live-ticket", spendAt + 15 * 60 * 1000, spendAt) === false,
+    `${spend.spentTicketCount()} entries held`);
+  spend.forgetSpentTickets();
+
   // 6 — the phished seller: no cookie at all.
   const flowE = await browser();
   const phished = await refusedLanding("ticket: with no cookie the route signs only a disposal", flowE.begun.state, "");
@@ -557,6 +600,12 @@ try {
   const vectorUrl = `https://nivadesk.app/ebay/callback?code=${encodeURIComponent(vectors.flow.code)}&state=${encodeURIComponent(vectors.flow.state)}`;
 
   for (const vector of vectors.relayVectors) {
+    // The fixture holds ONE ticket and five of the six vectors present it, which
+    // is five landings on a single `jti`. The route would spend it on the first
+    // and answer the rest with a disposal — correctly, and that rule is measured
+    // as case 5 above. These vectors measure the BYTES a connect landing signs,
+    // so each starts from a process that has not seen this ticket.
+    spend.forgetSpentTickets();
     // A dispose vector is produced by a browser holding nothing; a connect
     // vector by one holding the fixture's own ticket and nonce.
     const produced = await relayFrozen(

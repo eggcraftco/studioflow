@@ -20,7 +20,7 @@ From `ebay-connector`, the web half only:
 |---|---|
 | `app/ebay/callback/route.ts` | The accepted URL. Verifies the browser-binding **ticket** (§5.5) and, only then, sends `code`, `state` and the cookie nonce to the Cloud Function in a **signed POST body** — never a URL (design §5.4). A browser that holds no ticket gets the strictly weaker **dispose** envelope, which names no state. It forwards no eBay parameter, refuses anything that is not a callback, and turns the function's JSON answer into the seller-facing redirect |
 | `app/ebay/ticket/route.ts` | **New with §5.5, and it ships in the same deploy or nothing works.** The sealing route: the client hands it the ticket `beginEbayConnect` returned, it verifies it and answers the one `Set-Cookie` that seals it `HttpOnly`. Client JavaScript cannot set an `HttpOnly` cookie, so there is no other way to write that half; and the callers refuse to send the seller to eBay when it answers anything but 204 |
-| `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts` | The two cookie NAMES (derived identically by three parties) and the ticket verifier. `ebayTicket.ts` is server-only — it reads `node:crypto` and the relay key |
+| `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts`, `lib/studioflow/ebayTicketSpend.ts` | The two cookie NAMES (derived identically by three parties), the ticket verifier, and the callback edge's spent-ticket memory — the last is why a ticket signs a connect envelope once and a disposal every time after. `ebayTicket.ts` and `ebayTicketSpend.ts` are server-only |
 | `app/ebay/start/page.tsx`, `EbayStartContent.tsx` | The native hand-off: a signed-in browser claims the state, seals the ticket, sets the nonce cookie, redirects to eBay |
 | `app/settings/EbayIntegrationSection.tsx` and the registry, language and card changes | The eBay screen and the grid card |
 
@@ -91,8 +91,9 @@ and `firebase.json`, so **a change to `app/ebay/callback/route.ts` fired no work
 most likely to change was covered by nothing automatic, and the failure it would cause is silent and
 production-only (the canonical string drifting between the two trees, seen as an opaque 401 →
 `unavailable` on every seller's connect). The list now carries `studioflow-web/app/ebay/**`,
-`lib/studioflow/ebay.ts`, `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts`, both scripts and
-`studioflow-web/package.json`. **The `SKIP` line that used to print on every run is gone**, and it cannot
+`lib/studioflow/ebay.ts`, `lib/studioflow/ebayFlow.ts`, `lib/studioflow/ebayTicket.ts`,
+`lib/studioflow/ebayAdmission.ts`, `lib/studioflow/ebayTicketSpend.ts`, `lib/studioflow/ebayScreenRules.ts`,
+both scripts and `studioflow-web/package.json`. **The `SKIP` line that used to print on every run is gone**, and it cannot
 come back: a missing fixture is now one `FAIL` and a non-zero exit before the script compiles anything, and
 a source pin in `ebay-connect.test.js` asserts the relay script's code contains no `SKIP` and that the
 vector cases contain no `skip`, no `todo` and no early `return`. The canonical strings are recorded in the

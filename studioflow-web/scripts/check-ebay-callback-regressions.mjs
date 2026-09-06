@@ -417,7 +417,7 @@ try {
   });
 
   // ---- EBAY-REG-05 ---------------------------------------------------------
-  await reg("EBAY-REG-05", "a replayed ticket completes nothing a second time — the burn, not the ticket, is what stops it", async () => {
+  await reg("EBAY-REG-05", "a replayed ticket is spent at the edge: no second connect envelope is signed, and the state is never read again", async () => {
     const w = world();
     const seller = await browser(w);
     const first = await land(w, callbackUrl(seller.begun.state, CODE), seller.cookie);
@@ -431,33 +431,48 @@ try {
     const usedAtBefore = seller.row().usedAt;
     assert.equal(seller.row().used, true);
 
-    // The browser kept both cookies — or someone else copied them. The edge holds
-    // no replay memory by design, and this pins that it does not pretend to: the
-    // ticket verifies again and a CONNECT envelope is signed again.
+    // The browser kept both cookies — or someone else copied them. The edge
+    // spends a ticket's `jti` before it signs anything, so the second
+    // presentation signs the DISPOSE envelope: it names no state, the function
+    // never reaches the state document, and the seller reads the same sentence
+    // the burn used to produce.
     //
-    // A TRUE replay is the same pair AND the same code, and that one is refused
-    // by the registry rather than by the burn — proven separately below, because
-    // against a burned state the two controls are indistinguishable by answer.
-    // The second code here is the harder case for the edge and the one that
-    // isolates the burn.
+    // WITHOUT THE SPEND this landing signed a CONNECT envelope naming the state,
+    // every time, on the one path with no admission counter — a captured cookie
+    // pair bought an unbounded number of signatures we minted, invocations we
+    // paid for and Firestore reads. Delete the `spendTicket` term from step 6 of
+    // `app/ebay/callback/route.ts` and the three assertions below go red on
+    // `op`, on the state key, and on the state document being read.
+    //
+    // The second code is deliberate: a TRUE replay is the same pair AND the same
+    // code, and against a burned state the burn and the registry are
+    // indistinguishable by answer. A fresh code isolates what the EDGE did.
     const REPLAY_CODE = "AUTHCODE-second-code-from-the-same-attacker";
     const replay = await land(w, callbackUrl(seller.begun.state, REPLAY_CODE), seller.cookie);
-    assert.equal(replay.body.op, undefined, "a verified ticket signs the connect envelope, replay or not");
-    assert.equal(replay.body.state, seller.begun.state);
-    // …and it reaches exactly as far as the single-use transaction.
-    assert.equal(replay.delivered.payload.reason, "state", `the replay answered ${JSON.stringify(replay.delivered.payload)}`);
-    assert.equal(replay.location, `${SETTINGS}&ebay=error&reason=state`);
+    assert.equal(replay.body.op, "dispose", `the replay signed ${JSON.stringify(replay.body).slice(0, 120)}`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(replay.body, "state"), "the replayed landing signed a body naming a state");
+    assert.ok(!Object.prototype.hasOwnProperty.call(replay.body, "nonce"), "the replayed landing signed a body naming a nonce");
+    assert.ok(!String(replay.sent.init.body).includes(seller.begun.state), "the state reached the signed bytes anyway");
+    // The seller-facing answer is the one a replay always produced. A fix to what
+    // we SIGN must not change what a seller reads, and this is where that is held.
+    assert.equal(replay.location, `${SETTINGS}&ebay=error&reason=state`, String(replay.location));
     // The browser is left holding nothing. A ticket that verified means this flow
     // has ended however it ended, so the pair goes — a replay does not leave a
     // live-looking binding behind for a flow that is over.
     assert.ok(clearsBoth(replay, seller.begun.state), `the replay left the pair behind — ${JSON.stringify(replay.cookies)}`);
-    assert.equal(w.ledger.timesPresented(REPLAY_CODE), 0, "the replayed landing presented a second code to eBay");
+    // The disposal is worth MORE than the connect envelope was here: the second
+    // code is registered and spent at eBay, where the connect path left it alive
+    // — the function's `state` verdict deliberately does not redeem, so that a
+    // signed caller cannot drive outbound token requests at will.
+    assert.equal(w.ledger.timesPresented(REPLAY_CODE), 1, "the replayed landing left its second code alive at eBay");
+    assert.ok(w.store.read(`ebayPresentedCodes/${createHash("sha256").update(REPLAY_CODE).digest("hex")}`), "…and unregistered here");
     assert.equal(w.store.paths("ebayConnections/").length, connections.length, "the replay wrote a document");
     assert.equal(JSON.stringify(w.store.read(connectionPath)), connectionBefore, "the connection row changed under a replay");
     assert.equal(seller.row().usedAt, usedAtBefore, "the burn was re-stamped");
 
-    // The sealing route has no memory either, and that is not a gap: what a
-    // second cookie is worth is decided by the state, which is already spent.
+    // The sealing route has no memory, and that is not a gap: it hands back a
+    // cookie holding a ticket the callback edge has already spent, so what a
+    // second cookie is worth is decided where it is presented.
     if (ticketRoute) {
       const resealed = await seal(seller.begun.ticket);
       assert.equal(resealed.status, 204, "the ticket is a bearer value inside its window; nothing here claims otherwise");

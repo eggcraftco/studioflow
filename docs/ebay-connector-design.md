@@ -51,7 +51,7 @@ truthful capability map (§4.1), SDK-shaped signature verification and the order
 | Gate | Three layers: secrets marker file, runtime env switch, Firestore connector flag (`appConfig/commerce.connectors`) — **none of which gates account-deletion compliance** (§2) | Deploy activates nothing; rollback without redeploy; per-connection pause; compliance is not a feature |
 | Queue | `ebayEventWorker` (its own Cloud Tasks queue, created by the deploy under the function's own name, own service account); `retryCommerceEvent` re-enqueues eBay rows there instead of processing inline | §72 "payload goes to a queue"; §3.2 secrets isolation |
 | Scopes | `sell.fulfillment.readonly` + `commerce.identity.readonly` — **nothing else** | Read-only half, `readOnly: true`, consent copy "NivaDesk will read your orders". Square precedent SQ-AUTH-011 (read-first). When shipment-write ships, the card's existing *Reconnect required* event carries the new scope; a leaked refresh token from this half cannot write |
-| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc **and a MAC'd ticket beside it** (§5.5); the web stores the nonce in `__Host-nv_ebay_nonce_<flowTag>` and has `POST /ebay/ticket` seal the ticket into `__Host-nv_ebay_ticket_<flowTag>`, both `Path=/`; the callback route **verifies the ticket itself** — shape, MAC, window, this flow's state, this flow's nonce — and only then copies `code`, `state` and the nonce into a **signed POST body**, never a URL (§5.4). A landing it cannot verify posts a **dispose** envelope instead, which can name no state; an absent cookie is **no longer forwarded as `nonce: ""`** (that was the §5.4 rule, superseded). Either envelope **registers the code** in `ebayPresentedCodes/{sha256hex(code)}`, and only the invocation whose `create()` won may exchange it. The function still refuses a connect callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace and sends a signed-out visitor to sign in **and back** (§5, §5.2) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
+| OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc **and a MAC'd ticket beside it** (§5.5); the web stores the nonce in `__Host-nv_ebay_nonce_<flowTag>` and has `POST /ebay/ticket` seal the ticket into `__Host-nv_ebay_ticket_<flowTag>`, both `Path=/`; the callback route **verifies the ticket itself** — shape, MAC, window, this flow's state, this flow's nonce — **spends its `jti`** so that only the first presentation of a ticket is ever signed for, and only then copies `code`, `state` and the nonce into a **signed POST body**, never a URL (§5.4). A landing it cannot verify posts a **dispose** envelope instead, which can name no state; an absent cookie is **no longer forwarded as `nonce: ""`** (that was the §5.4 rule, superseded). Either envelope **registers the code** in `ebayPresentedCodes/{sha256hex(code)}`, and only the invocation whose `create()` won may exchange it. The function still refuses a connect callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace and sends a signed-out visitor to sign in **and back** (§5, §5.2) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
 | Preview / Sync now | `previewEbayImport` owner-only with the `syncLockUntilMs` single-flight; `syncEbayNow` member but charged to the connection's daily share (§7.4) | Square's preview is owner-only (`squareConnector.js` 832–833); an app-wide cap alone is a cross-tenant DoS |
 | Retention | `privacy/retention.js` eBay `{ days: 90, reason: "ebay_address_withheld_after_90d" }` — restricted doc deleted 90 days after delivery by `sweepMarketplacePii` (§8.4) | eBay itself stops returning `addressLine1/2` for orders older than 90 days (§1); keeping them longer than eBay does is not minimisation |
 
@@ -1724,7 +1724,7 @@ nv1.<state>.<nonceTag>.<expMs>.<jti>.<mac>
 | `state` | the state verbatim | `/^[A-Za-z0-9_-]{20,120}$/` — §4.5's own alphabet, which contains no `.`, which is why a dot-joined encoding is unambiguous. |
 | `nonceTag` | 43 chars | `base64url(HMAC-SHA256(ticketKey, "nonce." + nonce))`, 32 bytes, unpadded. **Not** `sha256hex(nonce)`: that value is compared server-side against `nonceHash`, and a ticket must not carry anything the state document compares. Keyed, so a ticket holder cannot even confirm a guessed nonce. |
 | `expMs` | 13 digits | Absolute expiry, unix milliseconds. **Always the state document's own `expiresAt`**, never `now + 600000`: for a native claim the state was minted earlier, and a ticket must never be the longer-lived half of the pair. |
-| `jti` | 22 chars | `base64url(randomBytes(16))`. Read by nothing today. It exists so that a ticket is not a deterministic function of values an attacker may know, and so that edge-side single-use storage — if the owner ever buys it (see *Single use*) — already has a unique, MAC-covered handle to key on. |
+| `jti` | 22 chars | `base64url(randomBytes(16))`. **Read by the callback edge's spend** (see *Single use*), which keys on it; it is MAC-covered, so the handle cannot be chosen or reused by the presenter. It also keeps a ticket from being a deterministic function of values an attacker may know. |
 | `mac` | 43 chars | `base64url(HMAC-SHA256(ticketKey, payload))`, where `payload` is the exact ASCII prefix `nv1.<state>.<nonceTag>.<expMs>.<jti>` — including `nv1.`, excluding the final `.`. |
 
 Full shape, applied before anything is split, after a cheap length cap of 400 characters:
@@ -2036,22 +2036,34 @@ ticket and connects. Abandoned flows leave at most a handful of cookies for at m
 
 Three answers, and the second is the only authoritative one:
 
-1. **At the edge, cooperatively.** This flow's two cookies are cleared on a landing whose ticket
-   **verified** — and on no landing where it failed. That rule is stronger than the `CONSUMED` set it
-   replaces and the edge can now decide it alone, without reading the function's answer: a verified ticket
-   means the flow this browser began has ended, one way or another; a failed ticket means these cookies (if
-   any) belong to some other flow, and clearing them would be the exact nuisance §5.4 fixed. It is
-   cooperative, not a control: an honest browser holds no reusable ticket afterwards, and a party who kept a
-   copy of the cookie value is not an honest browser.
+1. **At the edge, and it is no longer only cooperative.** This flow's two cookies are cleared on a landing
+   whose ticket **verified** — and on no landing where it failed. That rule is stronger than the `CONSUMED`
+   set it replaces and the edge can decide it alone, without reading the function's answer: a verified
+   ticket means the flow this browser began has ended, one way or another; a failed ticket means these
+   cookies (if any) belong to some other flow, and clearing them would be the exact nuisance §5.4 fixed.
+   Clearing on its own is cooperative — a party who kept a copy of the cookie value is not an honest
+   browser and ignores it — so the edge now also **spends the ticket's `jti` before it signs anything**
+   (`lib/studioflow/ebayTicketSpend.ts`): the first presentation signs the connect envelope, and every later
+   one takes step 7 instead. **This is a cost control, not the replay defence**, and the difference matters:
+   the memory is per process, so a replay that lands on a second instance is signed and then refused by
+   point 2 exactly as it was before. What it removes is that a captured cookie pair could be landed without
+   limit — the connect path is the one path with no admission counter, so each landing was a signature we
+   minted, an invocation we paid for and a Firestore read the function did, and the two documents below
+   refused the *outcome* while nothing refused the *request*.
 2. **Authoritatively, twice, in Firestore.** `ebayConnectStates/{state}.used` inside the same transaction
    that has burned the state since §4.5 — unchanged, in the function, where the credential is — and
    `ebayPresentedCodes/{sha256hex(code)}`, which is the one that matters when a *code* rather than a *state*
    is replayed. A ticket names exactly one state and a state is consumable once, so a replayed ticket can
    only ever address a burned state; a code is presentable once, so a replayed code cannot reach an exchange
    at all. This section does not pretend the edge adds to either.
-3. **Deliberately nowhere else.** Edge-side single-use storage would need a Firestore or KV credential on
-   Hostinger — residual 4's owner decision — and would buy nothing the two documents above do not already
-   buy. `jti` is minted and MAC-covered so that decision stays cheap if it is ever taken.
+3. **Deliberately nowhere durable.** This is the sentence that was wrong, and the correction is worth
+   stating rather than quietly replacing: it read "deliberately nowhere else — edge-side single-use storage
+   would need a Firestore or KV credential on Hostinger, and would buy nothing the two documents above do
+   not already buy". The credential is needed only for storage that **outlives the process**; the Map in
+   point 1 needs none. And the second clause was false in the one dimension the documents do not cover, the
+   request itself. A durable, shared edge store — Firestore or KV, residual 4's owner decision — would close
+   the cross-instance gap point 1 names; it is still not bought, and until it is, that gap is answered by
+   the burn and the registry, which answer it correctly and always have.
 
 #### The edge verification, in order
 
@@ -2096,11 +2108,19 @@ new.
      `nonce: ""`, because there is now something at the edge that can tell the difference between "no
      cookie" and "the right cookie", and the case that used to justify forwarding is handled by step 7
      instead.
-6. **Verified.** Build the body from `ticket.state` and the nonce cookie — the two values step 5 just proved
-   agree — serialise once, sign, POST, obey the answer, and land. **This is §5.4's contract, unchanged, byte
-   for byte**: same URL, same headers, same canonical string, same 45-second abort, same `FUNCTION_REASONS`
-   vocabulary, same 8192-byte cap over the exact bytes. Clear this flow's two cookies on the landing.
-7. **Not verified.** One **disposal** POST (next subsection), then land `?ebay=error&reason=browser` — the
+6. **Verified, and unspent here.** `spendTicket(ticket.jti)` first, and it is the `&&` of the same
+   condition, so nothing below it runs for a ticket this process has already signed a connect envelope for:
+   no serialisation, no signature, no POST. Then build the body from `ticket.state` and the nonce cookie —
+   the two values step 5 just proved agree — serialise once, sign, POST, obey the answer, and land. **From
+   the spend onward this is §5.4's contract, unchanged, byte for byte**: same URL, same headers, same
+   canonical string, same 45-second abort, same `FUNCTION_REASONS` vocabulary, same 8192-byte cap over the
+   exact bytes. Clear this flow's two cookies on the landing.
+7. **Not verified — or verified and already spent.** One **disposal** POST (next subsection), then land. A
+   spent ticket lands `?ebay=error&reason=state`, which is the word a second landing on a consumed flow
+   already produced (it used to reach the function and come back with it), and clears this flow's pair under
+   step 6's rule; its class is counted as **`replay`**, the seventh word, which is not a verification
+   failure and is the one class an operator reads as a signal. Everything else lands
+   `?ebay=error&reason=browser` — the
    same word and the same translated sentence the function would have produced for the same condition, so
    **no new vocabulary and no new translation**. **Clear nothing.** The answer is identical for all six
    classes, so the ticket verifier is no more an oracle than the 401 wall is. The disposal POST is subject
@@ -2139,7 +2159,7 @@ new.
 | 2 | Ticket minted for a **different state** (MAC valid), hand-planted under this flow's name | 5e `state` | **no** | yes | yes | untouched | same |
 | 3 | Ticket carrying a **different nonce** (MAC valid, state matches) | 5f `nonce` | **no** | yes | yes | untouched | same |
 | 4 | Expired ticket | 5d `expired` | **no** | yes | yes | untouched | same |
-| 5 | Replayed ticket — the same pair presented twice | passes 5 **again**; the edge cannot know | yes | no | **already registered → refused** | cleared | "The eBay sign-in link has expired or was already used. Start again." (`state`. With the SAME code — a true replay — that answer comes from the registry, before the state is read, and `EBAY-REG-05` proves which control answered by presenting the registered code against a second, still-live flow whose state is unburned afterwards. A replay carrying a *second* code is fresh to the registry and is stopped one line later by the burn) |
+| 5 | Replayed ticket — the same pair presented twice | **step 6, the spend**: the ticket verifies again and the `jti` is already held | **no** | yes | yes | cleared | "The eBay sign-in link has expired or was already used. Start again." (`state`, the word this case always produced — the spend changes what is signed, not what the seller reads. The state document is not read a second time and nothing names it. `EBAY-REG-05` presents a *second* code on the replay, which the connect envelope used to carry and leave alive at eBay; as a disposal it is registered and spent instead. The registry is still what answers a true replay on another instance, and `EBAY-REG-05` isolates it by presenting a registered code against a second, still-live flow whose state is unburned afterwards) |
 | 6 | No cookie at all — **the phished seller** | 5a `no-cookie` | **no** | **yes** | **yes — this is the case the registry exists for** | untouched | "Finish connecting eBay in the same browser you started from." |
 | 7 | Outsider using the route as a signing oracle: `?code=x&state=<shaped>` | 5a `no-cookie` | **no** | yes | yes | untouched | (not a seller) |
 | 8 | An observed code presented with the **attacker's own fresh state, nonce and ticket** | nothing at the edge fails — the attacker is a workspace owner and holds a valid ticket for their own flow | yes | no | **already registered by case 6 → refused** | cleared | `reason=state`; no exchange, no identity call, no connection. If the disposal also succeeded, the code is dead at eBay as well |
@@ -2368,6 +2388,10 @@ which is the correct trade. The runbook lines that have to exist because of this
 >   Since the cookie name carries the flow tag and `/ebay/ticket` derives that name from the ticket's own
 >   MAC-covered state, our own code cannot produce this. It means a hand-planted cookie or a bug — never a
 >   seller who pressed Connect twice, which the per-flow names handle without reaching this class.
+> - **`replay`** is not a verification failure: the ticket verified and this process had already spent it.
+>   One is a seller pressing back, or refreshing the landing page. A sustained count is somebody landing a
+>   copied cookie pair over and over — which now costs them a bounded disposal rather than a connect
+>   envelope, so it is a signal to read and not an incident to stop.
 > - **A `browser` verdict from the function after a ticket that verified at the edge** means a bug or a
 >   tampered state row. That reading depends on the `claimEbayConnectState` origin guard; without it a
 >   claimed web-origin state produced the same symptom benignly, which is what the first revision of this
@@ -2384,7 +2408,7 @@ disposal signal. Both are fixed by separating the **example** from the **count**
 **Web side.** The throttled per-request line stays, because an operator tracing one seller needs a rid:
 
 ```
-ebay callback ticket refused rid=<rid> class=<no-cookie|shape|mac|expired|state|nonce>     (throttled: once a minute per class)
+ebay callback ticket refused rid=<rid> class=<no-cookie|shape|mac|expired|state|nonce|replay>   (throttled: once a minute per class)
 ebay callback dispose rid=<rid> status=<n>                                                 (non-200 only, like the relay line)
 ```
 
@@ -2392,7 +2416,7 @@ And two **unthrottled aggregates**, emitted once a minute per process when any c
 counts and nothing else — no rid, no address, no value from any request:
 
 ```
-ebay callback ticket refused window=<ms> no-cookie=<n> shape=<n> mac=<n> expired=<n> state=<n> nonce=<n>
+ebay callback ticket refused window=<ms> no-cookie=<n> shape=<n> mac=<n> expired=<n> state=<n> nonce=<n> replay=<n>
 ebay ticket route window=<ms> sealed=<n> refused=<n> throttled=<n> blocked=<n>
 ```
 
@@ -2545,7 +2569,7 @@ one browser do not collide`, `ticket: a cross-site plant sets no cookie`), which
 | 2 | `ticket: one minted for another state signs nothing` | relay script | Valid MAC, `ticket.state ≠ query.state`, planted under this flow's name → class `state`, no connect POST; the ticket's own state is never named in any body |
 | 3 | `ticket: one minted for another nonce signs nothing` | relay script | Valid MAC, states equal, nonce cookie from a different flow → class `nonce`, no connect POST. **The literal form of criterion 4** |
 | 4 | `ticket: an expired one signs nothing` | relay script | `expMs` one second in the past → class `expired`; and `expMs` 20 minutes ahead → class `expired` too (the upper bound is real) |
-| 5 | `ticket: a replay is refused by the registry, not by luck` | relay script + `ebay-connect.test.js` | First presentation connects; the identical pair presented again passes the edge, posts, and the function answers `reason=state` **from `claimCode`**, with the state document never read on the second call, `exchangeCode` called exactly once in total and the connection row unchanged |
+| 5 | `ticket: the same pair presented AGAIN signs no second connect envelope` | relay script + `EBAY-REG-05` + `ebay-connect.test.js` | First presentation connects; the identical pair presented again is **spent at the edge**, so the body carries `op:"dispose"`, no `state` key, no `nonce` key and the flow's state nowhere in its bytes; the seller still reads `reason=state` and the pair is still cleared; the state document is not read or re-burned and the connection row is unchanged; the replay's second code is registered and spent rather than left alive. The spend's own bound is exercised: 5,000 entries stay inside the cap and the ticket with the most life left is still refused a second spend. The registry half — a code refused by `claimCode` before any state is read — is `ebay-connect.test.js`'s and `EBAY-REG-05`'s tail |
 | 6 | `ticket: with no cookie the route signs only a disposal` | relay script | No cookies → no connect POST; exactly one POST, whose body has `op:"dispose"`, **no `state` key and no `nonce` key**; landing `browser`; both cookies untouched |
 | 7 | `ticket: the route is not a signing oracle` | relay script + `ebay-connect.test.js` | Anonymous `?code=x&state=<shaped>`: the produced body carries no state; handed to the real function under the harness key, the fake Firestore records **exactly one operation** — the `create()` at `ebayPresentedCodes/<64 hex>` — and no state document is read or written |
 | 8 | `ticket: an observed code is dead when the attacker presents it` | `ebay-connect.test.js` | Victim's landing (case 6) → the code is registered. Then a fresh state, nonce and ticket of the attacker's own with the same code → `reason=state`, `exchangeCode` **not called**, no identity call, no connection row. **Three guard cases:** with the registry disabled the same input answers `connected`; with the disposal bucket empty the answer is still `state`; with `exchangeCode` rejecting every disposal (a wrong RuName) the answer is still `state` |

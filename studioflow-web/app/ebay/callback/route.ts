@@ -3,6 +3,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { ebayNonceCookieName, ebayTicketCookieName } from "../../../lib/studioflow/ebayFlow";
 import { bucketFor, clientAddress, takeToken, type Bucket } from "../../../lib/studioflow/ebayAdmission";
 import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure } from "../../../lib/studioflow/ebayTicket";
+import { spendTicket } from "../../../lib/studioflow/ebayTicketSpend";
 
 // eBay's RuName holds one "accepted URL" per application, and the seller's
 // browser lands on it after consent. It is on our own domain for the same
@@ -35,9 +36,11 @@ import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure } from "../.
 // credential and no round trip, plus a strictly weaker second envelope for the
 // case where that binding is absent:
 //
-//   * a verified ticket posts §5.4's `connect` envelope, unchanged byte for byte;
-//   * anything else posts a `dispose` envelope, which has NO state key and no
-//     nonce key, and which the function refuses if it carries either.
+//   * a verified ticket, THE FIRST TIME THIS PROCESS IS SHOWN IT, posts §5.4's
+//     `connect` envelope, unchanged byte for byte;
+//   * anything else — an unverifiable ticket, or one already spent here — posts
+//     a `dispose` envelope, which has NO state key and no nonce key, and which
+//     the function refuses if it carries either.
 //
 // A public caller can therefore still make us sign — that cost is real and is
 // not waved away — but what they can make us sign no longer names anything they
@@ -130,22 +133,30 @@ function disposeAdmitted(address: string, nowMs: number): boolean {
 // measures minutes with at least one event, so ten mis-cookied sellers and a
 // campaign of thousands would have produced the same single line — which is
 // exactly the difference an operator needs to see. Neither carries a value: the
-// class list is a closed six-word set, and the aggregate is numbers only.
-const failureCounts: Record<TicketFailure, number> = { "no-cookie": 0, shape: 0, mac: 0, expired: 0, state: 0, nonce: 0 };
+// class list is a closed SEVEN-word set, and the aggregate is numbers only.
+//
+// `replay` is the seventh and it is not a ticket failure: the ticket verified
+// and this process had already spent it (step 6). It is counted beside the six
+// because it takes the same exit and because it is the one class an operator
+// reads as a signal rather than as noise — a seller's own double-press produces
+// one, and a stream of them is somebody landing a copied cookie pair over and
+// over.
+type Refusal = TicketFailure | "replay";
+const refusalCounts: Record<Refusal, number> = { "no-cookie": 0, shape: 0, mac: 0, expired: 0, state: 0, nonce: 0, replay: 0 };
 let countsFromMs = 0;
-const saidAtMs = new Map<TicketFailure, number>();
+const saidAtMs = new Map<Refusal, number>();
 
-function countFailure(failure: TicketFailure, rid: string, nowMs: number) {
-  failureCounts[failure] += 1;
-  if (nowMs - (saidAtMs.get(failure) ?? -Infinity) >= OPS_LOG_EVERY_MS) {
-    saidAtMs.set(failure, nowMs);
-    console.warn(`ebay callback ticket refused rid=${rid} class=${failure}`);
+function countRefusal(refusal: Refusal, rid: string, nowMs: number) {
+  refusalCounts[refusal] += 1;
+  if (nowMs - (saidAtMs.get(refusal) ?? -Infinity) >= OPS_LOG_EVERY_MS) {
+    saidAtMs.set(refusal, nowMs);
+    console.warn(`ebay callback ticket refused rid=${rid} class=${refusal}`);
   }
   if (countsFromMs === 0) { countsFromMs = nowMs; return; }
   const window = nowMs - countsFromMs;
   if (window < COUNTER_WINDOW_MS) return;
-  console.warn(`ebay callback ticket refused window=${window} no-cookie=${failureCounts["no-cookie"]} shape=${failureCounts.shape} mac=${failureCounts.mac} expired=${failureCounts.expired} state=${failureCounts.state} nonce=${failureCounts.nonce}`);
-  for (const word of Object.keys(failureCounts) as TicketFailure[]) failureCounts[word] = 0;
+  console.warn(`ebay callback ticket refused window=${window} no-cookie=${refusalCounts["no-cookie"]} shape=${refusalCounts.shape} mac=${refusalCounts.mac} expired=${refusalCounts.expired} state=${refusalCounts.state} nonce=${refusalCounts.nonce} replay=${refusalCounts.replay}`);
+  for (const word of Object.keys(refusalCounts) as Refusal[]) refusalCounts[word] = 0;
   countsFromMs = nowMs;
 }
 
@@ -323,10 +334,34 @@ export async function GET(request: NextRequest) {
   const nonce = nonceCookie.length > MAX_NONCE_LENGTH ? "" : nonceCookie;
   const ticket = verifyEbayTicketForFlow(ebayTicketKey(key), ticketCookie, state, nonce, nowMs);
 
-  // 6. Verified. §5.4's contract, unchanged: the body is built from the ticket's
-  // own state and the nonce cookie — the two values step 5 just proved agree —
-  // serialised once, signed over those exact bytes, and the answer obeyed.
-  if (ticket.ok) {
+  // 6. Verified — AND SPENT, here, before a byte is signed. §5.4's contract is
+  // otherwise unchanged: the body is built from the ticket's own state and the
+  // nonce cookie — the two values step 5 just proved agree — serialised once,
+  // signed over those exact bytes, and the answer obeyed.
+  //
+  // The spend is `&&`, so the order is the guarantee: a ticket this process has
+  // already signed a connect envelope for never reaches `JSON.stringify`, never
+  // reaches `post`, and never names a state again. Before it, a verified ticket
+  // signed a connect envelope on EVERY presentation and nothing at this tier was
+  // spent or counted — and this is the one path with no admission counter of its
+  // own, so a party holding one captured cookie pair could land it at will and
+  // each landing was a signature we minted, an invocation we paid for and a
+  // Firestore read the function did. The two documents that answer a replay
+  // authoritatively (the state's burn, the presented-code registry) still answer
+  // it; they refuse the OUTCOME and never refused the request.
+  //
+  // What the second presentation gets instead is step 7's disposal, which is
+  // bounded, names no state, and registers the code — so a replay carrying a
+  // second live code now kills that code as well, which the connect path did
+  // not: the function's `state` verdict deliberately does not redeem, to avoid
+  // becoming a way to drive outbound token requests to eBay at will.
+  //
+  // Honest about what it is: one process's memory (`ebayTicketSpend.ts` states
+  // the bound and the eviction rule), so a replay that lands on another instance
+  // is signed and then refused exactly as it was before. It is a cost control
+  // and the edge's own enforcement of the single use it already claimed
+  // cooperatively by clearing this flow's cookies; it is not the replay defence.
+  if (ticket.ok && spendTicket(ticket.jti, ticket.expMs, nowMs)) {
     const raw = JSON.stringify({ v: 1, rid, code, state: ticket.state, nonce });
     // The function's 8192-BYTE body cap, applied to the exact bytes about to be
     // sent. Without it the two shape checks disagree on units and a multi-byte
@@ -361,18 +396,17 @@ export async function GET(request: NextRequest) {
     return land("error", "unavailable", state);
   }
 
-  // 7. Not verified, and this is the whole of §5.5's promise: nothing signed
-  // here may name the state the caller asked about. The only thing that goes out
-  // is a disposal — "record this code and spend it at eBay" — and the seller
-  // gets the word the function would have produced for the same condition, so
-  // there is no new vocabulary and no new translation. COOKIES ARE CLEARED ON
-  // NOTHING: whatever this browser is holding belongs to some other flow.
+  // 7. Not verified — or verified and already spent above. Either way this is
+  // the whole of §5.5's promise: nothing signed here may name the state the
+  // caller asked about. The only thing that goes out is a disposal — "record
+  // this code and spend it at eBay" — and it is subject to a counter, which is
+  // exactly what the connect path above is not.
   //
   // An exhausted counter here is the one place a landing leaves eBay's code
   // UNREGISTERED as well as unspent, which is why the bound is a per-process one
   // sized well above genuine traffic rather than a per-address one an attacker
   // steps around. It is on deploy plan §4.2's list for that reason.
-  countFailure(ticket.failure, rid, nowMs);
+  if (ticket.ok) countRefusal("replay", rid, nowMs); else countRefusal(ticket.failure, rid, nowMs);
   const address = clientAddress(request.headers.get("x-forwarded-for"));
   const raw = JSON.stringify({ v: 1, op: "dispose", rid, code });
   // Over the cap there is nothing the function would accept, so the request is
@@ -381,5 +415,22 @@ export async function GET(request: NextRequest) {
     const sent = await post(raw, key);
     if (sent.status !== 200) console.error(`ebay callback dispose rid=${rid} status=${sent.status}`);
   }
+  // The two landings differ in what the seller is told, and only there.
+  //
+  // A SPENT TICKET keeps the answer the seller already got: a second landing on
+  // a consumed flow used to reach the function and come back `state` — "The eBay
+  // sign-in link has expired or was already used. Start again." — and it still
+  // says that, because it is true of a ticket this edge has already spent and
+  // because a fix to what we SIGN must not change what a seller reads. This
+  // flow's cookies go with it, under the same rule step 6 uses: a ticket that
+  // verified means this flow has ended, however it ended.
+  //
+  // ANYTHING ELSE gets `browser`, the word the function would have produced for
+  // the same condition — no new vocabulary, no new translation — and CLEARS
+  // NOTHING, because whatever this browser is holding belongs to some other flow.
+  // The answer is identical for all six failure classes, so the verifier is no
+  // more an oracle than the 401 wall is; the spend is not one of the six and
+  // tells a caller only what they did themselves.
+  if (ticket.ok) return land("error", "state", ticket.state);
   return land("error", "browser");
 }
