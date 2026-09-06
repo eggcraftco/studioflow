@@ -778,14 +778,19 @@ a double count. Fixed:
 - `sales.customerTotal` = Σ `customerTotal` is reported beside it, so "what buyers paid" is available and
   never confused with the studio's take.
 - A new `tax` block, on the overview and on each channel row: `{ vatRegistered, vatBase, vatDue,
-  platformCollected, needsReview: { count, orderIds ≤20 }, basis: "engine_v4" }`. `platformCollected` is
+  platformCollected, needsReview: { count, orderIds ≤20 }, basis: "engine_v4" }`, on both the overview
+  and the channel rows only when `entitlements.advancedFinanceEnabled` — the channel row is the same
+  figure by another door, and a plan gate that only guards the headline is not a gate. `platformCollected` is
   marketplace tax the platform remits itself — real money the buyer paid, never part of the merchant's
   gross, fees or VAT.
 - `needsReview.count > 0` raises warning `tax_needs_review`, and the renderer says which channel ("2 Etsy
   orders do not say who is responsible for the tax").
 - Attention detector `order_tax_unknown` (detector table below).
-- `search_commerce_orders` row `totals` gains `customerTotal`, `vatDue`, `platformCollectedTax`,
-  `taxResponsibility`, `taxNeedsReview`.
+- `search_commerce_orders` row `totals` gains `customerTotal`, and — on a plan with
+  `advancedFinanceEnabled` — `vatDue`, `platformCollectedTax`, `taxResponsibility`, `taxNeedsReview`.
+  Without it the row keeps what the order took, what is paid and what is left, and the answer carries
+  `plan_limited`: `get_order_financials` refuses the same workspace the same figures, and two reads of
+  one workspace must not disagree about what its plan includes.
 
 **Fees are never added twice.** `fees.known` (order-level `platformFee` where `platformFeeKnown` — Square
 today) and `settlements.<provider>.fee` (the payout's own `totals.fee`) are the same Square money seen at
@@ -1012,8 +1017,8 @@ Output row (every field separate, §33.6):
   platformStatus, platformStatusSource,   // provider's word, or null / "none"
   paymentStatus, fulfillmentStatus,
   workflow: { status, designStatus, stage, isDispatched, isDelivered, dueDate },   // NivaDesk's word
-  totals: { grandTotal, paid, remaining, refunded, customerTotal, vatDue,
-            platformCollectedTax, taxResponsibility, taxNeedsReview, currency },   // only with Financial permission
+  totals: { grandTotal, paid, remaining, refunded, customerTotal, currency,      // only with Financial permission
+            vatDue, platformCollectedTax, taxResponsibility, taxNeedsReview },    // and only on advancedFinanceEnabled
   customer: { name, email } | { restricted: true, reason: "provider_pii_policy" },
   needsAttention: { reviewRequired, reasons: [] },
   lastSyncAt, freshness: { state } }

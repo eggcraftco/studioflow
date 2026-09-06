@@ -129,6 +129,53 @@ check("a basic plan gets a smaller answer, and is told so", () => {
   assert.ok(result.warnings.some((row) => row.code === "plan_limited"));
 });
 
+check("no answer in this file hands VAT to a plan that does not include it", () => {
+  // The entitlement is a property of the WORKSPACE, not of one capability. A
+  // Starter workspace is refused VAT by get_order_financials, so a per-order
+  // total, a per-channel tax block and a headline tax block must all refuse it
+  // too — otherwise the plan gate is only as strong as the least careful read.
+  const snapshot = fixtures.mixedSnapshot();
+  const basic = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: false, chatgptAppEnabled: true } });
+  const withheld = ["vatDue", "vatBase", "platformCollectedTax", "taxResponsibility"];
+
+  for (const [name, handler, args] of [
+    ["get_commerce_overview", commerce.commerceOverview, RANGE],
+    ["search_commerce_orders", commerce.searchCommerceOrders, {}],
+    ["get_channel_performance", commerce.channelPerformance, RANGE]
+  ]) {
+    const result = handler(snapshot, args, basic, { nowMs: snapshot.nowMs });
+    const serialised = JSON.stringify(result.data);
+    for (const key of withheld) {
+      assert.ok(!serialised.includes(`"${key}"`), `${name} put ${key} in front of a plan that does not include it`);
+    }
+    assert.ok(result.warnings.some((row) => row.code === "plan_limited"), `${name} withheld the figures without saying so`);
+    assert.ok(/NivaDesk Pro and Team/.test(result.warnings.find((row) => row.code === "plan_limited").message),
+      `${name} does not say where the missing figures live`);
+  }
+});
+
+check("a paid plan still gets the tax detail on every one of the three", () => {
+  const snapshot = fixtures.mixedSnapshot();
+  const pro = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: true, chatgptAppEnabled: true } });
+  const overview = commerce.commerceOverview(snapshot, RANGE, pro, { nowMs: snapshot.nowMs });
+  assert.ok(overview.data.tax && typeof overview.data.tax.vatDue === "number");
+  const search = commerce.searchCommerceOrders(snapshot, {}, pro, { nowMs: snapshot.nowMs });
+  assert.ok(search.data.orders.every((row) => typeof row.totals.vatDue === "number"));
+  assert.ok(!search.warnings.some((row) => row.code === "plan_limited"));
+  const channels = commerce.channelPerformance(snapshot, RANGE, pro, { nowMs: snapshot.nowMs });
+  assert.ok(channels.data.channels.some((row) => row.tax && typeof row.tax.vatDue === "number"));
+});
+
+check("the money a basic plan IS allowed still answers the question", () => {
+  const snapshot = fixtures.mixedSnapshot();
+  const basic = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: false, chatgptAppEnabled: true } });
+  const search = commerce.searchCommerceOrders(snapshot, {}, basic, { nowMs: snapshot.nowMs });
+  const row = search.data.orders.find((entry) => entry.orderId === "o_gbp");
+  assert.strictEqual(row.totals.grandTotal, 200, "what the order took is not the part the plan withholds");
+  assert.strictEqual(row.totals.remaining, 0);
+  assert.strictEqual(row.totals.currency, "GBP");
+});
+
 check("the range is inclusive UTC calendar days, and the basis mix is reported", () => {
   const snapshot = fixtures.mixedSnapshot();
   const single = commerce.commerceOverview(snapshot, { fromDate: "2026-09-03", toDate: "2026-09-03" }, ctx, { nowMs: snapshot.nowMs });

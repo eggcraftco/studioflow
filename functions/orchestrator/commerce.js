@@ -56,6 +56,20 @@ function finishTax(acc, settings) {
   };
 }
 
+/**
+ * The plan gate on money detail (§ the same entitlement `get_order_financials`
+ * reads before it hands back anything past Received, Base Cost and the basic
+ * balance). One helper, so the three capabilities in this file cannot answer
+ * the same workspace differently: a Starter workspace that is refused VAT by
+ * get_order_financials must not be given it per order by a search.
+ */
+function advancedFinance(ctx) {
+  return ctx && ctx.entitlements ? ctx.entitlements.advancedFinanceEnabled === true : true;
+}
+
+/** The sentence the plan-limited answers use, worded as the live tool words it. */
+const PLAN_LIMITED_DETAIL = "VAT, platform fees and settlements are available on NivaDesk Pro and Team.";
+
 function fulfilmentCounts(views) {
   const counts = { unfulfilled: 0, partial: 0, fulfilled: 0, unknown: 0, dispatched: 0, delivered: 0 };
   for (const view of views) {
@@ -154,7 +168,7 @@ function commerceSources(snapshot, views, { nowMs }) {
 }
 
 /** Channel rows: one per channel that has orders, plus the connections that do not. */
-function channelRows(views, snapshot, { workspace }) {
+function channelRows(views, snapshot, { workspace, advanced = true }) {
   const byChannel = new Map();
   for (const view of views) {
     if (!byChannel.has(view.channel)) byChannel.set(view.channel, []);
@@ -194,7 +208,9 @@ function channelRows(views, snapshot, { workspace }) {
       availability: channelModule.channelAvailability(name, { hasOrders: list.length > 0, connection }),
       orders: list.length,
       amounts: buckets.list(),
-      tax: finishTax(tax, snapshot.settings || {}),
+      // Withheld on a plan that does not include VAT: a per-channel tax block
+      // is the same figure the headline one is, reached by another door.
+      tax: advanced ? finishTax(tax, snapshot.settings || {}) : null,
       freshness: null
     });
   }
@@ -290,7 +306,7 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
     warnings.push(envelope.warning("loader_cap_reached", "The order read hit its cap, so this range may be missing older orders."));
   }
 
-  const advanced = ctx.entitlements ? ctx.entitlements.advancedFinanceEnabled === true : true;
+  const advanced = advancedFinance(ctx);
   const data = {
     range: {
       fromDate: bounds.fromDate,
@@ -312,7 +328,7 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
       shippingIncome: { available: false, reason: UNSUPPORTED.shippingIncome }
     },
     fulfilment: fulfilmentCounts(views),
-    channels: channelRows(views, snapshot, { workspace })
+    channels: channelRows(views, snapshot, { workspace, advanced })
   };
 
   if (advanced) {
@@ -328,7 +344,7 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
     data.settlements = settlementTotals(snapshot, bounds);
     data.settlementBasis = "arrivalDate";
   } else {
-    warnings.push(envelope.warning("plan_limited", "This plan reports order counts, gross sales, refunds and fulfilment only. VAT, platform fees and settlements are available on NivaDesk Pro and Team."));
+    warnings.push(envelope.warning("plan_limited", `This plan reports order counts, gross sales, refunds and fulfilment only. ${PLAN_LIMITED_DETAIL}`));
   }
 
   return {
@@ -366,7 +382,13 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     return haystack.includes(query);
   });
 
+  // Two independent gates, and the answer needs both. The ROLE decides whether
+  // this member sees order money at all; the PLAN decides whether the money
+  // they see includes VAT and platform-collected tax. Checking only the role is
+  // how a Starter workspace that get_order_financials refuses VAT to could read
+  // the same VAT off a search result.
   const financial = ctx.financialInfo === true;
+  const advanced = advancedFinance(ctx);
   const rows = matches.slice(0, limit).map((view) => {
     const row = {
       orderId: view.id,
@@ -401,18 +423,22 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
         remaining: round2(view.remainingAmount),
         refunded: round2(view.finance.refunded),
         customerTotal: round2(view.finance.customerTotal),
-        vatDue: round2(view.finance.vatDue),
-        platformCollectedTax: round2(view.finance.platformCollectedTax),
-        taxResponsibility: view.finance.taxResponsibility,
-        taxNeedsReview: view.finance.taxNeedsReview,
         currency: view.currency
       };
+      if (advanced) {
+        row.totals.vatDue = round2(view.finance.vatDue);
+        row.totals.platformCollectedTax = round2(view.finance.platformCollectedTax);
+        row.totals.taxResponsibility = view.finance.taxResponsibility;
+        row.totals.taxNeedsReview = view.finance.taxNeedsReview;
+      }
     }
     return row;
   });
 
   if (!financial) {
     warnings.push(envelope.warning("section_not_permitted", "Order money is not included for your role.", { section: "totals" }));
+  } else if (!advanced) {
+    warnings.push(envelope.warning("plan_limited", `This plan reports what each order took, what is paid and what is left. ${PLAN_LIMITED_DETAIL}`));
   }
   if (matches.length > rows.length) {
     warnings.push(envelope.warning("loader_cap_reached", `${matches.length} orders match; the first ${rows.length} are listed.`));
@@ -441,7 +467,7 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
     ? new Set(args.channels.map((value) => String(value).toLowerCase()))
     : null;
   const warnings = [];
-  const advanced = ctx.entitlements ? ctx.entitlements.advancedFinanceEnabled === true : true;
+  const advanced = advancedFinance(ctx);
 
   const settlements = settlementTotals(snapshot, bounds);
   const connections = snapshot.connections || {};
