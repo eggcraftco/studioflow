@@ -479,12 +479,11 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   // an incomplete answer; and when the order read HAD hit its 1000-document
   // cap, `freshnessLines` picked whichever of the two messages came first and
   // told the reader the only incompleteness was paging. `count` and `matched`
-  // say the paging part already. `search_inventory_items` raises the same code
-  // for the same reason — it truncated at `limit` and said nothing at all, so
-  // the two paging capabilities behaved in opposite directions.
-  if (matches.length > rows.length) {
-    warnings.push(envelope.warning("result_truncated", `${matches.length} orders match; the first ${rows.length} are listed.`));
-  }
+  // say the paging part already. Every capability that pages raises the same
+  // code through `envelope.pageWarning`, which owns the condition, so a paging
+  // capability has to opt OUT of saying it rather than remember to opt in.
+  warnings.push(...envelope.pageWarning(matches.length, rows.length,
+    `${matches.length} orders match; the first ${rows.length} are listed.`));
   warnings.push(...envelope.capWarnings(snapshot));
 
   return {

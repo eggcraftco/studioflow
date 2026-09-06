@@ -437,7 +437,13 @@ data.
 
 `loader_cap_reached` and `result_truncated` are different facts and are not interchangeable. The first
 means a READ stopped at its cap, and it sets `partial: true`; the second means the caller asked for a
-page and got one, and it does not. They shared a code until September 2026, so an ordinary `limit: 5`
+page and got one, and it does not. **All four** capabilities that take a `limit` raise it —
+`search_commerce_orders`, `search_inventory`, `get_business_attention_summary` and
+`get_banking_attention_summary`. Two of them did not for a while, which made the code mean "whichever
+author remembered", so the condition lives in `envelope.pageWarning` and `orchestrator-contract.test.js`
+counts `Number(args.limit)` against `envelope.pageWarning(` per file: a fifth paging capability fails the
+suite rather than a reviewer. (`entityRefs` is bounded separately, and says nothing, because it is an
+index into the page above it — every id there is on an item already in `data`.) They shared a code until September 2026, so an ordinary `limit: 5`
 over thirty matching orders reported `partial: true` and rendered "This answer is incomplete: 30 orders
 match; the first 5 are listed." — and, worse, when a real cap HAD been hit the single incompleteness
 line quoted whichever message came first, so a read that stopped at a thousand documents hid behind the

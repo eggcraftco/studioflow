@@ -650,10 +650,21 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const item of items) counts[item.severity] += 1;
 
+  // The page, said out loud — the same code `search_commerce_orders` and
+  // `search_inventory` raise, from the same helper. This capability pages
+  // exactly the way they do and said nothing, which made `result_truncated`
+  // mean "whichever author remembered". `totalItems` is beside the list, so
+  // nothing was fabricated; the sentence is what §6.3 promises.
+  warnings.push(...envelope.pageWarning(items.length, limited.length,
+    `${items.length} item(s) need attention; the first ${limited.length} are listed.`));
+
   return {
     data: { counts, sections: sectionRows, items: limited, totalItems: items.length, horizonDays },
     warnings,
     sources: attentionSources(snapshot, { views, sections, wantedDomains, nowMs }),
+    // A bounded INDEX into the page above, not a second answer: every id here
+    // is on an item in `data.items`, which is why a shorter list of refs hides
+    // nothing. The bound is on envelope size.
     entityRefs: limited.flatMap((item) => item.entityRefs).slice(0, 25),
     state: items.some((item) => item.severity === "critical") ? "needs_attention" : "completed"
   };
@@ -694,13 +705,19 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
 
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const item of items) counts[item.severity] += 1;
+  const limited = items.slice(0, limit);
+
+  // The banking twin pages the same way its sibling does, and was equally
+  // silent about it. One helper, four capabilities.
+  warnings.push(...envelope.pageWarning(items.length, limited.length,
+    `${items.length} banking item(s) need attention; the first ${limited.length} are listed.`));
 
   const connection = snapshot.bankConnection || null;
   return {
     data: {
       counts,
       totalItems: items.length,
-      items: items.slice(0, limit),
+      items: limited,
       connection: connection ? {
         syncState: String(connection.syncState || ""),
         lastSyncedAt: connection.lastSyncedAtMs ? new Date(Number(connection.lastSyncedAtMs)).toISOString() : null,
@@ -709,7 +726,9 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
     },
     warnings,
     sources: [bankSourceRow(connection, { nowMs })],
-    entityRefs: items.slice(0, 10).flatMap((item) => item.entityRefs).slice(0, 25),
+    // A bounded index into the page above; the ids are all on items in
+    // `data.items`.
+    entityRefs: limited.slice(0, 10).flatMap((item) => item.entityRefs).slice(0, 25),
     state: items.some((item) => item.severity === "critical") ? "needs_attention" : "completed"
   };
 }

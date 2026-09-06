@@ -149,6 +149,28 @@ function warning(code, message, extra = {}) {
 }
 
 /**
+ * The page a caller asked for, said out loud — or nothing, when the whole list
+ * fitted.
+ *
+ * Every capability that returns `list.slice(0, limit)` owes the caller this
+ * sentence, and two of the four did not: `search_commerce_orders` and
+ * `search_inventory` raised `result_truncated`, while both attention summaries
+ * paged in silence. `totalItems` sits beside the list, so nothing was fabricated
+ * — but §6.3 defines this code as "the caller asked for a page and got one", and
+ * a warning code raised by whichever author remembered is not a contract.
+ *
+ * The condition lives here rather than at four `if (list.length > rows.length)`
+ * sites for the same reason `capWarnings` does: a capability should have to opt
+ * OUT of saying it, not remember to opt in. The sentence stays local, because
+ * "orders match" and "items need attention" are different sentences.
+ *
+ * Returns an array so a call site can spread it unconditionally.
+ */
+function pageWarning(total, shown, sentence) {
+  return Number(total) > Number(shown) ? [warning("result_truncated", sentence)] : [];
+}
+
+/**
  * A reference to one row, with its label bounded.
  *
  * The label is the most consistently untrusted string in an answer: a bank
@@ -477,5 +499,5 @@ function applyChannelProfile(data, profile) {
 module.exports = {
   STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, MONEY_NAME, MONEY_IN_TEXT, PII_KEYS, PII_LABEL_TYPES, CAP_WARNINGS,
   WARNING_MESSAGE_MAX, WARNING_FIELD_MAX, STRING_MAX, DEFAULT_STRING_MAX, KEY_MAX,
-  warning, capWarnings, entityRef, finish, applyChannelProfile, boundStrings
+  warning, capWarnings, pageWarning, entityRef, finish, applyChannelProfile, boundStrings
 };

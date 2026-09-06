@@ -197,10 +197,10 @@ function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   // A page, said out loud. This capability truncated at `limit` and warned
   // about nothing, while `search_commerce_orders` warned about the same thing
   // under a code that means a truncated READ — two paging capabilities behaving
-  // in opposite directions over one question. One code for both.
-  if (items.length > rows.length) {
-    warnings.push(envelope.warning("result_truncated", `${items.length} items match; the first ${rows.length} are listed.`));
-  }
+  // in opposite directions over one question. One code for both, and one
+  // CONDITION for all four: `envelope.pageWarning`.
+  warnings.push(...envelope.pageWarning(items.length, rows.length,
+    `${items.length} items match; the first ${rows.length} are listed.`));
 
   return {
     data: { count: rows.length, matched: items.length, statuses: ITEM_STATUSES, items: rows },

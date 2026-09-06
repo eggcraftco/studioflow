@@ -22,7 +22,7 @@ const contextModule = require("../../orchestrator/context");
 const envelope = require("../../orchestrator/envelope");
 const render = require("../../orchestrator/render");
 const loaders = require("../../orchestrator/loaders");
-const { createOrchestrator, CAPABILITY_NAMES } = require("../../orchestrator");
+const { createOrchestrator, CAPABILITY_NAMES, HANDLERS } = require("../../orchestrator");
 const accessLog = require("../../privacy/accessLog");
 const fixtures = require("../fixtures/orchestrator");
 
@@ -465,6 +465,62 @@ check("every function the document tells a channel to call exists", () => {
     assert.strictEqual(typeof instance[name], "function", `the instance has no ${name}`);
   }
   assert(typeof contextModule.OrchestratorError === "function" && DOC.includes("OrchestratorError"));
+});
+
+check("every capability that pages says so — four out of four, not whichever author remembered", () => {
+  // §6.3 defines `result_truncated` as "the caller asked for a page and got
+  // one". Two capabilities raised it and two did not: both attention summaries
+  // did `items.slice(0, limit)` and returned the page in silence. `totalItems`
+  // sat beside the list, so nothing was fabricated — but a warning code that
+  // only some of its cases raise means "whichever author remembered", which is
+  // the shape the code was introduced to remove.
+  //
+  // Derived from the source rather than from a list here: a capability that
+  // reads `args.limit` pages, and every one of them must reach
+  // `envelope.pageWarning`. A fifth paging capability fails this without anyone
+  // adding a row.
+  const ORCH_DIR = path.join(__dirname, "..", "..", "orchestrator");
+  let pagingSites = 0;
+  for (const file of fs.readdirSync(ORCH_DIR).filter((name) => name.endsWith(".js"))) {
+    if (["envelope.js", "index.js"].includes(file)) continue;
+    const source = fs.readFileSync(path.join(ORCH_DIR, file), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const reads = (source.match(/Number\(args\.limit\)/g) || []).length;
+    const says = (source.match(/envelope\.pageWarning\(/g) || []).length;
+    assert.strictEqual(says, reads,
+      `orchestrator/${file}: ${reads} capabilit(ies) take a limit and ${says} raise result_truncated`);
+    pagingSites += reads;
+  }
+  assert.strictEqual(pagingSites, 4, `expected four paging capabilities, found ${pagingSites}`);
+
+  // And behaviourally, over real snapshots, with a page of one out of many.
+  const inventoryShelf = {
+    companyId: "co_1", nowMs: fixtures.NOW, settings: fixtures.settings,
+    inventoryItems: [
+      { id: "a", name: "A", trackingType: "quantity", status: "available", quantity: { onHand: 5, reserved: 0 } },
+      { id: "b", name: "B", trackingType: "quantity", status: "available", quantity: { onHand: 5, reserved: 0 } }
+    ]
+  };
+  const cases = [
+    ["get_business_attention_summary", fixtures.attentionSnapshot()],
+    ["get_banking_attention_summary", fixtures.attentionSnapshot()],
+    ["search_commerce_orders", fixtures.mixedSnapshot()],
+    ["search_inventory", inventoryShelf]
+  ];
+  const ctx = fixtures.ownerContext();
+  for (const [name, snapshot] of cases) {
+    const paged = HANDLERS[name](snapshot, { limit: 1 }, ctx, { nowMs: fixtures.NOW });
+    const list = paged.data.items || paged.data.orders || [];
+    const total = paged.data.totalItems !== undefined ? paged.data.totalItems : paged.data.matched;
+    assert.ok(total > list.length, `${name}: this fixture does not truncate, so the check proves nothing`);
+    assert.ok(paged.warnings.some((row) => row.code === "result_truncated"),
+      `${name} returned ${list.length} of ${total} and said nothing`);
+    // And a page that fits raises nothing: a warning always present says as
+    // little as one never present.
+    const whole = HANDLERS[name](snapshot, { limit: 50 }, ctx, { nowMs: fixtures.NOW });
+    assert.ok(!whole.warnings.some((row) => row.code === "result_truncated"),
+      `${name} reports a truncation over a list that fitted`);
+  }
 });
 
 check("a capability, a state or a warning code that the document never learned about fails here", () => {
