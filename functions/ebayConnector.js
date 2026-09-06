@@ -932,7 +932,14 @@ function createEbayConnectorFunctions(deps) {
       // other throw is a fixed string plus its classification word, which comes
       // from a closed vocabulary and can carry no value.
       const errorClass = classWordOf(error);
-      if (error?.name === "EbayOAuthError") console.error("ebayOAuthCallback failed:", String(error?.message || "").slice(0, 200));
+      // …and the pin is applied HERE rather than trusted from two modules away.
+      // What makes this line safe is `MESSAGE_SHAPE` in commerce/ebay/oauth.js,
+      // enforced where an EbayOAuthError is CONSTRUCTED — but a construction site
+      // is not this line, and `name` is a writable property, so an error built
+      // anywhere else wearing that name would print whatever it liked. Asking the
+      // real module (never the injected `oauth` dep, which a caller supplies) is
+      // one call, and it makes the guarantee local to the line that needs it.
+      if (error?.name === "EbayOAuthError" && ebayOAuth.messageIsSafe(error?.message)) console.error("ebayOAuthCallback failed:", String(error?.message || "").slice(0, 200));
       else console.error(`ebayOAuthCallback failed: rid=${rid} class=${errorClass}`);
       answer(200, { ok: false, outcome: "error", reason: errorClass === "auth" ? "token" : "exchange", rid });
     }

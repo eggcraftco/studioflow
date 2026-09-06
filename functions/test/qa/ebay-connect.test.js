@@ -526,6 +526,12 @@ const said = (res) => JSON.stringify(res.payload);
     assert.deepStrictEqual(withMessage.length, 1, withMessage.join(" | "));
     assert.ok(withMessage[0].includes('console.error("ebayOAuthCallback failed:"'), withMessage[0]);
     assert.ok(/error\?\.name === "EbayOAuthError"/.test(withMessage[0]), "the message line is reached only for the class §14.1 pins");
+    // …and the shape pin is applied AT the line, from the real module. `name` is
+    // a writable property, so the class check alone lets anything wearing that
+    // name print whatever it likes; `messageIsSafe` is the predicate §14.1's own
+    // test runs, and asking the injected `oauth` dep for it would let a stand-in
+    // widen the line.
+    assert.ok(/ebayOAuth\.messageIsSafe\(error\?\.message\)/.test(withMessage[0]), withMessage[0]);
     assert.ok(!/error\??\.stack/.test(body), "no stack anywhere");
     // The handler is not the whole of §5.4's logging surface, and this is how a
     // real leak got past this pin: `writeSyncEvent` is called from the connect
@@ -741,6 +747,43 @@ const said = (res) => JSON.stringify(res.payload);
     const refused = await callbackPost(pinned.fns, { state: begun2.state, nonce: begun2.nonce, code: "bad-code" });
     assert.strictEqual(refused.payload.reason, "token", said(refused));
     assert.ok(captured.slice(mark).some((l) => l.includes("ebayOAuthCallback failed:") && l.includes("invalid_grant")), "the EbayOAuthError message is the one that may be logged");
+  });
+
+  await check("an error WEARING the pinned class name but carrying an unpinned message is logged as a class word — the shape pin is applied at the line", async () => {
+    // §14.1 pins the message of every EbayOAuthError the oauth module CONSTRUCTS.
+    // That is a construction site, and it is two modules away from the one log
+    // line allowed to print a message. `name` is a writable property and the try
+    // around that line is far wider than the two oauth calls, so anything that
+    // sets `name = "EbayOAuthError"` — a future throw built by interpolation, a
+    // second copy of the module, a subclass — used to print whatever it carried,
+    // straight into Cloud Logging, past every pin in this suite.
+    const MARKER = "AUTHCODE-wearing-the-pinned-name-3f9c";
+    watch(MARKER);
+    const { fns } = buildEbay({ oauth: { exchangeCode: async () => {
+      const error = new Error(`ebay_oauth_http_400: invalid_grant "${MARKER}"`);
+      error.name = "EbayOAuthError";
+      error.status = 400; error.errorClass = "auth"; error.code = "invalid_grant";
+      throw error;
+    } } });
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const before = captured.length;
+    const res = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(res.payload.reason, "token", said(res));
+    const lines = captured.slice(before);
+    for (const line of lines) {
+      assert.ok(!line.includes(MARKER), `the unpinned message reached a line — ${line.slice(0, 160)}`);
+      assert.ok(!line.includes(MARKER.slice(0, 8)), `the first eight characters reached a line — ${line.slice(0, 160)}`);
+    }
+    // Something was still said, and in the shape a message this line may not
+    // print falls back to.
+    assert.ok(lines.some((l) => /ebayOAuthCallback failed: rid=[0-9a-f]{16} class=auth/.test(l)), lines.join(" | "));
+    // …and a message that DOES hold the shape is still printed, so this is a
+    // narrowing of the line and not its removal.
+    const honest = buildEbay();
+    const b2 = await honest.fns.beginEbayConnect({ auth, data: {} });
+    const mark = captured.length;
+    await callbackPost(honest.fns, { state: b2.state, nonce: b2.nonce, code: "bad-code" });
+    assert.ok(captured.slice(mark).some((l) => l.includes("ebayOAuthCallback failed:") && l.includes("invalid_grant")), captured.slice(mark).join(" | "));
   });
 
   await check("a Firestore refusal on the callback's OWN success path is logged as a class word — the syncLog write is inside §5.4's rule, not beside it", async () => {
