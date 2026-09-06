@@ -931,11 +931,11 @@ reaches the screen.
 | **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned** | "Finish connecting eBay in the same browser you started from." | nothing |
 | Nonce mismatch | Function | 200 `reason=browser`, **state burned** | same | nothing |
 | `NIVADESK_EBAY_CALLBACK_KEY` unset or under 32 chars | Web | 302 `reason=unavailable`, no call | "eBay did not complete the connection. Try again." | `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` / `… shorter than 32 characters` |
-| Unauthenticated / wrongly signed / stale timestamp / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection |
-| `EBAY_CALLBACK_KEY` unset on the function | Function | **401** `{"ok":false}` (indistinguishable from a wrong key) | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured` |
+| Unauthenticated / wrongly signed / stale timestamp / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection; **at most once a minute per instance** (below) |
+| `EBAY_CALLBACK_KEY` unset on the function | Function | **401** `{"ok":false}` (indistinguishable from a wrong key) | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured`, **at most once a minute per instance** — it is a configuration fact, not a per-request event, and the repeat is what an outsider would use to bury it |
 | GET (or any non-POST) on the function | Function | **405** `{"ok":false}` | — | nothing |
-| Query string on the function | Function | **400** `{"ok":false}` | — | `ebay callback: query string refused` (the string itself is **not** logged) |
-| Oversized (> 8 KB) body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length |
+| Query string on the function | Function | **400** `{"ok":false}` | — | `ebay callback: query string refused` (the string itself is **not** logged), at most once a minute per instance |
+| Oversized (> 8 KB) body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length, at most once a minute per instance (the byte length is in the line, never in the throttle key — otherwise varying the size would defeat it) |
 | Non-JSON / array / `v !== 1` body | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: body refused` + byte length (**never** the `JSON.parse` message — see *Logging*) |
 | `rid` not 16 lowercase hex | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: rid refused` (the value is **not** logged) |
 | Malformed `state` / over-long `code` or `nonce` | Function | **400** `{"ok":false,"rid"}` | `reason=unavailable` | `ebay callback: field shape refused rid=<rid>` + which field name |
@@ -995,6 +995,18 @@ behaviour rather than the code:
    `try`** whose `catch` answers 400 `{"ok":false}` and logs the fixed string `ebay callback: refused`
    with no arguments at all. It is a backstop, not a control: every expected condition is already
    answered above it.
+
+**Every line before the signature check is anonymously triggerable, so those lines are throttled.**
+`ebayOAuthCallback` is public: the method, query-string, `rawBody`, size and key checks all answer before
+any key is proven, so an outsider decides how often four log lines are written, and one of them —
+`ebay callback: EBAY_CALLBACK_KEY not configured` — is at **error** severity and is the line *Rollout*
+step 4 tells the operator to grep for. Unthrottled, a stranger can write it out of the very window it
+matters in, one line per request, at our expense. Each of those lines is therefore emitted **at most once
+a minute per instance, per message**, from a small map in the instance (`maxInstances: 10` bounds how many
+maps exist). What is suppressed is a repeat of a line already present; nothing is lost that the first line
+does not already say, and the lines *after* the signature — field shapes, the transaction failure, the
+connect block — are unthrottled because only a keyed caller can reach them. `maxInstances` bounds the
+invocation bill; this bounds the log bill, and they are not the same bound.
 
 What the platform still records for the POST, and why none of it matters: method, `requestUrl` — now the
 bare function URL with **no query string** — status, latency, `serverIp`, `userAgent` (the web server's),

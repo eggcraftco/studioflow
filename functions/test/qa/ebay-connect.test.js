@@ -204,6 +204,29 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(good.payload.outcome, "connected", said(good));
   });
 
+  await check("the ops lines an outsider can trigger repeat at most once a minute per instance, so the 'not configured' diagnostic cannot be buried", async () => {
+    // Every line before the signature check fires on a bare POST from anyone,
+    // and one of them is the error-severity line the rollout tells the operator
+    // to grep for. Unthrottled, a stranger writes it out of the window it
+    // matters in, one line per request, at our expense.
+    const { fns, nowRef, switches } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    switches.callbackKey = "";
+    const told = () => captured.filter((l) => l.includes("EBAY_CALLBACK_KEY not configured")).length;
+    const before = told();
+    for (let i = 0; i < 5; i += 1) await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(told() - before, 1, "five anonymous POSTs, one line");
+    nowRef.value += 61 * 1000;
+    await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(told() - before, 2, "and it is said again a minute later — suppressed, never lost");
+    // The map is per instance: a fresh one says it for itself. The throttle
+    // bounds noise; it does not hide a configuration fact from a new instance.
+    const fresh = buildEbay();
+    fresh.switches.callbackKey = "";
+    await callbackPost(fresh.fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(told() - before, 3);
+  });
+
   await check("every unauthenticated shape is 401 with a bare body: no signature, wrong key, swapped body, stale or future timestamp, no rawBody", async () => {
     const { fns, nowRef, store } = buildEbay();
     const begun = await fns.beginEbayConnect({ auth, data: {} });
@@ -316,7 +339,9 @@ const said = (res) => JSON.stringify(res.payload);
     // EbayOAuthError's message to eBay's own error / error_description. The pin
     // counts the line; it cannot see which throws reach it, and the try around
     // it is wider than the exception — so the guard is pinned too.
-    const consoleLines = body.split("\n").filter((l) => /console\.(log|warn|error)\(/.test(l));
+    // opsSay counts as a log call: the pre-signature lines go through it, and a
+    // future opsSay(…, error.message) must not slip past a console-only filter.
+    const consoleLines = body.split("\n").filter((l) => /console\.(log|warn|error)\(|opsSay\(/.test(l));
     const withMessage = consoleLines.filter((l) => /error\??\.(message|stack)/.test(l));
     assert.deepStrictEqual(withMessage.length, 1, withMessage.join(" | "));
     assert.ok(withMessage[0].includes('console.error("ebayOAuthCallback failed:"'), withMessage[0]);

@@ -115,6 +115,9 @@ const CALLBACK_MAX_CODE_LENGTH = 4096;
 const CALLBACK_MAX_NONCE_LENGTH = 200;
 const CALLBACK_RID_PATTERN = /^[0-9a-f]{16}$/;
 const CALLBACK_STATE_PATTERN = /^[A-Za-z0-9_-]{20,120}$/;
+// How often one pre-signature ops line may repeat, per instance. The lines
+// before the signature check are the ones an outsider can trigger at will.
+const CALLBACK_OPS_LOG_EVERY_MS = 60 * 1000;
 
 function safeIdPart(value) { return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 120); }
 function connectionDocId(companyId, sellerUserId) { return `${safeIdPart(companyId)}__${safeIdPart(sellerUserId)}`; }
@@ -262,6 +265,22 @@ function createEbayConnectorFunctions(deps) {
     if (offered.length !== expected.length) return false;
     return crypto.timingSafeEqual(offered, expected);
   }
+  // Every refusal before the signature check is anonymously triggerable: the
+  // endpoint is public, and those lines fire on a bare POST from anyone. One of
+  // them — "EBAY_CALLBACK_KEY not configured" — is at error severity and is the
+  // line the rollout tells the operator to grep for during exactly the window a
+  // stranger could be burying it, so each of them is emitted at most once a
+  // minute per instance, per message. What is suppressed is a repeat of a line
+  // already there; nothing is thrown away that the first line does not say.
+  // The map lives in the instance, so Cloud Run holds at most `maxInstances` of
+  // them and each is a handful of fixed keys.
+  const opsSaidAtMs = new Map();
+  const opsSay = (level, key, line) => {
+    const at = now();
+    if (at - (opsSaidAtMs.get(key) || -Infinity) < CALLBACK_OPS_LOG_EVERY_MS) return;
+    opsSaidAtMs.set(key, at);
+    console[level](line);
+  };
 
   // ---- token failures, classified by body (§6) -------------------------------
   async function recordTokenFailure(ref, error) {
@@ -459,18 +478,18 @@ function createEbayConnectorFunctions(deps) {
     // deliberately never read — Firebase's Express layer always populates it, so
     // its emptiness proves nothing, and reading it is the habit that leaked the
     // code into Cloud Logging in the first place. The raw URL is the mechanism.
-    if (String(req.originalUrl || req.url || "").includes("?")) { console.warn("ebay callback: query string refused"); answer(400, { ok: false }); return; }
+    if (String(req.originalUrl || req.url || "").includes("?")) { opsSay("warn", "query", "ebay callback: query string refused"); answer(400, { ok: false }); return; }
     const rawBody = req.rawBody;
     // A request with no raw bytes cannot be authenticated. It is never guessed at
     // by re-serialising req.body: that breaks an exact-bytes HMAC silently.
-    if (!Buffer.isBuffer(rawBody)) { console.warn("ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
-    if (rawBody.length > CALLBACK_MAX_BODY_BYTES) { console.warn("ebay callback: body refused", rawBody.length); answer(400, { ok: false }); return; }
+    if (!Buffer.isBuffer(rawBody)) { opsSay("warn", "unsigned", "ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
+    if (rawBody.length > CALLBACK_MAX_BODY_BYTES) { opsSay("warn", "oversize", `ebay callback: body refused ${rawBody.length}`); answer(400, { ok: false }); return; }
     const key = String(callbackKey() || "");
     // Fails closed — and closes it with the SAME status a wrong key gets, so the
     // answer cannot be used as an unauthenticated oracle for whether the secret
     // exists. The distinction lives only in this ops line (§5.4, "no 503").
-    if (key.length < CALLBACK_KEY_MIN_LENGTH) { console.error("ebay callback: EBAY_CALLBACK_KEY not configured"); answer(401, { ok: false }); return; }
-    if (!signatureAccepted(key, req.headers || {}, rawBody)) { console.warn("ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
+    if (key.length < CALLBACK_KEY_MIN_LENGTH) { opsSay("error", "unconfigured", "ebay callback: EBAY_CALLBACK_KEY not configured"); answer(401, { ok: false }); return; }
+    if (!signatureAccepted(key, req.headers || {}, rawBody)) { opsSay("warn", "unsigned", "ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
     let body = null;
     try { body = JSON.parse(rawBody.toString("utf8")); } catch { body = null; }
     // The parse error's message quotes the body back; the byte length is all the log gets.
