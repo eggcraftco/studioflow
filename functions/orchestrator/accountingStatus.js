@@ -51,6 +51,29 @@ const SEVERITY_FROM_STORED = Object.freeze({ error: "high", warning: "medium", i
  * really lives in, and the answer says which map the figure was measured
  * against instead of implying there is only one.
  */
+/**
+ * How many parts this transaction was split into.
+ *
+ * The loader projects `splits` to its LENGTH (loaders.projectBankRow), because
+ * the split rows carry categories and notes no capability reports. This
+ * function tested `Array.isArray(row.splits)`, which a number never satisfies —
+ * so the split branch could not fire, `notReady.split` was always 0 in
+ * production, and every split transaction was counted as ready to be prepared
+ * while render.js stated it as fact: "N bank transaction(s) are ready to be
+ * prepared, against this workspace's category map." That is the identical
+ * defect this function was rewritten to fix (a predicate scored against data it
+ * cannot see), surviving one line below the rewrite.
+ *
+ * Both shapes are accepted and the module says so, because it is pure and its
+ * input contract is the thing being fixed: the loader's count, or the raw
+ * array if a caller ever hands one over.
+ */
+function splitCount(row = {}) {
+  if (Array.isArray(row.splits)) return row.splits.length;
+  const count = Number(row.splits);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
 function readinessOf(rows = [], mappings = null) {
   const custom = Array.isArray(mappings) && mappings.length > 0;
   const mapped = new Set((custom ? mappings : DEFAULT_MAPPINGS).map((row) => String((row || {}).category || "")));
@@ -59,10 +82,9 @@ function readinessOf(rows = [], mappings = null) {
   let ready = 0;
   for (const row of rows) {
     const category = String(row.category || "");
-    const splits = Array.isArray(row.splits) ? row.splits : [];
     const reviewStatus = String(row.reviewStatus || "");
     if (!category) { notReady.uncategorised += 1; continue; }
-    if (splits.length > 0) { notReady.split += 1; continue; }
+    if (splitCount(row) > 0) { notReady.split += 1; continue; }
     if (reviewStatus === "needs_info") { notReady.needsInfo += 1; continue; }
     if (reviewStatus === "unreviewed" || row.categoryAuto === true) { notReady.unreviewed += 1; continue; }
     if (!mapped.has(category)) { notReady.unmapped += 1; continue; }
@@ -154,4 +176,4 @@ function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   };
 }
 
-module.exports = { POSTING_PHASES, SEVERITY_FROM_STORED, readinessOf, accountingSyncStatus };
+module.exports = { POSTING_PHASES, SEVERITY_FROM_STORED, splitCount, readinessOf, accountingSyncStatus };

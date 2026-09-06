@@ -10,6 +10,7 @@
 const assert = require("assert");
 const health = require("../../orchestrator/integrationHealth");
 const accounting = require("../../orchestrator/accountingStatus");
+const { projectBankRow } = require("../../orchestrator/loaders");
 const fixtures = require("../fixtures/orchestrator");
 
 let failures = 0;
@@ -212,6 +213,42 @@ check("readiness counts what is not ready, and why", () => {
   assert.strictEqual(result.data.readiness.ready, 1);
   assert.strictEqual(result.data.readiness.notReady.uncategorised, 1);
   assert.strictEqual(result.data.readiness.notReady.needsInfo, 1);
+});
+
+check("a split transaction is not ready, and the row is built the way the loader builds one", () => {
+  // The hand-built fixture was the reason this passed while production was
+  // wrong. `loadBank` projects `splits` to its LENGTH, and readinessOf tested
+  // `Array.isArray(row.splits)` — false for a number — so the split branch
+  // could never fire, `notReady.split` was 0 on every workspace, and every
+  // split transaction was counted as "ready to be prepared". The rows here go
+  // through the loader's own projection, so a fixture cannot disagree with
+  // the shape a capability actually receives again.
+  const snapshot = accountingSnapshot();
+  snapshot.categoryMappings = [{ category: "Materials", nominalCode: "500", taxCode: "ST" }];
+  snapshot.bankRows = [
+    projectBankRow("b_split", {
+      amount: -50, currency: "GBP", bookingDate: "2026-09-01", category: "Materials", reviewStatus: "reviewed",
+      // What the document holds: the array. What a capability sees: its length.
+      splits: [{ amount: -30, category: "Materials" }, { amount: -20, category: "Software" }]
+    }),
+    projectBankRow("b_plain", {
+      amount: -10, currency: "GBP", bookingDate: "2026-09-02", category: "Materials", reviewStatus: "reviewed"
+    })
+  ];
+  assert.strictEqual(snapshot.bankRows[0].splits, 2, "the loader hands over a count, not an array");
+
+  const result = accounting.accountingSyncStatus(snapshot, {}, ctx, { nowMs: NOW });
+  assert.strictEqual(result.data.readiness.notReady.split, 1, "a split transaction was counted as ready to be prepared");
+  assert.strictEqual(result.data.readiness.ready, 1, "only the unsplit row is ready");
+
+  // And the pure function agrees whichever shape it is handed, which is what
+  // makes the hand-built fixtures elsewhere in this file honest rather than
+  // lucky.
+  const asArray = [{ category: "Materials", reviewStatus: "reviewed", splits: [{ amount: -30 }, { amount: -20 }] }];
+  assert.strictEqual(accounting.readinessOf(asArray, snapshot.categoryMappings).notReady.split, 1);
+  assert.strictEqual(accounting.splitCount({ splits: 2 }), 2);
+  assert.strictEqual(accounting.splitCount({ splits: [] }), 0);
+  assert.strictEqual(accounting.splitCount({}), 0);
 });
 
 check("readiness is measured against the workspace's own category map, and says which one", () => {

@@ -88,6 +88,45 @@ function projectOrderForAssistant(raw = {}, onDecision = null) {
 }
 
 /**
+ * One bank transaction, as a capability sees it.
+ *
+ * Exported, and used by the tests, for the reason `projectOrderForAssistant` is:
+ * a fixture that approximates this shape is a fixture of a row that never
+ * reaches a capability. `splits` is the field that proved it — the document
+ * holds an array, this projection keeps its LENGTH, and accountingStatus.js
+ * tested `Array.isArray(row.splits)`, which a number never satisfies, so every
+ * split transaction scored as ready to be prepared and `notReady.split` was
+ * always 0. The unit test passed because it built the row by hand, with the
+ * array.
+ */
+function projectBankRow(id, data = {}) {
+  return {
+    id,
+    amount: num(data.amount),
+    currency: String(data.currency || "GBP").toUpperCase(),
+    bookingDate: String(data.bookingDate || "").slice(0, 10),
+    description: String(data.description || "").slice(0, 200),
+    counterparty: String(data.counterparty || "").slice(0, 160),
+    category: String(data.category || data.categoryAuto || "").slice(0, 60),
+    categoryAuto: Boolean(data.categoryAuto) && !data.category,
+    txType: String(data.txType || ""),
+    hasReceipt: Boolean(data.receiptPath),
+    receiptNotNeeded: data.receiptNotNeeded === true,
+    reviewStatus: String(data.reviewStatus || ""),
+    accountId: String(data.accountId || ""),
+    provider: String(data.provider || ""),
+    incomingKind: String(data.incomingKind || ""),
+    outgoingKind: String(data.outgoingKind || ""),
+    linkedOrderId: String(data.linkedOrderId || ""),
+    settlement: data.settlement ? { payoutId: String(data.settlement.payoutId || ""), provider: String(data.settlement.provider || "") } : null,
+    // A COUNT, not the array: the split rows themselves carry categories and
+    // notes nothing here reports, and a capability only ever needs to know
+    // whether this transaction is split.
+    splits: Array.isArray(data.splits) ? data.splits.length : 0
+  };
+}
+
+/**
  * The decisions of one read, as access-log rows — one per provider and reason,
  * not one per order.
  *
@@ -188,30 +227,7 @@ function createLoaders({ db, now = () => Date.now() }) {
 
   async function loadBank(companyId) {
     const snap = await company(companyId).collection("bankTransactions").orderBy("bookingDate", "desc").limit(CAPS.bank).get();
-    const rows = snap.docs.map((doc) => {
-      const data = doc.data() || {};
-      return {
-        id: doc.id,
-        amount: num(data.amount),
-        currency: String(data.currency || "GBP").toUpperCase(),
-        bookingDate: String(data.bookingDate || "").slice(0, 10),
-        description: String(data.description || "").slice(0, 200),
-        counterparty: String(data.counterparty || "").slice(0, 160),
-        category: String(data.category || data.categoryAuto || "").slice(0, 60),
-        categoryAuto: Boolean(data.categoryAuto) && !data.category,
-        txType: String(data.txType || ""),
-        hasReceipt: Boolean(data.receiptPath),
-        receiptNotNeeded: data.receiptNotNeeded === true,
-        reviewStatus: String(data.reviewStatus || ""),
-        accountId: String(data.accountId || ""),
-        provider: String(data.provider || ""),
-        incomingKind: String(data.incomingKind || ""),
-        outgoingKind: String(data.outgoingKind || ""),
-        linkedOrderId: String(data.linkedOrderId || ""),
-        settlement: data.settlement ? { payoutId: String(data.settlement.payoutId || ""), provider: String(data.settlement.provider || "") } : null,
-        splits: Array.isArray(data.splits) ? data.splits.length : 0
-      };
-    });
+    const rows = snap.docs.map((doc) => projectBankRow(doc.id, doc.data() || {}));
     return { rows, capped: snap.size >= CAPS.bank };
   }
 
@@ -476,4 +492,4 @@ function createLoaders({ db, now = () => Date.now() }) {
   return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
 }
 
-module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, piiBlockRows, projectCommerceConnection, projectOrderForAssistant };
+module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, piiBlockRows, projectCommerceConnection, projectOrderForAssistant, projectBankRow };
