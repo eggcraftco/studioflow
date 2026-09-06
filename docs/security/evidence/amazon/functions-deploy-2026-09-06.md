@@ -601,6 +601,32 @@ Six of the twenty-four hours are clean on every axis: no errors, no 5xx, real tr
 scheduler drift, event triggers firing. The soak continues; the next batch (B6.1, B6.2 — the 64
 June/July functions) stays closed until 2026-09-07 04:28 UTC and the operator's go.
 
+### Soak readback gap — 2026-09-06 10:29 UTC to 17:20 UTC
+
+**No readback exists for these seven hours, and that is recorded rather than smoothed over.** Both
+paths are unavailable at once: the gcloud credential expired again ("Reauthentication failed. cannot
+prompt during non-interactive execution"), and the console fallback now lands on a Google sign-in
+challenge because the browser session expired. The assistant does not sign in to anything, so neither
+route can be used until the operator restores one of them.
+
+The two-hourly watch did not fill the gap either: only two entries exist in the soak log, at 04:28
+and 10:29. The scheduled check did not fire.
+
+**What this does and does not mean.** It does not mean anything went wrong; it means nobody looked.
+Cloud Logging retains the entries, so the whole window is still readable — a single query over
+`2026-09-06T04:28:31Z` to the present recovers it in full once either credential works. Until that
+query runs, the soak cannot be called clean, and the 24-hour result due at 04:28 UTC on 7 September
+cannot be produced.
+
+**What the operator does:** run `gcloud auth login` (and `gcloud auth application-default login`), or
+sign back in to the Cloud console in the browser. Either one is enough.
+
+| Window | Readback | Result |
+|---|---|---|
+| 04:28:31 → 04:31 UTC (B5.3 gate) | console | 0 errors, 0 5xx, 32 probes as the positive control |
+| 04:28:31 → 10:29:50 UTC | gcloud | 0 errors, 0 5xx, 240 requests, 19 scheduler jobs on time |
+| 10:29:50 → 17:20 UTC | **none** | **unverified** |
+
 ## Rollback used
 
 None so far.
