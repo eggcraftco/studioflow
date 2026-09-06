@@ -925,6 +925,28 @@ What a key holder does get, stated so nobody has to rediscover it:
   to press Connect again; the damage is nuisance, not data.
 - Everything else is a 401, a 400, or a `reason=state`.
 
+**The authorization code is bound to the application, not to the state that fetched it — so the burn is
+the whole of that defence.** `exchangeCode` sends `grant_type`, `code` and `redirect_uri` and nothing
+else (`functions/commerce/ebay/oauth.js`), and `redirect_uri` is `redirectRuName`, one global value for
+every workspace. eBay therefore validates the code against **our application**, never against which
+NivaDesk state presented it. Concretely: an attacker who observes a live code can begin their own connect
+flow in their own browser, obtain `state_L` and `nonce_L`, and request
+`GET https://nivadesk.app/ebay/callback?code=<observed>&state=state_L` with `nv_ebay_nonce=nonce_L`. The
+route signs and relays it unchanged; the function finds `state_L` unused, the nonce matching and the
+environment right, and exchanges **someone else's** code into the attacker's workspace. Nothing in the
+protocol notices, because nothing in the protocol ties the two together.
+
+The only thing that normally prevents it is that the genuine flow spends the single-use code first — and
+the genuine flow spends it *because the state is burned at first presentation*, which is why the two
+paragraphs above and the ones under *The burn* are the same argument seen twice. Residual 1 lists the
+places a code can be observed (Hostinger's access log, the seller's browser history, the address bar) and
+then discounts them; this paragraph says what that discount rests on. PKCE would bind the code to the
+request that started it, and eBay's OAuth documents do not offer it for this flow
+(`docs/ebay-callback-platform-logging.md`, Hostinger's own suggestion and why only "redeem immediately"
+was available). It is also the reason production stays blocked on `connect.nivadesk.app` rather than that
+being a tidiness preference: the code sitting in a log we do not control is not made harmless by our own
+state handling, it is made *survivable* by it.
+
 **Ingress: the shared key is knowingly the sole control, and this is a decision, not an omission.**
 `ebayOAuthCallback` is a public unauthenticated Cloud Function. `ingress-internal-and-cloud-load-balancing`
 is not available to us, because the only legitimate caller is Hostinger's egress on the public internet;
