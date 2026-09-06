@@ -103,7 +103,12 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
     }
   } else if (capability === "get_integration_health") {
     const reconnect = (data.connections || []).filter((row) => row.reconnectRequired);
-    lines.push(line("result", `${data.count} connection(s) checked; ${reconnect.length} need reconnecting.`));
+    // `count` is the connections this workspace actually has; `considered` is
+    // the channels this answer looked at. Saying "6 connection(s) checked" about
+    // the second number told an empty workspace it had six connections. Both
+    // numerals come from `data`, including the reconnect count.
+    lines.push(line("result", `${data.count} connection(s) set up; ${data.needsReconnect} need reconnecting.`));
+    lines.push(line("breakdown", `${data.considered} channel(s) checked.`));
     for (const row of reconnect) lines.push(line("attention", `${row.provider} needs reconnecting.`));
   } else if (capability === "get_accounting_sync_status") {
     lines.push(line("result", `${data.connections.length} accounting connection(s).`));

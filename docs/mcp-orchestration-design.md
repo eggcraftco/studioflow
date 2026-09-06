@@ -1127,8 +1127,15 @@ Input: `{ provider? }`. Output rows:
   retries, deadLetters, reviewCount,                        // §11 asks for retries AND a DLQ/review count
   lastSuccessfulSync, reconnectRequired,
   mode: "read_only"|"limited"|"full",                       // commerce/capabilities + connectionCapabilities
+  connectionKnown,                                          // does this row stand for a connection that exists?
   availability }                                            // the §2.5 availability vocabulary
 ```
+
+Beside the rows: `{ count, considered, needsReconnect }`. `count` is connections this workspace actually
+has — rows with a connection document, plus Amazon when its own orders prove the connection exists, since
+its status is deliberately unreadable from here. `considered` is how many channels the answer looked at,
+which is what a row-count measures: an unconnected channel still gets a row so the reader can see it was
+checked. Reporting the second number as the first told an empty workspace it had six connections.
 
 `reviewCount` (missing from revision 1, required by §11) counts the root `commerceReviewQueue`
 (`commerce/engine.js:18` `REVIEW_COLLECTION`) `where("companyId","==",cid)`, grouped by

@@ -94,6 +94,10 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         provider,
         connectionId: null,
         account: null,
+        // A channel this workspace has never connected. The row exists so the
+        // reader can see it was considered; it is not a connection, and
+        // `connectionKnown` is what keeps it out of the headline count.
+        connectionKnown: false,
         authStatus: "disconnected",
         availability: channelModule.channelAvailability(provider, { hasOrders: false, connection: null }),
         ordersFreshness: { state: "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
@@ -121,6 +125,7 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         provider,
         connectionId: String(connection.id || ""),
         account: String(connection.account || connection.storeName || connection.shopName || connection.siteUrl || connection.host || ""),
+        connectionKnown: true,
         authStatus,
         availability: channelModule.channelAvailability(provider, { hasOrders: true, connection }),
         ordersFreshness,
@@ -155,6 +160,11 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
       provider: "amazon",
       connectionId: null,
       account: null,
+      // The connection document is in the hardened project and cannot be read
+      // from here, so its orders are the only evidence that it exists. No
+      // orders is no evidence, and an assumed Amazon connection would be one
+      // more imaginary connection in the count.
+      connectionKnown: hasAmazonOrders,
       authStatus: "not_visible",
       availability: channelModule.channelAvailability("amazon", { hasOrders: hasAmazonOrders, connection: null }),
       ordersFreshness: { state: hasAmazonOrders ? "not_visible" : "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
@@ -181,6 +191,8 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
       provider: "ebay",
       connectionId: null,
       account: null,
+      // Adapter code with no runtime: there is no eBay connection to have.
+      connectionKnown: false,
       authStatus: "disconnected",
       availability: hasEbayOrders ? "data_only" : "adapter_only",
       ordersFreshness: { state: "never", lastSuccessAt: null, lagMs: null, staleAfterMs: freshness.STALE_AFTER_MS.commerce },
@@ -206,6 +218,7 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         provider: String(connection.provider || "bank"),
         connectionId: String(connection.id || ""),
         account: String(connection.institutionName || connection.accountLabel || ""),
+        connectionKnown: true,
         authStatus: ["needs_reconsent", "disconnected"].includes(syncState) ? "reconnect_required" : (syncState === "error" ? "pending" : "ok"),
         availability: "connected",
         ordersFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
@@ -238,6 +251,7 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
         provider: String(connection.provider || "accounting"),
         connectionId: String(connection.id || ""),
         account: String(connection.companyName || connection.realmName || ""),
+        connectionKnown: true,
         authStatus: authStatusOf(connection),
         availability: "connected",
         ordersFreshness: { state: "unsupported", lastSuccessAt: null, lagMs: null, staleAfterMs: null },
@@ -255,8 +269,23 @@ function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
     warnings.push(envelope.warning("section_not_permitted", "Accounting connections are not included for your role.", { section: "accounting" }));
   }
 
+  // The headline number counts CONNECTIONS, not rows. Four commerce providers
+  // with no connection, plus the Amazon and eBay rows, are six rows on a
+  // workspace that has connected nothing — and "6 connection(s) checked; 0 need
+  // reconnecting" is a summary of six connections that do not exist. The
+  // per-row availability words were always honest; the count was not.
+  //
+  // `considered` keeps what the old number was actually measuring: how many
+  // channels this answer looked at. Both are reported, because they answer two
+  // different questions.
+  const connected = rows.filter((row) => row.connectionKnown === true);
   return {
-    data: { connections: rows, count: rows.length },
+    data: {
+      connections: rows,
+      count: connected.length,
+      considered: rows.length,
+      needsReconnect: rows.filter((row) => row.reconnectRequired).length
+    },
     warnings,
     sources,
     entityRefs: rows.filter((row) => row.connectionId).slice(0, 20)

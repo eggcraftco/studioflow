@@ -74,6 +74,46 @@ check("orders held for review are counted per connection, without the customer's
   assert.ok(!/customerName/.test(JSON.stringify(result.data)));
 });
 
+check("an empty workspace is not told it has six connections", () => {
+  // The tool answers "is anything wrong with my connections?". Its headline
+  // number counted placeholder rows — four unconnected commerce providers plus
+  // the Amazon and eBay rows — so a workspace that had connected nothing was
+  // told "6 connection(s) checked; 0 need reconnecting".
+  const empty = { companyId: "co_1", nowMs: NOW, settings: fixtures.settings, orders: [], connections: {}, commerceHealth: [] };
+  const result = health.integrationHealth(empty, {}, ctx, { nowMs: NOW });
+  assert.strictEqual(result.data.count, 0, "there are no connections; the count must not be the number of rows");
+  assert.strictEqual(result.data.considered, result.data.connections.length,
+    "what the old number measured — channels looked at — is still reported, under its own name");
+  assert.ok(result.data.considered > 0, "and the rows themselves still say each channel was considered");
+
+  const render = require("../../orchestrator/render");
+  const lines = render.summaryFor({ action: "get_integration_health", data: result.data, warnings: [], freshness: {} }, {});
+  const text = lines.map((row) => row.text).join("\n");
+  assert.ok(!/6 connection/.test(text), text);
+  assert.ok(/0 connection\(s\) set up/.test(lines[0].text), lines[0].text);
+});
+
+check("a connection Amazon's own project hides is counted only when its orders prove it exists", () => {
+  const withOrders = fixtures.mixedSnapshot();   // carries one Amazon order
+  const amazon = rowFor(health.integrationHealth(withOrders, {}, ctx, { nowMs: withOrders.nowMs }), "amazon");
+  assert.strictEqual(amazon.connectionKnown, true, "the orders are the only evidence this surface can have");
+
+  const withoutOrders = fixtures.mixedSnapshot();
+  withoutOrders.orders = withoutOrders.orders.filter((order) => String((order.commerce || {}).provider || "") !== "amazon");
+  const blind = rowFor(health.integrationHealth(withoutOrders, {}, ctx, { nowMs: withoutOrders.nowMs }), "amazon");
+  assert.strictEqual(blind.connectionKnown, false, "no orders is no evidence; an assumed connection is an invented one");
+  assert.strictEqual(blind.authStatus, "not_visible", "and it is still not called disconnected");
+});
+
+check("the counts a health answer states are counts of its own rows", () => {
+  const snapshot = fixtures.mixedSnapshot();
+  snapshot.connections.shopify[0].status = "reconnect_required";
+  const result = health.integrationHealth(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+  assert.strictEqual(result.data.count, result.data.connections.filter((row) => row.connectionKnown).length);
+  assert.strictEqual(result.data.needsReconnect, result.data.connections.filter((row) => row.reconnectRequired).length);
+  assert.strictEqual(result.data.needsReconnect, 1);
+});
+
 check("a stale sync is reported against the commerce threshold, not the bank's", () => {
   const snapshot = fixtures.mixedSnapshot();
   snapshot.commerceHealth[0].doc.orders.lastSuccessAtMs = NOW - 8 * HOUR;
