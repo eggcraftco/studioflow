@@ -265,18 +265,25 @@ function createEbayConnectorFunctions(deps) {
   function callbackDigest(key, timestamp, rawBody) {
     return crypto.createHmac("sha256", key).update(`v1.${timestamp}.`, "utf8").update(rawBody).digest("hex");
   }
-  function signatureAccepted(key, headers, rawBody) {
+  // Answers a WORD, and the word never leaves this process: every one of them is
+  // the same 401 `{ok:false}` on the wire, byte for byte, so nothing here is an
+  // oracle. The word exists because the operator's runbook has to tell the causes
+  // apart, and a CLOCK is one of them: a web host more than five minutes off
+  // Google's time produces exactly the 401 a key mismatch produces, and an
+  // operator following a runbook that names only the key re-mints it, redeploys,
+  // and is then out of diagnoses with the real cause never named.
+  function checkSignature(key, headers, rawBody) {
     const timestamp = String(headers["x-nivadesk-timestamp"] || "");
-    if (!/^\d{1,15}$/.test(timestamp)) return false;
-    if (Math.abs(now() - Number(timestamp)) > CALLBACK_SKEW_MS) return false;   // stale AND future
+    if (!/^\d{1,15}$/.test(timestamp)) return "unsigned";
+    if (Math.abs(now() - Number(timestamp)) > CALLBACK_SKEW_MS) return "skew";   // stale AND future
     const presented = String(headers["x-nivadesk-signature"] || "");
-    if (!presented.startsWith("v1=")) return false;
+    if (!presented.startsWith("v1=")) return "unsigned";
     const offered = Buffer.from(presented.slice(3), "utf8");
     const expected = Buffer.from(callbackDigest(key, timestamp, rawBody), "utf8");
     // timingSafeEqual throws on unequal lengths, so the length is guarded first;
     // the length of a hex digest is public, and the comparison itself is constant time.
-    if (offered.length !== expected.length) return false;
-    return crypto.timingSafeEqual(offered, expected);
+    if (offered.length !== expected.length) return "unsigned";
+    return crypto.timingSafeEqual(offered, expected) ? "ok" : "unsigned";
   }
   // Every refusal before the signature check is anonymously triggerable: the
   // endpoint is public, and those lines fire on a bare POST from anyone. One of
@@ -526,7 +533,14 @@ function createEbayConnectorFunctions(deps) {
     // answer cannot be used as an unauthenticated oracle for whether the secret
     // exists. The distinction lives only in this ops line (§5.4, "no 503").
     if (key.length < CALLBACK_KEY_MIN_LENGTH) { opsSay("error", "unconfigured", "ebay callback: EBAY_CALLBACK_KEY not configured"); answer(401, { ok: false }); return; }
-    if (!signatureAccepted(key, req.headers || {}, rawBody)) { opsSay("warn", "unsigned", "ebay callback: rejected unsigned request"); answer(401, { ok: false }); return; }
+    const signature = checkSignature(key, req.headers || {}, rawBody);
+    if (signature !== "ok") {
+      // Two ops keys, one answer. The skew line is anonymously triggerable like
+      // every other pre-signature line, so it is throttled with the rest.
+      if (signature === "skew") opsSay("warn", "skew", "ebay callback: relay timestamp outside the five-minute window");
+      else opsSay("warn", "unsigned", "ebay callback: rejected unsigned request");
+      answer(401, { ok: false }); return;
+    }
     let body = null;
     try { body = JSON.parse(rawBody.toString("utf8")); } catch { body = null; }
     // The parse error's message quotes the body back; the byte length is all the log gets.

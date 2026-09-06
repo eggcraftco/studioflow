@@ -1005,7 +1005,8 @@ reaches the screen.
 | **No nonce cookie** | **Function** (the web posts `nonce:""`) | 200 `reason=browser`, **state burned and the code redeemed and discarded** | "Finish connecting eBay in the same browser you started from." | nothing |
 | Nonce mismatch | Function | 200 `reason=browser`, **state burned, code redeemed and discarded** | same | nothing |
 | `NIVADESK_EBAY_CALLBACK_KEY` unset or under 32 chars | Web | 302 `reason=unavailable`, no call | "eBay did not complete the connection. Try again." | `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` / `… shorter than 32 characters` |
-| Unauthenticated / wrongly signed / stale timestamp / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection; **at most once a minute per instance** (below) |
+| Unauthenticated / wrongly signed / no `rawBody` POST | Function | **401** `{"ok":false}` | — (not a seller; if it were, `reason=unavailable`) | `ebay callback: rejected unsigned request` — no header, no body, no rid, no reason for the rejection; **at most once a minute per instance** (below) |
+| Timestamp outside the ±5-minute window (either direction) | Function | **401** `{"ok":false}` — byte-identical to the row above | same | `ebay callback: relay timestamp outside the five-minute window`, throttled the same way. **Its own ops key on purpose:** a relay host whose clock has drifted produces exactly the 401 a key mismatch produces, and a runbook naming only the key (deploy plan §4.2) sends the operator round the same loop for ever. The distinction is in our log, never in the answer, so it is no oracle |
 | `EBAY_CALLBACK_KEY` unset on the function | Function | **401** `{"ok":false}` (indistinguishable from a wrong key) | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback: EBAY_CALLBACK_KEY not configured`, **at most once a minute per instance** — it is a configuration fact, not a per-request event, and the repeat is what an outsider would use to bury it |
 | GET (or any non-POST) on the function | Function | **405** `{"ok":false}` | — | nothing |
 | Query string on the function | Function | **400** `{"ok":false}` | — | `ebay callback: query string refused` (the string itself is **not** logged), at most once a minute per instance |
@@ -1079,8 +1080,8 @@ behaviour rather than the code:
    answered above it.
 
 **Every line before the signature check is anonymously triggerable, so those lines are throttled.**
-`ebayOAuthCallback` is public: the method, query-string, `rawBody`, size and key checks all answer before
-any key is proven, so an outsider decides how often four log lines are written, and one of them —
+`ebayOAuthCallback` is public: the method, query-string, `rawBody`, size, key and timestamp checks all
+answer before any key is proven, so an outsider decides how often five log lines are written, and one —
 `ebay callback: EBAY_CALLBACK_KEY not configured` — is at **error** severity and is the line *Rollout*
 step 4 tells the operator to grep for. Unthrottled, a stranger can write it out of the very window it
 matters in, one line per request, at our expense. Each of those lines is therefore emitted **at most once

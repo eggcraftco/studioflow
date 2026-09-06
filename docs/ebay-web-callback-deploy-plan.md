@@ -107,6 +107,7 @@ key is never sent on the wire either, because the web side signs and the functio
 | set | set, same value | The only combination that can complete a connection. |
 | **unset**, or shorter than 32 characters | anything | The route makes **no call at all**. The seller lands on `…&ebay=error&reason=unavailable` → "eBay did not complete the connection. Try again." The Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. **No state is consumed — and that is the cost, not the comfort: see below.** |
 | set | **unset**, or the marker not committed, or the functions not deployed | The route signs and POSTs. An unconfigured function answers **401** — deliberately identical to a wrong key, so the status cannot be used to ask whether the secret exists — and an undeployed one is simply unreachable. Seller sees `reason=unavailable`; Hostinger logs `ebay callback relay rid=<rid> status=401` or `… unreachable`; Google logs `ebay callback: EBAY_CALLBACK_KEY not configured` when the function is there — **once a minute per instance, not once per request** (§5.4: that line is reachable without a key, so it is throttled; look for its presence, never count it). **No state is consumed — the cost, not the comfort: see below.** |
+| set, same value | set, same value, but the **web host's clock is more than five minutes off** Google's | The signature is never even compared: the function refuses on the timestamp window and answers the **same 401** as a wrong key. Hostinger logs `ebay callback relay rid=<rid> status=401`; Google logs `ebay callback: relay timestamp outside the five-minute window` — a different ops line from `rejected unsigned request`, which is the only way to tell this row from the one below. Without that line an operator re-mints the key, sets both halves, redeploys, and is still at 401 with nothing left to check. **No state is consumed.** |
 | set | set, **different value** (a half-finished rotation) | The signature does not verify: 401, seller `reason=unavailable`, `ebay callback relay rid=<rid> status=401` on Hostinger and `ebay callback: rejected unsigned request` on Google. The rid is the only value in either line, and it is minted by the web side for exactly this trace. **No state is consumed — the cost, not the comfort: see below.** This is the realistic steady-state row: a rotation where Hostinger already has the new value and Secret Manager does not. |
 
 The pattern is the point: **every partial configuration fails closed for the connection.** No code is
@@ -195,8 +196,11 @@ for the next time this pair moves.)
 7. **Then** the controlled-response proof repeats and must show a real refusal:
    - a signed relay whose state was never minted → 302 to the settings page with `reason=state` (the
      function answered 200 `{"ok":false,"reason":"state"}`; the redirect is the route's). A **401** here
-     instead means the signature was not accepted at all — the two halves of the key disagree, or the
-     secret is not mounted (§4.2, rows 3 and 4) — and says nothing about the state;
+     instead means the signature was not accepted at all, and it has **three** causes, not two: the two
+     halves of the key disagree, the secret is not mounted, **or this host's clock has drifted more than
+     five minutes** (§4.2, rows 3, 4 and 5). Read the Google-side line to tell them apart —
+     `rejected unsigned request` for the first two, `relay timestamp outside the five-minute window` for
+     the third. The 401 itself says nothing about the state;
    - a callback with a valid state but **no nonce cookie** → `reason=browser`, **and the state burned**.
      This still holds under §5.4 and is the point of it: the route posts `nonce: ""` rather than refusing,
      precisely so the state is consumed at the moment of consent. A route that refused an absent cookie

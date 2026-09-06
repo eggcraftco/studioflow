@@ -309,6 +309,33 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(ahead.payload.outcome, "connected", said(ahead));
   });
 
+  await check("a clock-skew 401 and a wrong-key 401 are the same answer and DIFFERENT ops lines — the operator can tell a drifted clock from a key mismatch", async () => {
+    // Same status, same body, same absence of a rid: the distinction is in our
+    // log and never in the answer, so it is no oracle. It exists because a
+    // Hostinger process whose time has drifted produces exactly the 401 a
+    // half-finished key rotation produces, and a runbook that names only the key
+    // sends the operator round the same loop for ever.
+    const { fns, nowRef } = buildEbay();
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const fields = { v: 1, rid: callbackRid(), code: "good-code", state: begun.state, nonce: begun.nonce };
+    const counted = (needle) => captured.filter((l) => l.includes(needle)).length;
+    const skewBefore = counted("timestamp outside the five-minute window");
+    const unsignedBefore = counted("rejected unsigned request");
+    const stale = await signedCallback(fns, fields, { timestampMs: nowRef.value - 6 * 60 * 1000 });
+    assert.strictEqual(counted("timestamp outside the five-minute window") - skewBefore, 1, "the clock has its own line");
+    assert.strictEqual(counted("rejected unsigned request") - unsignedBefore, 0, "and it is not filed as a bad signature");
+    nowRef.value += 61 * 1000;
+    const wrongKey = await signedCallback(fns, fields, { key: crypto.randomBytes(32).toString("hex") });
+    assert.strictEqual(counted("rejected unsigned request") - unsignedBefore, 1);
+    assert.strictEqual(stale.statusCode, 401); assert.strictEqual(wrongKey.statusCode, 401);
+    assert.strictEqual(JSON.stringify(stale.payload), JSON.stringify(wrongKey.payload), "byte-identical answers: the log is the only place they differ");
+    // …and the skew line is throttled like every other pre-signature line: an
+    // outsider chooses the timestamp, so it must not be a free line generator.
+    const repeatBefore = counted("timestamp outside the five-minute window");
+    for (let i = 0; i < 4; i += 1) await signedCallback(fns, fields, { timestampMs: nowRef.value - 6 * 60 * 1000 });
+    assert.strictEqual(counted("timestamp outside the five-minute window") - repeatBefore, 1, "four more, one line");
+  });
+
   await check("the envelope is refused with 400 and no rid: an oversized body, a non-JSON body, an array, v:2, and every rid that is not sixteen lowercase hex", async () => {
     const { fns, store } = buildEbay();
     const begun = await fns.beginEbayConnect({ auth, data: {} });
