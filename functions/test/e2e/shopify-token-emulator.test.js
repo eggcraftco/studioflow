@@ -1,12 +1,13 @@
 // SHOP-004 — the Shopify offline token at rest, against a real Firestore.
 //
 // The bridge's upsertStore is what the app server calls after OAuth; from here
-// on it stores an AES-256-GCM box under SHOPIFY_TOKEN_KEY beside the plaintext
-// (Phase A, dual write), every reader goes through shopifyStoreAccessToken,
-// the box is read first, and a store that only ever had the plaintext gets its
-// box the first time its token is read. What must NOT happen is a store that
-// stops syncing because a box will not open — the fallback is the plaintext,
-// with a warning, never an error.
+// on it stores an AES-256-GCM box under SHOPIFY_TOKEN_KEY and no plaintext
+// beside it (Phase B — the plaintext copy is written only when there is no key
+// to box with). Every reader goes through shopifyStoreAccessToken, the box is
+// read first, and a store that only ever had the plaintext gets its box the
+// first time its token is read, the plaintext being cleared once that box has
+// read back. What must NOT happen is a store that stops syncing because a box
+// will not open — the fallback is the plaintext, with a warning, never an error.
 //
 //   firebase emulators:exec --only firestore "node functions/test/e2e/shopify-token-emulator.test.js"
 
@@ -64,15 +65,15 @@ async function wipe() { for (const shop of [SHOP, LEGACY]) await storeRef(shop).
 (async () => {
   await wipe();
 
-  await check("upsertStore writes the box beside the plaintext, and the box opens to the token", async () => {
+  await check("upsertStore writes the box and no plaintext, and the box opens to the token", async () => {
     const res = await bridge({ action: "upsertStore", shop: SHOP, accessToken: TOKEN, shopName: "E2E Token", scopes: "read_orders" });
     assert.strictEqual(res.statusCode, 200, JSON.stringify(res.payload));
     const doc = (await storeRef(SHOP).get()).data();
-    assert.strictEqual(doc.accessToken, TOKEN, "Phase A: plaintext still there");
+    assert.strictEqual(doc.accessToken, "", "Phase B: no plaintext beside the box");
     const box = doc.accessTokenEncrypted;
     assert.ok(box && box.v === 1 && box.iv && box.tag && box.data, "an AES-GCM box");
     assert.notStrictEqual(box.data, TOKEN, "the box is not the token");
-    assert.ok(!JSON.stringify(box).includes(TOKEN), "the token appears nowhere in the box");
+    assert.ok(!JSON.stringify(doc).includes(TOKEN), "the token appears nowhere in the stored document");
     assert.ok(doc.tokenEncryptedAt, "stamped");
     assert.strictEqual(e2e.shopifyStoreAccessToken(doc), TOKEN, "read back through the helper");
   });
@@ -117,7 +118,7 @@ async function wipe() { for (const shop of [SHOP, LEGACY]) await storeRef(shop).
       if (after.accessTokenEncrypted) break;
     }
     assert.ok(after.accessTokenEncrypted && after.accessTokenEncrypted.data, "box written by the fire-and-forget migration");
-    assert.strictEqual(after.accessToken, "shpat_legacy", "Phase A: plaintext untouched");
+    assert.strictEqual(after.accessToken, undefined, "Phase B: the plaintext is cleared once the box has read back");
     assert.strictEqual(e2e.shopifyStoreAccessToken(after), "shpat_legacy", "and the box opens to the same token");
   });
 
@@ -146,11 +147,12 @@ async function wipe() { for (const shop of [SHOP, LEGACY]) await storeRef(shop).
     assert.strictEqual(e2e.shopifyStoreAccessToken(doc), "", "nothing to read");
   });
 
-  await check("a reinstall stores the new token in both forms again", async () => {
+  await check("a reinstall boxes the new token again, still with no plaintext", async () => {
     const res = await bridge({ action: "upsertStore", shop: SHOP, accessToken: "shpat_reinstalled" });
     assert.strictEqual(res.statusCode, 200);
     const doc = (await storeRef(SHOP).get()).data();
-    assert.strictEqual(doc.accessToken, "shpat_reinstalled");
+    assert.ok(doc.accessTokenEncrypted && doc.accessTokenEncrypted.data, "a fresh box");
+    assert.strictEqual(doc.accessToken, "", "no plaintext");
     assert.strictEqual(e2e.shopifyStoreAccessToken(doc), "shpat_reinstalled");
   });
 

@@ -74,7 +74,9 @@ jobs:
       - run: npm install -g firebase-tools@15
       # A demo- project needs no credentials; the suites pick their own project
       # ids (the emulator is multi-tenant), so this one only names the process.
+      # Storage is in the set because test/qa/storage-scan-rules.test.mjs (the
+      # upload scanner's rules) runs from the same glob and needs it.
       - name: Rules + e2e against the emulator
-        run: firebase emulators:exec --only firestore --project demo-nivadesk-ci "cd functions && npm run test:rules && bash test/run-e2e.sh"
+        run: firebase emulators:exec --only firestore,storage --project demo-nivadesk-ci "cd functions && npm run test:rules && bash test/run-e2e.sh"
         env:
           CI: "true"
