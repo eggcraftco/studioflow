@@ -54,6 +54,46 @@ function orchestratorWith(overrides = {}, snapshot = fixtures.mixedSnapshot()) {
   });
 }
 
+checkAsync("resolveContext builds every area a registry row is allowed to name", async () => {
+  // `assertCapability` reads `ctx.areas[permission.area]`, so an area this
+  // function does not build is `undefined` and refuses the owner as flatly as a
+  // stranger. It built four keys while ten rows named `notes` or
+  // `financialInfo`; `orchestrator-contract.test.js` pins the registry side of
+  // that, and this is the other half — the context really carrying them, out of
+  // the app's own `uidCanAccessWorkspaceArea` rather than a literal here.
+  const companyData = {
+    ownerUid: "u_owner",
+    members: { u_member: true },
+    memberAccess: { u_member: { orders: true, notes: true, financialInfo: true } }
+  };
+  const loadCompany = async () => ({ companyData, settings: fixtures.settings });
+  const orchestrator = createOrchestrator({
+    ...deps(), loadCompany, flags: { orchestrator: true },
+    loaders: { loadCompany, snapshotFor: async () => fixtures.mixedSnapshot() }
+  });
+
+  for (const uid of ["u_owner", "u_member"]) {
+    const ctx = await orchestrator.resolveContext({ uid, companyId: "co_1", scope: "orders.read notes.read finance.read" });
+    assert.deepStrictEqual(Object.keys(ctx.areas).sort(), [...context.AREA_KEYS].sort(),
+      `${uid}: ctx.areas does not carry every area a registry row may name`);
+    for (const area of context.AREA_KEYS) {
+      assert.strictEqual(typeof ctx.areas[area], "boolean", `${uid}: ctx.areas.${area} is ${ctx.areas[area]}`);
+    }
+    assert.strictEqual(ctx.areas.notes, true, `${uid} was granted notes and did not get it`);
+  }
+
+  // And the area is still ASKED for, not assumed: a member without it is
+  // refused by the notes row.
+  const noNotes = { ...companyData, memberAccess: { u_member: { orders: true, notes: false } } };
+  const strict = createOrchestrator({
+    ...deps(), loadCompany: async () => ({ companyData: noNotes, settings: fixtures.settings }), flags: { orchestrator: true },
+    loaders: { loadCompany: async () => ({ companyData: noNotes, settings: fixtures.settings }), snapshotFor: async () => fixtures.mixedSnapshot() }
+  });
+  const denied = await strict.resolveContext({ uid: "u_member", companyId: "co_1", scope: "notes.read notes.write" });
+  assert.strictEqual(denied.areas.notes, false);
+  assert.throws(() => context.assertCapability(denied, registry.entryFor("search_notes")), /does not include notes/);
+});
+
 checkAsync("a member whose access was revoked is refused on the next call, not the next cache expiry", async () => {
   // The company document is read per request. A gateway that cached it would
   // keep serving somebody whose membership was removed a minute ago.

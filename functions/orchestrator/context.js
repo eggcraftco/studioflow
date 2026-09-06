@@ -128,6 +128,33 @@ function missingScopes({ authType = "", scope = "" } = {}, required = []) {
   return (Array.isArray(required) ? required : []).filter((needed) => !granted.has(needed));
 }
 
+/**
+ * Every workspace area a registry row is allowed to name, and therefore every
+ * key `ctx.areas` carries.
+ *
+ * `assertCapability` reads `ctx.areas[permission.area]`, so an area the context
+ * does not build is `undefined` and refuses UNCONDITIONALLY — including to the
+ * owner. Ten rows named one: seven notes tools carry `area: "notes"` and
+ * `get_order_financials`, `get_extra_spending_overview` and
+ * `get_financial_overview` carry `area: "financialInfo"`, while this object held
+ * four keys and neither of those was among them.
+ *
+ * It failed closed, and it was harmless only by accident: none of the ten has a
+ * HANDLERS entry, so `assertCapability` is never reached for them today. The
+ * table exists precisely so a second channel can route the SAME rows through the
+ * same gate (registry.publishedForChannel, orchestrator/index.js), and the first
+ * time the WhatsApp gateway does, every notes tool would have been denied to
+ * everyone with "Your workspace access does not include notes."
+ *
+ * Both names are real `WORKSPACE_MEMBER_ACCESS_KEYS` in index.js, so
+ * `uidCanAccessWorkspaceArea` answers them properly; they were simply not asked.
+ * The list is enumerated here rather than derived from the registry because
+ * context.js must not import the registry — but `orchestrator-contract.test.js`
+ * pins `permission.area ∈ AREA_KEYS` over every row, so a row naming a new area
+ * fails the suite instead of failing its callers.
+ */
+const AREA_KEYS = Object.freeze(["orders", "dashboard", "customers", "bankFeed", "notes", "financialInfo"]);
+
 /** The refusal text for a missing grant, so both surfaces say the same thing. */
 function scopeRefusal(missing = [], granted = []) {
   if (granted.length === 0) {
@@ -205,12 +232,7 @@ async function resolveContext({ uid, companyId, authType = "chatgpt_oauth", scop
     authType: String(authType || ""),
     role,
     isOwner,
-    areas: {
-      orders: area("orders"),
-      dashboard: area("dashboard"),
-      customers: area("customers"),
-      bankFeed: area("bankFeed")
-    },
+    areas: Object.fromEntries(AREA_KEYS.map((name) => [name, area(name)])),
     financialInfo: deps.roleCanAccessFinancialInfo(companyData, cleanUid) === true,
     accountingReader: deps.accountingReaderCanRead ? deps.accountingReaderCanRead(companyData, cleanUid) === true : isOwner,
     inventoryAccess: deps.inventoryAccessAllowed ? deps.inventoryAccessAllowed(companyData, cleanUid) === true : isOwner,
@@ -336,6 +358,6 @@ function sectionAccess(ctx) {
 
 module.exports = {
   OrchestratorError, CHANNEL_TYPES, FIRST_PARTY_AUTH_TYPES,
-  resolveContext, assertCapability, sectionAccess, SECTION_OWNERS, scopeSet,
+  resolveContext, assertCapability, sectionAccess, SECTION_OWNERS, AREA_KEYS, scopeSet,
   scopeGateApplies, missingScopes, scopeRefusal
 };

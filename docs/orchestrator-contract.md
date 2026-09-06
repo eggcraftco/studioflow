@@ -126,8 +126,17 @@ const ctx = await nivaOrchestrator.resolveContext({
 ```
 
 Returns the context every capability is handed: `uid`, `email`, `companyId`, `companyData`, `authType`,
-`role`, `isOwner`, `areas{orders,dashboard,customers,bankFeed}`, `financialInfo`, `accountingReader`,
-`inventoryAccess`, `entitlements`, `workflowOnly`, `assignedOnly`, `scope[]`, `settings`, `channel`.
+`role`, `isOwner`, `areas`, `financialInfo`, `accountingReader`, `inventoryAccess`, `entitlements`,
+`workflowOnly`, `assignedOnly`, `scope[]`, `settings`, `channel`.
+
+`areas` carries one boolean per name in `context.AREA_KEYS` —
+`orders`, `dashboard`, `customers`, `bankFeed`, `notes`, `financialInfo` — each from the app's own
+`uidCanAccessWorkspaceArea`. That list is not decoration: `assertCapability` does
+`if (permission.area && !ctx.areas[permission.area])`, so an area the context does not build reads
+`undefined` and refuses everybody, the owner included. It held four names while ten registry rows asked
+for `notes` or `financialInfo` — harmless only because none of those ten has a handler yet, and exactly
+the kind of thing that surfaces the first time a second channel routes the same table through the same
+gate. `orchestrator-contract.test.js` now pins `permission.area ∈ AREA_KEYS` over every row.
 
 Four rules the gateway cannot opt out of:
 

@@ -78,6 +78,43 @@ check("a read-only binding gets every read and not one write", () => {
   }
 });
 
+check("every permission.area a row names is an area a context can actually hold", () => {
+  // `assertCapability` does `if (permission.area && !ctx.areas[permission.area])`,
+  // so an area `resolveContext` does not build reads `undefined` and refuses
+  // UNCONDITIONALLY, the owner included. Ten rows named one that was not there:
+  // seven notes tools on `area: "notes"` and the three finance tools on
+  // `area: "financialInfo"`, against an `areas` object with four keys.
+  //
+  // It failed closed, and it was harmless only by accident — none of the ten has
+  // a HANDLERS entry, so the gate is never reached for them today. This table
+  // exists so a second channel can route the SAME rows through the SAME gate,
+  // and the first time the WhatsApp gateway does, every notes tool is denied to
+  // everyone with "Your workspace access does not include notes."
+  const declared = [...new Set(registry.TOOL_REGISTRY
+    .map((entry) => (entry.permission || {}).area)
+    .filter((area) => typeof area === "string" && area.length > 0))].sort();
+  assert.ok(declared.length > 0, "no row names an area — this check has stopped testing anything");
+  for (const area of declared) {
+    assert.ok(contextModule.AREA_KEYS.includes(area),
+      `a registry row asks for the "${area}" area, which context.AREA_KEYS does not build — assertCapability would refuse every caller`);
+  }
+
+  // And a context really carries them, key for key — a constant list nothing
+  // reads would satisfy the loop above. `resolveContext` building them out of
+  // the app's own predicate is pinned in orchestrator-context.test.js; this is
+  // the fixture every other test in this suite is written against.
+  const owner = fixtures.ownerContext();
+  assert.deepStrictEqual(Object.keys(owner.areas).sort(), [...contextModule.AREA_KEYS].sort(),
+    "the context's areas and the areas a row may name are two different lists again");
+  // The key is load-bearing rather than merely present: the row passes when the
+  // area is held and is refused BY NAME when it is not.
+  const notesRow = registry.TOOL_REGISTRY.find((entry) => (entry.permission || {}).area === "notes");
+  assert.ok(notesRow, "no row carries the notes area any more");
+  assert.doesNotThrow(() => contextModule.assertCapability(owner, notesRow));
+  const withheld = fixtures.ownerContext({ isOwner: false, areas: { ...owner.areas, notes: false } });
+  assert.throws(() => contextModule.assertCapability(withheld, notesRow), /does not include notes/);
+});
+
 check("assurance gates a tool even when the binding allows its kind (WA §15)", () => {
   const everyKind = registry.CAPABILITY_KINDS;
   const atLevel = (level) => registry

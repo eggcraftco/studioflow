@@ -237,8 +237,17 @@ function attentionSnapshot({ nowMs = NOW } = {}) {
   };
 }
 
-/** A context the way resolveContext builds one, without touching Firestore. */
+/**
+ * A context the way resolveContext builds one, without touching Firestore.
+ *
+ * `areas` is built from `context.AREA_KEYS` rather than written out here, so a
+ * fixture cannot go on describing a shape the real context stopped having — the
+ * hand-written four-key version outlived the day two more areas were needed and
+ * would have hidden the fact that `notes` and `financialInfo` did not exist.
+ * A test that wants a narrower caller still replaces `areas` wholesale.
+ */
 function ownerContext(overrides = {}) {
+  const { AREA_KEYS } = require("../../orchestrator/context");
   return {
     uid: "u_owner",
     email: "owner@example.com",
@@ -247,7 +256,7 @@ function ownerContext(overrides = {}) {
     authType: "chatgpt_oauth",
     role: "owner",
     isOwner: true,
-    areas: { orders: true, dashboard: true, customers: true, bankFeed: true },
+    areas: Object.fromEntries(AREA_KEYS.map((name) => [name, true])),
     financialInfo: true,
     accountingReader: true,
     inventoryAccess: true,
