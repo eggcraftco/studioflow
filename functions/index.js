@@ -84,6 +84,13 @@ const {
 } = require("./integrationOrderFields");
 
 const TRACK17_TOKEN = defineSecret("TRACK17_TOKEN");
+// Rotated 6 September 2026 after the old value was exposed (see
+// docs/security/evidence/amazon/secret-exposure-2026-09-06.md). It was a plain
+// environment value, which is how an unfiltered `gcloud run services describe`
+// printed it, and it was also arriving as a URL query parameter, which put it in
+// Cloud Run's request log. Both of those are closed below: the value lives in
+// Secret Manager and is only accepted in a header.
+const TRACK17_WEBHOOK_TOKEN = defineSecret("TRACK17_WEBHOOK_TOKEN");
 const ROYALMAIL_CLIENT_ID = defineSecret("ROYALMAIL_CLIENT_ID");
 const ROYALMAIL_CLIENT_SECRET = defineSecret("ROYALMAIL_CLIENT_SECRET");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
@@ -21628,7 +21635,7 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
 });
 
 
-exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) => {
+exports.track17Webhook = onRequest({ region: "europe-west2", secrets: [TRACK17_WEBHOOK_TOKEN] }, async (req, res) => {
   try {
     if (req.method !== "POST") {
       res.status(200).json({ ok: true, message: "Webhook endpoint is alive. Use POST for updates." });
@@ -21648,13 +21655,26 @@ exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) 
     // Now an absent token refuses the request. 503 rather than 401, because the
     // fault is ours and not the sender's: 17TRACK should retry rather than treat the
     // delivery as rejected.
-    const expectedToken = String(process.env.TRACK17_WEBHOOK_TOKEN || "").trim();
+    // The value now comes from Secret Manager, so it is not in the service's
+    // environment and an `describe` of the service cannot print it.
+    let expectedToken = "";
+    try { expectedToken = String(TRACK17_WEBHOOK_TOKEN.value() || "").trim(); } catch { expectedToken = ""; }
     if (!expectedToken) {
-      console.error("track17Webhook: TRACK17_WEBHOOK_TOKEN is not set — refusing every request until it is.");
+      console.error("track17Webhook: the webhook secret is not readable — refusing every request until it is.");
       res.status(503).json({ ok: false, error: "not_configured" });
       return;
     }
-    const provided = String(req.query?.token || req.headers["x-studioflow-token"] || "");
+    // Header only. A token in the query string is written verbatim into Cloud
+    // Run's request log, which is how the previous value ended up there, so the
+    // URL form is refused rather than quietly accepted. 17TRACK must send the
+    // token as `x-studioflow-token`; a request that still puts it in the URL is
+    // answered with a reason that names the problem.
+    if (req.query && typeof req.query.token !== "undefined") {
+      console.warn("track17Webhook: refused a request carrying the token in the URL; the sender must use the x-studioflow-token header.");
+      res.status(401).json({ ok: false, error: "token_in_url" });
+      return;
+    }
+    const provided = String(req.headers["x-studioflow-token"] || "");
     if (!nvTimingSafeEqual(provided, expectedToken)) {
       console.warn("track17Webhook: rejected request with invalid token.");
       res.status(401).json({ ok: false, error: "invalid_token" });

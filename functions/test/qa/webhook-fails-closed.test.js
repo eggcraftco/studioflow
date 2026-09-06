@@ -53,6 +53,32 @@ check("a wrong token is still refused, and the sender is told which kind of fail
   assert.ok(/res\.status\(503\)[^\n]*not_configured/.test(body));
 });
 
+check("the tracking token comes from Secret Manager, not from the environment", () => {
+  // It was a plain environment value until 6 September 2026, which is how an
+  // unfiltered service description printed it into a transcript. The rotation moved
+  // it into Secret Manager; this check is what stops it moving back.
+  assert.ok(source.includes('const TRACK17_WEBHOOK_TOKEN = defineSecret("TRACK17_WEBHOOK_TOKEN")'),
+    "the webhook token is no longer declared as a Secret Manager parameter");
+  const head = source.slice(source.indexOf("exports.track17Webhook = onRequest("), source.indexOf("exports.track17Webhook = onRequest(") + 200);
+  assert.ok(head.includes("secrets: [TRACK17_WEBHOOK_TOKEN]"),
+    "the function does not bind the secret, so its value would be empty in production");
+  const body = bodyOf("exports.track17Webhook = onRequest(");
+  assert.ok(body.includes("TRACK17_WEBHOOK_TOKEN.value()"), "the handler does not read the secret");
+  assert.ok(!source.includes("process.env.TRACK17_WEBHOOK_TOKEN"),
+    "the handler still reads the token from the environment, where a service description can print it");
+});
+
+check("a token that arrives in the URL is refused, because a URL is written to the request log", () => {
+  const body = bodyOf("exports.track17Webhook = onRequest(");
+  const refusal = body.indexOf("token_in_url");
+  assert.ok(refusal > 0, "there is no refusal for a token carried in the query string");
+  assert.ok(refusal < body.indexOf("nvTimingSafeEqual"),
+    "the URL form is refused only after the token has already been used");
+  assert.ok(!body.includes("req.query?.token ||"), "the query parameter is still accepted as a token source");
+  assert.ok(body.includes('req.headers["x-studioflow-token"]'),
+    "the header form is gone as well, which would refuse every request");
+});
+
 check("every other inbound webhook still authenticates before it acts", () => {
   // Not a new rule — a regression net around the ones that already do it, so
   // that "authenticated" stays true of the whole surface rather than of one
