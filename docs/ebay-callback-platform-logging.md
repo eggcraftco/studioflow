@@ -130,6 +130,34 @@ three only "redeem immediately" is available to us, and we already do.
 questions 2, 3 and 4 in writing from a human agent. That answer is still outstanding and will be
 added here when it arrives.
 
+## The third log nobody had looked at: Firestore's own
+
+The two hops above are Hostinger's access log and Cloud Run's `httpRequest.requestUrl`. There is a third
+place a value from this flow can land, and it is worth naming because §5.4's headline — the code and the
+nonce are out of every backend URL — is silent about it.
+
+The **state** is a Firestore document id (`ebayConnectStates/{state}`), and Google's **Data Access** audit
+logs record the full document path in `protoPayload.resourceName`. Those logs are **off by default** on a
+Cloud project, they cost money to keep, and nothing in this work turns them on — and the state has been
+the document id since the connector was written, so this is not a regression. But "off by default" is a
+default, not a measurement, and a state is half of the attack §5.4 describes: a key holder who has seen
+one gets a state oracle, and a log reader who can also mint a state has the whole of the browser-binding
+defence.
+
+**Check, before the first sandbox connection** (design §5.4, residual 5; deploy plan §4.3 step 8):
+Google Cloud console → IAM & Admin → Audit Logs → **Cloud Firestore API** on `eggcraft-studio`. `DATA_READ`
+and `DATA_WRITE` must be unticked (Admin Read is a different thing and is always on).
+
+| Checked on | Firestore `DATA_READ` | Firestore `DATA_WRITE` | By |
+|---|---|---|---|
+| *not yet checked* | — | — | — |
+
+If they turn out to be on, the state is in a Google log the same way the code is in Hostinger's, and the
+mitigation is the one that already applies to the code: it is single-use and burned at first
+presentation, so a reader gets an oracle and a denial, never a connection. Closing it properly means
+hashing the state to derive the document id, which is an owner decision and a change to §4.5, not to the
+transport.
+
 ## What this decides
 
 The operator's rule was: if Hostinger offers no path-level redaction or disable, **or** the retention

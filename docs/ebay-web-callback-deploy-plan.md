@@ -183,7 +183,14 @@ a rule for the rollout and for every later rotation, not an incident.
      precisely so the state is consumed at the moment of consent. A route that refused an absent cookie
      locally would leave the state alive for its full ten minutes and hand the §5 attacker a second try.
    - an **unsigned** POST straight to the function → 401, and the state survives untouched.
-8. **Only then**, and under its own approval, the first sandbox OAuth connection. Sandbox only: the
+8. **One log check on the Google side, before the first OAuth attempt.** The state is a Firestore
+   document id, and Firestore **Data Access** audit logs record the full document path in
+   `protoPayload.resourceName`. They are off by default and nothing in this work turns them on, but §5.4
+   now claims the flow's values are out of the logs we control, so the claim is checked rather than
+   assumed: IAM → Audit Logs → Cloud Firestore API on `eggcraft-studio` — `DATA_READ` and `DATA_WRITE`
+   must be unticked. Record the answer in `docs/ebay-callback-platform-logging.md` beside the Cloud Run
+   finding, whichever way it comes out (design §5.4, residual 5).
+9. **Only then**, and under its own approval, the first sandbox OAuth connection. Sandbox only: the
    production accepted URL is blocked until the callback is served by a Cloudflare Worker on
    `connect.nivadesk.app`, because eBay puts the code in the query string of the first hop and
    Hostinger's access log keeps it (measured; no disable, no redaction, retention and readers

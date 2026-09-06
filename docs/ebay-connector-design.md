@@ -1283,7 +1283,7 @@ and the web route with no key configured.
 
 #### Residual risk, stated plainly
 
-Four things this change does **not** fix. Each is reduced or bounded, none is closed, and each names who
+Five things this change does **not** fix. Each is reduced or bounded, none is closed, and each names who
 would have to decide otherwise.
 
 1. **The code is still in Hostinger's access log.** eBay's RuName has one accepted URL and eBay decides how
@@ -1333,6 +1333,22 @@ would have to decide otherwise.
    invoker requirement, for the reasons argued above; `maxInstances: 10` bounds the spend and nothing
    bounds the attempts. If that is not acceptable, the alternative is a Google service-account credential
    living on Hostinger, and that is an **owner** decision, not one this design can make quietly.
+5. **The state is a Firestore document id, so one Google log type could still record it.** The headline of
+   this section is that the code and the nonce are out of every backend URL, and that holds. It does not
+   hold for the **state**: `states().doc(state)` makes it a document id (`beginEbayConnect`,
+   `claimEbayConnectState`, the callback transaction and the `connectionId` merge), and **Firestore Data
+   Access audit logs record the full document path in `protoPayload.resourceName`**. Those logs are
+   **off by default** on a Google Cloud project and this is not a regression — the state has been the
+   document id since the connector was written — but the claim "these values are in no log we control"
+   has to be checked rather than assumed, because this section itself treats a state as half an attack: a
+   key holder gets *a state oracle*, and a log reader who can also mint a state *has the whole of the
+   defence*. **One operator check, before the first sandbox connection:** confirm that Data Access audit
+   logs (`DATA_READ` / `DATA_WRITE`) are not enabled for Firestore on `eggcraft-studio` — IAM → Audit
+   Logs → Cloud Firestore API — and record the answer in `docs/ebay-callback-platform-logging.md`, beside
+   the Cloud Run finding. If they ever are enabled, the state joins the code in a log, and the mitigation
+   is the same one residual 1 names: the state is single-use and burned at first presentation, so a log
+   reader has an oracle and a denial, not a connection. Hashing the state to derive the document id would
+   close it and is an **owner** decision, not part of this transport change.
 
 Two things are recorded as **verified correct** so a later reviser does not re-litigate them: every one of
 the eight reason words plus `cancelled` still reaches the seller as a translated sentence
