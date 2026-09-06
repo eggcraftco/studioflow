@@ -317,7 +317,7 @@ Operator's instruction "B4.3'e geç" at 02:38 UTC, i.e. seven minutes into B4.2'
 | reconcileEtsyConnections | reconcileetsyconnections-00018-saw | 403 | reconcileetsyconnections-00019-noj | 403 |
 | reconcileSquareConnections | reconcilesquareconnections-00013-fax | 403 | reconcilesquareconnections-00014-mox | 403 |
 
-6: fifteen-minute watch (02:40:37 → 02:56:30): _pending_.
+6: fifteen-minute watch (02:40:37 → 02:56:31 UTC): **0 ERROR entries, 0 request 5xx**; traffic in the window was the probe set plus real calls on the new revisions (`reconcileSquareConnections` 200, `reconcileEtsyConnections` 200, `previewWorkspaceInvitation` 200) — passed.
 
 ## Rollback used
 
