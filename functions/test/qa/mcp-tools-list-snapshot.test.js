@@ -30,6 +30,11 @@ const { execFileSync } = require("child_process");
 const FUNCTIONS_DIR = path.join(__dirname, "..", "..");
 const INDEX = path.join(FUNCTIONS_DIR, "index.js");
 const FIXTURE = path.join(FUNCTIONS_DIR, "test", "fixtures", "mcp", "tools-list-full.json");
+// The sibling listing fixture. Its recorded states are compared against the
+// builder by mcp-tool-annotations.test.js, not here; what this file reads out
+// of it is its `note`, for the same reason it reads its own — see "every tool
+// count each fixture's note states is a count that fixture records" below.
+const ANNOTATIONS_FIXTURE = path.join(FUNCTIONS_DIR, "test", "fixtures", "mcp", "tools-list-annotations.json");
 // How many capabilities the flag adds is READ FROM THE REGISTRY, never counted
 // out here. The scope reduction of 6 September 2026 took the flagged set from
 // ten down to two, and a literal `+ 10` in this file was one of the places that
@@ -39,6 +44,7 @@ const registry = require("../../orchestrator/registry");
 const ORCHESTRATOR_ADDS = registry.publishedNames({ orchestrator: true })
   .filter((name) => !registry.publishedNames({}).includes(name));
 const fixture = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
+const annotationsFixture = JSON.parse(fs.readFileSync(ANNOTATIONS_FIXTURE, "utf8"));
 
 let failures = 0;
 const check = (name, run) => {
@@ -252,6 +258,46 @@ check("the fixture says where it came from, and how far that goes", () => {
     "the note claims more than a branch-internal recording can: say what it does not prove");
   assert.ok(/before the flip/i.test(fixture.note),
     "the note must name the one thing that closes the gap: diff it against the live listing once");
+});
+
+check("every tool count each fixture's note states is a count that fixture records", () => {
+  // The checks above compare states[*].tools against the builder and are green.
+  // Nothing compared the prose beside them, and on 7 September 2026 both notes
+  // described a fixture that no longer existed: tools-list-full.json said its
+  // two orchestrator states had been re-recorded at "29 and 30 tools" while
+  // holding 21 and 22, and tools-list-annotations.json said
+  // "inventory+orchestrator went from 31 tools to 30" while holding 22.
+  //
+  // That prose is not decoration. tools-list-full.json's note ends by telling
+  // the reader which two states `--write` regenerates and which four must never
+  // be — so it is what a person reads at the moment of an irreversible action,
+  // and a note that misdescribes its own file is a wrong instruction at exactly
+  // that moment.
+  for (const [name, file] of [["tools-list-full.json", fixture], ["tools-list-annotations.json", annotationsFixture]]) {
+    const recorded = new Map(Object.entries(file.states).map(([label, state]) => [label, state.tools.length]));
+    const sizes = new Set(recorded.values());
+    const figures = [...String(file.note || "").matchAll(/\b(\d+) tools?\b/g)].map((match) => Number(match[1]));
+
+    assert.ok(figures.length > 0,
+      `${name}: the note states no tool count at all. It governs a --write; it has to say what the file holds.`);
+    for (const figure of figures) {
+      assert.ok(
+        sizes.has(figure),
+        `${name}: the note says "${figure} tools", and no state in this file records ${figure}. ` +
+        `The recorded states are ${[...recorded].map(([label, size]) => `${label} ${size}`).join(", ")}. ` +
+        `Historical figures belong in docs/mcp-inventory-search-decision.md, not in a note that describes this file.`
+      );
+    }
+    // Membership alone would let the note name 19 forever and never mention the
+    // two states it governs, so name those two exactly.
+    for (const label of ["orchestrator", "inventory+orchestrator"]) {
+      assert.ok(
+        figures.includes(recorded.get(label)),
+        `${name}: the note never states the ${recorded.get(label)} tools its "${label}" state records. ` +
+        `Those are the two states --write regenerates; the note is what tells the operator what they are getting.`
+      );
+    }
+  }
 });
 
 console.log(failures === 0 ? "\nAll tools/list snapshot checks passed." : `\n${failures} check(s) failed.`);
