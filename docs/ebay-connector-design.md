@@ -783,7 +783,9 @@ and `reason` set from a fixed vocabulary; no value from the query ever reaches `
    `?ebay=error&reason=unavailable`. **No call**, plus one ops log line naming the variable and which
    check failed by name (`not configured` / `shorter than 32 characters`) and nothing else. The length
    floor is the same one the function applies; without it a truncated paste on Hostinger produces a
-   signed POST that dies as an opaque 401 with no ops line naming a cause.
+   signed POST that dies as an opaque 401 with no ops line naming a cause. This is the **one** step that
+   refuses without posting, and it suspends the burn while it lasts — see *The burn*, last two
+   paragraphs, and the operator action in the deploy plan §4.2.
 5. Mint `rid`, serialise once, sign, POST, with a 20-second abort.
 6. 200 + JSON + a known `outcome`/`reason` → redirect accordingly. Anything else →
    `?ebay=error&reason=unavailable`, plus **one ops log line for every non-200 outcome**, not only the
@@ -880,6 +882,24 @@ describes the attacker in this threat model, not the victim.
 The cost of the rule is bounded: a scan can only reach the function with a `code` and a `state` that
 pass the web route's shape checks, and an invented state answers `reason=state` after one transaction
 read.
+
+**The burn has one dependency, and it is the key.** The rule "a shaped callback always POSTs" holds only
+while the route *can* post: with `NIVADESK_EBAY_CALLBACK_KEY` unset, short, or disagreeing with Secret
+Manager, step 4 above returns `unavailable` without calling, or the function answers 401 before the
+transaction — and either way **the state is not burned**. That is not a flaw in step 4: without a key
+there is nothing to sign with, and an unsigned POST would be a 401 that burns nothing either. It is a
+property that has to be *stated*, because it is the same collapse this section just argued against,
+reached by configuration instead of by a code change. For as long as a key outage lasts, **§5's browser
+binding is suspended for every state minted in that window**: each consent leaves a live, unused state
+for the rest of its ten-minute TTL, while eBay's code for that consent is in Hostinger's access log
+(residual 1). Attacker B, who minted the state and holds `nonce_B`, needs only the code.
+
+The window is small — ten minutes past the last failed attempt — and the deploy plan carries the
+operator's action rather than leaving it implied: a key outage is a reason to **expire the outstanding
+`ebayConnectStates` before restoring service** (`docs/ebay-web-callback-deploy-plan.md` §4.2), or to wait
+out the TTL of the last failure before telling sellers to retry. The half-configured state fails closed
+for the *connection* and open for the *defence*, and a rollout document that says only the first has told
+the operator half of it.
 
 Replay is likewise still stopped by the state, not by the signature. A captured POST replayed inside
 the five-minute skew window verifies, reaches the transaction, finds `used: true` and answers
@@ -1116,8 +1136,12 @@ Removed, not kept as a fallback:
 5. Only then the first sandbox OAuth attempt, under its own approval.
 
 If the two values ever disagree, every connect attempt ends at `reason=unavailable` and no state is
-consumed: the failure mode of a rotation mistake is downtime, never an open door. If either side is
-unconfigured, the same is true — 401 on the function, no call from the web.
+consumed; the same holds if either side is unconfigured — 401 on the function, no call from the web. The
+failure mode of a rotation mistake is downtime for the connection — **and a suspended browser binding for
+the states minted while it lasts**, because an unconsumed state is exactly what *The burn* says must not
+survive a consent. Not an open door: B still needs the code, and the code is only in Hostinger's access
+log (residual 1). But not nothing either, which is why the rotation procedure ends with expiring the
+outstanding states rather than simply restoring the key (deploy plan §4.2).
 
 #### Test matrix
 

@@ -128,6 +128,20 @@ export async function GET(request: NextRequest) {
   // The length floor is the one the function applies — without it a truncated
   // paste on Hostinger produces a signed POST that dies as an opaque 401 with no
   // ops line naming a cause. Only the variable's NAME is ever logged.
+  //
+  // These two returns are the ONE place this route does what step 3 forbids: it
+  // refuses without POSTing, so nothing burns the state. That is not a choice —
+  // without the key there is nothing to sign with, and an unsigned POST is a
+  // 401 that burns nothing either. But it is not neutral, and the deploy plan
+  // must not read as though it were: for as long as the key is missing, short,
+  // or disagrees with Secret Manager, **§5's browser binding is suspended for
+  // every state minted in that window**. Each consent leaves a live, unused
+  // state for the rest of its ten-minute TTL while eBay's code sits verbatim in
+  // Hostinger's access log — the collapse step 3 exists to prevent, reached by
+  // configuration instead of by design. It fails closed for the connection and
+  // open for the defence, and those are different things. The operator's action
+  // is in docs/ebay-web-callback-deploy-plan.md §4.2: treat a key outage as a
+  // reason to expire the outstanding ebayConnectStates before restoring service.
   const key = String(process.env.NIVADESK_EBAY_CALLBACK_KEY || "");
   if (!key) {
     console.error("ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured");

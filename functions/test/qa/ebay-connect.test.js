@@ -190,7 +190,12 @@ const said = (res) => JSON.stringify(res.payload);
     switches.callbackKey = "";
     const blank = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
     assert.strictEqual(blank.statusCode, 401); assert.deepStrictEqual(blank.payload, { ok: false }, said(blank));
-    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "an unconfigured key burns nothing");
+    // Not a safety property: an unconfigured key cannot sign, so nothing reaches
+    // the transaction and the state stays LIVE for its TTL — §5's browser binding
+    // is suspended for as long as the outage lasts (§5.4, "The burn has one
+    // dependency"). Pinned because it is the behaviour; the operator's answer to
+    // it is expiring the outstanding states, not a code change.
+    assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, false, "an unconfigured key never reaches the transaction — the state survives, which is the cost, not the comfort");
     switches.callbackKey = "a".repeat(31);
     const short = await callbackPost(fns, { state: begun.state, nonce: begun.nonce, key: "a".repeat(31) });
     assert.strictEqual(short.statusCode, 401, "the 32-character floor is enforced, not assumed");

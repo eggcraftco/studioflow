@@ -101,13 +101,38 @@ key is never sent on the wire either, because the web side signs and the functio
 | Hostinger `NIVADESK_EBAY_CALLBACK_KEY` | Function `EBAY_CALLBACK_KEY` (secret **and** marker **and** deploy) | Result |
 |---|---|---|
 | set | set, same value | The only combination that can complete a connection. |
-| **unset**, or shorter than 32 characters | anything | The route makes **no call at all**. The seller lands on `…&ebay=error&reason=unavailable` → "eBay did not complete the connection. Try again." The Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. No state is consumed. |
-| set | **unset**, or the marker not committed, or the functions not deployed | The route signs and POSTs. An unconfigured function answers **401** — deliberately identical to a wrong key, so the status cannot be used to ask whether the secret exists — and an undeployed one is simply unreachable. Seller sees `reason=unavailable`; Hostinger logs `ebay callback relay rid=<rid> status=401` or `… unreachable`; Google logs `ebay callback: EBAY_CALLBACK_KEY not configured` when the function is there — **once a minute per instance, not once per request** (§5.4: that line is reachable without a key, so it is throttled; look for its presence, never count it). No state is consumed. |
-| set | set, **different value** (a half-finished rotation) | The signature does not verify: 401, seller `reason=unavailable`, `ebay callback relay rid=<rid> status=401` on Hostinger and `ebay callback: rejected unsigned request` on Google. The rid is the only value in either line, and it is minted by the web side for exactly this trace. No state is consumed. |
+| **unset**, or shorter than 32 characters | anything | The route makes **no call at all**. The seller lands on `…&ebay=error&reason=unavailable` → "eBay did not complete the connection. Try again." The Hostinger log carries one line naming the variable and which check failed: `ebay callback relay: NIVADESK_EBAY_CALLBACK_KEY not configured` or `… shorter than 32 characters`. **No state is consumed — and that is the cost, not the comfort: see below.** |
+| set | **unset**, or the marker not committed, or the functions not deployed | The route signs and POSTs. An unconfigured function answers **401** — deliberately identical to a wrong key, so the status cannot be used to ask whether the secret exists — and an undeployed one is simply unreachable. Seller sees `reason=unavailable`; Hostinger logs `ebay callback relay rid=<rid> status=401` or `… unreachable`; Google logs `ebay callback: EBAY_CALLBACK_KEY not configured` when the function is there — **once a minute per instance, not once per request** (§5.4: that line is reachable without a key, so it is throttled; look for its presence, never count it). **No state is consumed — the cost, not the comfort: see below.** |
+| set | set, **different value** (a half-finished rotation) | The signature does not verify: 401, seller `reason=unavailable`, `ebay callback relay rid=<rid> status=401` on Hostinger and `ebay callback: rejected unsigned request` on Google. The rid is the only value in either line, and it is minted by the web side for exactly this trace. **No state is consumed — the cost, not the comfort: see below.** This is the realistic steady-state row: a rotation where Hostinger already has the new value and Secret Manager does not. |
 
-The pattern is the point: **every partial configuration fails closed.** The cost is failed connect
-attempts, never data — no state is burned, no code is exchanged, no token is written, and nothing on the
-seller's screen is more specific than one sentence.
+The pattern is the point: **every partial configuration fails closed for the connection.** No code is
+exchanged, no token is written, and nothing on the seller's screen is more specific than one sentence.
+
+**What it does not do is keep §5's browser binding, and this plan used to say the opposite.** That
+defence is the burn (design §5.4, *The burn*): a shaped callback always POSTs, cookie or no cookie,
+precisely so the state is consumed at the moment of consent, whoever presented it. In every row above the
+POST is either never made or never authenticated, so **the state is not burned** — and an unburned state
+is the damage, not the safety. Each consent that lands in a key outage leaves a live, unused
+`ebayConnectStates` document for the rest of its ten-minute TTL, while eBay's `code` for that same consent
+is written verbatim into Hostinger's access log (measured, with no redaction and no disable —
+`docs/ebay-callback-platform-logging.md`). §5's attacker is a workspace owner who minted the state and
+holds its nonce in their own browser; against a live state, the code is the only thing they were missing.
+Ten minutes of that is a much smaller window than the design's residual 1, but it is the same collapse,
+reached by configuration rather than by a code change.
+
+**So the operator action, and it is not "wait for the fix to land".** Treat a key outage — unset, short,
+or the two halves disagreeing — as a security event as well as downtime:
+
+1. Fix the key (both halves, same value).
+2. **Before** restoring service, expire the states minted during the outage: every `ebayConnectStates`
+   document with `used == false` and `expiresAt` in the future, deleted or marked `used: true`. They are
+   worthless to their owners anyway — the seller's remedy for any failed attempt is to press Connect
+   again, which mints a fresh state and a fresh nonce.
+3. If step 2 is awkward, the TTL does it for you: wait ten minutes after the **last** failed attempt
+   before telling sellers to retry. Nothing older than that can still be presented.
+
+Nothing here is live today — no function is deployed and no genuine code or state exists yet — so this is
+a rule for the rollout and for every later rotation, not an incident.
 
 ### 4.3 The order itself
 
