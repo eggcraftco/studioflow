@@ -659,6 +659,25 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
     warnings.push(envelope.warning("plan_limited", "Live bank syncing is not included in this plan; the rows already imported are still reported."));
   }
 
+  // §12 lists nine findings; this capability covers seven. The two it does not
+  // are declared rather than left out, because a finding that was never looked
+  // for is indistinguishable from one that came back clean — and here the
+  // difference is provable: `payout_unmatched` IS reported by
+  // get_business_attention_summary, so the banking-specific question returned
+  // strictly less than the general one and said nothing about it.
+  //
+  // This capability reads bank rows (its declared domains are settings, bank,
+  // receiptInbox and connections) and cannot reach the payout collections at
+  // all, which is why the answer is a declaration and not a new read.
+  warnings.push(envelope.warning(
+    "unsupported_metric",
+    "Marketplace payouts that have not been matched with a bank line are not included here: this answer reads bank transactions only. get_payout_reconciliation_overview and get_business_attention_summary both cover them."
+  ));
+  warnings.push(envelope.warning(
+    "unsupported_metric",
+    "Suggested links between a bank transaction and an order or project are not reported: NivaDesk computes no such suggestion on the server, so there is nothing to hand over."
+  ));
+
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const item of items) counts[item.severity] += 1;
 

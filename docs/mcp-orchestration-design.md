@@ -1189,6 +1189,13 @@ Input: `{ fromDate?, toDate?, limit? }`. Output: `{ items: AttentionItem[] (grou
 {...}, connection: { syncState, lastSyncedAt, consentExpiresAt } }` with types `transaction_uncategorised`,
 `receipt_missing`, `possible_duplicate`, `unusual_charge`, `recurring_price_changed`,
 `possible_cancelled_subscription`, `possible_transfer`, `payout_unmatched`, `order_link_suggestion`.
+The last two are NOT implemented on this capability today and are declared as `unsupported_metric`
+warnings rather than omitted silently: it reads bank rows only (declared domains settings, bank,
+receiptInbox, connections) and cannot reach the payout collections, while `suggestOrderLink` /
+`rankOrdersForTransaction` were never ported into `functions/bank/insights.js`. `payout_unmatched` IS
+reported by get_business_attention_summary, so without the warning the banking-specific question returned
+strictly less than the general one and said nothing about it — a finding nobody looked for reads exactly
+like one that came back clean.
 Rules in `functions/bank/insights.js`, a pure port of `studioflow-web/lib/studioflow/bankInsights.ts`
 (`detectPossibleDuplicates`, `detectRecurringSpends` with price change/active, `suggestOrderLink` /
 `rankOrdersForTransaction`, `suggestCategory`) with a shared fixture test so the two copies agree, the way

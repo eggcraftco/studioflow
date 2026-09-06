@@ -336,6 +336,22 @@ check("the banking summary answers §12's list and reports the connection's own 
   assert.ok(result.data.connection.lastSyncedAt, "a banking answer has to say how old the feed is");
 });
 
+check("the banking answer names the two §12 findings it does not cover", () => {
+  const snapshot = fixtures.attentionSnapshot();
+  const result = attention.bankingAttentionSummary(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+
+  // The omission is not theoretical: the fixture has an unmatched Square
+  // payout, the broad read reports it, and asking the BANKING question returned
+  // strictly less with nothing said about it.
+  assert.ok(run(snapshot).data.items.some((item) => item.type === "payout_unmatched"));
+  assert.ok(!result.data.items.some((item) => item.type === "payout_unmatched"),
+    "this capability cannot reach the payout collections; that is the point of the warning");
+
+  const said = result.warnings.filter((row) => row.code === "unsupported_metric").map((row) => row.message).join(" ");
+  assert.ok(/payout/i.test(said), "a finding nobody looked for reads as a finding that came back clean");
+  assert.ok(/order or project/i.test(said), "the ninth §12 item has no implementation at all, and that is a fact worth stating");
+});
+
 check("a bank connection that needs re-consent is critical", () => {
   const snapshot = fixtures.attentionSnapshot();
   snapshot.bankConnection = { ...snapshot.bankConnection, syncState: "needs_reconsent" };
