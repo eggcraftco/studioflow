@@ -715,6 +715,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The reveal rate-limit counters (companies/{cid}/revealCounters/{uid}). A
+    // member who could reset their own counter could read every buyer's address
+    // in one sitting. Server-only, and named in both wildcard deny-lists below
+    // for the same reason as restrictedCustomer.
+    match /companies/{companyId}/revealCounters/{document=**} {
+      allow read, write: if false;
+    }
+
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -919,6 +927,7 @@ service cloud.firestore {
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
         && collectionId != 'restrictedCustomer'
+        && collectionId != 'revealCounters'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -978,6 +987,7 @@ service cloud.firestore {
         && collectionId != 'bankAuditLog'
         && collectionId != 'piiAccessLog'
         && collectionId != 'restrictedCustomer'
+        && collectionId != 'revealCounters'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -1178,6 +1188,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /squareConnectStates/{document=**} {
+      allow read, write: if false;
+    }
+    // eBay connector: seller OAuth credentials, connect states, the buyer index, the deletion ledger,
+    // the daily quota counter and the notification signing-key cache are server-only.
+    match /ebayConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /ebayConnectStates/{document=**} {
+      allow read, write: if false;
+    }
+    match /ebayBuyers/{document=**} {
+      allow read, write: if false;
+    }
+    match /ebayDeletionRequests/{document=**} {
+      allow read, write: if false;
+    }
+    match /ebayQuota/{document=**} {
+      allow read, write: if false;
+    }
+    match /ebayNotificationKeys/{document=**} {
       allow read, write: if false;
     }
     // Accounting connector: OAuth state pool and the realm → workspace map are server-only.

@@ -120,6 +120,27 @@ const SQUARE_TOKEN_KEY = defineSecret("SQUARE_TOKEN_KEY");
 const SQUARE_APP_ACCESS_TOKEN = defineSecret("SQUARE_APP_ACCESS_TOKEN");
 const SQUARE_ENVIRONMENT = defineSecret("SQUARE_ENVIRONMENT");
 const SQUARE_SECRETS = [SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_TOKEN_KEY, SQUARE_APP_ACCESS_TOKEN, SQUARE_ENVIRONMENT];
+// eBay connector (docs/ebay-connector-design.md §2, §3.2). The keyset, the key
+// the seller tokens are boxed under and the key that hashes buyer identifiers
+// are declared ONLY once the owner has created the four secrets and the
+// dedicated service account, and committed functions/.ebay-secrets-ready (the
+// Xero precedent). Until then EBAY_RUNTIME is empty: no secret is mounted, no
+// service account is named, and the CLI keeps deploying every other function.
+// Every eBay trigger spreads EBAY_RUNTIME into its options so secrets and
+// identity travel together — the default compute account never holds EBAY_*.
+// Values arrive as plain environment variables either way.
+const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));
+const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY
+  ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY")]
+  : [];
+const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";
+const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};
+const ebaySecretValue = (name) => process.env[name] || "";
+// The runtime switch: off means beginEbayConnect refuses, the callback answers
+// reason=disabled, both sweeps return before reading a row, and the queue
+// records order tasks as skipped — while account-deletion compliance keeps
+// running. Read once at module load (the NIVADESK_MALWARE_SCAN precedent).
+const EBAY_CONNECTOR_ENABLED = String(process.env.NIVADESK_EBAY_CONNECTOR || "") === "1";
 // Accounting connector — QuickBooks Online app credentials, the webhook
 // verifier and the key that boxes the OAuth tokens at rest.
 const NIVADESK_QBO_CLIENT_ID = defineSecret("NIVADESK_QBO_CLIENT_ID");
@@ -2589,6 +2610,10 @@ const WORKSPACE_MEMBER_ACCESS_DEFAULTS = Object.freeze({
   // Bank Spending feed (Open Banking). Off by default for every role — the
   // owner grants it per member; connecting banks/Pandle stays owner-only.
   bankFeed: false,
+  // A marketplace buyer's protected details (companies/{cid}/restrictedCustomer).
+  // Off by default; the owner grants it per member, and the reveal callable is
+  // the enforcement (access-control policy §5.3).
+  restrictedCustomer: false,
   settingsGeneral: true,
   settingsPdf: true,
   settingsQuickReply: true,
@@ -6137,6 +6162,66 @@ exports.listSquareUnmatched = squareExports.listSquareUnmatched;
 exports.listSquarePayouts = squareExports.listSquarePayouts;
 exports.auditSquareOrders = squareExports.auditSquareOrders;
 exports.matchSquarePayoutToBank = squareExports.matchSquarePayoutToBank;
+
+// eBay (docs/ebay-connector-design.md) — a seller account as one read-only
+// connection on the common engine. Every trigger carries EBAY_RUNTIME (secrets
+// AND the dedicated identity, together); eBay tasks ride their own Cloud Tasks
+// queue (ebayEventWorker below), never commerceEventWorker.
+const EBAY_QUEUE_FUNCTION = "ebayEventWorker";
+async function enqueueEbayTask(task, delaySeconds = 0) {
+  const queue = getFunctions().taskQueue(`locations/europe-west2/functions/${EBAY_QUEUE_FUNCTION}`);
+  await queue.enqueue(task, { scheduleDelaySeconds: Math.max(0, Math.round(delaySeconds)) });
+}
+const { createEbayConnectorFunctions } = require("./ebayConnector");
+const ebayExports = createEbayConnectorFunctions({
+  admin, HttpsError,
+  onCall: (options, handler) => onCall({ ...options, ...EBAY_RUNTIME }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, ...EBAY_RUNTIME }, handler),
+  onSchedule: (options, handler) => onSchedule({ ...options, ...EBAY_RUNTIME }, handler),
+  clientId: () => ebaySecretValue("EBAY_CLIENT_ID"),
+  clientSecret: () => ebaySecretValue("EBAY_CLIENT_SECRET"),
+  tokenKey: () => ebaySecretValue("EBAY_TOKEN_KEY"),
+  hashKey: () => ebaySecretValue("EBAY_HASH_KEY"),
+  // Non-secret configuration, sandbox by default; read at call time.
+  environment: () => process.env.NIVADESK_EBAY_ENVIRONMENT || "sandbox",
+  ruName: () => process.env.NIVADESK_EBAY_RUNAME || "",
+  deletionToken: () => process.env.NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN || "",
+  deletionEndpointUrl: () => process.env.NIVADESK_EBAY_DELETION_ENDPOINT_URL || "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications",
+  dailyCap: () => Number(process.env.NIVADESK_EBAY_DAILY_CAP) || 5000,
+  connectorEnabled: () => EBAY_CONNECTOR_ENABLED,
+  encryptToken: etsyModule.encryptToken,
+  decryptToken: etsyModule.decryptToken,
+  requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  isWorkspaceOwner: (companyData, uid) => uidIsCompanyOwner(companyData, uid),
+  isWorkflowOnlyMember: (companyData, uid) => workspaceMemberRole(companyData, uid) === "workflowOnly",
+  appReturnUrl: () => "https://nivadesk.app/settings",
+  functionsBaseUrl: () => "https://europe-west2-eggcraft-studio.cloudfunctions.net",
+  orderDocRef, integrationOrderCapacity, holdIntegrationOrder, sendPushNotificationToCompany,
+  reconcileLineItems, resolveDefaultDeliveryTime, companySettingsDocRef, recordPiiAccess,
+  enqueue: (task, delaySeconds) => enqueueEbayTask(task, delaySeconds),
+  ...(process.env.NIVADESK_E2E === "1" ? {
+    createClient: (options) => (global.__nivadeskEbayFakeClient ? global.__nivadeskEbayFakeClient(options) : require("./commerce/ebay/client").createEbayClient(options)),
+    oauth: new Proxy(require("./commerce/ebay/oauth"), { get: (target, key) => (global.__nivadeskEbayFakeOAuth && global.__nivadeskEbayFakeOAuth[key]) || target[key] }),
+    notificationVerifier: (input) => (global.__nivadeskEbayFakeVerifier ? global.__nivadeskEbayFakeVerifier(input) : require("./commerce/ebay/notification").verifyNotification(input)),
+    enqueue: (task, delaySeconds) => (global.__nivadeskEbayFakeEnqueue ? global.__nivadeskEbayFakeEnqueue(task, delaySeconds) : enqueueEbayTask(task, delaySeconds))
+  } : {})
+});
+exports.beginEbayConnect = ebayExports.beginEbayConnect;
+exports.claimEbayConnectState = ebayExports.claimEbayConnectState;
+exports.ebayOAuthCallback = ebayExports.ebayOAuthCallback;
+exports.getEbayConnections = ebayExports.getEbayConnections;
+exports.verifyEbayConnection = ebayExports.verifyEbayConnection;
+exports.updateEbayConnectionSettings = ebayExports.updateEbayConnectionSettings;
+exports.previewEbayImport = ebayExports.previewEbayImport;
+exports.runEbayImport = ebayExports.runEbayImport;
+exports.retryEbayImportFailures = ebayExports.retryEbayImportFailures;
+exports.syncEbayNow = ebayExports.syncEbayNow;
+exports.disconnectEbay = ebayExports.disconnectEbay;
+exports.reconcileEbayConnections = ebayExports.reconcileEbayConnections;
+exports.reconcileEbayConnectionsNightly = ebayExports.reconcileEbayConnectionsNightly;
+exports.ebayNotifications = ebayExports.ebayNotifications;
+exports.revealRestrictedCustomer = ebayExports.revealRestrictedCustomer;
 
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
@@ -11347,7 +11432,8 @@ async function purgeProviderDataForWorkspace(companyId) {
   const db = admin.firestore();
   const report = {
     etsyConnections: 0, etsyOAuthStates: 0, etsyExternalOrders: 0, etsyCustomerLinks: 0,
-    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, wooConnections: 0, wooConnectStates: 0, squareConnections: 0, squareConnectStates: 0, errors: []
+    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, wooConnections: 0, wooConnectStates: 0, squareConnections: 0, squareConnectStates: 0,
+    ebayConnections: 0, ebayConnectStates: 0, ebayBuyers: 0, errors: []
   };
   if (!companyId) return report;
 
@@ -11401,6 +11487,15 @@ async function purgeProviderDataForWorkspace(companyId) {
     return snap.size;
   });
   await step("squareConnectStates", () => deleteMatching(db.collection("squareConnectStates").where("companyId", "==", companyId)));
+  // eBay: the connection carries credentials, deliveries and syncLog subtrees; the
+  // buyer index rows are keyed by workspace, so they go with it.
+  await step("ebayConnections", async () => {
+    const snap = await db.collection("ebayConnections").where("companyId", "==", companyId).get();
+    for (const doc of snap.docs) await db.recursiveDelete(doc.ref);
+    return snap.size;
+  });
+  await step("ebayConnectStates", () => deleteMatching(db.collection("ebayConnectStates").where("companyId", "==", companyId)));
+  await step("ebayBuyers", () => deleteMatching(db.collection("ebayBuyers").where("companyId", "==", companyId)));
   await step("etsyWebhookEvents", async () => {
     let removed = 0;
     for (const shopId of shopIds) {
@@ -12011,7 +12106,7 @@ async function sweepRetentionPeriod(days, nowMs) {
   const cursor = Number((cursorSnap.data() || {}).sweptDeliveredAtMs) || 0;
 
   const cutoffMs = nowMs - days * 24 * 60 * 60 * 1000;
-  if (cutoffMs <= cursor) return { scanned: 0, scrubbed: 0, failed: 0, cursor };
+  if (cutoffMs <= cursor) return { scanned: 0, scrubbed: 0, restrictedDocsDeleted: 0, failed: 0, cursor };
 
   // Taken from the engine rather than typed again. The first version of this
   // function typed its own collection path and got it wrong, and a literal here
@@ -12025,6 +12120,7 @@ async function sweepRetentionPeriod(days, nowMs) {
     .get();
 
   let scrubbed = 0;
+  let restrictedDocsDeleted = 0;
   let failed = 0;
   const considered = [];
 
@@ -12037,6 +12133,15 @@ async function sweepRetentionPeriod(days, nowMs) {
         const { patch } = retention.scrubPatch(order, nowMs);
         await doc.ref.set(patch, { merge: true });
         scrubbed += 1;
+        // The restricted document is the other copy of the person (policy §5.6):
+        // it goes in the same iteration, and a document that was never written
+        // is not an error. Provider-generic — Amazon's thirty days and eBay's
+        // ninety both land here.
+        const restrictedCompanyId = orderCompanyId(order);
+        if (restrictedCompanyId) {
+          const restrictedDocRef = db.collection("companies").doc(restrictedCompanyId).collection("restrictedCustomer").doc(doc.id);
+          if ((await restrictedDocRef.get()).exists) { await restrictedDocRef.delete(); restrictedDocsDeleted += 1; }
+        }
         // The order can no longer show what was removed, so the log has to. It
         // records categories and ids, never the values — an audit trail that
         // contains the data it audits is a second copy of the problem.
@@ -12073,7 +12178,7 @@ async function sweepRetentionPeriod(days, nowMs) {
     }, { merge: true });
   }
 
-  return { scanned: due.size, scrubbed, failed, cursor: nextCursor };
+  return { scanned: due.size, scrubbed, restrictedDocsDeleted, failed, cursor: nextCursor };
 }
 
 exports.sweepMarketplacePii = onSchedule(
@@ -14994,6 +15099,43 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         if (outcome && outcome.status === "held") continue;
         await doc.ref.delete();
         imported += 1;
+        continue;
+      } else if (provider === "ebay") {
+        // The stored payload is the SAFE half — it has no address — so it is
+        // never replayed: the order is fetched fresh from eBay and lands through
+        // the connector's one apply path, restricted half included (design §7.3).
+        // A connection that is gone, not connected, or refused by eBay leaves
+        // the row held for the next release rather than importing an order whose
+        // buyer could never be filled in.
+        const connectionId = String(data.ebayConnectionId || "");
+        let connectionRef = connectionId ? admin.firestore().collection("ebayConnections").doc(connectionId) : null;
+        if (!connectionRef) {
+          const candidates = await admin.firestore().collection("ebayConnections").where("companyId", "==", companyId).where("status", "==", "connected").limit(2).get();
+          if (candidates.size === 1) connectionRef = candidates.docs[0].ref;
+        }
+        const connectionSnap = connectionRef ? await connectionRef.get() : null;
+        const connectionData = connectionSnap && connectionSnap.exists ? (connectionSnap.data() || {}) : null;
+        if (!connectionData || String(connectionData.companyId || "") !== companyId || String(connectionData.status) !== "connected") {
+          console.warn("releaseHeldIntegrationOrders: eBay connection not connected, left in place", doc.id);
+          unknown += 1;
+          continue;
+        }
+        let outcome = null;
+        try {
+          const client = await ebayExports._internal.clientFor(connectionRef, connectionData, { priority: "people" });
+          const fresh = await client.getOrder(String(data.externalId || ""));
+          if (!fresh) throw new Error("ebay_order_not_found");
+          const fulfillments = String(fresh.orderFulfillmentStatus || "").toUpperCase() === "NOT_STARTED" ? [] : await client.getShippingFulfillments(String(fresh.orderId));
+          outcome = await ebayExports._internal.applyEbayOrder(connectionRef, connectionData, fresh, { eventOrigin: "retry", client, fulfillments, eventKey: commerce.events.idempotencyKey({ provider: "ebay", connectionId: connectionRef.id, externalId: String(data.externalId || ""), eventType: `release@${fresh.lastModifiedDate || ""}` }) });
+        } catch (error) {
+          await doc.ref.set({ releaseError: String(error?.message || error).slice(0, 200), releaseAttemptedAtMs: Date.now() }, { merge: true }).catch(() => undefined);
+          console.warn("releaseHeldIntegrationOrders: eBay fetch failed, left in place", doc.id, error?.message || error);
+          unknown += 1;
+          continue;
+        }
+        if (outcome && outcome.result === "held") continue;
+        await doc.ref.delete();
+        if (outcome && ["created", "updated", "noop", "duplicate"].includes(outcome.result)) imported += 1;
         continue;
       } else {
         // TEST-016. A provider this build does not know how to replay. Deleting
@@ -33921,6 +34063,13 @@ async function processCommerceTaskByProvider(task) {
   if (task.provider === "shopify") return processShopifyCommerceTask(task);
   if (task.provider === "woocommerce") return wooExports._internal.processWooCommerceTask(task);
   if (task.provider === "square") return squareExports._internal.processSquareCommerceTask(task);
+  if (task.provider === "ebay") {
+    // eBay tasks belong to ebayEventWorker, which alone holds the eBay secrets.
+    // One landing here is a bug, not a silent skip.
+    const misrouted = new Error("provider_not_on_this_worker");
+    misrouted.errorClass = "validation";
+    throw misrouted;
+  }
   const error = new Error(`unknown_provider_${String(task.provider || "").replace(/[^a-z]/gi, "")}`);
   error.errorClass = "validation";
   throw error;
@@ -33971,6 +34120,39 @@ exports.commerceEventWorker = onTaskDispatched({
   }
 });
 
+// The eBay worker (design §3.2, §7.5, §9): its own queue and its own identity,
+// because commerceEventWorker mounts the Shopify, Woo and Square keys and runs
+// as the default account — giving it the eBay key would hand that key to every
+// function, and giving eBay's identity the other keys would be the same mistake
+// the other way round. The loop is the common worker's, with one difference: a
+// buyer-deletion task has no connection, so it touches no health document.
+async function runEbayEventTask(task) {
+  const result = await ebayExports._internal.processEbayCommerceTask(task);
+  if (String(task.entityType || "") !== "buyer_deletion") {
+    try {
+      const kind = result.status === "applied" ? "success" : (result.status === "retrying" ? "retry_scheduled" : (result.status === "dead" ? "dead" : "attempt"));
+      await commerce.health.touchHealth(admin.firestore(), { provider: "ebay", connectionId: task.connectionId, companyId: task.companyId, kind, FieldValue: admin.firestore.FieldValue });
+      if (Number(task.attempt || 1) > 1 && result.status !== "retrying") {
+        await commerce.health.touchHealth(admin.firestore(), { provider: "ebay", connectionId: task.connectionId, companyId: task.companyId, kind: "retry_cleared", FieldValue: admin.firestore.FieldValue });
+      }
+    } catch (error) { console.warn("ebay health (worker) failed:", error?.message || error); }
+  }
+  if (result.status === "retrying" && result.nextRetryInMs) {
+    const again = { ...task, attempt: Number(task.attempt || 1) + 1 };
+    await (process.env.NIVADESK_E2E === "1" && global.__nivadeskEbayFakeEnqueue ? global.__nivadeskEbayFakeEnqueue(again, result.nextRetryInMs / 1000) : enqueueEbayTask(again, result.nextRetryInMs / 1000));
+  }
+  return result;
+}
+
+exports.ebayEventWorker = onTaskDispatched({
+  region: "europe-west2",
+  retryConfig: { maxAttempts: 1 },          // retries are the policy's, with its delays — not Cloud Tasks' blind ones
+  rateLimits: { maxConcurrentDispatches: 5 },
+  ...EBAY_RUNTIME
+}, async (request) => {
+  await runEbayEventTask(request.data || {});
+});
+
 // RETRY-004 — a dead or waiting event, run again by the owner, under the same
 // idempotency key (RETRY-005): the engine's duplicate/noop verdicts make a
 // second application harmless. Orders are the user-safe class; nothing else
@@ -33990,6 +34172,12 @@ exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_
     key: eventKey, provider: record.provider, connectionId: record.connection_id, companyId, externalId: record.external_id,
     eventType: record.event_type, attempt: 1, eventOrigin: "retry", correlationId: record.correlation_id || undefined
   };
+  if (record.provider === "ebay") {
+    // This function does not hold the eBay secrets: the row is re-enqueued to
+    // the eBay worker rather than processed here.
+    await enqueueEbayTask(task, 0);
+    return { ok: true, queued: true, status: "queued" };
+  }
   const result = await processCommerceTaskByProvider(task);
   try {
     const kind = result.status === "applied" ? "success" : (result.status === "dead" ? "dead" : "attempt");
@@ -34359,6 +34547,10 @@ if (process.env.NIVADESK_E2E === "1") {
     woo: wooExports._internal,
     // Square: the connector's internals for the suite.
     square: squareExports._internal,
+    // eBay: the connector's internals and the worker loop, for the suite.
+    ebay: ebayExports._internal,
+    runEbayEventTask,
+    sweepRetentionPeriod,
     settlements: settlementMatcher,
     bank: bankFeedInternal,
     accounting: accountingExports._internal,

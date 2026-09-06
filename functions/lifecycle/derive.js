@@ -51,7 +51,7 @@ function firstTime(...candidates) {
  * @param {object} snapshot {
  *   orders: [], customers: [], bankConnections: [], bankTransactions: [],
  *   inventoryItems: [], accountingConnections: [], shopifyStores: [],
- *   etsyConnections: [], wooConnections: [], squareConnections: [],
+ *   etsyConnections: [], wooConnections: [], squareConnections: [], ebayConnections: [],
  *   settings: {}
  * }
  * @returns {{events: [], missing: []}} events are {name, atMs, subjectId}
@@ -95,7 +95,8 @@ function deriveEvents(snapshot = {}) {
     { rows: snapshot.shopifyStores, at: (row) => firstTime(row.linkedAt, row.createdAt, row.updatedAt), live: (row) => row.status !== "unlinked" },
     { rows: snapshot.etsyConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
     { rows: snapshot.wooConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
-    { rows: snapshot.squareConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" }
+    { rows: snapshot.squareConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
+    { rows: snapshot.ebayConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" }
   ];
   for (const group of connectionGroups) {
     for (const row of list(group.rows)) {
