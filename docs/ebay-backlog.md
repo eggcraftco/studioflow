@@ -7,11 +7,18 @@ rather than left in a review transcript nobody re-reads.
 
 Nothing here blocks Round 167 or the first sandbox OAuth.
 
+**Item 1 is a production blocker.** The operator's ruling of 6 September: the spoofable-header denial
+of service is accepted for sandbox and **blocks production**. No production RuName is created until
+the edge header or source this stack actually trusts has been identified and spoofing is prevented.
+It sits beside the platform-logging blocker, which requires the callback to move to a Worker on
+`connect.nivadesk.app` with the seven Cloudflare surfaces proven empty. Both gates are on the same
+door.
+
 ## Worth doing before the connector carries real sellers
 
 | # | Finding | Why it matters |
 |---|---|---|
-| 1 | **A spoofed `x-forwarded-for` can hold Connect eBay closed for a chosen seller.** The per-address counters on the ticket route and on the callback's disposal read the first entry of that header, which a stranger controls | It is a targeted denial of one seller's connect flow, not a data risk. The real bounds behind it are the per-process and per-instance buckets, so the blast radius is one instance. Closing it needs the proxy header this stack actually trusts, which is deploy plan §4.3 step 10 |
+| 1 | **PRODUCTION BLOCKER — a spoofed `x-forwarded-for` can hold Connect eBay closed for a chosen seller.** The per-address counters on the ticket route and on the callback's disposal read the first entry of that header, which a stranger controls | It is a targeted denial of one seller's connect flow, not a data risk. The real bounds behind it are the per-process and per-instance buckets, so the blast radius is one instance. Closing it needs the proxy header this stack actually trusts, which is deploy plan §4.3 step 10 |
 | 2 | The same lever suppresses code disposal for a named address at the callback route | Same mechanism, smaller consequence |
 | 3 | **A replay landing on a second instance is signed before it is refused.** Ticket single-use is a per-process memory | The burn and the presented-code registry still refuse it, so the outcome is correct; the cost is one signature and one Firestore read. Closing it needs a durable shared edge store, which is the design's residual 4 and an owner decision |
 | 4 | `ebayReasonText` reflects `Object.prototype` keys, so `?reason=constructor` can put a function into the settings sentence | A seller can only do it to their own screen, and the sentence is not stored |

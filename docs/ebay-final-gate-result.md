@@ -182,3 +182,28 @@ exits each set one. **No path reaches a raw code, a status word or a technical s
 Nothing found was blocking. Thirteen non-blocking findings — four medium, nine low — are written up in
 `docs/ebay-final-gate-backlog.md`. None of them breaks any of the seven criteria; three of the four
 mediums are documentation that has drifted from the code the gate just verified.
+
+## The one failed background command, and what it did
+
+Asked for before the deploy. In this whole session exactly one background command exited non-zero:
+task `bu2bnysme`, 2026-09-06 00:14 UTC, exit 144 (killed, not errored).
+
+**Its entire output is 74 bytes**, and every line is an elapsed-time marker:
+
+```
+t=15s
+t=30s
+t=45s
+t=60s
+t=75s
+t=90s
+t=105s
+[exited with code 144]
+```
+
+It was a wait loop, killed at about 105 seconds. **No write, no deploy, no security impact**, and the
+evidence is the output itself: a poller that prints only elapsed seconds performed no git operation,
+no `gcloud` write, no `firebase deploy` and no file change — any of those would appear in its own
+output, and the file is seven lines of timestamps. Nothing depended on its completion either: the
+work in flight at that minute was the Round 165 web deploy, which was afterwards verified directly
+against production rather than through this poller.

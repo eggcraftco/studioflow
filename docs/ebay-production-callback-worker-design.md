@@ -1,3 +1,29 @@
+> # ⚠ SUPERSEDED IN PART — read this before building anything from it
+>
+> **Corrected 6 September 2026.** This document was written against the §5.4 contract, before the
+> signed browser-binding ticket existed. Two of its instructions are now wrong and one of them is
+> actively harmful:
+>
+> 1. **It tells the Worker to refuse at the edge when the binding cookie is absent, and to make no
+>    backend call.** That behaviour was disproved: eBay binds an authorization code to the
+>    application, not to the state that fetched it, so refusing without calling leaves an observed
+>    code alive for the rest of its lifetime, and an attacker mints their own fresh state, nonce and
+>    ticket to spend it. The current design refuses **and** disposes: it posts a bounded, state-free
+>    `dispose` envelope carrying the code alone, which spends the code at eBay and touches no
+>    Firestore document. A Worker that reintroduces the silent edge refusal reopens the hole.
+> 2. **Its cookie section describes one cookie, minted by the backend and carried by the Worker.**
+>    There are now two — the nonce and the signed ticket — both `__Host-` prefixed and per flow, and
+>    the edge verifies the ticket's MAC, window, state match and nonce tag before it signs anything.
+>    A ticket is spent before signing, so the same ticket cannot buy a second envelope.
+>
+> What still stands: the reason for the Worker (Hostinger keeps the query string, with no way to
+> disable or redact it), the seven Cloudflare surfaces that must be proven empty with synthetic
+> values before any production RuName, the rule that no custom log line may carry a URL, cookie or
+> body, and the observability settings.
+>
+> **The rebuild of this document is a backlog item, not part of the frozen scope.** Read
+> `docs/ebay-connector-design.md` §5.4 and §5.5 for the contract a Worker must implement.
+
 # The production callback on connect.nivadesk.app
 
 Design only. Nothing has been created: no DNS record, no Worker, no route, no secret, and no
