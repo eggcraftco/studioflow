@@ -6,6 +6,8 @@ const assert = require("assert");
 const render = require("../../orchestrator/render");
 const envelope = require("../../orchestrator/envelope");
 const commerce = require("../../orchestrator/commerce");
+const inventory = require("../../orchestrator/inventory");
+const payouts = require("../../orchestrator/payouts");
 const attention = require("../../orchestrator/attention");
 const freshness = require("../../orchestrator/freshness");
 const fixtures = require("../fixtures/orchestrator");
@@ -19,7 +21,7 @@ const check = (name, run) => {
 const ctx = fixtures.ownerContext();
 const RANGE = { fromDate: "2026-09-01", toDate: "2026-09-30" };
 
-function envelopeFor(capability, handler, snapshot, args = RANGE) {
+function envelopeFor(capability, handler, snapshot, args = RANGE, channelProfile = null) {
   const result = handler(snapshot, args, ctx, { nowMs: snapshot.nowMs });
   const built = envelope.finish({
     capability,
@@ -28,11 +30,15 @@ function envelopeFor(capability, handler, snapshot, args = RANGE) {
     sources: result.sources,
     warnings: result.warnings,
     entityRefs: result.entityRefs,
-    nowMs: snapshot.nowMs
+    nowMs: snapshot.nowMs,
+    channelProfile
   });
-  built.summary.lines = render.summaryFor(built, { style: "chat" });
+  built.summary.lines = render.summaryFor(built, { style: channelProfile ? "compact" : "chat" });
   return built;
 }
+
+/** The group-thread policy, applied the way run() applies it: before rendering. */
+const GROUP = { capabilities: ["read"], security: { assurance_level: 1, pii_level: "none", financial_data_allowed: false } };
 
 /** Every numeral a string contains, as strings. */
 const numeralsIn = (text) => (String(text).match(/\d+(?:\.\d+)?/g) || []);
@@ -66,6 +72,42 @@ check("every number in a summary line exists in the data it summarises", () => {
       }
     }
   }
+});
+
+check("a withheld figure is said to be withheld, never rendered as zero", () => {
+  // run() applies the channel profile inside finish() and only then renders, so
+  // the renderer reads the REDACTED data. money(undefined) is 0, so an
+  // unguarded line handed a WhatsApp group "5 order(s) and 0 undefined gross"
+  // — a fabricated sales figure, on the path that consumer actually uses.
+  const cases = [
+    ["get_commerce_overview", commerce.commerceOverview, fixtures.mixedSnapshot(), RANGE],
+    ["get_channel_performance", commerce.channelPerformance, fixtures.mixedSnapshot(), RANGE],
+    ["get_inventory_overview", inventory.inventoryOverview, fixtures.attentionSnapshot(), {}],
+    ["get_payout_reconciliation_overview", payouts.payoutReconciliation, fixtures.attentionSnapshot(), {}]
+  ];
+  for (const [capability, handler, snapshot, args] of cases) {
+    const built = envelopeFor(capability, handler, snapshot, args, GROUP);
+    const text = built.summary.lines.map((row) => row.text).join("\n");
+    assert.ok(!/undefined|NaN|null/.test(text), `${capability}: rendered a missing figure: ${text}`);
+    assert.ok(!/\bnot shown in this channel\b[^\n]*\d/.test(text), `${capability}: a withheld line still carries a number`);
+    // And what IS still permitted comes through, so the answer is not empty.
+    assert.ok(built.summary.lines.length > 0, `${capability}: nothing was said at all`);
+    assert.ok(/not shown in this channel|item\(s\)|order\(s\)|channel\(s\)/.test(text), `${capability}: ${text}`);
+  }
+});
+
+check("every number in a redacted answer still comes from the redacted data", () => {
+  // The same rule as the full answer, on the path where a figure is missing:
+  // the count survives, the money does not, and nothing is invented to fill the
+  // gap.
+  const built = envelopeFor("get_commerce_overview", commerce.commerceOverview, fixtures.mixedSnapshot(), RANGE, GROUP);
+  const inData = new Set(numeralsIn(JSON.stringify(built.data)));
+  for (const row of built.summary.lines) {
+    for (const numeral of numeralsIn(row.text)) {
+      assert.ok(inData.has(numeral), `"${row.text}" contains ${numeral}, which is not in the data the channel was given`);
+    }
+  }
+  assert.ok(built.summary.lines.some((row) => /Sales figures are not shown/.test(row.text)));
 });
 
 check("no summary line carries provider- or buyer-authored text", () => {

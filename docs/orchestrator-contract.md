@@ -379,13 +379,18 @@ const text  = render.toText(lines, { style: "compact" });        // "1. …\n2. 
 directly, or render `data` itself.
 
 Slots come out in the §13 answer order — `result`, `breakdown`, `finance`, `attention`, `next` — and
-empty slots are dropped. Two rules the render tests pin:
+empty slots are dropped. Three rules the render tests pin:
 
 - **every number in a line comes from `data`.** A summary that computes its own total is a second
   implementation of the arithmetic, and the two drift.
 - **no provider- or buyer-authored text reaches a line.** Notes, history entries, design names and custom
   fields are written by other people; that is where a buyer's name leaks and where a prompt injection
   arrives.
+- **a withheld figure is said to be withheld, never coerced.** `run()` applies the channel profile inside
+  `finish()` and renders afterwards, so the renderer reads redacted `data`: a block may be
+  `{ restricted: true }` rather than figures. Rendering it anyway produced "5 order(s) and 0 undefined
+  gross" — a fabricated sales total on the path the WhatsApp consumer uses. The line says the figure is
+  not shown in this channel and carries no number at all.
 
 WhatsApp's own formatting (numbered lists, pagination, WA §38–§39) is the channel's business. The figures
 are not.

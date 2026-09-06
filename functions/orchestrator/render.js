@@ -25,6 +25,20 @@ const money = (value) => {
   return Number.isInteger(number) ? String(number) : number.toFixed(2);
 };
 
+/**
+ * The channel profile has already run by the time a line is written: `run()`
+ * applies it inside `envelope.finish()` and only then renders. So a block this
+ * renderer reads may be `{ restricted: true, reason: "channel_financial_policy" }`
+ * rather than the figures — and `money(undefined)` is 0, which turned a
+ * withheld sales total into "0 undefined gross" on the one path the WhatsApp
+ * consumer uses. A figure that is not there is SAID to be not there; it is
+ * never coerced into a number, because a fabricated zero is worse than silence.
+ */
+const withheld = (block) => Boolean(block) && typeof block === "object" && block.restricted === true;
+
+/** A block that can actually be read for figures. */
+const readable = (block) => Boolean(block) && typeof block === "object" && !withheld(block);
+
 function line(slot, text) {
   return { slot, text: String(text || "").trim() };
 }
@@ -52,14 +66,19 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
   const capability = envelopeRow.action;
 
   if (capability === "get_commerce_overview") {
-    lines.push(line("result", `${data.orders.count} order(s) and ${money(data.sales.gross)} ${data.sales.currency} gross in this range.`));
+    const count = ((data.orders || {}).count) || 0;
+    if (readable(data.sales)) {
+      lines.push(line("result", `${count} order(s) and ${money(data.sales.gross)} ${data.sales.currency} gross in this range.`));
+    } else {
+      lines.push(line("result", `${count} order(s) in this range. Sales figures are not shown in this channel.`));
+    }
     for (const row of (data.channels || []).filter((entry) => entry.orders > 0)) {
       lines.push(line("breakdown", `${row.channel}: ${row.orders}`));
     }
-    if (data.sales.excludedByCurrency && data.sales.excludedByCurrency.orders > 0) {
+    if (readable(data.sales) && data.sales.excludedByCurrency && data.sales.excludedByCurrency.orders > 0) {
       lines.push(line("breakdown", `${data.sales.excludedByCurrency.orders} order(s) in ${data.sales.excludedByCurrency.currencies.join(", ")} are listed separately and not added to the ${data.sales.currency} total.`));
     }
-    if (data.settlements && data.settlements.square) {
+    if (readable(data.settlements) && data.settlements.square) {
       lines.push(line("finance", `Square payouts in this range: ${money(data.settlements.square.net)} (reported beside sales, never added to them).`));
     }
   } else if (capability === "search_commerce_orders") {
@@ -67,16 +86,21 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
   } else if (capability === "get_channel_performance") {
     lines.push(line("result", `${(data.channels || []).filter((row) => row.orders > 0).length} channel(s) had orders in this range.`));
     for (const row of (data.channels || []).filter((entry) => entry.orders > 0)) {
-      const first = (row.amounts || [])[0];
+      const first = Array.isArray(row.amounts) ? row.amounts[0] : null;
       lines.push(line("breakdown", first ? `${row.channel}: ${row.orders} order(s), ${money(first.gross)} ${first.currency}` : `${row.channel}: ${row.orders} order(s)`));
     }
   } else if (capability === "get_inventory_overview") {
     lines.push(line("result", `${data.counts.items} inventory item(s), ${data.counts.lowStock} at or below their low-stock level.`));
-    lines.push(line("finance", `Stock value ${money(data.value.cost)} ${data.value.currency}.`));
+    if (readable(data.value)) lines.push(line("finance", `Stock value ${money(data.value.cost)} ${data.value.currency}.`));
+    else if (withheld(data.value)) lines.push(line("finance", "Stock value is not shown in this channel."));
   } else if (capability === "search_inventory_items") {
     lines.push(line("result", `${data.count} item(s) listed of ${data.matched} matching.`));
   } else if (capability === "get_payout_reconciliation_overview") {
-    lines.push(line("result", `${data.totals.matched} payout(s) matched with a bank line, ${data.totals.partial} matched with a difference, ${data.totals.unmatched} not matched.`));
+    if (readable(data.totals)) {
+      lines.push(line("result", `${data.totals.matched} payout(s) matched with a bank line, ${data.totals.partial} matched with a difference, ${data.totals.unmatched} not matched.`));
+    } else {
+      lines.push(line("result", "Payout matching figures are not shown in this channel."));
+    }
   } else if (capability === "get_integration_health") {
     const reconnect = (data.connections || []).filter((row) => row.reconnectRequired);
     lines.push(line("result", `${data.count} connection(s) checked; ${reconnect.length} need reconnecting.`));
