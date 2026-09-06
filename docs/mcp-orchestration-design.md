@@ -521,7 +521,7 @@ Rules for the modules:
   §5.6 fails the build if any orchestrator file imports `openAttention`, `resolveAttention`,
   `recordAudit` or `settlementMatch`, or if any file but `loaders.js` imports `firebase-admin`.
 - **No `require("../index")`.** Predicates that live in index.js (`uidHasCompanyAccess`,
-  `uidIsCompanyOwner`, `uidCanAccessWorkspaceArea`, `normalizeWorkspaceRole`,
+  `uidIsCompanyOwner`, `uidCanAccessWorkspaceArea`, `workspaceMemberRole`, `normalizeWorkspaceRole`,
   `billingEntitlementsForCompany`, `nvRoleCanAccessFinancialInfo`, `recordPiiAccess`) are injected through
   `createOrchestrator(deps)`, the way `createInventoryFunctions` is wired. index.js builds one instance at
   load; the WhatsApp gateway (a later function in the same codebase) builds it with the same deps.
@@ -558,7 +558,7 @@ Rules for the modules:
 resolveContext({ uid, companyId, authType, scope, channel })
 → {
     uid, companyId, companyRef, companyData,   // companyData is READ HERE, not accepted from the caller
-    role,                      // normalizeWorkspaceRole(...)
+    role,                      // normalizeWorkspaceRole(workspaceMemberRole(...)) — custom roles included
     isOwner,
     areas: { orders, dashboard, customers, financialInfo, bankFeed },   // uidCanAccessWorkspaceArea per area
     accountingReader,                                                   // accountingReaderCanRead(companyData, uid)

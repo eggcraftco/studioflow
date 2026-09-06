@@ -203,6 +203,74 @@ check("the assistant's loader actually carries the two fields", () => {
   assert.ok(/outgoingKind: nvCleanString/.test(loader), "the loader drops outgoingKind");
 });
 
+// ---- the orchestrator resolves the SAME role the app resolves ---------------
+//
+// A workspace can hand somebody a custom role whose baseRole is workflowOnly.
+// Only workspaceMemberRole knows that: it reads memberCustomRoles, follows the
+// id into customRoles and returns the base role. An orchestrator that re-derived
+// the role from members[uid].role saw a plain "member", so the assigned-orders
+// filter never ran and the payments/banking/payouts sections opened.
+const orchestrator = api._nvOrchestrator;
+const workflowOnlyInApp = api._nvWorkflowOnlyContext;
+
+/** A workspace where the member's role lives ONLY in a custom role. */
+function customRoleWorkspace(baseRole) {
+  return {
+    __workspaceId: "acme",
+    ownerUid: "owner-uid",
+    members: { "owner-uid": { role: "owner" }, "member-uid": { role: "member" } },
+    memberCustomRoles: { "member-uid": "custom_bench01" },
+    customRoles: { custom_bench01: { name: "Bench", baseRole } },
+    memberAccess: { "member-uid": { orders: true } }
+  };
+}
+
+const contextOver = (companyData, uid) => orchestrator.resolveContext(
+  { uid, companyId: "acme", scope: "orders.read finance.read" },
+  { loadCompany: async () => ({ companyData, settings: {} }) }
+);
+
+check("a workflow-only member on a custom role is workflow-only to the orchestrator too", async () => {
+  const companyData = customRoleWorkspace("workflowOnly");
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), true, "the app's own answer");
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.role, "workflowOnly", "the orchestrator read members[uid].role instead of the custom role");
+  assert.strictEqual(ctxOut.workflowOnly, true, "so the assigned-orders filter in loaders.js would never have run");
+
+  const sections = require("../../orchestrator/context").sectionAccess(ctxOut);
+  for (const section of ["payments", "banking", "payouts", "accounting"]) {
+    assert.strictEqual(sections[section], false, `${section} was opened to a workflow-only member`);
+  }
+});
+
+check("a member on an ordinary custom role keeps the base role that role carries", async () => {
+  const companyData = customRoleWorkspace("member");
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), false);
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.role, "member");
+  assert.strictEqual(ctxOut.workflowOnly, false, "an ordinary member must not be narrowed to their own assignments");
+});
+
+check("a member entry stored as a bare string still resolves", async () => {
+  // Older workspaces store `members: { uid: "workflowOnly" }`. The app's
+  // resolver copes with it; an inline `members[uid].role` reads undefined.
+  const companyData = {
+    __workspaceId: "acme",
+    ownerUid: "owner-uid",
+    members: { "owner-uid": "owner", "member-uid": "workflowOnly" },
+    memberAccess: { "member-uid": { orders: true } }
+  };
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), true);
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.workflowOnly, true);
+});
+
+check("the owner is still the owner", async () => {
+  const ctxOut = await contextOver(customRoleWorkspace("workflowOnly"), "owner-uid");
+  assert.strictEqual(ctxOut.role, "owner");
+  assert.strictEqual(ctxOut.workflowOnly, false);
+});
+
 check("the assistant's totals go through the shared rule, not the sign", () => {
   const source = require("fs").readFileSync(require("path").join(__dirname, "..", "..", "index.js"), "utf8");
   assert.ok(!/rows\.filter\(\(tx\) => tx\.amount > 0\)/.test(source), "an incoming total still reads the sign alone");

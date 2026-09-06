@@ -24,6 +24,8 @@
  *    honouring `suspendedMembers`.
  * 3. **Scopes are enforced, not just carried.** The token's granted scope is
  *    checked against the registry entry's `scopes` at call time.
+ * 4. **The role is resolved by the app's resolver, never re-derived here.**
+ *    See `resolveRole`.
  */
 
 /** A refusal the adapter maps onto its own error type (HttpsError for MCP). */
@@ -54,6 +56,40 @@ function scopeSet(scope) {
 }
 
 /**
+ * The workspace role, from the app's own resolver and from nothing else.
+ *
+ * `workspaceMemberRole` is the function the screens and the callables use
+ * (`nvWorkflowOnlyContext` is one line of it). It reads `memberCustomRoles`,
+ * resolves that custom role's `baseRole` through `customRoles`, and copes with
+ * a member entry stored as a bare string. Reading `members[uid].role ||
+ * memberRoles[uid]` inline reproduces none of that: a workflow-only member on a
+ * custom role comes back as a plain `member`, the assigned-orders filter in
+ * loaders.js never runs, and `sectionAccess` opens payments, banking and
+ * payouts to somebody the app restricts to their own work.
+ *
+ * So the resolver is injected, and its absence is a wiring error rather than a
+ * quiet fallback to the loosest answer a workspace can have.
+ */
+function resolveRole(companyData, uid, { isOwner, deps }) {
+  if (typeof deps.workspaceMemberRole !== "function") {
+    throw new OrchestratorError(
+      "failed-precondition",
+      "This deployment was built without the workspace role resolver, so the caller's role cannot be established."
+    );
+  }
+  const normalize = typeof deps.normalizeWorkspaceRole === "function"
+    ? (value) => String(deps.normalizeWorkspaceRole(value, "member"))
+    : (value) => String(value || "member");
+  // "unknown" is what the resolver returns when the uid holds no member entry
+  // at all — the owner's usual case, since an owner need not be in `members`.
+  // Every other answer, including a stricter one on an owner's own entry, is
+  // taken as it stands: this must not be able to widen a role.
+  const resolved = String(deps.workspaceMemberRole(companyData, uid, "member") || "");
+  if (resolved && resolved !== "unknown") return normalize(resolved);
+  return isOwner ? "owner" : "member";
+}
+
+/**
  * Build the context every capability is handed.
  *
  * `deps` supplies the predicates; nothing in this file knows how a role is
@@ -75,9 +111,7 @@ async function resolveContext({ uid, companyId, authType = "chatgpt_oauth", scop
   }
 
   const isOwner = deps.uidIsCompanyOwner(companyData, cleanUid) === true;
-  const role = deps.normalizeWorkspaceRole
-    ? String(deps.normalizeWorkspaceRole(companyData?.members?.[cleanUid]?.role || companyData?.memberRoles?.[cleanUid] || (isOwner ? "owner" : "member"), "member"))
-    : (isOwner ? "owner" : "member");
+  const role = resolveRole(companyData, cleanUid, { isOwner, deps });
 
   const area = (name) => isOwner || deps.uidCanAccessWorkspaceArea(companyData, cleanUid, name) === true;
   const entitlements = deps.billingEntitlementsForCompany ? deps.billingEntitlementsForCompany(companyData) : {};

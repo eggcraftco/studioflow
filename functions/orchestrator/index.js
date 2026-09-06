@@ -56,6 +56,9 @@ function createOrchestrator(deps = {}) {
     uidHasCompanyAccess: deps.uidHasCompanyAccess,
     uidIsCompanyOwner: deps.uidIsCompanyOwner,
     uidCanAccessWorkspaceArea: deps.uidCanAccessWorkspaceArea,
+    // The role RESOLVER, not just the normaliser: custom roles live in
+    // `memberCustomRoles`/`customRoles` and only this function reads them.
+    workspaceMemberRole: deps.workspaceMemberRole,
     normalizeWorkspaceRole: deps.normalizeWorkspaceRole,
     billingEntitlementsForCompany: deps.billingEntitlementsForCompany,
     roleCanAccessFinancialInfo: deps.roleCanAccessFinancialInfo,

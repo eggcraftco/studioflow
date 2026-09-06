@@ -31,6 +31,11 @@ function deps(overrides = {}) {
       companyData.ownerUid === uid || Boolean((companyData.members || {})[uid]) && !((companyData.suspendedMembers || {})[uid]),
     uidIsCompanyOwner: (companyData, uid) => companyData.ownerUid === uid,
     uidCanAccessWorkspaceArea: (companyData, uid, area) => ((companyData.memberAccess || {})[uid] || {})[area] === true,
+    // The app's resolver, standing in for workspaceMemberRole: the test scripts
+    // what it answers instead of copying how it decides, because what is being
+    // asserted is that the orchestrator ASKS it.
+    workspaceMemberRole: (companyData, uid) =>
+      String((companyData.roles || {})[uid] || (companyData.ownerUid === uid ? "owner" : "unknown")),
     normalizeWorkspaceRole: (value) => String(value || "member"),
     billingEntitlementsForCompany: () => ({ advancedFinanceEnabled: true, bankFeedEnabled: true, chatgptAppEnabled: true }),
     roleCanAccessFinancialInfo: (companyData, uid) => companyData.ownerUid === uid || ((companyData.memberAccess || {})[uid] || {}).financialInfo === true,
@@ -119,6 +124,47 @@ check("the plan entitlement for the ChatGPT connection is honoured", () => {
   // The same workspace over WhatsApp is not gated by the ChatGPT entitlement.
   const wa = fixtures.ownerContext({ entitlements: { chatgptAppEnabled: false }, channel: { type: "whatsapp", profile: null } });
   assert.doesNotThrow(() => context.assertCapability(wa, registry.entryFor("get_commerce_overview")));
+});
+
+checkAsync("the role is whatever the app's resolver says, not what the members map looks like", async () => {
+  // The failure this pins: a member whose role lives in a custom role reads as
+  // a plain `member` to anything that looks at members[uid].role, and a
+  // workflow-only member who resolves as `member` loses the assigned-orders
+  // filter and gains payments, banking and payouts.
+  const companyData = {
+    ownerUid: "u_owner",
+    members: { u_bench: { role: "member" } },
+    memberAccess: { u_bench: { orders: true } },
+    // Only the resolver can see this.
+    roles: { u_bench: "workflowOnly" }
+  };
+  const loadCompany = async () => ({ companyData, settings: fixtures.settings });
+  const orchestrator = createOrchestrator({
+    ...deps(), loadCompany, flags: { orchestrator: true },
+    loaders: { loadCompany, snapshotFor: async () => fixtures.mixedSnapshot() }
+  });
+  const ctx = await orchestrator.resolveContext({ uid: "u_bench", companyId: "co_1", scope: "orders.read" });
+  assert.strictEqual(ctx.role, "workflowOnly");
+  assert.strictEqual(ctx.workflowOnly, true, "the orchestrator re-derived the role instead of asking");
+  assert.strictEqual(ctx.assignedOnly, true);
+  const sections = context.sectionAccess(ctx);
+  assert.strictEqual(sections.payments, false);
+  assert.strictEqual(sections.banking, false);
+  assert.strictEqual(sections.payouts, false);
+});
+
+checkAsync("an orchestrator built without the resolver refuses rather than guessing", async () => {
+  // Failing closed matters more than the message: the guess a missing resolver
+  // would have to make is "member", which is the loosest role in the table.
+  const loadCompany = async () => ({ companyData: { ownerUid: "u_owner", members: { u_bench: true } }, settings: {} });
+  const orchestrator = createOrchestrator({
+    ...deps(), workspaceMemberRole: undefined, loadCompany, flags: { orchestrator: true },
+    loaders: { loadCompany, snapshotFor: async () => fixtures.mixedSnapshot() }
+  });
+  await assert.rejects(
+    () => orchestrator.resolveContext({ uid: "u_bench", companyId: "co_1" }),
+    /workspace role resolver/
+  );
 });
 
 check("a workflow-only member sees no money and no banking sections", () => {

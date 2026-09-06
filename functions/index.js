@@ -26156,6 +26156,11 @@ const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
   uidHasCompanyAccess,
   uidIsCompanyOwner,
   uidCanAccessWorkspaceArea,
+  // The workspace role comes from the app's resolver, which is the only code
+  // that knows a member can hold a custom role whose baseRole is workflowOnly.
+  // nvWorkflowOnlyContext is this function plus a comparison; the orchestrator
+  // does the comparison itself, over the same value.
+  workspaceMemberRole,
   normalizeWorkspaceRole,
   billingEntitlementsForCompany,
   roleCanAccessFinancialInfo: nvRoleCanAccessFinancialInfo,
@@ -26167,6 +26172,14 @@ const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
     catch (error) { return false; }
   }
 });
+
+// Exported for functions/test/qa/mcp-permissions.test.js: the orchestrator as
+// this deployment wires it, deps and all. With `loadCompany` overridden a test
+// can put one company document through both the app's own resolver and the
+// orchestrator's context and prove the two agree about the caller's role, which
+// is the only way to catch the orchestrator quietly becoming the looser copy.
+exports._nvOrchestrator = nvOrchestrator;
+exports._nvWorkflowOnlyContext = nvWorkflowOnlyContext;
 
 /** The names the orchestrator publishes on this deployment's flags. */
 function nvOrchestratorCapabilities() {

@@ -68,7 +68,8 @@ adapter does (`functions/index.js`, `nvOrchestrator`).
 | `uidHasCompanyAccess` | `(companyData, uid) => boolean` | yes | the app's own membership predicate, honouring `suspendedMembers` |
 | `uidIsCompanyOwner` | `(companyData, uid) => boolean` | yes | |
 | `uidCanAccessWorkspaceArea` | `(companyData, uid, area) => boolean` | yes | `orders`, `dashboard`, `customers`, `bankFeed` |
-| `normalizeWorkspaceRole` | `(value, fallback) => string` | no | |
+| `workspaceMemberRole` | `(companyData, uid, fallback) => string` | yes | the app's role RESOLVER — it follows `memberCustomRoles` into `customRoles` and returns that role's `baseRole`. Without it `resolveContext` refuses: a re-derived role reads a custom-role workflow-only member as a plain `member` and opens payments, banking and payouts to them |
+| `normalizeWorkspaceRole` | `(value, fallback) => string` | no | applied on top of the resolver's answer, to keep the value in the app's vocabulary |
 | `billingEntitlementsForCompany` | `(companyData) => object` | yes | plan gates; never re-derived here |
 | `roleCanAccessFinancialInfo` | `(companyData, uid) => boolean` | yes | |
 | `accountingReaderCanRead` | `(companyData, uid) => boolean` | no | defaults to owner-only |
@@ -91,7 +92,7 @@ const nivaOrchestrator = createOrchestrator({
   db: () => admin.firestore(),
   flags: registry.flagsFromEnv(process.env),
   uidHasCompanyAccess, uidIsCompanyOwner, uidCanAccessWorkspaceArea,
-  normalizeWorkspaceRole, billingEntitlementsForCompany,
+  workspaceMemberRole, normalizeWorkspaceRole, billingEntitlementsForCompany,
   roleCanAccessFinancialInfo: nvRoleCanAccessFinancialInfo,
   accountingReaderCanRead: (c, uid) => nvAccountingAccess.accountingReaderCanRead(c, uid, { uidIsCompanyOwner }),
   inventoryAccessAllowed: (c, uid) => { try { return nvRequireInventoryAccess({ companyData: c, uid }) === true; } catch { return false; } },
