@@ -94,6 +94,18 @@ const PII_KINDS = Object.freeze(["name", "email", "phone", "address"]);
 /** Risk classes (A cheapest to E highest) used by the channel policy layer. */
 const RISK_CLASSES = Object.freeze(["A", "B", "C", "D", "E"]);
 
+/**
+ * What a channel binding has to allow before a tool may be called over it
+ * (WhatsApp spec §11 `allowedCapabilities`, §83 the per-kind feature flags).
+ *
+ * These are NOT on the wire and no MCP client ever sees them: MCP's projection
+ * of this table is "every published entry", because the OAuth consent screen
+ * and the workspace role are that channel's policy layer. A chat binding has a
+ * second, coarser one — "this phone may read, but may not send anything to a
+ * customer" — and it needs a vocabulary to say that in.
+ */
+const CAPABILITY_KINDS = Object.freeze(["read", "internal_write", "external_write", "file_upload"]);
+
 /** The access-log sentence every readOnlyHint that leans on the carve-out repeats. */
 const ACCESS_LOG_NOTE = "the only write it makes is the piiAccessLog row recording the read";
 
@@ -875,6 +887,71 @@ function entryFor(name) {
 }
 
 /**
+ * What a binding must allow before this tool may run on that channel.
+ *
+ * Derived from the two fields the annotations are already derived from, so a
+ * channel's policy and the reviewer's annotation cannot disagree about the same
+ * tool: `permission.write` says whether the workspace changes, and `effects`
+ * says whether the change leaves NivaDesk. A tool that can put a message in a
+ * customer's inbox therefore needs `external_write` on the binding — the same
+ * fact that makes its openWorldHint true.
+ */
+function kindsFor(entry) {
+  const effects = Array.isArray(entry.effects) ? entry.effects : [];
+  const kinds = [];
+  if (entry.permission && entry.permission.write === true) {
+    kinds.push(effects.includes("customer_message") || effects.includes("provider_write") ? "external_write" : "internal_write");
+  } else {
+    kinds.push("read");
+  }
+  // A tool that takes a document off the caller is a file path into the
+  // workspace whatever else it does, and a binding can withhold that on its own.
+  if (effects.includes("external_fetch") || effects.includes("ocr")) kinds.push("file_upload");
+  return kinds;
+}
+
+/**
+ * A channel binding's profile, read the way a security boundary should be read:
+ * closed unless it says otherwise.
+ *
+ * An incomplete profile is the likely one — a gateway that forgot a field, a
+ * binding written before a kind existed — so a missing `capabilities` means
+ * reads only and a missing assurance level means level 1, the lowest thing a
+ * live binding can be (WA §15). Unknown capability names are dropped rather
+ * than honoured, so a typo removes access instead of granting it.
+ */
+function normalizeChannelProfile(profile) {
+  if (!profile || typeof profile !== "object") return null;
+  const security = (profile.security && typeof profile.security === "object") ? profile.security : {};
+  const listed = Array.isArray(profile.capabilities) ? profile.capabilities
+    : (Array.isArray(profile.allowedCapabilities) ? profile.allowedCapabilities : null);
+  const rawAssurance = security.assurance_level !== undefined ? security.assurance_level : profile.securityLevel;
+  const assurance = Math.floor(Number(rawAssurance));
+  return {
+    capabilities: (listed || ["read"]).map(String).filter((kind) => CAPABILITY_KINDS.includes(kind)),
+    assurance: Number.isFinite(assurance) && assurance >= 1 ? assurance : 1
+  };
+}
+
+/**
+ * The entries a channel may call: published by this deployment's flags, allowed
+ * by the binding's capability list, and at or under its assurance level.
+ *
+ * With no profile this is the MCP projection — the whole published table —
+ * because that is what `tools/list` serves. One table, two projections; there
+ * is no WhatsApp-specific tool set to drift (WA §81, §14).
+ */
+function publishedForChannel({ flags = {}, channelProfile = null } = {}) {
+  const profile = normalizeChannelProfile(channelProfile);
+  const entries = publishedEntries(flags);
+  if (!profile) return entries;
+  return entries.filter((entry) => {
+    if (entry.minAssurance > profile.assurance) return false;
+    return kindsFor(entry).every((kind) => profile.capabilities.includes(kind));
+  });
+}
+
+/**
  * The four hints for a tool, always in the same key order, always booleans.
  *
  * With the orchestrator flag off the caller gets the values the 1.1.1 listing
@@ -1044,11 +1121,14 @@ module.exports = {
   EFFECT_KINDS,
   PII_KINDS,
   RISK_CLASSES,
+  CAPABILITY_KINDS,
   FLAG_ENV,
   flagsFromEnv,
   normalizeFlags,
   publishedEntries,
   publishedNames,
+  publishedForChannel,
+  kindsFor,
   entryFor,
   annotationsFor,
   justificationFor,

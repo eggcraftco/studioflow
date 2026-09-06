@@ -63,9 +63,20 @@ function createOrchestrator(deps = {}) {
     inventoryAccessAllowed: deps.inventoryAccessAllowed
   };
 
-  /** The capabilities this deployment publishes, under the flags it was built with. */
-  function listCapabilities() {
-    return registry.publishedNames(flags).filter((name) => CAPABILITY_NAMES.includes(name));
+  /**
+   * The capabilities this deployment publishes, under the flags it was built
+   * with — and, when a channel binding's profile is given, under that binding's
+   * own policy as well (WA §11 allowedCapabilities, §14, §15).
+   *
+   * MCP calls it with no argument and gets the flag projection, which is what
+   * `tools/list` serves. The WhatsApp gateway passes its binding profile and
+   * gets the subset that binding may call, out of the same table: there is no
+   * second tool set to drift out of step with the first (WA §81).
+   */
+  function listCapabilities({ channelProfile = null } = {}) {
+    return registry.publishedForChannel({ flags, channelProfile })
+      .map((entry) => entry.name)
+      .filter((name) => CAPABILITY_NAMES.includes(name));
   }
 
   /**
