@@ -70,6 +70,12 @@ data class IntegrationSignals(
     /** Live Square merchants, from getSquareConnections. */
     val squareConnections: Int = 0,
     val squareConnectionsNeedingAttention: Int = 0,
+    /** Live eBay seller accounts, from getEbayConnections. The attention count
+     *  is the server's own specStatus — never an error code read again here. */
+    val ebayConnections: Int = 0,
+    val ebayConnectionsNeedingAttention: Int = 0,
+    val ebayAccount: String = "",
+    val ebaySandbox: Boolean = false,
     /** PayPal money feeds (first-party credentials), from the bank connections. */
     val paypalConnections: Int = 0,
     val paypalConnectionsNeedingAttention: Int = 0,
@@ -98,6 +104,18 @@ data class IntegrationProvider(
         if (id == "square") {
             if (signals.squareConnections == 0) return ""
             return if (signals.squareConnections == 1) "1 account" else "${signals.squareConnections} accounts"
+        }
+        if (id == "ebay") {
+            if (signals.ebayConnections == 0) return ""
+            val base = if (signals.ebayConnections == 1) {
+                signals.ebayAccount.ifBlank { "1 account" }
+            } else {
+                "${signals.ebayConnections} accounts"
+            }
+            // A sandbox account looks exactly like a live one on a card, and
+            // saying so is the difference between "no orders yet" and "these
+            // orders are not real".
+            return if (signals.ebaySandbox) "$base · Sandbox" else base
         }
         if (id == "paypal") return if (signals.paypalConnections == 0) "" else if (signals.paypalSandbox) "Sandbox" else "PayPal"
         if (id != "shopify") return ""
@@ -138,6 +156,13 @@ data class IntegrationProvider(
             if (signals.squareConnections == 0) return IntegrationState.Available
             return if (signals.squareConnectionsNeedingAttention == signals.squareConnections) IntegrationState.Attention else IntegrationState.Connected
         }
+        if (id == "ebay") {
+            // A disconnected row is not a connection, and the card goes amber
+            // only when EVERY live account needs a look: one paused sandbox
+            // account beside a working live one is not an outage.
+            if (signals.ebayConnections == 0) return IntegrationState.Available
+            return if (signals.ebayConnectionsNeedingAttention == signals.ebayConnections) IntegrationState.Attention else IntegrationState.Connected
+        }
         if (id == "paypal") {
             if (signals.paypalConnections == 0) return IntegrationState.Available
             return if (signals.paypalConnectionsNeedingAttention == signals.paypalConnections) IntegrationState.Attention else IntegrationState.Connected
@@ -175,7 +200,12 @@ val INTEGRATION_PROVIDERS = listOf(
     IntegrationProvider("amazon", "Amazon", "commerce", "planned", "", emptyList(), "", "A"),
     // Named beside Amazon because a studio deciding where to list wants to see
     // both, and a marketplace missing from the grid reads as "never coming".
-    IntegrationProvider("ebay", "eBay", "commerce", "planned", "", emptyList(), "", "E"),
+    // No logo file: eBay's mark is theirs and we are not allowed to redraw it,
+    // so the card carries the initial like Square and Etsy.
+    IntegrationProvider("ebay", "eBay", "commerce", "native",
+        "Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
+        listOf("Orders", "Listings", "Inventory", "Fulfilment", "Refunds", "Fees", "Payouts", "ChatGPT"),
+        "ebay", "E"),
     // Banking is its own section of the app here, not a settings screen, so this
     // card reports its state and sends nobody anywhere.
     IntegrationProvider("openbanking", "Open Banking", "banking", "native",

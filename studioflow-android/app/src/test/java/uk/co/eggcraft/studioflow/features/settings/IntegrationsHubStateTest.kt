@@ -51,3 +51,70 @@ class IntegrationsHubStateTest {
         )
     }
 }
+
+/**
+ * The eBay card: the same rule, on the connector that ships switched off.
+ *
+ * The card is read from the rows the SERVER returns, and needsAttention is the
+ * server's own specStatus (design §10, §11.1) — the count reaching these
+ * signals is already that judgement, never an error code re-read on the phone.
+ *
+ * These claims are the contract, not the code, and they are the ones the web
+ * mirror pins in functions/test/qa/shopify-badge-uninstalled.test.js. Keep the
+ * two in step.
+ */
+class EbayIntegrationCardTest {
+    private val ebay = INTEGRATION_PROVIDERS.first { it.id == "ebay" }
+
+    private fun signals(live: Int, attention: Int, account: String = "", sandbox: Boolean = false) =
+        IntegrationSignals(
+            ebayConnections = live,
+            ebayConnectionsNeedingAttention = attention,
+            ebayAccount = account,
+            ebaySandbox = sandbox,
+        )
+
+    @Test
+    fun aCardWithNoRowsIsAvailableIncludingWhenTheConnectorIsOff() {
+        // A planned card short-circuits before the eBay branch is ever reached,
+        // so the kind is part of the claim.
+        assertEquals("native", ebay.kind)
+        // The default signals object is also what a workspace whose
+        // getEbayConnections read REJECTED settles on — the connector is gated
+        // off — and that must read Available, exactly as the grid did before
+        // eBay existed, not Connected and not a crash.
+        assertEquals(IntegrationState.Available, ebay.state(IntegrationSignals()))
+        assertEquals("", ebay.detail(IntegrationSignals()))
+    }
+
+    @Test
+    fun oneHealthyAccountBesideABrokenOneKeepsTheCardGreen() {
+        val both = signals(live = 2, attention = 1)
+        assertEquals(IntegrationState.Connected, both.let(ebay::state))
+        assertEquals("2 accounts", ebay.detail(both))
+    }
+
+    @Test
+    fun everyLiveAccountNeedingALookLowersTheCard() {
+        assertEquals(IntegrationState.Attention, ebay.state(signals(live = 1, attention = 1)))
+        assertEquals(IntegrationState.Attention, ebay.state(signals(live = 3, attention = 3)))
+    }
+
+    @Test
+    fun aSandboxConnectionSaysSoOnTheCard() {
+        // A seller looking at a green badge over a sandbox account has no other
+        // way to learn that none of it is real.
+        val sandbox = signals(live = 1, attention = 0, account = "eggcraft", sandbox = true)
+        assertEquals(IntegrationState.Connected, ebay.state(sandbox))
+        assertEquals("eggcraft · Sandbox", ebay.detail(sandbox))
+        // A live account of the same shape must not carry the word.
+        assertEquals("eggcraft", ebay.detail(signals(live = 1, attention = 0, account = "eggcraft")))
+    }
+
+    @Test
+    fun anAccountWithNoNameStillCountsAsOne() {
+        // sellerUsername and displayName can both be absent on a connection
+        // eBay never named; the card still has to say there is one.
+        assertEquals("1 account", ebay.detail(signals(live = 1, attention = 0)))
+    }
+}
