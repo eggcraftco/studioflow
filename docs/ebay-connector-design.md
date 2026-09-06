@@ -1126,9 +1126,10 @@ Removed, not kept as a fallback:
 - **The function's decline branch**, `if (String(req.query?.error || "")) { … ebay: "cancelled" … }` at
   `functions/ebayConnector.js:400`. The POST body has no `error` field, so the branch is unreachable; it
   is **deleted**, not left as dead code, and `cancelled` is not in the function's response vocabulary. The
-  qa case at `ebay-connect.test.js:71-72` that asserts it against the function is **deleted with it** and
-  replaced by a source assertion in `check-ebay-relay-vectors.mjs` (below): the *route* contains the
-  decline branch. The matching function-side assertion is scoped to **`ebayOAuthCallback`'s body**, not to
+  qa case at `ebay-connect.test.js:71-72` that asserts it against the function is **deleted with it**; the
+  decline is now covered on the side that owns it, by `studioflow-web/scripts/check-ebay-relay-vectors.mjs`
+  (below), which both asserts the branch in the route's source and drives the real route with `?error=…`
+  and with a bare `?error=` — presence, not truthiness — to see `ebay=cancelled` and no call. The matching function-side assertion is scoped to **`ebayOAuthCallback`'s body**, not to
   the file — `functions/ebayConnector.js` legitimately carries a `"cancelled"` literal elsewhere
   (`envelope.order.platform_status === "cancelled"` in `applyEbayOrder`), so a file-wide pin would fail on
   correct code. It is pinned in `ebay-connect.test.js`'s source-pin case. §5's `ebayOAuthCallback` bullet
@@ -1239,23 +1240,35 @@ under `EBAY_SECRETS_READY`; the `callbackKey` dep is passed in `index.js`; `EBAY
 `ebayOAuthCallback` is declared with `maxInstances`; `access-control-policy.test.js`'s `EBAY_*` regex
 already covers it.
 
-**qa — shared signature vector:** `functions/test/fixtures/ebay-callback-signature-vectors.json` holds
-`{ key, timestampMs, body, signature }` triples computed with a fixed **test** key that has no production
-meaning and is not any real secret. `ebay-connect.test.js` checks the function's verifier against them;
-`studioflow-web/scripts/check-ebay-relay-vectors.mjs` (wired as `npm run test:relay`, the `test:finance`
-precedent) checks the route's signer against the same file. The two implementations are in different
-languages and cannot import each other, so **the vector is the shared pure thing** — this is the "tests
-that assert the bug" lesson applied across the boundary: a test that re-implements the canonical string
-next to the code it tests would prove nothing. One vector's nonce is a base64url string, to pin that
-`setEbayNonceCookie`'s `encodeURIComponent` and the cookie jar's own `decodeURIComponent` (step 3)
-round-trip it unchanged; one vector's nonce is `""`.
+**web — `npm run test:relay`, `studioflow-web/scripts/check-ebay-relay-vectors.mjs`.** This paragraph
+described a committed vector file in the past tense before either half existed; what exists now is
+stronger than the plan, and the plan's own premise turned out to be wrong, so both are recorded.
 
-`check-ebay-relay-vectors.mjs` additionally makes four **source** assertions over
-`app/ebay/callback/route.ts`, because there is no other automated coverage of that file: it exports
-`const runtime = "nodejs"` and `const dynamic = "force-dynamic"`; it contains the `error` →
-`ebay=cancelled` branch (the only place that word is produced); it reads
-`process.env.NIVADESK_EBAY_CALLBACK_KEY` **inside** the handler and checks its length; and it contains no
-`NEXT_PUBLIC_` reference and no early return on an absent nonce cookie.
+*The plan was:* `functions/test/fixtures/ebay-callback-signature-vectors.json` holding
+`{ key, timestampMs, body, signature }` triples under a fixed **test** key, checked by the function's
+verifier in `ebay-connect.test.js` and by the route's signer in the script — the two implementations
+being, it said, unable to import each other, so **the vector is the shared pure thing**. That file has
+**not** been written, and it is blocked on a decision rather than effort: a committed vector needs a fixed
+HMAC key, and who mints that key and where it is recorded is the **owner's** call (deploy plan check 10).
+
+*What is written instead:* the script **executes both implementations against each other**, which is what
+the vector was for. It compiles the real `app/ebay/callback/route.ts` with the project's own `tsc`
+(CommonJS, so `next/server` resolves; into a temp dir under the web tree, so `next` resolves at all),
+drives `GET` with `globalThis.fetch` captured, and hands the request the route produced — headers, exact
+body bytes and all — to the real `ebayOAuthCallback` through `functions/test/qa/helpers/ebayHarness.js`,
+under the harness's per-run key. Neither side re-implements the other and no key is committed. It covers:
+the canonical string agreeing across the boundary (the function accepts the route's signature and connects);
+the signature binding the body (one swapped field → 401, and the state survives); the absent cookie posting
+`nonce: ""` and the function burning the state; both decline shapes settling on our domain with no call;
+and a blank or 31-character key making no call, landing `unavailable`, and leaving the state unburned —
+the cost §4.2 of the deploy plan now names. It also makes the source assertions the plan listed, which no
+execution can show: `runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler
+`process.env.NIVADESK_EBAY_CALLBACK_KEY` read with its length floor, no `NEXT_PUBLIC_` outside comments,
+and no `return` on the line that reads the nonce cookie.
+
+*What it does not cover, and says so on every run:* the committed vector file. If someone writes it, the
+function's verifier should be checked against it in `ebay-connect.test.js` as planned; the script prints a
+`NOTE` when the file appears so the two do not drift apart silently.
 
 **e2e — `commerce-ebay-connector-emulator.test.js`:** set `process.env.EBAY_CALLBACK_KEY` beside the other
 four before `require("../../index.js")`. Case 1 becomes: begin → state doc with `nonceHash` and the
@@ -1268,7 +1281,8 @@ token and no `Hash` key in `getEbayConnections`). Add: an **unsigned** POST → 
 untouched, provable by then completing the flow with a signed one.
 
 **web:** `npm run typecheck` and `npx next build --no-lint` clean, with `ƒ /ebay/callback` still dynamic in
-the manifest; `npm run test:relay` green; and a grep of the built output that makes **two** assertions,
+the manifest; `npm run test:relay` green (what that covers is the paragraph above — the executed
+cross-boundary check, not the unwritten vector file); and a grep of the built output that makes **two** assertions,
 not one:
 
 - **Negative**, over the *client* chunks: no `NIVADESK_EBAY_CALLBACK_KEY` and no literal

@@ -7,6 +7,9 @@ out
 .env*.local
 .DS_Store
 tsconfig.tsbuildinfo
+# npm run test:relay compiles the callback route into a temp dir here (it has to
+# live under the web tree or `next` does not resolve); it is removed on exit.
+.ebay-relay-check-*
 
 # Local demo videos — never publish (3.4GB; GitHub rejects >100MB anyway)
 public/NivaDesk_Demo_high.mov

@@ -56,18 +56,22 @@ watching.
 | 7b | The key was **not inlined at build time** | grep the **server** chunk for the route: the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` must still be **present**. If Next replaced it statically the name vanishes and the value takes its place, so check 7 would pass in exactly the failure case. `export const runtime = "nodejs"` in the route is what prevents it | **done** — `.next/server/app/ebay/callback/route.js` still contains the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` |
 | 8 | The eBay screen degrades when the server has no eBay functions | open the settings section against production, where the callables do not exist: it must say the connector is not set up, not throw | run against the built app before the rsync |
 | 9 | Nothing else changed on the site | diff the publish repository after the rsync, and expect only eBay files, the registry, the language tables and the build output | run at deploy time |
-| 10 | `npm run test:relay` green | the route's HMAC signer matches the shared vector file the function's verifier is checked against, and the route's source assertions hold (`runtime = "nodejs"`, the decline branch, the in-handler `process.env` read, no `NEXT_PUBLIC_`, no early return on an absent nonce cookie) | **not runnable yet — the script and the vector file do not exist**; see below |
+| 10 | `npm run test:relay` green | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, an absent cookie posts `nonce:""` and burns the state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`, no early return on an absent nonce cookie) | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It does **not** read a committed vector file; see below |
 
-**Check 10 is the one gap in this list, and it is named rather than glossed.** Neither
-`studioflow-web/scripts/check-ebay-relay-vectors.mjs` nor
-`functions/test/fixtures/ebay-callback-signature-vectors.json` has been written. The blocker is a
-decision, not effort: a committed vector file needs a fixed HMAC key, and a 64-hex value in a committed
-file sits badly against this project's no-secret-values rule even when the value is meaningless — so the
-owner has to say who mints that fixture key and where it is recorded. What has been done instead is
-weaker in one specific way and no weaker in any other: the built route was driven against the **real**
-`ebayOAuthCallback` handler under a key minted per run and written nowhere, and the canonical string
-matched across the boundary. That proves the two halves agree today; it does not guard the agreement in
-CI, which is exactly what check 10 exists to do. The canonical string, for whoever writes the file, is
+**Check 10 was the one gap in this list, and it is now closed — but not in the way design §5.4 planned,
+so the difference is stated.** The plan was a committed vector file
+(`functions/test/fixtures/ebay-callback-signature-vectors.json`) checked by both sides. That file is still
+unwritten and still blocked on a decision rather than effort: a committed vector needs a fixed HMAC key,
+and a 64-hex value in a committed file sits badly against this project's no-secret-values rule even when
+the value is meaningless, so the **owner** has to say who mints that fixture key and where it is recorded.
+
+What the script does instead is the thing the vector was a proxy for: it runs **both** implementations
+against each other. It compiles the real `app/ebay/callback/route.ts`, drives it with `fetch` captured, and
+hands the request it produced to the real `ebayOAuthCallback` through the functions qa harness, under a key
+minted per run and written nowhere. That is a stronger check than a static triple — it exercises the route's
+decisions as well as its arithmetic — and it runs in CI, which the manual version recorded here previously
+did not. Every run prints a `SKIP` line naming the vector file as the thing it does not cover, so nobody
+reads "green" as more than it is. The canonical string, for whoever writes that file, is
 `HMAC-SHA256(key, "v1." + timestampMs + "." + rawBodyBytes)` as lowercase hex.
 
 **One property stated rather than fixed.** The nonce cookie is written by the browser with
