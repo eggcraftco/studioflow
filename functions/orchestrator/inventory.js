@@ -51,9 +51,7 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
     "unsupported_metric",
     "Channel allocation, stock sync mismatch, oversell risk and multi-channel listings need a product-to-listing mapping, which NivaDesk does not store yet. They are reported as unavailable, not as zero."
   )];
-  if (snapshot.inventoryCapped) {
-    warnings.push(envelope.warning("loader_cap_reached", "The inventory read hit its cap, so these figures may cover only part of the shelf."));
-  }
+  warnings.push(...envelope.capWarnings(snapshot));
 
   const currency = money.workspaceCurrency(snapshot.settings || {});
   // `items` used to be the raw row count while every other figure came from
@@ -103,7 +101,9 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
 function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
   const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
   const needle = String(args.query || "").trim().toLowerCase();
-  const warnings = [];
+  // A search over a shelf that was read only in part is a search that can miss
+  // the item somebody asked about.
+  const warnings = [...envelope.capWarnings(snapshot)];
   let items = filterItems(snapshot.inventoryItems || [], args);
 
   if (args.status) {

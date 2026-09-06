@@ -30,7 +30,15 @@
 const outbound = require("../privacy/outbound");
 const production = require("../production");
 
-/** Caps. Hitting one sets `partial: true` with a `loader_cap_reached` warning. */
+/**
+ * Caps. Hitting one sets `<name>Capped` on the snapshot, which becomes a
+ * `loader_cap_reached` warning and `partial: true` in the answer
+ * (envelope.CAP_WARNINGS, envelope.finish). Four of these used to be silent:
+ * `bankCapped` was written and read by nobody, and the payout, review,
+ * attention and inbox reads carried no flag at all, so a truncated answer said
+ * it was complete. The flag name is the cap's name plus "Capped", and a test
+ * pins the two sets against each other.
+ */
 const CAPS = Object.freeze({ orders: 1000, bank: 3000, inventory: 2000, payouts: 500, review: 200, attention: 100, inbox: 100 });
 
 /** What each capability declares it needs; the loader reads nothing else. */
@@ -243,11 +251,17 @@ function createLoaders({ db, now = () => Date.now() }) {
    */
   async function loadPayouts(companyId) {
     const out = {};
+    let capped = false;
     for (const [provider, collection] of [["square", "squarePayouts"], ["paypal", "paypalPayouts"]]) {
-      const { rows } = await readCollection(company(companyId).collection(collection), CAPS.payouts);
-      out[provider] = rows;
+      const read = await readCollection(company(companyId).collection(collection), CAPS.payouts);
+      out[provider] = read.rows;
+      // `readCollection` has always returned this and this function used to
+      // drop it on the floor, so a workspace whose payout history is longer
+      // than the cap was told how many payouts are unmatched over a list that
+      // had been cut off, with nothing said.
+      capped = capped || read.capped;
     }
-    return out;
+    return { payouts: out, capped };
   }
 
   async function loadConnections(companyId, ctx) {
@@ -323,7 +337,9 @@ function createLoaders({ db, now = () => Date.now() }) {
       const data = doc.data() || {};
       return { id: doc.id, provider: String(data.provider || ""), reason: String(data.reason || "") };
     });
-    return { queue, held };
+    // `heldForReview.total` is a headline number in get_integration_health, so
+    // a truncated read of either collection has to be sayable.
+    return { queue, held, capped: queueSnap.size >= CAPS.review || heldSnap.size >= CAPS.review };
   }
 
   async function loadAccountingAttention(companyId) {
@@ -331,7 +347,7 @@ function createLoaders({ db, now = () => Date.now() }) {
     // is never called from this module or any other under orchestrator/.
     const snap = await company(companyId).collection("accountingAttention")
       .where("status", "==", "open").limit(CAPS.attention).get();
-    return snap.docs.map((doc) => {
+    const rows = snap.docs.map((doc) => {
       const data = doc.data() || {};
       return {
         id: doc.id,
@@ -344,6 +360,7 @@ function createLoaders({ db, now = () => Date.now() }) {
         entityRefs: Array.isArray(data.entityRefs) ? data.entityRefs.slice(0, 5) : []
       };
     });
+    return { rows, capped: snap.size >= CAPS.attention };
   }
 
   /**
@@ -444,6 +461,7 @@ function createLoaders({ db, now = () => Date.now() }) {
     if (needs.has("receiptInbox")) {
       const snap = await company(companyId).collection("bankReceiptInbox").where("status", "==", "waiting").limit(CAPS.inbox).get();
       snapshot.receiptInbox = snap.docs.map((doc) => ({ id: doc.id, status: "waiting", createdAtMs: num((doc.data() || {}).createdAtMs) }));
+      snapshot.inboxCapped = snap.size >= CAPS.inbox;
     }
 
     // Connections BEFORE payouts: the payout answer asks the connection whether
@@ -455,7 +473,9 @@ function createLoaders({ db, now = () => Date.now() }) {
     }
 
     if (needs.has("payouts")) {
-      snapshot.payouts = await loadPayouts(companyId);
+      const payoutRead = await loadPayouts(companyId);
+      snapshot.payouts = payoutRead.payouts;
+      snapshot.payoutsCapped = payoutRead.capped;
       // Bank rows come from the `bank` domain or not at all.
       //
       // This branch used to call loadBank() unconditionally — up to three
@@ -474,12 +494,15 @@ function createLoaders({ db, now = () => Date.now() }) {
 
     if (needs.has("commerceHealth")) snapshot.commerceHealth = await loadCommerceHealth(companyId);
     if (needs.has("review")) {
-      const { queue, held } = await loadReview(companyId);
+      const { queue, held, capped } = await loadReview(companyId);
       snapshot.reviewQueue = queue;
       snapshot.heldOrders = held;
+      snapshot.reviewCapped = capped;
     }
     if (needs.has("accounting")) {
-      snapshot.accountingAttention = await loadAccountingAttention(companyId);
+      const attention = await loadAccountingAttention(companyId);
+      snapshot.accountingAttention = attention.rows;
+      snapshot.attentionCapped = attention.capped;
       // The readiness figure is measured against this map; the accounting
       // reader is the only caller allowed to see it, and the only one that
       // reports readiness.

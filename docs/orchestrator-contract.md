@@ -533,8 +533,16 @@ capabilities behind two different gates declare it, and a custom role can carry 
 A capability that reads a collection outside its declared domains fails `orchestrator-loaders.test.js`,
 which is generic: it records every path the handle was asked for and matches it against the declaration.
 
-Loader caps, per call: orders 1000, bank 3000, inventory 2000, payouts 500, review 200, inbox 100.
-Hitting one sets `partial: true` with `loader_cap_reached` — a truncated answer says it is truncated.
+Loader caps, per call: orders 1000, bank 3000, inventory 2000, payouts 500 per provider, review 200
+(each of the two collections), attention 100, inbox 100. Hitting one sets `<name>Capped` on the
+snapshot, which every capability turns into a `loader_cap_reached` warning through
+`envelope.capWarnings(snapshot)`, and that warning sets `partial: true` inside `envelope.finish` — a
+truncated answer says it is truncated. Four of the seven used to be silent (this paragraph and
+loaders.js both claimed otherwise): `bankCapped` was written and read by nobody, and the payout,
+review, attention and inbox reads carried no flag at all, so `heldForReview.total` and the accounting
+readiness figure were stated as facts over reads that could have been cut off.
+`orchestrator-loaders.test.js` now pins the cap names against `envelope.CAP_WARNINGS` and fills every
+capped collection to its cap to check each capability says so.
 
 ---
 

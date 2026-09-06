@@ -103,7 +103,10 @@ function payoutReconciliation(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     return { fromMs: parse(args.fromDate) ?? null, toMs: parse(args.toDate) ?? null };
   })();
 
-  const warnings = [];
+  // A payout read that was cut off means `inRange` is not the number of
+  // payouts in the range, and "is any money missing?" cannot be answered over a
+  // list nobody said was truncated.
+  const warnings = [...envelope.capWarnings(snapshot)];
   const totals = { matched: 0, partial: 0, unmatched: 0, notMatchable: 0, needsReview: 0 };
   const providers = [];
   const unmatchedRows = [];

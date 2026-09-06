@@ -110,7 +110,10 @@ function reviewCountsFor(snapshot, provider, connectionId) {
 
 function integrationHealth(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
   const wanted = String(args.provider || "").toLowerCase();
-  const warnings = [];
+  // `heldForReview.total` is stated as a headline number over a read that is
+  // capped at 200 documents. If that read was cut off, the number is a floor
+  // and the answer has to say so.
+  const warnings = [...envelope.capWarnings(snapshot)];
   const rows = [];
   const sources = [];
   const connections = snapshot.connections || {};

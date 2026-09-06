@@ -499,7 +499,11 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
     : new Set(DOMAINS);
 
   const sections = contextModule.sectionAccess(ctx);
-  const warnings = [];
+  // Orders, inventory, bank rows, the receipt inbox and the payout
+  // collections: this answer is built on up to five capped reads, and any of
+  // them coming back truncated makes "N item(s) need attention" a floor rather
+  // than a count.
+  const warnings = [...envelope.capWarnings(snapshot)];
   const settings = snapshot.settings || {};
   const workspace = require("./money").workspaceCurrency(settings);
   const companyId = String(snapshot.companyId || ctx.companyId || "");
@@ -661,7 +665,7 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
     ...bankConnectionItems(snapshot, { nowMs, companyId })
   ].sort((lhs, rhs) => SEVERITY_RANK[rhs.severity] - SEVERITY_RANK[lhs.severity]);
 
-  const warnings = [];
+  const warnings = [...envelope.capWarnings(snapshot)];
   if (ctx.entitlements && ctx.entitlements.bankFeedEnabled === false) {
     warnings.push(envelope.warning("plan_limited", "Live bank syncing is not included in this plan; the rows already imported are still reported."));
   }

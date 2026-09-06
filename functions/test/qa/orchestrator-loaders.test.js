@@ -15,7 +15,8 @@
 const assert = require("assert");
 const loadersModule = require("../../orchestrator/loaders");
 const registry = require("../../orchestrator/registry");
-const { CAPABILITY_NAMES } = require("../../orchestrator");
+const envelope = require("../../orchestrator/envelope");
+const { CAPABILITY_NAMES, HANDLERS } = require("../../orchestrator");
 const fixtures = require("../fixtures/orchestrator");
 
 let failures = 0;
@@ -195,6 +196,65 @@ check("a capability that declares payouts also declares connections", async () =
     assert.ok(declared.has("connections"),
       `${capability} declares payouts without connections: "not connected" would be read off an empty collection again`);
   }
+});
+
+/** A collection filled to exactly its cap, so `size >= limit` is true. */
+const many = (count, row) => Array.from({ length: count }, (_, index) => ({ id: `x${index}`, ...row }));
+
+/** Every capped collection, at its cap, keyed by the path the loader asks for. */
+const CAPPED_SEED = {
+  siparisler: many(loadersModule.CAPS.orders, { companyId: CID, status: "In Progress", paidAmount: 10, remainingAmount: 0, createdAt: "2026-09-01", paymentDate: "2026-09-01" }),
+  [`companies/${CID}/bankTransactions`]: many(loadersModule.CAPS.bank, { amount: -5, currency: "GBP", bookingDate: "2026-09-01", category: "Materials", reviewStatus: "reviewed" }),
+  [`companies/${CID}/inventoryItems`]: many(loadersModule.CAPS.inventory, { name: "Bar", trackingType: "quantity", quantity: { onHand: 5, reserved: 0 }, status: "available" }),
+  [`companies/${CID}/squarePayouts`]: many(loadersModule.CAPS.payouts, { provider: "square", status: "PAID", amount: 10, currency: "GBP", arrivalDate: "2026-09-01", totals: { gross: 10, fee: 0, net: 10 } }),
+  [`companies/${CID}/paypalPayouts`]: many(loadersModule.CAPS.payouts, { provider: "paypal", status: "PAID", amount: 10, currency: "GBP", arrivalDate: "2026-09-01", totals: { gross: 10, fee: 0, net: 10 } }),
+  commerceReviewQueue: many(loadersModule.CAPS.review, { companyId: CID, provider: "shopify", reason: "plan_limit" }),
+  [`companies/${CID}/heldIntegrationOrders`]: many(loadersModule.CAPS.review, { provider: "shopify", reason: "plan_limit" }),
+  [`companies/${CID}/accountingAttention`]: many(loadersModule.CAPS.attention, { provider: "quickbooks", kind: "changed", severity: "warning", message: "changed", status: "open" }),
+  [`companies/${CID}/bankReceiptInbox`]: many(loadersModule.CAPS.inbox, { status: "waiting", createdAtMs: fixtures.NOW - 1000 })
+};
+
+check("every cap has a flag, and the flag has a sentence", async () => {
+  // The two lists that have to agree: what the loader can truncate, and what an
+  // answer knows how to say. `bankCapped` was set and read by nothing, and the
+  // payout, review, attention and inbox reads set no flag at all, while
+  // loaders.js's header and docs/orchestrator-contract.md both promised that
+  // hitting a cap sets `partial: true` with `loader_cap_reached`.
+  const flags = Object.keys(loadersModule.CAPS).map((name) => `${name}Capped`).sort();
+  assert.deepStrictEqual(flags, Object.keys(envelope.CAP_WARNINGS).sort(),
+    "a cap with no sentence truncates in silence; a sentence with no cap can never be said");
+});
+
+check("a read that hits its cap says so, in the flag and in the answer", async () => {
+  const seen = new Set();
+  for (const capability of CAPABILITY_NAMES) {
+    const { snapshot } = await snapshotOf(capability, {}, CAPPED_SEED);
+    const hit = Object.keys(envelope.CAP_WARNINGS).filter((flag) => snapshot[flag] === true);
+    hit.forEach((flag) => seen.add(flag));
+
+    const result = HANDLERS[capability](snapshot, {}, fixtures.ownerContext({ companyId: CID }), { nowMs: fixtures.NOW }) || {};
+    const built = envelope.finish({
+      capability,
+      state: result.state || "completed",
+      data: result.data || {},
+      sources: result.sources || [],
+      warnings: result.warnings || [],
+      partial: result.partial === true,
+      entityRefs: result.entityRefs || [],
+      nowMs: fixtures.NOW
+    });
+    const said = built.warnings.some((row) => row.code === "loader_cap_reached");
+    assert.strictEqual(said, hit.length > 0,
+      hit.length > 0
+        ? `${capability} was built on a truncated read (${hit.join(", ")}) and said the answer was complete`
+        : `${capability} warned about a cap it did not hit`);
+    if (hit.length > 0) {
+      assert.strictEqual(built.partial, true, `${capability} raised loader_cap_reached without going partial`);
+    }
+  }
+  // And every cap is reachable by some capability, or the flag is decoration.
+  assert.deepStrictEqual([...seen].sort(), Object.keys(envelope.CAP_WARNINGS).sort(),
+    "a cap no capability can hit is a cap nobody needs");
 });
 
 (async () => {

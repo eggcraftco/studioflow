@@ -53,6 +53,52 @@ const ENTITY_TYPES = Object.freeze([
   "order", "bankTransaction", "payout", "inventoryItem", "connection", "note", "attention"
 ]);
 
+/**
+ * Every loader cap, and the sentence it produces when it is hit.
+ *
+ * loaders.js has always said "Hitting one sets `partial: true` with a
+ * `loader_cap_reached` warning", and docs/orchestrator-contract.md repeats it —
+ * "a truncated answer says it is truncated". Two of the six caps did that.
+ * `snapshot.bankCapped` was computed and read by nobody; the payout, review,
+ * attention and inbox reads carried no flag at all. So
+ * get_integration_health published `heldForReview.total` as a headline number
+ * over a 200-document read that could have been cut off, and
+ * get_accounting_sync_status counted readiness over up to 3000 bank rows on a
+ * workspace whose two-year PSD2 backfill makes that reachable — both stated as
+ * fact, neither able to say it was truncated.
+ *
+ * The flag name is the cap's own name plus "Capped", so the loader cannot add a
+ * cap this list does not know about: orchestrator-loaders.test.js asserts the
+ * two sets are equal.
+ *
+ * No numerals in these sentences. When an answer is partial the renderer quotes
+ * the first one into a summary line, and every numeral in a line has to exist
+ * in `data`.
+ */
+const CAP_WARNINGS = Object.freeze({
+  ordersCapped: "The order read hit its cap, so this range may be missing older orders.",
+  bankCapped: "The bank transaction read hit its cap, so these figures may cover only part of the statement.",
+  inventoryCapped: "The inventory read hit its cap, so these figures may cover only part of the shelf.",
+  payoutsCapped: "The payout read hit its cap, so some payouts in this range are not counted here.",
+  reviewCapped: "The read of orders held or queued for review hit its cap, so more may be waiting than are counted here.",
+  attentionCapped: "The accounting attention read hit its cap, so more items may be open than are listed here.",
+  inboxCapped: "The waiting-receipt read hit its cap, so more receipts may be waiting than are counted here."
+});
+
+/**
+ * The cap warnings for one snapshot: one per read that was truncated.
+ *
+ * A capability passes the whole snapshot rather than a list, because a flag is
+ * only ever set for a domain this capability declared AND was permitted — the
+ * loader sets nothing else — so "every cap this snapshot hit" is exactly "every
+ * cap this answer was built on".
+ */
+function capWarnings(snapshot = {}) {
+  return Object.keys(CAP_WARNINGS)
+    .filter((flag) => snapshot && snapshot[flag] === true)
+    .map((flag) => warning("loader_cap_reached", CAP_WARNINGS[flag]));
+}
+
 function warning(code, message, extra = {}) {
   if (!WARNING_CODES.includes(code)) {
     throw new TypeError(`Orchestrator warning code "${code}" is not in the closed list; add it to envelope.WARNING_CODES with the rule that raises it.`);
@@ -131,7 +177,13 @@ function finish({
     state,
     data: applyChannelProfile(data, channelProfile),
     freshness: built.freshness,
-    partial: partial === true || built.partial === true,
+    // A truncated answer says it is truncated. `loader_cap_reached` and
+    // `partial` were two separate things a capability had to remember to do
+    // together, and the ones that raised the warning did not set the flag — so
+    // the renderer, which only speaks when `partial` is true, stayed silent
+    // about a cap that had been hit. One of them now implies the other, here,
+    // where no capability can forget it.
+    partial: partial === true || built.partial === true || deduped.some((row) => row.code === "loader_cap_reached"),
     warnings: deduped,
     // The refs go through the same policy: they leave the server beside the
     // data, and a bank row's label is the counterparty's own name.
@@ -247,6 +299,6 @@ function applyChannelProfile(data, profile) {
 }
 
 module.exports = {
-  STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, PII_KEYS, PII_LABEL_TYPES,
-  warning, entityRef, finish, applyChannelProfile
+  STATES, WARNING_CODES, ENTITY_TYPES, MONEY_BLOCK_KEYS, PII_KEYS, PII_LABEL_TYPES, CAP_WARNINGS,
+  warning, capWarnings, entityRef, finish, applyChannelProfile
 };

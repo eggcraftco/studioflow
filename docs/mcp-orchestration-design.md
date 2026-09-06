@@ -560,8 +560,10 @@ Rules for the modules:
   subcollection reads, at most one equality on a subcollection) with in-memory filtering;
   `firestore.indexes.json` has no composite index for `siparisler`, `bankTransactions` or
   `inventoryItems`, and a composite `where` returns nothing silently (index.js:29468 comment). Caps:
-  orders 1000, bank rows 3000, inventory 2000, payouts 500 per provider; hitting a cap sets
-  `partial:true` with warning `loader_cap_reached`.
+  orders 1000, bank rows 3000, inventory 2000, payouts 500 per provider, review 200, accounting
+  attention 100, receipt inbox 100; hitting a cap sets `<name>Capped` on the snapshot, which becomes
+  a `loader_cap_reached` warning (`envelope.capWarnings`) and `partial:true`
+  (`envelope.finish`).
 
 ### 2.2 Context (input to every capability)
 

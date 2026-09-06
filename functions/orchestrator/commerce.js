@@ -311,9 +311,9 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
     warnings.push(envelope.warning("tax_needs_review", `${tax.needsReviewCount} order(s) do not say who is responsible for the sales tax.`));
   }
   warnings.push(envelope.warning("unsupported_metric", "Discounts and shipping income are not stored on an order, so they are reported as unavailable rather than zero."));
-  if (snapshot.ordersCapped) {
-    warnings.push(envelope.warning("loader_cap_reached", "The order read hit its cap, so this range may be missing older orders."));
-  }
+  // Every read this answer was built on that came back truncated — the orders,
+  // and the payout collections the settlement figures beside them come from.
+  warnings.push(...envelope.capWarnings(snapshot));
 
   const advanced = advancedFinance(ctx);
   const data = {
@@ -474,6 +474,7 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
   if (matches.length > rows.length) {
     warnings.push(envelope.warning("loader_cap_reached", `${matches.length} orders match; the first ${rows.length} are listed.`));
   }
+  warnings.push(...envelope.capWarnings(snapshot));
 
   return {
     data: {
@@ -497,7 +498,7 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
   const wanted = Array.isArray(args.channels) && args.channels.length
     ? new Set(args.channels.map((value) => String(value).toLowerCase()))
     : null;
-  const warnings = [];
+  const warnings = [...envelope.capWarnings(snapshot)];
   const advanced = advancedFinance(ctx);
 
   const settlements = settlementTotals(snapshot, bounds, ctx);

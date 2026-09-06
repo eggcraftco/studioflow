@@ -97,7 +97,11 @@ function readinessOf(rows = [], mappings = null) {
 
 function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
   const connections = (snapshot.connections || {}).accounting || [];
-  const warnings = [];
+  // Readiness is counted over the bank read, which is capped at 3000 rows — a
+  // number a workspace with the two-year PSD2 backfill reaches — and the
+  // attention rows over a read capped at 100. "N are ready to be prepared" is
+  // stated as fact, so a truncated read behind it has to be stated too.
+  const warnings = [...envelope.capWarnings(snapshot)];
 
   const writers = connections.filter((row) => String(row.mode || "") === "primary_write");
   const primaryWriter = writers.length > 0
