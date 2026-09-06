@@ -7,19 +7,35 @@
  * the tree that is actually deployed, rather than against a fixture recorded
  * somewhere on the branch.
  *
- * What it does, for each of two commits:
- *   1. `git archive <commit> functions` into a scratch directory (never a
- *      checkout, so the working tree is untouched and this stays read-only);
- *   2. symlinks the repo's functions/node_modules into it;
- *   3. requires index.js with EVERY environment variable whose name contains
+ * What it compares:
+ *   PRODUCTION -- a fixed commit, `git archive`d into a scratch directory. It
+ *     is fixed on purpose: it is a record of what is deployed, and it must not
+ *     move when the branch does.
+ *   CANDIDATE  -- the WORKING TREE. This one must never be pinned. It was, to
+ *     `56b6591c`, and five commits later the script still printed PASS and
+ *     "BYTE-IDENTICAL" because it was re-measuring a commit nobody was
+ *     proposing to ship. A harness that archives a fixed commit cannot see
+ *     drift in the tree it certifies, which is the one thing it exists to see.
+ *     The candidate snapshot records the HEAD sha and whether the tree was
+ *     dirty when it was taken, so the evidence carries the commit it was
+ *     measured at instead of the word "HEAD".
+ *
+ * For each side:
+ *   1. get a `functions/` tree -- `git archive <commit>` into a scratch
+ *      directory for production (never a checkout, so the working tree is
+ *      untouched and this stays read-only), or the repo's own for the
+ *      candidate;
+ *   2. symlink the repo's functions/node_modules into the scratch copy;
+ *   3. require index.js with EVERY environment variable whose name contains
  *      "MCP" deleted -- production carries no MCP env entry at all, so "unset"
  *      is the faithful state, not "0";
- *   4. calls the listing builder and writes the result.
+ *   4. call the listing builder and write the result.
  *
  * The baseline commit does not export the builder (it is module-local there),
- * so the harness appends a one-line export shim to the SCRATCH COPY only. The
- * pristine sha256 is recorded in each snapshot's `meta` so the shim can be
- * shown not to have altered the source that produced the listing.
+ * so the harness appends a one-line export shim to the SCRATCH COPY only -- it
+ * never writes into the repository. The pristine sha256 is recorded in each
+ * snapshot's `meta` so the shim can be shown not to have altered the source
+ * that produced the listing.
  *
  * Usage:
  *   node docs/evidence/capture-tools-list.js            # verify against committed snapshots
@@ -35,6 +51,8 @@ const REPO = path.resolve(__dirname, "..", "..");
 const EVIDENCE = __dirname;
 const WRITE = process.argv.includes("--write");
 
+const git = (...args) => execFileSync("git", ["-C", REPO, ...args]).toString().trim();
+
 /** The deployed tree. Ground truth, measured 6 Sep 2026 -- see the header of
  *  docs/mcp-production-parity.md for how each of these was established. */
 const PRODUCTION = {
@@ -42,29 +60,38 @@ const PRODUCTION = {
   file: "tools-list-production-015d5792.json",
   label: "production (Cloud Run revision chatgptmcp-00071-tir)"
 };
+/** The thing being certified: whatever is in the tree right now. */
 const CANDIDATE = {
-  commit: "56b6591c",
-  file: "tools-list-candidate-56b6591c-flags-off.json",
-  label: "mcp-orchestration HEAD, all MCP flags unset"
+  commit: null,
+  file: "tools-list-candidate-flags-off.json",
+  label: "mcp-orchestration working tree, all MCP flags unset"
 };
 
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
 function capture(commit) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `nv-parity-${commit}-`));
-  execFileSync("/bin/sh", ["-c",
-    `git -C ${JSON.stringify(REPO)} archive ${commit} functions | tar -x -C ${JSON.stringify(scratch)}`]);
+  const fromWorkingTree = commit === null;
+  const scratch = fromWorkingTree ? null : fs.mkdtempSync(path.join(os.tmpdir(), `nv-parity-${commit}-`));
+  if (!fromWorkingTree) {
+    execFileSync("/bin/sh", ["-c",
+      `git -C ${JSON.stringify(REPO)} archive ${commit} functions | tar -x -C ${JSON.stringify(scratch)}`]);
+  }
 
-  const functionsDir = path.join(scratch, "functions");
-  fs.symlinkSync(path.join(REPO, "functions", "node_modules"), path.join(functionsDir, "node_modules"));
+  const functionsDir = fromWorkingTree ? path.join(REPO, "functions") : path.join(scratch, "functions");
+  if (!fromWorkingTree) {
+    fs.symlinkSync(path.join(REPO, "functions", "node_modules"), path.join(functionsDir, "node_modules"));
+  }
 
   const indexPath = path.join(functionsDir, "index.js");
   const pristineSha = sha256(fs.readFileSync(indexPath));
 
-  // Expose the builder if this commit keeps it module-local (the baseline does).
+  // Expose the builder if this commit keeps it module-local (the baseline
+  // does). Never in the repository: a harness that edits the tree it is
+  // measuring is measuring its own edit.
   const source = fs.readFileSync(indexPath, "utf8");
   const shimmed = /exports\._nvMcpToolsWithSecuritySchemes/.test(source);
   if (!shimmed) {
+    if (fromWorkingTree) throw new Error("the working tree does not export the listing builder, and this harness will not modify it");
     fs.appendFileSync(indexPath,
       "\n// [parity harness, scratch only]\nexports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;\n");
   }
@@ -82,8 +109,8 @@ function capture(commit) {
   }).toString();
 
   const match = raw.match(/<<<NVJSON>>>([\s\S]*)<<<END>>>/);
-  if (!match) throw new Error(`${commit}: the listing builder produced no output`);
-  fs.rmSync(scratch, { recursive: true, force: true });
+  if (!match) throw new Error(`${commit || "working tree"}: the listing builder produced no output`);
+  if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
 
   return {
     tools: JSON.parse(match[1]),
@@ -97,11 +124,17 @@ const results = {};
 
 for (const target of [PRODUCTION, CANDIDATE]) {
   const captured = capture(target.commit);
+  const fromWorkingTree = target.commit === null;
+  // The SHA the evidence was taken at, never the word "HEAD": a label that says
+  // HEAD is true on the day it is written and silently false afterwards.
+  const head = git("rev-parse", "HEAD");
+  const dirty = git("status", "--porcelain", "--", "functions").length > 0;
   const snapshot = {
     meta: {
       what: "MCP tools/list, every MCP feature flag UNSET",
       source: target.label,
-      commit: execFileSync("git", ["-C", REPO, "rev-parse", target.commit]).toString().trim(),
+      commit: fromWorkingTree ? head : git("rev-parse", target.commit),
+      ...(fromWorkingTree ? { capturedFrom: "working tree", functionsTreeDirtyAtCapture: dirty } : {}),
       "functions/index.js sha256 (pristine, before any harness shim)": captured.indexSha256,
       exportShimAppendedToScratchCopy: captured.exportShimAppended,
       toolCount: captured.tools.length,
@@ -110,7 +143,7 @@ for (const target of [PRODUCTION, CANDIDATE]) {
     },
     tools: captured.tools
   };
-  results[target.commit] = snapshot;
+  results[target.file] = snapshot;
 
   const dest = path.join(EVIDENCE, target.file);
   const serialized = JSON.stringify(snapshot, null, 2) + "\n";
@@ -125,11 +158,11 @@ for (const target of [PRODUCTION, CANDIDATE]) {
   }
 }
 
-const prod = JSON.stringify(results[PRODUCTION.commit].tools);
-const cand = JSON.stringify(results[CANDIDATE.commit].tools);
+const prod = JSON.stringify(results[PRODUCTION.file].tools);
+const cand = JSON.stringify(results[CANDIDATE.file].tools);
 console.log("");
 console.log(`production listing sha256 : ${sha256(prod)}`);
-console.log(`candidate  listing sha256 : ${sha256(cand)}`);
+console.log(`candidate  listing sha256 : ${sha256(cand)}   (working tree at ${results[CANDIDATE.file].meta.commit.slice(0, 8)}${results[CANDIDATE.file].meta.functionsTreeDirtyAtCapture ? ", functions/ dirty" : ""})`);
 console.log(prod === cand
   ? "VERDICT: the flags-off candidate listing is BYTE-IDENTICAL to production."
   : "VERDICT: the flags-off candidate listing DIFFERS from production.");

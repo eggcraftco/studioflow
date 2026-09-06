@@ -170,17 +170,30 @@ return exactly what they return today; none of their shapes changes.
   commit `bc718e06`, before the orchestrator capabilities existed. Read the scope of that claim exactly:
   `bc718e06` is a commit on THIS branch, not the deployed 1.1.1 tree, so the fixture proves the listing
   has not moved since it was recorded, not that it equals what the review connection is being served.
-  Between the merge base and `bc718e06` the branch added three tools (`get_bank_spending_summary`,
-  `search_bank_transactions`, `attach_bank_receipt`), corrected six annotation values across four tools
-  (`update_order_status`, `update_note`, `pin_note`, `archive_note`) and renamed "Lite" to "Starter" in
-  two descriptions — all of which §3 covers as intended 1.2.0 changes. **Diff the fixture against the
-  live listing once before the flip**, so the two claims are not conflated.
+  Between the merge base with `main` (`f753a8ca`) and `bc718e06` the branch added three tools
+  (`get_bank_spending_summary`, `search_bank_transactions`, `attach_bank_receipt`), corrected six
+  annotation values across four tools (`update_order_status`, `update_note`, `pin_note`, `archive_note`)
+  and renamed "Lite" to "Starter" in two descriptions — all of which §3 covers as intended 1.2.0 changes.
+  Each of those four has been replayed and each is true of `f753a8ca`.
+
+  **Name the commit, never "the merge base".** This branch has two, and they are different: `f753a8ca`
+  is `git merge-base HEAD main`, and `015d5792` is the merge base with the deploy branch
+  `macbook-save-before-macstudio-2026-06-01`. Only the second was ever deployed, which is why the
+  changes above are true and simultaneously irrelevant to a parity question. Measured against the
+  deployed tree, the flags-off wire did not move by a byte — the three "new" tools are numbers 17, 18
+  and 19 of the production listing, the six annotation values are what production serves today, and the
+  production listing already says "Starter". `docs/mcp-production-parity.md` carries that measurement,
+  and it **discharges** the diff this bullet used to ask for: `states.off.tools` in the fixture is
+  byte-identical to the reconstructed production listing, so the two claims are no longer conflated —
+  they are separately established.
 - The OAuth and discovery surface: `mcp.nivadesk.app`, the `.well-known` routes, dynamic client
   registration only, PKCE, the redirect-URI registry, 405 on an SSE GET, 202 on notifications, the
   `openai-apps-challenge` file. One qualification, since "stays" is read literally here: the dynamic
-  **registration response** is not what the merge base returned. The base echoed all six scopes
-  unconditionally and carried no `redirect_uris` or `client_name`; HEAD returns `body.scope || six` plus
-  both fields. That is `14ff0cfb`, the redirect-URI registry, it predates the fixture recording, and it
+  **registration response** is not what `f753a8ca` returned — the merge base with `main`, replayed and
+  confirmed, not inferred. It echoed all six scopes unconditionally and carried no `redirect_uris` or
+  `client_name`; HEAD returns `body.scope || six` plus both fields. (The DEPLOYED tree, `015d5792`,
+  already returns both fields with the same six-scope default, so nothing here moves for a review
+  connection.) That is `14ff0cfb`, the redirect-URI registry, it predates the fixture recording, and it
   is not flag-gated — it belongs in §3 as a 1.2.0 change, not here as something unchanged. The scope
   NAMES are what has not moved. **No new scope names in 1.2.0** — the metadata and the registration
   response have advertised the same six since before this branch, verified by replaying the

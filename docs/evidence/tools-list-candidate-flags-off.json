@@ -1,9 +1,11 @@
 {
   "meta": {
     "what": "MCP tools/list, every MCP feature flag UNSET",
-    "source": "mcp-orchestration HEAD, all MCP flags unset",
-    "commit": "56b6591cd163a2dfc6a40ae83e2c757adce6cf02",
-    "functions/index.js sha256 (pristine, before any harness shim)": "9804b510d6d52632c1f62423991a4cb0382f2e64d11a917f32900000247083ce",
+    "source": "mcp-orchestration working tree, all MCP flags unset",
+    "commit": "75fa8ff4a5980990451979192bbb88676d33327c",
+    "capturedFrom": "working tree",
+    "functionsTreeDirtyAtCapture": false,
+    "functions/index.js sha256 (pristine, before any harness shim)": "f2ca4b98eba34b84c72b4b86ee2e7fed516e41b13154bd54aaa2fe7d73786ab9",
     "exportShimAppendedToScratchCopy": false,
     "toolCount": 19,
     "listingSha256": "7c838fb68a5b6e97571ec9605638913014e06931765e4b0dbe0bd53cbce64984",

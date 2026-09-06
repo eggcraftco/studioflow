@@ -1,11 +1,17 @@
 # MCP production parity: does the flags-off candidate equal production?
 
-> **Verdict: YES.** With every MCP feature flag unset, `mcp-orchestration` HEAD (`56b6591c`) serves a
+> **Verdict: YES.** With every MCP feature flag unset, the `mcp-orchestration` **working tree** serves a
 > `tools/list` **byte-identical** to the deployed production tree — 19 tools, same order, same
 > descriptions, same input schemas, same annotations, same advertised scopes. Both listings hash to
 > `7c838fb68a5b6e97571ec9605638913014e06931765e4b0dbe0bd53cbce64984`. **Zero differences to classify.**
 
-Measured 6 Sep 2026, read-only. No authenticated call was made to production.
+Measured 6 Sep 2026, read-only. No authenticated call was made to production. The candidate side is
+captured from the working tree rather than a commit, and each capture stamps the HEAD sha it was taken
+at into `docs/evidence/tools-list-candidate-flags-off.json` — so re-running the harness re-measures what
+is actually there. It used to archive a fixed commit (`56b6591c`) while calling it "HEAD"; five commits
+later it still printed PASS and "BYTE-IDENTICAL", because it was faithfully re-measuring a commit nobody
+was proposing to ship. The one document whose job is to catch drift must not be the one that cannot see
+it.
 
 ---
 
@@ -16,7 +22,7 @@ Measured 6 Sep 2026, read-only. No authenticated call was made to production.
 | live revision | `chatgptmcp-00071-tir` | `gcloud run revisions describe`, read-only |
 | MCP feature flags in production | **none — all unset** | the service carries 32 environment entries and not one name contains `MCP`; there is no `NIVADESK_MCP_*` and no `NV_MCP_*`. Names only were listed, never values. |
 | deployed source | deploy branch `functions/` at `ea37d25d` | deployment record; `functions/` unchanged on that branch since |
-| **baseline used below** | **`015d5792`** | `git diff 015d5792..ea37d25d -- functions/` is **empty** — not merely `index.js`, the *entire* `functions/` tree is identical. `015d5792` is also exactly this branch's merge base. |
+| **baseline used below** | **`015d5792`** | `git diff 015d5792..ea37d25d -- functions/` is **empty** — not merely `index.js`, the *entire* `functions/` tree is identical. |
 
 So production serves the flags-OFF listing: email receipts off, inventory off, orchestrator off.
 
@@ -26,8 +32,13 @@ sound because the extracted baseline `functions/index.js` hashes
 `80a971811e76d42ccc2d8adf65867b5850f580bc08097fc8c913440a8eb5750f`, identical to
 `git show ea37d25d:functions/index.js`.
 
-> A previous agent used `f753a8ca` as the baseline. That was wrong, and §5 below shows three claims in
-> `docs/mcp-submission-1.2.0.md` §4 that inherit the error.
+**"The merge base" names two different commits on this branch, so nobody should use the phrase bare.**
+`git merge-base HEAD main` is **`f753a8ca`** — that is the merge base, and it is what
+`docs/mcp-submission-1.2.0.md` §4 and `test/fixtures/mcp/tools-list-full.json` mean by the term.
+`015d5792` is the merge base with the *deploy* branch `macbook-save-before-macstudio-2026-06-01`, which
+is a different commit and the only one relevant to a parity question, because it is the one that was
+deployed. An earlier revision of this document called `015d5792` "exactly this branch's merge base",
+which put two definitions of one phrase on one branch. §5 says what follows from that.
 
 ## 2. Method — re-runnable
 
@@ -38,21 +49,30 @@ node docs/evidence/capture-tools-list.js          # verify against the committed
 node docs/evidence/capture-tools-list.js --write  # regenerate them
 ```
 
-For each commit it `git archive`s the `functions/` tree into a scratch directory (never a checkout, so
-the working tree is untouched), symlinks `functions/node_modules`, then requires `index.js` with **every
-environment variable whose name contains `MCP` deleted**. Unset is the faithful state — production has
-no MCP entry at all — rather than `"0"`, which is what the existing snapshot test uses. Both reach the
-same code path (`=== "1"`), but only one of them matches the deployed environment.
+The two sides are fetched differently, on purpose:
+
+- **production** is `git archive`d from the fixed commit `015d5792` into a scratch directory (never a
+  checkout, so the working tree is untouched). Fixed is right here: it is a record of what is deployed,
+  and it must not move when the branch does.
+- **the candidate** is the repository's own `functions/` tree. Never pinned: a harness that archives a
+  fixed commit cannot see drift in the thing it certifies.
+
+Both are then required with **every environment variable whose name contains `MCP` deleted**. Unset is
+the faithful state — production has no MCP entry at all — rather than `"0"`, which is what the existing
+snapshot test uses. Both reach the same code path (`=== "1"`), but only one of them matches the deployed
+environment.
 
 The baseline keeps its listing builder module-local, so the harness appends a one-line export shim **to
-the scratch copy only**; each snapshot records the pristine sha256 taken before the shim, so the shim can
-be shown not to have altered the source that produced the listing.
+the scratch copy only**, and refuses outright to shim the working tree; each snapshot records the
+pristine sha256 taken before the shim, so the shim can be shown not to have altered the source that
+produced the listing. The candidate snapshot also records the HEAD sha at capture and whether
+`functions/` was dirty, so the evidence names the commit it was measured at instead of the word "HEAD".
 
 Snapshots (full listing: name, title, description, complete input schema, annotations, securitySchemes,
 `_meta`, in listing order):
 
 - `docs/evidence/tools-list-production-015d5792.json`
-- `docs/evidence/tools-list-candidate-56b6591c-flags-off.json`
+- `docs/evidence/tools-list-candidate-flags-off.json` (its `meta.commit` names the HEAD it was taken at)
 
 ## 3. The classification table
 
@@ -135,17 +155,32 @@ literal 1.1.1 strings.
 
 ## 5. What this measurement corrects — `mcp-submission-1.2.0.md` §4
 
-§4's claims about the merge base were computed against `f753a8ca`, the wrong baseline. Against the real
-one (`015d5792`) three of them are false. **None of these changes the verdict** — they all say the branch
-changed something it did not, so reality is *more* parity, not less — but they should be fixed before a
-reviewer reads them:
+**§4's four claims are true.** An earlier revision of this section printed them in a table marked
+**False**, and that was wrong: it ruled on `f753a8ca` without ever measuring `f753a8ca`, replacing
+"claims about the wrong commit" with false claims about the right one — the same failure mode it was
+written to fix.
 
-| §4 claim | measured against `015d5792` |
-|---------|------------------------------|
-| "Between the merge base and `bc718e06` the branch added three tools (`get_bank_spending_summary`, `search_bank_transactions`, `attach_bank_receipt`)" | **False.** All three are tools 17, 18 and 19 of the *production* listing. The branch added none. |
-| "corrected six annotation values across four tools (`update_order_status`, `update_note`, `pin_note`, `archive_note`)" | **False.** Those annotation values are what production serves today (§3.1). |
-| "renamed 'Lite' to 'Starter' in two descriptions" | **False.** The production listing already says "Starter" and contains no "Lite". |
-| "the dynamic **registration response** is not what the merge base returned. The base echoed all six scopes unconditionally and carried no `redirect_uris` or `client_name`" | **False.** `015d5792` returns `redirect_uris` and `client_name`, and its `scope` default is the same six. The redirect-URI registry is already in production. |
+All four were replayed by driving the extracted trees, not by reading a diff:
+
+| §4 claim, measured against `f753a8ca` — the commit §4 actually names | result |
+|---------|------|
+| "Between the merge base and `bc718e06` the branch added three tools (`get_bank_spending_summary`, `search_bank_transactions`, `attach_bank_receipt`)" | **True.** `f753a8ca`'s flags-off listing is 16 tools, `create_order` … `get_financial_overview`; `bc718e06`'s is 19. |
+| "corrected six annotation values across four tools (`update_order_status`, `update_note`, `pin_note`, `archive_note`)" | **True.** Exactly six, across exactly those four: `update_order_status` destructive f→t and idempotent f→t, `update_note` the same pair, `pin_note` idempotent f→t, `archive_note` idempotent f→t. |
+| "renamed 'Lite' to 'Starter' in two descriptions" | **True.** Exactly two: `get_dashboard_summary` and `get_extra_spending_overview`. |
+| "the dynamic **registration response** is not what the merge base returned. The base echoed all six scopes unconditionally and carried no `redirect_uris` or `client_name`" | **True.** `f753a8ca:functions/index.js` returns `scope: "orders.read orders.write notes.read notes.write finance.read tasks.write"` with no `redirect_uris`, no `client_name`, and no `nvOAuthRedirectAllowed` anywhere in the file. |
+
+**What is wrong with them is the yardstick, not the content — and it does not weaken this verdict, it
+strengthens it.** `f753a8ca` is the merge base with `main`, and it was never deployed, so a change
+measured against it says nothing about what a review connection is being served. Measured against the
+tree that IS deployed (`015d5792`), the flags-off wire did not move by a byte: all three "added" tools
+are numbers 17, 18 and 19 of the production listing, those six annotation values are what production
+serves today (§3.1), the production listing already says "Starter" and contains no "Lite", and
+`015d5792` already returns `redirect_uris` and `client_name` with the same six-scope default.
+
+So §4 describes real branch history against a commit nobody shipped, and this document describes the
+only comparison a submission decision turns on. Both statements can stand; what cannot stand is either
+one using the bare phrase "the merge base", because on this branch it names two different commits
+(§1).
 
 And one claim is now **discharged**. §4 asks that the fixture be diffed against the live listing once
 before the flip, because `bc718e06` is a branch commit rather than the deployed tree:
