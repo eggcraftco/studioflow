@@ -106,6 +106,38 @@ const jsonResponse = (status, body) => ({ ok: status >= 200 && status < 300, sta
     await assert.rejects(oauth.refreshToken({ environment: "sandbox", clientId: "id", clientSecret: "s", refreshToken: "rt", fetchImpl: grant }), (error) => error.errorClass === "auth" && error.code === "invalid_grant");
   });
 
+  await check("§14.1 PIN — every EbayOAuthError message this module can throw matches the closed shape the callback is allowed to log", async () => {
+    // One console line in ebayConnector.js prints an EbayOAuthError's message
+    // (§5.4, *Logging*), and four places in the design said "§14.1 pins that
+    // message". No such test existed: the only assertion touching it was that
+    // the message does not contain the client secret. So here it is, and it is
+    // run against every constructor rather than against a sample — a caught
+    // foreign message used to be interpolated into two of them.
+    const CODE = "AUTHCODE-9b2e-never-in-a-message";
+    const messages = [];
+    const capture = async (promise) => { try { await promise; assert.fail("expected a throw"); } catch (error) { messages.push(String(error.message)); return error; } };
+    // eBay's own error field, with punctuation, capitals and a planted value.
+    await capture(oauth.exchangeCode({ environment: "sandbox", clientId: "id", clientSecret: "s", code: CODE, ruName: "ru", fetchImpl: fakeFetch(() => jsonResponse(400, { error: `invalid_grant "${CODE}"`, error_description: `the code ${CODE} is invalid` })) }));
+    await capture(oauth.refreshToken({ environment: "sandbox", clientId: "id", clientSecret: "s", refreshToken: "rt", fetchImpl: fakeFetch(() => jsonResponse(503, { error: "server_error" })) }));
+    await capture(oauth.appToken({ environment: "sandbox", clientId: "id", clientSecret: "s", fetchImpl: fakeFetch(() => jsonResponse(401, {})) }));
+    // A transport throw, whose own message is the classic carrier: the URL, the
+    // body, or whatever the runtime decided to put in it.
+    await capture(oauth.exchangeCode({ environment: "sandbox", clientId: "id", clientSecret: "s", code: CODE, ruName: "ru", fetchImpl: async () => { throw new Error(`connect ECONNREFUSED while sending ${CODE}`); } }));
+    await capture(oauth.fetchIdentity({ environment: "sandbox", accessToken: "at", fetchImpl: async () => { throw Object.assign(new Error(`terminated ${CODE}`), { name: "AbortError" }); } }));
+    for (const status of [401, 403, 500, 418]) await capture(oauth.fetchIdentity({ environment: "sandbox", accessToken: "at", fetchImpl: fakeFetch(() => jsonResponse(status, { errors: [{ message: CODE }] })) }));
+    assert.strictEqual(messages.length, 9);
+    for (const message of messages) {
+      assert.ok(oauth.messageIsSafe(message), `outside the pinned shape: ${message}`);
+      assert.ok(oauth.MESSAGE_SHAPE.test(message), message);
+      assert.ok(!message.includes(CODE) && !message.includes(CODE.slice(0, 8)), message);
+    }
+    // The signal that matters is kept: the class word survives sanitising, and a
+    // transport failure still says which kind it was.
+    assert.strictEqual(messages[0], "ebay_oauth_http_400", "an error field that is not a bare OAuth code contributes NOTHING — stripping it would leave a mangled copy of the value");
+    assert.ok(messages[1].endsWith(": server_error"), messages[1]);
+    assert.ok(messages[3].endsWith(": Error") && messages[4].endsWith(": AbortError"), messages.slice(3, 5).join(" | "));
+  });
+
   await check("fetchIdentity keeps four fields and drops the seller's own name, email and address", async () => {
     const fetchImpl = fakeFetch(() => jsonResponse(200, { userId: "ebayuser_xxx", username: "eggcraft_uk", accountType: "BUSINESS", registrationMarketplaceId: "EBAY_GB", businessAccount: { name: "EGGcraft Ltd", email: "owner@example.com", address: { addressLine1: "1 Workshop Lane", city: "London", postalCode: "E1 6AN", country: "GB" }, primaryContact: { firstName: "G", lastName: "O" } }, individualAccount: { firstName: "G", lastName: "O", email: "g@example.com" } }));
     const identity = await oauth.fetchIdentity({ environment: "sandbox", accessToken: "at", fetchImpl });

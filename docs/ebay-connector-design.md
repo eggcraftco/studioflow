@@ -1059,8 +1059,13 @@ behaviour rather than the code:
    callback's own SUCCESS path. A test now proves it rather than asserting it, by refusing the `syncLog`
    write and hunting the marker through every captured line, and both helpers are pinned **by name** in
    `ebay-connect.test.js` because the handler slice cannot see them. The one
-   exception is the truncated `EbayOAuthError` from `commerce/ebay/oauth.js`, which §14.1 pins to
-   be built from eBay's own `error`/`error_description` fields. Everywhere else the log line is a fixed
+   exception is the truncated `EbayOAuthError` from `commerce/ebay/oauth.js`, whose message §14.1 pins to
+   `MESSAGE_SHAPE` — a status number plus, at most, eBay's own error code or the caught error's *name*.
+   **That pin did not exist while four passages here cited it**, and two constructors interpolated a
+   foreign caught error's message into that exact class (`ebay_oauth_fetch_failed: …`,
+   `ebay_identity_fetch_failed: …`). Under undici those messages read "fetch failed" or "terminated" and
+   carried nothing, so it was never a live leak — but the guarantee protecting the one log line this
+   design deliberately leaves open was a comment, in a file whose comments are the thing under review. Everywhere else the log line is a fixed
    string plus values from the allowed list. The existing
    `console.error("ebayOAuthCallback state failed:", error?.message || error)` at
    `functions/ebayConnector.js:417` is **rewritten**, not kept.
@@ -2311,7 +2316,7 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
 ### 14.1 qa (pure, fake Firestore)
 | File | Asserts |
 |---|---|
-| `commerce-ebay-oauth.test.js` | authorize URL host per environment (`auth.ebay.com` / `auth.sandbox.ebay.com`), `redirect_uri` is the RuName verbatim, `scope` = the **two** scopes joined by `%20` (no `+`, no `sell.fulfillment` write scope), `state` echoed, no secret in any URL; token request uses Basic auth + `URLSearchParams`; refresh body carries exactly the stored `scopes`; `refresh_token_expires_in` → `refreshTokenExpiresAtMs`; `classifyTokenError` table (§6) with **HTTP 400** `invalid_grant` → auth, 400 `invalid_client` → `app_credentials_invalid`, 401 `invalid_client` → same, 400 `invalid_request` → `token_request_invalid`; `fetchIdentity` drops `individualAccount`/`businessAccount` |
+| `commerce-ebay-oauth.test.js` | **the message pin this section is cited for four times and did not have:** every `EbayOAuthError` this module can throw — token 4xx/5xx with a hostile `error` field, a transport throw whose own message carries a planted code, identity 401/403/500/418 — matches `MESSAGE_SHAPE`, `/^ebay_(oauth\|identity)_(http_\d{3}(: [a-z_]{0,60})?\|fetch_failed(: [A-Za-z]{0,40})?)$/`, and carries no planted value. eBay's `error` is **accepted or dropped**, never stripped: stripping the disallowed characters out of `invalid_grant "AUTHCODE-…"` leaves a mangled copy of the value that still matches the shape, which is how the first version of this pin failed. Also: authorize URL host per environment (`auth.ebay.com` / `auth.sandbox.ebay.com`), `redirect_uri` is the RuName verbatim, `scope` = the **two** scopes joined by `%20` (no `+`, no `sell.fulfillment` write scope), `state` echoed, no secret in any URL; token request uses Basic auth + `URLSearchParams`; refresh body carries exactly the stored `scopes`; `refresh_token_expires_in` → `refreshTokenExpiresAtMs`; `classifyTokenError` table (§6) with **HTTP 400** `invalid_grant` → auth, 400 `invalid_client` → `app_credentials_invalid`, 401 `invalid_client` → same, 400 `invalid_request` → `token_request_invalid`; `fetchIdentity` drops `individualAccount`/`businessAccount` |
 | `commerce-ebay-keys.test.js` | two-key encoding: whitespace and comma separators, 3 keys refused, 31-byte entry refused, write key is index 0, `buyerHash` matches under either key |
 | `commerce-ebay-client.test.js` | `getOrders` builds `filter=lastmodifieddate:[<from>..<to>]` with millisecond `Z` ISO, `fieldGroups=TAX_BREAKDOWN`, `limit=200`/`offset`; `next` pagination; `getOrdersByIds` chunks at 50; 404 → null on `getOrder`; 401 → one `onUnauthorized` then rethrow; 429 → `errorClass transient` + `retryAfter`; quota charged before the call; no path string outside `commerce/ebay/` (grep pin) |
 | `commerce-ebay-cursor-plan.test.js` | `bisect`: a window that truncates at page 4 halves, completed halves are reported in order, `MAX_BISECTIONS` respected, the recorded watermark never exceeds the last completed sub-window; `nightlyWindow` = max(7 d, lastFull − 24 h); `catchUpWindow` ignores the 24 h cap when `catchUpDueFromMs` is set and slices at 24 h |

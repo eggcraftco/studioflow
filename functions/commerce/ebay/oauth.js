@@ -61,6 +61,25 @@ function authorizeUrl({ environment, clientId, ruName, state, scopes = SCOPES })
   return `${hostsFor(environment).auth}/oauth2/authorize?${query.join("&")}`;
 }
 
+// §14.1 pins the MESSAGE of every EbayOAuthError to a closed shape, because one
+// log line in `ebayConnector.js` is allowed to print it (§5.4, *Logging*) and a
+// comment is not a guarantee. Two constructors used to interpolate a FOREIGN
+// caught error's message into it — under undici those read "fetch failed" or
+// "terminated" and carried nothing, so it was never a live leak, but the thing
+// protecting the one open log line has to be a test, in a file whose comments
+// are the thing under review. So: eBay's own `error` code, lowercased and
+// stripped to `[a-z_]`, or the caught error's NAME stripped to letters. Nothing
+// else reaches a message, and `messageIsSafe` is what the pin runs.
+const MESSAGE_SHAPE = /^ebay_(oauth|identity)_(http_\d{3}(: [a-z_]{0,60})?|fetch_failed(: [A-Za-z]{0,40})?)$/;
+// ACCEPT-OR-DROP, never strip: stripping the disallowed characters out of
+// `invalid_grant "AUTHCODE-…"` leaves a mangled copy of the value that still
+// matches the shape, which the pin caught the first time this was written. A
+// value that is not already a bare OAuth error code contributes nothing.
+const errorWord = (value) => { const word = String(value == null ? "" : value).trim(); return /^[a-z_]{1,60}$/.test(word) ? word : ""; };
+const errorName = (error) => { const name = String(error?.name || ""); return /^[A-Za-z]{1,40}$/.test(name) ? name : "Error"; };
+const withWord = (stem, word) => (word ? `${stem}: ${word}` : stem);
+function messageIsSafe(message) { return MESSAGE_SHAPE.test(String(message || "")); }
+
 class EbayOAuthError extends Error {
   constructor(message, { status = 0, code = "", errorClass = "unknown", body = null } = {}) {
     super(message);
@@ -109,13 +128,13 @@ async function tokenRequest({ environment, clientId, clientSecret, form, fetchIm
       body: form.toString(), signal: controller.signal, redirect: "manual"
     });
   } catch (error) {
-    throw new EbayOAuthError(`ebay_oauth_fetch_failed: ${String(error?.message || error).slice(0, 120)}`, { status: 0, errorClass: "transient", code: "provider_unavailable" });
+    throw new EbayOAuthError(withWord("ebay_oauth_fetch_failed", errorName(error)), { status: 0, errorClass: "transient", code: "provider_unavailable" });
   } finally { clearTimeout(timer); }
   let data = {};
   try { data = await response.json(); } catch { data = {}; }
   if (!response.ok) {
     const verdict = classifyTokenError(response.status, data);
-    throw new EbayOAuthError(`ebay_oauth_http_${response.status}: ${String(data?.error || "").slice(0, 60)}`, { status: response.status, code: verdict.code, errorClass: verdict.errorClass, body: { error: String(data?.error || ""), error_description: String(data?.error_description || "").slice(0, 200) } });
+    throw new EbayOAuthError(withWord(`ebay_oauth_http_${response.status}`, errorWord(data?.error)), { status: response.status, code: verdict.code, errorClass: verdict.errorClass, body: { error: String(data?.error || ""), error_description: String(data?.error_description || "").slice(0, 200) } });
   }
   return data;
 }
@@ -177,7 +196,7 @@ async function fetchIdentity({ environment, accessToken, fetchImpl = globalThis.
       method: "GET", headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` }, signal: controller.signal, redirect: "manual"
     });
   } catch (error) {
-    throw new EbayOAuthError(`ebay_identity_fetch_failed: ${String(error?.message || error).slice(0, 120)}`, { status: 0, errorClass: "transient", code: "provider_unavailable" });
+    throw new EbayOAuthError(withWord("ebay_identity_fetch_failed", errorName(error)), { status: 0, errorClass: "transient", code: "provider_unavailable" });
   } finally { clearTimeout(timer); }
   let data = {};
   try { data = await response.json(); } catch { data = {}; }
@@ -200,5 +219,6 @@ function identityOf(data) {
 
 module.exports = {
   HOSTS, SCOPES, APP_SCOPE, TOKEN_PATH, IDENTITY_PATH, DEFAULT_ACCESS_TTL_SEC, DEFAULT_REFRESH_TTL_SEC,
-  ebayEnvironment, hostsFor, authorizeUrl, classifyTokenError, basicAuth, exchangeCode, refreshToken, appToken, tokenExpiryOf, fetchIdentity, identityOf, EbayOAuthError
+  ebayEnvironment, hostsFor, authorizeUrl, classifyTokenError, basicAuth, exchangeCode, refreshToken, appToken, tokenExpiryOf, fetchIdentity, identityOf, EbayOAuthError,
+  MESSAGE_SHAPE, messageIsSafe
 };
