@@ -109,8 +109,9 @@ const nivaOrchestrator = createOrchestrator({
 const ctx = await nivaOrchestrator.resolveContext({
   uid,                       // string, required — the NivaDesk user the binding resolved to
   companyId,                 // string, required — a LOOKUP KEY, never a grant
-  authType: "whatsapp_binding",
-  scope: "",                 // OAuth scopes where the channel has them; "" means "not scope-limited"
+  authType: "whatsapp_binding",  // §3.1 — READ IT BEFORE YOU WIRE THIS UP. This value is
+                                 // refused on every capability today, on purpose.
+  scope: "",                 // a DELEGATED grant. Empty means "granted nothing", not "unrestricted"
   email: "",                 // for the audit row only
   channel: {                 // §4.1
     type: "whatsapp",        // "mcp" | "rest" | "whatsapp" | "app"; unknown values fall back to "mcp"
@@ -125,7 +126,7 @@ Returns the context every capability is handed: `uid`, `email`, `companyId`, `co
 `role`, `isOwner`, `areas{orders,dashboard,customers,bankFeed}`, `financialInfo`, `accountingReader`,
 `inventoryAccess`, `entitlements`, `workflowOnly`, `assignedOnly`, `scope[]`, `settings`, `channel`.
 
-Three rules the gateway cannot opt out of:
+Four rules the gateway cannot opt out of:
 
 1. **The company document is read for this request.** `resolveContext` calls `loadCompany` every time.
    A gateway that caches a role snapshot keeps serving somebody whose access was revoked a minute ago
@@ -137,6 +138,9 @@ Three rules the gateway cannot opt out of:
    read, so a model or a message that names another workspace gets `permission-denied`, not data.
 3. **Multi-workspace is resolved by the channel, never guessed** (WA §12). One `ctx` carries one
    workspace; an ambiguous "which workspace" is a question to the user, not a default.
+4. **A delegated grant is the whole of what that caller may do**, and a grant of nothing grants nothing.
+   `authType` decides whether `scope` is checked at all. See §3.1 — this is the one thing in this
+   document that will stop a new channel's first call, and it is meant to.
 
 Failures throw `OrchestratorError` (`require("./orchestrator/context").OrchestratorError`) with a `code`
 the channel maps onto its own reply:
@@ -156,6 +160,42 @@ The gate itself is `context.assertCapability(ctx, entry)`, and `run()` calls it 
 A channel never calls it directly to *decide* something — deciding twice is how two answers to the same
 question get born — but `context.sectionAccess(ctx)` is fair game when a gateway wants to say up front
 which sections of a multi-section answer this person will get.
+
+### 3.1 Delegated or first-party — settle this before the first call
+
+The orchestrator knows two kinds of caller, and `authType` is how it tells them apart
+(`context.FIRST_PARTY_AUTH_TYPES`, `context.missingScopes`):
+
+| kind | `authType` | scope gate |
+|------|-----------|------------|
+| **first party** — the member acting for themselves, holding no delegated grant | `firebase_session`, `app` | none. Role, area, financial and bankFeed gates are the whole gate, exactly as in the app |
+| **delegated** — a third party holding a grant the member approved | everything else, including any value nobody has named | the entry's `scopes` must all be present in `scope`, on every call |
+
+The list is closed the safe way round: **an auth type nobody has named is treated as a delegated token
+and must carry its scopes.** So `authType: "whatsapp_binding"` is delegated today, and with `scope: ""`
+every capability is refused — ten `permission-denied`s, with a message that tells a WhatsApp user to
+reconnect NivaDesk *in ChatGPT*. That is the behaviour, it is deliberate, and this document used to
+promise the opposite: it read an empty `scope` as an unrestricted one, so a gateway built from the
+sample above was refused on its first call. That is why the rule is spelled out here.
+
+**Do not make the refusal go away by inventing a scope string.** A gateway that mints
+`"orders.read finance.read"` for itself is not being gated by it — nothing granted that, no user
+approved it, and the check becomes a formality that logs a lie. If a WhatsApp binding is to be
+scope-checked, the scopes have to be minted by something the user consented to.
+
+The honest reading is that a WhatsApp binding is **first party**: it is the member acting for
+themselves through a bound phone number (WA §13), not a third party holding a delegated grant. Its
+second policy layer already exists and is not OAuth — it is the channel profile, `capabilities` plus
+`assurance_level` (§4.1), which the orchestrator applies from the same table. On that reading the fix
+is one line, adding `whatsapp_binding` to `FIRST_PARTY_AUTH_TYPES`, and it is listed in §9 as a
+reserved change rather than made here: exempting a channel that does not exist yet from the scope gate,
+before its binding and identity-proof model have been reviewed, is exactly what the closed list is for.
+A phone number is a weaker identity proof than a password, and whether that is answered by
+`minAssurance` alone is the question the reviewer has to answer, not this document.
+
+Until then, the gateway's first call is refused, loudly, with the reason in the message. That is the
+intended failure: a channel that forgot to declare itself finds out on call one rather than by quietly
+reading a workspace it was never granted.
 
 ---
 
@@ -482,6 +522,13 @@ shrinks with it.
 - **`request.idempotencyKey` / `providerMessageId` enforcement.** Accepted and carried today; deduplication
   is the gateway's until a write capability needs it.
 - **`ACCESS_SOURCES` gaining `whatsapp` and `rest`** (§5.4).
+- **`FIRST_PARTY_AUTH_TYPES` gaining `whatsapp_binding`** (§3.1). One line in
+  `orchestrator/context.js`, and the thing that unblocks CH-2's first call — but it exempts a channel
+  from the scope gate, so it is a reviewed decision and not a patch. What has to be true before it is
+  taken: the binding proves the member's identity to a standard the reviewer accepts, the binding's own
+  policy layer is the channel profile (§4.1) and is actually applied, and a lost or recycled phone
+  number revokes the binding. Until it is taken, every capability refuses a `whatsapp_binding` context,
+  which is the correct answer to "may this unreviewed channel read the workspace?".
 
 ---
 

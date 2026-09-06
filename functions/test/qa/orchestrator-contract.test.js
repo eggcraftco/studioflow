@@ -409,6 +409,43 @@ check("the loader caps a channel is told about are the caps it will hit", () => 
   }
 });
 
+// The document told the WhatsApp gateway to send `scope: ""` and said it meant
+// "not scope-limited". Since the scope rule became real that is exactly
+// backwards — an empty grant is a caller that was granted nothing — so a
+// gateway built from §3 was refused on all ten capabilities, with a message
+// telling a WhatsApp user to reconnect in ChatGPT.
+//
+// The behaviour is pinned in mcp-scope-enforcement; the document is the thing
+// that can go stale. So these read the CODE's answer and require the page to be
+// telling the truth about it, in both directions: if somebody adds an auth type
+// to the first-party list, the second check fails until §3.1 and §9 are
+// rewritten.
+check("§3.1 names the first-party auth types the code actually exempts", () => {
+  const first = [...contextModule.FIRST_PARTY_AUTH_TYPES];
+  assert(first.length > 0, "there is no first-party auth type list to describe");
+  for (const authType of first) {
+    assert(DOC.includes(`\`${authType}\``), `§3.1 does not name the first-party auth type ${authType}`);
+    assert.deepStrictEqual(contextModule.missingScopes({ authType, scope: "" }, ["finance.read"]), [],
+      `${authType} is documented as first party but is scope-checked`);
+  }
+  assert(DOC.includes("FIRST_PARTY_AUTH_TYPES"),
+    "the document never names the list a channel's auth type has to be in");
+  assert(!/means "not scope-limited"/.test(DOC),
+    'the document still tells a channel that an empty scope means "not scope-limited"');
+});
+
+check("a channel the code has not been told about is refused, and the document says so", () => {
+  const entry = registry.entryFor("get_business_attention_summary");
+  const ctx = fixtures.ownerContext({ authType: "whatsapp_binding", scope: [] });
+  assert(!contextModule.FIRST_PARTY_AUTH_TYPES.includes("whatsapp_binding"),
+    "whatsapp_binding is first party now — rewrite §3.1 and move it out of the §9 reserved list");
+  assert.throws(() => contextModule.assertCapability(ctx, entry), (error) => error.code === "permission-denied",
+    "an undeclared auth type with no grant is no longer refused");
+  const reserved = DOC.indexOf("## 9. Reserved interfaces — not implemented");
+  assert(DOC.indexOf("FIRST_PARTY_AUTH_TYPES` gaining `whatsapp_binding", reserved) > reserved,
+    "the one-line change that unblocks a second channel is not in the reserved list");
+});
+
 check("the reserved interfaces are still reserved, and still labelled as such", () => {
   const heading = DOC.indexOf("## 9. Reserved interfaces — not implemented");
   assert(heading > 0, "the document has no reserved-interfaces section");
