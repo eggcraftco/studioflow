@@ -142,6 +142,8 @@ try {
   // them. Section 2b runs the committed ticket vectors through this, which is
   // the same function `GET /ebay/callback` and `POST /ebay/ticket` both call.
   const ticketLib = webRequire(path.join(outDir, "lib", "studioflow", "ebayTicket.js"));
+  // The admission helpers both routes share, compiled the same way.
+  const admission = webRequire(path.join(outDir, "lib", "studioflow", "ebayAdmission.js"));
   // The builtin the COMPILED route calls through (`node_crypto_1.randomBytes`),
   // so section 2b can freeze the rid the route mints. Patched around one call
   // and restored in a `finally`; nothing else in this file reads it.
@@ -189,7 +191,7 @@ try {
   }
 
   /** Drive the real callback route, capture the request it would have sent. */
-  async function relay(url, cookie, answer) {
+  async function relay(url, cookie, answer, { address = null } = {}) {
     const realFetch = globalThis.fetch;
     let sent = null;
     globalThis.fetch = async (target, init) => {
@@ -197,7 +199,8 @@ try {
       return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "content-type": "application/json" } });
     };
     try {
-      const request = new NextRequest(new URL(url), cookie ? { headers: { cookie } } : {});
+      const headers = { ...(cookie ? { cookie } : {}), ...(address === null ? {} : { "x-forwarded-for": address }) };
+      const request = new NextRequest(new URL(url), Object.keys(headers).length ? { headers } : {});
       const response = await route.GET(request);
       // The Set-Cookie is part of the contract: clearing a flow's pair on a
       // landing that consumed nothing is a free way for a link to break an
@@ -633,6 +636,82 @@ try {
     sealedVector.status === 204 && (sealedVector.setCookie[0] || "").startsWith(`${vectorTicket.cookieName}=${vectorTicket.ticket};`),
     `${sealedVector.status} ${JSON.stringify(sealedVector.setCookie)}`);
   process.env.NIVADESK_EBAY_CALLBACK_KEY = KEY;
+
+  // ---- 2c. Admission, and it goes LAST because it drains the process buckets --
+  // Both buckets live in their route's module scope, so anything after this
+  // section would run against a drained one. Nothing does.
+
+  // The trim rule, as a unit: a per-address map that an attacker can CLEAR is
+  // not a counter. Both routes used to call `map.clear()` on overflow, so 4097
+  // spoofed addresses reset a real address's bucket as a side effect.
+  // The clock is frozen for this unit so that refill cannot be mistaken for a
+  // reset: what is under test is eviction, not the passage of time.
+  const at = Date.now();
+  const map = new Map();
+  const victimAddress = "203.0.113.99";
+  const victimBucket = admission.bucketFor(map, victimAddress, 30, at);
+  for (let i = 0; i < 30; i += 1) admission.takeToken(victimBucket, 30, at);
+  for (let i = 0; i < admission.MAX_TRACKED_ADDRESSES + 200; i += 1) {
+    admission.takeToken(admission.bucketFor(map, `flood-${i}`, 30, at), 30, at);
+  }
+  check("admission: a flood of fresh keys bounds the map without zeroing a bucket a real client is sitting on",
+    map.size <= admission.MAX_TRACKED_ADDRESSES
+    && map.has(victimAddress)
+    && admission.takeToken(admission.bucketFor(map, victimAddress, 30, at), 30, at) === false,
+    `size=${map.size} victim=${JSON.stringify(map.get(victimAddress))}`);
+  check("admission: an absent x-forwarded-for is the empty string, never a value that means 'admit'",
+    admission.clientAddress(null) === "" && admission.clientAddress("") === ""
+    && admission.clientAddress("198.51.100.4, 10.0.0.1") === "198.51.100.4");
+
+  // POST /ebay/ticket was an anonymous global kill switch: 300 requests a minute
+  // per process, charged for every caller before anything else, and sealing is
+  // the only way a seller reaches eBay. Executed before the fix: 320 anonymous
+  // posts carrying a junk ticket, each from a different spoofed address, drained
+  // the bucket and the very next call — a genuine seller sealing a REAL ticket —
+  // answered 429.
+  const seller = await browser();
+  for (let i = 0; i < 340; i += 1) await seal("nv1.not-a-ticket", { address: `198.51.100.${i % 251}` });
+  const floodedOut = await seal("nv1.not-a-ticket", { address: "198.51.100.200" });
+  check("ticket route: with the process bucket drained a junk ticket is a 429 — the flood is what the bucket refuses",
+    floodedOut.status === 429 && floodedOut.setCookie.length === 0, String(floodedOut.status));
+  const genuine = await seal(seller.begun.ticket, { address: "203.0.113.42" });
+  check("ticket route: …and a genuine seller's REAL ticket still seals through the drained bucket, so a stranger cannot close Connect eBay for everyone",
+    genuine.status === 204 && genuine.setCookie.length === 1, `${genuine.status} ${JSON.stringify(genuine.setCookie)}`);
+  // The reserve is keyed on the ticket's own state, so the one party who can
+  // exhaust it is somebody replaying a ticket of their own — and they close
+  // their own flow, not anybody else's.
+  let reserveOut = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const attempt = await seal(seller.begun.ticket, { address: `203.0.113.${100 + i}` });
+    if (attempt.status === 429) { reserveOut = i; break; }
+  }
+  const otherFlow = await browser();
+  const otherSeal = await seal(otherFlow.begun.ticket, { address: "203.0.113.77" });
+  check("ticket route: a replay flood of ONE valid ticket exhausts that flow's reserve and no other flow's",
+    reserveOut > 0 && otherSeal.status === 204, `reserve ran out at ${reserveOut}; another flow answered ${otherSeal.status}`);
+
+  // GET /ebay/callback's disposal had only the courtesy counter, and its own
+  // comment argued the gap away. Executed before the fix: 60 landings with no
+  // `x-forwarded-for` produced 60 signed POSTs, and 60 with one spoofed address
+  // each produced 60 more — every one of them a valid HMAC we minted and a
+  // billable Cloud Function invocation.
+  const noHeader = await browser();
+  let signed = 0;
+  let lastLanding = null;
+  for (let i = 0; i < 340; i += 1) {
+    lastLanding = await relay(`https://nivadesk.app/ebay/callback?code=flood-${i}&state=${encodeURIComponent(noHeader.begun.state)}`, "", browserAnswer);
+    if (lastLanding.sent) signed += 1;
+  }
+  check("callback route: an unsigned flood with NO x-forwarded-for is bounded — the per-process bucket is charged before the address is read",
+    signed < 340, `${signed} of 340 landings were signed and posted`);
+  check("callback route: …and the seller-facing answer never depends on the bucket, throttled or not",
+    lastLanding.location === "https://nivadesk.app/settings?section=ebay&ebay=error&reason=browser" && lastLanding.cookies.length === 0,
+    String(lastLanding.location));
+  const spoofed = await relay(`https://nivadesk.app/ebay/callback?code=flood-spoofed&state=${encodeURIComponent(noHeader.begun.state)}`,
+    "", browserAnswer, { address: "198.51.100.250" });
+  check("callback route: …and a fresh spoofed address does not buy a way past it, because the process bucket is charged first",
+    spoofed.sent === null && spoofed.location === "https://nivadesk.app/settings?section=ebay&ebay=error&reason=browser",
+    spoofed.sent ? "a POST was signed" : String(spoofed.location));
 } finally {
   rmSync(outDir, { recursive: true, force: true });
 }

@@ -2064,11 +2064,32 @@ new.
    same word and the same translated sentence the function would have produced for the same condition, so
    **no new vocabulary and no new translation**. **Clear nothing.** The answer is identical for all six
    classes, so the ticket verifier is no more an oracle than the 401 wall is. The disposal POST is subject
-   to one admission counter of its own — **30 per minute per client address**, on the same trusted-header
-   basis as `/ebay/ticket` — and when that is exhausted the route lands `browser` with no POST at all. A
-   per-address counter cannot be used to silence a genuine seller's disposal, because the counter a seller
-   charges is their own; a distributed flood evades it, which is what the function-side bound is for, and
-   which no longer matters to the defence because the defence is the registry.
+   to admission counters of its own — **300 per minute per process** and **30 per minute per client
+   address**, the same two bounds in the same order as `/ebay/ticket` — and when either is exhausted the
+   route lands `browser` with no POST at all.
+
+   **The per-process one is not optional, and its absence was a real gap.** The first revision had only the
+   per-address counter and argued the gap away in the route's own comment ("a distributed flood evades it
+   entirely, which is what the function's own bound is for"). The function's bound stops the eBay call, not
+   the *invocation*, and every landing here is a signed POST we mint and a Cloud Function invocation we pay
+   for. Executed on the compiled route: 60 landings with no `x-forwarded-for` produced 60 signed POSTs, and
+   60 with one spoofed address each produced 60 more — because `if (!address) return true` admitted a
+   missing header and the leftmost `x-forwarded-for` element is the client-supplied one on a front end that
+   appends. Draining the function's own bucket that way was also the cheapest path to the condition §5.5's
+   first revision depended on; the registry is why that no longer matters to the defence, and the process
+   bucket is why it no longer costs us an unbounded bill.
+
+   Both routes now share `lib/studioflow/ebayAdmission.ts`, which exists because their comments disagreed
+   about the same untrusted header — one calling it a courtesy limit, the other "the proxy header the
+   deployment sets", which is exactly what deploy plan §4.3 step 10 says has *not* been established — and
+   because both emptied their per-address map on overflow, so 4,097 spoofed addresses reset the bucket of
+   the one address actually being limited. Eviction is richest-first: a bucket throttled to zero is the
+   last thing forgotten.
+
+   An exhausted counter here is the one place a landing leaves eBay's code **unregistered** as well as
+   unspent, which is why the bound is a per-process one sized well above genuine traffic rather than a
+   per-address one an attacker steps around. It is on the "always POSTs" exception list below for that
+   reason.
 
 #### The twelve cases, and what the route does with each
 
@@ -2245,7 +2266,7 @@ if the number were self-evidently safe. It was never compared to anything, on an
 
 The exceptions to "always POSTs" are §5.4's three, plus one: no relay key (nothing to sign with, step 3);
 the connector switched off (answered before either path reaches eBay or Firestore); a Firestore throw on the
-connect path; and now an exhausted per-address disposal counter at the edge. All four leave a code
+connect path; and now an exhausted disposal counter at the edge (per process or per address). All four leave a code
 unpresented **and unregistered**, and the operator action is unchanged — deploy plan §4.2, whose honest
 sentence stays honest: nothing on our side can invalidate a code we never presented.
 

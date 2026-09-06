@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, randomBytes } from "node:crypto";
 import { ebayNonceCookieName, ebayTicketCookieName } from "../../../lib/studioflow/ebayFlow";
+import { bucketFor, clientAddress, takeToken, type Bucket } from "../../../lib/studioflow/ebayAdmission";
 import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure } from "../../../lib/studioflow/ebayTicket";
 
 // eBay's RuName holds one "accepted URL" per application, and the seller's
@@ -76,15 +77,23 @@ const KEY_MIN_LENGTH = 32;
 // sandbox connections beside this constant, and if Hostinger imposes a shorter
 // request ceiling of its own, that ceiling is the number to write here.
 const RELAY_TIMEOUT_MS = 45 * 1000;
-// A disposal is a belt and not the defence, so its admission counter may be
-// exhausted without anything being turned off: the counter a seller charges is
-// their own, and a distributed flood evades it entirely, which is what the
-// function's own bound is for. The address comes from the proxy header the
-// deployment sets (deploy plan §4, beside RELAY_TIMEOUT_MS); it is used for a
-// counter and for nothing else, and it is never logged.
+// A disposal is a belt and not the defence — the defence is the function's
+// presented-code registry — so its admission counter may be exhausted without
+// anything being turned off. What it bounds is OUR OWN COST, and that is the
+// bound this route was missing: every landing here is a signed POST we mint and
+// a Cloud Function invocation we pay for, and the per-address counter is a
+// courtesy limit on a header nothing has established as trustworthy
+// (lib/studioflow/ebayAdmission.ts states why, once, for both routes). Measured
+// before this: 60 landings with no `x-forwarded-for` produced 60 signed POSTs,
+// and 60 with one spoofed address each produced 60 more.
+//
+// So the per-process bucket is the real bound and is charged first, exactly as
+// `app/ebay/ticket/route.ts` does. Its size is that route's, for the same reason:
+// it is meant to be reached first by anything that matters, and it is far above
+// any plausible rate of genuine phished landings — which are rare, because the
+// common case is a seller with cookies, who never reaches this path.
 const DISPOSE_PER_ADDRESS_PER_MINUTE = 30;
-const BUCKET_WINDOW_MS = 60 * 1000;
-const MAX_TRACKED_ADDRESSES = 4096;
+const DISPOSE_PER_PROCESS_PER_MINUTE = 300;
 const COUNTER_WINDOW_MS = 60 * 1000;
 const OPS_LOG_EVERY_MS = 60 * 1000;
 
@@ -104,22 +113,15 @@ const FUNCTION_REASONS: ReadonlySet<string> = new Set<Reason>([
 // interpolated into this URL — only a word from the union above.
 const SETTINGS = "https://nivadesk.app/settings?section=ebay";
 
-type Bucket = { tokens: number; atMs: number };
 const disposeBuckets = new Map<string, Bucket>();
+const disposeProcessBucket: Bucket = { tokens: DISPOSE_PER_PROCESS_PER_MINUTE, atMs: 0 };
 function disposeAdmitted(address: string, nowMs: number): boolean {
+  // The process bucket FIRST, so that omitting or spoofing the header does not
+  // skip the only bound that binds an adversary. An absent address used to mean
+  // "admit" here, with nothing above it.
+  if (!takeToken(disposeProcessBucket, DISPOSE_PER_PROCESS_PER_MINUTE, nowMs)) return false;
   if (!address) return true;
-  // A flood from many addresses must not grow this map without bound.
-  if (disposeBuckets.size > MAX_TRACKED_ADDRESSES) disposeBuckets.clear();
-  const bucket = disposeBuckets.get(address) || { tokens: DISPOSE_PER_ADDRESS_PER_MINUTE, atMs: nowMs };
-  disposeBuckets.set(address, bucket);
-  bucket.tokens = Math.min(
-    DISPOSE_PER_ADDRESS_PER_MINUTE,
-    bucket.tokens + Math.max(0, ((nowMs - bucket.atMs) / BUCKET_WINDOW_MS) * DISPOSE_PER_ADDRESS_PER_MINUTE)
-  );
-  bucket.atMs = nowMs;
-  if (bucket.tokens < 1) return false;
-  bucket.tokens -= 1;
-  return true;
+  return takeToken(bucketFor(disposeBuckets, address, DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs), DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs);
 }
 
 // The example is throttled; the COUNT is not. A count over a throttled line
@@ -359,12 +361,17 @@ export async function GET(request: NextRequest) {
 
   // 7. Not verified, and this is the whole of §5.5's promise: nothing signed
   // here may name the state the caller asked about. The only thing that goes out
-  // is a disposal — "spend this code at eBay and keep nothing" — and the seller
+  // is a disposal — "record this code and spend it at eBay" — and the seller
   // gets the word the function would have produced for the same condition, so
   // there is no new vocabulary and no new translation. COOKIES ARE CLEARED ON
   // NOTHING: whatever this browser is holding belongs to some other flow.
+  //
+  // An exhausted counter here is the one place a landing leaves eBay's code
+  // UNREGISTERED as well as unspent, which is why the bound is a per-process one
+  // sized well above genuine traffic rather than a per-address one an attacker
+  // steps around. It is on deploy plan §4.2's list for that reason.
   countFailure(ticket.failure, rid, nowMs);
-  const address = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const address = clientAddress(request.headers.get("x-forwarded-for"));
   const raw = JSON.stringify({ v: 1, op: "dispose", rid, code });
   // Over the cap there is nothing the function would accept, so the request is
   // not made rather than made to be refused.

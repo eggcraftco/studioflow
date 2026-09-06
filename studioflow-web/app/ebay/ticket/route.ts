@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ebayTicketCookieName } from "../../../lib/studioflow/ebayFlow";
 import { ebayTicketKey, verifyEbayTicket, TICKET_MAX_LENGTH } from "../../../lib/studioflow/ebayTicket";
+import { bucketFor, clientAddress, takeToken, type Bucket } from "../../../lib/studioflow/ebayAdmission";
 
 // Sealing the browser-binding ticket into a cookie (design §5.5).
 //
@@ -38,39 +39,49 @@ export const dynamic = "force-dynamic";
 const ORIGIN = "https://nivadesk.app";
 const KEY_MIN_LENGTH = 32;
 const MAX_BODY_BYTES = 1024;
-// Admission. The per-address bucket is a courtesy limit on a header this
-// deployment has not yet established as trustworthy (deploy plan §4, beside
-// RELAY_TIMEOUT_MS): a spoofed value evades it, so the PER-PROCESS bucket is the
-// real bound and is sized to be reached first by anything that matters. The
-// address is never logged, in either case.
+// Admission. Why the header is worth only a courtesy limit, and why the
+// per-process bucket is the real bound, is stated once in
+// lib/studioflow/ebayAdmission.ts for this route and the callback's alike.
+//
+// THE PER-PROCESS BUCKET USED TO BE AN ANONYMOUS GLOBAL KILL SWITCH, and that is
+// what the reserve below exists for. It is charged for every caller before
+// anything else, and sealing is the ONLY way a seller reaches eBay: `sealEbayTicket`
+// returns false for anything but a 204 and `EbayStartContent`/`startConnect` then
+// refuse to send them. Measured: 320 anonymous posts carrying a junk ticket, each
+// from a different spoofed address, drained the bucket, and the very next call —
+// a genuine seller sealing a REAL ticket the real minter produced — answered 429.
+// Five requests a second, from anywhere, with no credential, closed Connect eBay
+// for every seller on the process.
+//
+// The fix is not a bigger number; it is that an exhausted bucket must not refuse
+// a caller who can PROVE a key holder minted their ticket. A ticket is a MAC over
+// a state, a nonce tag and an expiry, and only `beginEbayConnect` and
+// `claimEbayConnectState` mint them — both authenticated, both workspace-owner
+// gated. So verification, which is one HMAC over at most 400 bytes, runs first,
+// and a verified ticket draws on a RESERVE keyed on the ticket's own MAC-covered
+// state. Keyed on the flow, not global, because the one party who can flood
+// valid tickets is someone replaying a ticket of their own: that costs their own
+// flow its reserve and nobody else's.
+//
+// What an exhausted process bucket still refuses is every request whose ticket
+// does not verify, which is the whole of a flood.
 const PER_ADDRESS_PER_MINUTE = 30;
 const PER_PROCESS_PER_MINUTE = 300;
-const BUCKET_WINDOW_MS = 60 * 1000;
-// A flood from many addresses must not grow this map without bound.
-const MAX_TRACKED_ADDRESSES = 4096;
+const RESERVE_PER_FLOW_PER_MINUTE = 10;
 const COUNTER_WINDOW_MS = 60 * 1000;
 const OPS_LOG_EVERY_MS = 60 * 1000;
 
-type Bucket = { tokens: number; atMs: number };
 const addressBuckets = new Map<string, Bucket>();
+const flowBuckets = new Map<string, Bucket>();
 const processBucket: Bucket = { tokens: PER_PROCESS_PER_MINUTE, atMs: 0 };
 
-function take(bucket: Bucket, capacity: number, nowMs: number): boolean {
-  if (bucket.atMs === 0) bucket.atMs = nowMs;
-  bucket.tokens = Math.min(capacity, bucket.tokens + Math.max(0, ((nowMs - bucket.atMs) / BUCKET_WINDOW_MS) * capacity));
-  bucket.atMs = nowMs;
-  if (bucket.tokens < 1) return false;
-  bucket.tokens -= 1;
-  return true;
-}
+/** `ok`, or which of the two bounds refused — the caller treats them differently. */
+type Admission = "ok" | "process" | "address";
 
-function admitted(address: string, nowMs: number): boolean {
-  if (!take(processBucket, PER_PROCESS_PER_MINUTE, nowMs)) return false;
-  if (!address) return true;
-  if (addressBuckets.size > MAX_TRACKED_ADDRESSES) addressBuckets.clear();
-  const bucket = addressBuckets.get(address) || { tokens: PER_ADDRESS_PER_MINUTE, atMs: nowMs };
-  addressBuckets.set(address, bucket);
-  return take(bucket, PER_ADDRESS_PER_MINUTE, nowMs);
+function admitted(address: string, nowMs: number): Admission {
+  if (!takeToken(processBucket, PER_PROCESS_PER_MINUTE, nowMs)) return "process";
+  if (!address) return "ok";
+  return takeToken(bucketFor(addressBuckets, address, PER_ADDRESS_PER_MINUTE, nowMs), PER_ADDRESS_PER_MINUTE, nowMs) ? "ok" : "address";
 }
 
 // Counts, not lines: a count over a throttled line measures minutes with at
@@ -140,10 +151,15 @@ export async function POST(request: NextRequest) {
   const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") { tick("blocked", nowMs); sayRefused(nowMs); return refuse(400); }
 
-  // 3. Admission, bounded twice. The address comes from the proxy header the
-  // deployment sets; it is used for a counter and never for anything else.
-  const address = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-  if (!admitted(address, nowMs)) { tick("throttled", nowMs); sayRefused(nowMs); return refuse(429); }
+  // 3. Admission, bounded twice. The address is used for a counter and never for
+  // anything else. A refusal is not final yet: an exhausted PROCESS bucket is
+  // reconsidered at step 5 for a caller whose ticket verifies, because that
+  // bucket is anonymous and global and refusing on it alone is a kill switch.
+  // The per-address bucket is final — it binds one address, so it cannot be a
+  // kill switch for anybody else.
+  const address = clientAddress(request.headers.get("x-forwarded-for"));
+  const admission = admitted(address, nowMs);
+  if (admission === "address") { tick("throttled", nowMs); sayRefused(nowMs); return refuse(429); }
 
   const text = await readCapped(request);
   if (text === null) { tick("refused", nowMs); sayRefused(nowMs); return refuse(400); }
@@ -174,7 +190,22 @@ export async function POST(request: NextRequest) {
   // route can only seal what a key holder minted, and only for the flow the
   // ticket itself names.
   const verified = verifyEbayTicket(ebayTicketKey(key), ticket, nowMs);
-  if (!verified.ok) { tick("refused", nowMs); sayRefused(nowMs); return refuse(400); }
+  if (!verified.ok) {
+    // An unverifiable ticket under an exhausted process bucket is a flood, and it
+    // is told so rather than told its ticket is bad: the 429 is the honest answer
+    // and it costs the caller a retry rather than a diagnosis.
+    tick(admission === "process" ? "throttled" : "refused", nowMs);
+    sayRefused(nowMs);
+    return refuse(admission === "process" ? 429 : 400);
+  }
+  // The reserve. Only reached when the anonymous global bucket is empty, and keyed
+  // on the ticket's own MAC-covered state, so the one caller who can exhaust it —
+  // somebody replaying a valid ticket of their own — closes their own flow and
+  // nobody else's.
+  if (admission === "process"
+    && !takeToken(bucketFor(flowBuckets, verified.state, RESERVE_PER_FLOW_PER_MINUTE, nowMs), RESERVE_PER_FLOW_PER_MINUTE, nowMs)) {
+    tick("throttled", nowMs); sayRefused(nowMs); return refuse(429);
+  }
 
   // 6. One header, under a name derived from the ticket's OWN MAC-covered state
   // — so this is not a way to plant chosen bytes, and not a way to plant
