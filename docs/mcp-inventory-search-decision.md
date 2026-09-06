@@ -85,7 +85,7 @@ Both read the same collection: `companies/{companyId}/inventoryItems`.
 | `onHand` | ✓ | ✓ |
 | `sku` | ✗ | ✓ bounded 64 |
 | `serialNumber` | ✗ | ✓ bounded 64 |
-| `reserved` | ✗ | ✓ |
+| `reserved` | ✗ | ✓ — **but wrong for a one-off as merged.** It read `quantity.reserved`, which `inventory.js` never writes for a unique item (the reservation is `status: "reserved"` plus `reservedOrderIds`, and `quantity.reserved` is created 0 and left there), so an item the `reserved: true` filter had selected *because* it is held reported `reserved: 0`, while `get_inventory_overview` reported 1 for the same document. Both now call `inventoryMetrics.reservedUnits`, and `orchestrator-inventory.test.js` pins the two answers against each other. |
 | `lowStockAt` | ✗ | ✓ |
 | `supplierName` | ✗ | ✓ bounded 80 (a business, not a person — the row carries no PII) |
 | `customerOwned` | ✗ | ✓ — a customer's own item is flagged, never counted as the workshop's stock |

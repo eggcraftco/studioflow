@@ -147,5 +147,73 @@ check("the reserved and low-stock filters select what they say", () => {
   assert.deepStrictEqual(drawer.data.items.map((row) => row.itemId), ["q1"]);
 });
 
+check("the two capabilities report the SAME reserved figure for the same document", () => {
+  // search_inventory read `quantity.reserved` and hardcoded 0 for a one-off;
+  // get_inventory_overview's reservedItems hardcoded 1. Same branch of the same
+  // ternary over the same document, opposite constants — and the runtime is on
+  // the overview's side: inventory.js reserves a unique item by writing
+  // `status: "reserved"` and `reservedOrderIds` and never touching
+  // `quantity.reserved`, which was created 0 and stays 0. This is the one thing
+  // orchestrator-contract §0 exists to prevent, with one channel contradicting
+  // itself rather than two channels contradicting each other.
+  const overview = inventory.inventoryOverview(snapshot(), {}, ctx, { nowMs: fixtures.NOW });
+  const search = inventory.searchInventoryItems(snapshot(), {}, ctx, { nowMs: fixtures.NOW });
+  const bySearch = new Map(search.data.items.map((row) => [row.itemId, row.reserved]));
+  for (const row of overview.data.reservedForOpenOrders) {
+    assert.strictEqual(bySearch.get(row.itemId), row.reserved,
+      `${row.itemId}: search_inventory says ${bySearch.get(row.itemId)} held, get_inventory_overview says ${row.reserved}`);
+  }
+  // Named, so the check is about the one-off and not only about the boxes.
+  assert.strictEqual(bySearch.get("u2"), 1, "a reserved one-off reports nothing held");
+  assert.strictEqual(bySearch.get("q2"), 3, "3 of 10 boxes are held");
+
+  // And the filter does not contradict its own result: `reserved: true` is
+  // documented as "only items being held for an order", so every row it returns
+  // must report something held.
+  const held = inventory.searchInventoryItems(snapshot(), { reserved: true }, ctx, { nowMs: fixtures.NOW });
+  for (const row of held.data.items) {
+    assert.ok(row.reserved > 0, `${row.itemId} was selected because it is held and reports reserved: ${row.reserved}`);
+  }
+  // A one-off that is NOT held still reports zero — the fix is a definition,
+  // not a constant moved from one branch of the ternary to the other.
+  assert.strictEqual(bySearch.get("u1"), 0, "an available one-off was reported as held");
+});
+
+check("available counts what is free, not rows minus rows", () => {
+  // `uniqueCount + quantityCount - reservedCount` subtracts a partially
+  // reserved row WHOLE, so a shelf with seven free boxes on it answered
+  // `available: 0`. `partiallyReserved` exists precisely to mean partly
+  // available, and `data` is read by a model the way a summary line is.
+  const shelf = [
+    { id: "u1", name: "Ring", trackingType: "unique", status: "reserved", quantity: { onHand: 1, reserved: 0 }, reservations: [{ orderId: "o1" }], valuationCost: 100 },
+    { id: "q1", name: "Clasp", trackingType: "quantity", status: "partiallyReserved", quantity: { onHand: 10, reserved: 3 }, lowStockAt: 0, valuationCost: 2 }
+  ];
+  const counts = inventory.inventoryOverview({ ...snapshot(), inventoryItems: shelf }, {}, ctx, { nowMs: fixtures.NOW }).data.counts;
+  assert.strictEqual(counts.reserved, 2, "both rows are holding something");
+  assert.strictEqual(counts.available, 1, "seven clasps are free, so the shelf is not empty of available stock");
+
+  // The whole shelf, where the two counts overlap on exactly the partially
+  // reserved row: reserved is u2 and q2, available is u1, q1 and q2.
+  const full = inventory.inventoryOverview(snapshot(), {}, ctx, { nowMs: fixtures.NOW }).data.counts;
+  assert.strictEqual(full.reserved, 2);
+  assert.strictEqual(full.available, 3, "a partially reserved row is in both populations, and neither is a subtraction");
+
+  // Nothing free at all is still zero — the count did not simply stop being
+  // able to say no.
+  const allHeld = [{ id: "q9", name: "Beads", trackingType: "quantity", status: "reserved", quantity: { onHand: 4, reserved: 4 }, valuationCost: 1 }];
+  assert.strictEqual(
+    inventory.inventoryOverview({ ...snapshot(), inventoryItems: allHeld }, {}, ctx, { nowMs: fixtures.NOW }).data.counts.available,
+    0,
+    "a fully promised row must not be counted as available"
+  );
+  // And incoming stock is not on the shelf, so it is not free either.
+  const incoming = [{ id: "i9", name: "Strap", trackingType: "unique", status: "incoming", quantity: { onHand: 1, reserved: 0 }, valuationCost: 60 }];
+  assert.strictEqual(
+    inventory.inventoryOverview({ ...snapshot(), inventoryItems: incoming }, {}, ctx, { nowMs: fixtures.NOW }).data.counts.available,
+    0,
+    "stock that has not arrived was counted as available"
+  );
+});
+
 console.log(failures === 0 ? "\nAll inventory checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

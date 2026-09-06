@@ -36,6 +36,42 @@ const label = (value, max = 80) => untrusted.safeText(value, { max });
 
 const OFF_SHELF_STATUSES = Object.freeze(["sold", "used", "removed"]);
 
+/** The two statuses that mean something on this row is promised to an order. */
+const HOLDING_STATUSES = Object.freeze(["reserved", "partiallyReserved"]);
+
+const isHolding = (item) => HOLDING_STATUSES.includes(String((item || {}).status || ""));
+
+/**
+ * How much of one row is promised to an order — the ONE definition, because
+ * there were two and they answered the same document differently.
+ *
+ * A one-off does not record its reservation as a quantity. `inventory.js`
+ * reserves it by writing `status: "reserved"` plus `reservedOrderIds`, and
+ * never touches `quantity.reserved`, which was created as 0 and stays 0. So
+ * `Number(quantity.reserved) || 0` on a unique row reads the absence of a field
+ * as a measurement of zero: `search_inventory` reported `reserved: 0` on an
+ * item it had just returned BECAUSE it is reserved, while
+ * `get_inventory_overview` reported 1 for the same document out of
+ * `reservedItems`. One channel, two answers to itself.
+ *
+ * The status is the reservation for a one-off, so it is what is read — and it
+ * is read for the unreserved case too: `reservedItems` could hardcode 1 only
+ * because its caller had already filtered to the two holding statuses, and
+ * `search_inventory` has no such filter.
+ */
+function reservedUnits(item) {
+  const data = item || {};
+  if (String(data.trackingType) === "unique") return isHolding(data) ? 1 : 0;
+  return Number((data.quantity || {}).reserved) || 0;
+}
+
+/** How much of one row is still free — what "available" has to mean to be worth the word. */
+function availableUnits(item) {
+  const data = item || {};
+  const onHand = String(data.trackingType) === "unique" ? 1 : Number((data.quantity || {}).onHand) || 0;
+  return Math.max(0, onHand - reservedUnits(data));
+}
+
 /**
  * One definition of "low stock", for the count AND for the list.
  *
@@ -76,6 +112,15 @@ function summarize(items = []) {
     // rather than merely skipped, so every row the caller passed in lands in
     // exactly one population and the shelf adds up.
     offShelfCount: 0,
+    // Rows on the shelf with something still FREE. Not `uniqueCount +
+    // quantityCount - reservedCount`, which is what get_inventory_overview
+    // computed: that subtracts a whole row for a partial hold, so a clasp row
+    // with ten on hand and three promised vanished entirely and a shelf with
+    // seven free clasps on it answered `available: 0`. `partiallyReserved`
+    // exists precisely to mean partly available, so the free part is measured
+    // rather than assumed away. This count and `reservedCount` OVERLAP on a
+    // partially reserved row, deliberately: a row can be both.
+    availableCount: 0,
     lowStockCount: 0, customerOwnedCount: 0
   };
 
@@ -109,11 +154,12 @@ function summarize(items = []) {
       summary.quantityValue = round(summary.quantityValue + lineValue);
       if (isLowStock(data)) summary.lowStockCount += 1;
     }
-    if (status === "reserved" || status === "partiallyReserved") {
+    if (isHolding(data)) {
       summary.reservedCount += 1;
-      const reservedQty = isUnique ? 1 : Number((data.quantity || {}).reserved) || 0;
+      const reservedQty = reservedUnits(data);
       summary.reservedValue = round(summary.reservedValue + (isUnique ? lineValue : round(value * reservedQty)));
     }
+    if (availableUnits(data) > 0) summary.availableCount += 1;
   }
 
   return summary;
@@ -139,18 +185,22 @@ function lowStockItems(items = [], { limit = 25 } = {}) {
 /** Items holding stock for an order, with the order they are held for. */
 function reservedItems(items = [], { limit = 25 } = {}) {
   return (Array.isArray(items) ? items : [])
-    .filter((item) => ["reserved", "partiallyReserved"].includes(String((item || {}).status || "")))
+    .filter(isHolding)
     .map((item) => {
       const reservations = Array.isArray(item.reservations) ? item.reservations : [];
       return {
         itemId: label(item.id, 200),
         name: label(item.name),
         onHand: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).onHand) || 0,
-        reserved: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).reserved) || 0,
+        reserved: reservedUnits(item),
         orderIds: reservations.map((row) => label((row || {}).orderId, 200)).filter(Boolean).slice(0, 5)
       };
     })
     .slice(0, limit);
 }
 
-module.exports = { summarize, isLowStock, lowStockItems, reservedItems, OFF_SHELF_STATUSES };
+module.exports = {
+  summarize, isLowStock, lowStockItems, reservedItems,
+  reservedUnits, availableUnits, isHolding,
+  OFF_SHELF_STATUSES, HOLDING_STATUSES
+};

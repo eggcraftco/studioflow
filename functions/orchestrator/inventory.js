@@ -74,6 +74,16 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
   // named them. `matched` keeps the raw number under a heading that says what it
   // is: rows this answer's filters selected, whatever their status. The four add
   // up: matched = items + offShelf + customerOwned.
+  //
+  // `reserved` and `available` are the two that do NOT add up with them, and
+  // must not be read as if they did: both count rows on the shelf, and a
+  // partially reserved row is in both. `available` used to be
+  // `uniqueCount + quantityCount - reservedCount` — rows minus rows, presented
+  // under a word a reader takes as "what I can sell" — so a clasp row with ten
+  // on hand and three promised was subtracted whole and a shelf with seven free
+  // clasps answered `available: 0`. It is now counted against the free quantity
+  // (`metrics.availableUnits`), the way `reservedValue` was already computed
+  // against the promised one.
   const data = {
     counts: {
       items: summary.uniqueCount + summary.quantityCount + summary.incomingCount,
@@ -82,7 +92,7 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
       lowStock: summary.lowStockCount,
       reserved: summary.reservedCount,
       incoming: summary.incomingCount,
-      available: Math.max(0, summary.uniqueCount + summary.quantityCount - summary.reservedCount),
+      available: summary.availableCount,
       customerOwned: summary.customerOwnedCount
     },
     value: { cost: summary.totalValue, incoming: summary.incomingValue, reserved: summary.reservedValue, currency },
@@ -167,7 +177,17 @@ function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     // What `onHand` counts. Without it 12 is twelve grams or twelve clasps and
     // the model has to guess, which is how a quantity becomes a wrong sentence.
     unit: label((item.quantity || {}).unit, 24),
-    reserved: String(item.trackingType) === "unique" ? 0 : Number((item.quantity || {}).reserved) || 0,
+    // The SAME definition get_inventory_overview counts with
+    // (`metrics.reservedUnits`). This read `quantity.reserved` and hardcoded 0
+    // for a one-off, which is the absence of a field rather than a measurement:
+    // inventory.js reserves a unique item by writing `status: "reserved"` and
+    // `reservedOrderIds` and never touches `quantity.reserved`. So an item
+    // returned BY the `reserved: true` filter — "only items being held for an
+    // order" — came back saying nothing was held, while
+    // `reservedForOpenOrders` reported 1 for the same document. A model summing
+    // `items[].reserved` to answer "how much is promised?" was wrong by exactly
+    // the one-offs, which for a jewellery workshop is most of the shelf.
+    reserved: metrics.reservedUnits(item),
     lowStockAt: Number(item.lowStockAt) || 0,
     location: label(item.location, 64),
     supplierName: label(item.supplierName),
