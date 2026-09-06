@@ -625,7 +625,24 @@ sign back in to the Cloud console in the browser. Either one is enough.
 |---|---|---|
 | 04:28:31 → 04:31 UTC (B5.3 gate) | console | 0 errors, 0 5xx, 32 probes as the positive control |
 | 04:28:31 → 10:29:50 UTC | gcloud | 0 errors, 0 5xx, 240 requests, 19 scheduler jobs on time |
-| 10:29:50 → 17:20 UTC | **none** | **unverified** |
+| 10:29:50 → 17:20 UTC | none at the time | **recovered — see below** |
+
+### Gap recovered — 2026-09-06 17:16:31 UTC
+
+The operator ran `gcloud auth login`, and one query over the whole soak window closed the hole. This
+is why the entry above says nobody looked rather than something broke: the readback is retrospective
+and the retained entries answered for the unobserved hours as completely as a live check would have.
+
+| Check, 2026-09-06 04:28:31 → 17:16:31 UTC (all 350 deployed functions, 12 h 48 m) | Result |
+|---|---|
+| `severity>=ERROR` | **0** |
+| `httpRequest.status>=500` | **0** |
+| Positive control, all requests by class | **693** — 691 2xx, 2 3xx, no 4xx, no 5xx |
+| Cloud Scheduler (europe-west2) | 19 jobs, all ENABLED, every one with a recent attempt and a future next run |
+| Event-triggered functions, last two hours | stampOrderFinance 12, syncWorkflowSafeOrderView 10, notifyCustomerOnStatusChange 10, scanUploadedFile 4 — all INFO |
+| Query gaps | **0** |
+
+Thirteen of the twenty-four hours are now verified end to end with no unobserved window inside them.
 
 ## Rollback used
 
