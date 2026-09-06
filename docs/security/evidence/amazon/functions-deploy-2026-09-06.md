@@ -132,7 +132,7 @@ Started 2026-09-06T01:56:28Z from `0d11da8d`; "Deploy complete" at 01:58:22 (1 m
 
 Order-edit check (02:01:25, operator's own workspace, from the operator's session): one existing order's empty "Special Notes" field was given a test word and saved; the single Firestore write fired three of the seven triggers, all on their new revisions and all 200 — `stamporderfinance-00005-zab` (0.99 s), `syncworkflowsafeorderview-00019-tuw` (1.08 s), `notifycustomeronstatuschange-00009-nox` (0.05 s). The note was cleared again straight after (a second write, same three triggers). `settingsAuditTrail` and `enforceWorkspaceSeatLimit` fire on other documents (settings, membership) and `scheduleDeletedOrderFileCleanup` / `scanUploadedFile` on deletes and uploads — no test event was forced for those; they are read passively from the next real event, and their revisions are ACTIVE with their triggers unchanged.
 
-Gate: one order edit ✔ (three triggers proven on the new revisions), 30-minute watch (01:56:28 → 02:27:00): _pending_.
+Gate: one order edit ✔ (three triggers proven on the new revisions), 30-minute watch (01:56:28 → 02:27:25 UTC): **0 ERROR entries**; executions in the window: `stamporderfinance-00005-zab` 2 × 200, `syncworkflowsafeorderview-00019-tuw` 2 × 200, `notifycustomeronstatuschange-00009-nox` 2 × 200 (the two writes of the order-edit check); no other trigger fired in the window, none failed — passed.
 
 ## B4.1 — callables last deployed 1–5 Sep, chunk 1 (45 functions)
 
@@ -188,7 +188,18 @@ Operator approval "B4.1'e geç" at 02:05 UTC; health of the 47 functions deploye
 
 Result: "Deploy complete" at 02:11:15 (3 min 46 s), **45 of 45 "Successful update operation"**, exit 0; all 45 ACTIVE on their new revisions at 02:11:26; ERROR entries since the start: 0; probe table re-run at 02:12: identical to the baseline (44 × 401, 1 × 400, 0 × 5xx).
 
-Gate: state ACTIVE on all 45 ✔, probe table unchanged ✔, 15-minute error watch (02:07:29 → 02:27:30): _pending_.
+Gate: state ACTIVE on all 45 ✔, probe table unchanged ✔, 15-minute error watch (02:07:29 → 02:27:52 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic was the probe set (401) — passed.
+
+### Four-gate summary before B4.2 (02:28 UTC)
+
+| Batch | Window | ERROR entries | Request 5xx | Probes vs baseline | Behaviour |
+|---|---|---|---|---|---|
+| B1 ingress | 01:46:26 → 02:18:48 | 0 | 0 | identical (32 endpoints) | signed test delivery 200 |
+| B2 scheduled | 01:53:40 → 02:20:41 | 0 | n/a (no HTTP surface) | n/a | reminder check + finance sweep ran 200 on new revisions; hourly jobs re-anchored to 02:55, none lost |
+| B3 event-triggered | 01:56:28 → 02:27:25 | 0 | n/a | n/a | order write fired three triggers, all 200, twice |
+| B4.1 callables | 02:07:29 → 02:27:52 | 0 | 0 | identical (45 callables) | — |
+
+All four conditions the operator set (no new 5xx/error, no unexpected error log, probes unchanged, no scheduler/trigger regression) hold → B4.2 proceeds.
 
 ## Rollback used
 
