@@ -258,7 +258,7 @@ Operator's process for this batch (in chat, 02:14 UTC): go only if the four prev
 | getShopifyWebhookToken | getshopifywebhooktoken-00007-teq | 400 | getshopifywebhooktoken-00008-hoc | 400 |
 | getSiteStats | getsitestats-00007-zux | 403 | getsitestats-00008-yem | 403 |
 
-6: fifteen-minute watch (02:31:00 → 02:50:30): _pending_.
+6: fifteen-minute watch (02:31:00 → 02:50:57 UTC): **0 ERROR entries, 0 request 5xx**; traffic in the window was the probe set plus real calls from the operator's app sessions (`getAppAssistantAvailability` 5 × 200 and 2 × 204 on the new revision) — passed.
 
 ## B4.3 — callables last deployed 1–5 Sep, chunk 3 (45 functions)
 
