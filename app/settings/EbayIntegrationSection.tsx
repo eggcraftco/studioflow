@@ -17,9 +17,10 @@ import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
   beginEbayConnect, getEbayConnections, verifyEbayConnection, updateEbayConnectionSettings,
   previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
-  setEbayNonceCookie, ebayEventText, ebayReasonText, ebaySpecStatusText, ebayStatusLabel,
+  setEbayNonceCookie, sealEbayTicket, ebayEventText, ebayReasonText, ebaySpecStatusText, ebayStatusLabel,
   type EbayConnection, type EbayImportPreview, type EbayImportResult
 } from "@/lib/studioflow/ebay";
+import { ebayCallableErrorText } from "@/lib/studioflow/ebayScreenRules";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -66,7 +67,10 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
       setEnvironment(result.environment);
       if (!keepError) setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not load."));
+      // Never `err.message` on its own: a callable that is not deployed answers
+      // 404 and @firebase/functions makes the message the bare word `not-found`,
+      // which is the one thing the header rule above forbids on this screen.
+      setError(t(ebayCallableErrorText(err, "Could not load.")));
     } finally {
       setLoading(false);
     }
@@ -93,15 +97,23 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
 
   async function guard(key: string, fn: () => Promise<void>) {
     setBusy(key); setError(""); setNotice("");
-    try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : t("Could not load.")); } finally { setBusy(""); }
+    try { await fn(); } catch (err) { setError(t(ebayCallableErrorText(err, "Could not load."))); } finally { setBusy(""); }
   }
 
-  // Owner-only, and the one place the browser-binding nonce is put in a cookie
-  // before the seller leaves for eBay.
+  // Owner-only, and the one place the browser's two halves of the binding are
+  // put in cookies before the seller leaves for eBay (design §5.5): the nonce
+  // from here, and the ticket by a response from our own origin, because a
+  // ticket cookie must be HttpOnly and script cannot set one.
+  //
+  // If sealing fails the seller is NOT sent to eBay. Nothing has been consumed —
+  // no code exists yet and the state expires by TTL — whereas sending them on
+  // when we already know the return leg will be refused manufactures a live
+  // authorization code that nothing on our side can then invalidate.
   const startConnect = () => guard("connect", async () => {
     const result = await beginEbayConnect(companyId);
-    if (!result?.authorizeUrl) { setError(t("eBay did not complete the connection. Try again.")); return; }
-    setEbayNonceCookie(result.nonce);
+    if (!result?.authorizeUrl || !result?.ticket) { setError(t("eBay did not complete the connection. Try again.")); return; }
+    setEbayNonceCookie(result.state, result.nonce);
+    if (!(await sealEbayTicket(result.ticket))) { setError(t("eBay did not complete the connection. Try again.")); return; }
     window.location.href = result.authorizeUrl;
   });
 

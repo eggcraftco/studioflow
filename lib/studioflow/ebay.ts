@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { ebayNonceCookieName } from "@/lib/studioflow/ebayFlow";
 
 // The browser's whole view of the eBay connector.
 //
@@ -87,12 +88,12 @@ const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, na
  * arrives without it is refused. See docs/ebay-connector-design.md §5.
  */
 export async function beginEbayConnect(companyId: string) {
-  return (await call<{ companyId: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; scopes: string[]; environment: string }>(
+  return (await call<{ companyId: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; ticket: string; scopes: string[]; environment: string }>(
     "beginEbayConnect")({ companyId })).data;
 }
 /** The native start page's half: the uid that began the flow claims it once. */
 export async function claimEbayConnectState(state: string) {
-  return (await call<{ state: string }, { ok: boolean; authorizeUrl: string; nonce: string }>("claimEbayConnectState")({ state })).data;
+  return (await call<{ state: string }, { ok: boolean; authorizeUrl: string; nonce: string; ticket: string }>("claimEbayConnectState")({ state })).data;
 }
 export async function getEbayConnections(companyId: string) {
   const data = (await call<{ companyId: string }, { ok: boolean; connections: EbayConnection[]; configured: boolean; environment: string }>(
@@ -193,10 +194,29 @@ const REASON_TEXT: Record<string, string> = {
   browser: "Finish connecting eBay in the same browser you started from.",
   environment: "This eBay account belongs to a different environment.",
   no_seller: "eBay did not tell us which seller account this is. Reconnect and approve every permission.",
-  disabled: "eBay is not set up on this server yet. Contact support and we will enable it."
+  disabled: "eBay is not set up on this server yet. Contact support and we will enable it.",
+  // The four below share one sentence, and they are listed rather than left to
+  // the fallback so the vocabulary really is complete in one place — this
+  // comment used to claim that while three of the words the route can redirect
+  // with were missing from the table. The sentence is the one `ebayReasonText`
+  // already falls back to and already exists in all eleven other languages, so
+  // none of these needs a new translation.
+  //
+  // `unavailable` and `missing_code` are the route's own words, never the
+  // function's (design §5.4): the relay key is unset or short, or the signed
+  // POST failed, timed out or answered anything but a 200 carrying a known word;
+  // or the visit was not a callback at all. `token` and `exchange` are the
+  // function's, relayed unchanged — eBay refused the code, or the exchange
+  // failed some other way. None of the four earns a sentence of its own: there
+  // is nothing the seller can do but try again, and a technical code must never
+  // reach the screen.
+  unavailable: "eBay did not complete the connection. Try again.",
+  missing_code: "eBay did not complete the connection. Try again.",
+  token: "eBay did not complete the connection. Try again.",
+  exchange: "eBay did not complete the connection. Try again."
 };
 
-/** The `reason` the callback redirects with, and verify's own reason codes. */
+/** The `reason` the callback route redirects with, and verify's own reason codes. */
 export function ebayReasonText(reason: string): string {
   const key = String(reason || "").trim();
   return REASON_TEXT[key] || ebayErrorText(key) || "eBay did not complete the connection. Try again.";
@@ -235,12 +255,60 @@ export function ebayEventText(type: string): string {
 /**
  * The one place the nonce cookie is written.
  *
- * It is first-party to nivadesk.app, `SameSite=Lax` so it survives eBay's
- * top-level redirect back, and scoped to the callback path so no other page in
- * the app can read it. Ten minutes is the state's own life.
+ * It is first-party to nivadesk.app and `SameSite=Lax`, so it survives eBay's
+ * top-level redirect back. Ten minutes is the state's own life.
+ *
+ * `__Host-` is not decoration and it replaced a `Path=/ebay/callback` this
+ * design had itself called "a request-matching rule and not a security
+ * boundary" (design §5.5). Leaving the `Domain` attribute off controls what WE
+ * set and does nothing about what a SUBDOMAIN sets: a cookie written from any
+ * `*.nivadesk.app` origin with `Domain=nivadesk.app` and the same name arrives
+ * at nivadesk.app beside the host-only one, and neither the `Cookie` header nor
+ * `NextRequest.cookies.get()` defines a precedence we could rely on. That matters
+ * here rather than in theory, because nivadesk.app fronts a Cloudflare-for-SaaS
+ * Worker with a catch-all route. A browser refuses to store a `__Host-` cookie
+ * that carries a `Domain`, or a `Path` other than `/`, or no `Secure` — so the
+ * trade is a matching rule for an actual boundary, and `Secure` is now
+ * unconditional (browsers treat http://localhost as a secure context, so local
+ * development is unaffected; this flow requires HTTPS anywhere else anyway).
+ *
+ * The NAME carries the flow tag, so a seller who presses Connect twice no longer
+ * overwrites their first flow's cookie with their second's.
+ *
+ * The value is returned to the client as JSON and written here from client
+ * JavaScript, so this cookie cannot be HttpOnly and any script on nivadesk.app
+ * can read it. It defends against a phished foreign seller's browser, not
+ * against script on our own origin (§5.4, residual 2).
  */
-export function setEbayNonceCookie(nonce: string) {
-  if (typeof document === "undefined" || !nonce) return;
-  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `nv_ebay_nonce=${encodeURIComponent(nonce)}${secure}; SameSite=Lax; Path=/ebay/callback; Max-Age=600`;
+export function setEbayNonceCookie(state: string, nonce: string) {
+  if (typeof document === "undefined" || !state || !nonce) return;
+  document.cookie = `${ebayNonceCookieName(state)}=${encodeURIComponent(nonce)}; Secure; SameSite=Lax; Path=/; Max-Age=600`;
+}
+
+/**
+ * The ticket's other half (§5.5). It cannot be written from here: the ticket
+ * cookie must be HttpOnly, and client JavaScript cannot set an HttpOnly cookie.
+ * So it is handed to our own origin, which verifies it and answers with the one
+ * `Set-Cookie` that seals it.
+ *
+ * Answering FALSE is a decision and not a detail: the caller must not send the
+ * seller to eBay when sealing failed. A doomed flow that reaches eBay anyway
+ * manufactures a live authorization code whose return leg was always going to be
+ * refused, and a code we never present is the one thing nothing on our side can
+ * invalidate (residual 1). A 503 is ours — a missing key — and a 400 is the
+ * ticket's; both mean "do not go", and the seller sees "try again".
+ */
+export async function sealEbayTicket(ticket: string): Promise<boolean> {
+  if (!ticket) return false;
+  try {
+    const response = await fetch("/ebay/ticket", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ticket }),
+      cache: "no-store"
+    });
+    return response.status === 204;
+  } catch {
+    return false;
+  }
 }

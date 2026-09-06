@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { claimEbayConnectState, setEbayNonceCookie } from "@/lib/studioflow/ebay";
+import { claimEbayConnectState, sealEbayTicket, setEbayNonceCookie } from "@/lib/studioflow/ebay";
+import { ebayStartLoginHref } from "@/lib/studioflow/ebayScreenRules";
 import { studioT } from "@/lib/studioflow/language";
 
 // Where a connection begun in the Mac, iPhone or Android app becomes a browser
@@ -31,17 +32,31 @@ export function EbayStartContent() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) { router.replace("/login"); return; }
+    // …and BACK here afterwards. This page is not an ordinary screen a seller can
+    // re-open: it carries a single-use state with a ten-minute TTL that exists
+    // only in this URL, and it is reached from the Mac, iPhone or Android app,
+    // whose session is not the browser's — so a signed-out visit is the likely
+    // case, not the odd one. Without the `?next=` the seller lands on Home with
+    // no message and the whole flow is gone (design §5.2, which said this already).
+    if (!user) { router.replace(ebayStartLoginHref(state)); return; }
     if (!state) { setError(t("The eBay sign-in link has expired or was already used. Start again.")); return; }
     let cancelled = false;
     (async () => {
       try {
         const result = await claimEbayConnectState(state);
         if (cancelled) return;
-        if (!result?.authorizeUrl) { setError(t("eBay did not complete the connection. Try again.")); return; }
-        // The cookie is written in the browser that is about to be sent to
-        // eBay, which is the whole point of this page.
-        setEbayNonceCookie(result.nonce);
+        if (!result?.authorizeUrl || !result?.ticket) { setError(t("eBay did not complete the connection. Try again.")); return; }
+        // Both cookies are written in the browser that is about to be sent to
+        // eBay, which is the whole point of this page: the nonce from here, and
+        // the ticket by a response from our own origin, because a ticket cookie
+        // must be HttpOnly and script cannot set one (design §5.5).
+        setEbayNonceCookie(state, result.nonce);
+        const sealed = await sealEbayTicket(result.ticket);
+        if (cancelled) return;
+        // Sealing failed: the seller is not sent to eBay at all. Nothing has
+        // been consumed, and a flow whose return leg is already doomed would
+        // otherwise manufacture a live code nothing on our side can invalidate.
+        if (!sealed) { setError(t("eBay did not complete the connection. Try again.")); return; }
         window.location.href = result.authorizeUrl;
       } catch (err) {
         if (cancelled) return;
