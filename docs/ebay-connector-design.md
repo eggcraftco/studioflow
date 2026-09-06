@@ -49,7 +49,7 @@ truthful capability map (§4.1), SDK-shaped signature verification and the order
 | Sync pattern | 15-minute reconciliation sweep on the common cursor (`lastmodifieddate` window with overlap, **bisected** on truncation) + a nightly `reconcileEbayConnectionsNightly` with a multi-day lookback + a forced catch-up from the stored watermark on flag-on/reconnect (§7.1, §7.6); `ORDER_CONFIRMATION` notifications through the same gateway once the per-seller subscription exists (`notifications: "subscription_dependent"`, §7.5) | §54/§55 (nightly full reconciliation with overlap), §85 #20/#21 — neither notification-only nor polling-only. eBay's only seller order topic is create-only, so polling stays the source of updates |
 | Environment | `NIVADESK_EBAY_ENVIRONMENT` = `sandbox` (default) \| `production`, threaded through every host, written on the state doc **and** the connection doc, refused on mismatch, filtered by the sweep (§7.1) | Square precedent (SQ-AUTH-009) plus the sandbox-to-production flip (§7.7) |
 | Gate | Three layers: secrets marker file, runtime env switch, Firestore connector flag (`appConfig/commerce.connectors`) — **none of which gates account-deletion compliance** (§2) | Deploy activates nothing; rollback without redeploy; per-connection pause; compliance is not a feature |
-| Queue | `ebayEventWorker` (own Cloud Tasks queue `ebay-events`, own service account); `retryCommerceEvent` re-enqueues eBay rows there instead of processing inline | §72 "payload goes to a queue"; §3.2 secrets isolation |
+| Queue | `ebayEventWorker` (its own Cloud Tasks queue, created by the deploy under the function's own name, own service account); `retryCommerceEvent` re-enqueues eBay rows there instead of processing inline | §72 "payload goes to a queue"; §3.2 secrets isolation |
 | Scopes | `sell.fulfillment.readonly` + `commerce.identity.readonly` — **nothing else** | Read-only half, `readOnly: true`, consent copy "NivaDesk will read your orders". Square precedent SQ-AUTH-011 (read-first). When shipment-write ships, the card's existing *Reconnect required* event carries the new scope; a leaked refresh token from this half cannot write |
 | OAuth browser binding | `beginEbayConnect` returns a nonce whose hash is on the state doc; the web stores the nonce in a short-lived first-party cookie; the callback route forwards it; the function refuses a callback whose nonce does not match (`reason=browser`). Native clients start the flow through `nivadesk.app/ebay/start`, which requires a signed-in owner of the state's workspace (§5) | A workspace owner must not be able to phish a foreign seller's account into their workspace; PKCE would not help (verifier is server-held) and eBay has no PKCE |
 | Preview / Sync now | `previewEbayImport` owner-only with the `syncLockUntilMs` single-flight; `syncEbayNow` member but charged to the connection's daily share (§7.4) | Square's preview is owner-only (`squareConnector.js` 832–833); an app-wide cap alone is a cross-tenant DoS |
@@ -196,7 +196,7 @@ All `region: "europe-west2"`. Wrappers inject the runtime bundle exactly as Squa
 | `reconcileEbayConnections` | onSchedule `every 15 minutes`, `Europe/London` | — | connector on (global + per connection); environment match | 540 | `"ebay reconcile sweep: N connection(s), M failed, K connected"` |
 | `reconcileEbayConnectionsNightly` | onSchedule `every day 02:40`, `Europe/London` | — | connector on; environment match; low priority (80 % quota line) | 540 | multi-day lookback + unfulfilled-order follow-up (§7.6); writes `lastFullReconciliationAtMs` |
 | `ebayNotifications` | onRequest GET/POST | — (signature) | GET challenge always; POST deletion always (503 when unverifiable); order topics only when connector on | 30 | GET → `{ challengeResponse }`; POST → 200 fast, work enqueued |
-| `ebayEventWorker` | onTaskDispatched (queue `ebay-events`) | — | `buyer_deletion` never gated; `order` tasks connector on | 300 | `processEbayCommerceTask(task)` → `{ status }` the worker loop understands (§7.5, §9) |
+| `ebayEventWorker` | onTaskDispatched (its own queue) | — | `buyer_deletion` never gated; `order` tasks connector on | 300 | `processEbayCommerceTask(task)` → `{ status }` the worker loop understands (§7.5, §9) |
 | `revealRestrictedCustomer` | onCall `{companyId, orderId}` | owner, or member with the `restrictedCustomer` grant (§3.3) | never gated; per-user rate limit | 60 | provider-agnostic reveal that writes `piiAccessLog` `restricted_resource_accessed` through `recordPiiAccess` **before** returning |
 | (existing) `retryCommerceEvent` | onCall | owner | — | — | `if (record.provider === "ebay") { await enqueueEbayTask(task, 0); return { ok:true, queued:true }; }` — never processes an eBay row inline (that function does not hold the eBay secrets) |
 | (existing) `commerceEventWorker` | Cloud Tasks | — | — | — | **unchanged**: `secrets: [SHOPIFY_TOKEN_KEY, WOO_TOKEN_KEY, ...SQUARE_SECRETS]`; `processCommerceTaskByProvider` throws `provider_not_on_this_worker` for `ebay` (a task that lands here by mistake is a bug, not a silent skip) |
@@ -235,7 +235,7 @@ functions/commerce/ebay/notification.js       pure: challengeResponse(), parseSi
 functions/commerce/ebay/quota.js              pure verdict (Etsy shape) + per-day counter doc + per-connection stand-down
 functions/commerce/ebay/cursorPlan.js         pure: bisect(window, truncatedAt), nightlyWindow(now, lastFull), catchUpWindow(cursor, now)
 functions/commerce/ebay/status.js             pure: TRANSIENT_ERROR_CODES, BENIGN_ERROR_CODES, STALE_AFTER_MS, specStatusOf(doc, flags, now), cardStateOf(rows)
-functions/commerce/ebay/hashing.js            pure: buyerHash(key, value) = HMAC-SHA256, hex; keyOf(secret) validation
+functions/commerce/ebay/hashing.js            pure: buyerHash(key, value) = HMAC-SHA256, hex; keys are validated by keys.js keyListOf(secret)
 functions/privacy/reveal.js                   pure decision: revealAllowed({ role, memberAccess, orderAssignment }), revealPayloadOf(restrictedDoc)
 functions/test/fixtures/ebay-sandbox-order.json, ebay-sandbox-fulfillments.json   captured sandbox responses (§8.1)
 studioflow-web/lib/studioflow/ebay.ts, app/settings/EbayIntegrationSection.tsx, app/ebay/callback/route.ts, app/ebay/start/page.tsx
@@ -257,13 +257,13 @@ suite enforces it from the first commit.**
 - What runs as `ebay-connector@eggcraft-studio.iam.gserviceaccount.com`: every function in the table
   above that spreads `EBAY_RUNTIME` — the callables, the callback, the two sweeps, the gateway and
   `ebayEventWorker`. The account holds `roles/secretmanager.secretAccessor` on the four `EBAY_*` secrets
-  only, `roles/datastore.user`, `roles/cloudtasks.enqueuer` on the `ebay-events` queue, and
+  only, `roles/datastore.user`, `roles/cloudtasks.enqueuer` on the `ebayEventWorker` queue, and
   `roles/iam.serviceAccountUser` for the Cloud Tasks OIDC call. The default compute account is
   **not** granted the `EBAY_*` secrets.
 - Why a separate worker: `commerceEventWorker` mounts `SHOPIFY_TOKEN_KEY`, `WOO_TOKEN_KEY` and
   `SQUARE_SECRETS` and runs as the default identity; giving it `EBAY_SECRETS` would either hand the
   eBay key to the default identity or hand every other connector's key to the eBay identity. So eBay
-  tasks are enqueued to a second queue (`ebay-events`, same `retryConfig: { maxAttempts: 1 }` and
+  tasks are enqueued to a second queue (the one Cloud Tasks creates for `ebayEventWorker` itself, same `retryConfig: { maxAttempts: 1 }` and
   `rateLimits: { maxConcurrentDispatches: 5 }`) whose handler `ebayEventWorker` is the only place
   `processEbayCommerceTask` runs. `enqueueEbayTask(task, delaySeconds)` mirrors `enqueueCommerceEvent`
   with the queue name changed; the worker loop (health touch, `retrying` re-enqueue) is copied
@@ -685,8 +685,11 @@ bisecting — four times the first draft's 200.
    counts one failed connection and moves on. `app_credentials_invalid` → rethrow with that code; the
    sweep **stops** (one bad secret, one log line, no row touched).
 2. `cursor = cursors.readCursor(db, "ebay", ref.id, "order")`; `window = cursorPlan.catchUpWindow(cursor,
-   data, now, { force, lookbackMs })` → normally `cursors.cursorWindow` = `[max(now−24h, watermark−10min) .. now]`,
-   first pass `[now−24h .. now]` (the owner's backfill is `runEbayImport`, not the sweep) — **except**
+   data, now, { force, lookbackMs })` → normally `cursors.cursorWindow` = `[watermark−10min .. now]`, with the
+   24 h `maxWindowMs` capping only how much of that range **one pass** may cover, never where the next pass
+   starts: a watermark older than 24 h is worked forward pass by pass, and step 3's bisection is what keeps
+   the watermark honest inside each pass. On a connection with no cursor at all the first pass is
+   `[now−24h .. now]` (the owner's backfill is `runEbayImport`, not the sweep) — **except**
    when `data.catchUpDueFromMs > 0` (reconnect / flag-on / long pause, §7.6), in which case
    `fromMs = catchUpDueFromMs − 10 min` regardless of the 24 h cap, and the pass runs as a catch-up
    (`eventOrigin:"catch_up"`, sub-windowed by §7.6).
@@ -936,7 +939,10 @@ filter of §7.1):
 off to on — detected by the sweep as `flagOn && data.lastFlagState === false` (the sweep writes
 `lastFlagState` on every visit), (c) when a connection has been `rateLimitedUntilMs`,
 `reconnect_required` or `environment_mismatch` for more than 24 h (`lastSuccessAtMs < now − 24 h`)
-and becomes eligible again. The next §7.1 pass then starts at `catchUpDueFromMs − 10 min` in 24 h
+and becomes eligible again, and (d) when a connection's watermark has stood still under repeated
+truncation — three consecutive passes recorded `truncated` without the watermark moving — so a window
+too dense for the page budget is re-walked from the watermark in sub-windows rather than waiting for
+the nightly seven-day pass to notice. The next §7.1 pass then starts at `catchUpDueFromMs − 10 min` in 24 h
 sub-windows oldest first (bisection applies inside each), records each completed sub-window, clears
 `catchUpDueFromMs` when it reaches `now`, and writes `syncLog catch_up_completed`. e2e #10 asserts:
 flag off for a simulated 36 h with three orders modified meanwhile → flag on → the next pass applies
@@ -1251,8 +1257,8 @@ the callback lands on the same row and sets `catchUpDueFromMs` (§7.6).
 
 ### 11.1 Registry + state — `lib/studioflow/integrations.ts`
 - Row 105 becomes `{ id:"ebay", name:"eBay", category:"commerce", kind:"native", mark:"E",
-  blurb:"Bring eBay orders, listings, inventory, fulfilment, fees and payouts into the same NivaDesk workflow.",
-  capabilities:["Orders","Listings","Inventory","Fulfilment","Refunds","Fees","Payouts","ChatGPT"], manage:"ebay" }`
+  blurb:"Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
+  capabilities:["Orders","Payments","Refunds"], manage:"ebay" }`
   (§7 chips; the category label shown is the existing "commerce" group — a `Marketplace` category is a
   hub-wide change for Amazon and eBay together, out of this half). No logo file (README forbids a
   redrawn mark); `mark:"E"` stays.
@@ -1340,7 +1346,7 @@ this half.
 
 ### 12.1 Mac / iPhone (Swift, EGGcraft)
 - `NivaDeskIntegrations.swift` 109: `.init(id:"ebay", name:"eBay", category:"commerce", kind:"native",
-  blurb: <same blurb>, capabilities:["Orders","Listings","Inventory","Fulfilment","Refunds","Fees","Payouts","ChatGPT"], manage:"ebay", asset:"", mark:"E")`;
+  blurb: <same blurb>, capabilities:["Orders","Payments","Refunds"], manage:"ebay", asset:"", mark:"E")`;
   `NivaDeskIntegrationSignals` gains `ebayConnections` / `ebayConnectionsNeedingAttention`;
   `detail(signals:)` and `state(signals:)` gain `id == "ebay"` branches copied from Square.
 - `AyarlarView.swift`: `else if integrationsManaging == "ebay" { ebayIntegrationAyari }` (~6505);
@@ -1369,7 +1375,7 @@ this half.
 
 ### 12.2 Android (Kotlin)
 - `IntegrationsHub.kt` 178: `IntegrationProvider("ebay", "eBay", "commerce", "native", <blurb>,
-  listOf("Orders","Listings","Inventory","Fulfilment","Refunds","Fees","Payouts","ChatGPT"), "ebay", "E")`;
+  listOf("Orders","Payments","Refunds"), "ebay", "E")`;
   `IntegrationSignals` gains the eBay pair; `detail()`/`state()` gain `id == "ebay"` branches;
   `IntegrationsHubStateTest.kt` gains Available / Connected / Attention cases for eBay.
 - `SettingsScreen.kt`: `IntegrationsHubDetail` signals add
@@ -1602,8 +1608,11 @@ Owner actions outside the repo (not this task), **in this order**:
    verification token (the challenge is answered without secrets; the deletion POST needs them —
    hence step 3 first), subscribe `MARKETPLACE_ACCOUNT_DELETION`, press *Send Test Notification*
    and confirm a ledger row `done`.
-5. TTL policies for `ebayConnectStates.expireAt`, `deliveries.expireAt`, `ebayDeletionRequests.expireAt`;
-   create the `ebay-events` Cloud Tasks queue in europe-west2.
+5. TTL policies for `ebayConnectStates.expireAt`, `deliveries.expireAt`, `ebayDeletionRequests.expireAt`.
+   No queue to create by hand: `onTaskDispatched` makes `ebayEventWorker`'s queue at deploy time under
+   the function's own name in europe-west2, which is exactly what `enqueueEbayTask` targets
+   (`locations/europe-west2/functions/ebayEventWorker`). Grant the connector account
+   `roles/cloudtasks.enqueuer` on it after the first deploy.
 6. Set `NIVADESK_EBAY_CONNECTOR=1` and the flag doc for the first sandbox seller; run the §14 e2e
    list against the sandbox; capture the `ORDER_CONFIRMATION` payload for the §7.5 follow-up.
 7. Production keyset only after sandbox acceptance; at the flip run `purgeEbaySandboxRows` (§7.7),
