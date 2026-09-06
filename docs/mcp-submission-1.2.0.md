@@ -255,20 +255,49 @@ default of its own. A client that names its scopes still gets exactly those. The
 word would have asked for a grant that could not call `create_order`; it names the same list now, which
 is the string studioflow-web's proxy already emitted when the function set no header.
 
+**Half of that fix is a web deploy, and it is not optional (blocking).** The connect page is
+`studioflow-web/app/chatgpt/connect/ChatGPTConnectClient.tsx` in this worktree, and the page that is
+LIVE still reads `scope: params.get("scope") ?? "orders.read orders.write"`. When ChatGPT names no
+scope, that live page names two — so the server never reaches its own default and the connection is
+minted narrow whatever `nvOAuthDefaultScope()` says. Deploying the function alone corrects the
+challenge, the metadata and the registration response and leaves the actual mint site overriding all
+three: the same defect as this bullet, with one fewer place to look for it. The web deploy goes out
+**before or with** the flag flip — see the new step in §6. Nothing else on this branch needs a web
+deploy, which is precisely why it is easy to miss.
+
 **Flip-day, stated plainly.** A token minted before this change with only `orders.read orders.write`
 will be refused on the finance and notes tools the moment the flag goes on. The refusal names the
 missing scope and tells the user to reconnect, which re-mints the grant at full width. Check the live
 token records before flipping.
 
-Related, and a wire change if taken: `create_inventory_item` advertises `orders.read` today, which is a
-write tool advertising a read scope. Correcting it to `orders.write` is right and belongs in a
-submission, not in a merge.
+Related, and it gets worse the day this is enforced: `create_inventory_item` advertises `orders.read`
+today — a write tool advertising a read scope. While nothing checked scope that was a wire inaccuracy.
+Once `nvMcpAssertScope` runs, `scopesFor("create_inventory_item")` is the list the gate demands, so a
+connection granted only `orders.read` satisfies the scope gate on a tool that creates a document. The
+permission gate still applies (`nvRequireInventoryAccess`, write), so this is not an open door; it is a
+read grant that does not mean what it says. Correcting it to `orders.write` is a wire change and belongs
+in this submission rather than in a merge — and it belongs with the flag, not after it, because
+`NIVADESK_MCP_INVENTORY` is what publishes the tool in the first place.
 
 ### 5.5 Audit and access-log corrections
 
 - `privacy/accessLog.js` `ACCESS_SOURCES` has no `rest` and no `whatsapp`, so those reads are filed as
   `unknown`. Add both.
 - `chatgptWorkspaceAction` stamps its REST reads as `mcp`.
+- **The two bank tools hand over a person and file no row — a decision, and it belongs to this
+  submission.** `get_bank_spending_summary` returns `topMerchants[].merchant` and
+  `recurringSubscriptions[].merchant`; `search_bank_transactions` returns `merchant: tx.counterparty`.
+  A person-to-person payment puts a person in that field, and the registry says so — both declare
+  `pii: ["name"]` — but both declare `piiAccessLogged: false`, so neither read is recorded. The new
+  `get_banking_attention_summary` reads the same collection, declares the same `pii: ["name"]`, and
+  **does** log. So on flip day the assistant's newest door to bank counterparty names is audited and its
+  two oldest doors are not, which is the "one body of data, two doors" objection §5.4 settles for scope
+  and this branch settles for inventory. Closing it is flipping two fields (`piiAccessLogged: true`,
+  `piiSubject: "bank_transaction"`) and costs one fire-and-forget row per call, the same row the other
+  eight logging tools already write; the reason it was not flipped here is that it is a new write on a
+  read path against the live 1.1.1 connection, which is the operator's call and not a merge's. This was
+  written down in `docs/mcp-tool-annotations.md` ("Open items", 1) as a decision for this submission and
+  was missing from this list, so nobody would have met it at submission time.
 - ~~`MCP_ACTIONS_READING_PII` duplicates the registry's `pii` field; the registry should be the only
   list.~~ **Done.** The dispatcher derives the set from `piiAccessLogged`, and builds each row's
   `categories` from the entry's `pii` and `subject.kind` from its new `piiSubject`. Before that every
@@ -316,24 +345,28 @@ two known-wrong `openWorldHint` values live for longer.
 
 Nothing here runs from this worktree; it is the order the steps have to happen in.
 
-1. Close §5.1, §5.2, §5.7 and §5.8. The rest can follow the submission if it is written down; those four
-   change what the reviewer sees.
+1. Close §5.1, §5.2, §5.7 and §5.8, and decide the two bank tools' access-log flags (§5.5). The rest can
+   follow the submission if it is written down; those change what the reviewer sees or what is recorded.
 2. Merge the branch. The listing does not move: the flags are off.
-3. Set the chosen flags on `chatgptMcp` and deploy it (functions only, from a clean main checkout —
+3. **Deploy the web connect page** (§5.4). It is the only web change on this branch and the flag flip is
+   half-done without it: the live page still names `orders.read orders.write` when ChatGPT names none,
+   which overrides the server's own default and mints exactly the narrow token that flip-day then
+   refuses. Before or with step 4, never after.
+4. Set the chosen flags on `chatgptMcp` and deploy it (functions only, from a clean main checkout —
    remember the branch-divergence rule: a blind `firebase deploy --only functions` from a save branch has
    pushed stale functions before).
-4. Record the deployed listing as `test/fixtures/mcp/tools-list.1.2.0.json` from the **deployed** server,
+5. Record the deployed listing as `test/fixtures/mcp/tools-list.1.2.0.json` from the **deployed** server,
    and diff it against the registry projection for those exact flags. The current fixture has no
    all-three-flags state; generate the one that matches what was deployed.
-5. Re-run the five 1.1.1 review test cases on the review account: customer named exactly
+6. Re-run the five 1.1.1 review test cases on the review account: customer named exactly
    "OpenAI Review Test Customer", ESET row `demo-acc_demo006` reset to no receipt.
-6. Add the new review cases: `get_business_attention_summary`, `get_commerce_overview` and
+7. Add the new review cases: `get_business_attention_summary`, `get_commerce_overview` and
    `get_integration_health` on the review workspace — manual orders only, so the reviewer sees channels
    named as not connected instead of zeros — plus one `update_order_status` on an order with automatic
    updates **off**, so the notification boundary can be demonstrated without mailing a test address.
-7. Guide: move the Step B bullets, rebuild the corpus, deploy the seven assistant functions, probe the
+8. Guide: move the Step B bullets, rebuild the corpus, deploy the seven assistant functions, probe the
    live bot with one question per new capability.
-8. Submit 1.2.0 with the release notes below.
+9. Submit 1.2.0 with the release notes below.
 
 ---
 

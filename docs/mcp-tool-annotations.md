@@ -309,8 +309,16 @@ than an annotation, and the surface under review must not move on its own:
    PII check only fires when `piiAccessLogged` is true.
 2. **`create_inventory_item` advertises `orders.read`.** `nvMcpOAuthScopesForTool` has no case for it, so
    it falls to the default — a write tool advertising a read scope. The registry records what is on the
-   wire rather than what it should be, because correcting it changes the OAuth surface. Worth noting that
-   nothing enforces scope at call time today either: `context.scope` is captured and never checked.
+   wire rather than what it should be, because correcting it changes the OAuth surface.
+
+   This item used to end "nothing enforces scope at call time today either: `context.scope` is captured
+   and never checked", and that is no longer true. `context.missingScopes` is one rule over the
+   registry's `scopes` — a delegated grant is the whole of what that caller may do, and an empty grant
+   permits nothing — applied to the ten capabilities by `assertCapability` and to the other 19 by
+   `nvMcpAssertScope`, both gated on `NIVADESK_MCP_ORCHESTRATOR` so the reviewed surface is unmoved.
+   That makes the mis-advertised scope worse rather than harmless once the flag flips: a connection
+   granted only `orders.read` could call this write tool, because the scope the tool demands is the read
+   one it advertises. See `docs/mcp-submission-1.2.0.md` §5.4.
 3. **The URL guard does not run on the fetches it is named for.** `nvAssertPublicHttpsUrl` is called only
    when the URL is *not* `https`, and the guard's first act is to reject anything that is not `https` — so
    on both paths that fetch a model-supplied URL (`attach_bank_receipt`, `create_inventory_item`) it never
