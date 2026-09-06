@@ -73,25 +73,28 @@ class is the channel-policy grade (A lowest, E highest) the WhatsApp gateway wil
 | `get_bank_spending_summary` | true | false | true | false | — | finance.read | — | A |
 | `search_bank_transactions` | true | false | true | false | — | finance.read | — | A |
 | `attach_bank_receipt` | false | true | false | true | — | finance.read, orders.write | external_fetch, ocr | C |
-| `search_inventory` | true | false | true | false | inventory | orders.read | — | A |
+| `search_inventory` | true | false | true | false | inventory, orchestrator | orders.read | — | A |
 | `create_inventory_item` | false | false | false | true | inventory | orders.read | external_fetch | C |
 | `get_business_attention_summary` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
 | `get_commerce_overview` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
 | `search_commerce_orders` | true | false | true | false | orchestrator | orders.read | — | A |
 | `get_channel_performance` | true | false | true | false | orchestrator | orders.read, finance.read | — | A |
 | `get_inventory_overview` | true | false | true | false | orchestrator | orders.read | — | A |
-| `search_inventory_items` | true | false | true | false | orchestrator | orders.read | — | A |
 | `get_payout_reconciliation_overview` | true | false | true | false | orchestrator | finance.read | — | A |
 | `get_integration_health` | true | false | true | false | orchestrator | orders.read | — | A |
 | `get_accounting_sync_status` | true | false | true | false | orchestrator | finance.read | — | A |
 | `get_banking_attention_summary` | true | false | true | false | orchestrator | finance.read | — | A |
 
-Thirty-one tools, in three groups. Nineteen are published to the review connection. Two
-(`search_inventory`, `create_inventory_item`) are dispatchable but hidden behind
-`NIVADESK_MCP_INVENTORY`. Ten more — the cross-channel read capabilities of the orchestration design —
-are hidden behind `NIVADESK_MCP_ORCHESTRATOR`, and each of them arrived in the same commit as the handler
-behind it. A registry entry publishes a name into `tools/list`, and a name in the listing with no handler
-behind it is the list-versus-dispatcher split all over again, so a name is never added here first.
+Thirty tools. Nineteen are published to the review connection. Two (`search_inventory`,
+`create_inventory_item`) are dispatchable but hidden behind `NIVADESK_MCP_INVENTORY`. Ten — the
+cross-channel read capabilities of the orchestration design — are hidden behind
+`NIVADESK_MCP_ORCHESTRATOR`, and each of them arrived in the same commit as the handler behind it. The
+groups overlap by exactly one row: `search_inventory` is in both, because it is the workspace's ONE
+inventory search and either flag may publish it. It was two tools until `search_inventory_items` was
+folded into it (`docs/mcp-inventory-search-decision.md`); the old name survives as an internal alias in
+`orchestrator/index.js` and has no row here, because a row here is a tool on the wire. A registry entry
+publishes a name into `tools/list`, and a name in the listing with no handler behind it is the
+list-versus-dispatcher split all over again, so a name is never added here first.
 
 The ten read capabilities all carry the same four values — `true / false / true / false` — and that is not
 a copy-paste. They are pure functions over data NivaDesk already holds: they write nothing (the accounting
@@ -274,10 +277,16 @@ discovery document exposes as `annotationJustification`.
 
 ### `search_inventory`
 
-- **readOnlyHint true** — Because it reads the workspace's inventoryItems and filters them in memory; it writes nothing, and stock rows carry no person fields.
-- **destructiveHint false** — Because no item is altered by a search.
-- **idempotentHint true** — Because the same query returns the same items and creates nothing.
-- **openWorldHint false** — Because the items are read from NivaDesk and no outside system is contacted.
+The workspace's one inventory search, published by either the inventory flag or the orchestrator flag.
+With the orchestrator flag on it is answered by the orchestrator capability that used to be published
+separately as `search_inventory_items`; with it off, by the older MCP handler. Same collection, same
+gate, same four hints either way — the comparison that settled which implementation survives is
+`docs/mcp-inventory-search-decision.md`.
+
+- **readOnlyHint true** — Because it reads the workspace's inventoryItems and filters them in memory; no item is created, reserved or written, and stock rows carry no person fields.
+- **destructiveHint false** — Because a search does not touch the stock it finds.
+- **idempotentHint true** — Because the same filters return the same items, including two items that share a SKU, which is a search key here and never an identity.
+- **openWorldHint false** — Because there is no listing or channel data to consult: the items are read from NivaDesk and no outside system is contacted.
 
 ### `create_inventory_item`
 
@@ -367,13 +376,6 @@ than an annotation, and the surface under review must not move on its own:
 - **destructiveHint false** — Because counting stock cannot change it: no quantity, reservation or valuation is touched.
 - **idempotentHint true** — Because the same shelf produces the same counts and value on every call.
 - **openWorldHint false** — Because inventory has no external connector at all: the numbers come from NivaDesk's own items and nothing is fetched.
-
-### `search_inventory_items`
-
-- **readOnlyHint true** — Because it filters items in memory and returns rows; no item is created, reserved or written.
-- **destructiveHint false** — Because a search does not touch the stock it finds.
-- **idempotentHint true** — Because the same filters return the same items, including two items that share a SKU, which is a search key here and never an identity.
-- **openWorldHint false** — Because there is no listing or channel data to consult: the search runs entirely over NivaDesk's own inventory.
 
 ### `get_payout_reconciliation_overview`
 

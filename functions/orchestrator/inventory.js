@@ -103,10 +103,19 @@ function inventoryOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() }
 }
 
 /**
- * search_inventory_items (§11).
+ * search_inventory (§11) — the workspace's ONE inventory search.
+ *
+ * The function keeps the name it was written under; the capability it serves is
+ * `search_inventory`, and `search_inventory_items` is an alias
+ * (orchestrator/index.js) for callers that learned the older name.
  *
  * SKU is a search field, never an identity (§27): two items may legitimately
  * carry the same SKU and both are returned.
+ *
+ * `number` and `unit` come from the MCP handler this replaced. They are the
+ * only two fields it returned that this one did not, and neither is cosmetic: a
+ * workshop reads the item NUMBER off a label or a QR code, and an `onHand` of
+ * 12 with no unit is twelve grams or twelve clasps depending on the row.
  */
 function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
   const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
@@ -143,6 +152,11 @@ function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
 
   const rows = items.slice(0, limit).map((item) => ({
     itemId: label(item.id, 200),
+    // The workshop's own item number, the one printed on the label and encoded
+    // in the QR. `safeReference` rather than `safeText` for the reason the
+    // module header gives: a reference that does not look like a reference is
+    // refused outright, never truncated into a shorter injection.
+    number: untrusted.safeReference(item.number, { max: 64 }),
     name: label(item.name),
     sku: label(item.sku, 64),
     serialNumber: label(item.serialNumber, 64),
@@ -150,6 +164,9 @@ function searchInventoryItems(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     status: String(item.status || "available"),
     trackingType: String(item.trackingType || "unique"),
     onHand: String(item.trackingType) === "unique" ? 1 : Number((item.quantity || {}).onHand) || 0,
+    // What `onHand` counts. Without it 12 is twelve grams or twelve clasps and
+    // the model has to guess, which is how a quantity becomes a wrong sentence.
+    unit: label((item.quantity || {}).unit, 24),
     reserved: String(item.trackingType) === "unique" ? 0 : Number((item.quantity || {}).reserved) || 0,
     lowStockAt: Number(item.lowStockAt) || 0,
     location: label(item.location, 64),

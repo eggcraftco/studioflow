@@ -32,14 +32,22 @@ const integrationHealth = require("./integrationHealth");
 const accountingStatus = require("./accountingStatus");
 const attention = require("./attention");
 
-/** capability name → the pure function behind it. */
+/**
+ * capability name → the pure function behind it.
+ *
+ * The key order is the registry's order, because `listCapabilities()` returns
+ * registry order and the contract test compares the two. `search_inventory`
+ * comes first for that reason and no other: its registry row sits with the
+ * inventory tools, ahead of the nine capabilities only the orchestrator flag
+ * publishes.
+ */
 const HANDLERS = Object.freeze({
+  search_inventory: inventory.searchInventoryItems,
   get_business_attention_summary: attention.businessAttentionSummary,
   get_commerce_overview: commerce.commerceOverview,
   search_commerce_orders: commerce.searchCommerceOrders,
   get_channel_performance: commerce.channelPerformance,
   get_inventory_overview: inventory.inventoryOverview,
-  search_inventory_items: inventory.searchInventoryItems,
   get_payout_reconciliation_overview: payouts.payoutReconciliation,
   get_integration_health: integrationHealth.integrationHealth,
   get_accounting_sync_status: accountingStatus.accountingSyncStatus,
@@ -47,6 +55,29 @@ const HANDLERS = Object.freeze({
 });
 
 const CAPABILITY_NAMES = Object.freeze(Object.keys(HANDLERS));
+
+/**
+ * Old capability names that still resolve, and what they resolve to.
+ *
+ * `search_inventory_items` was the orchestrator's own inventory search until
+ * the workspace's two inventory searches were folded into one published tool
+ * (docs/mcp-inventory-search-decision.md). The name stays reachable because a
+ * channel or a caller may already use it, and breaking that buys nothing — but
+ * it is NOT a capability: it has no registry row, so it can never be published,
+ * never appears in `listCapabilities()`, and is never dispatchable by name over
+ * MCP. An alias is a spelling. A second registry row is a second tool on the
+ * wire, and that is what was wrong.
+ */
+const CAPABILITY_ALIASES = Object.freeze({
+  search_inventory_items: "search_inventory"
+});
+
+const resolveCapabilityName = (name) => {
+  const requested = String(name || "");
+  return Object.prototype.hasOwnProperty.call(CAPABILITY_ALIASES, requested)
+    ? CAPABILITY_ALIASES[requested]
+    : requested;
+};
 
 /**
  * Who the access log says made this read.
@@ -116,11 +147,22 @@ function createOrchestrator(deps = {}) {
   }
 
   async function run({ capability, args = {}, ctx, request = {} } = {}) {
-    const name = String(capability || "");
+    // An alias is resolved before anything else, so everything downstream —
+    // the registry row, the flag check, the access-log note, the envelope's
+    // `action` and the rendered summary — speaks the canonical name. A caller
+    // that says `search_inventory_items` gets an answer that says
+    // `search_inventory`, which is the tool that answered.
+    const name = resolveCapabilityName(capability);
     const entry = registry.entryFor(name);
     const handler = HANDLERS[name];
     if (!entry || !handler) throw new contextModule.OrchestratorError("invalid-argument", `Unknown capability "${name}".`);
-    if (entry.flag && flags[entry.flag] !== true) {
+    // `flag` is one key for every capability but the inventory search, which
+    // names two because either flag publishes it. Asking the registry which
+    // flags gate a row — rather than indexing `flags` by `entry.flag` — is the
+    // difference between "on when any of its flags is on" and a lookup that
+    // silently misses when the field is a list.
+    const gates = registry.flagsFor(entry);
+    if (gates.length > 0 && !gates.some((gate) => flags[gate] === true)) {
       throw new contextModule.OrchestratorError("failed-precondition", `The ${name} capability is not switched on in this deployment.`);
     }
 
@@ -232,4 +274,7 @@ function createOrchestrator(deps = {}) {
   return { resolveContext, listCapabilities, run, loaders, flags };
 }
 
-module.exports = { createOrchestrator, HANDLERS, CAPABILITY_NAMES, ACTOR_ROLES, actorRoleFor };
+module.exports = {
+  createOrchestrator, HANDLERS, CAPABILITY_NAMES, CAPABILITY_ALIASES, resolveCapabilityName,
+  ACTOR_ROLES, actorRoleFor
+};

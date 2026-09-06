@@ -83,7 +83,8 @@ check("the slots come out in the §13 order and empty ones are dropped", () => {
  *
  * The list is checked against `orchestrator.CAPABILITY_NAMES` below, because a
  * per-capability rule tested over a hand-picked subset is a rule about the
- * subset. `get_channel_performance` and `search_inventory_items` were both
+ * subset. `get_channel_performance` and the inventory search (then called
+ * `search_inventory_items`, now `search_inventory`) were both
  * missing from the numerals check, and the first of them had the defect that
  * check exists to catch.
  */
@@ -94,7 +95,7 @@ const ALL_CAPABILITIES = () => [
   ["get_business_attention_summary", attention.businessAttentionSummary, fixtures.attentionSnapshot(), {}],
   ["get_banking_attention_summary", attention.bankingAttentionSummary, fixtures.attentionSnapshot(), {}],
   ["get_inventory_overview", inventory.inventoryOverview, fixtures.attentionSnapshot(), {}],
-  ["search_inventory_items", inventory.searchInventoryItems, fixtures.attentionSnapshot(), {}],
+  ["search_inventory", inventory.searchInventoryItems, fixtures.attentionSnapshot(), {}],
   ["get_payout_reconciliation_overview", payouts.payoutReconciliation, fixtures.attentionSnapshot(), {}],
   ["get_integration_health", integrationHealth.integrationHealth, fixtures.mixedSnapshot(), {}],
   ["get_accounting_sync_status", accountingStatus.accountingSyncStatus, accountingSnapshot(), {}]
@@ -116,7 +117,7 @@ check("every number in a summary line exists in the data it summarises", () => {
   // it covers the line that would break it. The old list omitted
   // get_channel_performance — whose "7 channel(s) had orders in this range" was
   // a numeral the renderer counted itself, present nowhere in the payload — and
-  // search_inventory_items, and it passed get_accounting_sync_status by
+  // the inventory search, and it passed get_accounting_sync_status by
   // accident, because that fixture's single connection is called "qbo_1" so the
   // numeral 1 happened to be in `data`.
   for (const [capability, handler, snapshot, args] of ALL_CAPABILITIES()) {
@@ -493,7 +494,7 @@ check("the one incompleteness line quotes the truncated READ, never the page", (
   // truncate at `limit` and say nothing at all.
   const shelf = fixtures.attentionSnapshot();
   shelf.inventoryItems = [...shelf.inventoryItems, { ...shelf.inventoryItems[0], id: "i_low_2" }];
-  const items = envelopeFor("search_inventory_items", inventory.searchInventoryItems, shelf, { limit: 1 });
+  const items = envelopeFor("search_inventory", inventory.searchInventoryItems, shelf, { limit: 1 });
   assert.strictEqual(items.data.count, 1);
   assert.strictEqual(items.data.matched, 2);
   assert.ok(items.warnings.some((row) => row.code === "result_truncated"), "a truncated shelf search still says nothing");

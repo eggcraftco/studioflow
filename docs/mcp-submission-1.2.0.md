@@ -71,10 +71,13 @@ reasoning rather than our conclusion:
 
 ### 2.3 Ten cross-channel read capabilities
 
-`get_business_attention_summary`, `get_commerce_overview`, `search_commerce_orders`,
-`get_channel_performance`, `get_inventory_overview`, `search_inventory_items`,
+`search_inventory`, `get_business_attention_summary`, `get_commerce_overview`,
+`search_commerce_orders`, `get_channel_performance`, `get_inventory_overview`,
 `get_payout_reconciliation_overview`, `get_integration_health`, `get_accounting_sync_status`,
 `get_banking_attention_summary`.
+
+The first of them is also published by `NIVADESK_MCP_INVENTORY` on its own, where an older handler
+answers it. It was a separate capability called `search_inventory_items` until §5.1 was closed.
 
 They live in `functions/orchestrator/` as pure functions over a loaded snapshot, with the MCP tools as
 thin adapters, so the WhatsApp channel can reuse them without a second copy of the business rules
@@ -130,8 +133,8 @@ Nothing changes until a flag is set to `"1"` in the deployed function's environm
 | none (today) | **19** | — |
 | `NIVADESK_MCP_EMAIL_RECEIPTS` | 19 | `attach_bank_receipt` gains `receiptUrl` / `emailReceipt` inputs and two description sentences |
 | `NIVADESK_MCP_INVENTORY` | **21** | adds `search_inventory`, `create_inventory_item`; one sentence appended to `attach_bank_receipt`'s description |
-| `NIVADESK_MCP_ORCHESTRATOR` | **29** | adds the ten read tools; **two annotation corrections** (§3.1); two extra `initialize.instructions` lines |
-| inventory + orchestrator | **31** | all of the above |
+| `NIVADESK_MCP_ORCHESTRATOR` | **29** | adds the ten read tools — one of which is `search_inventory`, with the filters and the freshness block; **two annotation corrections** (§3.1); two extra `initialize.instructions` lines |
+| inventory + orchestrator | **30** | all of the above, and **not 31**: `search_inventory` is the one tool both flags publish, so it is listed once (§5.1) |
 
 ### 3.1 The two annotation corrections — the headline of the release notes, not a footnote
 
@@ -208,20 +211,36 @@ Each item is either a decision only the operator can make or a piece of work wit
 code. None of them is optional in the sense of "we can explain it later" — the reviewer reads the
 listing, and the listing is the claim.
 
-### 5.1 Two inventory searches — pick one (blocking)
+### 5.1 Two inventory searches — CLOSED, one is published
 
-With `NIVADESK_MCP_INVENTORY` and `NIVADESK_MCP_ORCHESTRATOR` both on, `tools/list` carries **31** tools
-including both `search_inventory` (the older MCP handler) and `search_inventory_items` (the orchestrator
-capability). Two tools for one job is the tool sprawl the design forbids, and a reviewer comparing them
-would be right to ask. Options:
+Settled 6 Sep 2026. The full field-by-field comparison and the evidence are in
+`docs/mcp-inventory-search-decision.md`; the short version:
 
-1. publish `search_inventory_items` and drop `search_inventory` from the listing while keeping its
-   dispatch case for any client that learned the name (recommended: the orchestrator version carries the
-   filters and the freshness block);
-2. keep `search_inventory` and leave `search_inventory_items` unpublished, reachable only through the
-   orchestrator for other channels;
-3. submit both with descriptions that say which to use — the weakest option, and the one that invites
-   the question.
+**Neither of them is public.** The rule was "whichever is public in production 1.1.1 today is
+canonical", and the answer to that question is *neither*: production runs with every MCP flag unset, so
+`tools/list` there is the 19 tools and carries no inventory search at all. There was no incumbent to
+protect, so the choice was made on the merits.
+
+**One published name, `search_inventory`; the orchestrator's implementation behind it.** The registry
+row for `search_inventory` is now gated by *both* flags, and `search_inventory_items` has no registry
+row at all — it survives as an internal alias (`orchestrator/index.js` `CAPABILITY_ALIASES`) so a caller
+that learned the name still resolves, but it can never be published or dispatched by name over MCP.
+
+Why this way round rather than option 1 as it was written here (publish `search_inventory_items`, drop
+`search_inventory`): the inventory flag on its own would then have published `create_inventory_item`
+with no search beside it, and the whole point of the search is the sentence in its own description —
+"use it before adding something, so an item the workshop already has gets topped up instead of
+duplicated". A create tool with no search next to it is a duplicate-maker.
+
+What moved, so nothing useful was dropped: the merged tool returns `number` (the item number on the
+label and in the QR) and `unit` (what `onHand` counts), the two fields only the older handler had.
+
+Wire effect: `inventory + orchestrator` is **30** tools, not 31. With the orchestrator flag off nothing
+moves — the inventory-only listing is byte-identical to what it has always been, and the older handler
+still answers it, because everything new on this branch stays behind `NIVADESK_MCP_ORCHESTRATOR`.
+
+Pinned by `test/qa/mcp-one-inventory-search.test.js`, which fails if a second inventory search ever
+appears in a published listing in **any** flag state.
 
 ### 5.2 `update_order_status` idempotency (blocking)
 

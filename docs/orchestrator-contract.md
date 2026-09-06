@@ -558,23 +558,30 @@ every one of them.
 
 | capability | scopes | gates | PII | domains read |
 |------------|--------|-------|-----|--------------|
+| `search_inventory` | orders.read | orders + inventory | — | settings inventory |
 | `get_business_attention_summary` | orders.read finance.read | orders | — | settings orders production inventory bank receiptInbox payouts connections commerceHealth review accounting |
 | `get_commerce_overview` | orders.read finance.read | orders + financial | — | settings orders payouts connections commerceHealth |
 | `search_commerce_orders` | orders.read | orders | name, e-mail | settings orders connections commerceHealth |
 | `get_channel_performance` | orders.read finance.read | orders + financial | — | settings orders payouts connections commerceHealth |
 | `get_inventory_overview` | orders.read | orders + inventory | — | settings inventory |
-| `search_inventory_items` | orders.read | orders + inventory | — | settings inventory |
 | `get_payout_reconciliation_overview` | finance.read | bankFeed | — | settings payouts bank connections |
 | `get_integration_health` | orders.read | orders | — | orders connections commerceHealth review |
 | `get_accounting_sync_status` | finance.read | accountingReader | — | settings connections accounting bank |
 | `get_banking_attention_summary` | finance.read | bankFeed | name | settings bank receiptInbox connections |
 
-`search_inventory_items` is registered as its own tool under the orchestrator flag, while the older
-`search_inventory` is registered under the inventory flag. With both flags on `tools/list` carries two
-inventory searches, which is the tool sprawl §10 of the orchestration spec warns about; the submission
-document (`docs/mcp-submission-1.2.0.md` §5.1) carries it as a decision the operator closes before the
-next listing goes out. For a channel it changes nothing — `run("search_inventory_items", …)` is the
-capability either way.
+`search_inventory` is the one capability in this table that is **not** gated by the orchestrator flag
+alone: its registry row names both `inventory` and `orchestrator`, so either flag publishes it. That is
+deliberate and it is the tool sprawl §10 warns about, closed rather than described. There used to be
+two inventory searches — this capability under the name `search_inventory_items`, and an older MCP
+handler called `search_inventory` under the inventory flag — with the same title over the same
+collection, so with both flags on `tools/list` showed a user two "Search inventory" tools. They are one
+tool now (`docs/mcp-inventory-search-decision.md`).
+
+For a channel almost nothing changes: `run("search_inventory_items", …)` still resolves, because
+`CAPABILITY_ALIASES` in `orchestrator/index.js` maps the old name to the new one before the registry is
+consulted. What does change is that the alias is a spelling and not a capability — it never appears in
+`listCapabilities()`, and the envelope it produces says `action: "search_inventory"`, because that is
+the tool that answered. New code should call `search_inventory`.
 
 "Domains read" is the ceiling, not the promise: a domain is read when the capability declared it **and**
 the caller may see it, so a member whose banking section the answer reports as `not_permitted` does not

@@ -121,11 +121,34 @@ check("every new capability is fully described: title, description, schema, anno
   }
 });
 
-check("the inventory flag and the orchestrator flag do not interfere", () => {
+check("the inventory flag and the orchestrator flag compose, and publish nothing twice", () => {
+  // This used to assert a CONCATENATION — inventoryOnly followed by the ten the
+  // orchestrator adds — which is exactly why it passed while `tools/list`
+  // carried two "Search inventory" tools over one collection. Concatenating two
+  // lists cannot notice that a name is in both of them.
+  //
+  // The two flags now share one tool on purpose: `search_inventory` is the
+  // workspace's only inventory search and either flag may publish it
+  // (docs/mcp-inventory-search-decision.md). So the relation is a set union,
+  // and what is worth asserting is that the union carries no duplicate.
   const both = listings["inventory+orchestrator"].tools.map((tool) => tool.name);
   const inventoryOnly = listings.inventory.tools.map((tool) => tool.name);
   const orchestratorOnly = listings.orchestrator.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(both, [...inventoryOnly, ...orchestratorOnly.slice(19)]);
+
+  assert.deepStrictEqual([...new Set(both)], both,
+    `a tool is published twice with both flags on: ${both.filter((name, i) => both.indexOf(name) !== i).join(", ")}`);
+  assert.deepStrictEqual(
+    both.slice().sort(),
+    [...new Set([...inventoryOnly, ...orchestratorOnly])].sort(),
+    "with both flags on the listing is neither more nor less than what each flag publishes on its own"
+  );
+  // The shared tool, named, so "the union has no duplicates" is a claim about a
+  // real overlap rather than a vacuous one.
+  assert.ok(inventoryOnly.includes("search_inventory") && orchestratorOnly.includes("search_inventory"),
+    "search_inventory is published by either flag; if that stops being true this check has stopped testing an overlap");
+  assert.strictEqual(both.filter((name) => name === "search_inventory").length, 1);
+  assert.ok(!both.includes("search_inventory_items"),
+    "search_inventory_items is an internal alias, never a published tool");
 });
 
 check("the initialize instructions describe what the flag state actually serves", () => {

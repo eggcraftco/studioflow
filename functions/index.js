@@ -24442,7 +24442,14 @@ function nvMcpAvailableActions() {
     "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview",
     "get_bank_spending_summary", "search_bank_transactions", "attach_bank_receipt"
   ];
-  if (NV_MCP_INVENTORY) actions.push("search_inventory", "create_inventory_item");
+  // ONE inventory search, whatever the flags. `search_inventory` is published
+  // by either flag — it is in the orchestrator's capability list as well as
+  // here — so with both on it must be pushed exactly once, and the orchestrator
+  // is the half that pushes it. See docs/mcp-inventory-search-decision.md.
+  if (NV_MCP_INVENTORY) {
+    if (!NV_MCP_ORCHESTRATOR) actions.push("search_inventory");
+    actions.push("create_inventory_item");
+  }
   // The orchestrator's read capabilities. The names come from the registry, so
   // the listing, the dispatcher and the capability table cannot disagree about
   // which of them this deployment offers.
@@ -24626,18 +24633,29 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTSearchBankTransactions(context, args);
     case "attach_bank_receipt":
       return nvChatGPTAttachBankReceipt(context, args);
+    // One tool name, one answer per deployment. With the orchestrator flag on,
+    // the workspace's inventory search IS the orchestrator capability — filters,
+    // freshness block, cap warnings and all. With it off this is the 1.1.1-era
+    // handler, unchanged, because everything new on this branch ships behind
+    // that flag and nothing else may move under it.
     case "search_inventory":
-      return nvChatGPTSearchInventory(context, args);
+      return NV_MCP_ORCHESTRATOR
+        ? nvChatGPTOrchestratorRun(context, "search_inventory", args)
+        : nvChatGPTSearchInventory(context, args);
     case "create_inventory_item":
       return nvChatGPTCreateInventoryItem(context, args);
     // The orchestrator capabilities: one line each, because the work is in
     // functions/orchestrator/ where a second channel can reach it.
+    // `search_inventory_items` is deliberately absent: it is an internal alias
+    // of `search_inventory` (orchestrator/index.js CAPABILITY_ALIASES), not a
+    // published tool, and a dispatcher case for a name the listing does not
+    // carry is exactly the list-versus-dispatcher split this switch was
+    // rewritten to close.
     case "get_business_attention_summary":
     case "get_commerce_overview":
     case "search_commerce_orders":
     case "get_channel_performance":
     case "get_inventory_overview":
-    case "search_inventory_items":
     case "get_payout_reconciliation_overview":
     case "get_integration_health":
     case "get_accounting_sync_status":
@@ -26932,23 +26950,52 @@ function nvMcpOrderToolSchemas() {
       annotations: nvMcpRegistry.annotationsFor("attach_bank_receipt", NV_MCP_FLAGS),
       _meta: { "openai/fileParams": ["receipt"] }
     },
-    ...(NV_MCP_INVENTORY ? [
+    // The workspace's ONE inventory search, published by either inventory flag.
+    //
+    // There were two tools here: this one and `search_inventory_items` down in
+    // the orchestrator block, with the same title over the same collection, so
+    // with both flags on a user was shown two "Search inventory" tools. Neither
+    // was ever public — production runs with every MCP flag unset — so the
+    // choice was made on the merits and is recorded field by field in
+    // docs/mcp-inventory-search-decision.md: this name, the orchestrator's
+    // implementation behind it.
+    //
+    // The schema grows with the flag because the handler does. With the
+    // orchestrator off, this is byte-for-byte the tool the inventory flag has
+    // always published, answered by nvChatGPTSearchInventory; with it on, the
+    // filters below are real and the orchestrator answers.
+    ...(NV_MCP_INVENTORY || NV_MCP_ORCHESTRATOR ? [
       {
         name: "search_inventory",
         title: "Search inventory",
-        description: "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
+        description: NV_MCP_ORCHESTRATOR
+          ? "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId."
+          : "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
         inputSchema: {
           type: "object",
           additionalProperties: false,
           required: [],
           properties: {
             companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            query: { type: "string", description: "What to look for — part of a name, SKU, serial number, brand or location." },
-            limit: { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
+            query: NV_MCP_ORCHESTRATOR
+              ? { type: "string", description: "Part of a name, SKU, serial number, brand, model, category or location." }
+              : { type: "string", description: "What to look for — part of a name, SKU, serial number, brand or location." },
+            ...(NV_MCP_ORCHESTRATOR ? {
+              status: { type: "string", enum: ["available", "partiallyReserved", "reserved", "incoming", "used", "sold", "removed", "archived"] },
+              lowStock: { type: "boolean", description: "Only items at or below their low-stock level." },
+              reserved: { type: "boolean", description: "Only items being held for an order." },
+              location: { type: "string", description: "Only items kept here." },
+              category: { type: "string", description: "Only items in this category." }
+            } : {}),
+            limit: NV_MCP_ORCHESTRATOR
+              ? { type: "integer", minimum: 1, maximum: 50, description: "Maximum items to return (default 20)." }
+              : { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
           }
         },
         annotations: nvMcpRegistry.annotationsFor("search_inventory", NV_MCP_FLAGS)
-      },
+      }
+    ] : []),
+    ...(NV_MCP_INVENTORY ? [
       {
         name: "create_inventory_item",
         title: "Add an inventory item",
@@ -27095,27 +27142,10 @@ function nvMcpOrderToolSchemas() {
         },
         annotations: nvMcpRegistry.annotationsFor("get_inventory_overview", NV_MCP_FLAGS)
       },
-      {
-        name: "search_inventory_items",
-        title: "Search inventory",
-        description: "Search stock by name, SKU, serial number, brand, category or location, and filter by status, low stock, reserved or location. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          required: [],
-          properties: {
-            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            query: { type: "string", description: "Part of a name, SKU, serial number, brand, category or location." },
-            status: { type: "string", enum: ["available", "partiallyReserved", "reserved", "incoming", "used", "sold", "removed", "archived"] },
-            lowStock: { type: "boolean", description: "Only items at or below their low-stock level." },
-            reserved: { type: "boolean", description: "Only items being held for an order." },
-            location: { type: "string", description: "Only items kept here." },
-            category: { type: "string", description: "Only items in this category." },
-            limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum items to return (default 20)." }
-          }
-        },
-        annotations: nvMcpRegistry.annotationsFor("search_inventory_items", NV_MCP_FLAGS)
-      },
+      // `search_inventory_items` stood here, as a second published "Search
+      // inventory" beside the one above. There is one now; this block's schema
+      // moved up to `search_inventory`, which the orchestrator answers whenever
+      // this flag is on.
       {
         name: "get_payout_reconciliation_overview",
         title: "Marketplace payouts against the bank",

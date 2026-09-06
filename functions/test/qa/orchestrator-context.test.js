@@ -123,7 +123,7 @@ check("the inventory section is gated by the inventory predicate, not by the ord
     inventoryAccess: false
   });
   assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_inventory_overview")), /Inventory/);
-  assert.throws(() => context.assertCapability(ctx, registry.entryFor("search_inventory_items")), /Inventory/);
+  assert.throws(() => context.assertCapability(ctx, registry.entryFor("search_inventory")), /Inventory/);
   const sections = context.sectionAccess(ctx);
   assert.strictEqual(sections.inventory, false, "the summary opened a section both inventory tools refuse");
   // Everything the orders area really does grant is untouched.
@@ -242,7 +242,12 @@ checkAsync("only the domains a capability declares are read", async () => {
     loaders: { loadCompany: deps().loadCompany, snapshotFor: async (domains) => { requested = domains; return snapshot; } }
   });
   const ctx = await orchestrator.resolveContext({ uid: "u_owner", companyId: "co_1", scope: "orders.read" });
-  await orchestrator.run({ capability: "search_inventory_items", args: {}, ctx });
+  // Deliberately the OLD name: `search_inventory_items` is an alias of
+  // `search_inventory` now, and an alias that stops resolving is a channel that
+  // stops working. Resolving it here means the alias is exercised by a test
+  // that is about something else, which is where a dead alias would show up.
+  const answer = await orchestrator.run({ capability: "search_inventory_items", args: {}, ctx });
+  assert.strictEqual(answer.action, "search_inventory", "the envelope names the tool that answered, not the alias that was typed");
   assert.deepStrictEqual(requested, ["settings", "inventory"], "an inventory search must not drag orders and connections in behind it");
 });
 

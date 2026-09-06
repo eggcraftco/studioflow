@@ -74,17 +74,23 @@ across `functions/` (excluding `node_modules`) and none exists as a tool, callab
 adopted as-is.
 
 > **Corrected 6 September 2026, after a reviewer measured the listing rather than reading this
-> paragraph.** What follows was the plan; it is not what the code does. `search_inventory_items` **is**
-> published, in the orchestrator flag branch (`functions/orchestrator/registry.js:782`, dispatched at
-> `functions/index.js:24640`), alongside the pre-existing hidden `search_inventory`
-> (`registry.js:585`). So the repository ships two inventory searches when both flags are on, which is
-> exactly the sprawl §10 warns about, and **that is an open decision for the submission rather than a
-> settled one**: either withdraw one of the two before the flip, or write down why both exist.
+> paragraph.** What follows was the plan; it is not what the code did. `search_inventory_items` **was**
+> published, in the orchestrator flag branch, alongside the pre-existing hidden `search_inventory`, so
+> the repository shipped two inventory searches when both flags were on — exactly the sprawl §10 warns
+> about.
 >
 > The arithmetic was wrong as well. Measured across the flag states: 19 published with the
 > orchestrator flag off, 21 with inventory, 29 with the orchestrator, **31 with both** — the
-> orchestrator appends **ten** tools, not nine, and the tenth is `search_inventory_items`, which is
-> why §7 carries no submission description for it.
+> orchestrator appended **ten** tools, not nine, and the tenth was `search_inventory_items`, which is
+> why §7 carried no submission description for it.
+>
+> **Closed the same day.** The two are one tool now. Neither was ever public — production runs with
+> every MCP flag unset, so its listing carries no inventory search at all — so the choice was made on
+> the merits: the published name is `search_inventory`, gated by **both** flags, with the orchestrator's
+> implementation behind it whenever the orchestrator flag is on; `search_inventory_items` has no
+> registry row and survives only as an internal alias. Both flags on is **30** tools, not 31. The
+> field-by-field comparison, what was folded in rather than dropped, and the test that fails if a second
+> inventory search ever appears in any flag state are in `docs/mcp-inventory-search-decision.md`.
 
 ## 1. Annotations
 
@@ -152,7 +158,7 @@ policy only; not on the wire).
 | 17 | get_bank_spending_summary | — | true | false | true | false | unchanged | finance.read | A / L1 |
 | 18 | search_bank_transactions | — | true | false | true | false | unchanged | finance.read | A / L1 |
 | 19 | attach_bank_receipt | — | false | true | false | true | unchanged | finance.read, orders.write | C / L2 |
-| 20 | search_inventory | NV_MCP_INVENTORY | true | false | true | false | hidden | (default orders.read) → orders.read | A / L1 |
+| 20 | search_inventory | NV_MCP_INVENTORY **or** NV_MCP_ORCHESTRATOR | true | false | true | false | hidden | (default orders.read) → orders.read | A / L1 |
 | 21 | create_inventory_item | NV_MCP_INVENTORY | false | false | false | true | hidden | (default orders.read, wrong) → orders.write | C / L2 |
 | 22 | get_business_attention_summary | NV_MCP_ORCHESTRATOR | true | false | true | false | new | orders.read, finance.read | A / L1 |
 | 23 | get_commerce_overview | NV_MCP_ORCHESTRATOR | true | false | true | false | new | finance.read | A / L1 |
@@ -1125,12 +1131,20 @@ sync, so its freshness row is `state: "unsupported"` and `inventoryLastSync` is 
 
 #### search_inventory (existing hidden tool, extended)
 
-Adds `status`, `lowStock`, `reserved`, `location`, `channel`, `mappingIssue` to the input schema in the
-same `NV_MCP_INVENTORY` branch (invisible while the flag is off). The `status` enum is the runtime's own
-`ITEM_STATUSES` (inventory.js:43): `available`, `partiallyReserved`, `reserved`, `incoming`, `used`,
-`sold`, `removed`, `archived` — not a paraphrase. `channel` and `mappingIssue` return an empty result with
-warning `unsupported_metric` (no mapping data). SKU stays a search field, not an identity (§27). Gate
-unchanged.
+Adds `status`, `lowStock`, `reserved`, `location` and `category` to the input schema. The `status` enum is
+the runtime's own `ITEM_STATUSES` (inventory.js:43): `available`, `partiallyReserved`, `reserved`,
+`incoming`, `used`, `sold`, `removed`, `archived` — not a paraphrase. SKU stays a search field, not an
+identity (§27). Gate unchanged.
+
+**As shipped, with two deliberate differences from the paragraph above.** The extension rides
+`NV_MCP_ORCHESTRATOR`, not `NV_MCP_INVENTORY`, because everything new on this branch does and the
+inventory-only listing has to stay byte-identical to what it already publishes; with that flag on, the
+tool IS the orchestrator capability. And `channel` / `mappingIssue` are **not** declared on the schema:
+the handler still answers them with `unsupported_metric` for any caller that sends them, but advertising
+two inputs that can only ever return nothing invites a model to use them. This is also where the
+implementation had drifted furthest from the plan — the extension had been built as a *second* tool,
+`search_inventory_items`, rather than as an extension of this one. It is one tool again;
+`docs/mcp-inventory-search-decision.md` has the comparison and the decision.
 
 #### get_payout_reconciliation_overview (§11)
 
@@ -1735,7 +1749,7 @@ History: 1.0.0 published; 1.1.0 rejected (test-case customer name + annotations)
 after commit 68222996 and rejected on the annotation/justification wording (§1). 1.2.0 is the next version
 and the annotation justification is its release blocker.
 
-### Tool descriptions for the new tools (§21, §30) — ten are published; the tenth, `search_inventory_items`, still has no description here (see §0)
+### Tool descriptions for the new tools (§21, §30) — ten are published; the tenth is the inventory search, described with the extended `search_inventory` below (see §0)
 
 On the wire, part of the catalogue freeze, and validated by CI — so they are written here rather than left
 to implementation. Each follows §21: what it does, when to use it, the read/write boundary, the provider

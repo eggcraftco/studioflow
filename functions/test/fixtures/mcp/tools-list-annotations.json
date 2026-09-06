@@ -1,6 +1,6 @@
 {
   "recorded": "2026-09-06",
-  "note": "names + annotations + advertised scopes of tools/list, per review-flag state. 'off' is the listing the 1.1.1 review connection is served: it was recorded from index.js at commit d4399da1, before the annotations moved into orchestrator/registry.js, so a change here means the reviewed surface moved.",
+  "note": "names + annotations + advertised scopes of tools/list, per review-flag state. 'off' is the listing the 1.1.1 review connection is served: it was recorded from index.js at commit d4399da1, before the annotations moved into orchestrator/registry.js, so a change here means the reviewed surface moved. The two orchestrator states were re-recorded when the workspace's two inventory searches were folded into one published tool (docs/mcp-inventory-search-decision.md): search_inventory replaced search_inventory_items in both, and inventory+orchestrator went from 31 tools to 30. The off and inventory states were NOT touched by that change and are still the d4399da1 recording.",
   "states": {
     "off": {
       "flags": {},
@@ -740,6 +740,18 @@
           ]
         },
         {
+          "name": "search_inventory",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
           "name": "get_business_attention_summary",
           "annotations": {
             "readOnlyHint": true,
@@ -792,18 +804,6 @@
         },
         {
           "name": "get_inventory_overview",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          },
-          "scopes": [
-            "orders.read"
-          ]
-        },
-        {
-          "name": "search_inventory_items",
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -1179,18 +1179,6 @@
         },
         {
           "name": "get_inventory_overview",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          },
-          "scopes": [
-            "orders.read"
-          ]
-        },
-        {
-          "name": "search_inventory_items",
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,

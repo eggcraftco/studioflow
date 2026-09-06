@@ -144,10 +144,19 @@ check("capability output carries no field that looks like a credential", () => {
 check("every published capability has a handler, and every handler is published", () => {
   const registry = require("../../orchestrator/registry");
   const { CAPABILITY_NAMES } = require("../../orchestrator");
+  // What the orchestrator flag adds to the always-published nineteen. The
+  // second filter this used to carry — "and not published by the inventory
+  // flag" — was a no-op when it was written and became wrong the moment
+  // `search_inventory` started being published by EITHER flag: it removed the
+  // one capability that is in both projections, and the comparison below then
+  // demanded a handler list with a hole in it.
   const published = registry.publishedNames({ orchestrator: true })
-    .filter((name) => !registry.publishedNames({}).includes(name) && !registry.publishedNames({ inventory: true }).includes(name));
+    .filter((name) => !registry.publishedNames({}).includes(name));
   assert.deepStrictEqual(published.slice().sort(), CAPABILITY_NAMES.slice().sort(),
     "a name in tools/list with no handler behind it is the list-versus-dispatcher split all over again");
+  // `create_inventory_item` is published by the inventory flag and is not a
+  // capability; with the orchestrator flag alone it must not appear at all.
+  assert.ok(!published.includes("create_inventory_item"), "the inventory write tool is not an orchestrator capability");
 });
 
 check("every capability declares only domains the loader knows how to read", () => {

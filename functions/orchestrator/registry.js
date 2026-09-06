@@ -582,12 +582,31 @@ const TOOL_REGISTRY = [
     }
   },
   {
+    // THE workspace's inventory search — one tool, one row, whatever the flags.
+    //
+    // There were two: this one under the inventory flag and an orchestrator
+    // capability called `search_inventory_items` under the orchestrator flag,
+    // so with both flags on `tools/list` carried two tools with the same title
+    // ("Search inventory") over the same collection. Neither was ever public —
+    // production runs with every MCP flag unset — so there was no incumbent to
+    // protect and the choice could be made on the merits: the name here, the
+    // orchestrator's implementation behind it, and `search_inventory_items`
+    // kept as an internal alias for callers that learned that name
+    // (orchestrator/index.js CAPABILITY_ALIASES). The comparison that settled
+    // it, field by field, is docs/mcp-inventory-search-decision.md.
+    //
+    // Two flags, because both surfaces need this one search: `inventory` alone
+    // publishes it beside `create_inventory_item`, and `orchestrator` alone
+    // publishes it as one of the ten read capabilities.
     name: "search_inventory",
     title: "Search inventory",
     domain: "inventory",
-    flag: "inventory",
+    flag: ["inventory", "orchestrator"],
     scopes: ["orders.read"],
-    permission: { guard: "nvRequireInventoryAccess", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false },
+    // `inventory: true` is the orchestrator's own gate (context.assertCapability
+    // → ctx.inventoryAccess, which index.js wires to nvRequireInventoryAccess),
+    // so the predicate is the same one the flag-off handler throws from.
+    permission: { guard: "nvRequireInventoryAccess", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false, inventory: true },
     riskClass: "A",
     minAssurance: 1,
     pii: [],
@@ -597,11 +616,12 @@ const TOOL_REGISTRY = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     liveAnnotations: null,
     pendingGuard: null,
+    domainNeeds: ["settings", "inventory"],
     justification: {
-      readOnlyHint: "Because it reads the workspace's inventoryItems and filters them in memory; it writes nothing, and stock rows carry no person fields.",
-      destructiveHint: "Because no item is altered by a search.",
-      idempotentHint: "Because the same query returns the same items and creates nothing.",
-      openWorldHint: "Because the items are read from NivaDesk and no outside system is contacted."
+      readOnlyHint: "Because it reads the workspace's inventoryItems and filters them in memory; no item is created, reserved or written, and stock rows carry no person fields.",
+      destructiveHint: "Because a search does not touch the stock it finds.",
+      idempotentHint: "Because the same filters return the same items, including two items that share a SKU, which is a search key here and never an identity.",
+      openWorldHint: "Because there is no listing or channel data to consult: the items are read from NivaDesk and no outside system is contacted."
     }
   },
   {
@@ -778,30 +798,10 @@ const TOOL_REGISTRY = [
       openWorldHint: "Because inventory has no external connector at all: the numbers come from NivaDesk's own items and nothing is fetched."
     }
   },
-  {
-    name: "search_inventory_items",
-    title: "Search inventory",
-    domain: "inventory",
-    flag: "orchestrator",
-    scopes: ["orders.read"],
-    permission: { guard: "nvRequireInventoryAccess", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false, inventory: true },
-    riskClass: "A",
-    minAssurance: 1,
-    pii: [],
-    piiAccessLogged: false,
-    piiSubject: null,
-    effects: [],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    liveAnnotations: null,
-    pendingGuard: null,
-    domainNeeds: ["settings", "inventory"],
-    justification: {
-      readOnlyHint: "Because it filters items in memory and returns rows; no item is created, reserved or written.",
-      destructiveHint: "Because a search does not touch the stock it finds.",
-      idempotentHint: "Because the same filters return the same items, including two items that share a SKU, which is a search key here and never an identity.",
-      openWorldHint: "Because there is no listing or channel data to consult: the search runs entirely over NivaDesk's own inventory."
-    }
-  },
+  // `search_inventory_items` used to be registered here, beside
+  // get_inventory_overview, as a second published inventory search. It is now
+  // the `search_inventory` entry above — one row, one published name — and the
+  // old name survives only as an internal alias in orchestrator/index.js.
   {
     name: "get_payout_reconciliation_overview",
     title: "Marketplace payouts against the bank",
@@ -927,10 +927,30 @@ function normalizeFlags(flags = {}) {
   };
 }
 
+/**
+ * The flags that can publish one entry, always as a list.
+ *
+ * `flag` is a single key for all but one tool. `search_inventory` names two,
+ * because it is the workspace's ONE inventory search and both flags that can
+ * open an inventory surface have to be able to publish it: the inventory flag
+ * alone publishes it beside `create_inventory_item` (whose description tells
+ * the model to search before it adds, so a create tool with no search beside it
+ * is a duplicate-maker), and the orchestrator flag alone publishes it as one of
+ * the ten read capabilities. What it must never be is TWO tools — see
+ * docs/mcp-inventory-search-decision.md and the invariant in
+ * test/qa/mcp-one-inventory-search.test.js.
+ */
+function flagsFor(entry) {
+  if (!entry || !entry.flag) return [];
+  return Array.isArray(entry.flag) ? entry.flag : [entry.flag];
+}
+
 /** True when the deployment publishes this entry under the given flags. */
 function isPublished(entry, flags) {
-  if (!entry.flag) return true;
-  return normalizeFlags(flags)[entry.flag] === true;
+  const gates = flagsFor(entry);
+  if (gates.length === 0) return true;
+  const on = normalizeFlags(flags);
+  return gates.some((gate) => on[gate] === true);
 }
 
 /** Published entries, in tools/list order. */
@@ -1112,8 +1132,14 @@ function assertRegistry(table = TOOL_REGISTRY, handlerSource = null) {
     seen.add(name);
     if (/(^|_)(test|internal|debug|dev)(_|$)/i.test(name)) fail(`"${name}" reads like an internal action, not a published tool.`);
 
-    if (entry.flag !== null && !Object.prototype.hasOwnProperty.call(FLAG_ENV, entry.flag)) {
-      fail(`"${name}" is gated by an unknown flag "${entry.flag}".`);
+    if (entry.flag !== null) {
+      const gates = flagsFor(entry);
+      if (gates.length === 0) fail(`"${name}" has an empty flag list; use null for "always published".`);
+      for (const gate of gates) {
+        if (!Object.prototype.hasOwnProperty.call(FLAG_ENV, gate)) {
+          fail(`"${name}" is gated by an unknown flag "${gate}".`);
+        }
+      }
     }
 
     // 1. Four explicit booleans, and nothing else, in both value sets.
@@ -1326,6 +1352,7 @@ module.exports = {
   FLAG_ENV,
   flagsFromEnv,
   normalizeFlags,
+  flagsFor,
   publishedEntries,
   publishedNames,
   publishedForChannel,

@@ -144,7 +144,11 @@ function summaryFor(envelopeRow, { style = "chat" } = {}) {
     }
     if (readable(data.value)) lines.push(line("finance", `Stock value ${money(data.value.cost)} ${safe(data.value.currency, 12)}.`));
     else if (withheld(data.value)) lines.push(line("finance", "Stock value is not shown in this channel."));
-  } else if (capability === "search_inventory_items") {
+  } else if (capability === "search_inventory") {
+    // The capability was called `search_inventory_items` until the two
+    // inventory searches were folded into one published tool. run() resolves
+    // the old name to this one before the renderer is reached, so there is no
+    // second branch to keep in step.
     lines.push(line("result", `${data.count} item(s) listed of ${data.matched} matching.`));
   } else if (capability === "get_payout_reconciliation_overview") {
     if (readable(data.totals)) {
