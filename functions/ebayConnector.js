@@ -559,11 +559,25 @@ function createEbayConnectorFunctions(deps) {
       await health.touchHealth(db(), { provider: "ebay", connectionId: id, companyId, kind: "success", now: now(), FieldValue }).catch(() => undefined);
       answer(200, { ok: true, outcome: "connected", rid });
     } catch (error) {
-      // The one error message this handler may log: §14.1 pins EbayOAuthError's
-      // message to eBay's own error / error_description, so no code rides in it.
-      console.error("ebayOAuthCallback failed:", String(error?.message || error).slice(0, 200));
-      const cls = String(error?.errorClass || events.classifyError(error));
-      answer(200, { ok: false, outcome: "error", reason: cls === "auth" ? "token" : "exchange", rid });
+      // §5.4's one logging exception, applied at exactly its stated width.
+      // §14.1 pins the MESSAGE of an EbayOAuthError to eBay's own error /
+      // error_description, and pins nothing else — but the try above is far
+      // wider than the two oauth calls: storeCredentials, the connection read
+      // and write, the state merge, the cursor read and the health touch all
+      // land here too, and none of their messages is pinned by anything. A
+      // future throw built by interpolating the code, the state or a token into
+      // its message would otherwise ship straight into Cloud Logging past every
+      // pin in the suite — the pins constrain this line, not what reaches it. So the
+      // message is logged ONLY for the pinned class — matched by `name`, not
+      // `instanceof`, because `oauth` is an injected dep and a second copy of
+      // the module (or a subclass) would slip an identity check — and every
+      // other throw is a fixed string plus its classification word, which comes
+      // from a closed vocabulary and can carry no value.
+      const cls = String(error?.errorClass || events.classifyError(error) || "");
+      const errorClass = events.ERROR_CLASSES.has(cls) ? cls : "unknown";
+      if (error?.name === "EbayOAuthError") console.error("ebayOAuthCallback failed:", String(error?.message || "").slice(0, 200));
+      else console.error(`ebayOAuthCallback failed: rid=${rid} class=${errorClass}`);
+      answer(200, { ok: false, outcome: "error", reason: errorClass === "auth" ? "token" : "exchange", rid });
     }
     } catch {
       // The backstop, not a control: every expected condition is answered above

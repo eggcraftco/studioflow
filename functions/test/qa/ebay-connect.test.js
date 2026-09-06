@@ -313,11 +313,14 @@ const said = (res) => JSON.stringify(res.payload);
     assert.ok(body.includes("req.originalUrl") && body.includes("req.rawBody"), "the stated query-string mechanism and the raw bytes");
     assert.ok(/maxInstances: 10/.test(body), "a bounded bill for an unkeyed flood");
     // One console line in this handler may carry an error message: §14.1 pins
-    // EbayOAuthError's message to eBay's own error / error_description.
+    // EbayOAuthError's message to eBay's own error / error_description. The pin
+    // counts the line; it cannot see which throws reach it, and the try around
+    // it is wider than the exception — so the guard is pinned too.
     const consoleLines = body.split("\n").filter((l) => /console\.(log|warn|error)\(/.test(l));
     const withMessage = consoleLines.filter((l) => /error\??\.(message|stack)/.test(l));
     assert.deepStrictEqual(withMessage.length, 1, withMessage.join(" | "));
     assert.ok(withMessage[0].includes('console.error("ebayOAuthCallback failed:"'), withMessage[0]);
+    assert.ok(/error\?\.name === "EbayOAuthError"/.test(withMessage[0]), "the message line is reached only for the class §14.1 pins");
     assert.ok(!/error\??\.stack/.test(body), "no stack anywhere");
     assert.ok(source.includes("crypto.timingSafeEqual(offered, expected)"), "the digests are compared in constant time");
     assert.ok(!source.includes("function connectRedirect"), "connectRedirect had one caller and is gone");
@@ -495,6 +498,34 @@ const said = (res) => JSON.stringify(res.payload);
     assert.deepStrictEqual(limited, { ok: true, healthy: false, reason: "rate_limited" });
     store.write(`ebayConnections/${connectionId}`, { ...store.read(`ebayConnections/${connectionId}`), status: "reconnect_required", lastErrorCode: "credentials_rejected" });
     assert.deepStrictEqual(await fns.verifyEbayConnection({ auth, data: { connectionId } }), { ok: true, healthy: false, reason: "credentials_rejected" });
+  });
+
+  await check("a throw the design does not pin — anything but EbayOAuthError inside the exchange block — is logged as a class word, never as a message", async () => {
+    // §5.4's one logging exception is EbayOAuthError's message, which §14.1 pins
+    // to eBay's own error / error_description. The try it sits in is wider than
+    // that: the token box, three Firestore writes, the cursor read and the health
+    // touch all land in the same catch, and nothing pins THEIR messages. The
+    // source pin cannot see this — it counts the log line, not what can reach it
+    // — so the behaviour is pinned here, with a throw carrying a marker value.
+    const MARKER = "MARKER-VALUE-that-must-never-be-logged";
+    watch(MARKER);
+    const { fns } = buildEbay({ oauth: { fetchIdentity: async () => { throw new Error(`a Firestore-shaped failure carrying ${MARKER}`); } } });
+    const begun = await fns.beginEbayConnect({ auth, data: {} });
+    const before = captured.length;
+    const res = await callbackPost(fns, { state: begun.state, nonce: begun.nonce });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.payload.reason, "exchange", said(res));
+    const lines = captured.slice(before);
+    assert.ok(lines.some((l) => l.includes("ebayOAuthCallback failed") && l.includes("class=unknown")), lines.join(" | "));
+    for (const line of lines) { assert.ok(!line.includes(MARKER), line); assert.ok(!line.includes(MARKER.slice(0, 8)), line); }
+    // …and the pinned class still logs its message, which is where an exchange
+    // refusal's cause actually lives.
+    const pinned = buildEbay();
+    const begun2 = await pinned.fns.beginEbayConnect({ auth, data: {} });
+    const mark = captured.length;
+    const refused = await callbackPost(pinned.fns, { state: begun2.state, nonce: begun2.nonce, code: "bad-code" });
+    assert.strictEqual(refused.payload.reason, "token", said(refused));
+    assert.ok(captured.slice(mark).some((l) => l.includes("ebayOAuthCallback failed:") && l.includes("invalid_grant")), "the EbayOAuthError message is the one that may be logged");
   });
 
   await check("LOG PIN — not one console line on any path carries a code, a state, a nonce, a signature, or even their first eight characters", async () => {

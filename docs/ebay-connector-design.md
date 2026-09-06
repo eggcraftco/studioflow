@@ -944,7 +944,8 @@ reaches the screen.
 | Environment mismatch | Function | 200 `reason=environment`, state burned | "This eBay account belongs to a different environment." | nothing |
 | Identity 403 / no seller | Function | 200 `reason=no_seller` | "eBay did not tell us which seller account this is. Reconnect and approve every permission." | nothing |
 | Exchange refused (auth class) | Function | 200 `reason=token` | "eBay did not complete the connection. Try again." | `ebayOAuthCallback failed:` + the truncated `EbayOAuthError` message, which §14.1 pins to be built from eBay's `error` / `error_description` only |
-| Exchange failed (anything else) | Function | 200 `reason=exchange` | same | as above |
+| Exchange failed (anything else from `commerce/ebay/oauth.js`) | Function | 200 `reason=exchange` | same | as above |
+| Anything else in the connect block throwing (the token box, a Firestore write, the cursor read, the health touch) | Function | 200 `reason=token` / `exchange` by class | same | `ebayOAuthCallback failed: rid=<rid> class=<word>` — **never** the message: §14.1 pins `EbayOAuthError`'s message and nothing else, so nothing else gets to log one |
 | Unexpected throw anywhere in steps 1–10 | Function | **400** `{"ok":false}` | `reason=unavailable` | `ebay callback: refused` — a fixed string and nothing else (see *Logging*) |
 | Function unreachable (DNS, TLS, refused) | Web | no HTTP result | `reason=unavailable` → "eBay did not complete the connection. Try again." | `ebay callback relay rid=<rid> unreachable` |
 | Function answered non-200 | Web | — | same | `ebay callback relay rid=<rid> status=<n>` |
@@ -973,6 +974,20 @@ behaviour rather than the code:
    string plus values from the allowed list. The existing
    `console.error("ebayOAuthCallback state failed:", error?.message || error)` at
    `functions/ebayConnector.js:417` is **rewritten**, not kept.
+
+   **The exception is applied at the log site, by class, because the `try` around it is wider than the
+   exception.** The connect block does not wrap only `exchangeCode` and `fetchIdentity`: `storeCredentials`,
+   the connection read and write, the `ebayConnectStates` merge, the cursor read and the health touch all
+   throw into the same `catch`, and §14.1 pins none of their messages. None of them can carry a listed
+   value today — `state` has passed its regex before `.doc()` sees it, `id` is sanitised, the code exists
+   only inside the oauth call — but "today" is the whole of that guarantee, and the source pin counts the
+   log LINE, not the throws that can reach it. So the line reads
+   `if (error?.name === "EbayOAuthError") console.error("ebayOAuthCallback failed:", …)` and every other
+   throw is logged as `ebayOAuthCallback failed: rid=<rid> class=<word>`, where the word comes from
+   `ERROR_CLASSES` — a closed vocabulary that can carry no value. The class is matched by `name`, not by
+   `instanceof`: `oauth` is an injected dependency, so a second copy of the module or a subclass would slip
+   an identity check. A future `throw new Error(\`… ${code}\`)` anywhere in those forty-five lines now logs
+   its class and nothing else, instead of shipping green past every pin in the suite.
 2. **An uncaught throw is logged by the platform, with the stack and the message.** Steps 1–10 contain no
    try/catch today, so any throw in them — a Buffer method on an unexpected type, a malformed header, a
    Firestore argument error — produces exactly the exposure this section exists to prevent, through a
@@ -1138,8 +1153,9 @@ work in this change.** `functions/test/qa/helpers/ebayHarness.js` is **not** rea
 | 24 | `state` = `"abc/def"`, `"a//b"`, `"x".repeat(1600)`, `"short"` in an otherwise valid signed body | 400 `{"ok":false,"rid"}`, `states().doc()` never called, and the log pin still passes. (Firestore's own `documentPath` error text embeds the rejected path, and a 1500-byte id is legal, so neither `.doc()` nor a length check is a filter) |
 | 25 | `code` of 4097 characters; `nonce` of 201 characters | 400 `{"ok":false,"rid"}` |
 | 26 | **Log pin** | `console.log/warn/error` captured across the whole suite. Assert that no captured line contains the code, the state, the nonce or the signature of any case above — **and also that it contains none of their first 8 characters**, which is what catches a truncated echo like `JSON.parse`'s ten-character prefix. Assert additionally that the only `rid` appearing in any line is one that matches `/^[0-9a-f]{16}$/` |
+| 26b | **The unpinned throw** | a throw inside the connect block that is **not** an `EbayOAuthError` — `fetchIdentity` raising a plain `Error` whose message carries a marker value — answers `reason=exchange` and logs `class=unknown`, with the marker in no line. The source pin cannot see this: it counts the log line, not what can reach it |
 | 27 | **Response pin** | `JSON.stringify(res.payload)` for every case contains no code, state or nonce value, and no 8-character prefix of one. The rid is checked against the shape, not against a fixture value — case 23 is the reason |
-| 28 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read, no `res.redirect` call, no `JSON.stringify(req.body)`, no `req.rawBody \|\|` fallback, no `"cancelled"` literal, and exactly one `console.*` call carrying an `error.message` — the `ebayOAuthCallback failed:` line §14.1 pins to eBay's own `error`/`error_description` — with no `error.stack` anywhere; it does contain `req.originalUrl` (the stated query-string mechanism) and `req.rawBody`; and the file still contains `crypto.timingSafeEqual` and no `connectRedirect`. Scoped to the handler, **not** the file: `applyEbayOrder` compares `platform_status === "cancelled"` and must keep doing so |
+| 28 | **Source pin** | `ebayOAuthCallback`'s body contains no `req.query` read, no `res.redirect` call, no `JSON.stringify(req.body)`, no `req.rawBody \|\|` fallback, no `"cancelled"` literal, and exactly one `console.*` call carrying an `error.message` — the `ebayOAuthCallback failed:` line §14.1 pins to eBay's own `error`/`error_description`, **and that line carries the `error?.name === "EbayOAuthError"` guard**, because counting the line says nothing about which throws reach it — with no `error.stack` anywhere; it does contain `req.originalUrl` (the stated query-string mechanism) and `req.rawBody`; and the file still contains `crypto.timingSafeEqual` and no `connectRedirect`. Scoped to the handler, **not** the file: `applyEbayOrder` compares `platform_status === "cancelled"` and must keep doing so |
 
 **qa — `commerce-ebay-wiring.test.js`:** `EBAY_SECRET_PARAMS` now names **five** secrets including
 `EBAY_CALLBACK_KEY` (the existing row says four and must be updated); the array is still built **only**
