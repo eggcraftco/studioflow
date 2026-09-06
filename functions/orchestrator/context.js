@@ -191,13 +191,23 @@ function assertCapability(ctx, entry) {
  * Which sections of a multi-section answer this context may see. A section the
  * role cannot see is NAMED and left empty — "Banking items are not included for
  * your role" — rather than silently missing, which reads as "nothing to report".
+ *
+ * Every line is the SAME predicate as the capability that owns that data.
+ * `inventory` used to read `ctx.areas.orders`, which is looser than the gate on
+ * get_inventory_overview and search_inventory_items (`permission.inventory` →
+ * nvRequireInventoryAccess: owner, OR the orders area AND an order role that
+ * can fully edit). A member who fell between those two predicates was refused
+ * both inventory tools and then handed item names and on-hand levels by the
+ * attention summary's `stock_low` item — the assistant as the looser door into
+ * the same data, which is the thing accounting/core/access.js was written in
+ * this branch to prevent. Two predicates over one body of data is the defect.
  */
 function sectionAccess(ctx) {
   return {
     orders: ctx.areas.orders === true,
     shipping: ctx.areas.orders === true,
     payments: ctx.financialInfo === true && !ctx.workflowOnly,
-    inventory: ctx.areas.orders === true,
+    inventory: ctx.inventoryAccess === true,
     banking: ctx.areas.bankFeed === true && !ctx.workflowOnly,
     payouts: ctx.areas.bankFeed === true && !ctx.workflowOnly,
     accounting: ctx.accountingReader === true && !ctx.workflowOnly,

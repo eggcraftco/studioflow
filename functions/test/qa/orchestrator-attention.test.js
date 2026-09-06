@@ -125,6 +125,28 @@ check("sections a role cannot see are named and empty, not silently missing", ()
   assert.ok(!result.data.items.some((item) => item.type === "receipt_missing"), "no banking item may leak through");
 });
 
+check("a member both inventory tools refuse gets no stock item here either", () => {
+  // The orders area is not the inventory gate. A member with the orders area
+  // and an order role that cannot fully edit is refused get_inventory_overview
+  // and search_inventory_items; the summary used to hand the same items over
+  // anyway, names and on-hand levels included.
+  const snapshot = fixtures.attentionSnapshot();
+  const noInventory = fixtures.ownerContext({
+    isOwner: false,
+    areas: { orders: true, dashboard: true, customers: true, bankFeed: true },
+    inventoryAccess: false
+  });
+  const result = run(snapshot, {}, noInventory);
+  assert.ok(!result.data.items.some((item) => item.type === "stock_low"),
+    "a shelf the caller may not open must not arrive as an attention item");
+  const section = result.data.sections.find((row) => row.id === "inventory");
+  assert.strictEqual(section.status, "not_permitted");
+  assert.strictEqual(section.itemCount, 0);
+  assert.ok(result.warnings.some((row) => row.code === "section_not_permitted" && row.section === "inventory"));
+  // The owner in the same workspace still gets it: this is a gate, not a removal.
+  assert.ok(run(snapshot).data.items.some((item) => item.type === "stock_low"));
+});
+
 check("the reorder item is the workshop's own stock, never a customer's", () => {
   // stock_low reads the same lowStockItems() the overview lists, so the list's
   // disagreement with its own count arrived here too: a customer's watch, in

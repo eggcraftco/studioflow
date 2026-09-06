@@ -111,6 +111,27 @@ check("the accounting gate is stricter than the bankFeed area, and is not substi
   assert.doesNotThrow(() => context.assertCapability(ctx, registry.entryFor("get_banking_attention_summary")));
 });
 
+check("the inventory section is gated by the inventory predicate, not by the orders area", () => {
+  // nvRequireInventoryAccess is owner, OR the orders area AND an order role
+  // that can fully edit. A member sitting between those two is refused both
+  // inventory tools and — while sectionAccess read ctx.areas.orders — was
+  // handed the same shelf by the attention summary's stock_low item. One body
+  // of data, one predicate.
+  const ctx = fixtures.ownerContext({
+    isOwner: false,
+    areas: { orders: true, dashboard: true, customers: true, bankFeed: true },
+    inventoryAccess: false
+  });
+  assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_inventory_overview")), /Inventory/);
+  assert.throws(() => context.assertCapability(ctx, registry.entryFor("search_inventory_items")), /Inventory/);
+  const sections = context.sectionAccess(ctx);
+  assert.strictEqual(sections.inventory, false, "the summary opened a section both inventory tools refuse");
+  // Everything the orders area really does grant is untouched.
+  assert.strictEqual(sections.orders, true);
+  assert.strictEqual(sections.integrations, true);
+  assert.strictEqual(context.sectionAccess(fixtures.ownerContext()).inventory, true);
+});
+
 check("a token without the scope a capability asks for cannot call it", () => {
   const ctx = fixtures.ownerContext({ scope: ["notes.read"] });
   assert.throws(() => context.assertCapability(ctx, registry.entryFor("get_commerce_overview")), /scope/);
