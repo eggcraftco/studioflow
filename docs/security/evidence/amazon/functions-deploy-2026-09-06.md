@@ -120,15 +120,19 @@ Rollback targets captured before the batch:
 
 | Function | Revision before (rollback target) | Revision after | State |
 |---|---|---|---|
-| enforceWorkspaceSeatLimit | enforceworkspaceseatlimit-00001-hud | | |
-| notifyCustomerOnStatusChange | notifycustomeronstatuschange-00008-vuh | | |
-| scanUploadedFile | scanuploadedfile-00003-duh | | |
-| scheduleDeletedOrderFileCleanup | scheduledeletedorderfilecleanup-00005-dey | | |
-| settingsAuditTrail | settingsaudittrail-00002-bip | | |
-| stampOrderFinance | stamporderfinance-00004-ruk | | |
-| syncWorkflowSafeOrderView | syncworkflowsafeorderview-00018-raf | | |
+| enforceWorkspaceSeatLimit | enforceworkspaceseatlimit-00001-hud | enforceworkspaceseatlimit-00002-yap | ACTIVE |
+| notifyCustomerOnStatusChange | notifycustomeronstatuschange-00008-vuh | notifycustomeronstatuschange-00009-nox | ACTIVE |
+| scanUploadedFile | scanuploadedfile-00003-duh | scanuploadedfile-00004-nar | ACTIVE |
+| scheduleDeletedOrderFileCleanup | scheduledeletedorderfilecleanup-00005-dey | scheduledeletedorderfilecleanup-00006-bug | ACTIVE |
+| settingsAuditTrail | settingsaudittrail-00002-bip | settingsaudittrail-00003-rad | ACTIVE |
+| stampOrderFinance | stamporderfinance-00004-ruk | stamporderfinance-00005-zab | ACTIVE |
+| syncWorkflowSafeOrderView | syncworkflowsafeorderview-00018-raf | syncworkflowsafeorderview-00019-tuw | ACTIVE |
 
-Gate: one order edit in the operator's own workspace (and a file upload if practical), then the trigger logs; 30-minute watch.
+Started 2026-09-06T01:56:28Z from `0d11da8d`; "Deploy complete" at 01:58:22 (1 min 54 s), **7 of 7 "Successful update operation"**, exit 0; all seven ACTIVE on their new revisions at 01:58:44; ERROR entries since the start: 0. The seven Eventarc triggers (five Firestore `document.written`, one `document.deleted`, one Storage `object.finalized`) are unchanged — a function redeploy replaces the Cloud Run revision behind the trigger, not the trigger.
+
+Order-edit check (02:01:25, operator's own workspace, from the operator's session): one existing order's empty "Special Notes" field was given a test word and saved; the single Firestore write fired three of the seven triggers, all on their new revisions and all 200 — `stamporderfinance-00005-zab` (0.99 s), `syncworkflowsafeorderview-00019-tuw` (1.08 s), `notifycustomeronstatuschange-00009-nox` (0.05 s). The note was cleared again straight after (a second write, same three triggers). `settingsAuditTrail` and `enforceWorkspaceSeatLimit` fire on other documents (settings, membership) and `scheduleDeletedOrderFileCleanup` / `scanUploadedFile` on deletes and uploads — no test event was forced for those; they are read passively from the next real event, and their revisions are ACTIVE with their triggers unchanged.
+
+Gate: one order edit ✔ (three triggers proven on the new revisions), 30-minute watch (01:56:28 → 02:27:00): _pending_.
 
 ## Rollback used
 
