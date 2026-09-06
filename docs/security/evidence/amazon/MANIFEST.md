@@ -1,6 +1,6 @@
 # Evidence pack — Amazon zone
 
-Generated 2026-09-05T21:42:00Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
+Generated 2026-09-05T23:44:19Z by infra/amazon/evidence.sh. Each file lists the command that produced it.
 
 | Control | Artifact | Status |
 |---|---|---|
@@ -67,5 +67,6 @@ Generated 2026-09-05T21:42:00Z by infra/amazon/evidence.sh. Each file lists the 
 | anti-malware | `edr-incident-1-active.png` | present (user-provided) |
 | anti-malware | `edr-incident-1-resolved.png` | present (user-provided) |
 | anti-malware | `edr-onboarding-2026-09-05.md` | present (record of 2026-09-05) |
+| anti-malware | `vuln-scan-2026-09-05.md` | present (record of 2026-09-05) |
 | anti-malware | `upload-scanner-production.txt` | captured |
 | diagram | `architecture.md` | captured |

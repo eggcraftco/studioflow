@@ -237,7 +237,7 @@ scans, under management):
 4. **Weekly full scan** scheduled by policy, in addition to on-access
    (real-time) scanning; results retained in the console.
 5. **Device compliance evidence**: disk encryption (FileVault / device
-   encryption) on, screen lock ≤ 15 minutes (operator decision 2026-09-05 23:05 UTC; within the CIS macOS Benchmark ceiling of 20 minutes — it was 5 minutes on 5 September), firewall on, compliance state
+   encryption) on, screen lock ≤ 15 minutes (operator decision 2026-09-05 23:05 UTC; exactly the DPP 1.1.2 maximum of 15 minutes and within the CIS macOS Benchmark ceiling of 20 — it was 5 minutes earlier that day), firewall on, compliance state
    reported to the MDM; a non-compliant device loses access (conditional
    access on the Google account, or at minimum the operator's documented
    procedure to revoke sessions).
@@ -296,6 +296,13 @@ remediation (below) and does not gate the application.
 Also not blockers, tracked separately: the main project's project-level
 `run.invoker` grant and the upload scanner's `ingress=all`.
 
+The rest of the Data Protection Policy (endpoint media restrictions, training
+record, password history, risk register, records of processing, log-review
+cadence, penetration test booking, zone backups, container scanning, dependency
+fixes) is mapped with owners and dates in `amazon-dpp-compliance-matrix.md`;
+none of those items is part of the network-security question that was refused,
+but the resubmission answers every one of them honestly.
+
 ## The other nine key controls — where they stand
 
 Amazon's guidance lists ten key controls. The four above are the ones the
@@ -304,14 +311,14 @@ refusal named. The rest, with the document that answers each:
 | Control | Answer | Where |
 |---|---|---|
 | Password and authentication | Yes — the privileged-account audit closed 4 Sep 2026; MFA and rotation attested per account | `password-and-mfa-policy.md` §8 |
-| Asset management | Partial — the device/system inventory is to be kept quarterly (control 4) | `access-control-policy.md` |
+| Asset management | Yes — device inventory and scope decision recorded 5 Sep 2026, re-confirmed quarterly; infrastructure scripted and read back by `verify-project.sh`; DPP 2.3 mapping in the compliance matrix | `access-control-policy.md` §6.1, `evidence/amazon/device-inventory.md`, `amazon-dpp-compliance-matrix.md` |
 | Access review | Yes — one human, roles reviewed 4 Sep 2026; quarterly cadence recorded | `access-control-policy.md` |
 | Data encryption at rest | Yes — Google-managed encryption on Firestore/Secret Manager; refresh tokens sealed on the connection document | `commerce/amazon/oauth.js` |
 | Anti-malware controls | Control 4 above | this document |
 | Data retention | Yes — 30-day retention sweep in production; Amazon zone retains only order data A1 needs | `privacy/retention.js` |
 | Identification of potential incidents | Control 3 above + Cloud Logging alerts | this document |
 | Incident management procedures | Yes — plan approved, six-monthly review | `incident-response-plan.md` |
-| Vulnerability management | Partial — `npm audit` in CI; annual penetration test and monthly scanning to be scheduled | plan §6 |
+| Vulnerability management | Yes (plan + first scan) — written plan with the DPP cadences and deadlines; first dependency scan recorded 5 Sep 2026 (1 critical / 13 high across the three trees, fixes available; due 12 Sep / 5 Oct); container scanning and a CI audit step planned; the annual penetration test is **scheduled, not done** — the operator books it before resubmission | `vulnerability-management.md`, `evidence/amazon/vuln-scan-2026-09-05.md` |
 | Third-party risk management | Yes — sub-processor list; no third party receives Amazon Information | `access-control-policy.md` |
 
 ## Option 3 — product security remediation (separate track)

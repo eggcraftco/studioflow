@@ -1,7 +1,8 @@
-# 2026-09-05T21:42:00Z
+# 2026-09-05T23:44:19Z
 # operator_org_roles
 
 organisation-level roles held by user:contact@eggcraft.co.uk:
   roles/accesscontextmanager.policyAdmin
+  roles/cloudsupport.admin
   roles/resourcemanager.organizationAdmin
 temporary bootstrap roles still present: none

@@ -249,7 +249,7 @@ for f in edr-console-devices.png edr-definitions-date.png edr-tamper-protection.
 done
 # The onboarding record (purchase steps, device baseline, ESET absence) is a
 # hand-written record like the SCC ones: listed, not captured.
-for f in edr-onboarding-2026-09-05.md; do
+for f in edr-onboarding-2026-09-05.md vuln-scan-2026-09-05.md; do
   if [ -s "$OUT/$f" ]; then printf '| anti-malware | `%s` | present (record of 2026-09-05) |\n' "$f" >> "$MANIFEST"; else printf '| anti-malware | `%s` | **missing** |\n' "$f" >> "$MANIFEST"; fi
 done
 capture anti-malware upload-scanner-production.txt bash -c "gcloud functions describe scanUploadedFile --region=europe-west2 --project=eggcraft-studio --gen2 --format='value(state,serviceConfig.environmentVariables.NIVADESK_MALWARE_SCAN)'; gcloud run services describe clamav-scanner --region=europe-west2 --project=eggcraft-studio --format='value(status.latestReadyRevisionName)'"
