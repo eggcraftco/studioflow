@@ -134,6 +134,62 @@ Order-edit check (02:01:25, operator's own workspace, from the operator's sessio
 
 Gate: one order edit ✔ (three triggers proven on the new revisions), 30-minute watch (01:56:28 → 02:27:00): _pending_.
 
+## B4.1 — callables last deployed 1–5 Sep, chunk 1 (45 functions)
+
+Operator approval "B4.1'e geç" at 02:05 UTC; health of the 47 functions deployed so far at that moment: 0 ERROR entries and 0 request 5xx since 01:35. Started 2026-09-06T02:07:29Z from `2777968a` (functions code identical to `4b44eef9`). Baseline probes (unauthenticated `POST {"data":{}}`): 44 × 401, 1 × 400 (`appleAppStoreServerNotification`, an HTTP endpoint that rejects an empty body), 0 × 5xx.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| acceptWorkspaceInvitation | acceptworkspaceinvitation-00001-geq | 401 | acceptworkspaceinvitation-00002-wir | 401 |
+| accountingAttentionResolve | accountingattentionresolve-00002-sor | 401 | accountingattentionresolve-00003-lev | 401 |
+| accountingMappingSuggestions | accountingmappingsuggestions-00003-gif | 401 | accountingmappingsuggestions-00004-qid | 401 |
+| accountingOverview | accountingoverview-00002-qov | 401 | accountingoverview-00003-suf | 401 |
+| accountingPlanMigration | accountingplanmigration-00002-yem | 401 | accountingplanmigration-00003-duj | 401 |
+| accountingSaveMappings | accountingsavemappings-00002-yug | 401 | accountingsavemappings-00003-zaz | 401 |
+| accountingSetMode | accountingsetmode-00002-teg | 401 | accountingsetmode-00003-yar | 401 |
+| accountingSyncActivity | accountingsyncactivity-00003-tav | 401 | accountingsyncactivity-00004-pid | 401 |
+| addLibraryFileVersion | addlibraryfileversion-00003-mah | 401 | addlibraryfileversion-00004-buj | 401 |
+| addSupportTicketReply | addsupportticketreply-00056-sus | 401 | addsupportticketreply-00057-hof | 401 |
+| addWorkspaceTeamMember | addworkspaceteammember-00047-bog | 401 | addworkspaceteammember-00048-hex | 401 |
+| amazonConnectStart | amazonconnectstart-00001-vij | 401 | amazonconnectstart-00002-fiw | 401 |
+| amazonDisconnect | amazondisconnect-00002-xuq | 401 | amazondisconnect-00003-hun | 401 |
+| anonymizeWebCustomer | anonymizewebcustomer-00003-men | 401 | anonymizewebcustomer-00004-foy | 401 |
+| appleAppStoreServerNotification | appleappstoreservernotification-00008-kek | 400 | appleappstoreservernotification-00009-mek | 400 |
+| approveWorkspaceJoinRequest | approveworkspacejoinrequest-00109-tis | 401 | approveworkspacejoinrequest-00110-cih | 401 |
+| askAppAssistant | askappassistant-00061-vet | 401 | askappassistant-00062-daj | 401 |
+| auditSquareOrders | auditsquareorders-00010-wan | 401 | auditsquareorders-00011-len | 401 |
+| auditWooOrders | auditwooorders-00003-bec | 401 | auditwooorders-00004-nev | 401 |
+| backfillWorkspaceFinance | backfillworkspacefinance-00004-ray | 401 | backfillworkspacefinance-00005-var | 401 |
+| bankAssignInboxReceipt | bankassigninboxreceipt-00004-noz | 401 | bankassigninboxreceipt-00005-xak | 401 |
+| bankCreateRequisition | bankcreaterequisition-00004-qec | 401 | bankcreaterequisition-00005-roh | 401 |
+| bankDeleteCategory | bankdeletecategory-00002-wow | 401 | bankdeletecategory-00003-lib | 401 |
+| bankDeleteConnection | bankdeleteconnection-00007-ric | 401 | bankdeleteconnection-00008-leb | 401 |
+| bankDeleteInboxReceipt | bankdeleteinboxreceipt-00002-zud | 401 | bankdeleteinboxreceipt-00003-ket | 401 |
+| bankDeleteRule | bankdeleterule-00004-yuc | 401 | bankdeleterule-00005-xir | 401 |
+| bankDeleteVendor | bankdeletevendor-00002-pay | 401 | bankdeletevendor-00003-jar | 401 |
+| bankFinalizeRequisition | bankfinalizerequisition-00015-zux | 401 | bankfinalizerequisition-00016-xey | 401 |
+| bankLinkRefundToOrder | banklinkrefundtoorder-00002-zur | 401 | banklinkrefundtoorder-00003-nax | 401 |
+| bankLinkTransactionToOrder | banklinktransactiontoorder-00003-jos | 401 | banklinktransactiontoorder-00004-xaj | 401 |
+| bankListAuditLog | banklistauditlog-00002-vet | 401 | banklistauditlog-00003-pih | 401 |
+| bankListPayouts | banklistpayouts-00002-tuv | 401 | banklistpayouts-00003-fom | 401 |
+| bankMatchIncomingToOrder | bankmatchincomingtoorder-00002-vil | 401 | bankmatchincomingtoorder-00003-ziy | 401 |
+| bankMatchReceipt | bankmatchreceipt-00004-kit | 401 | bankmatchreceipt-00005-vog | 401 |
+| bankMatchWaitingReceipts | bankmatchwaitingreceipts-00002-cix | 401 | bankmatchwaitingreceipts-00003-piv | 401 |
+| bankQueueInboxReceipt | bankqueueinboxreceipt-00002-jeg | 401 | bankqueueinboxreceipt-00003-vex | 401 |
+| bankSaveCategory | banksavecategory-00002-qoq | 401 | banksavecategory-00003-har | 401 |
+| bankSaveRule | banksaverule-00006-luk | 401 | banksaverule-00007-woc | 401 |
+| bankSaveVendor | banksavevendor-00002-doh | 401 | banksavevendor-00003-goc | 401 |
+| bankSetReviewStatusBulk | banksetreviewstatusbulk-00002-gaz | 401 | banksetreviewstatusbulk-00003-nep | 401 |
+| bankSetTransactionCategory | banksettransactioncategory-00003-heg | 401 | banksettransactioncategory-00004-waj | 401 |
+| bankSetTransactionCategoryBulk | banksettransactioncategorybulk-00002-law | 401 | banksettransactioncategorybulk-00003-dil | 401 |
+| bankSetTransactionReceipt | banksettransactionreceipt-00003-gap | 401 | banksettransactionreceipt-00004-baf | 401 |
+| bankSetTransactionSplits | banksettransactionsplits-00002-mir | 401 | banksettransactionsplits-00003-wuz | 401 |
+| bankSetTransactionVatBulk | banksettransactionvatbulk-00003-doj | 401 | banksettransactionvatbulk-00004-xih | 401 |
+
+Result: "Deploy complete" at 02:11:15 (3 min 46 s), **45 of 45 "Successful update operation"**, exit 0; all 45 ACTIVE on their new revisions at 02:11:26; ERROR entries since the start: 0; probe table re-run at 02:12: identical to the baseline (44 × 401, 1 × 400, 0 × 5xx).
+
+Gate: state ACTIVE on all 45 ✔, probe table unchanged ✔, 15-minute error watch (02:07:29 → 02:27:30): _pending_.
+
 ## Rollback used
 
 None so far.
