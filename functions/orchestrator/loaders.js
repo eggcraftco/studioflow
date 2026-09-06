@@ -77,6 +77,35 @@ function projectOrderForAssistant(raw = {}) {
   return projected;
 }
 
+/**
+ * Whether this caller may see a domain at all.
+ *
+ * Two conditions decide a read, not one: the capability must have DECLARED the
+ * domain, and the caller must be allowed the data. The declaration is the
+ * contract; this is the permission, and a read nobody may see is a read that
+ * should not happen — it costs the workspace documents, and it puts data in a
+ * process that was refused it, one line away from an answer.
+ *
+ * `bank` is the union of two predicates because the domain is declared by
+ * capabilities behind two different gates: the banking ones ask for the
+ * bankFeed AREA, and get_accounting_sync_status asks for the accounting reader,
+ * which the area does NOT imply — a member on a custom role reads their access
+ * from that role's map, so the explicit `memberAccess[uid].bankFeed` grant the
+ * accounting callables ask for can be true while the area map says no
+ * (accounting/core/access.js). Anything not named here is readable by anyone
+ * the capability's own gate let through.
+ */
+function readableDomain(domain, ctx = {}) {
+  const areas = (ctx && ctx.areas) || {};
+  switch (domain) {
+    case "bank": return areas.bankFeed === true || ctx.accountingReader === true;
+    case "receiptInbox": return areas.bankFeed === true;
+    case "inventory": return ctx.inventoryAccess === true;
+    case "accounting": return ctx.accountingReader === true;
+    default: return true;
+  }
+}
+
 function createLoaders({ db, now = () => Date.now() }) {
   const company = (companyId) => db().collection("companies").doc(String(companyId));
 
@@ -302,7 +331,12 @@ function createLoaders({ db, now = () => Date.now() }) {
 
   /** Read exactly what the capability declared, and nothing else. */
   async function snapshotFor(domainNeeds = [], ctx, { settings = {}, companyData = {} } = {}) {
-    const needs = new Set(domainNeeds.filter((name) => DOMAINS.includes(name)));
+    const declared = new Set(domainNeeds.filter((name) => DOMAINS.includes(name)));
+    // Declared AND permitted. `loadConnections` has always gated its bank and
+    // accounting sub-reads this way; the top-level branches did not, so three
+    // thousand bank rows were read for a member whose banking section the
+    // answer then reports as not_permitted.
+    const needs = new Set([...declared].filter((name) => readableDomain(name, ctx)));
     const companyId = ctx.companyId;
     const snapshot = { companyId, nowMs: now(), settings, companyDataHint: companyData };
 
@@ -347,18 +381,30 @@ function createLoaders({ db, now = () => Date.now() }) {
       snapshot.receiptInbox = snap.docs.map((doc) => ({ id: doc.id, status: "waiting", createdAtMs: num((doc.data() || {}).createdAtMs) }));
     }
 
-    if (needs.has("payouts")) {
-      snapshot.payouts = await loadPayouts(companyId);
-      const bankRows = snapshot.bankRows || (await loadBank(companyId)).rows;
-      snapshot.payoutBankRows = bankRowsForPayoutWindows(bankRows, snapshot.payouts);
-      const connections = snapshot.connections || (await loadConnections(companyId, ctx));
-      snapshot.connections = connections;
-      snapshot.bankConnection = (connections.bank || [])[0] || null;
-    }
-
-    if (needs.has("connections") && !snapshot.connections) {
+    // Connections BEFORE payouts: the payout answer asks the connection whether
+    // a feed exists (payouts.payoutFeedState), so it reads what this branch
+    // loaded rather than fetching a second copy of the same documents.
+    if (needs.has("connections")) {
       snapshot.connections = await loadConnections(companyId, ctx);
       snapshot.bankConnection = (snapshot.connections.bank || [])[0] || null;
+    }
+
+    if (needs.has("payouts")) {
+      snapshot.payouts = await loadPayouts(companyId);
+      // Bank rows come from the `bank` domain or not at all.
+      //
+      // This branch used to call loadBank() unconditionally — up to three
+      // thousand documents out of companies/{cid}/bankTransactions for
+      // get_commerce_overview and get_channel_performance, neither of which
+      // declares the bank domain and neither of which is behind the bankFeed
+      // gate. Nothing leaked, because payoutBankRows is only consumed by
+      // payouts.js, but it broke this module's own contract and the
+      // domainNeeds guarantee in registry.js, and one future line reading
+      // payoutBankRows from a commerce capability would have turned a contract
+      // violation into a bank-data leak to a member without Banking.
+      snapshot.payoutBankRows = Array.isArray(snapshot.bankRows)
+        ? bankRowsForPayoutWindows(snapshot.bankRows, snapshot.payouts)
+        : [];
     }
 
     if (needs.has("commerceHealth")) snapshot.commerceHealth = await loadCommerceHealth(companyId);
@@ -381,4 +427,4 @@ function createLoaders({ db, now = () => Date.now() }) {
   return { CAPS, DOMAINS, loadCompany, snapshotFor, bankRowsForPayoutWindows };
 }
 
-module.exports = { createLoaders, CAPS, DOMAINS, projectCommerceConnection, projectOrderForAssistant };
+module.exports = { createLoaders, CAPS, DOMAINS, readableDomain, projectCommerceConnection, projectOrderForAssistant };
