@@ -1307,9 +1307,12 @@ under `EBAY_SECRETS_READY`; the `callbackKey` dep is passed in `index.js`; `EBAY
 `ebayOAuthCallback` is declared with `maxInstances`; `access-control-policy.test.js`'s `EBAY_*` regex
 already covers it.
 
-**web — `npm run test:relay`, `studioflow-web/scripts/check-ebay-relay-vectors.mjs`.** This paragraph
-described a committed vector file in the past tense before either half existed; what exists now is
-stronger than the plan, and the plan's own premise turned out to be wrong, so both are recorded.
+**web — `npm run test:relay`, `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, run by the `relay`
+job in `.github/workflows/functions-tests.yml`.** This paragraph described a committed vector file in the
+past tense before either half existed; what exists now is stronger than the plan, and the plan's own
+premise turned out to be wrong, so both are recorded. The workflow's trigger list had to be widened at the
+same time: it watched only `functions/**`, `firestore.rules` and `firebase.json`, so a change to the route
+— one of the two signers — fired nothing at all.
 
 *The plan was:* `functions/test/fixtures/ebay-callback-signature-vectors.json` holding
 `{ key, timestampMs, body, signature }` triples under a fixed **test** key, checked by the function's

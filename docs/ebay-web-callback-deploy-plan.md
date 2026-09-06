@@ -56,7 +56,7 @@ watching.
 | 7b | The key was **not inlined at build time** | grep the **server** chunk for the route: the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` must still be **present**. If Next replaced it statically the name vanishes and the value takes its place, so check 7 would pass in exactly the failure case. `export const runtime = "nodejs"` in the route is what prevents it | **done** — `.next/server/app/ebay/callback/route.js` still contains the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` |
 | 8 | The eBay screen degrades when the server has no eBay functions | open the settings section against production, where the callables do not exist: it must say the connector is not set up, not throw | run against the built app before the rsync |
 | 9 | Nothing else changed on the site | diff the publish repository after the rsync, and expect only eBay files, the registry, the language tables and the build output | run at deploy time |
-| 10 | `npm run test:relay` green | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, an absent cookie posts `nonce:""` and burns the state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`, no early return on an absent nonce cookie) | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It does **not** read a committed vector file; see below |
+| 10 | `npm run test:relay` green — **and it is a CI job now, not a thing to remember** (`functions-tests.yml`, job `relay`) | the route's own signer is executed against the real `ebayOAuthCallback`: the canonical string agrees across the two trees, the signature binds the body, an absent cookie posts `nonce:""` and burns the state, both decline shapes make no call, and a blank or short key makes no call. Plus the route's source assertions (`runtime = "nodejs"`, `dynamic = "force-dynamic"`, the decline branch, the in-handler `process.env` read with its length floor, no `NEXT_PUBLIC_`, no early return on an absent nonce cookie) | **done — `studioflow-web/scripts/check-ebay-relay-vectors.mjs`, wired as `npm run test:relay`, green.** It does **not** read a committed vector file; see below |
 
 **Check 10 was the one gap in this list, and it is now closed — but not in the way design §5.4 planned,
 so the difference is stated.** The plan was a committed vector file
@@ -69,8 +69,17 @@ What the script does instead is the thing the vector was a proxy for: it runs **
 against each other. It compiles the real `app/ebay/callback/route.ts`, drives it with `fetch` captured, and
 hands the request it produced to the real `ebayOAuthCallback` through the functions qa harness, under a key
 minted per run and written nowhere. That is a stronger check than a static triple — it exercises the route's
-decisions as well as its arithmetic — and it runs in CI, which the manual version recorded here previously
-did not. Every run prints a `SKIP` line naming the vector file as the thing it does not cover, so nobody
+decisions as well as its arithmetic.
+
+**It now runs in CI, and the sentence that used to say so was false.** `.github/workflows/functions-tests.yml`
+gained a third job, `relay`, which installs the web tree alone (the functions qa harness pulls in no
+external package) and runs `npm run test:relay`. Getting there needed the workflow's own trigger list
+widened, which is the sharper half of the finding: the file listened to `functions/**`, `firestore.rules`
+and `firebase.json`, so **a change to `app/ebay/callback/route.ts` fired no workflow at all** — the side
+most likely to change was covered by nothing automatic, and the failure it would cause is silent and
+production-only (the canonical string drifting between the two trees, seen as an opaque 401 →
+`unavailable` on every seller's connect). The list now carries `studioflow-web/app/ebay/**`,
+`lib/studioflow/ebay.ts`, the script itself and `studioflow-web/package.json`. Every run prints a `SKIP` line naming the vector file as the thing it does not cover, so nobody
 reads "green" as more than it is. The canonical string, for whoever writes that file, is
 `HMAC-SHA256(key, "v1." + timestampMs + "." + rawBodyBytes)` as lowercase hex.
 

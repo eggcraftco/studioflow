@@ -7,11 +7,23 @@
 #             end-to-end suites (test/e2e) against a real Firestore emulator —
 #             the only tier that can catch a document that maps fine and stores
 #             badly, or a rule that lets the wrong user write.
+#   relay     studioflow-web's check-ebay-relay-vectors.mjs — the ONLY thing that
+#             executes app/ebay/callback/route.ts. It compiles the real route and
+#             hands what it produced to the real ebayOAuthCallback, so it is the
+#             one check that can see the two HMAC implementations drift apart.
+#             Its failure mode is silent and production-only (an opaque 401 →
+#             `unavailable` on every seller's connect), and it was previously
+#             recorded as "runs in CI" while running nowhere.
 #
 # The integration tier (test/run-integration.sh) needs Auth + Functions
 # emulators and a seed step; it stays local until it is made hermetic.
 name: functions-tests
 
+# The two lists are written out twice, identically, on purpose: GitHub Actions
+# does not support YAML anchors, so an alias here would fail the whole workflow
+# to parse. The web paths are the half of the eBay callback contract that lives
+# outside `functions/` — before they were listed, a change to the route fired NO
+# workflow at all, and the route owns one of the two HMAC implementations.
 on:
   push:
     paths:
@@ -19,12 +31,20 @@ on:
       - "firestore.rules"
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
+      - "studioflow-web/app/ebay/**"
+      - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/package.json"
   pull_request:
     paths:
       - "functions/**"
       - "firestore.rules"
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
+      - "studioflow-web/app/ebay/**"
+      - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/package.json"
   workflow_dispatch:
 
 concurrency:
@@ -48,6 +68,25 @@ jobs:
           cache-dependency-path: functions/package-lock.json
       - run: npm ci
       - run: npm test
+
+  relay:
+    name: eBay callback relay (route ↔ function)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: studioflow-web/package-lock.json
+      # Only the web tree is installed: the script needs `next` (for NextRequest)
+      # and the web tree's own `tsc` to compile the route, and the functions qa
+      # harness it drives the answer through pulls in no external package at all.
+      - run: npm ci
+        working-directory: studioflow-web
+      - run: npm run test:relay
+        working-directory: studioflow-web
 
   emulator:
     name: rules + e2e (Firestore emulator)
