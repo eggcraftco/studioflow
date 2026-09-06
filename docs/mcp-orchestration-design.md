@@ -858,7 +858,7 @@ say — filter to the orders that exist — rather than being undefined.
 
 Input: `{ horizonDays?: 1..30 (default 7), domains?: ["orders","shipping","payments","inventory","banking","payouts","accounting","integrations"], limit?: 1..50 (default 20) }`.
 
-Output `data`: `{ counts: { critical, high, medium, low }, sections: [ { id, status: "ok"|"not_permitted"|"unsupported"|"unavailable", itemCount } ], items: AttentionItem[] }` where
+Output `data`: `{ counts: { critical, high, medium, low }, sections: [ { id, status: "ok"|"not_permitted"|"not_requested", itemCount } ], items: AttentionItem[] }` where
 
 ```js
 AttentionItem = { attentionId, contentHash, type, severity: "critical"|"high"|"medium"|"low", title, reason,
@@ -936,7 +936,12 @@ item) and scenario 9 with nothing to key on. What changed is carried separately:
 keeps its id and moves its hash, and a dismissal can be honoured while a new member is still noticed.
 
 Sections the role cannot see appear as `status: "not_permitted"` with no items (the renderer says
-"Banking items are not included for your role", nothing more). workflowOnly contexts see only orders
+"Banking items are not included for your role", nothing more); a section the CALLER left out of `domains`
+is `not_requested`, which is a different sentence — "you did not ask" rather than "we could not tell you"
+— and `domains` gates the detectors themselves, so no unrequested section can hand over an item.
+`itemCount` counts every item carrying a reason in that section, so a merged overdue-and-unpaid order is
+counted under orders and under payments; the counts may therefore sum past `totalItems`, which counts
+things to look at rather than section rows. workflowOnly contexts see only orders
 assigned to them and no money/banking sections. The server-side Attention Engine (Phase 4) reuses
 `attention.collect(snapshot, ctx)` unchanged; only the loader trigger differs.
 

@@ -48,11 +48,25 @@ function highest(lhs, rhs) {
  * createdAtMs } for one order; the merge below turns them into items.
  * ------------------------------------------------------------------ */
 
-function orderDetectors(view, { nowMs, horizonDays, sections }) {
+/**
+ * A detector runs when its own domain is BOTH permitted and asked for.
+ *
+ * The `domains` argument is documented as "limit the answer to these areas", so
+ * it has to gate the detectors and not merely the rows that survive them.
+ * Gating one order's detectors on the role's sections alone made
+ * `domains: ["shipping"]` hand back an `order_overdue` item — whose own
+ * `domainOf()` is "orders" — beside a sections block reporting orders as
+ * carrying nothing. One answer, two contradictory claims.
+ *
+ * `domains` null means "everything the role can see", which is what an omitted
+ * argument means.
+ */
+function orderDetectors(view, { nowMs, horizonDays, sections, domains = null }) {
   const found = [];
   const open = !view.completed && !view.cancelled;
+  const on = (domain) => sections[domain] === true && (!domains || domains.has(domain));
 
-  if (sections.orders && open && view.dueDateMs) {
+  if (on("orders") && open && view.dueDateMs) {
     const overdueBy = nowMs - view.dueDateMs;
     if (overdueBy > 0 && !view.isDispatched) {
       found.push({
@@ -71,7 +85,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     }
   }
 
-  if (sections.payments && open && view.remainingAmount > 0) {
+  if (on("payments") && open && view.remainingAmount > 0) {
     const dueSoon = view.dueDateMs !== null && view.dueDateMs - nowMs <= horizonDays * DAY_MS;
     if (view.isDispatched || dueSoon) {
       const overdueBy = view.dueDateMs ? nowMs - view.dueDateMs : 0;
@@ -84,7 +98,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     }
   }
 
-  if (sections.orders && open && view.estimateWaitingSinceMs) {
+  if (on("orders") && open && view.estimateWaitingSinceMs) {
     const waitingDays = (nowMs - view.estimateWaitingSinceMs) / DAY_MS;
     found.push({
       type: "approval_waiting",
@@ -96,7 +110,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
 
   // Ready to ship and not gone. The stage is computed from the order's own
   // steps (production.resolveProductionStage), never read from a stored field.
-  if (sections.shipping && open && view.stage && view.stage.kind === "shipready" && !view.isDispatched) {
+  if (on("shipping") && open && view.stage && view.stage.kind === "shipready" && !view.isDispatched) {
     const overdueBy = view.dueDateMs ? nowMs - view.dueDateMs : null;
     found.push({
       type: "shipping_waiting",
@@ -106,7 +120,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     });
   }
 
-  if (sections.shipping && open && view.isDispatched === false && view.fulfillmentStatus === "fulfilled") {
+  if (on("shipping") && open && view.isDispatched === false && view.fulfillmentStatus === "fulfilled") {
     found.push({
       type: "platform_fulfilment_mismatch",
       severity: "high",
@@ -115,7 +129,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     });
   }
 
-  if (sections.orders && open && ["refunded", "partially_refunded", "voided"].includes(view.paymentStatus) && view.paidAmount > 0) {
+  if (on("orders") && open && ["refunded", "partially_refunded", "voided"].includes(view.paymentStatus) && view.paidAmount > 0) {
     found.push({
       type: "provider_state_conflict",
       severity: !view.isDispatched && view.remainingAmount <= 0 ? "critical" : "high",
@@ -124,7 +138,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     });
   }
 
-  if (sections.shipping && view.isDispatched && !view.trackingNumber) {
+  if (on("shipping") && view.isDispatched && !view.trackingNumber) {
     const since = view.updatedAtMs || view.createdAtMs || nowMs;
     found.push({
       type: "shipped_without_tracking",
@@ -134,7 +148,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     });
   }
 
-  if (sections.orders && view.reviewRequired) {
+  if (on("orders") && view.reviewRequired) {
     found.push({
       type: "order_review_required",
       severity: "high",
@@ -143,7 +157,7 @@ function orderDetectors(view, { nowMs, horizonDays, sections }) {
     });
   }
 
-  if (sections.payments && view.finance.taxNeedsReview) {
+  if (on("payments") && view.finance.taxNeedsReview) {
     found.push({
       type: "order_tax_unknown",
       severity: "medium",
@@ -489,8 +503,10 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
     .filter((view) => (ctx.workflowOnly ? view.assignedToUid === ctx.uid : true));
 
   let items = [];
-  if (wantedDomains.has("orders") || wantedDomains.has("shipping") || wantedDomains.has("payments")) {
-    items = items.concat(mergeOrderItems(views, { nowMs, horizonDays, sections }));
+  if (["orders", "shipping", "payments"].some((domain) => wantedDomains.has(domain))) {
+    // The detectors get the filter too, not just this outer gate: see
+    // orderDetectors.
+    items = items.concat(mergeOrderItems(views, { nowMs, horizonDays, sections, domains: wantedDomains }));
   }
 
   if (sections.inventory && wantedDomains.has("inventory")) {
@@ -589,10 +605,22 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
 
   // Sections the role cannot see are NAMED and empty. Silence would read as
   // "nothing to report".
+  //
+  // Three words, and the third is why this list is not two: "not_permitted" is
+  // we may not tell you, "not_requested" is you did not ask, and "ok" is
+  // everything else. A section the caller filtered out used to be reported as
+  // "unavailable", which reads as a failure of ours.
+  //
+  // itemCount counts every item carrying a reason in that section, so a merged
+  // item that is both overdue and unpaid is one thing to look at counted under
+  // orders AND under payments. The counts can therefore sum past `totalItems`,
+  // which counts things rather than section rows — and no section can report
+  // zero while an item of its own is in the answer.
   const sectionRows = DOMAINS.map((id) => {
     const permitted = sections[id] !== false;
-    const status = !wantedDomains.has(id) ? "unavailable" : (permitted ? "ok" : "not_permitted");
-    return { id, status, itemCount: items.filter((item) => domainOf(item.type) === id).length };
+    const status = !wantedDomains.has(id) ? "not_requested" : (permitted ? "ok" : "not_permitted");
+    const itemCount = items.filter((item) => (item.reasons || []).some((type) => domainOf(type) === id)).length;
+    return { id, status, itemCount };
   });
   for (const row of sectionRows) {
     if (row.status === "not_permitted") {
@@ -655,7 +683,7 @@ function bankingAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.n
 
 /** Which section an item type belongs to. */
 function domainOf(type) {
-  if (["order_overdue", "order_due_soon", "provider_state_conflict", "order_review_required", "order_attention"].includes(type)) return "orders";
+  if (["order_overdue", "order_due_soon", "approval_waiting", "provider_state_conflict", "order_review_required", "order_attention"].includes(type)) return "orders";
   if (["shipping_waiting", "shipped_without_tracking", "platform_fulfilment_mismatch"].includes(type)) return "shipping";
   if (["payment_outstanding", "order_tax_unknown"].includes(type)) return "payments";
   if (["stock_low", "stock_reserved_conflict"].includes(type)) return "inventory";

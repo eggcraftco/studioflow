@@ -125,6 +125,45 @@ check("sections a role cannot see are named and empty, not silently missing", ()
   assert.ok(!result.data.items.some((item) => item.type === "receipt_missing"), "no banking item may leak through");
 });
 
+check("the domains argument filters the detectors, not just the rows they produce", () => {
+  // o_late is overdue AND unpaid AND ready to ship. Asked about shipping, the
+  // answer is about shipping: an order_overdue item is an answer about orders,
+  // which this caller excluded.
+  const result = run(fixtures.attentionSnapshot(), { domains: ["shipping"] });
+  const late = itemFor(result, "1001");
+  assert.ok(late, "the order is still ready to ship, so shipping still has something to say");
+  assert.deepStrictEqual(late.reasons, ["shipping_waiting"]);
+  assert.ok(!result.data.items.some((item) => item.reasons.some((type) => domainOf(type) !== "shipping")),
+    "a domain the caller did not ask for produced an item anyway");
+});
+
+check("a section nobody asked about says so, and no section contradicts its own item count", () => {
+  const result = run(fixtures.attentionSnapshot(), { domains: ["shipping"] });
+  const orders = result.data.sections.find((row) => row.id === "orders");
+  assert.strictEqual(orders.status, "not_requested",
+    "\"unavailable\" reads as 'we could not tell you', not 'you did not ask'");
+  for (const row of result.data.sections) {
+    if (row.status === "ok") continue;
+    assert.strictEqual(row.itemCount, 0,
+      `${row.id} is reported as ${row.status} and hands over ${row.itemCount} item(s) of its own`);
+  }
+  // And every item in the answer is counted by the section it belongs to.
+  for (const item of result.data.items) {
+    for (const type of item.reasons) {
+      const section = result.data.sections.find((row) => row.id === domainOf(type));
+      assert.ok(section.itemCount > 0, `${type} is in the answer while ${section.id} reports none`);
+    }
+  }
+});
+
+check("a merged item is counted under every section it is a problem in", () => {
+  const result = run(fixtures.attentionSnapshot());
+  const late = itemFor(result, "1001");
+  assert.ok(late.reasons.includes("order_overdue") && late.reasons.includes("payment_outstanding"));
+  const payments = result.data.sections.find((row) => row.id === "payments");
+  assert.ok(payments.itemCount > 0, "an unpaid order is something to look at under payments too");
+});
+
 check("a signal with no data model behind it is declared unsupported, not invented", () => {
   // §40 asks for customer follow-up SLA breaches. There is no SLA field
   // anywhere, and a made-up threshold would look exactly like a real finding.
