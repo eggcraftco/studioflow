@@ -106,14 +106,29 @@ async function ready({ importState = "done", ...options } = {}) {
     assert.strictEqual(h.store.read("companies/c1/heldIntegrationOrders/ebay_H1").provider, "ebay");
   });
 
-  await check("an order that carries nobody writes no restricted document and no index row", async () => {
+  // A digital sale, a collect-in-person sale and an order eBay has already
+  // stripped all arrive with a username and no address. There is no person to
+  // put in the restricted collection — but the ORDER still names the buyer, and
+  // eBay's Marketplace Account Deletion obligation is that nothing identifying
+  // them remains. The deletion task finds orders through the buyer index alone,
+  // so the index row is what makes that reachable.
+  await check("an order that carries nobody writes no restricted document — but the index still names it, and a deletion reaches the username on the order", async () => {
     const h = await ready();
     const bare = ebayOrder("B1", { extra: { buyerCheckoutNotes: undefined, buyer: { username: "ghost_buyer" }, fulfillmentStartInstructions: [{ shippingStep: { shipTo: { contactAddress: { countryCode: "GB" } } } }] } });
     delete bare.buyerCheckoutNotes;
     assert.strictEqual((await h.apply(bare)).result, "created");
-    assert.strictEqual(h.restricted("B1"), undefined);
-    assert.strictEqual(h.store.paths("ebayBuyers/").length, 0);
+    assert.strictEqual(h.restricted("B1"), undefined, "no person, no restricted document");
     assert.strictEqual(h.orderDoc("B1").customerName, "ghost_buyer");
+    const hash = hashing.usernameHash(HASH_KEY, "ghost_buyer");
+    assert.deepStrictEqual(h.store.read(`ebayBuyers/c1__${hash}`).orderIds, ["ebay_c1_B1"], "the handle is an identifier: the deletion index carries it");
+    const out = await h.fns._internal.processEbayBuyerDeletion({ key: "ebay|deletion|n1", notificationId: "n1", entityType: "buyer_deletion", usernameHashes: [hash], userIdHashes: [], attempt: 1 });
+    assert.strictEqual(out.status, "applied"); assert.strictEqual(out.outcome.ordersScrubbed, 1, JSON.stringify(out));
+    const scrubbed = h.orderDoc("B1");
+    assert.strictEqual(scrubbed.customerName, "Buyer details removed");
+    assert.strictEqual(scrubbed.shippingName, "");
+    assert.strictEqual(scrubbed.customFields["eBay Buyer"], "");
+    assert.ok(!JSON.stringify(scrubbed).includes("ghost_buyer"), "eBay said erase this buyer: nothing identifying them is left on the order");
+    assert.strictEqual(h.store.read(`ebayBuyers/c1__${hash}`), undefined, "and the index row goes with it");
   });
 
   await check("personal data that survives the split is a loud invalid, never an order", async () => {

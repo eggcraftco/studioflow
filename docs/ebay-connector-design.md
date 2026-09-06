@@ -474,7 +474,10 @@ dictionary can reverse without the server-held key; no username, userId or eiasT
   `{ provider:"ebay", connectionId, buyerUsername, fields:{ fullName, companyName?, email?, phone?, address:{…}, taxAddress?, taxIdentifier?, buyerCheckoutNotes?, giftDetails?[] }, paths:[…], deliveredAtMs?, updatedAtMs }`.
   Written after every apply whose outcome is `created | updated | noop` (self-healing) **when the
   restricted half is non-empty**, never on `held`, never an empty document (§7.3). Deleted by the
-  retention sweep 90 days after delivery (§8.4) and by the deletion task (§9).
+  retention sweep 90 days after delivery (§8.4) and by the deletion task (§9). The `ebayBuyers` index
+  row is **not** tied to it: that is written whenever the order carries `buyer.username`, empty
+  restricted half or not (§9 — an order with no address still names the buyer, and the deletion task
+  reaches orders through the index alone).
 - `companies/{cid}/heldIntegrationOrders/{ebay_<orderId>}` (existing) — payload is the **safe** half only.
 - `companies/{cid}/privacyState/revealCounters/{uid}` — reveal rate-limit counters (§3.3), inside the
   already-denied `privacyState` subtree.
@@ -743,10 +746,16 @@ bisecting — four times the first draft's 200.
       → duplicate (`lastEventKey`) → stale (`externalUpdatedAt`) → capacity/hold → create/update with
       the `commerce` stamp and review row. Stale-guard order (§57) = provider `lastModifiedDate` →
       content hash → event key; eBay has no version number.
-   i. On `created | updated | noop` **and a non-empty restricted half**: `restrictedCustomer/{docId}.set(merge)`
-      with the restricted half (+ `deliveredAtMs` when the engine reports delivery, for §8.4) and the
-      `ebayBuyers` index `arrayUnion(docId)`. An empty restricted half writes nothing and deletes nothing
-      (a replay from a stored safe payload must not blank a real address — §7.3). On `created`:
+   i. On `created | updated | noop`: the `ebayBuyers` index `arrayUnion(docId)` under the keyed hash
+      of `safe.buyer.username` **whenever that handle is present**, and — separately, **only when the
+      restricted half is non-empty** — `restrictedCustomer/{docId}.set(merge)` with the restricted half
+      (+ `deliveredAtMs` when the engine reports delivery, for §8.4). The two are not one condition: an
+      order with no address (digital, collect-in-person, or one eBay has already stripped) still names
+      the buyer on `customerName`, `shippingName` and `customFields["eBay Buyer"]`, and §9 finds orders
+      through the index alone — tying the index to the restricted half left such an order carrying the
+      username after eBay had said to erase it. An empty restricted half writes and deletes no
+      restricted document (a replay from a stored safe payload must not blank a real address — §7.3).
+      On `created`:
       `sendPushNotificationToCompany(companyId, { title:"New eBay order", body: "<orderId> · <currency>
       <total>", orderId, type:"ebay_order" })` and `syncLog order_imported`; on review required →
       `syncLog order_needs_review`. No customer upsert.
@@ -1420,7 +1429,7 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
 | `commerce-ebay-capabilities.test.js` | `proveEbay` yields `shipment.write/finance.read/inventory.read === "not_in_this_release"` and `orders.read === true`; with every proof the spec's default map is reproduced |
 | `privacy-reveal.test.js` | tier table (§3.3), response shape excludes `taxIdentifier`/`paths`/notes, log-before-return (failing fake log → no payload), rate limit |
 | `ebay-connect.test.js` (Etsy shape) | state replay refused (`reason=state`), expiry, environment mismatch, **nonce mismatch → `reason=browser` and the state is burned**, `claimEbayConnectState` refuses a different uid and a second claim, `no_seller` when identity fails, cross-workspace connection id, reconnect keeps `connectedAtMs`/`settings`/`importState`/`importCursor` and sets `catchUpDueFromMs`, `sellerUserIdHash` written, single-flight refresh + lock outlasting retries, loser refuses expired token, only auth-class failure flips `reconnect_required` (`invalid_client` does not), disconnect deletes `credentials/current` and writes `disconnectedByUid: uid`, public view contains no `Encrypted` key, no token substring, no `Hash` key; settings/marketplace/sinceDays whitelists (§4.11) |
-| `ebay-sync.test.js` | pending-payment create rule, `autoSync` off skips creates but applies updates, `awaiting_first_import` before import, `includeCancelled`, `marketplace_disabled`, `restrictedCustomer` written on noop too, never on held, **never when the restricted half is empty**, `ebayBuyers` arrayUnion under the keyed hash, no `upsertIntegrationCustomer` call, held payload has no email, `marketplaceId` passed to the adapter, **queue path and sweep path agree** (same fake order → same documents), environment mismatch skipped, `app_credentials_invalid` stops the sweep after one row |
+| `ebay-sync.test.js` | pending-payment create rule, `autoSync` off skips creates but applies updates, `awaiting_first_import` before import, `includeCancelled`, `marketplace_disabled`, `restrictedCustomer` written on noop too, never on held, **never when the restricted half is empty**, `ebayBuyers` arrayUnion under the keyed hash **whenever the order names the buyer** (an address-less order is still reachable by a deletion notice), no `upsertIntegrationCustomer` call, held payload has no email, `marketplaceId` passed to the adapter, **queue path and sweep path agree** (same fake order → same documents), environment mismatch skipped, `app_credentials_invalid` stops the sweep after one row |
 | `commerce-ebay-wiring.test.js` (mirror of the Square pin) | secrets gate (`EBAY_SECRET_PARAMS` with the four names, marker file, `EBAY_RUNTIME` with `serviceAccount`), the four wrappers, every `exports.<fn> = ebayExports.<fn>;` line, `ebayEventWorker` on its own queue with the copied loop and the `buyer_deletion` health skip, `retryCommerceEvent` eBay branch enqueues and never processes, `commerceEventWorker` secrets literal **unchanged** and `provider_not_on_this_worker`, `_e2e.ebay`, rules regex for **all six** root blocks, purge steps, `releaseHeldIntegrationOrders` branch with a fresh fetch and no payload replay, `lifecycle/derive.js` group, `engine.applyEnvelope` used and no direct `orderDocRef(...).set` in the connector, exactly one `applyEbayOrder` definition and every path calling it, `NIVADESK_EBAY_CONNECTOR` read, retention sweep deletes `restrictedCustomer` |
 | `commerce-flags.test.js` (extend) | `connectors` area precedence: connection > provider > global; default off; **`readCommerceFlags` merges `connectors` from the document**; cache reset |
 | `access-control-policy.test.js` (extend) | regex covers `EBAY_*`; a mount of an eBay secret without `serviceAccount` fails; the policy paragraph names eBay |

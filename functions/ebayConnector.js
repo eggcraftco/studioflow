@@ -535,6 +535,26 @@ function createEbayConnectorFunctions(deps) {
     return rows;
   }
 
+  /**
+   * The deletion index (§9): which orders carry this buyer's handle, under the
+   * keyed hash. Written whenever the order names the buyer — NOT only when the
+   * restricted half has content. The adapter stamps the handle onto
+   * `customerName`, `shippingName` and `customFields["eBay Buyer"]` on every
+   * order, address or no address; a digital sale, a collect-in-person sale and
+   * an old order eBay has already stripped all carry the username and nothing
+   * else. `processEbayBuyerDeletion` finds orders through this index alone, so
+   * an order missing from it keeps the buyer's eBay username forever after eBay
+   * has told us to erase them. The handle is an identifier — this file treats
+   * it as one everywhere else — and eBay's Marketplace Account Deletion
+   * obligation is that nothing identifying the buyer remains.
+   */
+  async function indexBuyer(companyId, orderDocId, username) {
+    const handle = String(username || "");
+    if (!handle) return;
+    const hash = hashing.usernameHash(hashKeys()[0], handle);
+    await buyers().doc(`${safeIdPart(companyId)}__${hash}`).set({ companyId, provider: "ebay", usernameHash: hash, orderIds: FieldValue.arrayUnion(orderDocId), updatedAtMs: now() }, { merge: true });
+  }
+
   async function writeRestrictedCustomer(companyId, orderDocId, ref, safe, restricted, removed, envelope) {
     const username = String(safe?.buyer?.username || "");
     await restrictedRef(companyId, orderDocId).set({
@@ -543,10 +563,6 @@ function createEbayConnectorFunctions(deps) {
       customerType: "unknown", externalIdentities: [{ provider: "ebay", connectionId: ref.id, externalId: username }],
       dataOrigin: "ebay", piiPolicy: "provider_restricted", mergeStatus: "unreviewed", updatedAtMs: now()
     }, { merge: true });
-    if (username) {
-      const hash = hashing.usernameHash(hashKeys()[0], username);
-      await buyers().doc(`${safeIdPart(companyId)}__${hash}`).set({ companyId, provider: "ebay", usernameHash: hash, orderIds: FieldValue.arrayUnion(orderDocId), updatedAtMs: now() }, { merge: true });
-    }
   }
 
   async function applyEbayOrder(ref, data, order, { eventKey = null, eventOrigin = "reconcile", client = null, fulfillments = null, includeUnpaid = null, includeCancelled = null } = {}) {
@@ -596,8 +612,14 @@ function createEbayConnectorFunctions(deps) {
       // The held payload is the SAFE half: it carries no address, and the release path fetches fresh anyway (§7.3).
       hold: async (env2, capacity) => holdIntegrationOrder(companyId, "ebay", env2.identity.external_id, safe, capacity, { ebayConnectionId: ref.id, eventType: eventOrigin })
     });
-    if (["created", "updated", "noop"].includes(outcome.result) && Object.keys(restricted).length) {
-      await writeRestrictedCustomer(companyId, docId, ref, safe, restricted, removed, envelope);
+    if (["created", "updated", "noop"].includes(outcome.result)) {
+      // The index first, and independently: it is what an account-deletion
+      // notice follows, and an order whose buyer had no address still names the
+      // buyer. The restricted document only exists when there is a person to
+      // put in it (a replay from a stored safe payload must not blank a real
+      // address — §7.3).
+      await indexBuyer(companyId, docId, safe?.buyer?.username);
+      if (Object.keys(restricted).length) await writeRestrictedCustomer(companyId, docId, ref, safe, restricted, removed, envelope);
     }
     if (outcome.result === "created") {
       await writeSyncEvent(ref, { type: "order_imported", orderId: outcome.orderId || docId, externalId });
