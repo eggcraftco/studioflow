@@ -36,7 +36,7 @@ Deploy started 01:36:07, "Deploy complete" 01:38:14 (three "Successful update op
 
 Authenticated canary (01:42:50): from the operator's session, Settings › Integrations › Website / inbound › "Check this payload" with a synthetic order (no customer data) — the callable answered **200 in 0.98 s on revision `validateinboundorderpayload-00002-fuf`** (the 204 before it is the CORS preflight) and the page rendered the parsed preview. Nothing was written: the function only validates.
 
-Gate: state ACTIVE on all three ✔, probes unchanged ✔, authenticated call on the new revision ✔. Error watch: 0 ERROR entries and 0 request 5xx from 01:35 to 01:46 UTC (checked at 01:46:10 before B1); the operator instructed "B1'e geç" at that point, so B1 started 11 minutes into the planned 15 — the full-window readback at 01:53:30 is recorded below when it lands.
+Gate: state ACTIVE on all three ✔, probes unchanged ✔, authenticated call on the new revision ✔. Error watch: 0 ERROR entries and 0 request 5xx from 01:35 to 01:46 UTC (checked at 01:46:10 before B1); the operator instructed "B1'e geç" at that point, so B1 started 11 minutes into the planned 15. Full-window readback at 01:53:30 UTC: **0 ERROR entries and 0 request 5xx** for the three services since 01:35 — gate passed.
 
 ## B1 — ingress (29 functions)
 
@@ -81,6 +81,54 @@ Result: "Deploy complete" at 01:48:47 (2 min 21 s), **29 of 29 "Successful updat
 Signed test delivery (01:49:48, operator's session, Settings › Integrations › Website / inbound › "Send test webhook"): the callable `sendtestinboundwebhook-00004-mib` answered 200 in 1.9 s and its signed delivery reached `inboundorderwebhook-00025-pay`, which answered **200 in 0.9 s**; the app showed "The delivery URL answered. No order was created. This proves the URL, workspace and token." — the inbound path that reads the idempotency headers through `req.get` (the one the e2e fixture had to learn) works on the new revision with no order written. The Shopify / WooCommerce test button was not used: the workspace's store runs on the connector path and the legacy paste-URL webhooks answer 410 by design, exactly as in the probe table.
 
 Gate: probe table unchanged ✔, signed test delivery ✔, 30-minute log watch (01:46:26 → 02:18:30): _pending_.
+
+## B2 — scheduled (8 functions)
+
+Operator approval "B2 ve B3'e geç" at 01:53 UTC; B0 + B1 health at that moment: 0 ERROR entries and 0 request 5xx since 01:35. Started 2026-09-06T01:53:40Z from `0d11da8d` (functions code identical to `4b44eef9`).
+
+| Function | Revision before (rollback target) | Revision after | State |
+|---|---|---|---|
+| scheduledAccountingReconcile | scheduledaccountingreconcile-00005-kec | scheduledaccountingreconcile-00006-zeg | ACTIVE |
+| scheduledBankSync | scheduledbanksync-00019-son | scheduledbanksync-00020-jet | ACTIVE |
+| scheduledBillingEntitlementReconcile | scheduledbillingentitlementreconcile-00007-joz | scheduledbillingentitlementreconcile-00008-poq | ACTIVE |
+| scheduledFinanceSweep | scheduledfinancesweep-00004-bud | scheduledfinancesweep-00005-roz | ACTIVE |
+| scheduledQuickReplyKeySweep | scheduledquickreplykeysweep-00001-san | scheduledquickreplykeysweep-00002-laq | ACTIVE |
+| scheduledReminderCheck | scheduledremindercheck-00107-kuh | scheduledremindercheck-00108-pev | ACTIVE |
+| scheduledTrackingRefresh | scheduledtrackingrefresh-00112-taq | scheduledtrackingrefresh-00113-gux | ACTIVE |
+| sweepMarketplacePii | sweepmarketplacepii-00002-jox | sweepmarketplacepii-00003-hic | ACTIVE |
+
+Cloud Scheduler jobs behind the batch (read at 01:54 UTC, `gcloud scheduler jobs list`):
+
+| Job | Schedule | Last run before B2 (UTC) | Next run (UTC) |
+|---|---|---|---|
+| sweepMarketplacePii | every 24 hours | 14:35 | 14:35 |
+| scheduledFinanceSweep | every 20 minutes | 01:51 | 02:11 |
+| scheduledBillingEntitlementReconcile | every 60 minutes | 01:13 | 02:13 |
+| scheduledAccountingReconcile | every 6 hours | 00:43 | 06:43 |
+| scheduledReminderCheck | every 15 minutes | 01:42 | 01:57 |
+| scheduledTrackingRefresh | every 60 minutes | 01:00 | 02:00 |
+| scheduledQuickReplyKeySweep | every 24 hours | 00:54 | 00:54 |
+| scheduledBankSync | every 8 hours | 22:47 | 06:47 |
+
+Result: "Deploy complete" at 01:55:56 (2 min 16 s), **8 of 8 "Successful update operation"**, exit 0; all eight ACTIVE on their new revisions at 01:56:05; ERROR entries since the start: 0. The eight Cloud Scheduler jobs read back ENABLED with the same schedules after the deploy. One side effect worth knowing for the later batches: re-deploying an `onSchedule` function re-applies its Scheduler job, and for interval schedules ("every N minutes/hours") that re-anchors the interval at the deploy time — after B2 the next runs read reminder check 02:10 (was 01:57), tracking refresh 02:55 (was 02:00), billing reconcile 02:55 (was 02:13), quick-reply key sweep 01:55 (ran at deploy time instead of 00:54 tomorrow); finance sweep 02:11, accounting reconcile 06:43 and bank sync 06:47 kept their next run. No job was lost or disabled; the hourly jobs simply skipped one tick.
+
+Gate (passive, as planned): each job's next scheduled run is read from the logs; no manual trigger. Four of the eight run inside the 30-minute window (reminder check 01:57, tracking refresh 02:00, finance sweep 02:11, billing reconcile 02:13); the others are read at their next run.
+
+## B3 — event-triggered (7 functions)
+
+Rollback targets captured before the batch:
+
+| Function | Revision before (rollback target) | Revision after | State |
+|---|---|---|---|
+| enforceWorkspaceSeatLimit | enforceworkspaceseatlimit-00001-hud | | |
+| notifyCustomerOnStatusChange | notifycustomeronstatuschange-00008-vuh | | |
+| scanUploadedFile | scanuploadedfile-00003-duh | | |
+| scheduleDeletedOrderFileCleanup | scheduledeletedorderfilecleanup-00005-dey | | |
+| settingsAuditTrail | settingsaudittrail-00002-bip | | |
+| stampOrderFinance | stamporderfinance-00004-ruk | | |
+| syncWorkflowSafeOrderView | syncworkflowsafeorderview-00018-raf | | |
+
+Gate: one order edit in the operator's own workspace (and a file upload if practical), then the trigger logs; 30-minute watch.
 
 ## Rollback used
 
