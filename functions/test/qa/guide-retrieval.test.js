@@ -382,11 +382,20 @@ function topPaths(question, limit = 4) {
     "that claim is false today: the status notification goes out however the status was changed");
   assert(/says so instead of presenting old numbers as live/.test(section.text),
     "the freshness promise belongs in the guide too, not only in the tool output");
+  // The cross-channel reads are written up before they are published, so the
+  // chapter has to date itself: a bot that offers a tool the app does not
+  // publish sends the reader somewhere that is not there. When the flags flip,
+  // this assertion is what reminds whoever flips them to move the bullets.
+  assert(/not in the version of the NivaDesk app published in ChatGPT today/.test(section.text),
+    "the not-yet-published capabilities must be marked as not yet published");
   for (const question of [
     "what can ChatGPT see in my workspace?",
     "does ChatGPT message my customers?",
     "how do I connect NivaDesk to ChatGPT?",
     "can I send a receipt to NivaDesk from ChatGPT?",
+    "can ChatGPT tell me what needs attention today?",
+    "can I ask ChatGPT how much came from Etsy this month?",
+    "can ChatGPT tell me if my Shopify connection is healthy?",
     "ChatGPT'de neleri sorabilirim?"
   ]) {
     const paths = topPaths(question);

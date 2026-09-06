@@ -1179,6 +1179,21 @@ const TREE_EN: GuideNode[] = [
             "Finance and dashboard: an order's financials, the dashboard summary, the financial overview and extra spending for a month, year or date range — on the Starter plan in the basic shape, on Pro and Team with profit and remaining balances.",
             "Banking: monthly spending by category and merchant, recurring costs, search of bank transactions, and receipts — send a receipt or invoice photo and NivaDesk matches it to the bank line; if several lines could fit it asks which; if the payment has not arrived yet the receipt waits under Banking ▸ Receipts and is matched when it does. Attaching receipts is for the workspace owner."
           ] },
+          // The cross-channel reads are built and tested but are NOT in the
+          // published ChatGPT app: they arrive with the 1.2.0 submission, behind
+          // NIVADESK_MCP_ORCHESTRATOR / NIVADESK_MCP_INVENTORY. When the operator
+          // flips those flags, move these bullets up into "What you can ask" and
+          // delete this heading with its first bullet. Until then the heading is
+          // what keeps the guide honest: a bot that offers a tool the app does
+          // not publish sends the reader somewhere that is not there.
+          { kind: "sub", text: "Coming in the next version of the app" },
+          { kind: "bullets", items: [
+            "The four below are built and tested but are not in the version of the NivaDesk app published in ChatGPT today, so asking for them now gets you the answers above instead. They arrive with the next release, and nothing on your side has to change for it.",
+            "Across your channels: how many orders this month and where they came from (Shopify, Etsy, WooCommerce, Square, Amazon, manual); the sales, refunds and known platform fees of each channel; payouts and whether they have been matched with a bank line; orders that need attention because a shop shows them shipped while NivaDesk is still waiting. Channels you have not connected are named as not connected rather than counted as zero — but if orders from a channel are in your workspace they are counted, even when NivaDesk cannot see that connection's status from here. Orders in another currency are listed in their own rows, never converted into your workspace currency.",
+            "What needs attention today: overdue and due-soon orders, approvals and shipments waiting, low stock, receipts missing, uncategorised bank lines, unmatched payouts, connections that need reconnecting — one list, each item once, with the sync time behind it.",
+            "Connections and bookkeeping: whether each shop, bank and accounting connection is healthy and when it last synced; what is prepared for Pandle, Xero or QuickBooks and why a record is not ready yet. NivaDesk prepares; your accountant decides.",
+            "Inventory: stock overview, low-stock items and reserved items; search by name, SKU, serial, location or status; add an item from a photo after you confirm what it is."
+          ] },
           { kind: "sub", text: "When your customer hears about it" },
           { kind: "bullets", items: [
             "Changing an order's status from ChatGPT is the same action as changing it in the app, and it can reach your customer the same way: if the order has automatic updates on — which is the default for orders that carry an email address — NivaDesk emails them about the new status, and sends an SMS too where you have SMS switched on. ChatGPT can only choose from the statuses your workspace already uses, and it should tell you before it changes one.",
@@ -2380,6 +2395,18 @@ const TREE_TR: GuideNode[] = [
             "Notlar: kendi kişisel notlarınızı oluşturma, arama, açma, sonuna ekleme, düzenleme, sabitleme ve arşivleme. Ekip notları ChatGPT'den değiştirilmez.",
             "Finans ve pano: bir siparişin finansı, pano özeti, finansal genel bakış ve bir ay, yıl ya da tarih aralığı için ek harcamalar — Starter planda temel biçimde, Pro ve Team'de kâr ve kalan bakiyelerle.",
             "Banka: kategori ve satıcıya göre aylık harcama, tekrarlayan giderler, banka hareketlerinde arama ve fişler — bir fiş ya da fatura fotoğrafı gönderin, NivaDesk onu banka satırıyla eşleştirir; birden fazla satır uyuyorsa hangisi olduğunu sorar; ödeme henüz gelmediyse fiş Banking ▸ Receipts altında bekler ve geldiğinde eşlenir. Fiş ekleme çalışma alanı sahibine özeldir."
+          ] },
+          // Aynı not, İngilizcesindeki gibi: bu dört madde hazır ve testli ama
+          // yayındaki ChatGPT uygulamasında YOK; 1.2.0 gönderimiyle, bayraklar
+          // açıldığında gelir. Bayraklar açıldığında bu maddeleri "Neler
+          // sorabilirsiniz" altına taşıyın, başlığı ve ilk maddeyi silin.
+          { kind: "sub", text: "Uygulamanın sonraki sürümünde geliyor" },
+          { kind: "bullets", items: [
+            "Aşağıdaki dört madde hazır ve testli ama bugün ChatGPT'de yayında olan NivaDesk sürümünde yok; şimdi sorarsanız yukarıdaki yanıtları alırsınız. Sonraki sürümle gelirler ve bunun için sizin tarafınızda bir şey değişmesi gerekmez.",
+            "Kanallarınız genelinde: bu ay kaç sipariş geldi ve nereden (Shopify, Etsy, WooCommerce, Square, Amazon, elle); her kanalın satışı, iadeleri ve bilinen platform ücretleri; ödemeler (payout) ve banka satırıyla eşlenip eşlenmediği; mağaza gönderildi derken NivaDesk'in hâlâ beklediği siparişler. Bağlamadığınız kanallar sıfır sayılmaz, bağlı değil diye söylenir — ama bir kanalın siparişleri çalışma alanınızdaysa, NivaDesk o bağlantının durumunu buradan göremese bile o siparişler sayılır. Başka para birimindeki siparişler kendi satırlarında listelenir, çalışma alanı para birimine çevrilmez.",
+            "Bugün nelere bakılmalı: gecikmiş ve yaklaşan siparişler, bekleyen onaylar ve gönderiler, düşük stok, eksik fişler, kategorisiz banka satırları, eşlenmemiş ödemeler, yeniden bağlanması gereken bağlantılar — tek liste, her madde bir kez, arkasında senkron zamanıyla.",
+            "Bağlantılar ve defter: her mağaza, banka ve muhasebe bağlantısının sağlıklı olup olmadığı ve en son ne zaman senkronlandığı; Pandle, Xero ya da QuickBooks için nelerin hazırlandığı ve bir kaydın neden henüz hazır olmadığı. NivaDesk hazırlar; kararı muhasebeciniz verir.",
+            "Envanter: stok özeti, düşük stoklu ve rezerve ürünler; ad, SKU, seri, konum ya da duruma göre arama; ne olduğunu onayladıktan sonra fotoğraftan ürün ekleme."
           ] },
           { kind: "sub", text: "Müşteriniz ne zaman haber alır" },
           { kind: "bullets", items: [
