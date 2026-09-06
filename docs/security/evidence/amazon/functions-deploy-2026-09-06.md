@@ -329,6 +329,65 @@ Operator's instruction "B4.3'e geç" at 02:38 UTC, i.e. seven minutes into B4.2'
 
 All three clean; no new 5xx or error increase, no scheduler loss, no probe difference, no unexpected trigger behaviour → B4.4 may proceed on the operator's go.
 
+## B4.4 — callables last deployed 1–5 Sep, chunk 4 (45 functions)
+
+Operator's conditional approval (in chat, 02:59 UTC): go if the three conditions above are clean — they were. Same seven steps.
+
+1–2: snapshot at 02:59:49, baseline probes at 02:59:54: 1 × 400, 41 × 401, 3 × 403, 0 × 5xx.
+3: started 2026-09-06T03:01:54Z from `ab7a1f7a` (functions code identical to `4b44eef9`); "Deploy complete" 03:05:35 (3 min 41 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 03:05:35 all 45 services report a new Ready revision (table below).
+5: probes re-run at 03:05:39 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| reconcileWooConnections | reconcilewooconnections-00004-pax | 403 | reconcilewooconnections-00005-weg | 403 |
+| recreateWooWebhooks | recreatewoowebhooks-00003-geg | 401 | recreatewoowebhooks-00004-sis | 401 |
+| registerTracking | registertracking-00123-riw | 401 | registertracking-00124-jiq | 401 |
+| releaseHeldIntegrationOrders | releaseheldintegrationorders-00011-xor | 401 | releaseheldintegrationorders-00012-nij | 401 |
+| removeWorkspaceTeamMember | removeworkspaceteammember-00101-not | 401 | removeworkspaceteammember-00102-vew | 401 |
+| resetCustomOrderLandingStats | resetcustomorderlandingstats-00002-haz | 403 | resetcustomorderlandingstats-00003-bud | 403 |
+| resolveCommerceReview | resolvecommercereview-00002-moy | 401 | resolvecommercereview-00003-sos | 401 |
+| resolveEtsyCustomerMatch | resolveetsycustomermatch-00007-mog | 401 | resolveetsycustomermatch-00008-dos | 401 |
+| resyncStripeWorkspaceEntitlements | resyncstripeworkspaceentitlements-00030-hev | 401 | resyncstripeworkspaceentitlements-00031-seb | 401 |
+| retryCommerceEvent | retrycommerceevent-00013-tod | 401 | retrycommerceevent-00014-goh | 401 |
+| revokeChatGPTConnection | revokechatgptconnection-00001-mit | 401 | revokechatgptconnection-00002-miz | 401 |
+| revokeOrderEstimateLink | revokeorderestimatelink-00003-qit | 401 | revokeorderestimatelink-00004-fov | 401 |
+| revokeOrderPortalLink | revokeorderportallink-00002-zar | 401 | revokeorderportallink-00003-lor | 401 |
+| revokeWorkspaceInvitation | revokeworkspaceinvitation-00001-jop | 401 | revokeworkspaceinvitation-00002-mec | 401 |
+| rotateIntegrationWebhookToken | rotateintegrationwebhooktoken-00005-bev | 401 | rotateintegrationwebhooktoken-00006-zah | 401 |
+| runEtsyImport | runetsyimport-00017-tot | 401 | runetsyimport-00018-new | 401 |
+| runSquareImport | runsquareimport-00010-qak | 401 | runsquareimport-00011-qaz | 401 |
+| runWooImport | runwooimport-00005-ced | 401 | runwooimport-00006-zen | 401 |
+| saveFinancialSettings | savefinancialsettings-00079-ses | 401 | savefinancialsettings-00080-yih | 401 |
+| saveInventoryItem | saveinventoryitem-00008-jik | 401 | saveinventoryitem-00009-jif | 401 |
+| saveProductionStages | saveproductionstages-00004-pip | 401 | saveproductionstages-00005-nov | 401 |
+| saveSwiftOrder | saveswiftorder-00055-wuw | 401 | saveswiftorder-00056-vab | 401 |
+| saveThemeBrandingSettings | savethemebrandingsettings-00071-suh | 401 | savethemebrandingsettings-00072-rig | 401 |
+| saveWooSignatureSecret | savewoosignaturesecret-00002-sib | 400 | savewoosignaturesecret-00003-ker | 400 |
+| sendOrderEstimate | sendorderestimate-00004-yer | 401 | sendorderestimate-00005-luq | 401 |
+| setLibraryFileActiveVersion | setlibraryfileactiveversion-00003-tad | 401 | setlibraryfileactiveversion-00004-quv | 401 |
+| setOrderProductionStage | setorderproductionstage-00004-paj | 401 | setorderproductionstage-00005-sep | 401 |
+| setShopifyIntegrationState | setshopifyintegrationstate-00004-vos | 401 | setshopifyintegrationstate-00005-qin | 401 |
+| shareLibraryFileWithOrder | sharelibraryfilewithorder-00003-bil | 401 | sharelibraryfilewithorder-00004-hoz | 401 |
+| shopifyImportOrders | shopifyimportorders-00010-les | 401 | shopifyimportorders-00011-ciw | 401 |
+| shopifyReconcileOrders | shopifyreconcileorders-00003-cir | 403 | shopifyreconcileorders-00004-lor | 403 |
+| syncEtsyNow | syncetsynow-00017-fed | 401 | syncetsynow-00018-xoy | 401 |
+| syncSquareNow | syncsquarenow-00014-tuz | 401 | syncsquarenow-00015-map | 401 |
+| syncWooNow | syncwoonow-00005-nos | 401 | syncwoonow-00006-dew | 401 |
+| undoOrderCreate | undoordercreate-00001-jum | 401 | undoordercreate-00002-run | 401 |
+| undoOrderProductionStage | undoorderproductionstage-00004-zod | 401 | undoorderproductionstage-00005-cof | 401 |
+| updateSquareConnectionSettings | updatesquareconnectionsettings-00008-sop | 401 | updatesquareconnectionsettings-00009-gob | 401 |
+| updateWebOrder | updateweborder-00131-wus | 401 | updateweborder-00132-tiy | 401 |
+| updateWorkspaceMemberSuspension | updateworkspacemembersuspension-00001-fod | 401 | updateworkspacemembersuspension-00002-juf | 401 |
+| verifyAppleSubscriptionPurchase | verifyapplesubscriptionpurchase-00008-qon | 401 | verifyapplesubscriptionpurchase-00009-qop | 401 |
+| verifyEtsyConnection | verifyetsyconnection-00006-zur | 401 | verifyetsyconnection-00007-zam | 401 |
+| xeroConnectStart | xeroconnectstart-00003-sir | 401 | xeroconnectstart-00004-sop | 401 |
+| xeroDisconnect | xerodisconnect-00004-sem | 401 | xerodisconnect-00005-neb | 401 |
+| xeroListTenants | xerolisttenants-00003-yab | 401 | xerolisttenants-00004-xut | 401 |
+| xeroSelectTenant | xeroselecttenant-00003-rud | 401 | xeroselecttenant-00004-nih | 401 |
+
+6: fifteen-minute watch (03:01:54 → 03:17:30): _pending_.
+
 ## Rollback used
 
 None so far.
