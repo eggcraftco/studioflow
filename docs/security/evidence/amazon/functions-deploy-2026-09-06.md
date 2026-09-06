@@ -523,6 +523,58 @@ Started under the operator's standing approval after B5.1's clean gate. Same sev
 
 6: fifteen-minute watch (03:54:37 → 04:10:47 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic was the probe set — passed. Four conditions met → B5.3 started under the operator's standing approval.
 
+## B5.3 — callables last deployed in August, chunk 3 (32 functions)
+
+Started under the operator's standing approval after B5.2's clean gate. Same seven steps.
+
+1–2: snapshot at 04:11:08, baseline probes at 04:11:11: 1 × 400, 31 × 401, 0 × 5xx.
+3: started 2026-09-06T04:12:34Z from `39608e61` (functions code identical to `4b44eef9`); "Deploy complete" 04:15:24 (2 min 50 s), **32 of 32 "Successful update operation"**, exit 0.
+4: at 04:15:24 all 32 services report a new Ready revision (table below).
+5: probes re-run at 04:15:29 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| saveSwiftWorkspaceCardProfile | saveswiftworkspacecardprofile-00050-rer | 401 | saveswiftworkspacecardprofile-00051-yif | 401 |
+| saveTypeWorkspaceCardLayout | savetypeworkspacecardlayout-00003-deg | 401 | savetypeworkspacecardlayout-00004-tab | 401 |
+| saveUploadSafetySettings | saveuploadsafetysettings-00082-sag | 401 | saveuploadsafetysettings-00083-suh | 401 |
+| saveWorkspaceBlockHeadings | saveworkspaceblockheadings-00093-ceb | 401 | saveworkspaceblockheadings-00094-jul | 401 |
+| saveWorkspaceCardLayout | saveworkspacecardlayout-00103-nif | 401 | saveworkspacecardlayout-00104-hem | 401 |
+| saveWorkspaceCustomRole | saveworkspacecustomrole-00047-wed | 401 | saveworkspacecustomrole-00048-qiz | 401 |
+| saveWorkspaceLogo | saveworkspacelogo-00070-zer | 401 | saveworkspacelogo-00071-jin | 401 |
+| saveWorkspaceSidebarLayout | saveworkspacesidebarlayout-00053-mar | 401 | saveworkspacesidebarlayout-00054-vej | 401 |
+| saveWorkspaceSmsSettings | saveworkspacesmssettings-00004-kuf | 401 | saveworkspacesmssettings-00005-xel | 401 |
+| sendThreadMessage | sendthreadmessage-00046-fiv | 401 | sendthreadmessage-00047-maf | 401 |
+| setClientSubdomain | setclientsubdomain-00001-cuc | 401 | setclientsubdomain-00002-mig | 401 |
+| setInventoryItemStatus | setinventoryitemstatus-00003-tub | 401 | setinventoryitemstatus-00004-nid | 401 |
+| setSharedPersonalNoteEditingPresence | setsharedpersonalnoteeditingpresence-00028-sec | 401 | setsharedpersonalnoteeditingpresence-00029-hub | 401 |
+| setTrialPlan | settrialplan-00001-put | 401 | settrialplan-00002-reh | 401 |
+| setWebsiteAssistant | setwebsiteassistant-00001-guw | 401 | setwebsiteassistant-00002-sup | 401 |
+| sharePersonalNoteWithWorkspaceMember | sharepersonalnotewithworkspacemember-00030-mug | 401 | sharepersonalnotewithworkspacemember-00031-riw | 401 |
+| shopifyCompleteConnect | shopifycompleteconnect-00002-vir | 401 | shopifycompleteconnect-00003-goj | 401 |
+| startStocktake | startstocktake-00001-bag | 401 | startstocktake-00002-pet | 401 |
+| swapInventoryForOrder | swapinventoryfororder-00001-tub | 401 | swapinventoryfororder-00002-xib | 401 |
+| syncWorkspaceAcceptedJoinRequests | syncworkspaceacceptedjoinrequests-00105-sih | 401 | syncworkspaceacceptedjoinrequests-00106-zin | 401 |
+| testQuickReplyApiKey | testquickreplyapikey-00003-qaw | 401 | testquickreplyapikey-00004-wom | 401 |
+| trashLibraryFile | trashlibraryfile-00002-tiz | 401 | trashlibraryfile-00003-fuv | 401 |
+| undoClearAllOrdersTax | undoclearallorderstax-00001-ric | 401 | undoclearallorderstax-00002-tux | 401 |
+| undoWorkspaceBackupImport | undoworkspacebackupimport-00002-daq | 401 | undoworkspacebackupimport-00003-zok | 401 |
+| unlinkLibraryFile | unlinklibraryfile-00001-vez | 401 | unlinklibraryfile-00002-vim | 401 |
+| unpinMessageInThread | unpinmessageinthread-00002-yih | 401 | unpinmessageinthread-00003-meq | 401 |
+| updateWebCustomer | updatewebcustomer-00088-vir | 401 | updatewebcustomer-00089-vuz | 401 |
+| updateWorkspaceMemberAccess | updateworkspacememberaccess-00045-giq | 401 | updateworkspacememberaccess-00046-juf | 401 |
+| validateWorkspacePlanAction | validateworkspaceplanaction-00102-pev | 401 | validateworkspaceplanaction-00103-gux | 401 |
+| verifyClientDomain | verifyclientdomain-00006-zem | 401 | verifyclientdomain-00007-vic | 401 |
+| verifyGooglePlayPurchase | verifygoogleplaypurchase-00008-riw | 401 | verifygoogleplaypurchase-00009-yaf | 401 |
+| websiteChatRequestHuman | websitechatrequesthuman-00001-der | 400 | websitechatrequesthuman-00002-ras | 400 |
+
+6: fifteen-minute watch (04:12:34 → 04:28:30): _pending_.
+
+With B5.3 the August group (B5.1–B5.3, 122 functions) is on the remediated tree: **350 of 414** deployed. The 64 remaining are the June/July group (B6.1, B6.2), which per the plan and the operator's rule waits for a **24-hour soak** with no new batch, then the operator's go.
+
+## 24-hour soak
+
+Starts when B5.3's gate passes (entry below). Checks every two hours (errors and 5xx since the soak start across all 350 deployed functions, traffic by status class, the eight Scheduler jobs' state and next run, event-trigger executions), appended here; the 24-hour result subsection closes it.
+
 ## Rollback used
 
 None so far.
