@@ -1,7 +1,16 @@
 # eBay branch — credential and personal-data scan, 6 September 2026
 
-Run before the checkpoint push of `ebay-connector`, over the whole branch: 26 commits, 75 files,
-11,410 added lines, diffed against the merge base with `macbook-save-before-macstudio-2026-06-01`.
+Run before the checkpoint push of `ebay-connector`, over the whole branch as it stood then: 26
+commits, 75 files, 11,410 added lines, diffed against the merge base with
+`macbook-save-before-macstudio-2026-06-01`.
+
+**Re-run 6 September, after the POST callback contract and its two review rounds.** The branch is now
+**61 commits, 85 files, 14526 added lines**. The same thirteen patterns were run over the full current
+diff by the re-review's verdict agent: no long hex run, no private-key block, no JSON web token, no
+bearer or basic literal, no cloud provider key. The four secret-shaped assignments it found are test
+placeholders in the emulator suites and the qa harness. The client bundle carries the NAMES
+`NIVADESK_EBAY_CALLBACK_KEY`, `x-nivadesk-signature`, `EBAY_CLIENT_SECRET` and `EBAY_TOKEN_KEY` and no
+value for any of them. **The verdict below still holds at this size.**
 
 ## What was searched
 

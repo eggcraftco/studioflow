@@ -76,6 +76,13 @@ Sources read (read-only, nothing edited or executed):
 
 ## C) Final OAuth URL design, as the revised design states it
 
+> **Superseded on 6 September 2026.** Everything below describes the pre-§5.4 accept-URL behaviour,
+> where the web route forwarded every parameter to the Cloud Function in a query string and appended
+> `nonce=<cookie value>`. That transport is gone: the route now POSTs a signed JSON body, the function
+> takes POST only, and no value travels in a URL. The accepted, declined and privacy URLs in this
+> section are unchanged and still correct; the paragraph describing what the route does with them is
+> not. Read §5.4 of `docs/ebay-connector-design.md` for the current contract.
+
 **Authorize URL** (§1 "Authorize", "Scope encoding"): `https://auth.ebay.com/oauth2/authorize?client_id&response_type=code&redirect_uri=<RuName>&scope=<list>&state`; sandbox host `https://auth.sandbox.ebay.com/oauth2/authorize`. `redirect_uri` is the RuName verbatim, not a URL. `scope` is built by hand — `"scope=" + scopes.map(encodeURIComponent).join("%20")` — "never through `URLSearchParams`/`searchParams.set`, which would emit `+`"; `commerce-ebay-oauth.test.js` pins `%20` and the absence of `+`. `state = base64url(randomBytes(32))`, opaque to eBay.
 
 **Accept (callback) URL** — the RuName's "auth accepted URL" (§1 "RuName"; §5 diagram): `https://nivadesk.app/ebay/callback`. eBay arrives with `?code&state&expires_in`. `app/ebay/callback/route.ts` (§5.1, §11.4) "forwards every param untouched + `nonce=<cookie value>`" to `https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback`, expires the `nv_ebay_nonce` cookie on the redirect response, `dynamic = "force-dynamic"`, and "still reads or rewrites no eBay parameter".
