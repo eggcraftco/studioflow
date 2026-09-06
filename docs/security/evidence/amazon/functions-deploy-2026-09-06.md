@@ -201,6 +201,65 @@ Gate: state ACTIVE on all 45 ✔, probe table unchanged ✔, 15-minute error wat
 
 All four conditions the operator set (no new 5xx/error, no unexpected error log, probes unchanged, no scheduler/trigger regression) hold → B4.2 proceeds.
 
+## B4.2 — callables last deployed 1–5 Sep, chunk 2 (45 functions)
+
+Operator's process for this batch (in chat, 02:14 UTC): go only if the four previous gates are clean — they were (summary table above) — then 1 rollback snapshot, 2 probe baseline, 3 deploy, 4 ACTIVE/new-revision check, 5 probe compare, 6 fifteen-minute watch, 7 record and commit.
+
+1–2: snapshot at 02:29:04, baseline probes at 02:29:09 (unauthenticated `POST {"data":{}}`): 1 × 200 (a visitor-facing read that answers an empty request with an empty result), 5 × 400, 24 × 401, 15 × 403, 0 × 5xx.
+3: started 2026-09-06T02:31:00Z from `fdbd8d9a` (functions code identical to `4b44eef9`); "Deploy complete" 02:35:09 (4 min 9 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 02:35:09 all 45 services report a new Ready revision (table below).
+5: probes re-run at 02:35:12 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| bankSyncTransactions | banksynctransactions-00021-piz | 401 | banksynctransactions-00022-hum | 401 |
+| bankUpdateTransaction | bankupdatetransaction-00005-hok | 401 | bankupdatetransaction-00006-tek | 401 |
+| beginEtsyConnect | beginetsyconnect-00008-gas | 401 | beginetsyconnect-00009-xel | 401 |
+| beginSquareConnect | beginsquareconnect-00008-nud | 401 | beginsquareconnect-00009-goc | 401 |
+| beginWooConnect | beginwooconnect-00002-reg | 401 | beginwooconnect-00003-wiq | 401 |
+| changeAccountEmail | changeaccountemail-00039-vos | 401 | changeaccountemail-00040-qul | 401 |
+| chatgptWorkspaceAction | chatgptworkspaceaction-00046-ruf | 401 | chatgptworkspaceaction-00047-him | 401 |
+| cleanupStaleUnverifiedAccounts | cleanupstaleunverifiedaccounts-00005-lig | 403 | cleanupstaleunverifiedaccounts-00006-qer | 403 |
+| commerceEventWorker | commerceeventworker-00013-yuc | 403 | commerceeventworker-00014-gab | 403 |
+| createStripeCheckoutSession | createstripecheckoutsession-00051-gum | 400 | createstripecheckoutsession-00052-lug | 400 |
+| createSupportTicket | createsupportticket-00065-jol | 401 | createsupportticket-00066-ciy | 401 |
+| createSwiftOrder | createswiftorder-00055-wok | 401 | createswiftorder-00056-cus | 401 |
+| createWebOrder | createweborder-00108-rax | 401 | createweborder-00109-tot | 401 |
+| createWebsiteChat | createwebsitechat-00068-qar | 400 | createwebsitechat-00069-nap | 400 |
+| deleteMyAccount | deletemyaccount-00009-xaz | 401 | deletemyaccount-00010-lom | 401 |
+| deleteWebCustomer | deletewebcustomer-00084-yob | 401 | deletewebcustomer-00085-fuz | 401 |
+| deleteWorkspaceData | deleteworkspacedata-00061-wex | 401 | deleteworkspacedata-00062-hed | 401 |
+| disconnectEtsyShop | disconnectetsyshop-00010-wes | 401 | disconnectetsyshop-00011-yew | 401 |
+| disconnectSquare | disconnectsquare-00009-lak | 401 | disconnectsquare-00010-muz | 401 |
+| disconnectWooShop | disconnectwooshop-00003-jay | 401 | disconnectwooshop-00004-sop | 401 |
+| exportOrders | exportorders-00007-mol | 401 | exportorders-00008-zam | 401 |
+| finishWooConnect | finishwooconnect-00004-hob | 401 | finishwooconnect-00005-jaj | 401 |
+| generateQuickReply | generatequickreply-00085-heg | 401 | generatequickreply-00086-tof | 401 |
+| getActivationFunnel | getactivationfunnel-00001-muv | 403 | getactivationfunnel-00002-ret | 403 |
+| getAdminFeatureUsageDetail | getadminfeatureusagedetail-00004-det | 403 | getadminfeatureusagedetail-00005-cug | 403 |
+| getAdminInsights | getadmininsights-00007-tax | 403 | getadmininsights-00008-jeq | 403 |
+| getAdminLookup | getadminlookup-00004-caw | 403 | getadminlookup-00005-leq | 403 |
+| getAdminOnboardingDetail | getadminonboardingdetail-00003-dew | 403 | getadminonboardingdetail-00004-biv | 403 |
+| getAdminPlansDetail | getadminplansdetail-00005-wus | 403 | getadminplansdetail-00006-juz | 403 |
+| getAdminRevenueDetail | getadminrevenuedetail-00005-wiy | 403 | getadminrevenuedetail-00006-vos | 403 |
+| getAdminStorageDetail | getadminstoragedetail-00004-hal | 403 | getadminstoragedetail-00005-zor | 403 |
+| getAdminSubscriptionsDetail | getadminsubscriptionsdetail-00004-hif | 403 | getadminsubscriptionsdetail-00005-ves | 403 |
+| getAdminUsersWorkspacesDetail | getadminusersworkspacesdetail-00006-qic | 403 | getadminusersworkspacesdetail-00007-led | 403 |
+| getAppAssistantAvailability | getappassistantavailability-00019-mid | 200 | getappassistantavailability-00020-jel | 200 |
+| getCommerceCapabilities | getcommercecapabilities-00003-gur | 401 | getcommercecapabilities-00004-hav | 401 |
+| getCommerceHealth | getcommercehealth-00004-seg | 401 | getcommercehealth-00005-mav | 401 |
+| getCustomOrderLandingStats | getcustomorderlandingstats-00005-rus | 403 | getcustomorderlandingstats-00006-kif | 403 |
+| getEstimateForVisitor | getestimateforvisitor-00006-yis | 400 | getestimateforvisitor-00007-koj | 400 |
+| getEtsyConnections | getetsyconnections-00006-qit | 401 | getetsyconnections-00007-xew | 401 |
+| getInboundWebhookToken | getinboundwebhooktoken-00006-sad | 401 | getinboundwebhooktoken-00007-kod | 401 |
+| getPortalForVisitor | getportalforvisitor-00007-giq | 400 | getportalforvisitor-00008-buw | 400 |
+| getSearchConsoleStats | getsearchconsolestats-00004-xob | 403 | getsearchconsolestats-00005-xac | 403 |
+| getSetupChecklist | getsetupchecklist-00001-yod | 401 | getsetupchecklist-00002-zeq | 401 |
+| getShopifyWebhookToken | getshopifywebhooktoken-00007-teq | 400 | getshopifywebhooktoken-00008-hoc | 400 |
+| getSiteStats | getsitestats-00007-zux | 403 | getsitestats-00008-yem | 403 |
+
+6: fifteen-minute watch (02:31:00 → 02:50:30): _pending_.
+
 ## Rollback used
 
 None so far.
