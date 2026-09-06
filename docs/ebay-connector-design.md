@@ -595,10 +595,12 @@ Connect eBay ──▶ beginEbayConnect (owner) ──▶ ebayConnectStates/{sta
 "nv_ebay_nonce=<nonce>; Secure; SameSite=Lax; Path=/ebay/callback; Max-Age=600"` and then sets
 `window.location.href = authorizeUrl`. `app/ebay/callback/route.ts` reads `nv_ebay_nonce` from `request.cookies` and sends `code`, `state` and
 that nonce — the empty string when there is no cookie — to the function in a **signed POST body**, never
-a URL (**§5.4**, which supersedes the forwarding this paragraph used to describe). An absent cookie is
-**not** refused on the web side: the request must reach the function so the state is burned **and the code
-spent** at the moment of consent (§5.4, *The burn, and the spend*). It expires the cookie on the landings
-whose answer proves the state was consumed, and on no others — clearing it on a landing that consumed
+a URL (**§5.4**, which supersedes the forwarding this paragraph used to describe). An absent cookie was
+**not** refused on the web side, so that the request reached the function and the state was burned **and the
+code spent** at the moment of consent (§5.4, *The burn, and the spend*) — **superseded by §5.5**, where a
+second cookie carries a MAC the route can verify by itself, a callback without one signs only a code
+disposal that can name no state, and the code is still spent. It expired the cookie on the landings
+whose answer proved the state was consumed, and on no others — clearing it on a landing that consumed
 nothing let any link break a seller's in-flight connect (§5.4). The cookie is first-party to
 `nivadesk.app` and `SameSite=Lax` survives the top-level GET redirect from eBay. It is scoped to the
 callback path, which is a request-matching rule and **not** a security boundary: it is written from
@@ -626,6 +628,12 @@ adversarial list (§14.3) claims exactly: cross-workspace state, state replay, e
 **and browser binding** — not more.
 
 ### 5.4 The callback transport — the code and the nonce never travel in a backend URL
+
+**Superseded in part by §5.5**, which is where the route stops signing for anyone who asks: three things
+below are no longer current — *The public entrance* (now closed for the connect envelope), the
+`CONSUMED` cookie-clearing rule, and the sentence that says every shaped callback reaches the state
+transaction. Everything else in this section, including the POST contract and *The burn, and the spend*,
+stands unchanged, and §5.5 depends on it.
 
 **Supersedes** the last two lines of the §5 diagram, the forwarding paragraph in §5.1, the
 `ebayOAuthCallback` row in §3 (GET → POST) and the `connectRedirect` bullet at the end of §5.
@@ -988,6 +996,11 @@ What a key holder does get, stated so nobody has to rediscover it:
 - Everything else is a 401, a 400, or a `reason=state`.
 
 #### The public entrance: our own route signs for anyone who asks
+
+**Closed by §5.5 for the connect envelope; read this subsection as the statement of the problem, not of
+the current behaviour.** A caller with no verified ticket now makes the route sign only a `dispose`
+envelope, which has no `state` field and touches nothing in Firestore. What follows is why that was
+needed.
 
 Stated because two claims in this section were false without it, and because it is the direct cost of the
 decision in *The burn, and the spend*.
@@ -1523,6 +1536,535 @@ genuinely indeterminate. What that abort leaves indeterminate is the screen, not
 `refresh(true)` fires too early to resolve it on its own; pressing Connect again reconnects onto the same
 deterministic row, which is the recovery (see *Timeouts*).
 
+
+### 5.5 The browser-binding ticket — the edge verifies the binding, and the disposal path can name no state
+
+**Supersedes** three properties of §5.4, and nothing else: (a) *The public entrance* — "our own route signs
+for anyone who asks" — which was recorded as an accepted residual and is now closed for the connect
+envelope; (b) the `CONSUMED` cookie-clearing rule in `app/ebay/callback/route.ts`, replaced by a stronger
+rule the edge can decide by itself; (c) the sentence in *The burn, and the spend* that says every shaped
+callback reaches the state transaction — it now reaches one of **two** envelopes, and only one of them can
+name a state.
+
+**Stands, word for word:** the signed POST contract (*The request*, *The response*, *Order of checks*), §4.5's
+single-use transaction, the burn, the argument that **the spend and not the burn is what ends the attack**,
+the logging rules and their two traps, and every residual. §5.4's criterion-2 admission — "the web layer
+sees only that a cookie was PRESENT" — is what this section removes, and it removes only that.
+
+#### Why this section exists
+
+`app/ebay/callback/route.ts` signs unconditionally. It cannot authenticate eBay's redirect, so it checks a
+shape, reads a cookie and POSTs. §5.4 stated the consequence plainly and then accepted it: **any anonymous
+caller who requests `https://nivadesk.app/ebay/callback?code=x&state=<20–120 shaped characters>` makes our
+own server mint a valid HMAC** and drives `ebayOAuthCallback` into a Firestore transaction — one read, and,
+for a state the caller has observed in Hostinger's access log, one write that burns it. The endpoint that
+`EBAY_CALLBACK_KEY` exists to protect has a public entrance that hands out the key's authority to anyone
+who asks for it in the right shape.
+
+The remedy is not to refuse at the edge. §5.4 spent a whole subsection proving that an edge refusal is the
+removal of the defence, because only the function can spend eBay's code and an unspent code is the whole of
+residual 1. So the remedy has to be a **binding the edge can verify on its own** — no Firestore, no new
+credential, no round trip — and a **second, strictly weaker envelope** for the case where that binding is
+absent, whose entire authority is "burn this code at eBay".
+
+That is this section. It is also what turns §5.4's criterion 2 from *met in substance* into *met literally*:
+after this change the web layer verifies that the browser holds a value **we minted, for this state, over
+this nonce, still inside its window** — not merely that a cookie exists.
+
+#### What the ticket is, and which key signs it
+
+A ticket is one ASCII string, five dot-separated fields and a MAC, and it parses without a JSON parser
+anywhere near attacker bytes:
+
+```
+nv1.<state>.<nonceTag>.<expMs>.<jti>.<mac>
+```
+
+| Field | Bytes | What it is |
+|---|---|---|
+| `nv1` | literal | Version **and** domain tag. Covered by the MAC, so a v2 ticket can never be read as a v1 one. |
+| `state` | the state verbatim | `/^[A-Za-z0-9_-]{20,120}$/` — §4.5's own alphabet, which contains no `.`, which is why a dot-joined encoding is unambiguous. |
+| `nonceTag` | 43 chars | `base64url(HMAC-SHA256(ticketKey, "nonce." + nonce))`, 32 bytes, unpadded. **Not** `sha256hex(nonce)`: that value is compared server-side against `nonceHash`, and a ticket must not carry anything the state document compares. Keyed, so a ticket holder cannot even confirm a guessed nonce. |
+| `expMs` | 13 digits | Absolute expiry, unix milliseconds. **Always the state document's own `expiresAt`**, never `now + 600000`: for a native claim the state was minted earlier, and a ticket must never be the longer-lived half of the pair. |
+| `jti` | 22 chars | `base64url(randomBytes(16))`. Read by nothing today. It exists so that a ticket is not a deterministic function of values an attacker may know, and so that edge-side single-use storage — if the owner ever buys it (see *Single use*) — already has a unique, MAC-covered handle to key on. |
+| `mac` | 43 chars | `base64url(HMAC-SHA256(ticketKey, payload))`, where `payload` is the exact ASCII prefix `nv1.<state>.<nonceTag>.<expMs>.<jti>` — including `nv1.`, excluding the final `.`. |
+
+Full shape, applied before anything is split, after a cheap length cap of 400 characters:
+
+```
+/^nv1\.[A-Za-z0-9_-]{20,120}\.[A-Za-z0-9_-]{43}\.[0-9]{13}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/
+```
+
+**The key is derived, not new.** There is **no sixth secret**. The ticket key is
+
+```
+ticketKey = HMAC-SHA256(EBAY_CALLBACK_KEY | NIVADESK_EBAY_CALLBACK_KEY, "nivadesk/ebay/ticket/v1")   // 32 raw bytes
+```
+
+— the same 32 bytes both sides already hold, under a label. It has no name in Secret Manager and no name in
+Hostinger, deliberately. Three reasons, in order of weight:
+
+1. **A sixth name is a sixth way for the two sides to disagree.** §5.4's *Rollout* is five steps long
+   precisely because one shared value has to be minted once and set in two places, and step 3 exists
+   because an earlier list forgot that `EBAY_SECRET_PARAMS` gates the mount. Every one of those failure
+   modes would be duplicated by a second key, for no gain.
+2. **Both parties already hold the parent at exactly the right place.** The function mints tickets and
+   already reads `callbackKey()`; the route verifies them and already reads
+   `process.env.NIVADESK_EBAY_CALLBACK_KEY` inside the handler. Neither needs anything it does not have.
+3. **The label is domain separation.** A relay signature is `HMAC(key, "v1." + ts + "." + body)`; a ticket
+   is `HMAC(HMAC(key, "nivadesk/ebay/ticket/v1"), "nv1." + …)`; a nonce tag is that same derived key over
+   `"nonce." + nonce`. The three inputs begin with three distinct, non-overlapping prefixes and two of them
+   are computed under a key the relay verifier never sees, so no output of one can be fed to another.
+
+Rotation is unchanged and needs no new step: rotating `EBAY_CALLBACK_KEY` rotates the ticket key with it.
+The in-flight cost is symmetric with the relay's — tickets minted under the old key stop verifying and land
+the seller on the same `browser` sentence, recovered by one more press of Connect.
+
+#### Where it is minted — two entry points, one rule
+
+**The rule: wherever a nonce is minted, a ticket is minted beside it, over that nonce, from the same
+function invocation.** There is no other minter, and the two entry points are exactly the two that mint
+nonces today.
+
+| Entry point | Origin | What changes |
+|---|---|---|
+| `beginEbayConnect` | **web** | After `states().doc(state).set({ …, nonceHash: sha256hex(nonce), … })`, build the ticket over the *same* `nonce` variable and the state's own `expiresAt`. The reply becomes `{ ok, authorizeUrl, state, nonce, ticket, scopes, environment }`. |
+| `beginEbayConnect` | **native** | **Unchanged.** No nonce is returned, so no ticket is: a native app can hold neither cookie, which is the whole reason §5.2 exists. The reply still carries `startUrl` and no `authorizeUrl`. |
+| `claimEbayConnectState` | native hand-off, in a real browser | It already mints a fresh nonce and rewrites `nonceHash` inside the claim transaction. It now builds a ticket over that fresh nonce and the row's `expiresAt`, and answers `{ ok, authorizeUrl, nonce, ticket }`. |
+
+Because the minter writes `nonceHash` and the ticket's `nonceTag` from the same variable in the same call,
+an edge that matches the tag has matched the nonce the state document expects — transitively, under our own
+key. **The edge check and the transaction check are two verifications of the same fact, reached by
+different keys and different storage.** Neither replaces the other: a disagreement between them means a bug
+or a tampered state row, and the function stays authoritative (§5.4, *Order of checks*).
+
+`ebayConnectStates/{state}` gains **no field**. §4.5 is untouched: same document, same TTL, same
+`nonceHash`, same single-use transaction, no new index and no change to `firestore.rules`. The ticket is
+self-contained; that is the point of a MAC.
+
+#### Sealing it into a cookie: `POST /ebay/ticket`
+
+The ticket cookie must be `HttpOnly`, and client JavaScript cannot set an `HttpOnly` cookie. So the cookie
+is set by a response from our own origin, by a new route handler that does one thing.
+
+```
+POST https://nivadesk.app/ebay/ticket
+content-type: application/json
+{ "ticket": "nv1.…" }
+```
+
+- `export const runtime = "nodejs"` and `export const dynamic = "force-dynamic"`, for §5.4's reasons: Edge
+  handlers get `process.env` statically replaced, which would bake the key into the build.
+- Method: POST only. Anything else → 405 `{"ok":false}`.
+- Reads `NIVADESK_EBAY_CALLBACK_KEY` **inside the handler**, derives `ticketKey`, and verifies the ticket by
+  steps b–d of *The edge verification* below — shape, MAC, expiry window. It does **not** read cookies and
+  does **not** know the nonce.
+- **Success → `204 No Content`**, `cache-control: no-store`, and exactly one header:
+  `Set-Cookie: nv_ebay_ticket=<the verified ticket>; Max-Age=<ceil((expMs − now)/1000)>; Path=/ebay/callback; Secure; HttpOnly; SameSite=Lax`.
+- **Anything else → `400 {"ok":false}`**, no cookie, `cache-control: no-store`.
+
+Three properties this route must have, stated so an implementer cannot trade them away:
+
+1. **It sets a cookie only for a ticket it has verified**, so it is not a way to plant chosen bytes in a
+   seller's cookie jar. What an outsider *can* plant, cross-site, is a ticket of their own — but a ticket
+   alone is half a pair, and `nv_ebay_nonce` cannot be planted cross-site at all (it is written by script on
+   our origin, and no response of ours sets it). A planted ticket therefore dies at the nonce-tag step of
+   the callback, with the victim's own flow untouched because a failed ticket clears nothing.
+2. **It never extends a ticket.** `Max-Age` is computed from the MAC-covered `expMs`, so a ticket with two
+   minutes left seals into a two-minute cookie and a ticket with none seals into nothing (400).
+3. **It logs nothing per request** — one throttled ops line at most, `ebay ticket: refused`, at most once a
+   minute per web process, carrying no value from the body.
+
+The callers, both of which already exist and both of which gain the same two lines:
+
+- **Web** — `EbayIntegrationSection.startConnect`: `setEbayNonceCookie(result.nonce)`, then
+  `await sealEbayTicket(result.ticket)`, and **only on success** `window.location.href = result.authorizeUrl`.
+- **Native hand-off** — `EbayStartContent`: identical, on `claimEbayConnectState`'s reply.
+
+If sealing fails, the seller is **not sent to eBay**: they see the existing sentence "eBay did not complete
+the connection. Try again." and nothing has been consumed — no code exists yet, and the state expires by
+TTL. Sending a seller to eBay when we already know the return leg will refuse is the one behaviour that
+would manufacture the unspent codes residual 1 is about.
+
+`sealEbayTicket` lives beside `setEbayNonceCookie` in `lib/studioflow/ebay.ts` and is a same-origin `fetch`
+with the default credentials mode; the response's `Set-Cookie` applies because it is same-origin.
+
+#### The two cookies, in full
+
+| | `nv_ebay_nonce` | `nv_ebay_ticket` |
+|---|---|---|
+| Value | `base64url(randomBytes(24))` | the ticket string |
+| Written by | client JavaScript, `document.cookie` (`setEbayNonceCookie`) | a `Set-Cookie` on `POST /ebay/ticket` |
+| `Secure` | yes | yes |
+| `HttpOnly` | **no — structurally impossible**, the value is returned to the client as JSON and written by script (residual 2) | **yes** |
+| `SameSite` | `Lax` | `Lax` |
+| `Path` | `/ebay/callback` | `/ebay/callback` |
+| `Domain` | **absent** → host-only to `nivadesk.app` | **absent** → host-only to `nivadesk.app` |
+| Lifetime | `Max-Age=600` | `Max-Age` = seconds remaining on the ticket's MAC-covered `expMs` |
+| Cleared | on every landing whose ticket verified | on every landing whose ticket verified |
+
+`SameSite=Lax` on both is load-bearing and unchanged: eBay returns the seller by a top-level GET, which is
+the one cross-site context `Lax` still carries cookies in. The absent `Domain` attribute is deliberate on
+both — `Domain=nivadesk.app` would widen them to every present and future subdomain.
+
+`Path=/ebay/callback` is a **request-matching rule and not a security boundary** on either cookie. §5.4
+removed the opposite claim from three places and this section does not reintroduce it. `HttpOnly` on the
+ticket is a real boundary, but it is a boundary against **exfiltration**, not against **use**: script on
+`nivadesk.app` still cannot read the ticket, but it can cause the browser to send it, because the cookie
+rides any request to `/ebay/callback`. Residual 2 therefore narrows and does not close, and the honest
+statement of the gain is: **a script on our origin can no longer walk away with both halves.**
+
+#### Single use, and where that state lives
+
+Three answers, and the second is the only authoritative one:
+
+1. **At the edge, cooperatively.** Both cookies are cleared on every landing whose ticket **verified** —
+   and on no landing where it failed. That rule is stronger than the `CONSUMED` set it replaces and the
+   edge can now decide it alone, without reading the function's answer: a verified ticket means the flow
+   this browser began has ended, one way or another; a failed ticket means these cookies (if any) belong to
+   some other flow, and clearing them would be the exact nuisance §5.4 fixed — anyone who gets a seller to
+   open a shaped `/ebay/callback` link during the ten-minute window destroying an in-flight connect. Under
+   the new rule that link now fails at the state-mismatch step, clears nothing and burns nothing. It is
+   cooperative, not a control: an honest browser holds no reusable ticket afterwards, and a party who kept
+   a copy of the cookie value is not an honest browser.
+2. **Authoritatively, in `ebayConnectStates/{state}.used`**, inside the same Firestore transaction that has
+   burned the state since §4.5 — unchanged, in the function, where the credential is. A ticket names
+   exactly one state and a state is consumable once, so **a replayed ticket can only ever address a burned
+   state.** That is the whole of the enforcement, and this section does not pretend the edge adds to it.
+3. **Deliberately nowhere else.** Edge-side single-use storage would need a Firestore or KV credential on
+   Hostinger — residual 4's owner decision — and would buy nothing the state's `used` flag does not already
+   buy. `jti` is minted and MAC-covered so that decision stays cheap if it is ever taken.
+
+#### The edge verification, in order
+
+`GET /ebay/callback`, stopping at the first that fires. Steps 0–3 are §5.4's, unchanged. Everything from 4
+is new.
+
+0. `code` absent **and** `error` absent → `?ebay=error&reason=missing_code`. No call, no disposal, no cookie
+   touched.
+1. `error` present **and no `code`** → `?ebay=cancelled`. No call. Still the only place `cancelled` is
+   produced; still `params.has("error")` and not truthiness; a `code` still wins over an `error`.
+2. Shapes: `code` 1–4096 characters, `state` matching `/^[A-Za-z0-9_-]{20,120}$/` → else `missing_code`. No
+   call.
+3. `NIVADESK_EBAY_CALLBACK_KEY` present and ≥ 32 characters → else `?ebay=error&reason=unavailable`, one ops
+   line naming the variable and which check failed, **no call and no disposal**. This step **must** stay
+   ahead of step 4 and the order is forced, not chosen: the ticket key is derived from this value, so
+   without it there is nothing to verify a ticket with and nothing to sign either envelope with. The
+   residual is §5.4's, unchanged and now also covering disposal: while a key outage lasts, every consent
+   that lands leaves its code unpresented.
+4. **Mint `rid`** (8 random bytes, hex) — moved up from §5.4's step 5, because both envelopes carry one.
+5. **Verify the ticket.** Every sub-step that fails takes the *same* exit — step 7 — and the class is
+   recorded in our log and appears in no answer:
+   - **a.** `nv_ebay_ticket` cookie present and non-empty → else class **`no-cookie`**.
+   - **b.** Length ≤ 400 and the full shape above matches → else class **`shape`**. Applied before any split,
+     any decode and any parse; there is no JSON on this path at all.
+   - **c.** Recompute the MAC over the payload prefix with `ticketKey` and compare with `timingSafeEqual`
+     after a length guard → else class **`mac`**.
+   - **d.** `expMs > now` **and** `expMs ≤ now + 15 minutes` → else class **`expired`**. The upper bound is a
+     belt: the MAC already means only we can mint one, but a state cannot live past ten minutes, so a
+     ticket claiming more was minted by a rule that no longer exists.
+   - **e.** `ticket.state === query.state`, a plain byte comparison → else class **`state`**. Plain and not
+     constant-time on purpose: neither value is a secret — the state is in the access log by construction
+     (residual 1) — and pretending otherwise here would imply a protection this system does not have.
+   - **f.** Read `nv_ebay_nonce` (`NextRequest.cookies` has already applied the one `decodeURIComponent`;
+     do not apply a second). Recompute `base64url(HMAC-SHA256(ticketKey, "nonce." + cookieValue))` and
+     compare with `nonceTag` using `timingSafeEqual` after a length guard → else class **`nonce`**. **This
+     is the step that makes criterion 4 literal**: a ticket minted for another nonce fails here, in the web
+     layer, before anything is signed. An absent nonce cookie is the empty string and fails here too — it
+     is no longer forwarded as `nonce: ""`, because there is now something at the edge that can tell the
+     difference between "no cookie" and "the right cookie", and the case that used to justify forwarding is
+     handled by step 7 instead.
+6. **Verified.** Build the body from `ticket.state` and the nonce cookie — the two values step 5 just
+   proved agree — serialise once, sign, POST, obey the answer, and land. **This is §5.4's contract,
+   unchanged, byte for byte**: same URL, same headers, same canonical string, same 45-second abort, same
+   `FUNCTION_REASONS` vocabulary, same 8192-byte cap over the exact bytes. Clear both cookies on the
+   landing.
+7. **Not verified.** One **disposal** POST (next subsection), then land `?ebay=error&reason=browser` — the
+   same word and the same translated sentence the function would have produced for the same condition, so
+   **no new vocabulary and no new translation**. **Clear nothing.** The answer is identical for all six
+   classes, so the ticket verifier is no more an oracle than the 401 wall is.
+
+#### The ten cases, and what the route does with each
+
+| # | Case | Where it fails | Connect POST | Disposal | State touched | Cookies | Seller sees |
+|---|---|---|---|---|---|---|---|
+| 1 | Forged cookie — attacker-chosen bytes | 5c `mac` | **no** | yes | none | untouched | "Finish connecting eBay in the same browser you started from." |
+| 2 | Ticket minted for a **different state** (MAC valid) | 5e `state` | **no** | yes | none | untouched | same |
+| 3 | Ticket carrying a **different nonce** (MAC valid, state matches) | 5f `nonce` | **no** | yes | none | untouched | same |
+| 4 | Expired ticket | 5d `expired` | **no** | yes | none | untouched | same |
+| 5 | Replayed ticket — the same pair presented twice | passes 5 **again**; the edge cannot know | yes | no | the function's transaction finds `used: true` → `reason=state` | cleared | "The eBay sign-in link has expired or was already used. Start again." |
+| 6 | No cookie at all — **the phished seller** | 5a `no-cookie` | **no** | **yes — this is the case disposal exists for** | none (the state is never named, and expires by TTL) | untouched | "Finish connecting eBay in the same browser you started from." |
+| 7 | Outsider using the route as a signing oracle: `?code=x&state=<shaped>` | 5a `no-cookie` | **no** | yes | **none — the disposal envelope has no state field** | untouched | (not a seller) |
+| 8 | An observed code presented with the **attacker's own fresh state, nonce and ticket** | nothing fails — the attacker is a workspace owner and holds a valid ticket for their own flow | yes | no | the attacker's own state, burned | cleared | `reason=token` — eBay answers `invalid_grant`, because case 6's disposal already spent the code |
+| 9 | Firestore failure on the success path whose error message carries the code and the state | function-side | yes | no | burned, then the write fails | cleared | "eBay did not complete the connection. Try again." (`token`/`exchange` by class) — **and the marker appears in no log line** |
+| 10 | `rid` used to inject a state, a code, a nonce or a ticket into a log line | function step 7 (rid shape) — and, on the web side, the route mints its own `rid` and never accepts one | n/a | n/a | none | untouched | `unavailable` |
+
+Case 8 is the one that decides whether disposal is worth having, and it is worth reading twice. Remove the
+disposal from case 6 and case 8 stops answering `token` and starts answering **`connected`** — a foreign
+seller's eBay account in the attacker's workspace, which is the exact outcome §5 exists to prevent. The
+ticket gate alone does not close it; the ticket gate *creates* it, by refusing the landing that used to
+spend the code.
+
+Case 6 also loses the burn: the phished seller's state is no longer burned, because the function is never
+asked about it. Nothing of value is lost, and §5.4 already proved why — the burn stops that state and the
+attack never needed it; `state_B` is the *attacker's own* state. The state expires by TTL ten minutes later.
+
+#### Disposal: the bound, argued rather than assumed
+
+**The envelope.** Same URL, same headers, same canonical string, same key, same skew window. The body is
+different, and the difference is the whole guarantee:
+
+```json
+{ "v": 1, "op": "dispose", "rid": "9f2c4ad1b0e37c56", "code": "<eBay's code, verbatim>" }
+```
+
+**There is no `state` key and no `nonce` key, and the function refuses a `dispose` body that carries
+either.** That is a structural property, enforced on the authoritative side and tested, not an assertion
+about what the route happens to send. A connect body is unchanged and `op` is optional on it: absent or
+`"connect"` means the existing path, so nothing already written has to change. Any other value of `op` → 400.
+
+**Where it runs in the function.** After the rid shape check and after `connectorOn()`, before the presence
+and shape checks of the connect path:
+
+- Connector off → `200 { ok:false, outcome:"error", reason:"disabled", rid }` **without contacting eBay**.
+  §2 forbids reaching eBay while the switch is off, and this is exception 1 of *The burn, and the spend*,
+  now covering disposal as well.
+- Otherwise: the bucket (below), then **one** `oauth.exchangeCode` whose result — success or failure — is
+  discarded whole. No identity call. No connection document. No credentials. No `syncLog`. No health touch.
+  **No Firestore read and no Firestore write, of any kind.**
+- Answer, always and identically: `200 { ok:false, outcome:"error", reason:"browser", rid }`.
+
+**The bound, exactly:**
+
+| Question | Answer |
+|---|---|
+| What may it touch? | Nothing in Firestore. Not a read, not a write, not a transaction, not a `.doc()` call. |
+| What may it do? | Exactly one outbound token request, result discarded. Nothing else contacts eBay on this path. |
+| How often? | A token bucket in the instance: **30 disposals per minute per instance**, refilled continuously, keyed on **nothing** — a single counter, because a bucket keyed on anything from the body lets the caller pick a fresh key. `maxInstances: 10` bounds the whole system to ≤ 300 per minute. |
+| What does it answer? | `200 { ok:false, outcome:"error", reason:"browser", rid }` — whether it disposed, was throttled, or eBay refused. The caller learns nothing about whether the code was live, whether the bucket is empty, or whether eBay was reachable. |
+| What does it log? | Nothing per request. One throttled ops line when the bucket is empty — `ebay callback: disposal throttled` — at most once a minute per instance, carrying no value from the body. §5.4's logging rules apply unchanged: `spendAndDiscardCode` is already pinned by name for exactly this reason. |
+| What does the route do with the answer? | **Nothing.** The landing was decided at step 5; the route reads only the status, for its ops line. A function answer can never steer a landing the edge has already settled. |
+| How long does the route wait? | 20 seconds, then it lands anyway. The abort ends *our wait*, not the function's work — Cloud Run finishes the invocation and the code is still spent. |
+
+**Is it worth its cost?** The cost is real and must be named first: on this path our own server still mints
+a signature for an anonymous caller, and still makes an outbound request to eBay with attacker-supplied
+bytes. That is not zero, and calling it zero would repeat the mistake §5.4 corrected.
+
+What makes it acceptable is not that no signature is minted. It is **what the signature can authorise**:
+
+- It cannot name a state — there is no field for one, and a body carrying one is refused. So criterion 7's
+  demand, *prove that a public caller cannot cause a signed operation against an arbitrary state*, holds by
+  construction and is tested by inspecting the bytes the route produced, not by trusting it.
+- It cannot read or write Firestore, so the state oracle and the targeted denial that *The public entrance*
+  listed both disappear from the public path entirely. They remain available to a **key holder**, exactly as
+  §5.4 says, and that is unchanged.
+- Its only effect on the world is that an eBay authorization code stops working. **An attacker who spends
+  their own call on that is doing our job.** The only abuse left is volume, and volume is what the bucket
+  bounds.
+
+The residual cost, stated so nobody rediscovers it: a party who can read the access log in real time could
+dispose a *genuine* seller's code before that seller's own callback completes, and the seller would see
+"try again". They would need the code within seconds, and they would be choosing to destroy a code they
+could instead have used. It is a nuisance, not a data loss, and pressing Connect recovers it.
+
+The bucket adds one line to §5.4's exception list, and to the deploy plan's §4.2 trigger list: **a code goes
+unspent when the disposal bucket is empty.** Genuine disposals are rare — a phished seller, or a seller
+whose cookies were dropped — so only a deliberate flood empties it, and a flood is precisely when we prefer
+not to be eBay's problem.
+
+#### The rule, restated
+
+§5.4's rule was "a shaped callback always POSTs, cookie or no cookie". It survives, in a sharper form:
+
+> **A shaped callback always POSTs. A verified ticket posts a `connect` envelope; anything else posts a
+> `dispose` envelope, which can name no state.**
+
+The exceptions are the same three, plus one: no relay key (nothing to sign with, step 3); the connector
+switched off (answered before either path reaches eBay); a Firestore transaction throw on the connect path;
+and now an empty disposal bucket. All four leave a code unpresented, and the operator action is unchanged —
+deploy plan §4.2, whose honest sentence stays honest: nothing on our side can invalidate a code we never
+presented.
+
+#### If only one of the two cookies survives a privacy setting
+
+Both cookies are first-party, host-only, `Secure`, `SameSite=Lax`, the same `Path`, the same lifetime, and
+they are written within the same second on the same document. There is no browser setting we know of that
+keeps one and drops the other on those attributes. The one real asymmetry in the wild runs the *other* way
+and cannot bite here: ITP-style caps treat **script-written** cookies more harshly than `Set-Cookie` ones,
+which would shorten the **nonce**, not the ticket — and those caps operate in days, against a ten-minute
+lifetime.
+
+So the honest answer is about what the operator *meets*, not about which cookie survives:
+
+- **Ticket present, nonce gone** → step 5f, class `nonce`. Refuse, dispose, land `browser`.
+- **Nonce present, ticket gone** → step 5a, class `no-cookie`. Refuse, dispose, land `browser`.
+- **Both gone** → step 5a. Identical.
+
+All three produce the same sentence the seller saw before this change — "Finish connecting eBay in the same
+browser you started from." — and the same recovery, one more press of Connect. **The seller's experience is
+unchanged. What changes is the operator's evidence.**
+
+Before: a stuck seller left a **burned state** in Firestore, which proved the callback reached the function.
+After: a stuck seller leaves **nothing in Firestore at all** — the state is never named and expires by TTL —
+and the only trace is one throttled ops line on Hostinger. The runbook line that has to exist because of
+this:
+
+> A seller reports "Finish connecting eBay in the same browser you started from" and their state is **not**
+> burned. That is now the normal shape of a cookie problem, not evidence of a relay failure. Look on
+> Hostinger for `ebay callback ticket refused rid=… class=…`. `no-cookie` on a browser where the flow
+> otherwise works means cookies are being dropped by a setting or an extension between `/ebay/ticket` and
+> the return from eBay; the remedy is a different browser, not a server change. `mac` on more than one
+> seller at once means the two halves of `NIVADESK_EBAY_CALLBACK_KEY`/`EBAY_CALLBACK_KEY` have drifted —
+> the same cause as an unexplained 401, reached by a different symptom.
+
+And the cost that has to be measured rather than assumed: this change makes a seller need **both** cookies
+where one used to do. The populations should be identical, because the attributes are identical — but that
+is a prediction, so the deploy plan gains one line: over the first sandbox connections, count the
+`ticket refused` ops lines by class, and if `no-cookie` appears for sellers whose nonce plainly worked, the
+prediction was wrong and the pair needs revisiting before production.
+
+#### What changes in the function, and what does not
+
+Changed, and this is the complete list:
+
+- `beginEbayConnect` (web origin) and `claimEbayConnectState` mint a ticket beside the nonce and return it.
+- One `op: "dispose"` branch in `ebayOAuthCallback`, bounded as above, with its bucket.
+- `EBAY_SECRET_PARAMS`, `EBAY_RUNTIME`, the mount, the marker, the five secret names: **unchanged**. There
+  is no sixth secret.
+
+Unchanged, and asserted by the source pins: the POST contract, the canonical string, the header names, the
+skew window, the 8192-byte cap, the rid shape, the connector gate's position after the signature, the state
+transaction, the burn, the function's own redeem-and-discard on `browser`/`environment`, the eight reason
+words, `firestore.rules`, and §4.5's document. **The ticket is never sent to the function.** It is verified
+where it is read and goes no further, so the function's body, its response vocabulary and its tests are
+untouched apart from the dispose branch.
+
+Both dispositions of the code stay, and neither can be dropped: the **edge** disposes because the function
+never sees a failed-ticket landing, and the **function** disposes on `browser`/`environment` because a
+verified ticket can still meet a state whose stored hash disagrees — which, after this change, means a bug
+or a tampered row rather than a phish, and is exactly when we least want a live code left behind.
+
+#### Logging on the web side
+
+The route's vocabulary grows by one line and one closed word list, and by nothing else:
+
+```
+ebay callback ticket refused rid=<rid> class=<no-cookie|shape|mac|expired|state|nonce>
+ebay callback dispose rid=<rid> status=<n>          (non-200 only, like the relay line)
+```
+
+The class comes from a six-word closed set that can carry no value. The rid is the one the route minted
+itself; the route accepts no rid from anyone. §5.4's forbidden-field list gains **`ticket`, `nv_ebay_ticket`
+and `ticketKey`** — never logged, never echoed, never interpolated, in any form, on either side. Both lines
+are anonymously triggerable, so both are throttled the way the function's pre-signature lines are: at most
+once a minute per class per web process.
+
+#### The committed signature vectors — the skip ends here
+
+§5.4 planned `functions/test/fixtures/ebay-callback-signature-vectors.json` and it was never written,
+blocked on a question rather than on effort: *who mints the fixture key and where is it recorded?* This
+section answers it, because the ticket adds a second canonical string and a second MAC implementation to
+keep in step, and "we check them by executing both" is no longer enough on its own — a deterministic
+fixture is what catches a change that moves *both* implementations together.
+
+**The answer: the fixture mints its own key, inside itself, and says what it is on every line that matters.**
+
+`functions/test/fixtures/generate-ebay-callback-vectors.mjs` is committed and re-runnable. On first run it
+generates 32 random bytes; on every later run it reads the key back out of the fixture, so the vectors are
+stable and a regeneration is a no-op unless a format changed. The fixture:
+
+```json
+{
+  "README": "TEST VECTORS ONLY. The key below is a test key generated by generate-ebay-callback-vectors.mjs for this file alone. It is not a secret, has never been a secret, is used by nothing outside functions/test/** and studioflow-web/scripts/**, and must never be set in Secret Manager or in Hostinger.",
+  "keyLabel": "TEST-KEY-NOT-A-SECRET",
+  "key": "<64 hex — a test key>",
+  "relayVectors":  [ { "name": "…", "timestampMs": 0, "body": "<exact bytes>", "signature": "<64 hex>" } ],
+  "ticketVectors": [ { "name": "…", "state": "…", "nonce": "…", "expMs": 0, "jti": "…", "ticket": "nv1.…" } ]
+}
+```
+
+Both trees consume it: `ebay-connect.test.js` checks the function's `checkSignature` and its ticket minter
+against the vectors; `check-ebay-relay-vectors.mjs` checks the route's signer and its ticket verifier
+against the same file. The script's `NOTE` — "a vector file now exists … so the two do not drift apart
+silently" — is deleted, because the file exists and is consumed.
+
+**It must never skip again**, and that is enforced rather than promised: a source pin asserts the vector
+cases contain no `skip`, no `todo` and no early `return`, and a grep pin asserts the fixture's key appears
+nowhere outside `functions/test/**` and `studioflow-web/scripts/**` and that `keyLabel` is intact.
+
+#### Test matrix
+
+The ten regressions are one named test each, and the name is the contract.
+
+| # | Test name | Where | Asserts |
+|---|---|---|---|
+| 1 | `ticket: a forged cookie signs nothing` | relay script | Cookie of attacker-chosen bytes with a valid *shape* → no connect POST, a dispose POST, landing `ebay=error&reason=browser`, both cookies still set |
+| 2 | `ticket: one minted for another state signs nothing` | relay script | Valid MAC, `ticket.state ≠ query.state` → class `state`, no connect POST; the ticket's own state is never named in any body |
+| 3 | `ticket: one minted for another nonce signs nothing` | relay script | Valid MAC, states equal, nonce cookie from a different flow → class `nonce`, no connect POST. **The literal form of criterion 4** |
+| 4 | `ticket: an expired one signs nothing` | relay script | `expMs` one second in the past → class `expired`; and `expMs` 20 minutes ahead → class `expired` too (the upper bound is real) |
+| 5 | `ticket: a replay reaches a burned state` | relay script + `ebay-connect.test.js` | First presentation connects; the identical pair presented again passes the edge, posts, and the function answers `reason=state` with `exchangeCode` called exactly once in total and the connection row unchanged |
+| 6 | `ticket: with no cookie the route signs only a disposal` | relay script | No cookies → no connect POST; exactly one POST, whose body has `op:"dispose"`, **no `state` key and no `nonce` key**; landing `browser`; both cookies untouched |
+| 7 | `ticket: the route is not a signing oracle` | relay script + `ebay-connect.test.js` | Anonymous `?code=x&state=<shaped>`: the produced body carries no state; handed to the real function under the harness key, the fake Firestore records **zero** operations — no read, no write, no transaction — and no state document changes |
+| 8 | `ticket: an observed code is dead when the attacker presents it` | `ebay-connect.test.js` | Victim's landing (case 6) → `calls.codes` contains the code once, no connection. Then a fresh state, nonce and ticket of the attacker's own with the same code → `reason=token`, no connection row. A guard case with disposal disabled proves the same input would otherwise answer `connected` |
+| 9 | `log: a Firestore failure on the success path cannot inject` | `ebay-connect.test.js` | Verified ticket, valid connect POST, `syncLog` write rejected with a message built from the code and the state → answer is still `connected`, and neither value nor any 8-character prefix of it appears in any captured line |
+| 10 | `log: a rid cannot inject a state, a code, a nonce or a ticket` | `ebay-connect.test.js` | `rid` set in turn to the code, the state, the nonce and a whole ticket → 400 with no `rid` in the body, nothing logged with a rid, log pin green. Web side: the route mints its own rid and accepts none, asserted in source |
+| V | `vectors: the committed signature and ticket vectors reproduce on both sides` | `ebay-connect.test.js` + relay script | Every `relayVectors` entry reproduces under the function's verifier and the route's signer; every `ticketVectors` entry reproduces under the function's minter and the route's verifier. **No skip, no todo, no early return** — pinned |
+
+Supporting cases, added to the existing suites:
+
+- **`/ebay/ticket`** (relay script, which already compiles the real route with the project's `tsc`): a valid
+  ticket → 204 with the exact `Set-Cookie` attribute set, character for character; a ticket with a broken
+  MAC, a bad shape, an expired `expMs`, an over-long value → 400 and **no** `Set-Cookie`; `Max-Age` derived
+  from `expMs` and never extended; GET → 405; source assertions for `runtime = "nodejs"`,
+  `dynamic = "force-dynamic"`, the in-handler `process.env` read, and no `NEXT_PUBLIC_`.
+- **Key derivation** (both trees, against the fixture): the same label produces the same 32 bytes on both
+  sides; a ticket verified with the *relay* key rather than the derived one fails; a nonce tag fed to the
+  ticket verifier fails (domain separation).
+- **Disposal bound** (`ebay-connect.test.js`): a dispose body carrying `state` → 400; carrying `nonce` → 400;
+  a valid dispose → exactly one `exchangeCode`, `calls.identities === 0`, zero Firestore operations, answer
+  `browser`; the 31st dispose inside one minute → **no** `exchangeCode` and a byte-identical answer;
+  connector off → `disabled` with `exchangeCode` never called.
+- **Source pins** (`ebay-connect.test.js`, scoped to the handler): the dispose branch contains no `states(`,
+  no `db()`, no `connections(`, no `fetchIdentity`; `op` is validated before it is used; the connect path is
+  unchanged. Route side: `land()` clears cookies only on a verified-ticket landing, and the `CONSUMED` set
+  is gone.
+- **e2e** (`commerce-ebay-connector-emulator.test.js`): begin → the reply carries a ticket; a signed connect
+  POST built from that ticket's state and nonce → `connected`; a signed **dispose** POST → 200 `browser`
+  with the state document untouched, proven by then completing the flow with a connect POST.
+- **CI**: `.github/workflows/functions-tests.yml`'s `paths` list gains
+  `studioflow-web/app/settings/EbayIntegrationSection.tsx` — it is now one of the callers of the sealing
+  route, and the list already learned once that a signer outside `functions/**` fires nothing.
+
+#### What this does not fix
+
+**Hostinger's access log still receives the code and the state.** eBay's RuName has one accepted URL and
+eBay decides how it calls it: a top-level browser GET carrying `code` and `state` in the query string.
+Nothing in this section touches that hop. `GET /ebay/callback?code=…&state=…` is still written to the access
+log on nivadesk.app, still with the query string verbatim, still with no disable, no redaction, no
+established retention and no disclosed reader set (`docs/ebay-callback-platform-logging.md`). Residual 1 is
+not one byte smaller after this change. What changes is only **who can act on what that log shows**, and
+only because the disposal path keeps presenting the code: a log reader still finds a code, and still finds
+a state, and the reason the code is useless to them is the same reason it was useless before — it has
+already been presented. When it has not been presented — a key outage, a 401, a 5xx, the route's timeout,
+an empty disposal bucket — it is live, and nothing on our side can invalidate it. **Production remains
+blocked on moving the accepted URL to a Cloudflare Worker on `connect.nivadesk.app`**, which is where that
+residual is actually addressed, and which is an operator decision recorded in that note.
+
+Four more, each unchanged or only narrowed:
+
+- **The ticket does not make the nonce `HttpOnly`.** It adds a second cookie that is. Script on our origin
+  can no longer walk away with both halves, but it can still *use* both, because a cookie it cannot read
+  still rides the request. Residual 2 narrows; it does not close. Closing it needs a server route that mints
+  the nonce cookie too — a change to the connect flow, an owner's schedule.
+- **The ticket binds a browser, not a session.** It proves the browser holds something we minted for this
+  state and this nonce. It does not prove anyone is signed in, still less as the state's `uid`, and it
+  cannot: eBay's redirect must work for a seller who has no NivaDesk session in that moment. Residual 3
+  stands word for word.
+- **The shared key is still the sole control on a public function endpoint**, with no ingress restriction
+  and no IAM invoker requirement. What this section removes is the *public entrance* to the connect
+  envelope, not the wall's design. Residual 4 stands.
+- **A workspace owner can still connect their own seller account**, and a stolen signed-in session still
+  starts a flow as its owner. §5.3's list of what is claimed is unchanged.
 ---
 
 ## 6. Token refresh and boxing (§19, §59, §73)
