@@ -671,6 +671,8 @@ so a late reading is as good as a live one.
 **Progress at 22:54 UTC, 18 h 26 m in, 5 h 34 m to go:** 0 errors, 0 requests returning 5xx, 926
 requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps.
 
+| Soak readback, 2026-09-06 23:46:37 UTC (19 h 18 m in, gcloud) | 0 ERROR entries, 0 requests returning 5xx, 963 requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps |
+
 ## Rollback used
 
 None so far.
