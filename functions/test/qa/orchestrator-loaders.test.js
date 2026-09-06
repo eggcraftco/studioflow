@@ -311,15 +311,22 @@ check("every .limit() the loader issues is one of the caps that has a sentence",
   }
 });
 
-check("a member without Banking gets no PayPal payout collection read for them", async () => {
-  // The domain is one word over two bodies of data behind two different doors:
-  // Square's payouts ride a commerce connection, PayPal's are written off a
-  // `bankConnections` document (bankFeed.js paypalConnect). `readableDomain`
-  // let the whole domain through on `default: true`, so a member with orders
-  // and financial access and no Banking had companies/{cid}/paypalPayouts read
-  // — and commerce.settlementTotals published count/gross/fee/net from it under
-  // data.settlements.paypal, while get_payout_reconciliation_overview refused
-  // that same person outright.
+check("a member without Banking gets NEITHER payout collection read for them", async () => {
+  // The domain was gated as a union — bankFeed OR financialInfo — argued from
+  // where each document is WRITTEN: Square's payouts ride a commerce
+  // connection, PayPal's are written off a `bankConnections` document
+  // (bankFeed.js paypalConnect). Provenance is not permission, and
+  // firestore.rules gates the two collections identically:
+  //
+  //   match /companies/{cid}/squarePayouts/{document=**} {
+  //     allow read: if canReadBankFeed(companyId);
+  //   }
+  //
+  // where `canReadBankFeed` is owner OR memberAccess.bankFeed — financialInfo
+  // is not in it. So the union read `squarePayouts` for a member the client is
+  // refused it for, and `commerce.settlementTotals` published its
+  // count/gross/fee/net, while get_payout_reconciliation_overview refused that
+  // same person outright.
   const financialNoBank = {
     isOwner: false,
     areas: { orders: true, dashboard: true, customers: true, bankFeed: false },
@@ -331,15 +338,18 @@ check("a member without Banking gets no PayPal payout collection read for them",
     [`companies/${CID}/squarePayouts`]: [{ id: "sq_1", provider: "square", status: "PAID", amount: 10, currency: "GBP", arrivalDate: "2026-09-02", totals: { gross: 10, fee: 0, net: 10 } }]
   });
   assert.ok(!touched(reads, "paypalPayouts"), "the PayPal payout collection was read for a member without Banking");
-  assert.ok(touched(reads, "squarePayouts"), "the Square payouts a commerce answer is built on stopped being read");
-  assert.strictEqual(snapshot.payouts.paypal, undefined, "a collection nobody read must not look like a collection that was empty");
+  assert.ok(!touched(reads, "squarePayouts"), "the Square payout collection was read for a member the rules file refuses it to");
+  assert.strictEqual(snapshot.payouts, undefined, "a collection nobody read must not look like a collection that was empty");
 
-  // And the money does not reach the answer.
+  // And neither provider's money reaches the answer.
   const ctx = fixtures.ownerContext({ companyId: CID, ...financialNoBank });
   const result = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
-  assert.strictEqual(result.data.settlements.paypal, undefined, `data.settlements still carries ${JSON.stringify(result.data.settlements.paypal)}`);
-  assert.ok(result.data.settlements.others.some((row) => row.provider === "paypal" && row.reason === "connection_not_visible"),
-    "the answer must say the PayPal feed cannot be seen from here, not guess that it is missing");
+  for (const provider of ["paypal", "square"]) {
+    assert.strictEqual(result.data.settlements[provider], undefined,
+      `data.settlements still carries ${JSON.stringify(result.data.settlements[provider])} for ${provider}`);
+    assert.ok(result.data.settlements.others.some((row) => row.provider === provider && row.reason === "connection_not_visible"),
+      `the answer must say the ${provider} feed cannot be seen from here, not guess that it is missing`);
+  }
 });
 
 check("the owner still gets both payout feeds", async () => {

@@ -11,6 +11,14 @@
 // PayPal money, through the commerce overview, to somebody the banking tools
 // had already said no to.
 //
+// Gating it as `bankFeed OR financialInfo` fixed the PayPal half and left the
+// Square half exactly as it was: the SAME member still received
+// `settlement: {available, count, net, currency}` per channel out of
+// get_channel_performance, off `companies/{cid}/squarePayouts` — which
+// firestore.rules refuses them outright, on `canReadBankFeed`, under a comment
+// that reads "Processor payouts are money: readable with the bank feed". One
+// gate, `areas.bankFeed`, is what the rules file asks, so it is what this asks.
+//
 // The fix for that one domain is a line. The fix for the SHAPE is this file
 // plus the table it reads: `loaders.DOMAIN_GATES` has a row for every domain,
 // every row is either a predicate or an `open: true` with its reason written
@@ -340,27 +348,58 @@ check("a refused caller is told, in the words the caller reads", async () => {
   assert.ok(said.size >= 5, `only ${said.size} refusals were observed across the gated domains`);
 });
 
-check("payouts: the domain the gate did not cover, end to end", async () => {
+check("payouts: neither provider's money reaches a member the rules file refuses", async () => {
   // The finding itself, kept as a case because a rule proved over a
-  // cross-product is easy to satisfy accidentally and this is the sentence that
-  // has to stay true: a member with financial access and no Banking sees Square
-  // money, does not see PayPal money, and is TOLD the PayPal feed cannot be
-  // read from here rather than being shown a zero.
+  // cross-product is easy to satisfy accidentally and these are the sentences
+  // that have to stay true. The predicate is firestore.rules' own: BOTH payout
+  // collections are `allow read: if canReadBankFeed(companyId)`, which is owner
+  // OR memberAccess.bankFeed — financialInfo is not in it. So a member with
+  // financial access and no Banking reads neither collection, gets no figure
+  // out of either, and is TOLD the feed cannot be seen from here rather than
+  // being shown a zero.
+  //
+  // Both capabilities are driven, because they emit the money in two different
+  // shapes: `data.settlements.<provider>` from the overview, and a per-channel
+  // `settlement` row from get_channel_performance — which had no gate of any
+  // kind and is how Square money reached this member after the PayPal half was
+  // closed.
   const ctx = contextWith("financialInfo");
   const { domains, snapshot } = await domainsRead("get_commerce_overview", ctx);
-  assert.ok(domains.has("payouts"), "the Square payouts a commerce answer is built on stopped being read");
-  assert.strictEqual(snapshot.payouts.paypal, undefined, "the PayPal payout collection was read for a member without Banking");
-  const result = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
-  const serialised = JSON.stringify(result.data);
-  assert.ok(!serialised.includes("4200.55"), `the PayPal payout amount is in the answer: ${serialised.slice(0, 200)}`);
-  assert.ok(result.data.settlements.others.some((row) => row.provider === "paypal" && row.reason === "connection_not_visible"),
-    "the answer must say the PayPal feed cannot be seen from here, not guess that it is missing");
+  assert.ok(!domains.has("payouts"), "a payout collection was read for a member without Banking");
+  assert.strictEqual(snapshot.payouts, undefined, "the payout collections were read for a member without Banking");
 
-  // And with Banking, the same read produces it — a gate that never opens
-  // would satisfy every check above.
+  const overview = HANDLERS.get_commerce_overview(snapshot, {}, ctx, { nowMs: fixtures.NOW });
+  const performance = HANDLERS.get_channel_performance(snapshot, {}, ctx, { nowMs: fixtures.NOW });
+  for (const [label, result] of [["get_commerce_overview", overview], ["get_channel_performance", performance]]) {
+    const serialised = JSON.stringify(result.data);
+    // 4200.55 is the seeded PayPal payout; 10 is the seeded Square one, so it
+    // is checked through the fields that would carry it rather than by string.
+    assert.ok(!serialised.includes("4200.55"), `${label}: the PayPal payout amount is in the answer`);
+  }
+  assert.ok(overview.data.settlements.others.some((row) => row.provider === "paypal" && row.reason === "connection_not_visible"),
+    "the answer must say the PayPal feed cannot be seen from here, not guess that it is missing");
+  assert.ok(overview.data.settlements.others.some((row) => row.provider === "square" && row.reason === "connection_not_visible"),
+    "Square is money out of the same collection: its refusal must read the same way");
+  assert.strictEqual(overview.data.settlements.square, undefined, "Square settlement totals were published to a member without Banking");
+
+  const squareRow = performance.data.channels.find((row) => row.channel === "square");
+  assert.deepStrictEqual(squareRow.settlement, { available: false, reason: "connection_not_visible" },
+    "get_channel_performance published a Square settlement row to a member without Banking");
+  // A refused provider is not the same statement as an unsupported one, and
+  // flattening the two would make this check pass while saying the wrong thing.
+  const faireRow = performance.data.channels.find((row) => row.channel === "faire");
+  assert.strictEqual(faireRow.settlement.reason, "provider_not_supported",
+    "a provider NivaDesk has no payout feed for must not be reported as one the caller may not see");
+
+  // And with Banking, the same reads produce both feeds — a gate that never
+  // opens would satisfy every check above.
   const banking = contextWith("financialInfo", "bankFeed");
   const withBank = await domainsRead("get_commerce_overview", banking);
   assert.ok(Array.isArray(withBank.snapshot.payouts.paypal), "a member with Banking lost the PayPal feed");
+  assert.ok(Array.isArray(withBank.snapshot.payouts.square), "a member with Banking lost the Square feed");
+  const allowed = HANDLERS.get_channel_performance(withBank.snapshot, {}, banking, { nowMs: fixtures.NOW });
+  assert.strictEqual(allowed.data.channels.find((row) => row.channel === "square").settlement.available, true,
+    "a member with Banking lost the Square settlement row");
 });
 
 (async () => {

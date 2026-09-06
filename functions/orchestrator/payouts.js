@@ -76,14 +76,29 @@ function inRange(payout, { fromMs, toMs }) {
  * available when it is not, and the same honesty forbids calling a connected
  * processor disconnected.
  *
- * Where each connection lives matters here. Square's is a commerce connection
- * (`connections.square`), which every capability declaring `connections` gets.
- * PayPal's is a BANK connection (bankFeed.js writes paypalPayouts from a
- * `bankConnections` document), which the loader reads only for a caller with the
- * Banking area — so for a caller without it, the honest answer is that the
- * connection cannot be seen from here rather than a guess in either direction.
+ * Visibility is asked FIRST, and of both providers, because a payout feed
+ * nobody may read has no state this answer is entitled to describe. Payouts are
+ * gated on Banking — firestore.rules gates `squarePayouts` and `paypalPayouts`
+ * alike on `canReadBankFeed`, and `loaders.DOMAIN_GATES.payouts` asks the same
+ * question — so without that area neither collection is on the snapshot.
+ *
+ * The visibility question used to be asked of PayPal alone, on the argument
+ * that PayPal's rows come off a `bankConnections` document while Square's come
+ * off a commerce connection. That is where a document is WRITTEN, not who may
+ * read it, and the asymmetry had a consequence: a caller without Banking fell
+ * through to the Square commerce connection — which they can see — and
+ * `settlementTotals` answered `available: true` and totalled a collection the
+ * rules file refuses them.
+ *
+ * Order matters as much as symmetry. Asking "is the collection empty?" before
+ * "may this caller see it?" turns a refusal into `count: 0`, and a zero is a
+ * claim that somebody looked.
  */
 function payoutFeedState(snapshot, provider, ctx = {}) {
+  if (!(ctx && ctx.areas && ctx.areas.bankFeed === true)) {
+    return { available: false, reason: "connection_not_visible" };
+  }
+
   const rows = (snapshot.payouts || {})[provider];
   if (Array.isArray(rows) && rows.length > 0) return { available: true };
 
@@ -93,9 +108,6 @@ function payoutFeedState(snapshot, provider, ctx = {}) {
     : (connections[provider] || []).length > 0;
   if (connected) return { available: true };
 
-  if (provider === "paypal" && !(ctx && ctx.areas && ctx.areas.bankFeed === true)) {
-    return { available: false, reason: "connection_not_visible" };
-  }
   return { available: false, reason: "provider_not_connected" };
 }
 

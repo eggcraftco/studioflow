@@ -603,24 +603,47 @@ the caller may see it, so a member whose banking section the answer reports as `
 have the bank feed, the vendor list or the receipt inbox read on their behalf either. `bank` is
 deliberately the union of two predicates — the `bankFeed` area or the accounting reader — because two
 capabilities behind two different gates declare it, and a custom role can carry one without the other.
-`payouts` is a union for the same reason and is gated twice, because the domain is one word over two
-bodies of data behind two different doors. A Square payout is written off a commerce connection
-(`squareConnections`) and reported beside sales, so the domain gate is financial access; a PayPal payout
-is written off a `bankConnections` document (`bankFeed.js` `paypalConnect`), so `loadPayouts` reads that
-collection only for a caller with the Banking area, the way `loadConnections` already gated its bank
-sub-read. Without the second gate a member with orders and financial access and no Banking had
-`companies/{cid}/paypalPayouts` read, and `commerce.settlementTotals` published its `count/gross/fee/net`
-under `data.settlements.paypal`, while `get_payout_reconciliation_overview` refused the same person with
-"Bank Spending is not enabled for your role." A collection a caller may not read has **no key** on the
-snapshot, which is a third state distinct from the empty array a read collection gets, and
-`payouts.payoutFeedState` already tells them apart: for PayPal without Banking it answers
-`connection_not_visible` rather than guessing "not connected".
+`payouts` is **not** a union, and the two attempts it took to get there are worth writing down, because
+both were reasoned from the wrong question.
+
+It began ungated, on the `switch` whose `default` was `return true`. `1127c548` gave it a predicate —
+`areas.bankFeed OR financialInfo` — and `loadPayouts` a second gate below that, dropping the PayPal
+collection for a caller without Banking. Both halves were argued from where each document is *written*:
+a Square payout rides a commerce connection (`squareConnections`), a PayPal payout is written off a
+`bankConnections` document (`bankFeed.js` `paypalConnect`). `759b0f48` then replaced the `switch` with
+`DOMAIN_GATES` and a fail-closed default; it carried that same predicate into a table row and changed no
+payout behaviour, whatever its own commit message claims about being the commit that closed the hole.
+Read `git log -S'case "payouts": return areas.bankFeed'` before believing either message.
+
+Provenance is not permission, and the union left the Square half exactly where it started. The client is
+refused those documents outright:
+
+```
+match /companies/{companyId}/squarePayouts/{document=**} {
+  allow read: if canReadBankFeed(companyId);   // "Processor payouts are money:
+}                                              //  readable with the bank feed"
+```
+
+`canReadBankFeed` is owner OR `memberAccess.bankFeed`; `financialInfo` is not in it, and `paypalPayouts`
+carries the identical rule. So a member with orders and financial access and no Banking was handed
+`settlement: {available, count, net, currency}` per channel by `get_channel_performance` — which had no
+payout gate of any kind — and `data.settlements.square` by `get_commerce_overview`, in the same session
+where `get_payout_reconciliation_overview` refused them with "Bank Spending is not enabled for your
+role." The gate is now `areas.bankFeed` alone, which is the question the rules file asks.
+
+A collection a caller may not read has **no key** on the snapshot, which is a third state distinct from
+the empty array a read collection gets. `payouts.payoutFeedState` asks visibility FIRST and of both
+providers, so a refused caller is told `connection_not_visible` rather than handed `count: 0` — a zero is
+a claim that somebody looked. `get_channel_performance` carries that reason through to its per-channel
+`settlement` row instead of flattening it to `no_payout_feed_for_this_provider`, which would turn a fact
+about the caller's role into a claim about the workspace.
 
 The gate is a TABLE, `loaders.DOMAIN_GATES`, with a row for every domain in `DOMAINS`: either a predicate
 naming the grant it asks for, or `open: true` with the reason it is open written beside it. A domain with
-no row is refused — `readableDomain` fails closed. That shape is the actual fix for the payouts finding:
-the predicate used to be a `switch` whose `default` was `return true`, so a domain was gated by somebody
-having remembered to gate it, and `payouts` is what remembering missed. Six domains are open on purpose —
+no row is refused — `readableDomain` fails closed. That shape is what stops the NEXT `payouts`: the
+predicate used to be a `switch` whose `default` was `return true`, so a domain was gated by somebody
+having remembered to gate it. It is not, on its own, what fixed this one — a table row can hold a wrong
+predicate as faithfully as a `switch` case can, and for one commit it did. Six domains are open on purpose —
 `settings`, `orders`, `production`, `connections`, `commerceHealth`, `review` — and `connections` is open
 only at the top level: the bank and accounting sub-reads inside `loadConnections` carry their own gates,
 because those documents are not commerce documents. `test/qa/orchestrator-domain-gates.test.js`

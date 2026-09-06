@@ -513,6 +513,7 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
   const advanced = advancedFinance(ctx);
 
   const settlements = settlementTotals(snapshot, bounds, ctx);
+  const settlementReasons = new Map((settlements.others || []).map((row) => [row.provider, row.reason]));
   const connections = snapshot.connections || {};
   const byChannel = new Map();
   for (const view of views) {
@@ -567,9 +568,21 @@ function channelPerformance(snapshot, args = {}, ctx = {}, { nowMs = Date.now() 
       };
     });
 
-    const settlementRow = ["square", "paypal"].includes(name) && settlements[name]
+    // Money, so the reason is the payout layer's own. `settlementTotals` writes
+    // a provider's totals only when `payoutFeedState` said the feed is
+    // available, and files the reason it was not under `others` — including
+    // `connection_not_visible`, which is what a caller without Banking gets.
+    // Flattening every absent provider to "no payout feed for this provider"
+    // told a refused caller that the workspace has no Square payouts, which is
+    // a claim about the workspace made out of a fact about their role.
+    const hasFeedLayer = ["square", "paypal"].includes(name);
+    const settlementRow = hasFeedLayer && settlements[name]
       ? { available: true, count: settlements[name].count, net: settlements[name].net, currency: settlements[name].currency }
-      : { available: false, reason: name === "faire" ? "provider_not_supported" : "no_payout_feed_for_this_provider" };
+      : {
+        available: false,
+        reason: (hasFeedLayer && settlementReasons.get(name))
+          || (name === "faire" ? "provider_not_supported" : "no_payout_feed_for_this_provider")
+      };
 
     rows.push({
       channel: name,

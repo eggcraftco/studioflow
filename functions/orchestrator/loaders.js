@@ -202,28 +202,35 @@ function piiBlockRows(decisions = []) {
  * (accounting/core/access.js). Anything not named here is readable by anyone
  * the capability's own gate let through.
  *
- * `payouts` is a union for the same reason and needs a second gate BELOW it,
- * because the domain is one word over two bodies of data that live behind two
- * different doors. A Square payout is written off a commerce connection
- * (`squareConnections`) and is reported beside sales, so the gate is the one
- * get_commerce_overview and get_channel_performance sit behind: financial
- * access. A PayPal payout is written off a `bankConnections` document
- * (bankFeed.js `paypalConnect` — the same collection `connections.bank` is read
- * from), so the gate is Banking, and it is applied in `loadPayouts` exactly the
- * way `loadConnections` applies it to the bank sub-read. Without that second
- * gate the domain's `default: return true` handed a member with orders and
- * financial access, and no Banking, the PayPal payout collection — and
- * `commerce.settlementTotals` published `count/gross/fee/net` from it under
- * `data.settlements.paypal`, while get_payout_reconciliation_overview refused
- * the same person with "Bank Spending is not enabled for your role".
+ * `payouts` is ONE gate — Banking — over both providers, and it used to be a
+ * union that let financial access in.
  *
- * What the union still permits and should not: get_business_attention_summary
- * declares payouts and gates its payout SECTION on Banking, so a member with
- * financial access and no Banking has `squarePayouts` read for an answer that
- * cannot use it. Closing that needs the capability's own gate, not the domain's
- * — the domain is all `readableDomain` can see — and the read is of the same
- * commerce collection that member's answer already reads (`squareConnections`),
- * so it is a wasted read rather than a read of data they were refused.
+ * The union was argued from where each document is written: a PayPal payout
+ * comes off a `bankConnections` document (bankFeed.js `paypalConnect`) and a
+ * Square payout comes off a commerce connection (`squareConnections`), so the
+ * PayPal half was gated on Banking and the Square half on financial access.
+ * That argument is about provenance. The question a gate answers is about the
+ * DATA, and firestore.rules answers it once for both:
+ *
+ *     match /companies/{cid}/squarePayouts/{document=**} {
+ *       allow read: if canReadBankFeed(companyId);   // "Processor payouts are
+ *     }                                              //  money: readable with
+ *                                                    //  the bank feed"
+ *
+ * `canReadBankFeed` is owner OR `memberAccess.bankFeed`. `financialInfo` is not
+ * in it. So the client was refused `squarePayouts` outright while the assistant
+ * read the collection and published `settlement: {available, count, net,
+ * currency}` per channel out of get_channel_performance, and `data.settlements`
+ * out of get_commerce_overview — to a member the SAME session refuses at
+ * get_payout_reconciliation_overview with "Bank Spending is not enabled for
+ * your role". Two predicates over one body of data, with the assistant holding
+ * the looser one: the defect this file and accounting/core/access.js exist to
+ * prevent.
+ *
+ * With one gate the second gate below it (`payoutCollectionsFor`) is defence in
+ * depth rather than the load-bearing check, and the reads a caller without
+ * Banking does not get are not wasted reads of data they were refused — they
+ * are reads that do not happen.
  *
  * The table below is written as a table for one reason: this used to be a
  * `switch` whose `default` was `return true`, and a default that says yes is
@@ -268,9 +275,9 @@ const DOMAIN_GATES = Object.freeze({
     why: "accounting/core/access.js owns this grant; the assistant asks the same question it does."
   },
   payouts: {
-    grant: "areas.bankFeed OR financialInfo",
-    allows: (ctx) => areasOf(ctx).bankFeed === true || ctx.financialInfo === true,
-    why: "One word over two bodies of data: Square's rows ride a commerce connection and are gated on financial access, PayPal's ride a bankConnections document and are gated on Banking inside payoutCollectionsFor."
+    grant: "areas.bankFeed",
+    allows: (ctx) => areasOf(ctx).bankFeed === true,
+    why: "Processor payouts are money that has left the processor, and firestore.rules gates BOTH collections — squarePayouts as well as paypalPayouts — on canReadBankFeed, which is owner OR memberAccess.bankFeed and does not include financialInfo. The assistant asks the question the rules file asks."
   }
 });
 
@@ -287,20 +294,25 @@ function readableDomain(domain, ctx = {}) {
 }
 
 /**
- * Which payout collections this caller may see, and where each one comes from.
+ * Which payout collections this caller may see.
  *
- * Square's rows ride a commerce connection; PayPal's ride a bank connection.
+ * Both of them, or neither: firestore.rules gates `squarePayouts` and
+ * `paypalPayouts` on the same `canReadBankFeed`, and so does the domain row
+ * above, so a caller who reached this function already holds Banking. The
+ * predicate is repeated here as defence in depth — the domain gate is one
+ * `readableDomain` call away from any future capability that declares
+ * `payouts`, and this is the function that names the collections.
+ *
  * The collection a caller may not read is not read and its key is left OFF the
  * snapshot — which is not the same as the empty array `loadPayouts` writes for
  * a collection it DID read and found empty. `payouts.payoutFeedState` tells the
- * two apart already: for PayPal without Banking it answers
- * `connection_not_visible` rather than guessing "not connected".
+ * two apart: without Banking it answers `connection_not_visible` for BOTH
+ * providers rather than guessing "not connected" or reporting a zero.
  */
 function payoutCollectionsFor(ctx = {}) {
   const areas = (ctx && ctx.areas) || {};
-  const rows = [["square", "squarePayouts"]];
-  if (areas.bankFeed === true) rows.push(["paypal", "paypalPayouts"]);
-  return rows;
+  if (areas.bankFeed !== true) return [];
+  return [["square", "squarePayouts"], ["paypal", "paypalPayouts"]];
 }
 
 function createLoaders({ db, now = () => Date.now() }) {
