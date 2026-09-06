@@ -296,6 +296,14 @@ than an annotation, and the surface under review must not move on its own:
    written down rather than implied, and the test pins the flag to the dispatcher's own set so neither side
    can drift. Closing it means adding two names to that set — a new write on a read path, which is a
    decision for the same submission.
+
+   The 1.2.0 reads do not widen this gap. `get_banking_attention_summary` declares `pii: ["name"]`
+   **and** is in `MCP_ACTIONS_READING_PII`, so its counterparty labels are recorded.
+   `get_business_attention_summary` runs the same detectors with `revealCounterparty: false`: the
+   grouped rows carry transaction ids and no merchant label, so the broad read declares no PII because
+   it emits none. A test over the runtime pins it (`orchestrator-attention.test.js`), because
+   `assertRegistry` cannot: `pii: []` with `piiAccessLogged: false` is internally consistent, and its
+   PII check only fires when `piiAccessLogged` is true.
 2. **`create_inventory_item` advertises `orders.read`.** `nvMcpOAuthScopesForTool` has no case for it, so
    it falls to the default — a write tool advertising a read scope. The registry records what is on the
    wire rather than what it should be, because correcting it changes the OAuth surface. Worth noting that

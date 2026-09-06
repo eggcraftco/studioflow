@@ -150,6 +150,56 @@ check("a workflow-only member sees only their own orders", () => {
   assert.strictEqual(itemFor(result, "1001"), undefined, "somebody else's order is not this member's to see");
 });
 
+/* ------------------------------------------------------------- who, and when */
+
+/** A monthly standing order to a private individual, whose price just moved. */
+function personToPersonSnapshot() {
+  const snapshot = fixtures.attentionSnapshot();
+  const row = (id, amount, bookingDate) => ({
+    id, amount: -amount, currency: "GBP", bookingDate,
+    counterparty: "Margaret Ellison", description: "STANDING ORDER",
+    hasReceipt: true, category: "Rent"
+  });
+  snapshot.bankRows = [
+    row("t_1", 400, "2026-06-01"), row("t_2", 400, "2026-07-01"),
+    row("t_3", 400, "2026-08-01"), row("t_4", 450, "2026-09-01")
+  ];
+  return snapshot;
+}
+
+check("the cross-domain read names no person, because it declares none and logs none", () => {
+  // The registry says pii: [] and piiAccessLogged: false for this capability,
+  // and it is not in MCP_ACTIONS_READING_PII — so an answer that carried a
+  // counterparty's name would be a declaration that does not match the runtime,
+  // which is the class of defect this branch exists to remove. assertRegistry
+  // cannot catch it: pii:[] with piiAccessLogged:false is internally consistent.
+  const snapshot = personToPersonSnapshot();
+  const result = run(snapshot);
+  const recurring = result.data.items.find((item) => item.type === "recurring_price_changed");
+  assert.ok(recurring, "the finding itself must still be reported — silence is not privacy");
+  assert.ok(
+    !JSON.stringify(result).includes("Margaret Ellison"),
+    "a counterparty's name reached the capability that files no access-log row"
+  );
+  // Told WHICH, so the caller can ask WHO through the capability that records it.
+  assert.deepStrictEqual(recurring.entityRefs.map((ref) => ref.id), ["t_4"]);
+  assert.strictEqual(recurring.entityRefs[0].type, "bankTransaction");
+});
+
+check("the banking read does name them, and is the one that declares and records it", () => {
+  const snapshot = personToPersonSnapshot();
+  const result = attention.bankingAttentionSummary(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+  const recurring = result.data.items.find((item) => item.type === "recurring_price_changed");
+  assert.ok(recurring);
+  assert.strictEqual(recurring.entityRefs[0].label, "Margaret Ellison");
+
+  const registry = require("../../orchestrator/registry");
+  assert.deepStrictEqual(registry.entryFor("get_banking_attention_summary").pii, ["name"]);
+  assert.strictEqual(registry.entryFor("get_banking_attention_summary").piiAccessLogged, true);
+  assert.deepStrictEqual(registry.entryFor("get_business_attention_summary").pii, []);
+  assert.strictEqual(registry.entryFor("get_business_attention_summary").piiAccessLogged, false);
+});
+
 /* --------------------------------------------------------------- banking */
 
 check("the banking summary answers §12's list and reports the connection's own state", () => {

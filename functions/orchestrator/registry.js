@@ -616,6 +616,14 @@ const TOOL_REGISTRY = [
     permission: { guard: "orchestrator.assertCapability", area: "orders", write: false, financial: false, bankFeed: false, ownerOnly: false },
     riskClass: "A",
     minAssurance: 1,
+    // Nobody is named here, and that is enforced rather than hoped for. This
+    // capability emits the same banking findings as get_banking_attention_summary
+    // but asks for them with `revealCounterparty: false`, so a recurring-spend
+    // group carries its transaction ids and no merchant label — and a merchant
+    // is a person whenever the payment was person to person. The order items
+    // follow the same rule: the title names the order, never the buyer. The
+    // caller is told WHICH, and asks the banking capability WHO, which is the
+    // read that declares pii and files the access-log row.
     pii: [],
     piiAccessLogged: false,
     effects: [],

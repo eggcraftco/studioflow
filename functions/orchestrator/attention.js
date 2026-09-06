@@ -231,9 +231,23 @@ function amountsByCurrency(rows) {
  * Banking detectors (§12), shared by both attention capabilities.
  * ------------------------------------------------------------------ */
 
-function bankingItems(snapshot, { nowMs, companyId, limitRows = 20 }) {
+/**
+ * `revealCounterparty` is the difference between them, and it is a PII decision
+ * rather than a presentation one. A recurring-spend group is titled with the
+ * merchant, and a merchant is a person whenever the payment was person to
+ * person — which is why get_banking_attention_summary declares `pii: ["name"]`
+ * and is listed in MCP_ACTIONS_READING_PII, so the read is recorded.
+ * get_business_attention_summary is the broad "what should I look at today?"
+ * read, declares no PII and writes no access-log row, so it asks for the same
+ * findings WITHOUT the names: it says which transactions, and the caller asks
+ * the banking capability who — the same rule the order items follow, where the
+ * title names the order and never the customer.
+ */
+function bankingItems(snapshot, { nowMs, companyId, limitRows = 20, revealCounterparty = true }) {
   const rows = Array.isArray(snapshot.bankRows) ? snapshot.bankRows : [];
   const items = [];
+  // The one place a counterparty becomes a label. Off, it never becomes one.
+  const counterparty = (value) => (revealCounterparty ? String(value || "") : "");
   const spend = rows.filter((row) => classification.isSpendRow(row));
 
   const missingReceipt = spend.filter((row) => !row.hasReceipt && row.receiptNotNeeded !== true);
@@ -302,7 +316,7 @@ function bankingItems(snapshot, { nowMs, companyId, limitRows = 20 }) {
       type: "recurring_price_changed",
       severity: "medium",
       title: `${priceChanged.length} recurring payment(s) changed price`,
-      rows: priceChanged.map((row) => ({ id: row.transactionIds[row.transactionIds.length - 1] || row.key, label: row.merchant, currency: row.currency, amount: row.typicalAmount, bookingDate: row.lastDate })),
+      rows: priceChanged.map((row) => ({ id: row.transactionIds[row.transactionIds.length - 1] || row.key, label: counterparty(row.merchant), currency: row.currency, amount: row.typicalAmount, bookingDate: row.lastDate })),
       amountsByCurrency: null,
       oldestMs: Math.min(...priceChanged.map((row) => insights.parseDay(row.lastDate) || nowMs))
     }));
@@ -314,7 +328,7 @@ function bankingItems(snapshot, { nowMs, companyId, limitRows = 20 }) {
       type: "possible_cancelled_subscription",
       severity: "low",
       title: `${stopped.length} recurring payment(s) have stopped arriving`,
-      rows: stopped.map((row) => ({ id: row.transactionIds[row.transactionIds.length - 1] || row.key, label: row.merchant, currency: row.currency, amount: row.typicalAmount, bookingDate: row.lastDate })),
+      rows: stopped.map((row) => ({ id: row.transactionIds[row.transactionIds.length - 1] || row.key, label: counterparty(row.merchant), currency: row.currency, amount: row.typicalAmount, bookingDate: row.lastDate })),
       amountsByCurrency: null,
       oldestMs: Math.min(...stopped.map((row) => insights.parseDay(row.lastDate) || nowMs))
     }));
@@ -410,7 +424,9 @@ function businessAttentionSummary(snapshot, args = {}, ctx = {}, { nowMs = Date.
   }
 
   if (sections.banking && wantedDomains.has("banking")) {
-    items = items.concat(bankingItems(snapshot, { nowMs, companyId }));
+    // No counterparty names: this capability declares no PII and files no
+    // access-log row, so it must not be the one that hands over a person.
+    items = items.concat(bankingItems(snapshot, { nowMs, companyId, revealCounterparty: false }));
     items = items.concat(bankConnectionItems(snapshot, { nowMs, companyId }));
   }
 
