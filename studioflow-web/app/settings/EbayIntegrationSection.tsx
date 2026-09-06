@@ -20,6 +20,7 @@ import {
   setEbayNonceCookie, sealEbayTicket, ebayEventText, ebayReasonText, ebaySpecStatusText, ebayStatusLabel,
   type EbayConnection, type EbayImportPreview, type EbayImportResult
 } from "@/lib/studioflow/ebay";
+import { ebayCallableErrorText } from "@/lib/studioflow/ebayScreenRules";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -66,7 +67,10 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
       setEnvironment(result.environment);
       if (!keepError) setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not load."));
+      // Never `err.message` on its own: a callable that is not deployed answers
+      // 404 and @firebase/functions makes the message the bare word `not-found`,
+      // which is the one thing the header rule above forbids on this screen.
+      setError(t(ebayCallableErrorText(err, "Could not load.")));
     } finally {
       setLoading(false);
     }
@@ -93,7 +97,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
 
   async function guard(key: string, fn: () => Promise<void>) {
     setBusy(key); setError(""); setNotice("");
-    try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : t("Could not load.")); } finally { setBusy(""); }
+    try { await fn(); } catch (err) { setError(t(ebayCallableErrorText(err, "Could not load."))); } finally { setBusy(""); }
   }
 
   // Owner-only, and the one place the browser's two halves of the binding are

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { claimEbayConnectState, sealEbayTicket, setEbayNonceCookie } from "@/lib/studioflow/ebay";
+import { ebayStartLoginHref } from "@/lib/studioflow/ebayScreenRules";
 import { studioT } from "@/lib/studioflow/language";
 
 // Where a connection begun in the Mac, iPhone or Android app becomes a browser
@@ -31,7 +32,13 @@ export function EbayStartContent() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) { router.replace("/login"); return; }
+    // …and BACK here afterwards. This page is not an ordinary screen a seller can
+    // re-open: it carries a single-use state with a ten-minute TTL that exists
+    // only in this URL, and it is reached from the Mac, iPhone or Android app,
+    // whose session is not the browser's — so a signed-out visit is the likely
+    // case, not the odd one. Without the `?next=` the seller lands on Home with
+    // no message and the whole flow is gone (design §5.2, which said this already).
+    if (!user) { router.replace(ebayStartLoginHref(state)); return; }
     if (!state) { setError(t("The eBay sign-in link has expired or was already used. Start again.")); return; }
     let cancelled = false;
     (async () => {

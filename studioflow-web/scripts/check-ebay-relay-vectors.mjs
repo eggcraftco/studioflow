@@ -50,6 +50,7 @@ const webRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(webRoot, "..");
 const callbackPath = path.join(webRoot, "app", "ebay", "callback", "route.ts");
 const ticketRoutePath = path.join(webRoot, "app", "ebay", "ticket", "route.ts");
+const screenRulesPath = path.join(webRoot, "lib", "studioflow", "ebayScreenRules.ts");
 const flowPath = path.join(webRoot, "lib", "studioflow", "ebayFlow.ts");
 const vectorPath = path.join(repoRoot, "functions", "test", "fixtures", "ebay-callback-signature-vectors.json");
 
@@ -128,7 +129,7 @@ const outDir = mkdtempSync(path.join(webRoot, ".ebay-relay-check-"));
 try {
   execFileSync(
     path.join(webRoot, "node_modules", ".bin", "tsc"),
-    [callbackPath, ticketRoutePath, "--outDir", outDir, "--module", "commonjs", "--target", "es2022", "--moduleResolution", "node", "--skipLibCheck", "--strict"],
+    [callbackPath, ticketRoutePath, screenRulesPath, "--outDir", outDir, "--module", "commonjs", "--target", "es2022", "--moduleResolution", "node", "--skipLibCheck", "--strict"],
     { stdio: "inherit" }
   );
 
@@ -636,6 +637,73 @@ try {
     sealedVector.status === 204 && (sealedVector.setCookie[0] || "").startsWith(`${vectorTicket.cookieName}=${vectorTicket.ticket};`),
     `${sealedVector.status} ${JSON.stringify(sealedVector.setCookie)}`);
   process.env.NIVADESK_EBAY_CALLBACK_KEY = KEY;
+
+  // ---- 2b-ii. The two client-screen rules, executed ------------------------
+  // Both were written in a comment and contradicted by the code beneath it.
+  const rules = webRequire(path.join(outDir, "lib", "studioflow", "ebayScreenRules.js"));
+
+  // RULE 1, against the REAL @firebase/functions rather than against our idea of
+  // it: a callable that is not deployed answers 404, and the library turns that
+  // into a FirebaseError whose MESSAGE is the bare word `not-found`.
+  // `EbayIntegrationSection` printed `err.message`, so the screen said `not-found`
+  // — during the deploy plan's own window, which ships the web tier first.
+  const notDeployed = await (async () => {
+    const { initializeApp, deleteApp } = webRequire("@firebase/app");
+    const { getFunctions, httpsCallableFromURL } = webRequire("@firebase/functions");
+    const app = initializeApp({ projectId: "demo-nivadesk", apiKey: "test", appId: "1:1:web:1" }, `ebay-probe-${Date.now()}`);
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+    try { await httpsCallableFromURL(getFunctions(app), "https://example.invalid/getEbayConnections")({}); return null; }
+    catch (error) { return error; }
+    finally { globalThis.fetch = realFetch; await deleteApp(app).catch(() => undefined); }
+  })();
+  check("callable error: an undeployed function really does arrive as a FirebaseError whose message is the bare status word",
+    notDeployed instanceof Error && notDeployed.message === "not-found" && String(notDeployed.code) === "functions/not-found",
+    `${notDeployed && notDeployed.code} ${notDeployed && notDeployed.message}`);
+  check("callable error: …and the screen gets a sentence for it, never the word — the rule the section's own header states",
+    rules.ebayCallableErrorText(notDeployed, "Could not load.")
+      === "eBay is not set up on this server yet. Contact support and we will enable it.",
+    rules.ebayCallableErrorText(notDeployed, "Could not load."));
+  check("callable error: every other bare status word is a code too, and none of them reaches the screen",
+    ["unavailable", "internal", "permission-denied", "failed-precondition", "unauthenticated"].every((word) => {
+      const error = Object.assign(new Error(word), { code: `functions/${word}` });
+      return rules.ebayCallableErrorText(error, "Could not load.") === "Could not load.";
+    }));
+  check("callable error: …while a sentence the SERVER wrote on purpose still reaches it unchanged",
+    rules.ebayCallableErrorText(
+      Object.assign(new Error("This eBay connection was started by a different NivaDesk user."), { code: "functions/permission-denied" }),
+      "Could not load.") === "This eBay connection was started by a different NivaDesk user.");
+
+  // Source pins, because a unit test on a helper stays green while the screen
+  // goes back to printing `err.message` beside it.
+  const sectionSource = readFileSync(path.join(webRoot, "app", "settings", "EbayIntegrationSection.tsx"), "utf8");
+  check("callable error: the settings section reaches no error message except through the helper",
+    !/setError\((?:err|error) instanceof Error \? (?:err|error)\.message/.test(sectionSource)
+    && (sectionSource.match(/ebayCallableErrorText\(/g) || []).length >= 2,
+    "EbayIntegrationSection still prints a raw callable message");
+
+  // RULE 2: a signed-out visitor to /ebay/start comes back to /ebay/start. The
+  // page used to `router.replace("/login")` with no `?next=`, and /login's
+  // default is /home — so the single-use state, which lives only in that URL,
+  // was gone and the seller had to start again from the native app.
+  const startState = "AbCdEf0123456789-_XyZ";
+  check("start page: a signed-out visitor is sent to sign in AND BACK, with the state intact",
+    rules.ebayStartLoginHref(startState) === `/login?next=${encodeURIComponent(`/ebay/start?state=${startState}`)}`,
+    rules.ebayStartLoginHref(startState));
+  check("start page: …and /login's own rule accepts that next — same-origin, one leading slash",
+    (() => {
+      const next = new URLSearchParams(rules.ebayStartLoginHref(startState).split("?")[1]).get("next") || "";
+      return next.startsWith("/") && !next.startsWith("//");
+    })());
+  check("start page: a state that is not shaped like one is not reflected into the URL we build",
+    rules.ebayStartLoginHref("https://evil.example/") === `/login?next=${encodeURIComponent("/ebay/start")}`
+    && rules.ebayStartLoginHref("") === `/login?next=${encodeURIComponent("/ebay/start")}`,
+    rules.ebayStartLoginHref("https://evil.example/"));
+
+  const startSource = readFileSync(path.join(webRoot, "app", "ebay", "start", "EbayStartContent.tsx"), "utf8");
+  check("start page: …and the page itself sends a signed-out visitor through that helper, not to a bare /login",
+    !/router\.replace\("\/login"\)/.test(startSource) && startSource.includes("ebayStartLoginHref(state)"),
+    "EbayStartContent still drops the state on the way to /login");
 
   // ---- 2c. Admission, and it goes LAST because it drains the process buckets --
   // Both buckets live in their route's module scope, so anything after this
