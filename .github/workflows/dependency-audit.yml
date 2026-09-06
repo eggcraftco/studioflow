@@ -1,0 +1,58 @@
+# DPP 2.7 — dependency vulnerability scanning on a cadence and on every
+# dependency change (docs/security/vulnerability-management.md).
+#
+# The gate (scripts/audit-gate.mjs) fails on any critical advisory and on any
+# high advisory that is not allow-listed with a due date in
+# docs/security/audit-allowlist.json — so an accepted high is only ever
+# accepted until the date the plan committed to. Moderates are reported.
+#
+# `npm audit` works from the lockfiles alone, so there is no install step.
+name: dependency-audit
+
+on:
+  push:
+    paths:
+      - "functions/package.json"
+      - "functions/package-lock.json"
+      - "functions-amazon/package.json"
+      - "functions-amazon/package-lock.json"
+      - "studioflow-web/package.json"
+      - "studioflow-web/package-lock.json"
+      - "docs/security/audit-allowlist.json"
+      - "scripts/audit-gate.mjs"
+      - ".github/workflows/dependency-audit.yml"
+  pull_request:
+    paths:
+      - "functions/package.json"
+      - "functions/package-lock.json"
+      - "functions-amazon/package.json"
+      - "functions-amazon/package-lock.json"
+      - "studioflow-web/package.json"
+      - "studioflow-web/package-lock.json"
+      - "docs/security/audit-allowlist.json"
+      - "scripts/audit-gate.mjs"
+      - ".github/workflows/dependency-audit.yml"
+  schedule:
+    # Every Monday 06:00 UTC — well inside the 30-day window the policy requires.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: npm audit gate (functions, functions-amazon, studioflow-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Audit every tree against the allow-list
+        run: node scripts/audit-gate.mjs
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-${{ github.run_id }}
+          path: audit-report/
+          retention-days: 90

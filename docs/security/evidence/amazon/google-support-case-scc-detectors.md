@@ -206,3 +206,5 @@ been created and will be reviewed shortly."*
 - Without a paid plan: the public issue tracker component for Security Command Center
   (issuetracker.google.com), with the same text minus the project internals that should not be
   public (keep the project number, drop the identities), or the Google Cloud Community forum.
+
+- 2026-09-06 01:35 UTC check (operator's Chrome session, case page): status **New**, priority P3, no response from Google yet.

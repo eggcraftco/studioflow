@@ -140,3 +140,6 @@ store-metadata/screenshots/source/**/*.psd
 # Large local demo recordings (not served by the site)
 studioflow-web/public/NivaDesk_Demo_high.mov
 studioflow-web/public/NivaDesk_Demo.mp4
+
+# written by scripts/audit-gate.mjs on every run; the CI keeps it as an artifact
+audit-report/

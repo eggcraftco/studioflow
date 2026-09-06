@@ -1,0 +1,38 @@
+{
+  "policy": "Dependency audit gate (DPP 2.7, docs/security/vulnerability-management.md). Critical advisories are never allowed. High advisories are allowed only with an entry here and only until the entry's due date; past the date the gate fails until the fix ships or the operator records a new risk decision with a new date. Moderate and low advisories are reported, not gated. Every entry names the fix that closes it.",
+  "entries": [
+    {
+      "tree": "functions",
+      "advisory": "GHSA-mwp4-54f8-5fhr",
+      "package": "ip-address",
+      "via": "geoip-lite 1.4.x pins ip-address 5.9.x",
+      "reason": "Leading-zero octet decoding in Address4. NivaDesk only calls geoip.lookup(ip) on the request address for a country hint; the parsing quirk changes at most the geo answer, never an access decision.",
+      "fix": "geoip-lite 1.x -> 2.0.3 (major; resolves ip-address ^10.2.0). Separate backlog item, see vulnerability-management.md.",
+      "recorded": "2026-09-05",
+      "due": "2026-10-05",
+      "owner": "NivaDesk Incident Lead"
+    },
+    {
+      "tree": "studioflow-web",
+      "advisory": "GHSA-6g55-p6wh-862q",
+      "package": "postcss",
+      "via": "next 15 pins postcss 8.4.31",
+      "reason": "Arbitrary file read via source-map handling at build time. PostCSS runs only during the Hostinger build over NivaDesk's own stylesheets; no untrusted CSS reaches it.",
+      "fix": "next 15 -> 16.3.4 (major). Separate backlog item, see vulnerability-management.md.",
+      "recorded": "2026-09-05",
+      "due": "2026-10-05",
+      "owner": "NivaDesk Incident Lead"
+    },
+    {
+      "tree": "studioflow-web",
+      "advisory": "GHSA-r28c-9q8g-f849",
+      "package": "postcss",
+      "via": "next 15 pins postcss 8.4.31",
+      "reason": "Path traversal in previous-source-map auto-loading, build time only, same exposure as above.",
+      "fix": "next 15 -> 16.3.4 (major). Separate backlog item, see vulnerability-management.md.",
+      "recorded": "2026-09-05",
+      "due": "2026-10-05",
+      "owner": "NivaDesk Incident Lead"
+    }
+  ]
+}
