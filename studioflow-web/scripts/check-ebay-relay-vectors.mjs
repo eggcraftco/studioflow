@@ -236,7 +236,14 @@ try {
     return { begun, sealed, ticketCookie, nonceCookie, cookie: `${nonceCookie}; ${ticketCookie}` };
   }
 
-  const callbackUrl = (state, extra = "") => `https://nivadesk.app/ebay/callback?code=good-code${extra}&state=${encodeURIComponent(state)}`;
+  // One code per FLOW, derived from the state so every call site keeps its
+  // one-argument shape and two landings on the same flow present the same code —
+  // which is what a real replay looks like. A single shared literal would now be
+  // refused by §5.5's presented-code registry the second time any flow used it,
+  // and that would be an artefact of the fixture rather than a fact about the
+  // route. The prefix is what the harness's fake eBay accepts.
+  const codeOf = (state) => `good-code-${String(state).slice(0, 10)}`;
+  const callbackUrl = (state, extra = "") => `https://nivadesk.app/ebay/callback?code=${encodeURIComponent(codeOf(state))}${extra}&state=${encodeURIComponent(state)}`;
   const connected = { status: 200, body: { ok: true, outcome: "connected", rid: "0123456789abcdef" } };
   const browserAnswer = { status: 200, body: { ok: false, outcome: "error", reason: "browser", rid: "0123456789abcdef" } };
   const bodyOf = (sent) => JSON.parse(sent.init.body);
@@ -282,7 +289,7 @@ try {
   // And the signature is bound to THIS body: one changed character is a 401.
   const second = await browser();
   const again = await relay(callbackUrl(second.begun.state), second.cookie, connected);
-  const swapped = again.sent.init.body.replace('"code":"good-code"', '"code":"other-code"');
+  const swapped = again.sent.init.body.replace(`"code":"${codeOf(second.begun.state)}"`, '"code":"other-code"');
   const refused = await deliver(again.sent, { tamper: swapped });
   check("the signature binds the body: one swapped field and the function answers 401",
     refused.statusCode === 401 && JSON.stringify(refused.payload) === JSON.stringify({ ok: false }),
@@ -356,7 +363,7 @@ try {
     && store.read(`ebayConnectStates/${flowE.begun.state}`).used === false,
     `${JSON.stringify(disposed.payload)} used=${store.read(`ebayConnectStates/${flowE.begun.state}`).used}`);
   check("…and the code that landing carried was spent at eBay, which is what the disposal is for",
-    calls.codes.filter((c) => c === "good-code").length > 0, JSON.stringify(calls.codes.slice(-3)));
+    calls.codes.filter((c) => c === codeOf(flowE.begun.state)).length === 1, JSON.stringify(calls.codes.slice(-3)));
 
   // 7 — the outsider using the route as a signing oracle.
   const before = store.paths("ebayConnectStates/").length;
@@ -475,7 +482,7 @@ try {
   const both = await browser();
   const withError = await relay(callbackUrl(both.begun.state, "&error=access_denied"), both.cookie, connected);
   check("a callback carrying BOTH a code and an error takes the relay path — the code wins, so the burn has no exception",
-    withError.sent !== null && bodyOf(withError.sent).code === "good-code",
+    withError.sent !== null && bodyOf(withError.sent).code === codeOf(both.begun.state),
     withError.sent ? withError.sent.init.body.slice(0, 60) : "no request was made");
   const bothDelivered = await deliver(withError.sent);
   check("…and the function consumes that state like any other callback",

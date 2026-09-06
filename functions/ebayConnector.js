@@ -62,12 +62,21 @@ const BUYER_INDEX_COLLECTION = "ebayBuyers";
 const DELETION_LEDGER_COLLECTION = "ebayDeletionRequests";
 const QUOTA_COLLECTION = "ebayQuota";
 const KEY_CACHE_COLLECTION = "ebayNotificationKeys";
+// §5.5's presented-code registry. The id is sha256hex(code) — derived, never
+// caller-shaped — and the document is one field: an existence bit with an expiry.
+const PRESENTED_CODE_COLLECTION = "ebayPresentedCodes";
 const RESTRICTED_SUBCOLLECTION = "restrictedCustomer";
 const CREDENTIALS_SUBCOLLECTION = "credentials";
 const CREDENTIALS_DOC = "current";
 const REVEAL_COUNTERS_SUBCOLLECTION = "revealCounters";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+// One hour, an order of magnitude above any plausible authorization-code
+// lifetime: §1 records no figure for eBay's, and this design does not depend
+// on one, so the TTL is set high rather than derived from a fact we have not
+// verified. Steady-state size is the number of distinct codes presented in an
+// hour — for genuine traffic, the number of connections.
+const PRESENTED_CODE_TTL_MS = 60 * 60 * 1000;
 const DELIVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const LEDGER_TTL_MS = 400 * 24 * 60 * 60 * 1000;
 const TOKEN_REFRESH_AHEAD_MS = 10 * 60 * 1000;          // eBay access tokens live ~2 h
@@ -175,6 +184,7 @@ function createEbayConnectorFunctions(deps) {
   const states = () => db().collection(STATE_COLLECTION);
   const buyers = () => db().collection(BUYER_INDEX_COLLECTION);
   const ledgerRows = () => db().collection(DELETION_LEDGER_COLLECTION);
+  const presentedCodes = () => db().collection(PRESENTED_CODE_COLLECTION);
   const FieldValue = admin.firestore.FieldValue;
   const env = () => ebayOAuth.ebayEnvironment(environment());
   const configured = () => Boolean(String(clientId() || "").trim());
@@ -616,6 +626,44 @@ function createEbayConnectorFunctions(deps) {
     return "refused";
   }
 
+  // ---- the presented-code registry (§5.5) — the defence that asks nobody -----
+  // THE WRITE THAT RECORDS A CODE AND THE PERMISSION TO EXCHANGE IT ARE THE SAME
+  // OPERATION. That one sentence is the whole of it: `.create()` succeeds for
+  // exactly one invocation, and only that invocation may exchange. There is no
+  // ordering, no ceiling, no partial failure and no instance-local counter that
+  // can permit the second presentation while refusing the first, because there is
+  // only one of them.
+  //
+  // It replaces the disposal as the thing that closes §5's attack. The disposal is
+  // a call to eBay — a party who can refuse, throttle, disagree about a RuName or
+  // be flooded out of reach by anyone with a browser — so an observed code's fate
+  // must not depend on it. It does not: a code registered here is unusable through
+  // us whatever eBay says, whatever the bucket holds, and whatever
+  // NIVADESK_EBAY_DISPOSE is set to.
+  //
+  // The document is `ebayPresentedCodes/{sha256hex(code)} = { expireAt }` and
+  // nothing else: not the code, not a state, not a rid, not a companyId, not an
+  // address, not a timestamp anyone could correlate. The id is DERIVED, so the trap
+  // §4.5 names — Firestore embeds a rejected path in its error message — cannot
+  // fire here: there is no attacker-shaped path on this write. The shape is not new
+  // either; §4.3's `deliveries/{notificationId}` is the same one for the same
+  // reason: create as the primitive, duplicate → skip, TTL to clean up.
+  async function claimCode(code) {
+    try {
+      await presentedCodes().doc(sha256hex(code)).create({
+        expireAt: admin.firestore.Timestamp.fromMillis(now() + PRESENTED_CODE_TTL_MS)
+      });
+      return "fresh";
+    } catch (error) {
+      // ALREADY_EXISTS is gRPC 6, matched on the CODE and never on the message:
+      // a Firestore message can carry the value that threw, and §5.4's rule is
+      // that no such message is read into a decision, let alone into a line.
+      if (Number(error?.code) === 6) return "seen";
+      console.error(`ebay callback: registry write failed class=${classWordOf(error)}`);
+      return "unavailable";
+    }
+  }
+
   // ---- disposal's bound, and what can be measured about it (§5.5) ------------
   // A token bucket in the instance, refilled continuously, keyed on NOTHING: a
   // bucket keyed on anything from the body lets the caller pick a fresh key.
@@ -636,9 +684,10 @@ function createEbayConnectorFunctions(deps) {
   // empty bucket, which is a COST signal and not a defence signal; `disabled`
   // is a disposal that made no call because a switch was off.
   //
-  // (§5.5's line also carries `registered` and `duplicate`. Those are the
-  // presented-code registry's counts, and they join this line with it.)
-  const disposeCounts = { spent: 0, refused: 0, throttled: 0, disabled: 0, fromMs: 0 };
+  // `registered` and `duplicate` are the registry's: a flood that repeats one code
+  // shows up as `registered=1 duplicate=n` and costs one outbound request in
+  // total, which is the difference between a cost signal and an attack signal.
+  const disposeCounts = { registered: 0, duplicate: 0, spent: 0, refused: 0, throttled: 0, disabled: 0, fromMs: 0 };
   function countDispose(word) {
     if (Object.prototype.hasOwnProperty.call(disposeCounts, word)) disposeCounts[word] += 1;
   }
@@ -647,10 +696,11 @@ function createEbayConnectorFunctions(deps) {
     if (disposeCounts.fromMs === 0) { disposeCounts.fromMs = at; return; }
     const window = at - disposeCounts.fromMs;
     if (window < CALLBACK_COUNTER_WINDOW_MS) return;
-    const { spent, refused, throttled, disabled } = disposeCounts;
-    if (spent || refused || throttled || disabled) {
-      console.warn(`ebay callback dispose window=${window} spent=${spent} refused=${refused} throttled=${throttled} disabled=${disabled}`);
+    const { registered, duplicate, spent, refused, throttled, disabled } = disposeCounts;
+    if (registered || duplicate || spent || refused || throttled || disabled) {
+      console.warn(`ebay callback dispose window=${window} registered=${registered} duplicate=${duplicate} spent=${spent} refused=${refused} throttled=${throttled} disabled=${disabled}`);
     }
+    disposeCounts.registered = 0; disposeCounts.duplicate = 0;
     disposeCounts.spent = 0; disposeCounts.refused = 0; disposeCounts.throttled = 0; disposeCounts.disabled = 0;
     disposeCounts.fromMs = at;
   }
@@ -723,9 +773,26 @@ function createEbayConnectorFunctions(deps) {
       // The structural guarantee, enforced where it counts: a signature the web
       // route minted for an anonymous caller can name no state and no nonce.
       if (typeof body.state !== "undefined" || typeof body.nonce !== "undefined") { console.warn(`ebay callback: field shape refused rid=${rid}`, "envelope"); answer(400, { ok: false, rid }); return; }
+      // THE REGISTRY, AND IT SITS ABOVE EVERYTHING BELOW IT. This is the line the
+      // first revision of §5.5 did not have, and its absence is what let an
+      // anonymous caller turn the defence off by draining the bucket: the code was
+      // recorded nowhere, so an empty bucket meant an observed code stayed usable.
+      // Registering first means none of the three switches under it — the bucket,
+      // the operational switch, eBay's own answer — can undo the record.
+      const claim = await claimCode(body.code);
+      // A code somebody already presented needs no second disposal: the first
+      // presentation registered it, and that is what makes it unusable through us.
+      // This is also what collapses a flood repeating one code to a single
+      // outbound request, at no cost to the answer, which never varies.
+      if (claim === "seen") { countDispose("duplicate"); answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return; }
+      if (claim === "fresh") countDispose("registered");
+      // `unavailable` falls THROUGH and still spends, bucket permitting, and the
+      // two paths failing in opposite directions is deliberate: refusing to
+      // connect costs a retry, refusing to spend costs a live code.
       // The bound. An empty bucket skips the eBay call and answers exactly what a
       // successful disposal answers — it is a cost control, and nothing the
-      // seller or an attacker sees may depend on it.
+      // seller or an attacker sees may depend on it. It can no longer turn any
+      // part of the defence off: the code is registered above it either way.
       if (!takeDisposeToken()) { countDispose("throttled"); answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return; }
       if (!disposeEnabled()) { countDispose("disabled"); answer(200, { ok: false, outcome: "error", reason: "browser", rid }); return; }
       // The RuName and the environment are this deployment's CURRENT globals: a
@@ -753,6 +820,24 @@ function createEbayConnectorFunctions(deps) {
     if (!CALLBACK_STATE_PATTERN.test(state)) { console.warn(`ebay callback: field shape refused rid=${rid}`, "state"); answer(400, { ok: false, rid }); return; }
     if (code.length > CALLBACK_MAX_CODE_LENGTH) { console.warn(`ebay callback: field shape refused rid=${rid}`, "code"); answer(400, { ok: false, rid }); return; }
     if (typeof body.nonce !== "undefined" && (typeof body.nonce !== "string" || body.nonce.length > CALLBACK_MAX_NONCE_LENGTH)) { console.warn(`ebay callback: field shape refused rid=${rid}`, "nonce"); answer(400, { ok: false, rid }); return; }
+    // ---- the registry, BEFORE the state transaction (§5.5) --------------------
+    // The only thing that authorises an exchange. It is above the transaction so
+    // that a code already presented is refused without a state document being read
+    // at all, and so that a code this invocation could not record is never
+    // exchanged — the invariant is "the exchange happens only in the invocation
+    // whose create() succeeded", and an exchange after a failed create would break
+    // it as surely as one after ALREADY_EXISTS.
+    const connectClaim = await claimCode(code);
+    // `state` is the word for `seen`, and it adds no vocabulary: its sentence —
+    // "The eBay sign-in link has expired or was already used. Start again." — is
+    // exactly true of a code presented twice, and it is the same word an unknown,
+    // used or expired state produces, so it is no oracle. It distinguishes nothing
+    // a caller could not already produce for themselves.
+    if (connectClaim === "seen") { answer(200, { ok: false, outcome: "error", reason: "state", rid }); return; }
+    // Fails CLOSED. 503 rather than a reason word because this failure is OURS and
+    // not the seller's; the route lands `unavailable` for it as it does for any
+    // other non-200, and nothing is read, burned or exchanged.
+    if (connectClaim !== "fresh") { answer(503, { ok: false }); return; }
     let verdict = { reason: "state", row: null };
     try {
       verdict = await db().runTransaction(async (tx) => {
@@ -1787,17 +1872,17 @@ function createEbayConnectorFunctions(deps) {
       // fixture and by nothing else. They are exposed rather than re-implemented
       // in a test on purpose: a test that writes its own HMAC asserts the test's
       // arithmetic, not this file's ("tests that assert the bug").
-      callbackDigest, checkSignature, mintTicket,
+      callbackDigest, checkSignature, mintTicket, claimCode,
       applyEbayOrder, reconcileConnection, reconcileConnectionNightly, runSweep, eligibleRows, clientFor, refreshWithLock, recordTokenFailure, storeCredentials, credentialsRef,
       processEbayCommerceTask, processEbayBuyerDeletion, reconcileDeletionRequests, handleNotificationRequest, signingKeyFor, resetCaches,
       publicView, settingsOf, marketplacesOf, clampSinceDays, connectionDocId, ebayOrderDocId, deletionPatch, limits,
-      CONNECTION_COLLECTION, STATE_COLLECTION, BUYER_INDEX_COLLECTION, DELETION_LEDGER_COLLECTION, QUOTA_COLLECTION, KEY_CACHE_COLLECTION, RESTRICTED_SUBCOLLECTION, REVEAL_COUNTERS_SUBCOLLECTION
+      CONNECTION_COLLECTION, STATE_COLLECTION, BUYER_INDEX_COLLECTION, DELETION_LEDGER_COLLECTION, QUOTA_COLLECTION, KEY_CACHE_COLLECTION, PRESENTED_CODE_COLLECTION, RESTRICTED_SUBCOLLECTION, REVEAL_COUNTERS_SUBCOLLECTION
     }
   };
 }
 
 module.exports = {
   createEbayConnectorFunctions, connectionDocId, ebayOrderDocId, safeIdPart,
-  CONNECTION_COLLECTION, STATE_COLLECTION, BUYER_INDEX_COLLECTION, DELETION_LEDGER_COLLECTION, QUOTA_COLLECTION, KEY_CACHE_COLLECTION, RESTRICTED_SUBCOLLECTION, REVEAL_COUNTERS_SUBCOLLECTION,
-  STATE_TTL_MS, TOKEN_REFRESH_AHEAD_MS, TOKEN_REFRESH_LOCK_MS, REFRESH_TOKEN_WARN_MS, MAX_CONNECTIONS_PER_SWEEP, RECONCILE_MAX_PAGES, IMPORT_SLICE_MS
+  CONNECTION_COLLECTION, STATE_COLLECTION, BUYER_INDEX_COLLECTION, DELETION_LEDGER_COLLECTION, QUOTA_COLLECTION, KEY_CACHE_COLLECTION, PRESENTED_CODE_COLLECTION, RESTRICTED_SUBCOLLECTION, REVEAL_COUNTERS_SUBCOLLECTION,
+  STATE_TTL_MS, PRESENTED_CODE_TTL_MS, TOKEN_REFRESH_AHEAD_MS, TOKEN_REFRESH_LOCK_MS, REFRESH_TOKEN_WARN_MS, MAX_CONNECTIONS_PER_SWEEP, RECONCILE_MAX_PAGES, IMPORT_SLICE_MS
 };

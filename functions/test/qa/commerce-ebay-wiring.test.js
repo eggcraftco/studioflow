@@ -105,8 +105,8 @@ check("no eBay URL appears in the connector or index.js — every path lives in 
   }
 });
 
-check("the rules deny all six eBay root collections and the per-workspace restricted and reveal-counter subcollections, in every list", () => {
-  for (const col of ["ebayConnections", "ebayConnectStates", "ebayBuyers", "ebayDeletionRequests", "ebayQuota", "ebayNotificationKeys"]) {
+check("the rules deny all seven eBay root collections and the per-workspace restricted and reveal-counter subcollections, in every list", () => {
+  for (const col of ["ebayConnections", "ebayConnectStates", "ebayBuyers", "ebayDeletionRequests", "ebayQuota", "ebayNotificationKeys", "ebayPresentedCodes"]) {
     assert.ok(new RegExp(`match /${col}/\\{document=\\*\\*\\} \\{\\s*allow read, write: if false;`).test(rules), col);
   }
   assert.ok(/match \/companies\/\{companyId\}\/restrictedCustomer\/\{orderId\} \{\s*allow read, write: if false;/.test(rules));

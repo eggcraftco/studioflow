@@ -28,7 +28,7 @@ process.env.NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN = "nivadesk_ebay_deletion-
 process.env.NIVADESK_EBAY_DELETION_ENDPOINT_URL = "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayNotifications";
 
 // ---- the fake eBay ----------------------------------------------------------
-const ebay = { orders: new Map(), fulfillments: new Map(), calls: [], clients: [], exchanges: 0, refreshes: 0, refuseRefresh: null, refuseOrders: null, pageLimit: 200, failOrders: new Set() };
+const ebay = { orders: new Map(), fulfillments: new Map(), calls: [], clients: [], exchanges: 0, codes: [], refreshes: 0, refuseRefresh: null, refuseOrders: null, pageLimit: 200, failOrders: new Set() };
 function order(id, { lastModifiedDate, creationDate, paymentStatus = "PAID", fulfillmentStatus = "NOT_STARTED", cancelState = "NONE_REQUESTED", marketplace = "EBAY_GB", total = "116.00", username = "ada_l", extra = {} } = {}) {
   const created = creationDate || new Date(Date.now() - 3600000).toISOString();
   const modified = lastModifiedDate || created;
@@ -47,7 +47,7 @@ function order(id, { lastModifiedDate, creationDate, paymentStatus = "PAID", ful
 }
 const inWindow = (iso, fromMs, toMs) => { const ms = Date.parse(iso); return ms >= fromMs && ms <= toMs; };
 global.__nivadeskEbayFakeOAuth = {
-  async exchangeCode({ code }) { ebay.exchanges += 1; if (code !== "good-code") throw Object.assign(new Error("ebay_oauth_http_400: invalid_grant"), { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${ebay.exchanges}`, expires_in: 7200, refresh_token: `rt_${ebay.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token" }; },
+  async exchangeCode({ code }) { ebay.exchanges += 1; ebay.codes.push(String(code)); if (!/^good-code/.test(String(code))) throw Object.assign(new Error("ebay_oauth_http_400: invalid_grant"), { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${ebay.exchanges}`, expires_in: 7200, refresh_token: `rt_${ebay.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token" }; },
   async refreshToken() { ebay.refreshes += 1; if (ebay.refuseRefresh) throw ebay.refuseRefresh; await new Promise((r) => setTimeout(r, 20)); return { access_token: `at_refreshed_${ebay.refreshes}`, expires_in: 7200 }; },
   async fetchIdentity() { return { userId: "ebayuser_xxx", username: "eggcraft_uk", accountType: "BUSINESS", registrationMarketplaceId: "EBAY_GB" }; },
   async appToken() { return { access_token: "app-token", expires_in: 7200 }; }
@@ -109,6 +109,9 @@ async function wipe() {
   }
   const states = await db.collection(eb.STATE_COLLECTION).where("companyId", "==", COMPANY).get(); await Promise.all(states.docs.map((d) => d.ref.delete()));
   const quota = await db.collection(eb.QUOTA_COLLECTION).get(); await Promise.all(quota.docs.map((d) => d.ref.delete()));
+  // The registry carries no companyId by design (§5.5: the document is an
+  // existence bit and nothing else), so it is cleared wholesale between runs.
+  const presented = await db.collection(eb.PRESENTED_CODE_COLLECTION).get(); await Promise.all(presented.docs.map((d) => d.ref.delete()));
   await db.recursiveDelete(connRef()); await db.recursiveDelete(db.collection("companies").doc(COMPANY)); await db.collection("companySettings").doc(COMPANY).delete();
   await db.collection("appConfig").doc("commerce").delete();
 }
@@ -117,7 +120,11 @@ async function setFlags(doc) { await db.collection("appConfig").doc("commerce").
 // once and the signature is taken over those exact bytes, with `body` parsed
 // BACK from them — never the reverse, or a body-swap would go green while
 // proving nothing about the bytes Cloud Run actually receives.
-async function callback(state, { code = "good-code", nonce = "", key = process.env.EBAY_CALLBACK_KEY, sign = true, rid = null } = {}) {
+// §5.5's presented-code registry makes a code single-use ACROSS flows, so the
+// default is unique per call: a case that means to present one code twice names
+// it. The fake accepts anything starting with `good-code`.
+let e2eCodeSeq = 0;
+async function callback(state, { code = `good-code-${++e2eCodeSeq}`, nonce = "", key = process.env.EBAY_CALLBACK_KEY, sign = true, rid = null } = {}) {
   const raw = JSON.stringify({ v: 1, rid: rid === null ? crypto.randomBytes(8).toString("hex") : rid, code, state, nonce });
   const buffer = Buffer.from(raw, "utf8");
   const ts = String(Date.now());
@@ -129,6 +136,22 @@ async function callback(state, { code = "good-code", nonce = "", key = process.e
     rawBody: buffer, body: JSON.parse(raw)
   }, res);
   return res;
+}
+/** The DISPOSE envelope (§5.5): no state key, no nonce key, and the function
+ *  refuses one that carries either. This is what the web route signs for a
+ *  browser holding no ticket, and it is the landing that registers the code. */
+async function disposeCallback({ code = `good-code-${++e2eCodeSeq}`, key = process.env.EBAY_CALLBACK_KEY, rid = null } = {}) {
+  const raw = JSON.stringify({ v: 1, op: "dispose", rid: rid === null ? crypto.randomBytes(8).toString("hex") : rid, code });
+  const buffer = Buffer.from(raw, "utf8");
+  const ts = String(Date.now());
+  const digest = crypto.createHmac("sha256", key).update(`v1.${ts}.`, "utf8").update(buffer).digest("hex");
+  const res = fakeResponse();
+  await index.ebayOAuthCallback({
+    method: "POST", originalUrl: "/ebayOAuthCallback",
+    headers: { "content-type": "application/json", "x-nivadesk-timestamp": ts, "x-nivadesk-signature": `v1=${digest}` },
+    rawBody: buffer, body: JSON.parse(raw)
+  }, res);
+  return { res, code };
 }
 async function connect() { const begun = await index.beginEbayConnect.run({ auth, data: { companyId: COMPANY }, rawRequest: {} }); const res = await callback(begun.state, { nonce: begun.nonce }); return { begun, res }; }
 const conn = async () => (await connRef().get()).data();
@@ -157,11 +180,12 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data().used, false, "an unsigned POST reads no state and burns none");
     const forged = await callback("forged-state-value-00000000", { nonce: "x" });
     assert.strictEqual(forged.payload.reason, "state", JSON.stringify(forged.payload));
-    // The absent-cookie case: the web route posts nonce:"" and the state is
-    // consumed anyway — and eBay's code is spent and thrown away, which is the
-    // half that actually stops the attack. A code is bound to the application
-    // and not to the state that fetched it, so a refusal that leaves it unspent
-    // leaves it replayable against a state the attacker mints (§5.4).
+    // A connect envelope carrying no nonce: the state is consumed anyway and
+    // eBay's code is spent and thrown away. The rationale is no longer that the
+    // spend is what stops the attack — §5.5 moved that to the registry, and this
+    // envelope is not the one the web route signs for a cookieless browser any
+    // more (that one is exercised below). What is unchanged is the FUNCTION's
+    // contract, which is what this tier tests: a wrong or absent nonce burns.
     const phished = await callback(out.state);
     assert.strictEqual(phished.payload.reason, "browser", JSON.stringify(phished.payload));
     assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(out.state).get()).data().used, true, "burned on an absent nonce");
@@ -193,6 +217,63 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     assert.strictEqual(view.specStatus, "connected_read_only"); assert.strictEqual(view.status, "connected");
     assert.ok(!JSON.stringify(view).includes("at_1") && !JSON.stringify(view).includes("at_2") && !Object.keys(view).some((k) => /Hash$/.test(k)) && !JSON.stringify(view).includes("Encrypted"));
     assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(state).get()).data().connectionId, connId);
+  });
+
+  await check("#1b the presented-code registry, against a real Firestore: one create per code, the same code refused for ever after, and a dispose envelope that touches no state", async () => {
+    // §5.5's defence, on the tier where `.create()` raises a real ALREADY_EXISTS
+    // from Firestore rather than a fake's throw. The qa suite proves the
+    // branching; this proves the primitive is the one the design names.
+    //
+    // Nothing here connects: the seller's own state is left completable at the
+    // end, which is the property case 6 rests on.
+    const before = (await db.collection(eb.PRESENTED_CODE_COLLECTION).get()).size;
+    const begun = await index.beginEbayConnect.run({ auth, data: { companyId: COMPANY }, rawRequest: {} });
+    assert.ok(begun.ticket && /^nv1\./.test(begun.ticket), "begin hands the browser a ticket beside the nonce");
+
+    // The phished landing, in the shape the web route actually signs for a
+    // browser holding no ticket: no state key, no nonce key.
+    const exchanges = ebay.exchanges;
+    const CODE = "good-code-registry-e2e";
+    const disposed = await disposeCallback({ code: CODE });
+    assert.strictEqual(disposed.res.statusCode, 200);
+    assert.deepStrictEqual(Object.keys(disposed.res.payload).sort(), ["ok", "outcome", "reason", "rid"]);
+    assert.strictEqual(disposed.res.payload.reason, "browser", JSON.stringify(disposed.res.payload));
+    assert.strictEqual(ebay.exchanges, exchanges + 1, "one token request, discarded whole");
+    assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(begun.state).get()).data().used, false,
+      "a disposal reached a state document");
+
+    const id = crypto.createHash("sha256").update(CODE).digest("hex");
+    const row = await db.collection(eb.PRESENTED_CODE_COLLECTION).doc(id).get();
+    assert.ok(row.exists, "the id is exactly sha256hex(code)");
+    assert.deepStrictEqual(Object.keys(row.data()), ["expireAt"], JSON.stringify(row.data()));
+    assert.strictEqual((await db.collection(eb.PRESENTED_CODE_COLLECTION).get()).size, before + 1);
+
+    // The same code again, on the DISPOSE path: ALREADY_EXISTS from Firestore,
+    // so no second eBay call and no second document.
+    const dup = await disposeCallback({ code: CODE });
+    assert.strictEqual(dup.res.payload.reason, "browser", JSON.stringify(dup.res.payload));
+    assert.strictEqual(ebay.exchanges, exchanges + 1, "a registered code was presented to eBay again");
+    assert.strictEqual((await db.collection(eb.PRESENTED_CODE_COLLECTION).get()).size, before + 1);
+
+    // …and on the CONNECT path, against the seller's own live state: refused
+    // with `state`, and that state is not even burned — so the refusal came from
+    // the registry, before the state was read. This is design case 8: an
+    // observed code cannot be carried into a second, attacker-owned flow.
+    const replay = await callback(begun.state, { code: CODE, nonce: begun.nonce });
+    assert.strictEqual(replay.payload.reason, "state", JSON.stringify(replay.payload));
+    assert.strictEqual((await db.collection(eb.STATE_COLLECTION).doc(begun.state).get()).data().used, false,
+      "the registry answered before the state transaction");
+    assert.strictEqual(ebay.exchanges, exchanges + 1);
+
+    // Nothing of the seller's was consumed by any of it: their state is still
+    // unburned, unclaimed and unexpired, so their own consent is still theirs to
+    // finish. This case deliberately connects NOTHING — the flow is abandoned and
+    // expires by TTL — so that the connection state the later cases build on is
+    // exactly what case #1 left.
+    const stillTheirs = (await db.collection(eb.STATE_COLLECTION).doc(begun.state).get()).data();
+    assert.strictEqual(stillTheirs.used, false);
+    assert.ok(stillTheirs.expiresAt > Date.now(), "the victim's flow expired instead of surviving");
+    assert.ok(!stillTheirs.connectionId, "the victim's state was joined to a connection");
   });
 
   await check("#2 a state minted for production is refused on this sandbox server; a production row is skipped by the sweep with environment_mismatch", async () => {

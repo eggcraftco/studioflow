@@ -1191,7 +1191,8 @@ service cloud.firestore {
       allow read, write: if false;
     }
     // eBay connector: seller OAuth credentials, connect states, the buyer index, the deletion ledger,
-    // the daily quota counter and the notification signing-key cache are server-only.
+    // the daily quota counter, the notification signing-key cache and the presented-code registry
+    // are server-only.
     match /ebayConnections/{document=**} {
       allow read, write: if false;
     }
@@ -1208,6 +1209,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /ebayNotificationKeys/{document=**} {
+      allow read, write: if false;
+    }
+    // The presented-code registry (design §5.5). Written by the callback function
+    // alone: the document id is sha256hex of an eBay authorization code, and a
+    // client that could create one could pre-register a code it had observed and
+    // stop the genuine seller's landing from ever exchanging it.
+    match /ebayPresentedCodes/{document=**} {
       allow read, write: if false;
     }
     // Accounting connector: OAuth state pool and the realm → workspace map are server-only.

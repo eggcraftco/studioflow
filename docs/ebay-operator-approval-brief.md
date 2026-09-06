@@ -13,7 +13,7 @@ branch, waiting on you.
 | Server half | OAuth, sync, notifications, the account-deletion endpoint, quota, rules, tests |
 | Web card, Mac and iPhone card, Android card | All four shipped on the branch, with the eBay screen translated into eleven languages |
 | Review | Two adversarial reviewers raised sixteen findings, four of them high; all fixed on the branch |
-| Verification | Unit suite 1,306 passing and 0 failing, exit 0. The two eBay callback scripts — which compile the real web routes and drive them into the real Cloud Function — exit 0: `test:relay` (the transport, the browser-binding ticket, and the committed vectors) and `test:ebay-regressions` (the ten cases the review cites by id). The emulator chain (rules plus the end-to-end suites) exits 0. Web typechecks and builds. Mac and Android compile |
+| Verification | Unit suite 1,309 passing and 0 failing, exit 0. The two eBay callback scripts — which compile the real web routes and drive them into the real Cloud Function — exit 0: `test:relay` (the transport, the browser-binding ticket, and the committed vectors) and `test:ebay-regressions` (the ten cases the review cites by id). The emulator chain (rules plus the end-to-end suites) exits 0. Web typechecks and builds. Mac and Android compile |
 | Credential hygiene | The whole branch diff was scanned: no Cert ID, no client secret, no token, no base64 blob. The secrets marker file is not committed. **One thing to know before you see it in a diff:** the branch now contains a committed file with two 64-character hex values in it, `functions/test/fixtures/ebay-callback-signature-vectors.json`. They are **test keys the file generates for itself** — labelled `TEST-KEY-NOT-A-SECRET`, with a README in the file saying they must never be entered in Secret Manager or Hostinger — and a test walks the whole repository and fails if either value appears anywhere else. They have never signed anything real and nothing outside the test suites reads them. Nothing here needs you to mint, record or store a value |
 | Live effect if deployed today | None. The connector is behind a switch that is off, and the secrets marker does not exist, so the functions deploy with no eBay identity and no eBay secret |
 
@@ -34,10 +34,28 @@ that nonce to the Cloud Function in a **signed server-to-server POST**, never in
 §5.5). The nonce is what binds the OAuth state to the browser that started it, so a stolen state parameter
 cannot finish someone else's connection. The ticket is what stops the page being a signing oracle: without
 it, anyone who visited that URL with a state of their choosing made our own server sign a message naming
-that state. A visitor with no ticket now gets a message that names **nothing** — its only effect is that
-eBay's authorization code is presented once and thrown away, which is the one thing that makes the copy in
-the hosting log worthless. Why any of it travels in a body rather than a query string — and what that does
-and does not fix — is Gate C below and `docs/ebay-callback-platform-logging.md`.
+that state. A visitor with no ticket now gets a message that names **nothing**.
+
+What that message does is worth stating exactly, because an earlier version of this brief overstated it.
+It does two things, and only the first is a defence we control end to end:
+
+1. **It records the code.** The function writes one Firestore document whose id is a hash of the code,
+   and the write that records a code is the same operation that grants permission to exchange it. After
+   that write, **no path through our function will ever exchange that code** — not with a different
+   state, not from a different workspace, not an hour later. That is what makes the copy in the hosting
+   log unusable by whoever reads it, and it depends on nothing outside our own database.
+2. **It also presents the code to eBay once and throws the answer away**, which additionally kills the
+   code *at eBay*. That half is a belt: it is a call to a third party who can refuse it, rate-limit us,
+   or disagree about a RuName, and it is capped at 60 requests a minute across the whole system because
+   it shares an endpoint with every connected seller's token refresh. It is the only thing that would
+   help if our own eBay application credentials ever leaked, since a party holding those could exchange
+   an observed code without touching our function at all.
+
+If the second fails for any reason the first still holds. If the callback never reached the function at
+all — a key outage, the relay timing out, the connector switched off — neither holds, the code is live
+for the rest of its life at eBay, and the operator action is deploy plan §4.2. Why any of it travels in a
+body rather than a query string — and what that does and does not fix — is Gate C below and
+`docs/ebay-callback-platform-logging.md`.
 
 The declined URL returns the seller to the eBay settings section with a plain sentence. A decline that
 arrives the other way, as an `error` parameter on the accepted URL, is settled by that same page and

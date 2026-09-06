@@ -88,7 +88,10 @@ function makeFakeFirestore(nowRef = { value: Date.now() }) {
       set: async (patch, options = {}) => { guard(path); docs.set(path, options.merge && docs.has(path) ? deepMerge(docs.get(path), patch, now()) : replaceAll(patch, now())); },
       update: async (patch) => { if (!docs.has(path)) throw new Error(`fake firestore: update on missing ${path}`); docs.set(path, deepMerge(docs.get(path), patch, now())); },
       delete: async () => { docs.delete(path); },
-      create: async (data) => { if (docs.has(path)) { const e = new Error("ALREADY_EXISTS"); e.code = 6; throw e; } docs.set(path, replaceAll(data, now())); },
+      // `guard` runs here as it does for set(): a refusal injected over a
+      // create() is how the registry's "unavailable" branch is executed, and
+      // without it that branch could only be argued about.
+      create: async (data) => { guard(path); if (docs.has(path)) { const e = new Error("ALREADY_EXISTS"); e.code = 6; throw e; } docs.set(path, replaceAll(data, now())); },
       collection: (name) => collectionHandle(`${path}/${name}`)
     };
     return handle;

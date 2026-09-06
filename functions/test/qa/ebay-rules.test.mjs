@@ -34,6 +34,7 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "ebayDeletionRequests", "n1"), { status: "queued", usernameHash: "hash" });
   await setDoc(doc(db, "ebayQuota", "2026-09-06"), { calls: 1 });
   await setDoc(doc(db, "ebayNotificationKeys", "kid1"), { key: "pem" });
+  await setDoc(doc(db, "ebayPresentedCodes", "a".repeat(64)), { expireAt: new Date() });
   await setDoc(doc(db, "companies", CO, "restrictedCustomer", "o1"), { provider: "ebay", fields: { fullName: "Ada" } });
   await setDoc(doc(db, "companies", CO, "revealCounters", MEMBER), { hourCount: 1 });
 });
@@ -46,6 +47,7 @@ const PATHS = [
   ["ebayDeletionRequests", "n1"],
   ["ebayQuota", "2026-09-06"],
   ["ebayNotificationKeys", "kid1"],
+  ["ebayPresentedCodes", "a".repeat(64)],
   ["companies", CO, "restrictedCustomer", "o1"],
   ["companies", CO, "revealCounters", MEMBER]
 ];
@@ -74,6 +76,10 @@ for (const [who, ctx] of people) {
   }
   await mustFail(`${who} cannot create a connection pointed at the workspace`, setDoc(doc(db, "ebayConnections", "forged"), { companyId: CO, status: "connected" }));
   await mustFail(`${who} cannot mint a connect state`, setDoc(doc(db, "ebayConnectStates", "forged"), { companyId: CO, uid: OWNER, nonceHash: "x" }));
+  // The registry is the defence of §5.5, so a client that could CREATE one of
+  // these could pre-register a code it had read out of the access log and stop
+  // the genuine seller's landing from ever exchanging it.
+  await mustFail(`${who} cannot pre-register a presented code`, setDoc(doc(db, "ebayPresentedCodes", "b".repeat(64)), { expireAt: new Date() }));
   await mustFail(`${who} cannot write a restricted buyer document`, setDoc(doc(db, "companies", CO, "restrictedCustomer", "forged"), { fields: {} }));
   await mustFail(`${who} cannot reset a reveal counter`, setDoc(doc(db, "companies", CO, "revealCounters", MEMBER), { hourCount: 0 }));
 }

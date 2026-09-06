@@ -116,7 +116,7 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(phished.payload.reason, "browser", said(phished));
     assert.strictEqual(store.read(`ebayConnectStates/${begun.state}`).used, true, "burned on an ABSENT nonce, not only a wrong one");
     const noKeyAtAll = await fns.beginEbayConnect({ auth, data: {} });
-    const omitted = await signedCallback(fns, { v: 1, rid: callbackRid(), code: "good-code", state: noKeyAtAll.state });
+    const omitted = await signedCallback(fns, { v: 1, rid: callbackRid(), code: "good-code-omitted-nonce", state: noKeyAtAll.state });
     assert.strictEqual(omitted.payload.reason, "browser", "no nonce key in the body is the same as an empty one");
     assert.strictEqual(store.read(`ebayConnectStates/${noKeyAtAll.state}`).used, true);
     const other = await fns.beginEbayConnect({ auth, data: {} });
@@ -129,44 +129,132 @@ const said = (res) => JSON.stringify(res.payload);
     // of the defence: the burn kills this state, the exchange kills this code.
     // A code is bound to the application, not to the state that fetched it, so
     // an unspent one is replayable against any other live state (the case below).
-    assert.deepStrictEqual(calls.codes, ["good-code", "good-code", "good-code"], "every refusal that burned a live state also spent the code");
+    assert.strictEqual(calls.codes.length, 3, "every refusal that burned a live state also spent the code it carried");
+    assert.ok(calls.codes.includes("good-code-omitted-nonce"), calls.codes.join(","));
     assert.strictEqual(calls.identities, 0, "spending is one token request: no identity call, nothing asked about the seller");
     assert.strictEqual(store.paths("ebayConnections/").length, 0, "and nothing kept: no connection, no credentials");
+    // …and every code that reached the connect path was REGISTERED before its
+    // state was read, which is the half that does not depend on eBay answering
+    // (§5.5). FOUR, not three: the `again` landing above met a burned state, so
+    // it was never exchanged and never disposed of — and it is registered all the
+    // same, which is what makes that landing shape leave nothing usable behind.
+    assert.strictEqual(store.paths("ebayPresentedCodes/").length, 4, store.paths("ebayPresentedCodes/").join(","));
   });
 
-  await check("the code a refusal observed is SPENT, so the §5 attacker's fresh-state replay fails — the burn alone never stopped it", async () => {
-    // eBay binds a code to the APPLICATION (grant_type, code, one global RuName),
-    // never to the state that fetched it, so burning the victim's state leaves
-    // the code usable against any other live state. Executed against this
-    // handler before the fix: the victim answered `browser` with zero exchanges,
-    // and a second, freshly minted state exchanged the same code and connected.
-    // Modelled here with eBay's real rule — a code is single use — which the
-    // shared fake does not impose, because most cases here reuse "good-code".
-    const spent = new Set();
-    const singleUse = async ({ code }) => {
-      if (spent.has(code)) throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" });
-      spent.add(code);
-      return { access_token: "at_x", expires_in: 7200, refresh_token: "rt_x", refresh_token_expires_in: 47304000, scope: realOAuth.SCOPES.join(" ") };
+  await check("CASE 8 — an observed code presented with the attacker's OWN fresh state, nonce and ticket is refused by the REGISTRY, not by luck", async () => {
+    // This is the case §5 exists to prevent and the one §5.5 says decides whether
+    // the section works. eBay binds a code to the APPLICATION (grant_type, code,
+    // one global RuName), never to the state that fetched it, so burning the
+    // victim's state leaves the code usable against any other live state.
+    // Executed against this handler before the registry existed: the victim
+    // answered `browser` with zero exchanges, and a second, freshly minted state
+    // exchanged the same code and CONNECTED — a foreign seller's eBay account in
+    // the attacker's workspace.
+    //
+    // What refuses it now is one Firestore create, and the four cases below are
+    // there because the first revision of §5.5 answered this with the disposal:
+    // an outbound call to eBay, through a counter any anonymous caller could
+    // drain, using a RuName the dispose envelope structurally cannot know.
+    const OBSERVED = "OBSERVED-CODE-9f2a";
+    const singleUseEbay = () => {
+      const spent = new Set();
+      return {
+        spent,
+        exchangeCode: async ({ code }) => {
+          if (spent.has(code)) throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" });
+          spent.add(code);
+          return { access_token: "at_x", expires_in: 7200, refresh_token: "rt_x", refresh_token_expires_in: 47304000, scope: realOAuth.SCOPES.join(" ") };
+        }
+      };
     };
-    const { fns, store, calls } = buildEbay({ oauth: { exchangeCode: singleUse } });
+
+    // (a) The victim's phished landing registers the code, and the attacker's own
+    // fresh flow is refused without a state document being read.
+    // The phished landing is a DISPOSE envelope, because that is what the edge
+    // signs for a browser holding no ticket (§5.5 step 7). Using a connect
+    // envelope here would quietly test a different path — the connect path's
+    // spend is not bucketed — and would make guard (b) vacuous.
+    const ebay = singleUseEbay();
+    const { fns, store } = buildEbay({ oauth: { exchangeCode: ebay.exchangeCode } });
     const victim = await fns.beginEbayConnect({ auth, data: {} });
-    const phished = await callbackPost(fns, { state: victim.state, code: "OBSERVED-CODE-9f2a", nonce: "" });
+    const phished = await disposePost(fns, { code: OBSERVED });
     assert.strictEqual(phished.payload.reason, "browser", said(phished));
-    assert.strictEqual(store.read(`ebayConnectStates/${victim.state}`).used, true, "the state is burned");
-    assert.ok(spent.has("OBSERVED-CODE-9f2a"), "…and the code is spent, which is the half the burn cannot do");
-    assert.strictEqual(store.paths("ebayConnections/").length, 0, "the tokens that came back were thrown away");
-    assert.strictEqual(calls.identities, 0);
-    // The attacker's own live state, their own nonce, the code they observed.
+    assert.strictEqual(store.read(`ebayConnectStates/${victim.state}`).used, false,
+      "the victim's own state is untouched: the function is never asked about it (§5.5, case 6)");
+    assert.strictEqual(store.paths("ebayPresentedCodes/").length, 1, "the code is REGISTERED — the half that asks nobody");
+    assert.ok(ebay.spent.has(OBSERVED), "…and spent as well, which is the belt");
     const attacker = await fns.beginEbayConnect({ auth, data: {} });
-    const replay = await callbackPost(fns, { state: attacker.state, code: "OBSERVED-CODE-9f2a", nonce: attacker.nonce });
-    assert.strictEqual(replay.payload.ok, false, said(replay));
-    assert.strictEqual(replay.payload.reason, "token", "eBay refuses a spent code — invalid_grant is auth class");
+    const replay = await callbackPost(fns, { state: attacker.state, code: OBSERVED, nonce: attacker.nonce });
+    assert.strictEqual(replay.payload.reason, "state", said(replay));
+    assert.strictEqual(store.read(`ebayConnectStates/${attacker.state}`).used, false,
+      "the registry answered BEFORE the state transaction: the attacker's own live state is not even burned");
     assert.strictEqual(store.paths("ebayConnections/").length, 0, "nothing landed in the attacker's workspace");
-    // And the same fresh state, with a code nobody spent, still connects: the
-    // defence is the spending, not a blanket refusal.
+    // And the same fresh state with a code nobody presented still connects: the
+    // registry refuses a REPLAY, not a connection.
     const honest = await fns.beginEbayConnect({ auth, data: {} });
-    const good = await callbackPost(fns, { state: honest.state, code: "FRESH-CODE-1", nonce: honest.nonce });
+    const good = await callbackPost(fns, { state: honest.state, code: "good-code-FRESH-1", nonce: honest.nonce });
     assert.strictEqual(good.payload.outcome, "connected", said(good));
+
+    // (b) GUARD — with the disposal bucket EMPTY the answer is still `state`. This
+    // is the case the first revision could not answer: the bucket is anonymous,
+    // global and attacker-fillable, and when the defence ran through it, draining
+    // it turned the defence off. The registry sits ABOVE the bucket, so it does
+    // not.
+    const drainedEbay = singleUseEbay();
+    const drained = buildEbay({ oauth: { exchangeCode: drainedEbay.exchangeCode } });
+    for (let i = 0; i < 6; i += 1) await disposePost(drained.fns, { code: `drain-${i}` });     // six a minute per instance
+    const phished2 = await disposePost(drained.fns, { code: OBSERVED });
+    assert.strictEqual(phished2.payload.reason, "browser", said(phished2));
+    assert.ok(!drainedEbay.spent.has(OBSERVED), "the bucket was supposed to be empty; nothing below would mean anything");
+    assert.strictEqual(drained.store.paths("ebayPresentedCodes/").length, 7, "…and the code is registered anyway, which is the whole point");
+    const a2 = await drained.fns.beginEbayConnect({ auth, data: {} });
+    const replay2 = await callbackPost(drained.fns, { state: a2.state, code: OBSERVED, nonce: a2.nonce });
+    assert.strictEqual(replay2.payload.reason, "state", `an empty bucket turned the defence off: ${said(replay2)}`);
+    assert.strictEqual(drained.store.paths("ebayConnections/").length, 0);
+
+    // (c) GUARD — with every disposal REFUSED by eBay (a RuName that has moved on,
+    // an environment that has flipped, a 429) the answer is still `state`.
+    const wrongRuName = buildEbay({ oauth: { exchangeCode: async () => { throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" }); } } });
+    await disposePost(wrongRuName.fns, { code: OBSERVED });
+    const a3 = await wrongRuName.fns.beginEbayConnect({ auth, data: {} });
+    const replay3 = await callbackPost(wrongRuName.fns, { state: a3.state, code: OBSERVED, nonce: a3.nonce });
+    assert.strictEqual(replay3.payload.reason, "state", `a refused disposal turned the defence off: ${said(replay3)}`);
+    assert.strictEqual(wrongRuName.store.paths("ebayConnections/").length, 0);
+
+    // (d) GUARD — with NIVADESK_EBAY_DISPOSE=0, the switch §5.5 says is safe to
+    // throw in an incident precisely because the registry carries the defence.
+    const noDispose = buildEbay({ oauth: { exchangeCode: singleUseEbay().exchangeCode } });
+    noDispose.switches.disposeEnabled = false;
+    await disposePost(noDispose.fns, { code: OBSERVED });
+    const a4 = await noDispose.fns.beginEbayConnect({ auth, data: {} });
+    const replay4 = await callbackPost(noDispose.fns, { state: a4.state, code: OBSERVED, nonce: a4.nonce });
+    assert.strictEqual(replay4.payload.reason, "state", `the switch turned the defence off: ${said(replay4)}`);
+    assert.strictEqual(noDispose.store.paths("ebayConnections/").length, 0);
+
+    // (e) THE MUTANT — remove the registry and this same input CONNECTS. Without
+    // this the four cases above prove only that nothing else broke; with it they
+    // are about the registry. The removal is modelled where the registry actually
+    // lives: a store whose create() at ebayPresentedCodes never records anything
+    // and never says ALREADY_EXISTS, which is exactly "no registry".
+    const open = buildEbay({ oauth: { exchangeCode: singleUseEbay().exchangeCode } });
+    const openDb = open.admin.firestore;
+    open.admin.firestore = Object.assign(() => {
+      const real = openDb();
+      // A registry that records nothing and never says ALREADY_EXISTS. Everything
+      // else in the store is untouched, so this is the removal of ONE control.
+      return { ...real, collection: (name) => (name === "ebayPresentedCodes"
+        ? { doc: () => ({ create: async () => undefined }) }
+        : real.collection(name)) };
+    }, openDb);
+    for (let i = 0; i < 6; i += 1) await disposePost(open.fns, { code: `open-drain-${i}` });
+    const phishedOpen = await disposePost(open.fns, { code: "OBSERVED-CODE-open" });
+    assert.strictEqual(phishedOpen.payload.reason, "browser", said(phishedOpen));
+    const a6 = await open.fns.beginEbayConnect({ auth, data: {} });
+    const stolen = await callbackPost(open.fns, { state: a6.state, code: "OBSERVED-CODE-open", nonce: a6.nonce });
+    assert.strictEqual(stolen.payload.outcome, "connected",
+      `the mutant is supposed to be exploitable; if this is not 'connected' the four guards above prove nothing: ${said(stolen)}`);
+    assert.strictEqual(open.store.read(open.store.paths("ebayConnections/").find((x) => x.split("/").length === 2)).connectedByUid, "u1",
+      "…and it is a connection in the workspace whose state presented the code, which is exactly the §5 outcome");
   });
 
   await check("a state minted for the sandbox is refused on a production server (reason=environment) — nothing is stored, and the code is spent rather than left alive", async () => {
@@ -443,7 +531,7 @@ const said = (res) => JSON.stringify(res.payload);
     // real leak got past this pin: `writeSyncEvent` is called from the connect
     // block and `spendAndDiscardCode` from the refusal path, and both are
     // defined ABOVE the slice above. So they are pinned by name.
-    for (const name of ["async function writeSyncEvent(", "async function spendAndDiscardCode("]) {
+    for (const name of ["async function writeSyncEvent(", "async function spendAndDiscardCode(", "async function claimCode("]) {
       const at = source.indexOf(name);
       assert.ok(at > 0, `${name} was not found — this pin follows the callback's reachable log sites`);
       const helper = source.slice(at, source.indexOf("\n  }", at));
@@ -783,7 +871,7 @@ const said = (res) => JSON.stringify(res.payload);
     assert.deepStrictEqual(unknown.payload, { ok: false, rid });
   });
 
-  await check("dispose: one exchange, no identity call, no Firestore, no connection — and the same answer every time", async () => {
+  await check("dispose: one exchange, no identity call, exactly ONE Firestore operation — the registry create — and the same answer every time", async () => {
     const { fns, store, calls } = buildEbay();
     const paths = store.paths("").length;
     const rid = callbackRid();
@@ -793,10 +881,62 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(calls.exchanges, 1);
     assert.deepStrictEqual(calls.codes, ["good-code"]);
     assert.strictEqual(calls.identities, 0, "no identity call: nothing is being connected");
-    assert.strictEqual(store.paths("").length, paths, "no document is read, written or created");
+    // One document, and it is the registry's: the id is sha256hex of the code —
+    // derived, so no caller can aim this write at a path they chose — and the
+    // body is one field, an existence bit with an expiry. Nothing about the
+    // caller, the flow or the moment is stored (§5.5).
+    assert.strictEqual(store.paths("").length, paths + 1, "the dispose envelope's only Firestore effect is the create");
+    const id = crypto.createHash("sha256").update("good-code").digest("hex");
+    const row = store.read(`ebayPresentedCodes/${id}`);
+    assert.ok(row, store.paths("ebayPresentedCodes/").join(","));
+    assert.deepStrictEqual(Object.keys(row), ["expireAt"], JSON.stringify(row));
     // A code eBay refuses is the outcome we want, so the answer is identical.
     const refused = await disposePost(fns, { code: "bad-code", rid });
     assert.deepStrictEqual(refused.payload, { ok: false, outcome: "error", reason: "browser", rid });
+  });
+
+  await check("REGISTRY — fresh, then seen, and a create that fails is 503 on connect and STILL SPENDS on dispose", async () => {
+    const { fns, store } = buildEbay();
+    // The helper's three answers, asked directly. `claimCode` is exposed for the
+    // same reason the two canonical strings are: a test that re-implements it
+    // asserts the test's arithmetic, not this file's.
+    assert.strictEqual(await fns._internal.claimCode("code-A"), "fresh");
+    assert.strictEqual(await fns._internal.claimCode("code-A"), "seen");
+    assert.strictEqual(await fns._internal.claimCode("code-B"), "fresh");
+    const idA = crypto.createHash("sha256").update("code-A").digest("hex");
+    assert.ok(store.read(`ebayPresentedCodes/${idA}`), "the id is exactly sha256hex(code)");
+
+    // A create that fails for any reason but ALREADY_EXISTS. The two envelopes
+    // fail in OPPOSITE directions and that is the decision, not an oversight:
+    // refusing to connect costs a retry, refusing to spend costs a live code.
+    const broken = buildEbay();
+    broken.store.refuseWrites(/^ebayPresentedCodes\//, "7 INVALID_ARGUMENT: registry unavailable");
+    const begun = await broken.fns.beginEbayConnect({ auth, data: {} });
+    const rid = callbackRid();
+    const connectRes = await callbackPost(broken.fns, { state: begun.state, code: "good-code-unrecordable", nonce: begun.nonce, rid });
+    assert.strictEqual(connectRes.statusCode, 503, said(connectRes));
+    assert.deepStrictEqual(connectRes.payload, { ok: false }, said(connectRes));
+    assert.strictEqual(broken.calls.exchanges, 0, "a code that could not be recorded is never exchanged");
+    assert.strictEqual(broken.store.read(`ebayConnectStates/${begun.state}`).used, false, "and the state is not read or burned");
+    const disposeRes = await disposePost(broken.fns, { code: "good-code-unrecordable-2", rid });
+    assert.deepStrictEqual(disposeRes.payload, { ok: false, outcome: "error", reason: "browser", rid }, said(disposeRes));
+    assert.strictEqual(broken.calls.exchanges, 1, "the dispose path fails TOWARD spending");
+  });
+
+  await check("REGISTRY — a flood repeating one code costs one outbound request, and the aggregate says so", async () => {
+    const { fns, calls, nowRef } = buildEbay();
+    const before = captured.length;
+    for (let i = 0; i < 20; i += 1) await disposePost(fns, { code: "ONE-OBSERVED-CODE" });
+    assert.strictEqual(calls.exchanges, 1, "twenty presentations of one code, one token request");
+    // …and the bucket still has its tokens, because a duplicate is refused above
+    // it: a flood on one code cannot drain the budget a genuine disposal needs.
+    for (let i = 0; i < 6; i += 1) await disposePost(fns, { code: `after-the-flood-${i}` });
+    assert.strictEqual(calls.exchanges, 6,
+      "the nineteen duplicates charged no bucket token: the minute's whole budget of six was still there for real codes");
+    nowRef.value += 61 * 1000;
+    await disposePost(fns, { code: "last" });
+    const line = captured.slice(before).find((l) => l.includes("ebay callback dispose window="));
+    assert.ok(line && /registered=7 duplicate=19 /.test(line), String(line));
   });
 
   await check("dispose: the seventh inside one minute makes no eBay call, and a switch turns the call off without changing the answer", async () => {
@@ -963,14 +1103,32 @@ const said = (res) => JSON.stringify(res.payload);
     assert.strictEqual(connect.statusCode, 200);
     assert.strictEqual(connect.payload.reason, "state", said(connect));
     assert.strictEqual(connect.payload.rid, v.flow.connectRid, "the rid it echoes is the one the vector's body carries");
-    // And the dispose envelope reaches the disposal: one token request with the
-    // vector's own code, nothing kept.
+    // The two valid vectors carry the SAME code, which is worth pinning rather
+    // than working around: the connect vector above registered it, so the dispose
+    // vector delivered into the same world is a duplicate and makes no eBay call
+    // at all, while answering the same eight bytes as any other disposal.
     const before = calls.codes.length;
     const dispose = await deliver(v.relayVectors.find((r) => r.id === "relay-dispose-valid"));
     assert.strictEqual(dispose.statusCode, 200);
     assert.strictEqual(dispose.payload.reason, "browser", said(dispose));
-    assert.deepStrictEqual(calls.codes.slice(before), [v.flow.code], "the disposal presented the vector's code once");
+    assert.deepStrictEqual(calls.codes.slice(before), [], "a code already registered is not presented to eBay a second time");
     assert.strictEqual(calls.identities, 0, "and asked for no identity");
+
+    // …and delivered into a world that has not seen the code, the same bytes
+    // reach the disposal: one token request with the vector's own code.
+    const alone = buildEbay();
+    alone.switches.callbackKey = v.key;
+    alone.nowRef.value = v.clock.nowMs;
+    const vector = v.relayVectors.find((r) => r.id === "relay-dispose-valid");
+    const res = fakeRes();
+    await alone.fns.ebayOAuthCallback({
+      method: "POST", originalUrl: "/ebayOAuthCallback",
+      headers: { "content-type": "application/json", "x-nivadesk-timestamp": String(vector.timestampMs), "x-nivadesk-signature": `v1=${vector.signature}` },
+      rawBody: Buffer.from(vector.body, "utf8"),
+      body: JSON.parse(vector.body)
+    }, res);
+    assert.strictEqual(res.payload.reason, "browser", said(res));
+    assert.deepStrictEqual(alone.calls.codes, [v.flow.code], "the disposal presented the vector's code once");
   });
 
   await check("VECTORS — every committed ticket reproduces BYTE FOR BYTE under the function's own minter", async () => {
@@ -1080,6 +1238,21 @@ const said = (res) => JSON.stringify(res.payload);
       assert.ok(!branch.includes(name), `the dispose branch must not reach ${name}`);
     }
     assert.ok(/typeof body\.state !== "undefined" \|\| typeof body\.nonce !== "undefined"/.test(branch), "it refuses a body that names either");
+    // The registry is the branch's ONLY Firestore reach, it goes through the one
+    // helper, and it sits ABOVE the bucket — which is the correction §5.5 records
+    // as its second: while the defence ran through the bucket, draining the
+    // bucket turned the defence off.
+    assert.strictEqual((branch.match(/claimCode\(/g) || []).length, 1, "exactly one registry claim");
+    assert.ok(!branch.includes("presentedCodes("), "the branch reaches the collection only through claimCode");
+    assert.ok(branch.indexOf("claimCode(") < branch.indexOf("takeDisposeToken()"), "the registry is charged before the bucket");
+    assert.ok(branch.indexOf("claimCode(") < branch.indexOf("disposeEnabled()"), "…and before the operational switch");
+    // And on the connect path the claim is above the transaction, for the same
+    // reason: a code that has been presented once is refused without a state
+    // document being read, and a code we could not record is never exchanged.
+    const connectPath = source.slice(to, source.indexOf("// ---- 3. reading and managing a connection", to));
+    assert.ok(connectPath.indexOf("claimCode(code)") > 0 && connectPath.indexOf("claimCode(code)") < connectPath.indexOf("runTransaction"),
+      "the connect path claims the code before the state transaction");
+    assert.ok(/answer\(503, \{ ok: false \}\)/.test(connectPath), "a registry it could not write fails closed, with a 503 the route lands as `unavailable`");
     // `op` is validated out of a closed vocabulary BEFORE anything branches on it.
     const handler = source.slice(source.indexOf("const ebayOAuthCallback = onRequest("), to);
     assert.ok(handler.indexOf('op !== "connect" && op !== "dispose"') < handler.indexOf('if (op === "dispose")'), "op is validated before it is used");

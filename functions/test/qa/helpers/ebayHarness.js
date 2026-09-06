@@ -84,7 +84,7 @@ function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") },
     // A refusal is the REAL EbayOAuthError, not an Error wearing its fields: the
     // callback logs a caught message only for that class (§5.4), so a stand-in
     // would leave the one permitted message line unexercised by the log pin.
-    exchangeCode: async ({ code }) => { calls.exchanges += 1; calls.codes.push(String(code)); if (code !== "good-code") throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${calls.exchanges}`, expires_in: 7200, refresh_token: `rt_${calls.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token", scope: realOAuth.SCOPES.join(" ") }; },
+    exchangeCode: async ({ code }) => { calls.exchanges += 1; calls.codes.push(String(code)); if (!/^good-code/.test(String(code))) throw new realOAuth.EbayOAuthError("ebay_oauth_http_400: invalid_grant", { status: 400, errorClass: "auth", code: "invalid_grant" }); return { access_token: `at_${calls.exchanges}`, expires_in: 7200, refresh_token: `rt_${calls.exchanges}`, refresh_token_expires_in: 47304000, token_type: "User Access Token", scope: realOAuth.SCOPES.join(" ") }; },
     refreshToken: async () => { calls.refreshes += 1; await new Promise((r) => setTimeout(r, 30)); return { access_token: `at_refreshed_${calls.refreshes}`, expires_in: 7200 }; },
     fetchIdentity: async () => { calls.identities += 1; return { userId: "ebayuser_xxx", username: "eggcraft_uk", accountType: "BUSINESS", registrationMarketplaceId: "EBAY_GB" }; },
     appToken: async () => { calls.appTokens += 1; return { access_token: "app-token", expires_in: 7200 }; },
@@ -157,8 +157,16 @@ async function signedCallback(fns, fields, { key = CALLBACK_KEY, timestampMs = n
   return res;
 }
 
+// §5.5's presented-code registry makes a code single-use ACROSS FLOWS, which is
+// the point of it: the second presentation of the same code is refused before
+// the state document is read. So the default code is unique per call — a test
+// that means to present one code twice says so by naming it — and the fake eBay
+// accepts anything starting with `good-code` rather than that one literal.
+let codeSeq = 0;
+const freshCode = () => `good-code-${++codeSeq}`;
+
 /** The relay POST the web route would send for a browser that kept its nonce. */
-async function callbackPost(fns, { state, code = "good-code", nonce = "", rid = null, ...rest } = {}) {
+async function callbackPost(fns, { state, code = freshCode(), nonce = "", rid = null, ...rest } = {}) {
   const fields = { v: 1, rid: rid === null ? callbackRid() : rid, code, state, nonce };
   return signedCallback(fns, fields, rest);
 }
@@ -170,7 +178,7 @@ async function callbackPost(fns, { state, code = "good-code", nonce = "", rid = 
  * without them rather than with them blanked, which is the shape a caller who
  * wanted a state would have to produce.
  */
-async function disposePost(fns, { code = "good-code", rid = null, ...rest } = {}) {
+async function disposePost(fns, { code = freshCode(), rid = null, ...rest } = {}) {
   const fields = { v: 1, op: "dispose", rid: rid === null ? callbackRid() : rid, ...(code === undefined ? {} : { code }) };
   return signedCallback(fns, fields, rest);
 }
@@ -178,8 +186,8 @@ async function disposePost(fns, { code = "good-code", rid = null, ...rest } = {}
 /** Begin + callback with the browser nonce forwarded: a connected seller. */
 async function connect(fns, { auth = { uid: "u1" } } = {}) {
   const begun = await fns.beginEbayConnect({ auth, data: { companyId: "c1" } });
-  const res = await callbackPost(fns, { state: begun.state, code: "good-code", nonce: begun.nonce });
+  const res = await callbackPost(fns, { state: begun.state, code: freshCode(), nonce: begun.nonce });
   return { begun, res, connectionId: "c1__ebayuser_xxx" };
 }
 
-module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, callbackPost, disposePost, signedCallback, callbackRid, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };
+module.exports = { buildEbay, fakeEbay, ebayOrder, fakeRes, connect, callbackPost, disposePost, signedCallback, callbackRid, freshCode, TOKEN_KEY, HASH_KEY, CALLBACK_KEY };

@@ -21,7 +21,7 @@
 //   EBAY-REG-05  a replayed ticket
 //   EBAY-REG-06  no cookie at all (the phished seller)
 //   EBAY-REG-07  an outsider using the web route as a signing oracle
-//   EBAY-REG-08  an observed code presented with the attacker's own fresh flow
+//   EBAY-REG-08  an observed code presented with the attacker's own fresh flow, and the registry that refuses it
 //   EBAY-REG-09  a Firestore failure on the SUCCESS path, attempting log injection
 //   EBAY-REG-10  a request id carrying a secret- or state-shaped value into a log line
 //
@@ -54,7 +54,7 @@
 // tier reaches a seller only through that consequence.
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -337,6 +337,29 @@ try {
     untouched(w, flowA, "REG-02 flow A");
     untouched(w, flowB, "REG-02 flow B");
     assert.equal(w.ledger.timesPresented(CODE), 1);
+
+    // …and the case dies on ITS OWN guard, which the first version of this case
+    // did not pin. With only the ticket planted, the pair above is caught by the
+    // NONCE compare (flow A's nonce cookie against flow B's tag), so deleting
+    // `verified.state !== queryState` left all ten green. Plant flow B's NONCE
+    // as well and the nonce step passes: the only thing left between this
+    // landing and a connect envelope is the state comparison.
+    const w2 = world();
+    const a2 = await browser(w2);
+    const b2 = await browser(w2);
+    const planted2 = [
+      `${nonceCookieName(a2.begun.state)}=${encodeURIComponent(b2.begun.nonce)}`,
+      `${ticketCookieName(a2.begun.state)}=${b2.ticketCookie.split("=").slice(1).join("=")}`
+    ].join("; ");
+    const CROSS = "AUTHCODE-cross-flow-binding";
+    const cross = await land(w2, callbackUrl(a2.begun.state, CROSS), planted2);
+    refusedAtTheEdge(cross, { code: CROSS });
+    // Without the guard this lands `connect`, naming state B, and burns and
+    // CONNECTS state B on an authorization code eBay issued for flow A — a
+    // cross-flow, potentially cross-workspace binding.
+    untouched(w2, a2, "REG-02 flow A (both halves planted)");
+    untouched(w2, b2, "REG-02 flow B (both halves planted)");
+    assert.equal(w2.store.paths("ebayConnections/").length, 0, "a cross-flow landing connected something");
   });
 
   // ---- EBAY-REG-03 ---------------------------------------------------------
@@ -385,7 +408,12 @@ try {
       refusedAtTheEdge(landing, { code: CODE });
       untouched(w, seller, `REG-04 (${label})`);
     }
-    assert.equal(w.ledger.timesPresented(CODE), 2, "each landing disposed of the code it carried");
+    // ONE, not two: the first landing registered the code (§5.5), so the second
+    // is a duplicate and makes no eBay call at all. The code is dead through us
+    // either way, and that is the property — the second outbound request was
+    // never what killed it.
+    assert.equal(w.ledger.timesPresented(CODE), 1, "a code already registered was presented to eBay a second time");
+    assert.equal(w.store.paths("ebayPresentedCodes/").length, 1, "…and it was registered exactly once");
   });
 
   // ---- EBAY-REG-05 ---------------------------------------------------------
@@ -406,6 +434,12 @@ try {
     // The browser kept both cookies — or someone else copied them. The edge holds
     // no replay memory by design, and this pins that it does not pretend to: the
     // ticket verifies again and a CONNECT envelope is signed again.
+    //
+    // A TRUE replay is the same pair AND the same code, and that one is refused
+    // by the registry rather than by the burn — proven separately below, because
+    // against a burned state the two controls are indistinguishable by answer.
+    // The second code here is the harder case for the edge and the one that
+    // isolates the burn.
     const REPLAY_CODE = "AUTHCODE-second-code-from-the-same-attacker";
     const replay = await land(w, callbackUrl(seller.begun.state, REPLAY_CODE), seller.cookie);
     assert.equal(replay.body.op, undefined, "a verified ticket signs the connect envelope, replay or not");
@@ -428,6 +462,19 @@ try {
       const resealed = await seal(seller.begun.ticket);
       assert.equal(resealed.status, 204, "the ticket is a bearer value inside its window; nothing here claims otherwise");
     }
+
+    // THE REGISTRY, ISOLATED. The same code, presented against a DIFFERENT flow
+    // that is still live and holds its own valid ticket: the answer is `state`
+    // and that flow's state document is still unburned — so the refusal came
+    // from `claimCode`, before the state was read at all. Against the burned
+    // state above, `state` proves nothing about which control answered.
+    const second = await browser(w);
+    const again = await land(w, callbackUrl(second.begun.state, CODE), second.cookie);
+    assert.equal(again.body.op, undefined, "the second flow's own ticket verifies, so a connect envelope is signed");
+    assert.equal(again.delivered.payload.reason, "state", `the re-presented code answered ${JSON.stringify(again.delivered.payload)}`);
+    assert.equal(second.row().used, false, "the state was read and burned: the registry did not answer first");
+    assert.equal(w.ledger.timesPresented(CODE), 1, "the re-presented code reached eBay a second time");
+    assert.equal(w.store.paths("ebayConnections/").length, connections.length, "a second connection appeared");
   });
 
   // ---- EBAY-REG-06 ---------------------------------------------------------
@@ -438,8 +485,13 @@ try {
     const landing = await land(w, callbackUrl(seller.begun.state, CODE), "");
     refusedAtTheEdge(landing, { code: CODE });
     untouched(w, seller, "REG-06");
-    // Not one document read into existence, written or changed, anywhere.
-    assert.equal(snapshot(w.store), before, "the disposal changed Firestore");
+    // The disposal's ONLY Firestore effect: one create at a hash-derived id. This
+    // is the case the registry exists for — the phished seller's landing is what
+    // records the code, and that record is what refuses the attacker's own flow
+    // in REG-08. Nothing else in the store moved.
+    const added = w.store.paths("").filter((p) => !before.includes(JSON.stringify(p)));
+    assert.deepEqual(added, [`ebayPresentedCodes/${createHash("sha256").update(CODE).digest("hex")}`], JSON.stringify(added));
+    assert.deepEqual(Object.keys(w.store.read(added[0])), ["expireAt"], "the document is an existence bit with an expiry, and nothing else");
     // The victim can still finish their own consent: nothing of theirs was spent.
     const finish = await land(w, callbackUrl(seller.begun.state, "AUTHCODE-the-sellers-own-consent"), seller.cookie);
     assert.equal(finish.delivered.payload.outcome, "connected", `the victim's own flow answered ${JSON.stringify(finish.delivered.payload)}`);
@@ -462,8 +514,14 @@ try {
     refusedAtTheEdge(oracle, { code: CODE });
     assert.ok(!String(oracle.sent.init.body).includes(invented), "the invented state reached the signed bytes");
     assert.equal(w.store.read(`ebayConnectStates/${invented}`), undefined, "a document was created for it");
-    assert.equal(w.store.paths("").length, paths, "the document count changed");
-    assert.equal(snapshot(w.store), before, "a document's contents changed");
+    // EXACTLY ONE operation, and it is the registry's `create()` at an id the
+    // caller cannot aim: `sha256hex` is 64 hex characters by construction, so the
+    // trap §4.5 names — Firestore embeds a rejected path in its error message,
+    // and a document id may be 1500 bytes — cannot fire on this write.
+    assert.equal(w.store.paths("").length, paths + 1, "the dispose envelope touched more than the registry");
+    const registered = w.store.paths("ebayPresentedCodes/");
+    assert.deepEqual(registered, [`ebayPresentedCodes/${createHash("sha256").update(CODE).digest("hex")}`], JSON.stringify(registered));
+    assert.match(registered[0].split("/")[1], /^[0-9a-f]{64}$/, "the id carries nothing the caller chose");
     // Reads are not observable in the fake, so the stronger half — that the
     // dispose branch cannot reach states(), connections() or a transaction at all
     // — is a source pin in functions/test/qa/ebay-connect.test.js, not a claim here.
@@ -473,65 +531,99 @@ try {
     assert.equal(bare.sent, null, "a request was made for a callback carrying no code");
     assert.equal(bare.location, `${SETTINGS}&ebay=error&reason=missing_code`);
     assert.deepEqual(bare.cookies, []);
-    assert.equal(snapshot(w.store), before);
+    assert.equal(w.store.paths("").length, paths + 1, "a callback with no code still touched Firestore");
 
     // (c) A shaped state that is not this deployment's is no different: an
     // oracle is about what we will SIGN, not about which words are well formed.
     const shaped = await land(w, callbackUrl("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", CODE), "");
     refusedAtTheEdge(shaped, { code: CODE });
     assert.ok(!String(shaped.sent.init.body).includes("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"));
-    assert.equal(w.store.paths("").length, paths);
+    // The same code again: already registered, so not even a second create.
+    assert.equal(w.store.paths("").length, paths + 1);
+    assert.equal(snapshot(w.store).length > before.length, true, "the registry document is the one thing that appeared");
   });
 
   // ---- EBAY-REG-08 ---------------------------------------------------------
-  await reg("EBAY-REG-08", "an observed code presented with the attacker's OWN fresh state, nonce and ticket — what happens, and whether the code survives", async () => {
-    // This case asserts a residual, not a defence. §5.5's presented-code registry
-    // (ebayPresentedCodes/{sha256hex(code)}) is NOT built, so the only thing
-    // standing between an observed code and an attacker's own workspace is the
-    // disposal reaching eBay first. The assertions below say that in both
-    // orders, and the registry probe at the end is a tripwire: when the registry
-    // lands, this case goes red and whoever builds it must restate the answer.
+  await reg("EBAY-REG-08", "an observed code presented with the attacker's OWN fresh state, nonce and ticket is refused by the registry", async () => {
+    // THE CASE §5 EXISTS TO PREVENT, executed end to end through the real route
+    // and the real function. An attacker reads a code out of the first hop's
+    // access log (residual 1), begins their own connect flow, holds a valid
+    // ticket for their own state, and lands with the observed code. Nothing at
+    // the edge fails: they are a workspace owner with a genuine binding.
+    //
+    // This case used to assert the opposite outcome, and said so: §5.5's
+    // presented-code registry was not built, so the only thing between an
+    // observed code and the attacker's own workspace was the disposal reaching
+    // eBay first — a call to a third party, through a counter any anonymous
+    // caller could drain. The registry is built now, and (c) below removes it to
+    // show that these assertions are about the registry and not about luck.
     const OBSERVED = "AUTHCODE-observed-in-the-first-hops-log";
+    const registryId = `ebayPresentedCodes/${createHash("sha256").update(OBSERVED).digest("hex")}`;
 
-    // (a) The attacker gets there first — the victim's browser has not landed yet.
-    const early = world();
-    const victim = await browser(early, { uid: "u1" });
-    const attacker = await browser(early, { uid: "u9" });
-    const taken = await land(early, callbackUrl(attacker.begun.state, OBSERVED), attacker.cookie);
+    // (a) The victim's phished landing (case 6) registers the code, and the
+    // attacker's own flow is then refused WITHOUT their state being read: it is
+    // still unburned afterwards, which is what says the registry answered first.
+    const w = world();
+    const victim = await browser(w, { uid: "u1" });
+    const phished = await land(w, callbackUrl(victim.begun.state, OBSERVED), "");
+    assert.equal(phished.body.op, "dispose");
+    untouched(w, victim, "REG-08 phished victim");
+    assert.ok(w.store.read(registryId), "the phished landing did not register the code");
+    const attacker = await browser(w, { uid: "u9" });
+    const taken = await land(w, callbackUrl(attacker.begun.state, OBSERVED), attacker.cookie);
     assert.equal(taken.body.op, undefined, "the attacker's own ticket is valid, so a connect envelope is signed");
     assert.equal(taken.body.state, attacker.begun.state, "against the attacker's OWN state");
-    assert.equal(taken.delivered.payload.outcome, "connected",
-      `the observed code was refused here, which this case does not yet claim: ${JSON.stringify(taken.delivered.payload)}`);
-    const connections = early.store.paths("ebayConnections/").filter((p) => p.split("/").length === 2);
-    assert.equal(connections.length, 1);
-    assert.equal(early.store.read(connections[0]).connectedByUid, "u9",
-      "the connection the victim's code produced belongs to the state that presented it");
-    assert.equal(early.ledger.timesPresented(OBSERVED), 1);
-    assert.ok(early.ledger.spent.has(OBSERVED), "the code did not survive: the attacker spent it");
-    // The victim's own flow was never involved and is still theirs to finish.
-    untouched(early, victim, "REG-08 victim");
-    assert.equal(early.store.paths("ebayPresentedCodes").length, 0,
-      "TRIPWIRE: a presented-code registry exists now, so this case's answer must be rewritten");
+    assert.equal(taken.delivered.payload.outcome, "error", JSON.stringify(taken.delivered.payload));
+    assert.equal(taken.delivered.payload.reason, "state", JSON.stringify(taken.delivered.payload));
+    assert.equal(taken.location, `${SETTINGS}&ebay=error&reason=state`);
+    assert.equal(w.store.paths("ebayConnections/").length, 0, "the victim's seller account landed in the attacker's workspace");
+    assert.equal(attacker.row().used, false, "the registry answered before the state transaction: the attacker's state is not even burned");
+    assert.equal(w.ledger.timesPresented(OBSERVED), 1, "the attacker's attempt reached eBay");
 
-    // (b) The victim's phished landing gets there first, and the disposal is what
-    // the answer rests on.
-    const late = world();
-    const victim2 = await browser(late, { uid: "u1" });
-    const phished = await land(late, callbackUrl(victim2.begun.state, OBSERVED), "");
-    assert.equal(phished.body.op, "dispose");
-    untouched(late, victim2, "REG-08 phished victim");
-    assert.ok(late.ledger.spent.has(OBSERVED), "the disposal did not reach eBay");
-    const attacker2 = await browser(late, { uid: "u9" });
-    const tooLate = await land(late, callbackUrl(attacker2.begun.state, OBSERVED), attacker2.cookie);
-    assert.equal(tooLate.delivered.payload.outcome, "error");
-    assert.equal(tooLate.delivered.payload.reason, "token",
-      `an already-spent code answered ${JSON.stringify(tooLate.delivered.payload)}`);
-    assert.equal(tooLate.location, `${SETTINGS}&ebay=error&reason=token`);
-    assert.equal(late.store.paths("ebayConnections/").length, 0, "something was connected with a dead code");
-    assert.equal(late.ledger.timesPresented(OBSERVED), 2, "the attacker's attempt reached eBay and was refused");
-    // The attacker's own state is burned by their own attempt — the transaction
-    // burns before the exchange, so a second try needs a second consent.
-    assert.equal(attacker2.row().used, true);
+    // (b) THE ORDERING DOES NOT MATTER, which is the difference between a
+    // registry and a race. Attacker first, victim's phished landing second: the
+    // attacker's own landing registers the code, so their exchange goes through
+    // — that is a code they observed being spent into their own flow, and it is
+    // the residual §5.5 records, not a defence claim. What matters here is that
+    // it is bounded to the party who was first, and that they cannot be first
+    // twice: the same code is refused for ever after.
+    const early = world();
+    const attacker2 = await browser(early, { uid: "u9" });
+    const first = await land(early, callbackUrl(attacker2.begun.state, OBSERVED), attacker2.cookie);
+    assert.equal(first.delivered.payload.outcome, "connected", JSON.stringify(first.delivered.payload));
+    const attacker3 = await browser(early, { uid: "u9" });
+    const second = await land(early, callbackUrl(attacker3.begun.state, OBSERVED), attacker3.cookie);
+    assert.equal(second.delivered.payload.reason, "state", JSON.stringify(second.delivered.payload));
+    assert.equal(early.store.paths("ebayConnections/").filter((p) => p.split("/").length === 2).length, 1);
+
+    // (c) THE MUTANT. Remove the registry — and nothing else — and (a) answers
+    // `connected`: the victim's eBay seller account in the attacker's workspace,
+    // `connectedByUid` and all. Without this, (a) proves only that something
+    // refused the landing.
+    const open = world();
+    const openDb = open.admin.firestore;
+    open.admin.firestore = Object.assign(() => {
+      const real = openDb();
+      return { ...real, collection: (name) => (name === "ebayPresentedCodes"
+        ? { doc: () => ({ create: async () => undefined }) }          // records nothing, never ALREADY_EXISTS
+        : real.collection(name)) };
+    }, openDb);
+    const victim2 = await browser(open, { uid: "u1" });
+    // The disposal is defeated the way §5.5 says an anonymous caller defeats it:
+    // six landings a minute drain the function's bucket, and the seventh — the
+    // genuine phished one — makes no eBay call.
+    for (let i = 0; i < 6; i += 1) await land(open, callbackUrl(victim2.begun.state, `drain-${i}`), "");
+    const phished2 = await land(open, callbackUrl(victim2.begun.state, OBSERVED), "");
+    assert.equal(phished2.body.op, "dispose");
+    assert.equal(open.ledger.timesPresented(OBSERVED), 0, "the bucket was supposed to be empty; the mutant would prove nothing otherwise");
+    const thief = await browser(open, { uid: "u9" });
+    const stolen = await land(open, callbackUrl(thief.begun.state, OBSERVED), thief.cookie);
+    assert.equal(stolen.delivered.payload.outcome, "connected",
+      `the mutant is supposed to be exploitable: ${JSON.stringify(stolen.delivered.payload)}`);
+    const connections = open.store.paths("ebayConnections/").filter((p) => p.split("/").length === 2);
+    assert.equal(connections.length, 1);
+    assert.equal(open.store.read(connections[0]).connectedByUid, "u9",
+      "with no registry the connection the victim's code produced belongs to the state that presented it");
   });
 
   // ---- EBAY-REG-09 ---------------------------------------------------------

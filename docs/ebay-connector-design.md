@@ -23,7 +23,7 @@ Review revisions folded in (6 Sep): eBay-specific PII split and trip-wire (§8),
 hash-only deletion task (§4.6, §4.7, §9), deletion compliance that bypasses the gates (§2, §9),
 `kid` abuse limits (§9), a dedicated service account and worker for the eBay secrets (§3.2), browser-bound
 OAuth state (§5), read-only scopes only (§0), the reveal callable's authorization model (§3.3),
-owner-only preview with per-connection budget (§3, §7.4), six root deny blocks (§4.10), server-side
+owner-only preview with per-connection budget (§3, §7.4), seven root deny blocks (§4.10), server-side
 input whitelists (§4.11), the two-key encoding (§6), a 90-day retention window (§8.4),
 signature-then-budget instead of per-IP (§9), cursor bisection + nightly reconciliation + forced
 catch-up (§7.1, §7.6), refresh-failure classification by body (§6), the queue path routed through
@@ -2078,7 +2078,7 @@ new.
 | 2 | Ticket minted for a **different state** (MAC valid), hand-planted under this flow's name | 5e `state` | **no** | yes | yes | untouched | same |
 | 3 | Ticket carrying a **different nonce** (MAC valid, state matches) | 5f `nonce` | **no** | yes | yes | untouched | same |
 | 4 | Expired ticket | 5d `expired` | **no** | yes | yes | untouched | same |
-| 5 | Replayed ticket — the same pair presented twice | passes 5 **again**; the edge cannot know | yes | no | **already registered → refused** | cleared | "The eBay sign-in link has expired or was already used. Start again." (`state`, from the registry, before the state is even read) |
+| 5 | Replayed ticket — the same pair presented twice | passes 5 **again**; the edge cannot know | yes | no | **already registered → refused** | cleared | "The eBay sign-in link has expired or was already used. Start again." (`state`. With the SAME code — a true replay — that answer comes from the registry, before the state is read, and `EBAY-REG-05` proves which control answered by presenting the registered code against a second, still-live flow whose state is unburned afterwards. A replay carrying a *second* code is fresh to the registry and is stopped one line later by the burn) |
 | 6 | No cookie at all — **the phished seller** | 5a `no-cookie` | **no** | **yes** | **yes — this is the case the registry exists for** | untouched | "Finish connecting eBay in the same browser you started from." |
 | 7 | Outsider using the route as a signing oracle: `?code=x&state=<shaped>` | 5a `no-cookie` | **no** | yes | yes | untouched | (not a seller) |
 | 8 | An observed code presented with the **attacker's own fresh state, nonce and ticket** | nothing at the edge fails — the attacker is a workspace owner and holds a valid ticket for their own flow | yes | no | **already registered by case 6 → refused** | cleared | `reason=state`; no exchange, no identity call, no connection. If the disposal also succeeded, the code is dead at eBay as well |
@@ -2451,6 +2451,16 @@ of the unit suite, so a drift is *named* rather than only failing.
 
 The twelve regressions are one named test each, and the name is the contract.
 
+**Where the numbers here and the `EBAY-REG-nn` ids meet, because they are not the same list.** The
+operator's report cites **ten** ids, and those ten live in
+`studioflow-web/scripts/check-ebay-callback-regressions.mjs` as `EBAY-REG-01 … 10`: they are the cases
+that carry a landing's bytes into the real function and assert the CONSEQUENCE — which document changed,
+which code reached eBay. Cases **11** and **12** below carry no `EBAY-REG` id and are not missing: they
+are about what the ROUTES produce, so they live in `check-ebay-relay-vectors.mjs` (`ticket: two flows in
+one browser do not collide`, `ticket: a cross-site plant sets no cookie`), which is what this table's
+*Where* column has always said. Both scripts run in the same CI job. Rows below whose *Where* says
+`ebay-connect.test.js` are additionally covered there, at the function's own unit.
+
 | # | Test name | Where | Asserts |
 |---|---|---|---|
 | 1 | `ticket: a forged cookie signs nothing` | relay script | Cookie of attacker-chosen bytes with a valid *shape* → no connect POST, a dispose POST, landing `ebay=error&reason=browser`, both cookies still set |
@@ -2498,8 +2508,11 @@ Supporting cases, added to the existing suites:
   or already used" `failed-precondition`, `nonceHash` unchanged, no ticket minted; on a `native`-origin
   state → a ticket, and a second claim refused.
 - **Source pins** (`ebay-connect.test.js`, scoped to the handler): the dispose branch contains no `states(`,
-  no `connections(`, no `fetchIdentity`, and exactly one `.create(`; `op` is validated before it is used;
-  the connect path is unchanged apart from the claim. Route side: `land()` clears cookies only on a
+  no `connections(`, no `fetchIdentity`, no `presentedCodes(` and exactly one `claimCode(` — the registry is
+  reached through the one helper, so "exactly one `.create()`" is pinned where the create lives — and that
+  claim sits **above** `takeDisposeToken()` and `disposeEnabled()`, which is correction 2 made mechanical;
+  `op` is validated before it is used; on the connect path `claimCode(code)` precedes `runTransaction` and a
+  registry it could not write answers `503`. Route side: `land()` clears cookies only on a
   verified-ticket landing and only this flow's pair, and the `CONSUMED` set is gone.
 - **e2e** (`commerce-ebay-connector-emulator.test.js`): begin → the reply carries a ticket; a signed connect
   POST built from that ticket's state and nonce → `connected` and one `ebayPresentedCodes` document; the
@@ -3456,7 +3469,7 @@ with `JAVA_HOME` set. Tests assert the spec's contract, never a copy of the impl
 | `privacy-reveal.test.js` | tier table (§3.3), response shape excludes `taxIdentifier`/`paths`/notes, log-before-return (failing fake log → no payload), rate limit |
 | `ebay-connect.test.js` (Etsy shape) | the whole §5.4 transport matrix (28 cases: method, query string, key floor, signature, skew both ways, rawBody, rid shape, state shape, field caps, log/response/source pins) — note the harness rewrite §5.4 specifies; state replay refused (`reason=state`), expiry, environment mismatch, **nonce mismatch and empty nonce → `reason=browser` and the state is burned in both cases**, `claimEbayConnectState` refuses a different uid and a second claim, `no_seller` when identity fails, cross-workspace connection id, reconnect keeps `connectedAtMs`/`settings`/`importState`/`importCursor` and sets `catchUpDueFromMs`, `sellerUserIdHash` written, single-flight refresh + lock outlasting retries, loser refuses expired token, only auth-class failure flips `reconnect_required` (`invalid_client` does not), disconnect deletes `credentials/current` and writes `disconnectedByUid: uid`, public view contains no `Encrypted` key, no token substring, no `Hash` key; settings/marketplace/sinceDays whitelists (§4.11) |
 | `ebay-sync.test.js` | pending-payment create rule, `autoSync` off skips creates but applies updates, `awaiting_first_import` before import, `includeCancelled`, `marketplace_disabled`, `restrictedCustomer` written on noop too, never on held, **never when the restricted half is empty**, `ebayBuyers` arrayUnion under the keyed hash **whenever the order names the buyer** (an address-less order is still reachable by a deletion notice), no `upsertIntegrationCustomer` call, held payload has no email, `marketplaceId` passed to the adapter, **queue path and sweep path agree** (same fake order → same documents), environment mismatch skipped, `app_credentials_invalid` stops the sweep after one row |
-| `commerce-ebay-wiring.test.js` (mirror of the Square pin) | secrets gate (`EBAY_SECRET_PARAMS` with the **five** names including `EBAY_CALLBACK_KEY`, built only under `EBAY_SECRETS_READY`, marker file, `EBAY_RUNTIME` with `serviceAccount`), `ebayOAuthCallback` declared with `maxInstances`, the four wrappers, every `exports.<fn> = ebayExports.<fn>;` line, `ebayEventWorker` on its own queue with the copied loop and the `buyer_deletion` health skip, `retryCommerceEvent` eBay branch enqueues and never processes, `commerceEventWorker` secrets literal **unchanged** and `provider_not_on_this_worker`, `_e2e.ebay`, rules regex for **all six** root blocks, purge steps, `releaseHeldIntegrationOrders` branch with a fresh fetch and no payload replay, `lifecycle/derive.js` group, `engine.applyEnvelope` used and no direct `orderDocRef(...).set` in the connector, exactly one `applyEbayOrder` definition and every path calling it, `NIVADESK_EBAY_CONNECTOR` read, retention sweep deletes `restrictedCustomer` |
+| `commerce-ebay-wiring.test.js` (mirror of the Square pin) | secrets gate (`EBAY_SECRET_PARAMS` with the **five** names including `EBAY_CALLBACK_KEY`, built only under `EBAY_SECRETS_READY`, marker file, `EBAY_RUNTIME` with `serviceAccount`), `ebayOAuthCallback` declared with `maxInstances`, the four wrappers, every `exports.<fn> = ebayExports.<fn>;` line, `ebayEventWorker` on its own queue with the copied loop and the `buyer_deletion` health skip, `retryCommerceEvent` eBay branch enqueues and never processes, `commerceEventWorker` secrets literal **unchanged** and `provider_not_on_this_worker`, `_e2e.ebay`, rules regex for **all seven** root blocks, purge steps, `releaseHeldIntegrationOrders` branch with a fresh fetch and no payload replay, `lifecycle/derive.js` group, `engine.applyEnvelope` used and no direct `orderDocRef(...).set` in the connector, exactly one `applyEbayOrder` definition and every path calling it, `NIVADESK_EBAY_CONNECTOR` read, retention sweep deletes `restrictedCustomer` |
 | `commerce-flags.test.js` (extend) | `connectors` area precedence: connection > provider > global; default off; **`readCommerceFlags` merges `connectors` from the document**; cache reset |
 | `access-control-policy.test.js` (extend) | regex covers `EBAY_*`; a mount of an eBay secret without `serviceAccount` fails; the policy paragraph names eBay |
 | `commerce-ebay-adapter.test.js` (extend, first) | "a DE order with no ctx.marketplaceId links to ebay.de" (fails before §8.3 lands) |
@@ -3578,7 +3591,7 @@ Order of commits (small, on `ebay-connector`, never pushed by the agent):
    `connectionCapabilities.proveEbay`, `privacy/reveal.js` + qa (synthetic fixture for the adapter,
    captured fixture required by the sanitize test — see owner actions).
 4. `ebayConnector.js` + index wiring (`EBAY_RUNTIME`, `ebayEventWorker`, `retryCommerceEvent` branch,
-   `revealRestrictedCustomer`) + rules (six blocks) + purge + release branch + lifecycle + retention
+   `revealRestrictedCustomer`) + rules (seven blocks) + purge + release branch + lifecycle + retention
    sweep step + wiring pins.
 5. e2e suites.  6. Web card/section/callables/callback/start page/translations.  7. Guide + corpus rebuild.
 8. Swift card + view + dictionary (xcodebuild proof).  9. Android card + detail + repository + dictionary + unit test (gradle proof).
