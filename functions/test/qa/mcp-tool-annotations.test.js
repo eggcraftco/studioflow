@@ -383,6 +383,46 @@ check("the document states the four values it claims for each tool", () => {
   }
 });
 
+check("the submission document counts the surface the flags actually publish", () => {
+  // docs/mcp-submission-1.2.0.md is what the operator flips flags from and what
+  // the release notes are written out of. A count that drifts there becomes a
+  // sentence sent to a reviewer that the deployed listing then contradicts.
+  const submission = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-submission-1.2.0.md"), "utf8");
+  const rows = {
+    "none (today)": {},
+    "`NIVADESK_MCP_INVENTORY`": { inventory: true },
+    "`NIVADESK_MCP_ORCHESTRATOR`": { orchestrator: true },
+    "inventory + orchestrator": { inventory: true, orchestrator: true }
+  };
+  for (const [label, flags] of Object.entries(rows)) {
+    const line = submission.split("\n").find((text) => text.startsWith(`| ${label} |`));
+    assert.ok(line, `the submission document has no row for ${label}`);
+    const published = registry.publishedNames(flags).length;
+    assert.ok(
+      line.includes(`**${published}**`) || line.includes(`| ${published} |`),
+      `${label}: the document does not say ${published} tools`
+    );
+  }
+
+  // And the corrections it promises the reviewer are the ones the registry is
+  // holding back — no more, and no fewer.
+  const correctionRows = submission.split("\n").filter((line) => /^\| `[a-z_]+` \| `[a-zA-Z]+Hint` \|/.test(line));
+  let pending = 0;
+  for (const row of registry.correctionsPending()) {
+    for (const change of row.changes) {
+      pending += 1;
+      const line = correctionRows.find((text) => text.startsWith(`| \`${row.name}\` | \`${change.hint}\` |`));
+      assert.ok(line, `${row.name}/${change.hint} is not in the submission document's correction table`);
+      assert.ok(
+        line.includes(`| ${change.live} | **${change.verified}**`),
+        `${row.name}/${change.hint}: the document does not state ${change.live} → ${change.verified}`
+      );
+    }
+  }
+  assert.strictEqual(correctionRows.length, pending,
+    "the submission document lists a different number of annotation corrections than the registry holds");
+});
+
 if (failures > 0) {
   console.error(`\n❌ MCP TOOL ANNOTATIONS: ${failures} failure(s)`);
   process.exit(1);
