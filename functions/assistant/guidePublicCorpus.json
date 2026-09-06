@@ -386,6 +386,14 @@
    "search": "Etsy Etsy is a connection of its own rather than a webhook recipe. You sign in to Etsy once, and your shop's orders arrive in NivaDesk with the buyer, the items and the personalisation notes already in place — so a made-to-order shop can work from its production board instead of living in the Etsy tab.\nNothing is imported behind your back. The first import is a preview you approve, and any order NivaDesk will not bring in tells you why in a sentence instead of disappearing quietly.\nWhen the same buyer orders again, NivaDesk recognises them and files the new order under the customer you already have. Etsy Etsy bir webhook tarifi değil, kendi başına bir bağlantı. Etsy'ye bir kez giriş yaparsınız; mağazanızın siparişleri NivaDesk'e alıcısı, ürünleri ve kişiselleştirme notlarıyla birlikte gelir — böylece siparişe göre üretim yapan bir mağaza, Etsy sekmesinde yaşamak yerine kendi üretim panosundan çalışabilir.\nArkanızdan hiçbir şey içe aktarılmaz. İlk içe aktarma, sizin onayladığınız bir önizlemedir; NivaDesk'in almayacağı her sipariş sessizce kaybolmak yerine nedenini bir cümleyle söyler.\nAynı alıcı yeniden sipariş verdiğinde NivaDesk onu tanır ve yeni siparişi zaten sahip olduğunuz müşterinin altına yazar."
   },
   {
+   "id": "set-ebay",
+   "title": "eBay",
+   "path": "Settings › eBay",
+   "headings": "",
+   "text": "Connect your eBay seller account and your eBay orders appear in NivaDesk's Orders alongside everything else, with the buyer's username, the items, totals, taxes and any tracking eBay has. NivaDesk reads your orders; it does not change your listings, prices or stock. Buyer contact details are kept in a protected place and shown only when you ask for them.",
+   "search": "eBay Connect your eBay seller account and your eBay orders appear in NivaDesk's Orders alongside everything else, with the buyer's username, the items, totals, taxes and any tracking eBay has. NivaDesk reads your orders; it does not change your listings, prices or stock. Buyer contact details are kept in a protected place and shown only when you ask for them. eBay eBay satıcı hesabınızı bağlayın; eBay siparişleriniz alıcı kullanıcı adı, ürünler, tutarlar, vergiler ve eBay'deki kargo takibiyle birlikte Siparişler'de diğer her şeyin yanında görünür. NivaDesk siparişlerinizi okur; ilanlarınızı, fiyatlarınızı veya stoğunuzu değiştirmez. Alıcı iletişim bilgileri korumalı bir yerde tutulur ve yalnızca siz istediğinizde gösterilir."
+  },
+  {
    "id": "set-safety",
    "title": "Safety & Uploads",
    "path": "Settings › Safety & Uploads",

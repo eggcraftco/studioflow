@@ -983,7 +983,7 @@ const TREE_EN: GuideNode[] = [
             "Missing order audit and payouts: every connected channel's Manage screen has Run audit, which compares the platform's orders from the chosen days with what NivaDesk holds and lists any that are missing; Sync now or Import brings them in. On Square, the Payouts card explains what Square sent to your bank per payout — gross sales, refunds, fees and adjustments — kept apart from payments, ready for bank matching. The order screen's channel strip shows the platform's own number, status and total, with one link to open the order at the provider.",
             "Needs review: the Sync health card lists orders the sync could apply but could not vouch for — an item not in the catalogue, a missing total — with the reason, an Open order link and, for the owner, Resolve. Resolving clears the flag on the order; a later clean sync clears it on its own.",
             "Other platforms: Wix, Squarespace, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
-            "Etsy is not one of those: it has a connection of its own, described in the next section.",
+            "Etsy and eBay are not among those: each has a connection of its own, described in the sections that follow.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
           ] }
         ]
@@ -1030,6 +1030,50 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Disconnect says what will happen before it happens: syncing stops, and the stored Etsy access is destroyed.",
             "Every order and every piece of production work already in NivaDesk stays exactly where it is."
+          ] }
+        ]
+      },
+      {
+        id: "set-ebay",
+        title: "eBay",
+        blocks: [
+          { kind: "para", text: "Connect your eBay seller account and your eBay orders appear in NivaDesk's Orders alongside everything else, with the buyer's username, the items, totals, taxes and any tracking eBay has. NivaDesk reads your orders; it does not change your listings, prices or stock. Buyer contact details are kept in a protected place and shown only when you ask for them." },
+          { kind: "sub", text: "Connecting your account" },
+          { kind: "bullets", items: [
+            "[Web] Settings → Integrations → eBay → Set up, then Connect eBay. Approve the connection on eBay in the same browser and you come straight back.",
+            "[Mac] [iPhone/iPad] [Android] The same button opens nivadesk.app in your browser; sign in if asked, approve on eBay, then come back to the app and press Check now.",
+            "Only the workspace owner can connect or disconnect.",
+            "The connection is read-only: your orders and who they are from. NivaDesk cannot change a listing, a price or your stock."
+          ] },
+          { kind: "sub", text: "Choosing what comes in" },
+          { kind: "bullets", items: [
+            "Pick how far back to import (up to 90 days), whether unpaid or cancelled orders come in, and which eBay sites.",
+            "Preview shows how many orders were found and how many duplicates were prevented before anything is written.",
+            "A large import may pause and ask you to press Import again; nothing is lost in between.",
+            "If an order or two could not be brought in, the card says so and Retry tries just those again."
+          ] },
+          { kind: "sub", text: "Staying up to date" },
+          { kind: "bullets", items: [
+            "NivaDesk checks eBay for changed orders every few minutes and once more each night with an overlap, so a change is never missed.",
+            "Sync now checks the last 24 hours immediately.",
+            "Sync health shows the last successful check, pending retries and anything that needs a look.",
+            "Your production work is yours — stages, notes, schedule, files — and a sync never writes over it."
+          ] },
+          { kind: "sub", text: "Buyers and your customer list" },
+          { kind: "bullets", items: [
+            "eBay buyers are not added to your customer list automatically and are never merged by name.",
+            "Their address is available from the order when you need it to ship, and every time it is shown is recorded.",
+            "It is removed 90 days after delivery, which is also when eBay stops showing it to you."
+          ] },
+          { kind: "sub", text: "If eBay asks you to reconnect" },
+          { kind: "bullets", items: [
+            "When eBay stops accepting the connection (permission removed, a changed eBay password, or the 18-month authorisation ends) the card says Reconnect required; press Reconnect and approve again.",
+            "Nothing already imported is lost, and orders that changed while you were disconnected are picked up.",
+            "If the card says eBay is not set up on this server yet, the connector is not switched on for you — contact support."
+          ] },
+          { kind: "sub", text: "Disconnecting" },
+          { kind: "bullets", items: [
+            "Disconnect removes NivaDesk's access to your eBay account and stops syncing; the orders you imported stay."
           ] }
         ]
       },
@@ -2158,7 +2202,7 @@ const TREE_TR: GuideNode[] = [
             "Eksik sipariş denetimi ve ödeme aktarımları: bağlı her kanalın Manage ekranında Run audit vardır; seçilen günlerdeki platform siparişlerini NivaDesk'tekilerle karşılaştırır ve eksik olanları listeler; Sync now veya Import onları getirir. Square'de Payouts kartı, Square'in bankana aktarım başına gönderdiğini açıklar — brüt satış, iadeler, ücretler ve düzeltmeler — ödemelerden ayrı, banka eşleştirmesine hazır. Sipariş ekranındaki kanal şeridi platformun kendi numarasını, durumunu ve toplamını gösterir; siparişi sağlayıcıda açan tek bir bağlantı sunar.",
             "İnceleme gerekiyor: Sync health kartı, senkronun uygulayabildiği ama doğrulayamadığı siparişleri — katalogda olmayan bir kalem, eksik bir toplam — nedeniyle, Open order bağlantısıyla ve sahip için Resolve düğmesiyle listeler. Çözüldü demek siparişteki bayrağı kaldırır; sonraki temiz bir senkron bayrağı kendiliğinden kaldırır.",
             "Diğer platformlar: Wix, Squarespace, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
-            "Etsy bunlardan biri değil: kendi bağlantısı var, bir sonraki bölümde anlatılıyor.",
+            "Etsy ve eBay bunlardan değil: her birinin kendi bağlantısı var, sonraki bölümlerde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
           ] }
         ]
@@ -2205,6 +2249,50 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Disconnect, olmadan önce ne olacağını söyler: senkronizasyon durur ve saklanan Etsy erişimi yok edilir.",
             "NivaDesk'te zaten bulunan her sipariş ve her üretim işi olduğu yerde kalır."
+          ] }
+        ]
+      },
+      {
+        id: "set-ebay",
+        title: "eBay",
+        blocks: [
+          { kind: "para", text: "eBay satıcı hesabınızı bağlayın; eBay siparişleriniz alıcı kullanıcı adı, ürünler, tutarlar, vergiler ve eBay'deki kargo takibiyle birlikte Siparişler'de diğer her şeyin yanında görünür. NivaDesk siparişlerinizi okur; ilanlarınızı, fiyatlarınızı veya stoğunuzu değiştirmez. Alıcı iletişim bilgileri korumalı bir yerde tutulur ve yalnızca siz istediğinizde gösterilir." },
+          { kind: "sub", text: "Hesabı bağlama" },
+          { kind: "bullets", items: [
+            "[Web] Settings → Integrations → eBay → Set up, ardından Connect eBay. Bağlantıyı eBay'de aynı tarayıcıda onaylayın; doğrudan geri dönersiniz.",
+            "[Mac] [iPhone/iPad] [Android] Aynı düğme tarayıcınızda nivadesk.app'i açar; sorulursa giriş yapın, eBay'de onaylayın, sonra uygulamaya dönüp Check now'a basın.",
+            "Bağlantıyı yalnızca çalışma alanı sahibi kurabilir veya kesebilir.",
+            "Bağlantı salt okunurdur: siparişleriniz ve kimden geldikleri. NivaDesk bir ilanı, fiyatı veya stoğunuzu değiştiremez."
+          ] },
+          { kind: "sub", text: "Neyin geleceğini seçme" },
+          { kind: "bullets", items: [
+            "Ne kadar geriye gidileceğini (90 güne kadar), ödenmemiş ya da iptal edilmiş siparişlerin gelip gelmeyeceğini ve hangi eBay sitelerinin dahil olacağını seçin.",
+            "Preview, hiçbir şey yazılmadan önce kaç sipariş bulunduğunu ve kaç kopyanın önlendiğini gösterir.",
+            "Büyük bir içe aktarma duraklayıp Import'a yeniden basmanızı isteyebilir; arada hiçbir şey kaybolmaz.",
+            "Bir iki sipariş alınamadıysa kart bunu söyler ve Retry yalnızca onları yeniden dener."
+          ] },
+          { kind: "sub", text: "Güncel kalma" },
+          { kind: "bullets", items: [
+            "NivaDesk değişen siparişler için eBay'i birkaç dakikada bir, ayrıca her gece bir kez örtüşen bir aralıkla kontrol eder; böylece bir değişiklik atlanmaz.",
+            "Sync now son 24 saati hemen kontrol eder.",
+            "Sync health son başarılı kontrolü, bekleyen yeniden denemeleri ve bakılması gereken her şeyi gösterir.",
+            "Üretim işiniz sizindir — aşamalar, notlar, takvim, dosyalar — ve senkronizasyon bunların üzerine asla yazmaz."
+          ] },
+          { kind: "sub", text: "Alıcılar ve müşteri listeniz" },
+          { kind: "bullets", items: [
+            "eBay alıcıları müşteri listenize otomatik eklenmez ve asla ada göre birleştirilmez.",
+            "Adresleri, kargolamak için gerektiğinde siparişten görülebilir ve her gösterim kaydedilir.",
+            "Teslimattan 90 gün sonra silinir; eBay de size adresi tam o zaman göstermeyi bırakır."
+          ] },
+          { kind: "sub", text: "eBay yeniden bağlanmanızı isterse" },
+          { kind: "bullets", items: [
+            "eBay bağlantıyı kabul etmeyi bıraktığında (izin kaldırıldı, eBay şifresi değişti ya da 18 aylık yetki bitti) kartta Reconnect required yazar; Reconnect'e basıp yeniden onaylayın.",
+            "İçe aktarılmış hiçbir şey kaybolmaz ve siz bağlı değilken değişen siparişler sonradan alınır.",
+            "Kart eBay'in bu sunucuda henüz kurulu olmadığını söylüyorsa bağlayıcı sizin için açılmamıştır — destekle iletişime geçin."
+          ] },
+          { kind: "sub", text: "Bağlantıyı kesme" },
+          { kind: "bullets", items: [
+            "Disconnect, NivaDesk'in eBay hesabınıza erişimini kaldırır ve senkronizasyonu durdurur; içe aktardığınız siparişler kalır."
           ] }
         ]
       },
