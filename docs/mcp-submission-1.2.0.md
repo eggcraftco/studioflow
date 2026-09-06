@@ -99,13 +99,21 @@ thin adapters, so the WhatsApp channel can reuse them without a second copy of t
 it declares.
 
 Every one of them answers in the same envelope: `state`, `data`, `freshness.sources[]`, `partial`,
-`warnings[]` (a closed list of codes), `entityRefs`, `suggestedActions`, `summary.lines`. The three
+`warnings[]` (a closed list of codes), `entityRefs`, `suggestedActions`, `summary.lines`. The two
 honesty rules that matter to a reviewer, because they are visible in a demo:
 
-- a channel that is **not connected** is named as not connected, never counted as zero — which is what
-  the review workspace will show for Shopify, Etsy, Amazon and eBay;
 - a source that contributed rows but cannot report a sync time sets `partial: true` and says which;
 - amounts in another currency are listed in their own rows and never converted.
+
+A third rule stood here until 7 September 2026 — "a channel that is not connected is named as not
+connected, never counted as zero" — and neither published capability does it. The roster that does is
+`channelRows` (`functions/orchestrator/commerce.js:172-215`), which walks `channelModule.CHANNELS` and
+pushes a `channelAvailability(...)` row for a channel with no orders and no connection. It has exactly two
+callers, `commerceOverview` (`commerce.js:341`) and `channelPerformance` (`commerce.js:533`), and the
+reduction removed both capabilities. What `search_commerce_orders` emits instead is `commerceSources`
+(`commerce.js:112-168`), which pushes a row only for a provider that has a `commerceHealth` document or
+that contributed a non-manual order — so on a workspace with manual orders and no connections it names no
+channel at all, connected or otherwise.
 
 ### 2.4 Discovery text, gated
 
@@ -485,10 +493,13 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    "OpenAI Review Test Customer", ESET row `demo-acc_demo006` reset to no receipt. Reconnect the review
    connection after step 4: its grant was minted before the flip and carries two scopes, which the
    finance and notes tools now refuse (§5.4, flip-day).
-7. Add the new review cases: `search_commerce_orders` and `search_inventory` on the review workspace —
-   manual orders only, so the reviewer sees channels named as not connected instead of zeros — plus one
-   `update_order_status` on an order with automatic updates **off**, so the notification boundary can be
-   demonstrated without mailing a test address.
+7. Add the new review cases: `search_commerce_orders` and `search_inventory` on the review workspace.
+   With manual orders and no shop connections, what the reviewer sees from `search_commerce_orders` is
+   `count` and `matched` over the workspace's own orders and an EMPTY `sources` array: no channel is
+   named, connected or not, because none contributed a row and none has a `commerceHealth` document
+   (§2.3). Do not stage the demo around a channel roster. Plus one `update_order_status` on an order with
+   automatic updates **off**, so the notification boundary can be demonstrated without mailing a test
+   address.
 8. Guide: move the Step B bullets, rebuild the corpus, deploy the seven assistant functions, probe the
    live bot with one question per new capability.
 9. Submit 1.2.0 with the release notes below.
@@ -519,8 +530,7 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 >
 > **New in this version:** two read-only tools — one that searches orders across a workspace's sales
 > channels and one that searches its stock. Both report how fresh their data is and what they could not
-> include; a channel the workspace has not connected is named as not connected rather than counted as
-> zero, and amounts in other currencies are listed separately rather than converted. Neither writes
+> include, and amounts in other currencies are listed separately rather than converted. Neither writes
 > anything, calls a shop, marketplace or bank, or modifies an external provider.
 >
 > **Unchanged:** the OAuth and discovery surface, the scope names, the workspace and role model, and the

@@ -295,6 +295,136 @@ check("the carve-out paragraph counts the access-log rows the registry declares"
   }
 });
 
+/**
+ * Every top-level `function name(...)` body in a module, and which of the
+ * module's own functions each one calls. Enough to answer "can a published
+ * capability reach this helper", which is the question a claim about behaviour
+ * turns into.
+ */
+function callGraph(source) {
+  const starts = [...source.matchAll(/^(?:async )?function ([A-Za-z0-9_$]+)\s*\(/gm)]
+    .map((match) => ({ name: match[1], at: match.index }));
+  const bodies = new Map();
+  starts.forEach((entry, index) => {
+    const end = index + 1 < starts.length ? starts[index + 1].at : source.length;
+    bodies.set(entry.name, source.slice(entry.at, end));
+  });
+  const calls = new Map();
+  for (const [name, body] of bodies) {
+    calls.set(name, [...bodies.keys()].filter((other) => other !== name && new RegExp(`\\b${other}\\(`).test(body)));
+  }
+  return calls;
+}
+
+/** Everything reachable from `roots` through a module's own functions. */
+function reachableFrom(calls, roots) {
+  const seen = new Set();
+  const queue = [...roots];
+  while (queue.length) {
+    const name = queue.shift();
+    if (seen.has(name) || !calls.has(name)) continue;
+    seen.add(name);
+    queue.push(...calls.get(name));
+  }
+  return seen;
+}
+
+check("no reviewer-facing or operator-facing claim rests on a capability the reduction removed", () => {
+  // B3. §7 of the submission is the block pasted to OpenAI, and it promised
+  // "a channel the workspace has not connected is named as not connected rather
+  // than counted as zero". §2.3 stated the same thing as an honesty rule
+  // "visible in a demo", and checklist step 7 told the operator to stage the
+  // review around it. Nothing published does it: the roster is `channelRows`,
+  // whose only callers are `commerceOverview` and `channelPerformance`, and the
+  // reduction removed both capabilities. That is the 1.1.1 rejection shape —
+  // telling a reviewer a tool behaves in a way it does not — in the document
+  // written to avoid it.
+  //
+  // So the claim is not banned by name; it is tied to the code that would have
+  // to produce it. Putting get_commerce_overview back in the release would make
+  // channelRows reachable and the sentence true again, and this check would
+  // allow it then.
+  const submission = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-submission-1.2.0.md"), "utf8");
+  const orchestrator = require("../../orchestrator");
+
+  const section = (heading, next) => {
+    const start = submission.indexOf(heading);
+    assert.ok(start >= 0, `${heading.trim()} is gone from the submission document`);
+    const end = next ? submission.indexOf(next, start + 1) : -1;
+    return submission.slice(start, end > start ? end : undefined);
+  };
+  const checklist = section("\n## 6. ", "\n## 7. ");
+  const releaseNotes = section("\n## 7. ");
+  assert.ok(/draft to paste/i.test(releaseNotes) && releaseNotes.length > 800,
+    "§7 is the reviewer-facing block; if it has moved or shrunk this check has stopped reading it");
+  assert.ok(/Submission checklist/i.test(checklist) && checklist.length > 800,
+    "§6 is the operator's checklist; if it has moved or shrunk this check has stopped reading it");
+
+  // 1. Neither section may name a capability this release does not publish.
+  const publishedEver = new Set(Object.values(FLAG_STATES).flatMap((flags) => registry.publishedNames(flags)));
+  let named = 0;
+  for (const [label, text] of [["§6 checklist", checklist], ["§7 release notes", releaseNotes]]) {
+    for (const match of text.matchAll(/`((?:get|search|create|update|add|attach|pin|archive|append|list)_[a-z_]+)`/g)) {
+      named += 1;
+      assert.ok(
+        publishedEver.has(match[1]),
+        `${label} names \`${match[1]}\`, which no flag state publishes. ` +
+        `The reduction of 6 September left ${[...publishedEver].sort().join(", ")}.`
+      );
+    }
+  }
+  assert.ok(named >= 3, `expected §6 and §7 to name capabilities by name; found ${named}`);
+
+  // 2. Claims tied to a specific producer: allowed only where a published
+  //    capability can reach that producer.
+  const CLAIMS = [
+    {
+      what: "a channel that is not connected is named as not connected rather than counted as zero",
+      pattern: /named as not connected|not connected[^.\n]{0,60}(?:rather than|never|instead of)[^.\n]{0,40}zero/i,
+      module: "commerce.js",
+      producer: "channelRows",
+      // The removed callers, so a refutation has to carry its own evidence.
+      evidence: ["channelRows", "commerceOverview", "channelPerformance"]
+    }
+  ];
+
+  for (const claim of CLAIMS) {
+    const source = fs.readFileSync(path.join(FUNCTIONS_DIR, "orchestrator", claim.module), "utf8");
+    const handlers = [...publishedEver]
+      .map((name) => orchestrator.HANDLERS[name])
+      .filter(Boolean)
+      .map((fn) => fn.name);
+    assert.ok(handlers.length > 0, "no published capability resolves to a handler; the reachability test would be vacuous");
+    const reachable = reachableFrom(callGraph(source), handlers).has(claim.producer);
+
+    for (const [label, text] of [["§6 checklist", checklist], ["§7 release notes", releaseNotes]]) {
+      assert.ok(
+        reachable || !claim.pattern.test(text),
+        `${label} claims "${claim.what}". No published capability reaches ` +
+        `${claim.producer}() in orchestrator/${claim.module}; the published handlers are ` +
+        `[${handlers.join(", ")}]. Telling a reviewer a tool does something it does not is the 1.1.1 rejection.`
+      );
+    }
+
+    // Elsewhere in the document the claim may be quoted — that is how the
+    // correction explains itself — but only beside the code that shows it is
+    // not true, so it cannot come back as a bare promise.
+    if (!reachable) {
+      for (const paragraph of submission.split("\n\n")) {
+        if (!claim.pattern.test(paragraph)) continue;
+        for (const name of claim.evidence) {
+          assert.ok(
+            paragraph.includes(name),
+            `a paragraph of the submission states "${claim.what}" without naming ${name}. ` +
+            `The claim is false while ${claim.producer}() is unreachable, so quoting it has to carry the ` +
+            `reason it is being quoted.`
+          );
+        }
+      }
+    }
+  }
+});
+
 check("the submission's carve-out sign-off names every tool the operator is signing for", () => {
   // §5.7 is the operator's signature, not narration: "a position to sign off,
   // not a bug". On 7 September 2026 it described seven tools and weighed an
