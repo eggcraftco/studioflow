@@ -769,3 +769,62 @@ Stripe. 25 exact mutations, every one red.
 null ledger rows stay null until the next `customer.subscription.*` delivery for each. And the two
 invoice events stay off the live endpoint until this code is reviewed and deployed — adding them first
 would deliver to a handler that could not read them.
+
+---
+
+# Addendum 5, 7 September — the scope-frozen final review was NOT clean
+
+One review, three behaviours, eight stress points. It found **four defects, two of them HIGH**, and the
+worst one **was introduced by the patch itself**. Recording that plainly, because the deploy gate was
+"if the review is clean".
+
+## The two HIGH findings
+
+**1. A stale event backdates the renewal, and the sweep then drops the workspace to Free Demo.**
+Only the `customer.subscription.*` rail passed `event.created` down. `applyInvoicePaid` called
+`applySubscription(subscription, "invoice.paid")` with no event time, so `eventCreatedMs` defaulted to
+0 and `writeStripeSubscriptionLedger` skipped **both** the staleness check *and* the write of
+`stripeEventSequence`. The renewal date it had just recorded was written **without raising the
+watermark that protects it**. A late-arriving older `customer.subscription.*` event then rolled
+`billingCurrentPeriodEnd` back to the pre-renewal date — a date already in the past — and the hourly
+sweep selects exactly on `billingEffectiveStatus == "active" AND billingCurrentPeriodEnd < now-2h`,
+flips the row to expired and recomputes the workspace to Free Demo.
+
+**This path could not exist before the patch**, because every `invoice.paid` skipped before reaching
+`applySubscription`. Making the path write is what created the exposure. `checkout.session.completed`
+had the identical omission, and nine such events are already in production — but it fires once per
+subscription where renewals recur monthly.
+
+**2. `applyInvoicePaymentFailed` reported success when the subscription retrieve failed.** It caught
+the error and returned, which `processStripeEvent` files as `processingStatus: "processed"` with a
+`processedAt` — a 200 to Stripe saying the event was consumed, plus a dedupe row that refuses the
+redelivery. A Stripe outage would have silently eaten the dunning event. Stress point (h), exactly.
+
+## Fixed, and verified twice
+
+`processStripeEvent` now computes `eventCreatedMs` once and hands it to all four rails; the three
+appliers take and forward it, defaulting to 0 so the reconcile job and the owner's Refresh are still
+never treated as stale. The retrieve error is held and re-thrown after the failure stamp lands, on both
+exits — matching what `invoice.paid` has always done.
+
+Suite **1202 → 1205 PASS**, drift checks **26 → 29**, exit 0. Eight new mutations plus a sample of the
+original battery, all red.
+
+**Re-verified independently, not taken on the review's word:**
+
+| Mutation restored by hand | Result |
+|---|---|
+| `applyInvoicePaid` stops forwarding the event time | exit 1 — *"every webhook rail stamps the ledger's event sequence"* and *"a renewal raises the watermark that protects its own date"* |
+| Both `if (retrieveError) throw retrieveError;` exits neutered | exit 1 — *"a failed subscription retrieve leaves the payment_failed event retryable — the handler reported success after the retrieve failed"* |
+
+One correction to my own working: my first attempt at the second mutation was a no-op, because my
+pattern expected `throw` at the start of a line and the code writes `if (retrieveError) throw
+retrieveError;` on one. The suite passing there was my regex, not the code. Re-run correctly, it fails
+as it should.
+
+## Also established, and left alone
+
+**Both legacy fallbacks are dead code on every path this deployment has.** Pinned SDK is stripe 22.1.1
+at `2026-04-22.dahlia`, `stripeClient()` passes no `apiVersion` override, and all 42 recorded events
+carry dahlia. The only way to reach a fallback is an operator pinning an endpoint back — the rollback
+case the comments name. **Not removed: that is the operator's call, and out of a frozen scope.**
