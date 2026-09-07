@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import Network
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import SwiftUI
 
 /// Home: the screen that answers what needs attention, what is next, and where
@@ -42,6 +43,52 @@ struct HomeAccess {
     }
 }
 
+// MARK: - The workspace's real setup checklist
+
+/// One step of the setup checklist, exactly as the server built it.
+///
+/// The list is deliberately NOT computed here. `getSetupChecklist`
+/// (functions/lifecycle/checklist.js) builds it from the SAME requirements
+/// table activation is measured against, so a client that drew its own list
+/// would drift from the measurement the moment either side changed — and a
+/// jeweller who came to manage bespoke commissions would keep being told to
+/// connect an online shop. Spec §114.
+struct HomeSetupChecklistStep: Decodable {
+    let key: String
+    let title: String
+    let detail: String
+    /// What the step asks for, in the server's vocabulary — mapped to a tab by
+    /// `homeSetupDestination(forAction:)`, never used as a tab name directly.
+    let action: String
+    let done: Bool
+}
+
+struct HomeSetupChecklist: Decodable {
+    let path: String
+    /// §115: activation reached. The card stops being a list.
+    let complete: Bool
+    let steps: [HomeSetupChecklistStep]
+    let doneCount: Int
+    let headline: String
+}
+
+/// Where each server-named step sends somebody, in Home's own tab vocabulary.
+///
+/// An action with no tab of its own returns "" and the step is drawn without a
+/// way in, rather than sent somewhere approximate — the same rule the web card
+/// follows (a step with no href is disabled). The assistant is a popover on
+/// Apple, not a tab, so it has no entry.
+func homeSetupDestination(forAction action: String) -> String {
+    switch action {
+    case "integrations": return "Settings"
+    case "new_order": return "Orders"
+    case "new_customer": return "Customers"
+    case "bank": return "BankSpending"
+    case "inventory": return "Inventory"
+    default: return ""
+    }
+}
+
 // MARK: - Shared data
 
 /// One read for the whole screen, sliced per card. Orders alone feed Money,
@@ -71,6 +118,15 @@ final class HomeData: ObservableObject {
     /// Banking screen uses.
     @Published var bankMonthlyFixed: Double = 0
 
+    /// The workspace's real setup checklist, from `getSetupChecklist`. `nil`
+    /// means the server has not answered (or could not) and the Getting started
+    /// card falls back to its own generic list.
+    @Published var setupChecklist: HomeSetupChecklist?
+    /// Whether the workspace has been through business setup — read from the
+    /// one field the server checklist is itself built from, so the fallback list
+    /// stops claiming the step is done for a workspace that never did it.
+    @Published var setupProfileDone = false
+
     private var notesListener: ListenerRegistration?
     private var notesKey = ""
     private var bankListener: ListenerRegistration?
@@ -86,7 +142,8 @@ final class HomeData: ObservableObject {
         pathMonitor.start(queue: DispatchQueue(label: "home.path"))
     }
 
-    func load(manager: FirebaseManager, companyId: String, wantsInventoryItems: Bool = false) async {
+    func load(manager: FirebaseManager, companyId: String,
+              wantsInventoryItems: Bool = false, wantsSetupChecklist: Bool = false) async {
         async let summary = try? manager.loadInventorySummary()
         async let loadedStages = manager.loadProductionStages()
         let (nextSummary, nextStages) = await (summary, loadedStages)
@@ -97,10 +154,51 @@ final class HomeData: ObservableObject {
         if wantsInventoryItems {
             inventoryItems = (try? await manager.loadInventoryItems()) ?? []
         }
+        // Only when the card that shows it is actually on this member's Home —
+        // a callable nobody can see the answer to is a round trip for nothing.
+        if wantsSetupChecklist {
+            await loadSetupChecklist(companyId: companyId)
+        }
         if !nextStages.isEmpty { stages = nextStages }
         loadedAt = Date()
         listenNotes(companyId: companyId)
         listenBankHealth(companyId: companyId)
+    }
+
+    /// The checklist, and the one field the fallback list needs to stop lying.
+    ///
+    /// Silent on failure, deliberately: somebody whose checklist will not load
+    /// should get the Home screen they opened, and the generic list is a better
+    /// answer than an error about a card.
+    private func loadSetupChecklist(companyId: String) async {
+        do {
+            let result = try await Functions.functions(region: "europe-west2")
+                .httpsCallable("getSetupChecklist").call([String: Any]())
+            if let payload = result.data as? [String: Any],
+               JSONSerialization.isValidJSONObject(payload),
+               let encoded = try? JSONSerialization.data(withJSONObject: payload),
+               let parsed = try? JSONDecoder().decode(HomeSetupChecklist.self, from: encoded) {
+                setupChecklist = parsed
+            }
+        } catch {
+            // Left as it was; the card falls back.
+        }
+
+        // Workspace-scoped on purpose: this object is rebuilt whenever the
+        // company id changes, so a value read for one workspace can never be
+        // shown against another the way a UserDefaults mirror could.
+        guard !companyId.isEmpty else { return }
+        let settings = try? await Firestore.firestore()
+            .collection("companySettings").document(companyId).getDocument()
+        let fields = settings?.data() ?? [:]
+        // The same two facts the server's own `onboarding` step is built from
+        // (functions/lifecycle/checklist.js), so the fallback answers this
+        // question the way the real list does. Deliberately NOT the completion
+        // TIMESTAMP: that is written when somebody skips as well, and skipping
+        // is not completing.
+        let goal = (fields["onboardingMainGoal"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        setupProfileDone = (fields["businessOnboardingCompleted"] as? Bool) == true || !goal.isEmpty
     }
 
     private func listenNotes(companyId: String) {
@@ -260,7 +358,8 @@ struct HomeView: View {
                 firebaseManager.startBankFeedRealtime(companyId: companyId, isOwner: true)
             }
             await data.load(manager: firebaseManager, companyId: companyId,
-                            wantsInventoryItems: wantsInventoryItems)
+                            wantsInventoryItems: wantsInventoryItems,
+                            wantsSetupChecklist: wantsSetupChecklist)
         }
         .onDisappear { data.stop() }
         .alert(t("Edit heading", lang: seciliDil), isPresented: Binding(
@@ -292,7 +391,8 @@ struct HomeView: View {
             VStack(alignment: .trailing, spacing: 8) {
                 Button {
                     Task { await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId,
-                                          wantsInventoryItems: wantsInventoryItems) }
+                                          wantsInventoryItems: wantsInventoryItems,
+                                          wantsSetupChecklist: wantsSetupChecklist) }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -454,6 +554,10 @@ struct HomeView: View {
 
     private var wantsInventoryItems: Bool {
         visible.contains { $0.id == .inventory && $0.size == .twoByTwo }
+    }
+
+    private var wantsSetupChecklist: Bool {
+        visible.contains { $0.id == .gettingStarted }
     }
 
     /// The grid lives inside a ScrollView, so it has to state its own height.
