@@ -82,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.bankDetectRecurring
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
@@ -134,12 +135,15 @@ fun HomeCardBody(
      *  wave one off. */
     setupSkipped: List<String> = emptyList(),
     onSkipSetupStep: ((String) -> Unit)? = null,
-    onRestoreSetupSkipped: (() -> Unit)? = null
+    onRestoreSetupSkipped: (() -> Unit)? = null,
+    /** Getting started only: this workspace's own steps, from the server. Null
+     *  while the call is in flight and after one that failed. */
+    setupChecklist: StudioFlowRepository.StudioSetupChecklist? = null
 ) {
     when (id) {
         HomeCardId.GettingStarted ->
             HomeGettingStartedBody(size, state, inventory, t, setupSkipped, onSkipSetupStep,
-                onRestoreSetupSkipped)
+                onRestoreSetupSkipped, setupChecklist, onOpenSection)
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onStartNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
@@ -489,6 +493,25 @@ private data class SetupStep(
     val destination: String, val cta: String, val done: Boolean
 )
 
+/**
+ * Where a server-named step sends somebody.
+ *
+ * The server names the ACTION ("bank", "inventory") rather than a screen,
+ * because the four clients do not share one — these are this app's sections,
+ * and they are the same destinations the web map uses. An action with no
+ * section here resolves to nothing and the step stays inert rather than
+ * offering a button that goes nowhere.
+ */
+private fun setupStepDestination(action: String): String = when (action) {
+    "integrations" -> "Settings"
+    "new_order" -> "Orders"
+    "new_customer" -> "Customers"
+    "bank" -> "BankSpending"
+    "inventory" -> "Inventory"
+    "assistant" -> "QuickReply"
+    else -> ""
+}
+
 @Composable
 private fun HomeGettingStartedBody(
     size: HomeCardSize,
@@ -498,25 +521,56 @@ private fun HomeGettingStartedBody(
     skipped: List<String> = emptyList(),
     onSkip: ((String) -> Unit)? = null,
     /** "Skip for now" is only true if a skipped step can come back. */
-    onRestoreSkipped: (() -> Unit)? = null
+    onRestoreSkipped: (() -> Unit)? = null,
+    /** This workspace's own steps, from getSetupChecklist. */
+    checklist: StudioFlowRepository.StudioSetupChecklist? = null,
+    /** What makes a step a step rather than a sentence about one. */
+    onOpenSection: ((String) -> Unit)? = null
 ) {
     val inventoryCount = (inventory?.uniqueCount ?: 0) + (inventory?.quantityCount ?: 0)
     val fromStore = state.orders.any {
         !it.customFields["Shopify Status"].isNullOrBlank() || !it.customFields["WooCommerce Status"].isNullOrBlank()
     }
-    val allSteps = listOf(
-        SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", true),
+    // The fallback, for a call that has not answered yet or could not: the same
+    // six steps for everybody, which is exactly why it is not the list we ask
+    // for. "Set up business profile" used to be hardcoded ticked here — the
+    // card congratulated a workspace that had never opened Settings — so it now
+    // reads the completion the rest of the app reads.
+    val localSteps = listOf(
+        SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", state.workspaceSettings.businessOnboardingCompleted),
         SetupStep("customer", "Add your first customer", "Orders, notes and files all hang off a customer.", "Customers", "Add customer", state.customers.isNotEmpty()),
         SetupStep("order", "Create your first order", "The record everything else in NivaDesk attaches to.", "Orders", "Create order", state.orders.isNotEmpty()),
         SetupStep("shop", "Connect your shop", "Import orders automatically from Shopify or WooCommerce.", "Settings", "Connect shop", fromStore),
         SetupStep("inventory", "Add an inventory item", "Track what you own, what is reserved and what is low.", "Inventory", "Add item", inventoryCount > 0),
         SetupStep("bank", "Connect your bank", "Read-only. Spending arrives and you categorise it.", "BankSpending", "Connect bank", state.bankTransactions.isNotEmpty())
     )
+    // The server's list is built from the goal this workspace chose and from the
+    // same requirements table activation is measured against, so the checklist
+    // and the measurement cannot drift apart. Its steps carry their own words;
+    // the CTA is a plain "Continue" because the step's name is already on the
+    // row above the panel.
+    val allSteps = checklist?.steps?.map { step ->
+        SetupStep(
+            step.key, step.title, step.detail,
+            setupStepDestination(step.action), "Continue", step.done
+        )
+    } ?: localSteps
+    // Skips are recorded against step ids. The server names its steps
+    // differently ("order_created", not "order"), so a step waved off under the
+    // local list is simply not one of these — nothing is hidden by accident.
     val steps = allSteps.filter { it.id !in skipped }
     if (steps.isEmpty()) return
     val done = steps.filter { it.done }
-    val next = steps.firstOrNull { !it.done }
+    // The step to push somebody at has to be one they can get to. The server's
+    // first line ("Tell us what you'd like help with") is a statement with no
+    // destination, so it is passed over unless it is all that is left.
+    val next = steps.firstOrNull { !it.done && it.destination.isNotEmpty() }
+        ?: steps.firstOrNull { !it.done }
     val todo = steps.filter { !it.done && it.id != next?.id }
+    fun opener(step: SetupStep): (() -> Unit)? {
+        if (onOpenSection == null || step.destination.isEmpty()) return null
+        return { onOpenSection(step.destination) }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The count belongs at every size: the bar alone says "some", and the
@@ -536,7 +590,7 @@ private fun HomeGettingStartedBody(
                     // The square spends itself on the one thing to do next and
                     // the way past it, not on a list of what is still open —
                     // that list is the wall §15 says never to put here.
-                    HomeNextPanel(next, t, "compact")
+                    HomeNextPanel(next, t, "compact", opener(next))
                     if (onSkip != null) HomeSkipText(t("Skip for now")) { onSkip(next.id) }
                 } else HomeAllSetNote(skipped, onRestoreSkipped, t)
             }
@@ -547,14 +601,14 @@ private fun HomeGettingStartedBody(
             HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (next != null) {
-                        HomeNextPanel(next, t, "inline")
+                        HomeNextPanel(next, t, "inline", opener(next))
                         if (onSkip != null) HomeSkipText(t("Skip for now")) { onSkip(next.id) }
                     } else HomeAllSetNote(skipped, onRestoreSkipped, t)
                 }
                 Box(Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
                 Column(Modifier.weight(1f)) {
-                    todo.take(3).forEach { HomeCheckRow(t(it.label), "todo") }
+                    todo.take(3).forEach { HomeCheckRow(t(it.label), "todo", onClick = opener(it)) }
                 }
             }
             HomeCardSize.TwoByTwo -> {
@@ -572,12 +626,13 @@ private fun HomeGettingStartedBody(
                                 HomeCheckRow(
                                     t(it.label),
                                     if (it.done) "done" else if (it.id == next?.id) "current" else "todo",
-                                    boxed = true
+                                    boxed = true,
+                                    onClick = opener(it)
                                 )
                             }
                         }
                         if (next != null) {
-                            HomeNextPanel(next, t, "large")
+                            HomeNextPanel(next, t, "large", opener(next))
                             if (onSkip != null) {
                                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                     HomeSkipText(t("Skip for now")) { onSkip(next.id) }
@@ -614,12 +669,23 @@ private fun HomeAllSetNote(skipped: List<String>, onRestore: (() -> Unit)?, t: (
     }
 }
 
+/**
+ * [onClick] is the difference between a recommendation and a button. The panel
+ * computed the right next step and drew it, tint and all, with nothing behind
+ * it — so the whole panel is the target now, not just the pill: at 1x1 the pill
+ * is about 22dp tall, which is half a finger.
+ *
+ * A step with no destination gets null and loses the pill entirely. A button
+ * that does nothing is worse than no button.
+ */
 @Composable
-private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String) {
+private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String, onClick: (() -> Unit)? = null) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(HomeTone.accent.copy(alpha = 0.07f))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(
                 horizontal = if (style == "compact") 10.dp else 11.dp,
                 vertical = if (style == "compact") 7.dp else 9.dp
@@ -643,20 +709,22 @@ private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String)
             Text(t(step.blurb), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(
-            // The square has no width for "Connect your shop" twice — the panel's
-            // heading already named the step, so the button just moves.
-            t(if (style == "large") step.cta else "Continue"),
-            fontSize = if (style == "compact") 11.sp else 12.sp,
-            fontWeight = FontWeight.Bold, color = Color.White,
-            modifier = Modifier
-                .then(if (style == "compact") Modifier else Modifier.fillMaxWidth())
-                .background(HomeTone.accent, RoundedCornerShape(9.dp))
-                .padding(
-                    horizontal = if (style == "compact") 11.dp else 16.dp,
-                    vertical = if (style == "compact") 4.dp else 8.dp
-                )
-        )
+        if (onClick != null) {
+            Text(
+                // The square has no width for "Connect your shop" twice — the panel's
+                // heading already named the step, so the button just moves.
+                t(if (style == "large") step.cta else "Continue"),
+                fontSize = if (style == "compact") 11.sp else 12.sp,
+                fontWeight = FontWeight.Bold, color = Color.White,
+                modifier = Modifier
+                    .then(if (style == "compact") Modifier else Modifier.fillMaxWidth())
+                    .background(HomeTone.accent, RoundedCornerShape(9.dp))
+                    .padding(
+                        horizontal = if (style == "compact") 11.dp else 16.dp,
+                        vertical = if (style == "compact") 4.dp else 8.dp
+                    )
+            )
+        }
     }
 }
 

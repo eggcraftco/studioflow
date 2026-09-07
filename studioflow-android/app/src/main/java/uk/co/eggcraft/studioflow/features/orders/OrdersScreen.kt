@@ -87,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.firestore.FieldValue
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -834,9 +835,33 @@ private fun OrderListPane(
                         // create; that null-ness is the gate, not a second copy of it.
                         canCreate = onStartCreateOrder != null,
                         onStartCreateOrder = onStartCreateOrder ?: {},
+                        // The wizard itself opens only for an owner or admin
+                        // with settings access (StudioFlowMainScreen). While
+                        // the write below did nothing that mismatch cost
+                        // nothing; now that it works, a member pressing this
+                        // would reset the WORKSPACE's onboarding and still see
+                        // no wizard. An action the role cannot perform is not
+                        // offered (§6).
+                        canRunBusinessSetup = state.workspace?.memberAccess?.settings == true &&
+                            state.workspace.role.trim().lowercase(Locale.UK) in setOf("owner", "admin"),
                         onRunBusinessSetup = {
+                            // The reader is deliberately tolerant: a workspace
+                            // counts as onboarded if the completed-AT stamp is
+                            // on the document at all, whatever the boolean
+                            // says. So writing `false` and leaving the stamp
+                            // behind meant this button could never do anything
+                            // — it wrote, the listener came back, and the
+                            // wizard stayed shut. Apple's reset deletes the
+                            // stamp; this does the same. The `false` stays
+                            // because the boolean falls back to its previous
+                            // value when the field is absent.
                             onUpdateWorkspaceSettings(
-                                mapOf("businessOnboardingCompleted" to false),
+                                mapOf(
+                                    "businessOnboardingCompleted" to false,
+                                    "businessOnboardingCompletedAt" to FieldValue.delete(),
+                                    "businessOnboardingCompletedAction" to FieldValue.delete(),
+                                    "businessOnboardingCompletedBy" to FieldValue.delete()
+                                ),
                                 t("Business setup reopened.")
                             )
                         }
@@ -2226,6 +2251,8 @@ private const val OrdersDayMs = 24L * 60L * 60L * 1000L
 private fun OrdersFirstRunCard(
     creating: Boolean,
     canCreate: Boolean,
+    /** Only the roles the wizard will actually open for. */
+    canRunBusinessSetup: Boolean,
     onStartCreateOrder: () -> Unit,
     onRunBusinessSetup: () -> Unit
 ) {
@@ -2247,7 +2274,13 @@ private fun OrdersFirstRunCard(
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you."),
+                // The long line offers the setup run, so it is only for the
+                // people who are offered it. Both strings are already carried
+                // in all eleven languages — a role-aware sentence is not worth
+                // an English-only one.
+                text = if (canRunBusinessSetup)
+                    t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you.")
+                else t("Create your first order"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -2267,18 +2300,20 @@ private fun OrdersFirstRunCard(
                         )
                     }
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = StudioBlue.copy(alpha = 0.12f),
-                    modifier = Modifier.clickable { onRunBusinessSetup() }
-                ) {
-                    Text(
-                        text = t("Run Business Setup"),
-                        color = StudioBlue,
-                        fontWeight = FontWeight.ExtraBold,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
-                    )
+                if (canRunBusinessSetup) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = StudioBlue.copy(alpha = 0.12f),
+                        modifier = Modifier.clickable { onRunBusinessSetup() }
+                    ) {
+                        Text(
+                            text = t("Run Business Setup"),
+                            color = StudioBlue,
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+                        )
+                    }
                 }
             }
         }

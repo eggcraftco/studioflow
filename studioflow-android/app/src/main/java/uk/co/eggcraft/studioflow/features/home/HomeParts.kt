@@ -3,6 +3,7 @@ package uk.co.eggcraft.studioflow.features.home
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -205,12 +206,19 @@ fun HomePanel(compact: Boolean = false, content: @Composable () -> Unit) {
 }
 
 /** A filled tick for done, an arrow for the step you are on, a hollow ring for
- *  the rest — the shape carries the state, not the colour alone (§20). */
+ *  the rest — the shape carries the state, not the colour alone (§20).
+ *
+ *  [onClick] is what turns the row from a description of a step into the step:
+ *  the checklist used to render as text nobody could act on, so the one thing
+ *  it asked for was the one thing it would not do. A row with nowhere to go
+ *  (no destination) is passed null and stays inert rather than pretending. */
 @Composable
-fun HomeCheckRow(label: String, state: String, boxed: Boolean = false) {
+fun HomeCheckRow(label: String, state: String, boxed: Boolean = false, onClick: (() -> Unit)? = null) {
     Row(
         Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(if (boxed) 9.dp else 8.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .alpha(if (state == "done") 0.65f else 1f)
             .then(
                 // The big card draws each step as its own bordered row, as the
