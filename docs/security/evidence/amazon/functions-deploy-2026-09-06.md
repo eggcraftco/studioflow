@@ -676,3 +676,60 @@ requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0
 ## Rollback used
 
 None so far.
+
+## The gate closed — the full window, read retrospectively
+
+**2026-09-07 04:29:53 UTC**, one minute and twenty-two seconds after the window ended at 04:28:31.
+One query over the whole soak, `2026-09-06T04:28:31Z` → now, exactly as planned: the answer to a
+24-hour soak can only be read once the 24 hours have passed, and reading it earlier would have
+certified a shorter window.
+
+| Measure | Result |
+|---|---|
+| Functions queried | 350, the full batch set B0–B5.3 |
+| `severity>=ERROR` since the soak began | **0** |
+| Requests returning 5xx since the soak began | **0** |
+| Positive control — all requests by status class | **1151** (1142 2xx, 2 3xx, 7 4xx). Non-zero, so an empty error result means *no errors*, not *no query* |
+| Cloud Scheduler (europe-west2) | **19 of 19 ENABLED**, every one with a recent attempt and a future next run |
+| Event-triggered functions, last two hours | syncWorkflowSafeOrderView 10, stampOrderFinance 10, notifyCustomerOnStatusChange 10 — all INFO |
+| Query gaps | **0** |
+
+**Widened, because the batch filter cannot see outside itself.** The table above filters to the 350
+deployed functions, so a 5xx in a function this deployment never touched would not appear in it. The
+same window was therefore re-read with no service filter at all — every `cloud_run_revision` in the
+project, `severity>=ERROR OR httpRequest.status>=500`, `timestamp>="2026-09-06T04:28:31Z"`:
+**0 entries.** The clean result is project-wide, not batch-shaped.
+
+### The seven 4xx, each accounted for
+
+A 4xx is not automatically benign, so all seven were identified rather than waved past.
+
+| Count | Service | What it was |
+|---|---|---|
+| 3 | `track17webhook` | **Ours.** The token-revocation proof at 19:58 UTC: the old token, the URL-parameter form, and no token, each correctly refused 401 |
+| 1 | `nvviewsharedfile` | **Ours.** `GET /f/zzprobenotreal` from the web-route reachability probe at 01:08 UTC, answered 404 by the function as designed |
+| 3 | `stripewebhook` | **Not ours, and not this deployment's — see below** |
+
+**GATE VERDICT: PASS.** Twenty-four hours, zero errors, zero 5xx project-wide, every scheduled job on
+time, no unobserved window, and no gap in any query.
+
+### A separate standing problem the soak surfaced, which is not a soak failure
+
+`stripewebhook` is rejecting genuine Stripe deliveries. Over the last fourteen days it has received
+**14 requests and answered 400 to every one of them — zero successes.** The requests carry
+`User-Agent: Stripe/1.0 (+https://stripe.com/docs/webhooks)` from Stripe's own address range, and
+arrive at the raw Cloud Run URL `stripewebhook-…-nw.a.run.app`. The handler rejects before writing any
+application log line, which is the shape of a signature that does not verify.
+
+Three things say plainly that this is **not** a finding against the dependency remediation, and the
+gate above is not weakened by it:
+
+- It **predates the soak by ten days** — the same 400s appear on 27, 28 and 29 August.
+- It is a **4xx, not a 5xx or an ERROR**: the endpoint is refusing, not failing.
+- The billing rail that matters is healthy in the same window: `scheduledBillingEntitlementReconcile`
+  ran **338 times, all 200**.
+
+But it is worth a look on its own account, because a webhook that has never once succeeded is either
+a stale endpoint left registered in the Stripe dashboard pointing at a service whose signing secret
+differs, or real events being dropped. **Nothing was changed** — diagnosing it means touching
+production webhook configuration, which this window does not permit. Recorded for the morning.
