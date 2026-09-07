@@ -554,6 +554,70 @@ function createStripeBillingFunctions({
     return 0;
   }
 
+  /**
+   * Where an incoming webhook event sits against what this subscription's
+   * ledger row has already applied.
+   *
+   * Stripe does not promise delivery in order: a `customer.subscription.updated`
+   * retried after a network blip could overwrite a newer one and push a
+   * workspace that had just gone active back to `trialing`.
+   *
+   * The comparison is the WEBHOOK EVENT's own created time, which is the only
+   * value that reliably increases from one delivery to the next. An earlier
+   * attempt built a sequence out of the subscription's own date fields, and
+   * that is not monotonic — once canceled_at was set it out-ranked every
+   * later event, so a resubscribe or a manual resync was dropped for good.
+   *
+   * Anything without an event time (the reconcile job, the owner's own
+   * "Refresh subscription access") is never treated as stale.
+   *
+   * This USED to live inside writeStripeSubscriptionLedger, and that was the
+   * whole defect: the ledger write skipped itself and RETURNED, applySubscription
+   * discarded the return value, and the storage and team-seat branches below it
+   * then wrote the workspace from the stale payload anyway — re-granting an
+   * add-on and seats that had already been cancelled, durably, with no later
+   * event repairing it. The decision is made once, here, by the one caller that
+   * can act on it, BEFORE anything mutates.
+   *
+   * The read FAILS CLOSED. It used to be caught and warned, which let a single
+   * ledgerRef.get() failure apply a stale event in full and file it as processed,
+   * so no redelivery could ever repair it. Throwing instead leaves the
+   * stripeBillingEvents row at "received" with no processedAt (processStripeEvent
+   * only stamps processedAt after the applier RETURNS), so the dedupe lets
+   * Stripe's redelivery through.
+   */
+  async function stripeSubscriptionEventOrdering({ workspace, subscriptionId, eventType, eventCreatedMs = 0 }) {
+    const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
+    const eventSequence = Number(eventCreatedMs) > 0 ? Number(eventCreatedMs) : 0;
+    if (eventSequence <= 0) return { checked: true, stale: false, ledgerRef, eventSequence: 0, seen: 0 };
+
+    let existing = null;
+    try {
+      existing = await ledgerRef.get();
+    } catch (error) {
+      console.warn("Stripe ledger ordering check failed; refusing to apply the event.", {
+        subscriptionId, eventType, eventSequence, message: error?.message || String(error)
+      });
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+
+    const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
+    // Strictly older, never equal. Stripe's `created` has one-second granularity,
+    // so two events for the same subscription can share a timestamp; treating
+    // equal as stale would drop the second one, and a cancellation delivered in
+    // the same second as an update is exactly the pair that must not be dropped.
+    // Equal is safe to apply because what gets applied is not the payload — it is
+    // the subscription Stripe currently holds (see applySubscription), so both
+    // members of a tie write the same canonical state instead of racing.
+    const stale = seen > 0 && eventSequence < seen;
+    if (stale) {
+      console.warn("Stripe subscription event arrived out of order; not applied.", {
+        subscriptionId, eventType, eventSequence, seen
+      });
+    }
+    return { checked: true, stale, ledgerRef, eventSequence, seen };
+  }
+
   async function writeStripeSubscriptionLedger({
     workspace,
     subscription,
@@ -563,39 +627,25 @@ function createStripeBillingFunctions({
     periodEnd,
     customerId,
     shouldFallback,
-    eventCreatedMs = 0
+    ordering
   }) {
     const subscriptionId = String(subscription?.id || "").trim();
-    if (!workspace?.ref || !subscriptionId || !item) return;
+    if (!workspace?.ref || !subscriptionId || !item) return { skipped: true, reason: "ledger_write_not_applicable" };
 
-    // Stripe does not promise delivery in order: a `customer.subscription.updated`
-    // retried after a network blip could overwrite a newer one and push a
-    // workspace that had just gone active back to `trialing`.
-    //
-    // The comparison is the WEBHOOK EVENT's own created time, which is the only
-    // value that reliably increases from one delivery to the next. An earlier
-    // attempt built a sequence out of the subscription's own date fields, and
-    // that is not monotonic — once canceled_at was set it out-ranked every
-    // later event, so a resubscribe or a manual resync was dropped for good.
-    //
-    // Anything without an event time (the reconcile job, the owner's own
-    // "Refresh subscription access") is never treated as stale.
-    const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
-    const eventSequence = Number(eventCreatedMs) > 0 ? Number(eventCreatedMs) : 0;
-    if (eventSequence > 0) {
-      try {
-        const existing = await ledgerRef.get();
-        const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
-        if (seen > 0 && eventSequence < seen) {
-          console.warn("Stripe subscription event arrived out of order; not applied.", {
-            subscriptionId, eventType, eventSequence, seen
-          });
-          return { skipped: true, reason: "stale_subscription_event" };
-        }
-      } catch (error) {
-        console.warn("Stripe ledger ordering check failed:", error?.message || error);
-      }
+    // A precondition, not a second read. The ordering decision belongs to
+    // applySubscription because it also gates the add-on branches and the
+    // entitlement recompute; a ledger writer that could make its own decision is
+    // how those branches came to run behind its back. Anything that reaches here
+    // without a fresh, non-stale decision is a programming error, and it throws
+    // rather than writing — a throw is retryable, a quiet write is not.
+    if (!ordering || ordering.checked !== true) {
+      throw new Error("writeStripeSubscriptionLedger requires an ordering decision from applySubscription");
     }
+    if (ordering.stale === true) {
+      throw new Error("writeStripeSubscriptionLedger must never be reached for a stale subscription event");
+    }
+    const ledgerRef = ordering.ledgerRef;
+    const eventSequence = Number(ordering.eventSequence) > 0 ? Number(ordering.eventSequence) : 0;
 
     const metadata = subscription.metadata || {};
     const activeForEntitlement = subscriptionActiveForEntitlement(status, shouldFallback);
@@ -633,6 +683,8 @@ function createStripeBillingFunctions({
     if (!ledgerSnap.exists || !ledgerSnap.data()?.createdAt) {
       await ledgerRef.set({ createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     }
+
+    return { written: true, eventSequence };
   }
 
   function timestampFromAppleMillis(milliseconds) {
@@ -1083,23 +1135,99 @@ function createStripeBillingFunctions({
     return result;
   }
 
-  async function applySubscription(subscription, eventType, eventCreatedMs = 0) {
-    const metadata = subscription.metadata || {};
-    const item = itemFromMetadataOrSubscription(metadata, subscription);
-    const workspace = await workspaceRefFromStripeRefs({
-      workspaceId: metadata.workspaceId,
-      subscriptionId: subscription.id,
-      customerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id
-    });
-
-    if (!workspace || !item) {
-      return { skipped: true, reason: !workspace ? "workspace_not_found" : "billing_item_not_found" };
+  // The ONE place a Stripe subscription mutates a workspace: the ledger row, the
+  // storage add-on, the purchased team seats and the entitlement recompute all
+  // happen here and nowhere else. Two properties are enforced at the top, in this
+  // order, and everything below them depends on both:
+  //
+  //   (1) ORDERING, decided once. If the delivering event is older than what this
+  //       subscription's ledger row has already applied, the function returns
+  //       before it has mutated anything at all — not the ledger, not the add-on
+  //       branches, not the recompute, and not the per-rail stamps its callers
+  //       write, which are all gated on `updated`. The previous shape made this
+  //       decision two frames down, inside the ledger writer, whose return value
+  //       was discarded here; the add-on branches then wrote a cancelled add-on
+  //       and cancelled seats back onto the workspace from the stale payload.
+  //
+  //   (2) CANONICAL STATE. `stripe` is passed by the rail that is handed a
+  //       webhook PAYLOAD (customer.subscription.*). The event is then used only
+  //       to IDENTIFY the subscription — its id, its customer and its workspace
+  //       metadata are immutable, which is what makes identification safe even
+  //       when the body is stale — and what gets applied is the subscription
+  //       Stripe currently holds. A late delivery therefore re-applies present
+  //       truth instead of an old snapshot, which is what makes an equal
+  //       `event.created` (Stripe's granularity is one second) a non-event rather
+  //       than a race: both members of a tie write the same state.
+  //
+  //       The other three rails already retrieved the subscription themselves one
+  //       frame up and pass no `stripe`, so this costs exactly one extra API call
+  //       per customer.subscription.* event and never two on the same event.
+  //
+  //       The costs, honestly: that call can fail, and a failure now THROWS
+  //       instead of applying something. That is the direction that keeps the
+  //       event retryable rather than losing it. A `customer.subscription.deleted`
+  //       retrieve is fine — the pinned SDK types retrieve as
+  //       `Promise<Response<Subscription>>` with no deleted variant
+  //       (Subscriptions.d.ts:29; only SubscriptionItems has a Deleted* type) and
+  //       `Subscription.Status` includes 'canceled' (Subscriptions.d.ts:430) — so
+  //       a cancelled subscription comes back as itself with status canceled,
+  //       which is the right answer. `isDeleted` below also forces the fallback
+  //       from the event type, so that rail does not depend on the status alone.
+  async function applySubscription(subscription, eventType, eventCreatedMs = 0, { stripe = null } = {}) {
+    const eventMetadata = subscription?.metadata || {};
+    const subscriptionId = String(subscription?.id || "").trim();
+    if (!subscriptionId) {
+      // Without an id there is no ledger row to order against and nothing to
+      // retrieve, so there is no safe way to apply this at all.
+      return { skipped: true, reason: "subscription_not_found_on_event" };
     }
 
-    const status = String(subscription.status || "unknown");
+    const workspace = await workspaceRefFromStripeRefs({
+      workspaceId: eventMetadata.workspaceId,
+      subscriptionId,
+      customerId: stripeReferenceId(subscription.customer)
+    });
+    if (!workspace) {
+      return { skipped: true, reason: "workspace_not_found" };
+    }
+
+    // (1) Ordering, before any mutation and before the Stripe call — a stale
+    // redelivery must not cost an API request either.
+    const ordering = await stripeSubscriptionEventOrdering({
+      workspace, subscriptionId, eventType, eventCreatedMs
+    });
+    if (ordering.stale === true) {
+      return {
+        skipped: true,
+        reason: "stale_subscription_event",
+        workspaceId: workspace.id,
+        eventSequence: ordering.eventSequence,
+        appliedEventSequence: ordering.seen
+      };
+    }
+
+    // (2) Canonical state.
+    let current = subscription;
+    if (stripe) {
+      current = await stripe.subscriptions.retrieve(subscriptionId);
+      if (!current || typeof current !== "object" || String(current.id || "").trim() !== subscriptionId) {
+        // Not a transient network error, but the same answer: refuse to apply
+        // anything and let the redelivery try again rather than falling back to
+        // the payload this retrieve exists to distrust.
+        throw new Error(`Stripe returned no usable subscription for ${subscriptionId}`);
+      }
+    }
+
+    const metadata = current.metadata || {};
+    const item = itemFromMetadataOrSubscription(metadata, current);
+    if (!item) {
+      return { skipped: true, reason: "billing_item_not_found" };
+    }
+
+    const status = String(current.status || "unknown");
     // Reads the items, not the subscription: current_period_end moved there.
-    const periodEnd = timestampFromUnix(stripeCurrentPeriodEndUnix(subscription));
-    const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || "";
+    const periodEnd = timestampFromUnix(stripeCurrentPeriodEndUnix(current));
+    const customerId = stripeReferenceId(current.customer);
     const isDeleted = eventType === "customer.subscription.deleted";
     const shouldFallback = isDeleted || ["canceled", "unpaid", "incomplete_expired"].includes(status);
 
@@ -1108,14 +1236,14 @@ function createStripeBillingFunctions({
     // while billingPlan continues to serve existing clients during rollout.
     await writeStripeSubscriptionLedger({
       workspace,
-      subscription,
+      subscription: current,
       item,
       eventType,
       status,
       periodEnd,
       customerId,
       shouldFallback,
-      eventCreatedMs
+      ordering
     });
 
     if (item.type === "storage_addon") {
@@ -1125,7 +1253,7 @@ function createStripeBillingFunctions({
         billingStorageAddonMB: addonActive ? item.storageAddonMB : 0,
         billingStorageAddonKey: addonActive ? item.key : "",
         billingStorageAddonStatus: addonActive ? status : "cancelled",
-        billingStorageAddonSubscriptionId: addonActive ? subscription.id : "",
+        billingStorageAddonSubscriptionId: addonActive ? current.id : "",
         billingStorageAddonCurrentPeriodEnd: periodEnd,
         billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         billingUpdatedBy: "stripe_webhook",
@@ -1137,7 +1265,7 @@ function createStripeBillingFunctions({
 
     if (item.type === "team_seat_addon") {
       const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
-      const firstSubscriptionItem = Array.isArray(subscription.items?.data) ? subscription.items.data[0] : null;
+      const firstSubscriptionItem = Array.isArray(current.items?.data) ? current.items.data[0] : null;
       const requestedQuantity = Math.max(1, Number(firstSubscriptionItem?.quantity || 1) || 1);
       const purchasedSeatQuantity = addonActive ? Math.min(5, Math.floor(requestedQuantity)) : 0;
       await workspace.ref.set({
@@ -1145,7 +1273,7 @@ function createStripeBillingFunctions({
         billingAdditionalTeamSeatQuantity: purchasedSeatQuantity,
         billingAdditionalTeamSeatKey: addonActive ? item.key : "",
         billingAdditionalTeamSeatStatus: addonActive ? status : "cancelled",
-        billingAdditionalTeamSeatSubscriptionId: addonActive ? subscription.id : "",
+        billingAdditionalTeamSeatSubscriptionId: addonActive ? current.id : "",
         billingAdditionalTeamSeatCurrentPeriodEnd: periodEnd,
         billingTeamIncludedSeats: 5,
         billingTeamSelfServiceMax: 10,
@@ -1257,6 +1385,22 @@ function createStripeBillingFunctions({
     let resolution = null;
     if (subscription) {
       resolution = await applySubscription(subscription, "invoice.payment_failed", eventCreatedMs);
+      // Invariant: after a stale decision NOTHING mutates, and that includes the
+      // failure stamp below. This rail is the only caller that writes the
+      // workspace unconditionally rather than behind `result.updated`, so it is
+      // the only one that needs the decision spelled out. Returning the skip
+      // verbatim is also what keeps the stripeBillingEvents row truthful: a
+      // handler that had applied nothing used to file itself as
+      // `updated: true, status: "past_due"`.
+      if (resolution && resolution.skipped === true && resolution.reason === "stale_subscription_event") {
+        return {
+          skipped: true,
+          reason: "stale_subscription_event",
+          workspaceId: workspace.id,
+          eventSequence: resolution.eventSequence,
+          appliedEventSequence: resolution.appliedEventSequence
+        };
+      }
     }
 
     await workspace.ref.set({
@@ -1328,7 +1472,12 @@ function createStripeBillingFunctions({
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      result = await applySubscription(object, event.type, eventCreatedMs);
+      // The only rail handed a raw webhook body. `stripe` tells applySubscription
+      // to re-read the subscription from Stripe and apply THAT, so the body is
+      // used to identify the subscription and never to describe it. The other
+      // three rails retrieved it themselves a frame ago and must not pay for a
+      // second call.
+      result = await applySubscription(object, event.type, eventCreatedMs, { stripe });
     } else if (event.type === "invoice.paid") {
       result = await applyInvoicePaid(stripe, object, eventCreatedMs);
     } else if (event.type === "invoice.payment_failed") {
@@ -2315,6 +2464,12 @@ function createStripeBillingFunctions({
       applySubscription,
       applyInvoicePaid,
       applyInvoicePaymentFailed,
+      // The ordering decision and the ledger writer, so the tests can prove the
+      // two halves of the guard separately: that the decision is made before any
+      // mutation, and that the writer refuses to run without one. A future caller
+      // that reintroduces the bypass fails a check rather than a customer.
+      stripeSubscriptionEventOrdering,
+      writeStripeSubscriptionLedger,
       // The dispatcher, for the same reason: which event time each rail hands
       // to applySubscription, and whether a throwing handler leaves the
       // stripeBillingEvents row retryable, are properties of THIS function.
