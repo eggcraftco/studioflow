@@ -622,3 +622,68 @@ real subscription would be trusted to a rail that does not work.
 **Correct order, and the reason for it:** fix the field read (with a fallback to the legacy shape so an
 older API version still works), ship it, *then* add `invoice.paid` and `invoice.payment_failed` to the
 live endpoint. The code fix is in progress on this branch; the endpoint change waits for it.
+
+---
+
+# Addendum 4, 7 September — the code fix landed; two operator steps have not
+
+## Made, in code, on this branch
+
+Both drifted reads now go through one resolver each, new location first and the legacy shape as a
+fallback, so a replayed old event or an endpoint pinned back during a rollback still resolves:
+
+- `stripeSubscriptionIdFromInvoice(invoice)` — `parent.subscription_details.subscription`, then
+  `invoice.subscription`. Used by `applyInvoicePaid` and `applyInvoicePaymentFailed`.
+- `stripeCurrentPeriodEndUnix(subscription)` — the earliest usable `items.data[].current_period_end`,
+  then `subscription.current_period_end`. Used by `applySubscription`, the single choke point every
+  Stripe ledger row is written through.
+
+One more thing was wrong on the failure path and is fixed with them: `applyInvoicePaymentFailed`
+returned `status: "past_due"` even when the subscription retrieve had thrown and nothing had moved the
+workspace — a claim persisted verbatim into the `stripeBillingEvents` row next to
+`processingStatus: "processed"`. It now reports `payment_failed_not_applied` with the reason.
+
+**Nothing was deployed.** No `firebase deploy`, no Dashboard change, no secret touched.
+
+## Still open — both need an operator, neither is code
+
+**1. The two invoice events are still not on the live endpoint.** `we_1TgKjqRVZaURcx14uD5VAzvu` still
+listens to exactly the four events recorded above: `checkout.session.completed`,
+`customer.subscription.created`, `.updated`, `.deleted`. Adding `invoice.paid` and
+`invoice.payment_failed` is now the correct move — that ordering was the whole point of Addendum 3 —
+but until it is made *and the fix is deployed*, the invoice half of this work is correct code that
+never runs, and renewals are still not being recorded. This is not "done".
+
+**2. The five null ledger rows are not backfilled.** Read-only count taken today, aggregates only:
+
+```
+  9 subscription ledger rows in production
+    stripe  5  — currentPeriodEnd null on all 5
+    apple   3  — currentPeriodEnd set on all 3
+    google  1  — currentPeriodEnd set
+```
+
+The change is forward-only. A Stripe row is repopulated when the next `customer.subscription.*`
+webhook arrives for it, or when an owner presses **Refresh subscription access**
+(`resyncStripeWorkspaceEntitlements` → `applySubscription`; the `subscriptions.list` objects it reads
+do carry `items`, so that path backfills correctly). Nothing sweeps them on its own, and while a row
+stays null the 36-hour grace window in `firestore.rules` / `storage.rules` has nothing to gate on and
+the expiry reconcile's `where("billingCurrentPeriodEnd", "<", cutoff)` cannot match it.
+
+Unlike the invoice half, the `current_period_end` half needs no endpoint change to start working:
+`customer.subscription.updated` is already subscribed, so the first delivery after a deploy writes a
+real date.
+
+## One thing to watch in the logs
+
+`subscription.items` is a paginated `ApiList` and an embedded sub-list returns at most ten entries. The
+resolver cannot page it without becoming async, so instead it logs
+
+```
+  Stripe subscription items are paginated; the period end is the earliest of the FIRST PAGE only.
+```
+
+Today that line is unreachable — checkout creates exactly one line item. If it ever appears, a
+subscription has more than ten items and the period end being written is the earliest of a page, not
+of the subscription, which is the over-granting direction. That is the point at which the resolver has
+to start paging.

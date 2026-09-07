@@ -1235,11 +1235,28 @@ function createStripeBillingFunctions({
       billingUpdatedBy: "stripe_webhook"
     }, { merge: true });
 
+    // `status` is a claim about what this handler DID, and processStripeEvent
+    // persists it verbatim into the stripeBillingEvents row alongside
+    // processingStatus "processed". Nothing on this path writes billingStatus
+    // itself: past_due only lands via applySubscription, which needs both an id
+    // and a subscription the retrieve actually returned. The retrieve is
+    // caught-and-warned on purpose (the failure stamp must land either way), so
+    // reporting "past_due" unconditionally described a transition that had not
+    // happened — the same shape of untrue-on-its-face record as the drift above.
+    const entitlementResolutionApplied = Boolean(resolution?.updated);
+    const notAppliedReason = entitlementResolutionApplied
+      ? ""
+      : !subscriptionId
+        ? "invoice_without_subscription"
+        : !subscription
+          ? "subscription_retrieve_failed"
+          : String(resolution?.reason || "subscription_not_applied");
     return {
       updated: true,
       workspaceId: workspace.id,
-      status: "past_due",
-      entitlementResolutionApplied: Boolean(resolution?.updated)
+      status: entitlementResolutionApplied ? "past_due" : "payment_failed_not_applied",
+      entitlementResolutionApplied,
+      ...(notAppliedReason ? { entitlementResolutionSkippedReason: notAppliedReason } : {})
     };
   }
 
@@ -2238,9 +2255,22 @@ function createStripeBillingFunctions({
     googlePlayRtdnNotification,
     scheduledBillingEntitlementReconcile,
     stripeWebhook,
-    // Not a deployable function — consumed by deleteMyAccount in index.js and
-    // stripped out before Object.assign(exports, ...).
-    _internal: { cancelWorkspaceStripeSubscriptionsForDeletion }
+    // Not deployable functions — consumed by deleteMyAccount in index.js and by
+    // the tests, and stripped out before Object.assign(exports, ...).
+    _internal: {
+      cancelWorkspaceStripeSubscriptionsForDeletion,
+      // The four webhook appliers are closures over this factory's injected
+      // admin/PLAN_ENTITLEMENTS, so nothing outside could call them and the
+      // only checks over them were reading their source text. A source check
+      // cannot tell "uses the resolver" from "calls the resolver and throws the
+      // answer away", which is exactly how the drift got in. Exposed here so
+      // functions/test/qa/stripe-invoice-api-drift.test.js can run them against
+      // a fake Firestore and assert on what they write.
+      applyCompletedSubscriptionCheckout,
+      applySubscription,
+      applyInvoicePaid,
+      applyInvoicePaymentFailed
+    }
   };
 }
 
@@ -2291,9 +2321,14 @@ function stripeReferenceId(value) {
  * payload replayed from an older API version (or an endpoint pinned back during
  * a rollback) still resolves instead of silently skipping.
  *
- * An empty string is a real answer, not a failure: a one-off or manually issued
- * invoice has no subscription at all, and `parent.type` is then "quote_details".
- * Callers must keep skipping those.
+ * An empty string is a real answer, not a failure, and it has two shapes. The
+ * pinned SDK types `parent` as `Invoice.Parent | null` (Invoices.d.ts:344) and
+ * `Parent.Type` as exactly `'quote_details' | 'subscription_details'`
+ * (Invoices.d.ts:858) — there is no third value meaning "neither". So a one-off
+ * or manually issued invoice carries `parent: null` outright, and only an
+ * invoice generated from a QUOTE carries `parent.type === "quote_details"`.
+ * Both resolve to "" here, by different branches. Callers must keep skipping
+ * them: the bug was that the skip fired for everything, not that it exists.
  */
 function stripeSubscriptionIdFromInvoice(invoice) {
   if (!invoice || typeof invoice !== "object") return "";
@@ -2323,10 +2358,35 @@ function stripeSubscriptionIdFromInvoice(invoice) {
  * "subscriptions whose minimum item current_period_end"), and it is the
  * conservative direction here: this date extends paid access, so the latest end
  * would keep a workspace entitled past what its earliest item paid for.
+ *
+ * That is deliberately NOT the rule the rest of the ledger row uses: planTier,
+ * itemKey and quantity all come from `items.data[0]`
+ * (itemFromMetadataOrSubscription, and the quantity read in
+ * writeStripeSubscriptionLedger). With two items on different cadences the row
+ * therefore describes data[0]'s plan with the earliest item's expiry. The
+ * asymmetry is on purpose and the direction is what settles it: this field
+ * grants access, and under-granting is recovered by the next webhook or by the
+ * owner's own Refresh subscription access, while over-granting is not recovered
+ * at all. Checkout only ever creates one line item (createStripeCheckoutSession
+ * passes a single-entry `line_items`), so today this is reachable only by adding
+ * an item from the Stripe Dashboard.
+ *
+ * `subscription.items` is an ApiList, not an array (Subscriptions.d.ts:190), and
+ * an embedded sub-list returns at most ten entries. Past ten this sees a page,
+ * not the set, so the "earliest" could be later than the real one — the
+ * over-granting direction. Paging it needs a Stripe call, which would make this
+ * resolver async and is not in scope here; instead the truncation is logged
+ * rather than swallowed, and an operator who ever sees that line has to page the
+ * list before this can be trusted.
  */
 function stripeCurrentPeriodEndUnix(subscription) {
   if (!subscription || typeof subscription !== "object") return 0;
 
+  if (subscription.items && subscription.items.has_more === true) {
+    console.warn("Stripe subscription items are paginated; the period end is the earliest of the FIRST PAGE only.", {
+      subscriptionId: String(subscription.id || "")
+    });
+  }
   const items = subscription.items && Array.isArray(subscription.items.data) ? subscription.items.data : [];
   let earliest = 0;
   for (const item of items) {
