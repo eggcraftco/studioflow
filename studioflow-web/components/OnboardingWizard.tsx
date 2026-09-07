@@ -536,7 +536,14 @@ export function OnboardingWizard({
 }
 
 /** Shown once the answers are saved: what we prepared, and the three things
- *  worth doing first — drawn from the goal they picked, not a generic list. */
+ *  worth doing first — drawn from the goal they picked, not a generic list.
+ *
+ *  Each of the three goes somewhere now, and so does the main button. They were
+ *  dead text: the product had already worked out the right next step and then
+ *  made the person go and find it. `onOpen` takes the destination so the shell can
+ *  finish the setup state and route in one go — pressing any of them means the
+ *  same thing ("I am done here, take me there"), and leaving the wizard by two
+ *  different code paths is how the finish state drifts. */
 export function OnboardingReady({
   answers,
   t,
@@ -544,7 +551,7 @@ export function OnboardingReady({
 }: {
   answers: OnboardingAnswers;
   t: (text: string) => string;
-  onOpen: () => void;
+  onOpen: (href?: string) => void;
 }) {
   const workflowLabel = ONBOARDING_WORKFLOWS.find(entry => entry.id === answers.workflow)?.label ?? "";
   const rawKindLabel = ONBOARDING_WORK_KINDS.find(entry => entry.id === answers.workKinds[0])?.label ?? "";
@@ -571,16 +578,26 @@ export function OnboardingReady({
         </header>
         <ol className="onboard-tasks">
           {tasks.map((task, index) => (
-            <li key={task}>
-              <span aria-hidden="true">{index + 1}</span>
-              {t(task)}
+            <li key={task.label}>
+              <button type="button" onClick={() => onOpen(task.href)}>
+                <span className="onboard-task-index" aria-hidden="true">{index + 1}</span>
+                <span className="onboard-task-label">{t(task.label)}</span>
+                <span className="onboard-task-arrow" aria-hidden="true">›</span>
+              </button>
             </li>
           ))}
         </ol>
         <footer className="onboard-foot">
           <span className="onboard-saved">{t("You can change all of this later in Settings.")}</span>
           <div className="onboard-actions">
-            <button type="button" className="onboard-btn onboard-btn-primary" onClick={onOpen}>
+            {/* Lands on the first task rather than wherever the tab happened to
+                be. The old button dropped everybody on the dashboard, which is
+                a wall of empty KPIs on day one. */}
+            <button
+              type="button"
+              className="onboard-btn onboard-btn-primary"
+              onClick={() => onOpen(tasks[0]?.href)}
+            >
               {t("Open my workspace")}
             </button>
           </div>

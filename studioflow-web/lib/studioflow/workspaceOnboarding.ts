@@ -466,6 +466,18 @@ function onboardingPayload(
     showCardShipping: preset.showShipping,
     showCardPriority: preset.showPriority,
     businessTemplateAppliedAt: serverTimestamp(),
+    // The boolean AND the timestamp. Two server readers ask for the boolean with
+    // `=== true` (getSetupChecklist and the admin completion count), so a path
+    // that wrote only the timestamp finished onboarding in a way the server
+    // could not see: the checklist kept offering steps the workspace had already
+    // done. This is the smart/standard template path, which somebody reaches by
+    // going through setup — a genuine completion, so it may say so.
+    //
+    // Deliberately NOT added to saveWorkspaceOnboardingSkip below. Pressing Skip
+    // is declining setup, not completing it, and the one-time backfill
+    // (docs/onboarding/completion-backfill-2026-09-07.md) excluded 22 skippers
+    // for exactly that reason. Skip keeps writing the timestamp and the action.
+    businessOnboardingCompleted: true,
     businessOnboardingCompletedAt: serverTimestamp(),
     businessOnboardingCompletedAction: action,
     businessOnboardingCompletedBy: userId
