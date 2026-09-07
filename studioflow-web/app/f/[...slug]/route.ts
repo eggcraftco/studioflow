@@ -2,9 +2,9 @@ import { NextRequest } from "next/server";
 import {
   MAX_PROXY_BYTES,
   PROXY_DEADLINE_MS,
+  canonicalFileBucket,
   capBytes,
-  declaredLengthExceedsCap,
-  isAllowedFileBucket
+  declaredLengthExceedsCap
 } from "@/lib/studioflow/fileProxyGuards";
 
 export const runtime = "nodejs";
@@ -28,7 +28,15 @@ export const dynamic = "force-dynamic";
 //
 // This route is unauthenticated BY DESIGN: the links go to customers who have no
 // NivaDesk account, and the Firebase download token in `t` is the capability. What
-// it does have to authenticate is the ORIGIN OF THE BYTES — see isAllowedFileBucket.
+// it does have to authenticate is the ORIGIN OF THE BYTES — see canonicalFileBucket.
+//
+// The bucket arrives by TWO routes and both are checked HERE, where it is used:
+// the caller's `?b=`, and the `bucket` field of a fileShares row handed back by
+// nvViewSharedFile. The second is server-side data, which is why it was missed:
+// the gate on the mint side (nvParseFirebaseStorageUrl) is not retroactive and
+// does not land in the same deploy as this file, so a row written before either
+// — or during the window between the two deploys — would otherwise be honoured
+// for ever. A value is checked where it is used or it is not checked.
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -90,8 +98,20 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   // too big), and the byte count through the stream (content-length can be
   // absent, and it can lie). The counter is the one that actually makes the cap
   // true — it aborts mid-transfer, which cancels the upstream body.
+  // `redirect: "manual"` is the fourth bound, and it is about origin rather than
+  // size: without it the allowlist constrains where we ASK for bytes, not where we
+  // READ them from, because a 3xx from the storage host would be followed to any
+  // origin at all and that body served under our hostname with our attachment
+  // header. firebasestorage.googleapis.com does not 3xx an alt=media download, so
+  // this is defence in depth — but it is the one remaining way the bucket check
+  // can be true and the bytes still not be ours. A 3xx now arrives as !upstream.ok
+  // and is answered like any other failure.
   async function streamDownload(fileUrl: string, downloadName: string): Promise<Response> {
-    const upstream = await fetch(fileUrl, { cache: "no-store", signal: AbortSignal.timeout(PROXY_DEADLINE_MS) });
+    const upstream = await fetch(fileUrl, {
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(PROXY_DEADLINE_MS)
+    });
     if (!upstream.ok || !upstream.body) return errorPage("This file could not be downloaded right now.", nivadeskHost);
     if (declaredLengthExceedsCap(upstream.headers.get("content-length"), MAX_PROXY_BYTES)) {
       await upstream.body.cancel().catch(() => {});
@@ -123,7 +143,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
         if (!metaResponse.ok || !meta?.ok || !meta.bucket || !meta.path || !meta.token) {
           return errorPage("This file link has expired or does not exist.", nivadeskHost);
         }
-        const target = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(meta.bucket)}/o/${encodeURIComponent(meta.path)}?alt=media&token=${encodeURIComponent(meta.token)}`;
+        // The stored bucket gets the same identity test as the caller-supplied
+        // one. This row was written by nvCreateFileLink, which now refuses a
+        // foreign bucket — but only for rows written after that deploy, and this
+        // file ships in a different one. Refused with the wording an expired
+        // link gets, since to the customer that is what a dead row is.
+        const sharedBucket = canonicalFileBucket(meta.bucket);
+        if (!sharedBucket) {
+          return errorPage("This file link has expired or does not exist.", nivadeskHost);
+        }
+        const target = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(sharedBucket)}/o/${encodeURIComponent(meta.path)}?alt=media&token=${encodeURIComponent(meta.token)}`;
         return await streamDownload(target, String(meta.fileName || slug[0]));
       } catch {
         return errorPage("This file could not be downloaded right now.", nivadeskHost);
@@ -152,11 +181,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   if (!storagePath || storagePath.includes("..")) return errorPage("This file link is invalid.", nivadeskHost);
   // Identity, not shape. A bucket that is not ours is answered with the same
   // words as an expired link, on purpose: the caller learns nothing about why.
-  if (!isAllowedFileBucket(bucket)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
+  // Everything below uses `ourBucket` — the spelling the allowlist matched —
+  // rather than `bucket`, the caller's; checking one string and using another is
+  // the split that every bypass in this file's history has been made of.
+  const ourBucket = canonicalFileBucket(bucket);
+  if (!ourBucket) return errorPage("This file link is invalid or has expired.", nivadeskHost);
   if (!TOKEN_PATTERN.test(token)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
 
   // Reconstruct the real Firebase Storage download URL (loaded directly by the browser).
-  const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
+  const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ourBucket)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
 
   if (wantsDownload) {
     try {
@@ -170,7 +203,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const safeUrl = escapeHtml(firebaseUrl);
   const safeName = escapeHtml(fileName);
   // Download links stay on THIS host: the route streams the bytes itself.
-  const downloadHref = escapeHtml(`${request.nextUrl.pathname}?b=${encodeURIComponent(bucket)}&t=${encodeURIComponent(token)}&dl=1`);
+  const downloadHref = escapeHtml(`${request.nextUrl.pathname}?b=${encodeURIComponent(ourBucket)}&t=${encodeURIComponent(token)}&dl=1`);
 
   let body: string;
   if (IMAGE_EXTENSIONS.has(ext)) {

@@ -57,7 +57,7 @@ const { createClamavScanner } = require("./security/clamavClient");
 const { createMalwareScanTrigger } = require("./malwareScanTrigger");
 const malwareScanRules = require("./security/malwareScan");
 const remoteFetch = require("./security/remoteFetch");
-const { isAllowedFileBucket } = require("./security/fileBuckets");
+const { canonicalFileBucket } = require("./security/fileBuckets");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
 // admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
@@ -27028,18 +27028,22 @@ function nvParseFirebaseStorageUrl(rawUrl) {
   if (parsed.hostname !== "firebasestorage.googleapis.com") return null;
   const match = parsed.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
   if (!match) return null;
-  const bucket = decodeURIComponent(match[1]);
-  const storagePath = decodeURIComponent(match[2]);
-  const token = parsed.searchParams.get("token") || "";
-  if (!bucket || !storagePath || !token) return null;
   // The host was already pinned above; the BUCKET was not, and the ownership
-  // check that follows this parse is on the storage PATH. So without this line a
+  // check that follows this parse is on the storage PATH. So without this a
   // signed-in member of any self-serve workspace could hand us a download URL for
   // his OWN Firebase project under a companies/<his workspace>/ path, pass the
   // ownership check, and get a fileShares row that turns nivadesk.app into a
   // distribution point for his bytes. Refused here rather than at the call site
   // so a second caller cannot be written without it.
-  if (!isAllowedFileBucket(bucket)) return null;
+  //
+  // canonicalFileBucket returns the allowlist entry, so what gets STORED is the
+  // spelling that was checked. `/v0/b/%20eggcraft-studio.appspot.com/o/…` used to
+  // parse and write " eggcraft-studio.appspot.com" into the row, and every link
+  // built from that row 404s for ever.
+  const bucket = canonicalFileBucket(decodeURIComponent(match[1]));
+  const storagePath = decodeURIComponent(match[2]);
+  const token = parsed.searchParams.get("token") || "";
+  if (!bucket || !storagePath || !token) return null;
   return { bucket, storagePath, token };
 }
 
@@ -27147,6 +27151,19 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
       res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
       return;
     }
+    // Read-time origin check, and it is not a duplicate of the one in
+    // nvParseFirebaseStorageUrl. That one guards the WRITE, so it is not
+    // retroactive: a row minted before it existed keeps its foreign bucket, and
+    // {merge:true} on a path-derived doc id never rewrites the bucket of a row
+    // nobody re-shares. Without this line the mint gate could be perfect and a
+    // single planted row would still make nivadesk.app — and any customer's
+    // branded domain, where the viewer drops our name — a distribution point for
+    // somebody else's project. Worded like an expiry; the caller learns nothing.
+    const bucket = canonicalFileBucket(data.bucket);
+    if (!bucket) {
+      res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
+      return;
+    }
     // Withdrawn or aged out. Both are checked here because this handler is the
     // only thing standing between a short id and the file: it is public, it
     // takes no auth, and before this there was no state it could refuse on.
@@ -27159,10 +27176,10 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
     if (String(req.query.meta || "") === "1") {
       // The web /f/ route streams downloads itself; this hands it the target.
       res.set("content-type", "application/json");
-      res.status(200).send(JSON.stringify({ ok: true, bucket: String(data.bucket), path: String(data.path), token: String(data.token), fileName: String(data.fileName || "file") }));
+      res.status(200).send(JSON.stringify({ ok: true, bucket, path: String(data.path), token: String(data.token), fileName: String(data.fileName || "file") }));
       return;
     }
-    const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(data.bucket)}/o/${encodeURIComponent(data.path)}?alt=media&token=${encodeURIComponent(data.token)}`;
+    const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(data.path)}?alt=media&token=${encodeURIComponent(data.token)}`;
     res.status(200).send(nvFileViewerHtml(firebaseUrl, String(data.fileName || "file"), String(req.query.brand || "") !== "0"));
   } catch (error) {
     console.error("nvViewSharedFile failed:", error);

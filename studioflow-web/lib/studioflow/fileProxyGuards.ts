@@ -8,7 +8,9 @@
 // `studioflow-web`, so neither bundle can import a file from the other. The two
 // copies are held identical by studioflow-web/scripts/check-file-proxy-guards.mjs
 // ("npm run test:file-proxy"), which loads BOTH shipped modules and fails the
-// moment their lists differ. Do not edit one without the other.
+// moment their lists differ — and, because two copies can perfectly agree on a
+// third party's bucket, also pins each list to exactly the two names below.
+// Do not edit one without the other.
 
 /**
  * The buckets a /f/ link may name. An IDENTITY test, not a shape test.
@@ -22,24 +24,46 @@
  * that also carries every portal, tracking, estimate and invoice link we send.
  *
  * Both entries name the SAME bucket. `eggcraft-studio.firebasestorage.app` is the
- * only bucket literal anywhere in this tree; `eggcraft-studio.appspot.com` is the
- * legacy alias Firebase projects still answer to, and a link minted before the
- * rename would carry it. Admitting the alias grants an attacker nothing — it is
- * still our bucket and a valid Firebase download token in `?t=` is still required
- * — while leaving it out would break old customer links silently, with a message
- * that reads like an expiry rather than a bug. The thing to refuse is not the
- * legacy spelling of our bucket; it is somebody else's project.
+ * only bucket of OURS named anywhere in this tree (the census also turns up
+ * `staging-bucket.firebasestorage.app`, a fixture in functions/test/qa/malware-scan.test.js,
+ * and the deliberately-foreign names in the guard tests — no other real project).
+ * `eggcraft-studio.appspot.com` is the legacy alias Firebase projects still answer
+ * to, and a link minted before the rename would carry it; functions/test/qa/files-library.mjs
+ * already exercised both spellings before this guard existed. Admitting the alias
+ * grants an attacker nothing — it is still our bucket and a valid Firebase download
+ * token in `?t=` is still required — while leaving it out would break old customer
+ * links silently, with a message that reads like an expiry rather than a bug. The
+ * thing to refuse is not the legacy spelling of our bucket; it is somebody else's
+ * project.
  */
 export const ALLOWED_FILE_BUCKETS: readonly string[] = Object.freeze([
   "eggcraft-studio.firebasestorage.app",
   "eggcraft-studio.appspot.com"
 ]);
 
+/**
+ * The allowlist entry this bucket IS, or null.
+ *
+ * Returning the matched entry rather than a boolean is the point. The comparison
+ * has to normalise (trim + lowercase, as the old pattern was case-insensitive),
+ * and a guard that normalises for the compare while the caller goes on using the
+ * caller's own spelling is a checked-value/used-value split — the shape of every
+ * bypass in this file's history. It does not reach a foreign bucket here (GCS
+ * bucket names are lowercase-only, so a case-drifted spelling can name our bucket
+ * or nothing), but it did cause a real durable bug: a padded URL such as
+ * `/v0/b/%20eggcraft-studio.appspot.com/o/…` passed the mint-side parser and the
+ * padding was written into the fileShares row, so every link from that row 404s
+ * for ever. Callers use what this returns, not what they passed in.
+ */
+export function canonicalFileBucket(bucket: string | null | undefined): string | null {
+  const candidate = String(bucket ?? "").trim().toLowerCase();
+  if (!candidate) return null;
+  return ALLOWED_FILE_BUCKETS.includes(candidate) ? candidate : null;
+}
+
 /** True only for one of our own buckets. Case-insensitive, as the old pattern was. */
 export function isAllowedFileBucket(bucket: string | null | undefined): boolean {
-  const candidate = String(bucket ?? "").trim().toLowerCase();
-  if (!candidate) return false;
-  return ALLOWED_FILE_BUCKETS.includes(candidate);
+  return canonicalFileBucket(bucket) !== null;
 }
 
 /**
