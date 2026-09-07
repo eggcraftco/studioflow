@@ -1,17 +1,22 @@
 # MCP 1.2.0 — backlog
 
-The non-blocking half of the final gate. The verdict, and the nine issues that produced it, are in
-`docs/mcp-final-gate-result.md`.
+The non-blocking half of the final gate. The verdict is in `docs/mcp-final-gate-result.md`.
 
-Nothing here argues against that verdict. Four kinds of entry: what was verified and holds — recorded so
+**That verdict is now PASS**, re-measured at `01e5ab6c` on 7 September 2026. B2–B9 — the nine findings
+this file was first written beside, minus B1 — are closed and each closure was re-verified against the
+code. B1, the SSRF finding on the assistant's file-fetch paths, is out of scope by operator instruction:
+it is being assessed on its own branch in another worktree, and nothing here or in the gate result says
+anything about its status.
+
+Nothing here argues against that verdict. Six kinds of entry: what was verified and holds — recorded so
 the negatives are not read as unchecked — the eight findings of §2, real but not refusing the branch, each
-with what closing it would take, §4, what the money removal of 7 September walked past, and §5, what the
-documentation pass that followed it walked past. Read them as the list the next change is measured
-against.
+with what closing it would take, §4, what the money removal of 7 September walked past, §5, what the
+documentation pass that followed it walked past, and §6, what the deterministic parity gate noticed and
+did not act on. Read them as the list the next change is measured against.
 
 - Repository: `/Users/gocmen/Developer/studioflow-mcp`, branch `mcp-orchestration`
 - Commit: `3f68dc88` for §1–§3; §4 was added against the tree after the money removal, §5 after the
-  documentation pass that closed the last of B2–B9
+  documentation pass that closed the last of B2–B9, §6 at `01e5ab6c` after the parity gate
 - Date: 7 September 2026
 
 ---
@@ -398,3 +403,53 @@ The pass that closed the remaining documentation findings. Same rule as §4: a l
   unchanged — so nothing is wrong about the evidence; the provenance stamp beside it is simply old.
   Closing it: regenerate on a clean tree, which is the one condition a pass that is itself editing
   `functions/index.js` cannot meet.
+
+---
+
+## 6. Noticed by the deterministic parity gate (7 September 2026, `01e5ab6c`)
+
+The gate passed on all five checks. Nothing below is a disagreement between the registry, the listing,
+the dispatcher and the documents about the two new capabilities, and nothing below touches the flags-off
+byte-identity, the money invariant or the customer-search invariant. Each was measured, not read.
+
+- **The design still tells the reviewer that 1.2.0 corrects `create_inventory_item`'s advertised scope,
+  and it does not.** `docs/mcp-orchestration-design.md:1902-1904` lists, among the runtime corrections
+  the submission ships, "OAuth scope enforcement per tool, which also corrects `create_inventory_item`
+  from `orders.read` to `orders.write` (§1.4.4)". The registry deliberately keeps the read scope —
+  `functions/orchestrator/registry.js:637-641`, whose own comment says "a write tool advertising a read
+  scope … correcting it is a change to the OAuth surface and belongs with the 1.2.0 submission, not
+  here" — and the builder emits `["orders.read"]` for that tool in all eight flag states, verified by
+  running `registry.scopesFor("create_inventory_item")` and by reading the emitted `securitySchemes`.
+  `:221` (design table row 21) states the same intent as a proposal, "(default orders.read, wrong) →
+  orders.write", which is honest; `:1904` states it as something the release does. `:1560` compounds it
+  by naming a test case that does not exist — "scope enforcement: a token without `orders.write` cannot
+  call `create_inventory_item`" — while `functions/test/qa/mcp-scope-enforcement.test.js` has no
+  `create_inventory_item` case at all. Not a gate failure: `create_inventory_item` is not one of the two
+  new capabilities, and it is a pre-existing hidden tool. Closing it: either make the correction and add
+  the test `:1560` promises, or move `:1904` into the design's proposal voice and say the wire keeps
+  `orders.read` for this release.
+- **The §7 release-note text says "two read-only tools" while §5.8 recommends a flip that puts three
+  new tools on the wire, one of them a write tool.** `docs/mcp-submission-1.2.0.md:600` opens the
+  paste-to-OpenAI block with "**New in this version:** two read-only tools", which is exactly right for
+  `NIVADESK_MCP_ORCHESTRATOR` on its own. `:524-526` (§5.8) recommends "all three flags together, one
+  submission, so the reviewer sees the finished surface once", and under that flip the reviewer also
+  receives `create_inventory_item` — never published before, `readOnlyHint: false`, `openWorldHint:
+  true` — for the first time. The document is not inconsistent with itself: §3's table at `:203` names
+  that tool under its own flag, §2.5 at `:164-167` names it in the guide bullet, and the design at
+  `:1914-1915` explains that it is pre-existing rather than new. But the block that is actually pasted
+  to the reviewer describes two of the three tools that would appear. This is the same root as the §6
+  step 8 item in §5 above. Closing it: either name the third tool in the §7 block with a sentence
+  saying it is a pre-existing hidden tool now being published, or make §5.8 recommend flipping the
+  orchestrator flag alone, so what §7 describes is what the wire carries.
+- **`docs/evidence/tools-list-candidate-flags-off.json`'s `meta` block is still stale, and the one
+  condition for closing it is now met.** The entry in §5 above records the staleness and says "Closing
+  it: regenerate on a clean tree, which is the one condition a pass that is itself editing
+  `functions/index.js` cannot meet." The gate run changed no code, so the tree was clean throughout:
+  `meta.commit` reads `75fa8ff4…` and `meta["functions/index.js sha256 …"]` reads `f2ca4b98…` while the
+  tree is at `01e5ab6c` with `functions/index.js` at `1e329911…`. The evidence itself is sound — the
+  harness re-derives and compares the `tools` array, which matches, and the listing hash
+  `7c838fb68a5b6e97…` is unchanged — so this is a provenance stamp, not a wrong measurement. It was
+  deliberately left alone here because the gate's instruction was to change no code unless a suite is
+  red, and regenerating is a change rather than a report. Closing it: `node
+  docs/evidence/capture-tools-list.js --write` on a clean tree, then confirm the diff touches only
+  `meta` and that both `listingSha256` values still read `7c838fb68a5b6e97…`.
