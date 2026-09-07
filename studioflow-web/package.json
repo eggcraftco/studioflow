@@ -12,7 +12,8 @@
     "build:emulator": "NEXT_PUBLIC_FIREBASE_EMULATOR=1 next build",
     "start:emulator": "NEXT_PUBLIC_FIREBASE_EMULATOR=1 next start",
     "build:next": "next build",
-    "test:finance": "node scripts/check-finance-vectors.mjs"
+    "test:finance": "node scripts/check-finance-vectors.mjs",
+    "test:file-proxy": "node scripts/check-file-proxy-guards.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

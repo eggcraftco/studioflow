@@ -1,4 +1,11 @@
 import { NextRequest } from "next/server";
+import {
+  MAX_PROXY_BYTES,
+  PROXY_DEADLINE_MS,
+  capBytes,
+  declaredLengthExceedsCap,
+  isAllowedFileBucket
+} from "@/lib/studioflow/fileProxyGuards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,11 +15,21 @@ export const dynamic = "force-dynamic";
 // A masked link looks like:
 //   https://nivadesk.app/f/companies/<cid>/client_files/photo.jpg?b=<bucket>&t=<token>
 //
-// The address bar stays on nivadesk.app, but the actual file bytes are loaded by
-// the viewer's browser DIRECTLY from Firebase Storage — they never pass through
-// our server. This route only returns a tiny HTML shell (a few KB).
+// The address bar stays on nivadesk.app. For VIEWING, the bytes are loaded by the
+// viewer's browser directly from Firebase Storage and this route returns only a
+// tiny HTML shell (a few KB).
+//
+// For DOWNLOADING (?dl=1, added 2026-08-27) that is not true: streamDownload below
+// fetches the file server-side and pipes it through this host, so the Download
+// button never has to show or CORS-fetch the storage URL. This comment used to say
+// the bytes never pass through our server, full stop — which is the sentence that
+// talks a reviewer out of looking for a size cap. They do pass through, and what
+// bounds them lives in lib/studioflow/fileProxyGuards.ts.
+//
+// This route is unauthenticated BY DESIGN: the links go to customers who have no
+// NivaDesk account, and the Firebase download token in `t` is the capability. What
+// it does have to authenticate is the ORIGIN OF THE BYTES — see isAllowedFileBucket.
 
-const BUCKET_PATTERN = /^[a-z0-9._-]+\.(appspot\.com|firebasestorage\.app)$/i;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 function escapeHtml(value: string): string {
@@ -67,11 +84,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   // the Download button never has to show (or CORS-fetch) the storage URL.
   const wantsDownload = searchParams.get("dl") === "1";
 
+  // Three bounds, because any one of them alone is a bound in name only:
+  // the deadline (a request cannot hold a connection for ever), the declared
+  // length (refuse before a byte moves when the upstream is honest about being
+  // too big), and the byte count through the stream (content-length can be
+  // absent, and it can lie). The counter is the one that actually makes the cap
+  // true — it aborts mid-transfer, which cancels the upstream body.
   async function streamDownload(fileUrl: string, downloadName: string): Promise<Response> {
-    const upstream = await fetch(fileUrl, { cache: "no-store" });
+    const upstream = await fetch(fileUrl, { cache: "no-store", signal: AbortSignal.timeout(PROXY_DEADLINE_MS) });
     if (!upstream.ok || !upstream.body) return errorPage("This file could not be downloaded right now.", nivadeskHost);
+    if (declaredLengthExceedsCap(upstream.headers.get("content-length"), MAX_PROXY_BYTES)) {
+      await upstream.body.cancel().catch(() => {});
+      return errorPage("This file could not be downloaded right now.", nivadeskHost);
+    }
     const safeDownloadName = downloadName.replace(/["\r\n\\]/g, "").slice(0, 180) || "file";
-    return new Response(upstream.body, {
+    return new Response(upstream.body.pipeThrough(capBytes(MAX_PROXY_BYTES)), {
       status: 200,
       headers: {
         "content-type": upstream.headers.get("content-type") || "application/octet-stream",
@@ -123,7 +150,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const fileName = pathSegments[pathSegments.length - 1] || "file";
 
   if (!storagePath || storagePath.includes("..")) return errorPage("This file link is invalid.", nivadeskHost);
-  if (!BUCKET_PATTERN.test(bucket)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
+  // Identity, not shape. A bucket that is not ours is answered with the same
+  // words as an expired link, on purpose: the caller learns nothing about why.
+  if (!isAllowedFileBucket(bucket)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
   if (!TOKEN_PATTERN.test(token)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
 
   // Reconstruct the real Firebase Storage download URL (loaded directly by the browser).

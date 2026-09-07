@@ -57,6 +57,7 @@ const { createClamavScanner } = require("./security/clamavClient");
 const { createMalwareScanTrigger } = require("./malwareScanTrigger");
 const malwareScanRules = require("./security/malwareScan");
 const remoteFetch = require("./security/remoteFetch");
+const { isAllowedFileBucket } = require("./security/fileBuckets");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
 // admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
@@ -27031,6 +27032,14 @@ function nvParseFirebaseStorageUrl(rawUrl) {
   const storagePath = decodeURIComponent(match[2]);
   const token = parsed.searchParams.get("token") || "";
   if (!bucket || !storagePath || !token) return null;
+  // The host was already pinned above; the BUCKET was not, and the ownership
+  // check that follows this parse is on the storage PATH. So without this line a
+  // signed-in member of any self-serve workspace could hand us a download URL for
+  // his OWN Firebase project under a companies/<his workspace>/ path, pass the
+  // ownership check, and get a fileShares row that turns nivadesk.app into a
+  // distribution point for his bytes. Refused here rather than at the call site
+  // so a second caller cannot be written without it.
+  if (!isAllowedFileBucket(bucket)) return null;
   return { bucket, storagePath, token };
 }
 
