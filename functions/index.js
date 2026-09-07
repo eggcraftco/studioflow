@@ -56,6 +56,7 @@ const { defineSecret } = require("firebase-functions/params");
 const { createClamavScanner } = require("./security/clamavClient");
 const { createMalwareScanTrigger } = require("./malwareScanTrigger");
 const malwareScanRules = require("./security/malwareScan");
+const remoteFetch = require("./security/remoteFetch");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
 // admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
@@ -24648,8 +24649,11 @@ async function nvChatGPTCreateInventoryItem(context, args = {}) {
   const photoUrl = nvCleanString(photo?.download_url || args.photoUrl || "", 2000);
   if (photoUrl) {
     try {
-      const source = /^https:\/\//i.test(photoUrl) ? photoUrl : nvAssertPublicHttpsUrl(photoUrl);
-      const response = await fetch(source, { redirect: "follow", headers: { Accept: "image/*" } });
+      // One door: validated and fetched are the same value. The ternary that
+      // used to be here sent every https URL — i.e. every hostile one — straight
+      // to fetch, and handed the guard only inputs the guard was certain to
+      // reject. Redirects are refused inside nvFetchRemoteDocument.
+      const response = await nvFetchRemoteDocument(photoUrl, "image/*");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const buffer = Buffer.from(await response.arrayBuffer());
       if (buffer.length > 0 && buffer.length <= 15 * 1024 * 1024) {
@@ -24881,22 +24885,29 @@ async function nvChatGPTSearchBankTransactions(context, args = {}) {
 
 const NV_RECEIPT_MIME_ALLOWLIST = ["image/", "application/pdf", "text/html", "text/plain", "application/octet-stream"];
 
-/** Blocks link fetches that point back inside our own network (SSRF). */
-function nvAssertPublicHttpsUrl(rawUrl) {
-  let url;
-  try { url = new URL(rawUrl); } catch { throw new HttpsError("invalid-argument", "receiptUrl is not a valid URL."); }
-  if (url.protocol !== "https:") throw new HttpsError("invalid-argument", "receiptUrl must be an https link.");
-  const host = url.hostname.toLowerCase();
-  const blocked = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || host === "metadata.google.internal";
-  const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
-  const privateIp = isIp && (() => {
-    const [a, b] = host.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
-  })();
-  if (blocked || privateIp || host.startsWith("[")) {
-    throw new HttpsError("invalid-argument", "receiptUrl must point to a public https address.");
+// nvAssertPublicHttpsUrl used to live here: a validator you called, got a
+// string back from, and then fetched separately. That shape is the defect —
+// it lets the checked URL and the fetched URL drift apart, which is exactly
+// what happened at both call sites — so it is gone rather than rewritten.
+// There is no way to validate a caller's URL without also fetching it through
+// the same call. The rules themselves are in security/remoteFetch.js.
+
+/**
+ * The single door for fetching a URL a caller supplied.
+ *
+ * Both remote-document sinks (the inventory photo and the bank receipt) go
+ * through here and nowhere else, so the URL that is validated is by
+ * construction the URL that is fetched. Redirects are refused, not followed —
+ * see security/remoteFetch.js, including the one supported way to re-enable
+ * them if that is ever wanted.
+ */
+async function nvFetchRemoteDocument(rawUrl, accept) {
+  try {
+    return await remoteFetch.safeRemoteFetch(rawUrl, { accept });
+  } catch (error) {
+    if (error instanceof remoteFetch.UnsafeUrlError) throw new HttpsError("invalid-argument", error.message);
+    throw error;
   }
-  return url.toString();
 }
 
 function nvEscapeHtml(value) {
@@ -24948,11 +24959,20 @@ async function nvChatGPTAttachBankReceipt(context, args = {}) {
       : null;
 
     if (chatFileUrl || linkUrl) {
-      const source = chatFileUrl && /^https:\/\//i.test(chatFileUrl) ? chatFileUrl : nvAssertPublicHttpsUrl(linkUrl);
+      // Whichever URL is actually fetched is the one validated. Previously
+      // these were two different variables: the guard checked linkUrl and the
+      // fetch used chatFileUrl, so on the live path (linkUrl is always empty
+      // unless NV_MCP_EMAIL_RECEIPTS is on) the guard's only working branch was
+      // dead code and the fetched URL was never checked at all.
+      const source = chatFileUrl || linkUrl;
       let response;
       try {
-        response = await fetch(source, { redirect: "follow", headers: { Accept: "application/pdf,image/*,text/html;q=0.8,*/*;q=0.5" } });
+        response = await nvFetchRemoteDocument(source, "application/pdf,image/*,text/html;q=0.8,*/*;q=0.5");
       } catch (error) {
+        // A refusal is not a network failure: let it through as the
+        // invalid-argument it is, rather than reporting the caller's own
+        // hostile link as our side being unavailable.
+        if (error instanceof HttpsError) throw error;
         throw new HttpsError("unavailable", `Could not download the document (${error?.message || "network error"}).`);
       }
       if (!response.ok) throw new HttpsError("unavailable", `Could not download the document (HTTP ${response.status}).`);
