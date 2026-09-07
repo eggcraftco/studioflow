@@ -353,3 +353,21 @@ out of step. That is now measured rather than asserted:
   `chatgpt_connection`, and the marketplace-block audit row carries `source: ctx.channel.type`.
 
 W2 is unblocked from the MCP side. It is not unblocked by this document for anything on its own side.
+
+## 10. Re-run independently, on the gated commit, by a second party
+
+Everything in §0–§9 was produced by the gate agent. The three claims that decide the gate were then
+re-run from scratch on the working tree at `4c942d0b`, by a different reader, with no cached result
+in between. This section is that second record; it is not a copy of the first.
+
+| Claim | Re-run command | Result |
+|---|---|---|
+| The two kept capabilities emit no money | `node test/qa/mcp-no-money.test.js` | exit 0 — four checks pass, including *every finished envelope is money-free, in all eight flag states and for every caller* |
+| The branch is green | `npm test` (functions) | **exit 0, 1382 PASS, 0 FAIL** — the suite stops at the first failure, so a clean exit is the whole suite, not a prefix |
+| Flags OFF is production 1.1.1 | `node docs/evidence/capture-tools-list.js` | production `7c838fb6…64984`, candidate `7c838fb6…64984`, **byte-identical**, and both committed snapshots still match |
+
+The count moved from the 1370 the demonetise agent reported to 1382 because the alignment and gate
+passes added checks; no test was removed to reach a clean run.
+
+**Gate verdict, seconded: PASS.** Nothing here was deployed, no flag was turned on, and the branch is
+pushed to `origin/mcp-orchestration` only so the work is not held on one machine.
