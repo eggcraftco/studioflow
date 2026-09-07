@@ -404,3 +404,65 @@ All under
 | `read_livemode.js`, `read_events.js`, `read_billing_agg.js`, `read_stripe_subs.js`, `probe1-6.js` | read-only Firestore aggregates |
 
 Code references are to `/Users/gocmen/Developer/studioflow-app/functions/stripeBilling.js` unless stated.
+
+---
+
+# Addendum, 7 September — the live account identified, and a second symptom of the same split
+
+## The live Stripe account is `acct_1TcRj7RVZaURcx14`
+
+Not guessed and not read from a secret. Stripe's own error responses to our production key carry it:
+
+```
+request_log_url: 'https://dashboard.stripe.com/acct_1TcRj7RVZaURcx14/workbench/logs?object=req_...'
+x-stripe-routing-context-priority-tier: 'livemode-critical'
+```
+
+Eleven such lines across `createstripecheckoutsession` in the last 30 days. The `livemode` routing tier
+confirms these were live-mode API calls, so this is the live account, not a sandbox.
+
+**The browser session cannot reach it.** The Chrome profile is signed in to a Stripe user whose only
+account is a *sandbox*, `acct_1UD6fMCaq9fK94tW` ("New business", UK, unnamed, onboarding incomplete,
+**zero webhook endpoints**). Attempting to exit the sandbox returns *"Get your live account to exit
+sandbox — we need to verify some information about you and your business"*, i.e. this login has no live
+account at all. Navigating directly to `dashboard.stripe.com/acct_1TcRj7RVZaURcx14/webhooks` silently
+redirects back to the sandbox — the login is not a member of the live account.
+
+So the seven questions that need the dashboard remain open, and they need a different Stripe login.
+Nothing was created, changed, verified or filled in; the onboarding form was left untouched.
+
+## A second symptom, and it points at the same root cause
+
+`createStripeCheckoutSession` produced **20 error entries in 30 days, all identical**:
+
+```
+StripeInvalidRequestError: No such customer: 'cus_Uc8H6JiloBcleq'
+  at /workspace/stripeBilling.js:1475
+```
+
+That customer id is **stored on a live workspace document**:
+
+| Field | Value |
+|---|---|
+| Workspace | `KSQide…` (truncated) |
+| `billingCustomerId` | `cus_Uc8H6JiloBcleq` |
+| `billingCustomerCreatedAt` | **2026-05-30** |
+| `billingPlan` | `pro_monthly` |
+| `billingProvider` | `shopify` |
+
+Four of 63 workspaces carry a Stripe customer id at all; this is one of them.
+
+**Why it matters, and why it is the same story.** The customer was created on **30 May** — ten days
+before the 9 June boundary this report identifies, where the signing secret rotated to v4 and
+test-mode events stopped while live-mode events began. A customer id minted before that boundary and
+now presented to a **live** key produces exactly this error. It is the same test/live split as the
+webhook 400s, seen from the other side: the webhook shows a signer we cannot verify, this shows a
+customer we cannot fetch.
+
+**It is customer-affecting in a way the webhook 400s were not.** Every checkout attempt from that
+workspace fails with a 500. The mitigating detail is that `billingProvider` is `shopify`, so Stripe may
+not be that workspace's real billing rail — but the code still tries, and still throws.
+
+**Not fixed, nothing changed.** The smallest fix is to treat `resource_missing` on the stored customer
+as "mint a new customer" rather than an unhandled error, which is a code change with its own deploy.
+Recorded here so it is decided rather than rediscovered.
