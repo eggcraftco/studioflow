@@ -466,3 +466,98 @@ not be that workspace's real billing rail — but the code still tries, and stil
 **Not fixed, nothing changed.** The smallest fix is to treat `resource_missing` on the stored customer
 as "mint a new customer" rather than an unhandled error, which is a code change with its own deploy.
 Recorded here so it is decided rather than rediscovered.
+
+---
+
+# Addendum 2, 7 September — the dashboard, read. All seven questions answered.
+
+Read-only inspection of the Stripe Dashboard, Test mode OFF and ON, plus the sandboxes. Nothing was
+rotated, deleted, resent or changed; no signing secret was revealed.
+
+## The answer: two endpoints on one URL, in two different ACCOUNTS
+
+The report's shape was right and its location was wrong. It predicted a live/test split **inside one
+account**. The truth is a **live account and a separate sandbox account**, both pointing at the same
+production URL.
+
+| | **Working signer** | **Failing signer** |
+|---|---|---|
+| Account | **NivaDesk**, `acct_1TcRj7RVZaURcx14` (live) | **NivaDesk sandbox**, `acct_1TcRjHD3VBItFZ5T` |
+| Destination ID | **`we_1TgKjqRVZaURcx14uD5VAzvu`** | **`we_1TcSpBD3VBItFZ5T9i6K9Ytj`** |
+| Name | `dynamic-harmony` | **`NivaDesk Billing Webhook`** |
+| Destination URL | `https://stripewebhook-ukbn4tcyca-nw.a.run.app` | **the same URL** |
+| State | Active | Active |
+| **Error rate** | **0 %** | **100 %** |
+| Listening to | **4 events** | **6 events** |
+| API version | 2026-04-22.dahlia | 2026-04-22.dahlia |
+| Description | *(none)* | "Stripe subscription events for NivaDesk Lite, Pro and Team sandbox billing." |
+
+The server holds exactly one `STRIPE_WEBHOOK_SECRET` (v4). It is the live endpoint's. The sandbox
+endpoint signs with its own, and every one of its deliveries fails verification — hence a 100 % error
+rate on one endpoint and 0 % on the other, from one URL, with one secret. **This is why the same
+secret version on the same revision produced both 200s and 400s.**
+
+**Live test mode is empty.** `acct_1TcRj7RVZaURcx14` in Test mode has **no endpoints at all** — only an
+"Import · 1" offer. So the failing signer was never the live account's test mode, which is what the
+first report inferred from the retry cadence.
+
+## The dropped event types, and who they belong to
+
+Every failed delivery on the sandbox endpoint is **`customer.subscription.deleted`**, `400 ERR`, source
+Automatic. A worked example from the delivery detail:
+
+```
+Event ID     evt_1UClpED3VBItFZ5T4KL04WHi
+Origin       Sep 6, 2026, 7:34:03 PM   (attempts 7:34:03, 7:34:18, 8:35:13 — three, then abandoned)
+Description  review@nivadesk.app's subscription to price_1Tg8EpD3VBItFZ5T3oVrEm02 was canceled
+```
+
+Also failed: Aug 29 01:05:40, Aug 28 23:04:13, and the rest of the pattern the log analysis found.
+
+**They are sandbox subscriptions belonging to `review@nivadesk.app`** — the internal review workspace,
+one of the two addresses in `STRIPE_INTERNAL_TEST_EMAILS`. No paying customer's event was ever dropped.
+That settles the severity question the first report left open on inference: **a tidy-up, not an
+incident**, now on observed evidence rather than on the absence of complaints.
+
+## A separate gap the dashboard exposed, which nobody was looking for
+
+The handler switches on **six** event types. The two endpoints do not agree on which it receives:
+
+| Event type | Sandbox endpoint | **Live endpoint** |
+|---|---|---|
+| `checkout.session.completed` | yes | yes |
+| `customer.subscription.created` | yes | yes |
+| `customer.subscription.updated` | yes | yes |
+| `customer.subscription.deleted` | yes | yes |
+| **`invoice.paid`** | yes | **NO** |
+| **`invoice.payment_failed`** | yes | **NO** |
+
+**Production does not subscribe to `invoice.paid` or `invoice.payment_failed`.** The code handles both
+— `applyInvoicePaid` and `applyInvoicePaymentFailed` exist and are wired — but Stripe never sends them
+to the live endpoint, so a renewal payment and a failed payment are both invisible in production. The
+sandbox endpoint, ironically, is the one configured correctly.
+
+This is not the cause of the 400s and it is not urgent while no live subscription exists. It matters
+the moment one does: renewals would not be recorded and a failed payment would not be noticed. It is
+also the reason the seven skipped `invoice.paid → invoice_without_subscription` rows in the ledger are
+all test-mode — they could only ever have arrived from the sandbox.
+
+## The seven questions, answered
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Exact endpoint Stripe is calling | `https://stripewebhook-ukbn4tcyca-nw.a.run.app` — **both** endpoints target it |
+| 2 | Which endpoint ID / account | Working `we_1TgKjqRVZaURcx14uD5VAzvu` on `acct_1TcRj7RVZaURcx14`; failing `we_1TcSpBD3VBItFZ5T9i6K9Ytj` on `acct_1TcRjHD3VBItFZ5T` |
+| 3 | Does the configured secret match | Yes — for the live endpoint. It cannot match the sandbox one. **Do not rotate** |
+| 4 | Duplicates / stale, or expected | Sandbox subscription cancellations for an internal review account, retried 3× then abandoned. Not events production expects |
+| 5 | Which event types dropped | **`customer.subscription.deleted`** only, all from the sandbox |
+| 6 | Should business state have changed | **No.** They concern `review@nivadesk.app` in a sandbox, not a paying workspace |
+| 7 | Another active successful endpoint | Yes — the live one, 0 % error. No endpoint exists outside these two in this login's accounts |
+
+## Smallest fix, not applied
+
+Point the sandbox endpoint somewhere that is not production — a sandbox listener or a separate
+function — or disable it. Do **not** add its secret as a second `defineSecret`: that would make the
+production handler accept sandbox events signed by a sandbox key, and the live `STRIPE_SECRET_KEY`
+could not fetch their objects anyway. Separately, and on its own merits, add `invoice.paid` and
+`invoice.payment_failed` to the live endpoint before the next real subscription.
