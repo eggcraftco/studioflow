@@ -213,11 +213,31 @@ been created and will be reviewed shortly."*
 
 ## Google's response — archived 2026-09-07, case 75151719
 
-**Provenance, stated plainly:** the conclusions below were relayed by the operator on 2026-09-07 and
-are recorded verbatim as they were given. The assistant has **not** read the case page itself, so the
-exact timestamp of Google's reply is not filled in here. It should be taken from
-`console.cloud.google.com/support/cases/detail/v2/75151719?project=nivadesk-amazon` and added to the
-event table above; the verbatim text of the reply belongs in this section beneath these conclusions.
+**Provenance — now first-hand.** The conclusions were first relayed by the operator; the reply itself
+was afterwards read directly from the support thread in `contact@eggcraft.co.uk`, so this section is
+no longer second-hand.
+
+| Field | Value |
+|---|---|
+| From | Google Cloud Support `<cloudsupport@google.com>`, engineer **Murali Selvaraj** |
+| Received | **2026-09-07 06:49** local (BST) |
+| Thread | `Google Cloud Support 75151719: Event Threat Detection and Cloud Run Threat Detection produce no findings for Google's documented test procedures on a project` |
+
+**Three things in the reply that the relayed summary did not carry, and that change what we do next:**
+
+1. **Google recommended the retest we then ran.** *"Now that well over 24 hours have passed since your
+   Premium trial activation, we recommend deploying a new Cloud Run job and running the exact same
+   base64 command to verify the finding triggers successfully."* The third test was done at Google's
+   own request, not on our initiative.
+2. **CRTD writes no watcher telemetry at all.** *"CRTD does not write its own execution logs or watcher
+   process status to your instance/container logs. There is no customer-visible log indicator that the
+   watcher process has attached or stopped."* This **answers** the open question in
+   `crtd-investigation-2026-09-05.md` about where `resource type threat_detector` logs should appear:
+   nowhere. That question must not be asked again — only Google can see whether the watcher attached.
+3. **The ETD mechanism, in their words.** *"When Security Command Center encounters a finding without
+   project-level metadata, it automatically escalates and classifies it as an organization-level
+   finding. Because your organization is currently on the Standard tier … the finding is essentially
+   dropped from your project-level Premium view."*
 
 ### What Google confirmed
 
