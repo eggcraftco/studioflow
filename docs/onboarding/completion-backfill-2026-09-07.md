@@ -57,3 +57,34 @@ Ids written: `scratchpad/backfill/written-ids.json`. Full population with both e
 The 22 Skip workspaces are now their own recovery cohort — **"explicitly skipped onboarding"** — and
 must not receive the messaging meant for users who completed setup and failed to activate. They did not
 fail at setup; they declined it, which is a different question and probably a different answer.
+
+---
+
+## Re-measurement after the backfill (the operator asked for this)
+
+| Boundary input | Re-measured | Report said |
+|---|---|---|
+| companies | 63 | 63 |
+| no `companySettings` doc at all (cohort A rule) | 22 | 21 — **see note** |
+| stamp with `action == "skip"` (cohort B* rule) | 22 | 22 |
+| stamp with a real completion action | 18 | — |
+| live workspaces with the boolean now true | **18** (5 pre-existing + 13 written) | — |
+| ...of which pressed Skip | **0** | — |
+
+**The A difference is not a data conflict.** My rule was the plain one, "no settings document". The
+cohort report resolves an overlap by testing activation FIRST, which moves one workspace that satisfies
+both A and D into D — and the report states the alternative outright: *"Reverse the order and A becomes
+22, D becomes 5."* My 22 is exactly that predicted number, which is corroboration rather than
+disagreement.
+
+**Verdict: the backfill is neutral to the cohort segmentation, as expected.** The five cohorts key on
+`businessOnboardingCompletedAt` and `businessOnboardingCompletedAction`, never on the boolean. The
+boolean's only consumers are the two strict server readers — `getSetupChecklist` and the admin count —
+which is exactly the visibility the backfill was for. No cohort number moves, so no recovery decision
+is invalidated.
+
+**What the backfill did NOT fix, and must not be mistaken for fixed.** `functions/lifecycle/derive.js:69`
+reads only `businessOnboardingCompletedAt` and ignores the action field, so `getActivationFunnel` still
+counts all 22 Skip workspaces as having completed onboarding — over-reporting completion by roughly
+2.5x on the operator's own dashboard. That is a one-line server change in a file this phase is not
+allowed to touch, and it is listed as a backend item rather than silently left.
