@@ -208,3 +208,44 @@ been created and will be reviewed shortly."*
   public (keep the project number, drop the identities), or the Google Cloud Community forum.
 
 - 2026-09-06 01:35 UTC check (operator's Chrome session, case page): status **New**, priority P3, no response from Google yet.
+
+---
+
+## Google's response — archived 2026-09-07, case 75151719
+
+**Provenance, stated plainly:** the conclusions below were relayed by the operator on 2026-09-07 and
+are recorded verbatim as they were given. The assistant has **not** read the case page itself, so the
+exact timestamp of Google's reply is not filled in here. It should be taken from
+`console.cloud.google.com/support/cases/detail/v2/75151719?project=nivadesk-amazon` and added to the
+event table above; the verbatim text of the reply belongs in this section beneath these conclusions.
+
+### What Google confirmed
+
+1. **The SCC pipeline, service agents and Pub/Sub delivery chain are confirmed healthy by Google.**
+2. **`project is already onboarded` / `FAILED_PRECONDITION` has no residual effect.**
+3. **CRTD supports europe-west2 and project-level Premium activation.**
+4. **Google states initial CRTD watcher propagation may take up to 24 hours.**
+5. **ETD Malware: Bad Domain may be promoted to organization-level when project metadata is absent,
+   and may therefore not appear because the organization is Standard tier.**
+
+### What each conclusion closes, and what it does not
+
+- Conclusions 1 and 2 remove the two explanations the investigation had been carrying: the pipeline is
+  not broken and the onboarding error is not the cause. Both records in
+  `crtd-investigation-2026-09-05.md` and `etd-investigation-2026-09-05.md` had listed these as open
+  possibilities; they are now closed by the vendor.
+- Conclusion 3 removes the region and activation-scope hypothesis for CRTD specifically.
+- **Conclusion 4 is the one that invalidated both earlier CRTD tests.** Both were run within
+  10 h 18 min of enablement (02:21:20 UTC), well inside a 24-hour propagation window. Neither was a
+  fair test of the detector, which is why a third test was run — see below.
+- **Conclusion 5 changes what an absent ETD finding means.** If Bad Domain is promoted to the
+  organisation, and the organisation is Standard tier, then no amount of testing from inside a
+  Premium *project* can make that finding appear. Repeating the VM test cannot answer the question;
+  only Google can say whether the promoted finding is reachable at all under this tier split.
+
+### Status of control 3 (IDS / IPS / threat detection)
+
+**Still In Progress. Explicitly NOT marked Passed.** Nothing above demonstrates a detector firing;
+it explains why two tests were not valid and why a third class of test may never be. Passing this
+control requires an observed finding, or a written statement from Google that one is unobtainable in
+this configuration — neither of which exists yet.
