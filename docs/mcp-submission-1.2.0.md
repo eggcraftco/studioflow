@@ -202,10 +202,16 @@ Nothing changes until a flag is set to `"1"` in the deployed function's environm
 | none (today) | **19** | — |
 | `NIVADESK_MCP_EMAIL_RECEIPTS` | 19 | `attach_bank_receipt` gains `receiptUrl` / `emailReceipt` inputs and two description sentences |
 | `NIVADESK_MCP_INVENTORY` | **21** | adds `search_inventory`, `create_inventory_item`; one sentence appended to `attach_bank_receipt`'s description |
-| `NIVADESK_MCP_ORCHESTRATOR` | **21** | adds the two read tools the reduction kept — `search_inventory` (with the filters and the freshness block) and `search_commerce_orders`; **two annotation corrections** (§3.1); two extra `initialize.instructions` lines |
+| `NIVADESK_MCP_ORCHESTRATOR` | **21** | adds the two read tools the reduction kept — `search_inventory` (with the filters and the freshness block) and `search_commerce_orders`; **three annotation corrections** across two tools (§3.1); two extra `initialize.instructions` lines |
 | inventory + orchestrator | **22** | all of the above, and **not 23**: `search_inventory` is the one tool both flags publish, so it is listed once (§5.1) |
 
-### 3.1 The two annotation corrections — the headline of the release notes, not a footnote
+### 3.1 The three annotation corrections — the headline of the release notes, not a footnote
+
+Three hint values, across two tools. The heading said "two" until 7 September 2026 while the table
+under it carried three rows and `registry.correctionsPending()` held three — the §7 release-note block
+then named only the two `openWorldHint` changes, so the paste-to-OpenAI text under-declared a value that
+moves on the wire the moment the flag is set. The count here, in §3's table row above and in §7 is read
+back out of the registry by `mcp-tool-annotations.test.js`.
 
 | tool | hint | 1.1.1 serves | verified | why the verified value is right |
 |------|------|--------------|----------|--------------------------------|
@@ -215,7 +221,10 @@ Nothing changes until a flag is set to `"1"` in the deployed function's environm
 
 The third row is a decision, not just a report: either the no-op guard ships and the hint stays `true`
 honestly (§5.2), or the hint goes out as `false`. The registry's `pendingGuard` mechanism fails the
-build if somebody adds the guard without flipping the hint, so the two cannot drift.
+build if somebody adds the guard without flipping the hint, so the two cannot drift. Until that decision
+is taken the registry serves `false` behind the flag, which is why the release notes declare three
+changes rather than two; if the guard ships, `correctionsPending()` drops to two and the count in this
+document has to follow it in the same commit — the test compares the two.
 
 These three are the ONLY hints on which the served listing and the verified table are allowed to
 differ, and they are declared one by one in `registry.LIVE_HINT_EXEMPTIONS`. The load-time check that
@@ -568,12 +577,17 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 > justification is missing, or if a hint disagrees with the outward effects the tool declares. Each tool
 > carries a written justification per hint.
 >
-> **Two values changed since 1.1.1, and both are corrections we found by tracing each tool's effect
-> rather than its handler.** `create_order` and `update_order_status` are now `openWorldHint: true`:
-> creating an order or changing its status fires the workspace's own notification rules, which e-mail the
-> customer — and send an SMS where the workspace has SMS enabled — through our provider. The write is
-> ours; the message leaves our domain, so the hint is true. We would rather correct this ourselves than
-> defend the old value.
+> **Three values changed since 1.1.1, across two tools, and all three are corrections we found by
+> tracing each tool's effect rather than its handler.** `create_order` and `update_order_status` are now
+> `openWorldHint: true`: creating an order or changing its status fires the workspace's own notification
+> rules, which e-mail the customer — and send an SMS where the workspace has SMS enabled — through our
+> provider. The write is ours; the message leaves our domain, so the hint is true. And
+> `update_order_status` is now `idempotentHint: false`: a repeat with the same status appends a second
+> entry to the order's history, because every entry is minted with a fresh id and timestamp and the
+> array-union that stores it therefore cannot deduplicate. No second customer message goes out — the
+> trigger returns early when the status has not changed — but a new sub-record the user can see in the
+> order's own history is enough to fail the definition below. We would rather correct all three
+> ourselves than defend the old values.
 >
 > **Definitions we used** (also in the tool justifications): read-only means no write of workspace state,
 > no external call with a side effect and no trigger — with one disclosed exception, an access-log row
@@ -583,8 +597,13 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 > trigger the workspace configured.
 >
 > **New in this version:** two read-only tools — one that searches orders across a workspace's sales
-> channels and one that searches its stock. Both report how fresh their data is and what they could not
-> include. **Neither reports any monetary value**: no order total, nothing paid or outstanding, no
+> channels and one that searches its stock. Both say what they could not include: a read that hit its
+> document limit and a result page shorter than the number of matches are each reported in the answer
+> rather than left for the model to notice. Freshness is reported where there is a sync to report on:
+> the order search names the last successful sync of each channel that contributed rows to that answer,
+> so a workspace with no shop connected is told about no channels rather than being shown a roster of
+> zeros; stock has no connector at all, so the stock search says its freshness is not applicable instead
+> of stating a sync time it does not have. **Neither reports any monetary value**: no order total, nothing paid or outstanding, no
 > refund, no tax, no payout and no currency. The order search reports whether an order is paid as a
 > status word, never as an amount; the workspace's money stays with the finance tools that were already
 > in the app, behind the permissions they already have. Neither writes anything, calls a shop,

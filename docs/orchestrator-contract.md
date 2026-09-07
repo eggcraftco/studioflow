@@ -623,6 +623,20 @@ cannot reach one under any flag. What a second channel may call is the two rows 
 All are reads: class A, assurance 1, no outward effect — which is why a level-1 read binding may call
 every one of them.
 
+**There is no customer search or customer read capability here, none was removed to get to two, and none
+is being added.** The operator's list of what to build named "customer search and read" third and it was
+never built: `run()` has never dispatched a customer capability, `HANDLERS` has no entry whose name
+contains "customer", the registry has no such row in any flag state, and `loaders.DOMAIN_GATES` has no
+`customers` domain — so a capability that wanted one could not read it even if somebody wrote the
+handler. The `customers` name that DOES appear in this document, at §2, is a workspace ACCESS AREA
+(`context.AREA_KEYS`, from the app's own `uidCanAccessWorkspaceArea`); it gates nothing on this surface
+today, because no capability's `permission.area` names it. The operator froze the new surface at two
+capabilities on 7 September 2026, so a customer capability is not deferred work a gateway should design
+around — a channel that needs a person's details reads them where they exist, as the `customer` field on
+an order row, under `search_commerce_orders`' declared `pii: ["name","email"]` and its access-log row.
+`mcp-reduced-surface.test.js` holds that shut from the code side and `orchestrator-contract.test.js`
+from this document's side.
+
 **Neither of them reports money — not a figure, and not a currency.** On 7 September 2026 the operator
 took every monetary field out of both. `search_commerce_orders` used to put a `totals` block on each row
 (`grandTotal`, `paid`, `remaining`, `refunded`, `customerTotal`, `currency`, plus `vatDue` and
@@ -832,8 +846,14 @@ shrinks with it.
 - `test/qa/orchestrator-domain-gates.test.js` — every domain the loader knows is gated or deliberately
   open, no grant opens a domain its row does not name, no capability reads a gated domain for a caller
   without the grant, and the refusal reaches the caller as a sentence.
-- `test/qa/mcp-tool-annotations.test.js` — the registry's four booleans and their justifications, and
-  which tools file a PII row.
+- `test/qa/mcp-tool-annotations.test.js` — the registry's four booleans and their justifications, which
+  tools file a PII row, and the counts and pointers the flip-day documents state about all of that.
+- `test/qa/mcp-no-money.test.js` — §8.1's "neither of them reports money": every key either capability
+  emits, at every depth, in all eight flag states and for a caller holding the financial grant on an
+  advanced plan, refused on a money-shaped NAME rather than on the list of fields removed on
+  7 September 2026. It was named in §8.1 and missing from this list until 7 September 2026, which is the
+  same kind of gap the list exists to close: a channel author reading §11 for the suite would not have
+  found the test that pins §8.1's central claim.
 - `test/qa/mcp-reduced-surface.test.js` — §8.1's "out means out": the eight capabilities the 6 September
   2026 reduction removed have no registry row, appear in no listing and no action list under any of the
   eight flag combinations (one child process each, because the flags are read at require time), are in

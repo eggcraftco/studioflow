@@ -26318,10 +26318,14 @@ const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
 // coded, tested and dispatchable; flip this to "1" and redeploy chatgptMcp once
 // the verdict lands, then tell OpenAI about the two new tools.
 const NV_MCP_INVENTORY = process.env.NIVADESK_MCP_INVENTORY === "1";
-// The 1.2.0 submission flag. Today it carries the two annotation corrections
-// the runtime audit found (create_order and update_order_status reach the
-// customer through notifyCustomerOnStatusChange, and a repeated status write
-// appends a second history entry); the orchestrator read tools join it later.
+// The 1.2.0 submission flag. Today it carries the three annotation corrections
+// the runtime audit found, across two tools: create_order and
+// update_order_status both reach the customer through
+// notifyCustomerOnStatusChange (openWorldHint false → true, on each of them),
+// and a repeated status write appends a second history entry
+// (update_order_status idempotentHint true → false). The count that matters is
+// registry.correctionsPending(), and it is three — which is what the release
+// notes have to declare. The orchestrator read tools join it later.
 // Off, tools/list is the 1.1.1 bytes the review connection is served. The
 // operator flips it as part of a submission, never as part of a merge.
 const NV_MCP_ORCHESTRATOR = process.env.NIVADESK_MCP_ORCHESTRATOR === "1";

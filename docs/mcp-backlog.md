@@ -3,13 +3,15 @@
 The non-blocking half of the final gate. The verdict, and the nine issues that produced it, are in
 `docs/mcp-final-gate-result.md`.
 
-Nothing here argues against that verdict. Three kinds of entry: what was verified and holds — recorded so
+Nothing here argues against that verdict. Four kinds of entry: what was verified and holds — recorded so
 the negatives are not read as unchecked — the eight findings of §2, real but not refusing the branch, each
-with what closing it would take, and §4, what the money removal of 7 September walked past. Read them as
-the list the next change is measured against.
+with what closing it would take, §4, what the money removal of 7 September walked past, and §5, what the
+documentation pass that followed it walked past. Read them as the list the next change is measured
+against.
 
 - Repository: `/Users/gocmen/Developer/studioflow-mcp`, branch `mcp-orchestration`
-- Commit: `3f68dc88` for §1–§3; §4 was added against the tree after the money removal
+- Commit: `3f68dc88` for §1–§3; §4 was added against the tree after the money removal, §5 after the
+  documentation pass that closed the last of B2–B9
 - Date: 7 September 2026
 
 ---
@@ -357,10 +359,42 @@ refusal; each is a line so the next change is measured against it rather than re
   `applyChannelProfile` would be caught only by its own unit checks. `orchestrator-render.test.js` was
   changed on 7 September to exercise the detector explicitly for that reason. Worth knowing before the
   WhatsApp channel publishes a capability that does carry money.
-- **The submission's §7 release-note block is prose that nothing parses for money claims.**
-  `mcp-tool-annotations.test.js` parses the annotation numbers out of `docs/mcp-tool-annotations.md`, and
-  `mcp-reduced-surface.test.js` reads the guide chapter out of the built corpus and checks the names
-  against the registry — but the paste-to-OpenAI paragraph is checked by a person. Two of the three false
-  claims closed on 6 and 7 September lived there. Closing it: extend the annotations test to assert the
-  §7 block names no field the published capabilities do not emit, the way B3's closure already suggests
-  for behaviours.
+- ~~**The submission's §7 release-note block is prose that nothing parses for money claims.**~~
+  **Mostly closed, 7 September 2026.** `mcp-tool-annotations.test.js` now slices every blockquote line
+  under the §7 heading and reads it: the annotation-correction count must equal
+  `registry.correctionsPending()`, every pending hint must be named there, and the "both report how
+  fresh their data is" promise is refused by measuring what the two capabilities actually return on a
+  manual-only snapshot. With the check B3's closure added — a capability name no flag publishes, and a
+  behaviour claim whose producer is unreachable — the block is parsed for its counts, its tool names,
+  its freshness promise and its one producer-backed behaviour claim. What a person still reads alone is
+  a NEW claim about a field, invented in prose no existing pattern matches; giving that the treatment
+  `mcp-no-money.test.js` gives the code — a shape rather than a list — means writing a money detector
+  for English, which is a bigger thing than it looks and was not attempted.
+
+---
+
+## 5. Noticed while finishing the documents (7 September 2026)
+
+The pass that closed the remaining documentation findings. Same rule as §4: a line, not a refusal.
+
+- **The design document's §1.2 runtime tool table still has eight rows whose Flag column is false.** The
+  correction now stands under the table and `mcp-reduced-surface.test.js` requires it to, but the rows
+  themselves still read `NV_MCP_ORCHESTRATOR` over `get_business_attention_summary`,
+  `get_commerce_overview`, `get_channel_performance`, `get_inventory_overview`,
+  `get_payout_reconciliation_overview`, `get_integration_health`, `get_accounting_sync_status` and
+  `get_banking_attention_summary`. They were left because the table carries the annotation reasoning for
+  the rows that DID ship, and cutting eight rows out of a 30-row table is a bigger edit than the
+  documentation pass was asked for. Closing it: either delete the eight rows and renumber, or move them
+  under a heading that says they are the design's proposal rather than the runtime's table.
+- **§6 step 8's probe list names two capabilities where the recommended flip publishes three tools.**
+  The step says "one question per published capability: `search_commerce_orders` and `search_inventory`",
+  and with §5.8's recommended all-three-flags flip `create_inventory_item` is published too — its
+  photo-add is described in the same guide bullet the step tells the operator to move. It is consistent
+  with this repository's use of "capability" (the two `CAPABILITY_NAMES`), so it is not false; it is a
+  gap in a flip-day instruction. Closing it: name the third tool, or say why a write tool is not probed.
+- **`docs/evidence/tools-list-candidate-flags-off.json`'s `meta` block is stale by nine commits.** It
+  records `commit: 75fa8ff4…` and that day's `functions/index.js` sha256. The harness rewrites `meta`
+  only under `--write`, and its verification compares the `tools` array — which still matches, hash
+  unchanged — so nothing is wrong about the evidence; the provenance stamp beside it is simply old.
+  Closing it: regenerate on a clean tree, which is the one condition a pass that is itself editing
+  `functions/index.js` cannot meet.

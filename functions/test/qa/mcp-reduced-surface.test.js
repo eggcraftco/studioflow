@@ -382,6 +382,185 @@ check("the orphaned modules are still on disk, unchanged and unpublished", () =>
   }
 });
 
+/* ------------------------------------------------------------------ *
+ * The third item on the operator's list, which was never built.
+ * ------------------------------------------------------------------ */
+
+check("no customer capability exists anywhere on this surface", () => {
+  // The operator's list of what to build named "customer search and read"
+  // third. It was never written, and on 7 September 2026 the operator froze the
+  // new surface at two capabilities, so it will not be. Nothing was kept or
+  // dropped for it — which is a different claim from the eight above, and needs
+  // its own proof, because a reader of any of these documents could reasonably
+  // assume a third capability is merely deferred.
+  //
+  // Four doors, the same four "out" means for the eight removed names, plus one
+  // this case needs and they did not: a customer capability could not read a
+  // customer even if somebody wrote the handler, because the loader has no
+  // domain for it. `customers` DOES exist as a workspace access AREA
+  // (context.AREA_KEYS), which is why this check names what it is looking at
+  // rather than banning the word.
+  const isCustomerish = (name) => /customer/i.test(String(name));
+
+  for (const entry of registry.TOOL_REGISTRY) {
+    assert.ok(!isCustomerish(entry.name), `the registry publishes ${entry.name}; the surface is frozen at two capabilities`);
+  }
+  for (const name of Object.keys(HANDLERS)) {
+    assert.ok(!isCustomerish(name), `run() dispatches ${name}`);
+  }
+  for (const name of Object.keys(CAPABILITY_ALIASES)) {
+    assert.ok(!isCustomerish(name), `${name} is an alias into the capability table`);
+  }
+  const actions = servedUnder({ emailReceipts: true, inventory: true, orchestrator: true }).actions;
+  for (const name of actions) {
+    assert.ok(!isCustomerish(name), `the MCP dispatcher answers ${name} with every flag on`);
+  }
+  const { DOMAIN_GATES } = require("../../orchestrator/loaders");
+  for (const domain of Object.keys(DOMAIN_GATES)) {
+    assert.ok(!/^customers?$/i.test(domain),
+      `the loader has a "${domain}" domain: a customer capability would now have something to read`);
+  }
+  // And the area key it is NOT: this exists, gates nothing here, and is the one
+  // thing a reader might mistake for the capability.
+  assert.ok(contextModule.AREA_KEYS.includes("customers"),
+    "AREA_KEYS no longer carries `customers`; the contract paragraph that distinguishes the area from the capability needs rewriting");
+  for (const entry of registry.TOOL_REGISTRY) {
+    assert.notStrictEqual(entry.permission && entry.permission.area, "customers",
+      `${entry.name} gates on the customers area; no capability did when the contract said none does`);
+  }
+});
+
+check("the documents that name customer search say plainly that there is none", () => {
+  // Three of these documents raised the question themselves — the operator's
+  // list is quoted in each — and a document that names a capability without
+  // answering whether it exists reads as a roadmap. The contract is here
+  // whether or not it uses the phrase, because it is the document a second
+  // channel is written against: a gateway author planning around a customer
+  // read is the concrete cost of leaving this unstated.
+  const DOCS_DIR = path.join(FUNCTIONS_DIR, "..", "docs");
+  const ALWAYS = ["orchestrator-contract.md"];
+  const named = fs.readdirSync(DOCS_DIR)
+    .filter((name) => name.endsWith(".md"))
+    .filter((name) => /customer search/i.test(fs.readFileSync(path.join(DOCS_DIR, name), "utf8")));
+  const required = [...new Set([...ALWAYS, ...named])];
+  for (const must of ["mcp-orchestration-design.md", "mcp-submission-1.2.0.md", "orchestrator-contract.md"]) {
+    assert.ok(required.includes(must),
+      `${must} no longer raises the customer capability at all; if the paragraph was deleted rather than answered, put it back`);
+  }
+
+  // Both halves have to be said: that it does not exist, and that it is not
+  // being written. The first alone reads as a status report on work in flight.
+  const EXISTS = /(no such capability|there is no customer search|no customer search or customer read capability|never been a customer capability|no assistant surface in this repository can read a customer)/i;
+  const PLANNED = /(not being written|none is being added|is not being added|not being built|will not be)/i;
+  for (const name of required) {
+    // Unwrapped: these documents hard-wrap at about 100 characters, so a
+    // sentence that says the thing can have a newline through the middle of it.
+    const text = fs.readFileSync(path.join(DOCS_DIR, name), "utf8").replace(/\s+/g, " ");
+    assert.ok(EXISTS.test(text),
+      `${name} names customer search and never says it does not exist. Nothing was removed for it: it was never built.`);
+    assert.ok(PLANNED.test(text),
+      `${name} says the customer capability does not exist and never says it is not being added. ` +
+      `The surface is frozen at two capabilities; "does not exist yet" is a different sentence from "is not coming".`);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * The design document, read against the registry rather than against
+ * its own banner.
+ * ------------------------------------------------------------------ */
+
+const DESIGN = path.join(FUNCTIONS_DIR, "..", "docs", "mcp-orchestration-design.md");
+
+check("the design's runtime tool table does not show a removed capability as published", () => {
+  // §1.2 is a table with a Flag column, and for eight of its rows that column
+  // says `NV_MCP_ORCHESTRATOR` over a capability no flag state can publish. The
+  // table is kept — it carries the annotation reasoning for tools that still
+  // exist — so what is required is that the correction stands beside it. This
+  // check fails if the correction is deleted, and it fails if a NEW removed
+  // name appears in the table without one.
+  const design = fs.readFileSync(DESIGN, "utf8");
+  const rows = design.split("\n").filter((line) => /^\| \d+ \| [a-z_]+ \|/.test(line));
+  assert.ok(rows.length >= 22, `the design's §1.2 table has ${rows.length} rows; this check no longer reads it`);
+  const shownAsPublished = rows
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .filter((cells) => /NV_MCP_/.test(cells[3]))
+    .map((cells) => cells[2]);
+  const stale = shownAsPublished.filter((name) => REMOVED_NAMES.includes(name));
+  assert.deepStrictEqual(stale.slice().sort(), [...REMOVED_NAMES].sort(),
+    "the design's §1.2 table no longer shows exactly the eight removed capabilities as flag-published; " +
+    "if a row was corrected or added, this check and the correction under the table both need to move");
+  assert.ok(
+    design.includes("The Flag column of rows 22, 23, 25, 26, 27, 28, 29 and 30 is no longer true"),
+    "the correction under the design's §1.2 table is gone, and the table still tells a reader that " +
+    "NV_MCP_ORCHESTRATOR publishes eight capabilities the registry has no row for"
+  );
+});
+
+check("every test file the design names is on disk or accounted for", () => {
+  // §5 is a test plan, and a plan is allowed to name a file nobody wrote — but
+  // only where the document says so. The banner's §5 correction enumerates
+  // them, and it was written in a way that covered the per-capability files and
+  // silently missed two others: §5.1's `mcp-registry-annotations.test.js` (the
+  // suite calls it `mcp-tool-annotations.test.js`) and §5.3's
+  // `mcp-parity.test.js`, which was never written at all.
+  const design = fs.readFileSync(DESIGN, "utf8");
+  const banner = design.split("\n").slice(0, 70).join("\n");
+  const named = [...new Set([...design.matchAll(/\btest\/qa\/([a-z0-9-]+\.test\.js)/g)].map((m) => m[1]))];
+  assert.ok(named.length >= 6, `the design names ${named.length} test/qa files; this scan has stopped finding them`);
+  for (const file of named) {
+    if (fs.existsSync(path.join(FUNCTIONS_DIR, "test", "qa", file))) continue;
+    assert.ok(banner.includes(file),
+      `the design document sends a reader to test/qa/${file}, which does not exist, and the banner's ` +
+      `§5 correction does not account for it. Either write the file or name it there.`);
+  }
+});
+
+check("the guide says the cross-channel search reports no amounts, in both languages", () => {
+  // The bullet said "Amounts stay in the currency the order was taken in" until
+  // 7 September 2026 — true of the capability as designed on 6 September, false
+  // of it a day later. It was corrected in the same pass that removed the
+  // money, and nothing checked it: the guide is the one text here a paying user
+  // reads, and a sentence about a figure the tool does not return teaches them
+  // to ask for something that is not there.
+  //
+  // Keyed on the wire text rather than standing alone: the shipped description
+  // of `search_commerce_orders` declares the same thing to the model, so if
+  // that declaration is ever dropped this check says which of the two moved.
+  const wire = fs.readFileSync(path.join(FUNCTIONS_DIR, "index.js"), "utf8");
+  assert.ok(/It reports no amounts at all: no order total, nothing paid or outstanding, no refund, no tax and no currency\./.test(wire),
+    "the shipped search_commerce_orders description no longer declares that it reports no amounts; " +
+    "if the capability regained a figure, mcp-no-money.test.js is the check that should have said so first");
+
+  // Two markers per language, because one is not enough: the bullet must say
+  // that no amount comes back AND that no currency is named — the currency was
+  // the half that survived the first reduction, in both the code and this
+  // bullet, precisely because it carried no figure.
+  const SAYS_NONE = {
+    en: [/reports no amounts at all/i, /names no currency/i],
+    tr: [/Hiçbir tutar döndürmez/i, /para birimi de vermez/i]
+  };
+  // The sentence that was here, and its Turkish twin. Deliberately the literal
+  // promise rather than a money-word scan: the bullet legitimately contains
+  // "worth" and "total" inside the negations above, and a check that trips on
+  // its own correction gets deleted rather than fixed.
+  const PROMISES_MONEY = {
+    en: /(currency the order was taken in|amounts? stay in the currency)/i,
+    tr: /(para biriminde kalır|siparişin alındığı para biriminde)/i
+  };
+  for (const [language, marker] of [["EN", "Coming in the next version of the app"], ["TR", "Uygulamanın sonraki sürümünde geliyor"]]) {
+    const block = comingBullets(marker);
+    const key = language.toLowerCase();
+    for (const says of SAYS_NONE[key]) {
+      assert.ok(says.test(block),
+        `the ${language} guide no longer tells the reader that the cross-channel search returns no amounts ` +
+        `and names no currency (looked for ${says}).`);
+    }
+    const promise = block.match(PROMISES_MONEY[key]);
+    assert.ok(!promise,
+      `the ${language} guide promises a monetary field ("${promise ? promise[0] : ""}") from a capability that returns none`);
+  }
+});
+
 (async () => {
   for (const [name, run] of asyncChecks) {
     try { await run(); console.log("PASS ", name); }

@@ -135,8 +135,10 @@ const TOOL_REGISTRY = [
     piiSubject: null,
     effects: ["customer_message"],
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    // 1.1.1 shipped openWorldHint false. It is wrong, and this is the larger of
-    // the two corrections waiting on the flag.
+    // 1.1.1 shipped openWorldHint false. It is wrong, and it is one of the
+    // three hint corrections waiting on the flag — two openWorldHint values
+    // here and on update_order_status, plus that tool's idempotentHint.
+    // `correctionsPending()` is the count, and the release notes declare it.
     liveAnnotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     pendingGuard: null,
     justification: {

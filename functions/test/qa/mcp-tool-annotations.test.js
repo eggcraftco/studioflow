@@ -41,8 +41,20 @@ const FLAG_STATES = {
 
 // Documents write counts as words ("Nine read tools"), so the checks that read a
 // number back out of a document have to read both spellings.
-const NUMBER_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
-const asCount = (text) => (/^\d+$/.test(text) ? Number(text) : NUMBER_WORDS[String(text).toLowerCase()]);
+// The table runs to 22 and the review connection is served 19, so the range has
+// to reach the numbers these documents actually spell — "Nineteen tools go to
+// the review connection", "Twenty-two tools." — and read the hyphen out of the
+// compound ones.
+const NUMBER_WORDS = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, twentyone: 21, twentytwo: 22, twentythree: 23
+};
+const asCount = (text) => {
+  const raw = String(text).trim();
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return NUMBER_WORDS[raw.toLowerCase().replace(/[\s-]/g, "")];
+};
 
 let failures = 0;
 function check(name, run) {
@@ -944,6 +956,73 @@ check("the document states the four values it claims for each tool", () => {
   }
 });
 
+check("the annotation document's own paragraph counts the table above it", () => {
+  // The sentence under the table is the reviewer's index into it: how many
+  // entries there are, how many of them the review connection is served, and
+  // which flag hides the rest. Every number in it is a word rather than a
+  // digit, so the `**N** tools` scan below never saw it, and the paragraph
+  // states the two flag groups as a pair that overlaps by exactly one row — a
+  // claim the registry can answer and prose cannot be trusted to keep.
+  const paragraph = doc.split("\n\n").find((block) => /are published to the review connection/.test(block));
+  assert.ok(paragraph, "the paragraph under the annotation table is gone");
+
+  const flagsOff = registry.publishedNames({});
+  const inventoryOnly = registry.publishedNames({ inventory: true }).filter((name) => !flagsOff.includes(name));
+  const orchestratorOnly = registry.publishedNames({ orchestrator: true }).filter((name) => !flagsOff.includes(name));
+
+  const total = /^([A-Za-z-]+|\d+) tools\./.exec(paragraph.trim());
+  assert.ok(total, 'the paragraph must open with the size of the table ("N tools.")');
+  assert.strictEqual(asCount(total[1]), registry.TOOL_REGISTRY.length,
+    `the paragraph says "${total[1]} tools" and the registry holds ${registry.TOOL_REGISTRY.length}`);
+
+  const served = /([A-Za-z]+|\d+) are published to the review connection/.exec(paragraph);
+  assert.strictEqual(asCount(served[1]), flagsOff.length,
+    `the paragraph says ${served[1]} tools go to the review connection; flags-off the registry publishes ${flagsOff.length}`);
+
+  for (const [flagName, hidden] of [["NIVADESK_MCP_INVENTORY", inventoryOnly], ["NIVADESK_MCP_ORCHESTRATOR", orchestratorOnly]]) {
+    const stated = new RegExp(`([A-Za-z]+|\\d+)[^.]*hidden behind\\s+\`?${flagName}\``).exec(paragraph.replace(/\n/g, " "));
+    assert.ok(stated, `the paragraph does not say how many tools ${flagName} hides`);
+    assert.strictEqual(asCount(stated[1]), hidden.length,
+      `the paragraph says ${stated[1]} tools sit behind ${flagName}; the registry gates ${hidden.length} on it (${hidden.join(", ")})`);
+    for (const name of hidden) {
+      assert.ok(paragraph.includes(`\`${name}\``), `${flagName} publishes ${name} and the paragraph never names it`);
+    }
+  }
+});
+
+check("the parity document lists the flags-off surface, in order", () => {
+  // docs/mcp-production-parity.md is the evidence that the reviewed listing has
+  // not moved, and §3.1 writes that listing out by hand, one numbered row per
+  // tool. The hash comparison in docs/evidence/capture-tools-list.js proves the
+  // BYTES; nothing checked that the table a person reads names the same tools
+  // in the same order, so a capability added to the flags-off set would be
+  // invisible here while every other check stayed green.
+  const parity = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-production-parity.md"), "utf8");
+  const rows = parity.split("\n")
+    .map((line) => /^\| (\d+) \| `([a-z_]+)` \|/.exec(line))
+    .filter(Boolean);
+  const flagsOff = registry.publishedNames({});
+  assert.deepStrictEqual(rows.map((row) => row[2]), flagsOff,
+    "the parity document's §3.1 table is not the flags-off listing, in listing order");
+  assert.deepStrictEqual(rows.map((row) => Number(row[1])), flagsOff.map((_, index) => index + 1),
+    "the parity document's §3.1 table is misnumbered");
+  // Every "N tools" in the prose is the same 19 — except where the sentence
+  // attributes the figure to a named commit, which makes it a measurement of
+  // that tree rather than a claim about this one. §5 measures `f753a8ca` at 16
+  // that way, and it is right to.
+  let seen = 0;
+  parity.split("\n").forEach((line, index) => {
+    for (const match of line.matchAll(/\b(\d+) tools?\b/g)) {
+      if (/`[0-9a-f]{7,40}`/.test(line)) continue;   // attributed to a commit
+      seen += 1;
+      assert.strictEqual(Number(match[1]), flagsOff.length,
+        `mcp-production-parity.md:${index + 1} states ${match[1]} tools; flags-off the registry publishes ` +
+        `${flagsOff.length}. A figure measured at another commit has to name that commit on the same line.`);
+    }
+  });
+  assert.ok(seen >= 3, `expected the parity document to state its tool count in prose, found ${seen}`);
+});
+
 check("the submission document counts the surface the flags actually publish", () => {
   // docs/mcp-submission-1.2.0.md is what the operator flips flags from and what
   // the release notes are written out of. A count that drifts there becomes a
@@ -1041,6 +1120,229 @@ check("no document states a wire count in prose that the builder does not produc
   // green, which is how B4, B5 and B9 survived in the first place.
   assert.ok(bold >= 3, `expected the pinned documents to state at least three bolded tool counts, found ${bold}`);
   assert.ok(quartets >= 2, `expected at least two four-state quartets in the pinned documents, found ${quartets}`);
+});
+
+check("a hyphenated wire count is a wire count too", () => {
+  // The check above matched `**N** tools` and a bare four-state quartet, and it
+  // was green on 7 September 2026 while `docs/mcp-orchestration-design.md`
+  // §7 recommended flipping all three flags "so the reviewer sees the finished
+  // 30-tool surface once". Written that way the number sits outside both
+  // patterns: no bold, and "tool" hyphenated onto the noun. Wrong by eight, in
+  // the paragraph that tells the operator what a reviewer will be shown.
+  //
+  // The pattern is exercised against a literal below rather than only against
+  // the documents, because a document with no hyphenated count left in it is
+  // the normal state, and a scan that matches nothing proves nothing.
+  // Same convention as the check above: a count the builder produces today may
+  // be stated flat; a superseded figure has to read as history. There the
+  // marker is "unbolded"; a hyphenated count cannot be bolded, so the marker is
+  // the sentence's own tense — `docs/mcp-inventory-search-decision.md` calls
+  // its 29 "the defect this section describes", and the design's 30 was
+  // recommending what a reviewer would be shown.
+  // The marker is looked for over the wrapped sentence, not the one line: these
+  // documents are hard-wrapped at about 100 characters, and the decision
+  // document's own "the defect this section describes" sits on the line ABOVE
+  // its 29.
+  const HYPHENATED = /(?<![\d.])(\d+)-tool\b/g;
+  const HISTORY = /\b(was|were|until|used to|no longer|had been|defect|stale|history|historical)\b/i;
+  const windowAt = (lines, index) => lines.slice(Math.max(0, index - 1), index + 2).join(" ");
+  const verdict = (lines, index) => [...String(lines[index]).matchAll(HYPHENATED)]
+    .some(() => !HISTORY.test(windowAt(lines, index)));
+  assert.ok(verdict(["Recommended: all three on, so the reviewer sees the finished 30-tool surface once."], 0),
+    "the hyphenated-count pattern no longer catches the present-tense sentence it was written for");
+  assert.ok(!verdict(["it went on shipping the defect this section", "describes: a 29-tool orchestrator state"], 1),
+    "the history marker no longer recognises a figure a document is explicitly recording as past");
+
+  const counts = Object.values(FLAG_STATES).map((flags) => registry.publishedNames(flags).length);
+  const live = new Set(counts);
+  for (const name of ["mcp-submission-1.2.0.md", "mcp-inventory-search-decision.md",
+    "mcp-orchestration-design.md", "mcp-backlog.md", "mcp-tool-annotations.md",
+    "mcp-production-parity.md", "orchestrator-contract.md"]) {
+    const lines = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", name), "utf8").split("\n");
+    lines.forEach((line, index) => {
+      for (const match of line.matchAll(HYPHENATED)) {
+        assert.ok(
+          live.has(Number(match[1])) || HISTORY.test(windowAt(lines, index)),
+          `${name}:${index + 1} states a "${match[0]}" surface in the present tense; no flag state publishes ${match[1]}. ` +
+          `The builder publishes ${[...live].sort((a, b) => a - b).join(", ")}. ` +
+          `Write a superseded figure in a sentence that says what it is the history of.`
+        );
+      }
+    });
+  }
+});
+
+check("a per-flag tool count in prose is the delta that flag actually adds", () => {
+  // `docs/mcp-orchestration-design.md` §7 item 6 is the operator's own "tools
+  // exposed" list, one line per flag. It said `NIVADESK_MCP_ORCHESTRATOR=1
+  // (9 tools ...)` until 7 September 2026 — the pre-reduction number — while
+  // the flag adds two. This is not the same claim as a total: it is what
+  // setting one flag on its own appends to the flags-off listing, so it is
+  // measured that way.
+  const design = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-orchestration-design.md"), "utf8");
+  const base = registry.publishedNames({}).length;
+  const FLAG_KEY = { NIVADESK_MCP_EMAIL_RECEIPTS: "emailReceipts", NIVADESK_MCP_INVENTORY: "inventory", NIVADESK_MCP_ORCHESTRATOR: "orchestrator" };
+  let seen = 0;
+  for (const match of design.matchAll(/`?(NIVADESK_MCP_[A-Z_]+)=1`?[^(\n]{0,40}\((\d+) tools?/g)) {
+    const [, flagName, stated] = match;
+    const key = FLAG_KEY[flagName];
+    assert.ok(key, `the design document names an environment flag the registry does not know: ${flagName}`);
+    const delta = registry.publishedNames({ [key]: true }).length - base;
+    assert.strictEqual(Number(stated), delta,
+      `the design document says ${flagName}=1 exposes ${stated} tools; on its own it adds ${delta} ` +
+      `(${registry.publishedNames({ [key]: true }).filter((n) => !registry.publishedNames({}).includes(n)).join(", ") || "nothing"})`);
+    seen += 1;
+  }
+  assert.ok(seen >= 2, `expected at least two per-flag tool counts in the design document, found ${seen}`);
+});
+
+check("the annotation corrections are counted the same in the table, the prose and the release notes", () => {
+  // `registry.correctionsPending()` holds three hint changes across two tools.
+  // The check above pins the submission's correction TABLE against it and was
+  // green on 7 September 2026 while §3.1's heading read "The two annotation
+  // corrections", §3's flag table said "**two annotation corrections**", and
+  // §7 — the block marked "draft to paste" for OpenAI — opened "Two values
+  // changed since 1.1.1, and both are corrections", then described only the two
+  // `openWorldHint` changes. The third, `update_order_status` idempotentHint
+  // true → false, moves on the wire the moment the flag is set: the release
+  // notes under-declared a value the reviewer would find by reading the
+  // listing, which is the shape 1.1.1 was rejected over.
+  //
+  // The count is read out of the registry, so if the no-op guard of §5.2 ships
+  // and `correctionsPending()` drops to two, this check requires the documents
+  // to say two in the same commit.
+  const submission = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-submission-1.2.0.md"), "utf8");
+  const total = registry.correctionsPending().reduce((sum, row) => sum + row.changes.length, 0);
+  const tools = registry.correctionsPending().length;
+  const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  const word = WORDS[total];
+  assert.ok(word, `the registry holds ${total} corrections and this check has no word for that`);
+
+  // Unwrapped for the same reason the checks above are: these documents are
+  // hard-wrapped, and two of the three sentences below span a line break.
+  const flat = submission.replace(/\s+/g, " ");
+  const sites = [
+    [`### 3.1 The ${word} annotation corrections`, "§3.1's heading"],
+    [`**${word} annotation corrections** across ${WORDS[tools]} tools`, "§3's per-flag table row"],
+    [`**${word.charAt(0).toUpperCase()}${word.slice(1)} values changed since 1.1.1, across ${WORDS[tools]} tools`, "§7's release-note block"]
+  ];
+  for (const [needle, where] of sites) {
+    assert.ok(flat.includes(needle),
+      `${where} does not state the ${total} annotation corrections the registry holds ` +
+      `(expected to find "${needle}"). registry.correctionsPending() is the count.`);
+  }
+
+  // The same number, in the design document's own submission plan (§7 item 1),
+  // which said "Two values change from what is live" beside the submission's
+  // three-row table.
+  // Unwrapped: this sentence is hard-wrapped and the phrase spans two lines.
+  const design = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-orchestration-design.md"), "utf8")
+    .replace(/\s+/g, " ");
+  const Capital = `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+  assert.ok(design.includes(`**${Capital} values change from what is live, across ${WORDS[tools]} tools**`),
+    `the design document's §7 item 1 does not state the ${total} annotation corrections the registry holds`);
+
+  // And every hint the registry is holding back has to be DESCRIBED in the
+  // release-note block, not merely totalled there: a count that says three over
+  // a paragraph that explains two is the defect this check was written for.
+  const notes = releaseNoteBlock(submission);
+  for (const row of registry.correctionsPending()) {
+    for (const change of row.changes) {
+      assert.ok(notes.includes(`\`${change.hint}: ${change.verified}\``),
+        `the §7 release-note block never states ${row.name}'s corrected ${change.hint} (${change.verified}). ` +
+        `A reviewer reads this block against the listing; a hint that moves and is not named here is one they find themselves.`);
+    }
+  }
+});
+
+/**
+ * The §7 "draft to paste" block: every blockquote line under that heading.
+ *
+ * It is prose in a document otherwise full of tables, and it is the only text
+ * in this repository that goes to OpenAI verbatim — two of the three false
+ * claims closed on 6 and 7 September 2026 lived in it, and nothing parsed it.
+ */
+function releaseNoteBlock(submission) {
+  const lines = submission.split("\n");
+  const at = lines.findIndex((line) => /^## 7\. Release notes/.test(line));
+  assert.ok(at >= 0, "the submission document no longer has a §7 release-notes section");
+  const block = [];
+  for (const line of lines.slice(at + 1)) {
+    if (/^## /.test(line)) break;
+    if (line.startsWith(">")) block.push(line.replace(/^>\s?/, ""));
+  }
+  assert.ok(block.length > 5, "the §7 release-note block is empty or is no longer a blockquote");
+  return block.join("\n");
+}
+
+check("the release notes describe the freshness these two capabilities actually report", () => {
+  // Measured, not reasoned about. The block said "Both report how fresh their
+  // data is and what they could not include" until 7 September 2026, and
+  // neither half of the first claim survives being run:
+  //
+  //   * `search_commerce_orders` names a source only for a provider with a
+  //     commerceHealth document or a non-manual order, so on the manual-only
+  //     review workspace — the workspace §6 step 7 tells the operator to demo
+  //     on — `sources` is empty and no freshness is reported at all;
+  //   * `search_inventory` has no connector behind it, so its one row is
+  //     `state: "unsupported"` rather than a sync time.
+  //
+  // Same finding shape as B3: a submission page telling OpenAI that a tool
+  // exhibits a behaviour the reviewer's own demo will not show.
+  const commerce = require("../../orchestrator/commerce");
+  const inventory = require("../../orchestrator/inventory");
+  const manualOnly = {
+    companyId: "co_1", nowMs: Date.UTC(2026, 8, 15, 12, 0, 0),
+    settings: { seciliParaBirimi: "£" },
+    orders: [{ id: "o1", companyId: "co_1", status: "In Progress", customerName: "A B", emailAddress: "a@b.co", createdAt: "2026-09-02" }],
+    inventoryItems: [{ id: "i1", name: "Clasp", trackingType: "quantity", status: "available", quantity: { onHand: 10, unit: "pcs" } }]
+  };
+  const orders = commerce.searchCommerceOrders(manualOnly, {}, {});
+  assert.strictEqual(orders.data.count, 1, "the manual-only snapshot no longer returns a row; this check proves nothing");
+  assert.deepStrictEqual(orders.sources, [],
+    "search_commerce_orders now names a source on a manual-only workspace; the release-note sentence below can be widened");
+  const stock = inventory.searchInventoryItems(manualOnly, {}, {});
+  assert.strictEqual(stock.sources.length, 1, "search_inventory no longer returns exactly one freshness row");
+  assert.strictEqual(stock.sources[0].state, "unsupported",
+    "search_inventory now reports a real freshness state; the release-note sentence below can be widened");
+
+  const submission = fs.readFileSync(path.join(FUNCTIONS_DIR, "..", "docs", "mcp-submission-1.2.0.md"), "utf8");
+  const notes = releaseNoteBlock(submission);
+  assert.ok(!/both report how fresh/i.test(notes),
+    "the release notes promise OpenAI that both new tools report how fresh their data is. " +
+    "Measured just above: the order search reports nothing on a workspace with no connected channel, " +
+    "and stock has no connector, so its freshness row is \"unsupported\".");
+  assert.ok(/each channel that contributed/i.test(notes),
+    "the release notes must say whose freshness the order search reports — the channels that contributed rows to that answer");
+  assert.ok(/not applicable/i.test(notes),
+    "the release notes must say that stock freshness is not applicable rather than leaving an unsupported row to read as a sync time");
+});
+
+check("the design document's disclaimed line numbers land on the lines they name", () => {
+  // The 7 September 2026 banner tells a reader that four specific lines below
+  // it are design history rather than a description of the shipped capability.
+  // All four references were wrong — by 19, 19, 19 and 20 lines — which is
+  // worse than no reference: the money sentence stays undisclaimed and the
+  // reader is sent to a line that never needed disclaiming. The numbers are
+  // read out of the banner rather than written here, so the check fails when
+  // an edit above them shifts the document.
+  const DESIGN = path.join(FUNCTIONS_DIR, "..", "docs", "mcp-orchestration-design.md");
+  const lines = fs.readFileSync(DESIGN, "utf8").split("\n");
+  const banner = lines.slice(0, 60).join("\n");
+  const at = banner.indexOf("is design history");
+  assert.ok(at >= 0, "the design banner no longer carries the money-history paragraph this check pins");
+  const refs = [...banner.slice(at).matchAll(/\(`:(\d+)`\)/g)].map((m) => Number(m[1]));
+  // In the order the banner names them.
+  const EXPECTED = ["customerTotal", "totals: { grandTotal", "money fields only with financialInfo", "what it still owes"];
+  assert.strictEqual(refs.length, EXPECTED.length,
+    `the banner names ${refs.length} disclaimed lines and this check knows ${EXPECTED.length}; ` +
+    "if a reference was added or removed, pair it with the phrase it points at here");
+  refs.forEach((line, index) => {
+    const text = lines[line - 1];
+    assert.ok(text !== undefined, `the banner points at :${line}, past the end of the document`);
+    assert.ok(text.includes(EXPECTED[index]),
+      `the banner points at :${line} for "${EXPECTED[index]}", and that line reads:\n      ${String(text).slice(0, 120)}`);
+  });
 });
 
 if (failures > 0) {

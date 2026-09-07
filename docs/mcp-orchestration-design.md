@@ -30,9 +30,13 @@ Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/U
 > `ctx.financialInfo` or `entitlements.advancedFinanceEnabled` at all. The block and both conditions were
 > deleted rather than switched off. Every sentence below that describes what
 > `search_commerce_orders` returns as money is design history — §8.6's `customerTotal` addition
-> (`:865`), the row projection in §11 (`:1061`), the "money fields only with financialInfo" cell in the
-> permission matrix (`:1332`) and the draft tool description that offers "what it still owes" (`:1811`),
-> which the shipped description no longer says. Read the wire text in `functions/index.js` for what a
+> (`:904`), the `totals` block in §11's output row (`:1140`), the "money fields only with financialInfo"
+> cell in the permission matrix (`:1371`) and the draft tool description that offers "what it still
+> owes" (`:1839`), which the shipped description no longer says. Those four line numbers were each wrong
+> by between four and nineteen lines until 7 September 2026: a pointer that lands on the wrong line
+> leaves the sentence it was meant to disclaim standing undisclaimed, and sends the reader to one that
+> did not need it. `mcp-tool-annotations.test.js` now reads each of them back and fails if the line it
+> names does not carry the phrase claimed for it. Read the wire text in `functions/index.js` for what a
 > model is actually told. `search_inventory` never emitted a figure and is unchanged.
 > `functions/test/qa/mcp-no-money.test.js` enumerates every key both capabilities emit and refuses a
 > money-shaped NAME, in all eight flag states and for a caller holding the financial grant.
@@ -46,7 +50,14 @@ Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/U
 > (`orchestrator-channel.test.js`, `orchestrator-money.test.js`, `orchestrator-search-commerce.test.js`,
 > `orchestrator-channel-performance.test.js`, `orchestrator-accounting.test.js`,
 > `orchestrator-no-secrets.test.js`, `bank-insights.test.js`) were never written; they were the plan.
-> §11 of the contract document lists the suite that exists.
+> Two more file names in §5 are not per-capability files and were missed by the sentence above until
+> 7 September 2026: §5.1's `mcp-registry-annotations.test.js` was written as
+> `test/qa/mcp-tool-annotations.test.js`, and §5.3's `mcp-parity.test.js` was never written at all —
+> what discharges the parity claim is `docs/evidence/capture-tools-list.js` (listing bytes against the
+> deployed tree) together with `test/qa/mcp-tools-list-snapshot.test.js`, which is a narrower claim than
+> §5.3 describes and is why `docs/mcp-production-parity.md` exists. §11 of the contract document lists
+> the suite that exists, and `mcp-reduced-surface.test.js` now fails if this document names a
+> `test/qa/…` file that is neither on disk nor accounted for in this paragraph.
 Spec: `NivaDesk_ChatGPT_MCP_Agentic_Orchestration_Expanded_2026-09-05-2.md` (§1–§93) and
 `NivaDesk_WhatsApp_AI_Channel_Implementation_Spec_2026-09-05.md` (cited as WA §n). Both read-only.
 
@@ -217,6 +228,15 @@ policy only; not on the wire).
 | 28 | get_integration_health | NV_MCP_ORCHESTRATOR | true | false | true | false | new | orders.read | A / L1 |
 | 29 | get_accounting_sync_status | NV_MCP_ORCHESTRATOR | true | false | true | false | new | finance.read | A / L1 |
 | 30 | get_banking_attention_summary | NV_MCP_ORCHESTRATOR | true | false | true | false | new | finance.read | A / L1 |
+
+**The Flag column of rows 22, 23, 25, 26, 27, 28, 29 and 30 is no longer true, and this table is kept as
+the annotation reasoning rather than as a listing.** `NV_MCP_ORCHESTRATOR` publishes two tools —
+`search_inventory` (row 20) and `search_commerce_orders` (row 24) — and no flag state publishes the
+other eight: the 6 September 2026 reduction took their registry rows, schemas and dispatcher cases out
+of the release, so there is nothing for a flag to expose. Rows 1–21 and row 24 are the 22 entries
+`orchestrator/registry.js` actually holds. `mcp-reduced-surface.test.js` reads the Flag column of this
+table and fails if a removed name is still shown as published without this correction standing beside
+it.
 
 Resolution of §17's "verify" cells from runtime (not from names):
 
@@ -1851,12 +1871,27 @@ named explicitly (`available`, `partiallyReserved`, `reserved`, `incoming`, `use
 
 ### What changes
 
+> **This list is the submission plan, not design, and items 1, 5, 6 and 7 were falsified by the
+> reduction of 6 September 2026 and the money removal of 7 September 2026.** They are corrected in place
+> rather than left to the banner at the top of this document, because that banner disclaims which
+> capabilities are DESIGNED — not a count of hints or tools on the wire, and not a list of demo cases an
+> operator would actually run. The operative version of all of it is `docs/mcp-submission-1.2.0.md` §3
+> (what each flag puts on the wire), §3.1 (the annotation corrections) and §6 (the checklist).
+> What these items said until 7 September 2026: "Two values change from what is live" — three do, across
+> two tools; "Nine new tools"; `NIVADESK_MCP_ORCHESTRATOR=1` exposing "9 tools"; "the finished 30-tool
+> surface"; and review cases for `get_business_attention_summary`, `get_commerce_overview` and
+> `get_integration_health`, three capabilities with no registry row, staged around a channel roster no
+> published capability emits.
+
 1. **Annotations**: the four hints now come from one registry with literal booleans, are asserted at load
-   (no coercion), and every tool carries four "Because…" lines. **Two values change from what is live**,
-   and that is the headline of the release notes rather than a footnote: `create_order` and
-   `update_order_status` move `openWorldHint` from `false` to `true`, because a status a workspace has
-   configured for automatic updates sends the customer an e-mail — and an SMS where SMS is enabled — via
-   `notifyCustomerOnStatusChange`. The notes carry the §1.1 definitions, the full §1.3 text, and an
+   (no coercion), and every tool carries four "Because…" lines. **Three values change from what is live,
+   across two tools**, and that is the headline of the release notes rather than a footnote:
+   `create_order` and `update_order_status` move `openWorldHint` from `false` to `true`, because a status
+   a workspace has configured for automatic updates sends the customer an e-mail — and an SMS where SMS
+   is enabled — via `notifyCustomerOnStatusChange`; and `update_order_status` moves `idempotentHint`
+   from `true` to `false`, because a repeated status write appends a second history entry the order's
+   own history shows the user. `registry.correctionsPending()` is the count.
+   The notes carry the §1.1 definitions, the full §1.3 text, and an
    explicit answer to the 1.1.1 message: "every hint is a literal boolean in source and on the wire; the
    deployed list was diffed against the registry with `mcp-tools-report.js --compare`; the two `verify`
    cases OpenAI could not see (`update_*` idempotency and `attach_bank_receipt` retry) are decided by the
@@ -1874,20 +1909,25 @@ named explicitly (`available`, `partiallyReserved`, `reserved`, `incoming`, `use
    because it corrects what an audit row CLAIMS rather than adding one.
 4. **Discovery text**: serverInfo `1.2.0` and the rewritten `instructions` — both flag-gated so the live
    1.1.1 connection is unaffected until the operator deploys the submission (§1.4.6).
-5. **Nine new tools** with the descriptions above, plus the two inventory tools and the extended
-   `search_inventory` filters.
+5. **Two new read tools**, the two the reduction kept: `search_commerce_orders` and the extended
+   `search_inventory`. The other eight §7 descriptions below have no registry row and no dispatcher
+   case; `create_inventory_item` is not new either — it is the pre-existing hidden write tool that
+   `NIVADESK_MCP_INVENTORY` has always published beside the search.
 6. **Tools exposed** — decided by the operator at flip time, and only via flags:
-   `NIVADESK_MCP_EMAIL_RECEIPTS=1` (receiptUrl/emailReceipt inputs on `attach_bank_receipt`),
-   `NIVADESK_MCP_INVENTORY=1` (2 tools), `NIVADESK_MCP_ORCHESTRATOR=1` (9 tools plus the discovery and
-   annotation changes). The list OpenAI reviews is whichever projection was deployed, and
-   `mcp-tools-report.js --compare` proves it. Recommended: all three on, one submission, so the reviewer
-   sees the finished 30-tool surface once — and, more importantly, so the corrected annotations are what
-   they review.
+   `NIVADESK_MCP_EMAIL_RECEIPTS=1` (receiptUrl/emailReceipt inputs on `attach_bank_receipt`, no new
+   tool), `NIVADESK_MCP_INVENTORY=1` (2 tools: `search_inventory`, `create_inventory_item`),
+   `NIVADESK_MCP_ORCHESTRATOR=1` (2 tools: `search_inventory`, `search_commerce_orders`, plus the
+   discovery and annotation changes). `search_inventory` is the one tool both flags publish, so all
+   three on is **22** tools rather than 23. The list OpenAI reviews is whichever projection was
+   deployed, and `mcp-tools-report.js --compare` proves it. Recommended: all three on, one submission,
+   so the reviewer sees the finished surface once — and, more importantly, so the corrected annotations
+   are what they review.
 7. **Test cases**: the five 1.1.1 cases re-run on the review account (customer exactly "OpenAI Review Test
-   Customer"; ESET row `demo-acc_demo006` reset to no receipt); new cases for
-   `get_business_attention_summary`, `get_commerce_overview` and `get_integration_health` on the review
-   workspace (manual orders only → channel rows named as not connected, health rows for the demo bank
-   connection), so the reviewer sees honest degrade; and one case exercising `update_order_status` on an
+   Customer"; ESET row `demo-acc_demo006` reset to no receipt); new cases for the two published reads,
+   `search_commerce_orders` and `search_inventory`, on the review workspace — and staged around what
+   those two actually answer, which on a manual-only workspace is `count` and `matched` over the
+   workspace's own orders with an empty `sources` array, no channel named connected or otherwise, and
+   no figure of any kind; and one case exercising `update_order_status` on an
    order with automatic updates **off**, so the reviewer can see the notification boundary without the
    review workspace mailing a test address.
 8. **Guide** Step A (immediately, including the corrected customer-notification text) and Step B (with the

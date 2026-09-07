@@ -233,7 +233,12 @@ is named, connected or otherwise.
 
 **Invariant.** Reviewer-facing truth. This is a submission page telling OpenAI that a tool exhibits a
 behaviour it does not, which is precisely the 1.1.1 rejection shape — the argument the branch itself makes
-at `:85-91` about "customer search and read".
+at `:85-91` about "customer search and read". On that third item, so this page answers the question it
+raises rather than only citing it: **no customer search or customer read capability exists, none was
+removed to reach two, and none is being added.** It was never built — no registry row, no dispatcher
+case, no handler, and no `customers` domain in the loader for one to read — and the operator froze the
+new surface at two capabilities on 7 September 2026. Customer data reaches an assistant only as fields
+on an order.
 
 **Closing it.** Delete the claim from `:511-512`, `:105-106` and `:478`, and rewrite checklist step 7 to
 describe what the reviewer will actually see on a manual-only workspace: a result with `count`, `matched`,
