@@ -87,6 +87,28 @@
 //   T1  any check in this file deleted
 //         -> the runner's count guard, which is deliberately not a check
 //
+// A second, later round covered what the fix ARMED rather than what it read.
+// Making invoice.paid reach applySubscription made it the rail that records a
+// renewal, and a recorded date needs the ordering watermark that defends it.
+// Same method, same table:
+//
+//   O1  processStripeEvent: applyInvoicePaid(stripe, object) — the event time dropped
+//         -> a renewal raises the watermark that protects its own date
+//   O2  processStripeEvent: applyCompletedSubscriptionCheckout(stripe, object)
+//         -> every webhook rail stamps the ledger's event sequence
+//   O3  processStripeEvent: applyInvoicePaymentFailed(stripe, object)
+//         -> every webhook rail stamps the ledger's event sequence
+//   O4  applyInvoicePaid: applySubscription(subscription, "invoice.paid") — not forwarded
+//         -> a renewal raises the watermark that protects its own date
+//   O5  writeStripeSubscriptionLedger: the stripeEventSequence spread removed
+//         -> every webhook rail stamps the ledger's event sequence
+//   H1  applyInvoicePaymentFailed: the re-throw after the failure stamp removed
+//         -> a failed subscription retrieve leaves the payment_failed event retryable
+//   H2  processStripeEvent: the applier dispatch wrapped in a catch that returns
+//         -> a failed subscription retrieve leaves the payment_failed event retryable
+//   H3  applyInvoicePaymentFailed: the re-throw on the workspace_not_found exit removed
+//         -> a failed subscription retrieve leaves the payment_failed event retryable
+//
 // Run: node test/qa/stripe-invoice-api-drift.test.js
 const assert = require("assert");
 const fs = require("fs");
@@ -101,7 +123,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 26;
+const EXPECTED_CHECKS = 29;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -593,27 +615,180 @@ check("a dahlia invoice.payment_failed moves the workspace to past_due", () => {
 });
 
 check("a payment_failed that applied nothing no longer claims past_due", () => {
-  // The retrieve is caught and warned on purpose, so the failure stamp lands
-  // either way — but then nothing writes billingStatus, and the row this
-  // handler leaves in stripeBillingEvents is marked processed. Returning
+  // Nothing on this path writes billingStatus: past_due lands only via
+  // applySubscription, which needs both a resolved id and a subscription the
+  // retrieve returned. A payment_failed on a one-off invoice has neither, and
+  // it still stamps the failure and is still filed as processed — so reporting
   // "past_due" there recorded a transition that had not happened.
-  const h = harness({ retrieve: () => { throw new Error("stripe unavailable"); } });
+  //
+  // This deliberately uses the one-off invoice rather than a throwing retrieve:
+  // a failed retrieve now re-throws (see the next check), so the not-applied
+  // RETURN shape is only observable on a path that has no error to report.
+  const h = harness();
   return (async () => {
-    const captured = await captureWarningsAsync(() => h.applyInvoicePaymentFailed(h.stripe, dahliaInvoice({ id: "in_failed" })));
-    const result = captured.value;
+    const result = await h.applyInvoicePaymentFailed(h.stripe, dahliaInvoice({ id: "in_failed", parent: null }));
 
-    assert.deepStrictEqual(h.retrieved, [SUB], "the id resolved, the call just failed");
-    assert.ok(captured.lines.some((line) => /Could not retrieve failed invoice subscription/.test(line)),
-      "the swallowed retrieve failure left no trace at all");
+    assert.deepStrictEqual(h.retrieved, [], "a one-off invoice must not cost a Stripe call");
     assert.strictEqual(result.updated, true, "the failure stamp still landed");
     assert.notStrictEqual(result.status, "past_due", "the handler still claims a move it did not make");
     assert.strictEqual(result.status, "payment_failed_not_applied");
     assert.strictEqual(result.entitlementResolutionApplied, false);
-    assert.strictEqual(result.entitlementResolutionSkippedReason, "subscription_retrieve_failed");
+    assert.strictEqual(result.entitlementResolutionSkippedReason, "invoice_without_subscription");
 
     const workspace = h.workspace();
     assert.ok(workspace.billingPaymentFailedAt, "the failure stamp is missing");
     assert.strictEqual(workspace.billingStatus, "free", "nothing on this path writes billingStatus");
+  })();
+});
+
+check("a failed subscription retrieve leaves the payment_failed event retryable", () => {
+  // The retrieve is caught so the failure stamp still lands — that half was
+  // deliberate and survives. What must not survive is RETURNING afterwards:
+  // processStripeEvent files anything that returns as processingStatus
+  // "processed" WITH a processedAt, and its own dedupe keys on that processedAt.
+  // So a returned result answers Stripe 200 ("consumed, stop retrying") and in
+  // the same breath refuses the redelivery that would have applied the
+  // transition — past_due lost for good on that event id, with the workspace
+  // left carrying billingPaymentFailedAt, which reads as a handled failure.
+  //
+  // invoice.paid never caught the retrieve at all, and that is the shape being
+  // matched here: 500, row left "received", redelivery applies it.
+  const h = harness({ retrieve: () => { throw new Error("stripe unavailable"); } });
+  const event = {
+    id: "evt_failed",
+    type: "invoice.payment_failed",
+    created: 1_700_000,
+    data: { object: dahliaInvoice({ id: "in_failed" }) }
+  };
+  return (async () => {
+    const captured = await captureWarningsAsync(() => assert.rejects(
+      () => h.processStripeEvent(h.stripe, event),
+      /stripe unavailable/,
+      "the handler reported success after the retrieve failed"
+    ));
+    assert.deepStrictEqual(h.retrieved, [SUB], "the id resolved, the call just failed");
+    assert.ok(captured.lines.some((line) => /Could not retrieve failed invoice subscription/.test(line)),
+      "the retrieve failure left no trace at all");
+
+    const workspace = h.workspace();
+    assert.ok(workspace.billingPaymentFailedAt, "the failure stamp no longer lands");
+    assert.strictEqual(workspace.billingStatus, "free", "nothing on this path writes billingStatus");
+
+    const row = h.store.get(`stripeBillingEvents/${event.id}`);
+    assert.ok(row, "the event row was never opened");
+    assert.strictEqual(row.processingStatus, "received", "a handler that threw was filed as finished");
+    assert.strictEqual(row.processedAt, undefined,
+      "processedAt was stamped for a handler that threw, so the dedupe now refuses the retry");
+
+    // Stripe redelivers the SAME event id, and this time the retrieve works.
+    h.stripe.subscriptions.retrieve = async (id) => {
+      h.retrieved.push(id);
+      return dahliaSubscription({ status: "past_due" });
+    };
+    const retried = await h.processStripeEvent(h.stripe, event);
+    assert.strictEqual(retried.duplicate, undefined, "the redelivery was refused as a duplicate");
+    assert.strictEqual(retried.status, "past_due");
+    assert.strictEqual(h.workspace().billingStatus, "past_due", "the redelivery never reached the workspace");
+
+    // The same rule on the earlier exit. An invoice for a subscription and a
+    // customer this Firestore has never seen resolves no workspace at all, and
+    // filing that as a permanent "workspace_not_found" while the only thing
+    // that actually failed was a Stripe call is the same lost event.
+    const orphan = harness({ retrieve: () => { throw new Error("stripe unavailable"); } });
+    await captureWarningsAsync(() => assert.rejects(
+      () => orphan.applyInvoicePaymentFailed(orphan.stripe, dahliaInvoice({
+        id: "in_orphan",
+        customer: "cus_unknown",
+        parent: { type: "subscription_details", subscription_details: { subscription: "sub_unknown" } }
+      })),
+      /stripe unavailable/,
+      "a transient Stripe failure was filed as a permanent workspace_not_found"
+    ));
+  })();
+});
+
+check("every webhook rail stamps the ledger's event sequence", () => {
+  // writeStripeSubscriptionLedger's ordering guard is gated on `seen > 0`: it
+  // compares the incoming event's created time against the stripeEventSequence
+  // already on the row, and a row without one cannot be defended at all. Only
+  // customer.subscription.* used to pass an event time, so any row whose most
+  // recent write came from checkout.session.completed or either invoice handler
+  // carried no sequence and the guard was dead on it.
+  //
+  // Asserted through processStripeEvent, not through the appliers: which time
+  // each rail hands down is a property of the dispatcher, and calling an
+  // applier with an explicit third argument cannot observe it.
+  const invoiceForRail = dahliaInvoice({ id: "in_rail" });
+  const rails = [
+    ["checkout.session.completed", { id: "cs_1", object: "checkout.session", mode: "subscription", subscription: SUB }, 1_700_010, undefined],
+    ["invoice.paid", dahliaInvoice(), 1_700_020, undefined],
+    ["invoice.payment_failed", invoiceForRail, 1_700_030, () => dahliaSubscription({ status: "past_due" })],
+    ["customer.subscription.updated", dahliaSubscription(), 1_700_040, undefined]
+  ];
+  return (async () => {
+    for (const [type, object, created, retrieve] of rails) {
+      const h = harness({ retrieve });
+      await h.processStripeEvent(h.stripe, { id: `evt_${type}`, type, created, data: { object } });
+      const rows = h.ledgerRows();
+      assert.strictEqual(rows.length, 1, `${type} left no ledger row`);
+      assert.strictEqual(rows[0].stripeEventSequence, created * 1000,
+        `${type} wrote the ledger row without raising the ordering watermark`);
+    }
+  })();
+});
+
+check("a renewal raises the watermark that protects its own date", () => {
+  // Stress points (f) and (e) together, and the reason the sequence above is
+  // not bookkeeping. invoice.paid is the rail that records a renewal, so it is
+  // the rail whose date a late delivery can undo:
+  //
+  //   1. customer.subscription.updated, created T, period end PERIOD_END
+  //   2. invoice.paid, created T+100, the retrieve returns the renewed end
+  //   3. customer.subscription.updated, created T+50 — older than the renewal,
+  //      delivered after it, still carrying the PRE-renewal end
+  //
+  // With the renewal's own event time on the row, step 3 is older than the
+  // watermark and is dropped with a warning. Without it the row still reads T,
+  // T+50 out-ranks it, and billingCurrentPeriodEnd rolls back to a date already
+  // in the past — which reconcileExpiredBillingEntitlements then selects on
+  // hourly (billingEffectiveStatus "active" AND billingCurrentPeriodEnd < now-2h)
+  // to expire the plan row and re-resolve the workspace to Free Demo.
+  const RENEWED_END = PERIOD_END + 2_592_000;
+  const h = harness({
+    retrieve: () => dahliaSubscription({
+      items: { object: "list", has_more: false, data: [{ id: "si_plan", quantity: 1, price: { id: "price_pro_monthly" }, current_period_end: RENEWED_END }] }
+    })
+  });
+  const staleUpdate = {
+    id: "evt_late",
+    type: "customer.subscription.updated",
+    created: 1_700_050,
+    data: { object: dahliaSubscription() }
+  };
+  return (async () => {
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_first", type: "customer.subscription.updated", created: 1_700_000, data: { object: dahliaSubscription() }
+    });
+    assert.strictEqual(millisOf(h.workspace().billingCurrentPeriodEnd, "billingCurrentPeriodEnd"), PERIOD_END * 1000);
+
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_renewal", type: "invoice.paid", created: 1_700_100, data: { object: dahliaInvoice() }
+    });
+    assert.strictEqual(millisOf(h.workspace().billingCurrentPeriodEnd, "billingCurrentPeriodEnd"), RENEWED_END * 1000,
+      "the renewal was not recorded at all");
+    assert.strictEqual(h.ledgerRows()[0].stripeEventSequence, 1_700_100_000,
+      "the renewal was written without raising the watermark that protects it");
+
+    // The ledger WRITE is what the guard drops; applySubscription still runs
+    // recomputeEffectiveWorkspaceEntitlement, which re-derives the workspace
+    // from the ledger rows and therefore re-states the date it just defended.
+    const captured = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, staleUpdate));
+    assert.ok(captured.lines.some((line) => /arrived out of order/i.test(line)),
+      "a rolled-back renewal was not even logged");
+    assert.strictEqual(millisOf(h.workspace().billingCurrentPeriodEnd, "billingCurrentPeriodEnd"), RENEWED_END * 1000,
+      "a late older event rolled the renewal date back to the pre-renewal period end");
+    assert.strictEqual(h.ledgerRows()[0].stripeEventSequence, 1_700_100_000, "the watermark went backwards");
+    assert.strictEqual(h.workspace().billingPlan, "pro_monthly");
   })();
 });
 
@@ -768,9 +943,15 @@ check("the webhook still dispatches the invoice events to these handlers", () =>
     ["checkout.session.completed", "applyCompletedSubscriptionCheckout"]
   ]) {
     assert.ok(body.includes(`event.type === "${eventType}"`), `${eventType} is no longer dispatched`);
-    assert.ok(body.includes(`${handler}(stripe, object)`), `${eventType} no longer reaches ${handler}`);
+    // The event time is part of the dispatch, not an extra: a rail that writes
+    // the ledger row without it leaves the row's ordering guard disarmed.
+    assert.ok(body.includes(`${handler}(stripe, object, eventCreatedMs)`),
+      `${eventType} no longer reaches ${handler} with the event time`);
   }
-  assert.ok(/applySubscription\(object, event\.type/.test(body), "customer.subscription.* no longer reaches applySubscription");
+  assert.ok(/applySubscription\(object, event\.type, eventCreatedMs\)/.test(body),
+    "customer.subscription.* no longer reaches applySubscription");
+  assert.ok(/const eventCreatedMs = Number\(event\.created \|\| 0\) \* 1000;/.test(body),
+    "the event time the rails are handed is no longer the event's own created time");
 });
 
 check("the appliers under test are the ones the factory ships", () => {

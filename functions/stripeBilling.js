@@ -1050,7 +1050,12 @@ function createStripeBillingFunctions({
     };
   }
 
-  async function applyCompletedSubscriptionCheckout(stripe, session) {
+  // eventCreatedMs is the delivering webhook event's own created time. It is
+  // forwarded to applySubscription for one reason: the ledger's ordering guard
+  // can only compare against a row that already carries a stripeEventSequence,
+  // so every rail that WRITES the row has to raise the watermark. See the note
+  // over the same parameter on applyInvoicePaid.
+  async function applyCompletedSubscriptionCheckout(stripe, session, eventCreatedMs = 0) {
     if (String(session.mode || "") !== "subscription") {
       return { skipped: true, reason: "non_subscription_checkout" };
     }
@@ -1063,7 +1068,7 @@ function createStripeBillingFunctions({
     }
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const result = await applySubscription(subscription, "checkout.session.completed");
+    const result = await applySubscription(subscription, "checkout.session.completed", eventCreatedMs);
 
     if (result.updated && result.workspaceId) {
       const startedTrial = String(subscription.status || "") === "trialing" || Number(subscription.trial_end || 0) > 0;
@@ -1179,7 +1184,20 @@ function createStripeBillingFunctions({
     };
   }
 
-  async function applyInvoicePaid(stripe, invoice) {
+  // The third argument is what stops a renewal being undone. Before the drift
+  // fix every invoice.paid skipped before it reached applySubscription, so this
+  // rail never wrote the ledger row and never needed a sequence. Now it writes
+  // the renewed currentPeriodEnd — and a write that does not also raise
+  // stripeEventSequence leaves that date unprotected: a customer.subscription.*
+  // event created BEFORE this renewal but delivered after it still out-ranks the
+  // stale watermark, is applied, and rolls billingCurrentPeriodEnd back to the
+  // pre-renewal date. That date is not cosmetic — reconcileExpiredBillingEntitlements
+  // selects on it hourly and drops the workspace to Free Demo.
+  //
+  // Using the invoice event's created time here is the conservative direction:
+  // the subscription written on this rail comes from a fresh retrieve, so it is
+  // at least as new as event.created claims, never older.
+  async function applyInvoicePaid(stripe, invoice, eventCreatedMs = 0) {
     // parent.subscription_details.subscription first, legacy invoice.subscription second.
     const subscriptionId = stripeSubscriptionIdFromInvoice(invoice);
     if (!subscriptionId) {
@@ -1188,7 +1206,7 @@ function createStripeBillingFunctions({
     }
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const result = await applySubscription(subscription, "invoice.paid");
+    const result = await applySubscription(subscription, "invoice.paid", eventCreatedMs);
     if (result.updated && result.workspaceId) {
       await admin.firestore().collection("companies").doc(result.workspaceId).set({
         billingLastInvoiceId: invoice.id || "",
@@ -1199,8 +1217,9 @@ function createStripeBillingFunctions({
     return result;
   }
 
-  async function applyInvoicePaymentFailed(stripe, invoice) {
+  async function applyInvoicePaymentFailed(stripe, invoice, eventCreatedMs = 0) {
     let subscription = null;
+    let retrieveError = null;
     // Same drift as invoice.paid, but it fails quietly here: without the id the
     // workspace still resolves through invoice.customer, so the failure is
     // stamped and the handler looks successful while applySubscription is never
@@ -1210,6 +1229,14 @@ function createStripeBillingFunctions({
       try {
         subscription = await stripe.subscriptions.retrieve(subscriptionId);
       } catch (error) {
+        // Held, not swallowed. The catch exists so the failure stamp below still
+        // lands; the error is re-thrown after it, because a Stripe outage is a
+        // transient failure and processStripeEvent files anything that RETURNS
+        // as processed-with-a-processedAt. That stamp is what the dedupe keys
+        // on, so returning here would tell Stripe the event was consumed AND
+        // refuse the redelivery that would have applied it — the past_due
+        // transition would be lost for good on that event id.
+        retrieveError = error;
         console.warn("Could not retrieve failed invoice subscription:", error?.message || error);
       }
     }
@@ -1220,11 +1247,16 @@ function createStripeBillingFunctions({
       subscriptionId,
       customerId: typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id
     });
-    if (!workspace) return { skipped: true, reason: "workspace_not_found" };
+    if (!workspace) {
+      // Same rule: a Stripe outage must not be filed as a permanent
+      // "no such workspace" verdict on an event that is never redelivered.
+      if (retrieveError) throw retrieveError;
+      return { skipped: true, reason: "workspace_not_found" };
+    }
 
     let resolution = null;
     if (subscription) {
-      resolution = await applySubscription(subscription, "invoice.payment_failed");
+      resolution = await applySubscription(subscription, "invoice.payment_failed", eventCreatedMs);
     }
 
     await workspace.ref.set({
@@ -1234,6 +1266,12 @@ function createStripeBillingFunctions({
       billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       billingUpdatedBy: "stripe_webhook"
     }, { merge: true });
+
+    // The stamp has landed, so the transient failure can now be surfaced. This
+    // is the same shape as invoice.paid, which never caught the retrieve at all:
+    // the webhook answers 500, the stripeBillingEvents row stays "received" with
+    // no processedAt, and Stripe's redelivery is let through by the dedupe.
+    if (retrieveError) throw retrieveError;
 
     // `status` is a claim about what this handler DID, and processStripeEvent
     // persists it verbatim into the stripeBillingEvents row alongside
@@ -1275,19 +1313,26 @@ function createStripeBillingFunctions({
 
     let result = { skipped: true, reason: "unhandled_event" };
     const object = event.data?.object || {};
+    // Every rail below can write the subscription ledger row, so every rail
+    // gets the event time. Passing it only to customer.subscription.* left the
+    // rows written by the other three carrying no stripeEventSequence at all,
+    // and writeStripeSubscriptionLedger's ordering guard needs `seen > 0` to
+    // fire — so a renewal recorded by invoice.paid could be rolled back by an
+    // older customer.subscription.updated with no warning logged.
+    const eventCreatedMs = Number(event.created || 0) * 1000;
 
     if (event.type === "checkout.session.completed") {
-      result = await applyCompletedSubscriptionCheckout(stripe, object);
+      result = await applyCompletedSubscriptionCheckout(stripe, object, eventCreatedMs);
     } else if (
       event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      result = await applySubscription(object, event.type, Number(event.created || 0) * 1000);
+      result = await applySubscription(object, event.type, eventCreatedMs);
     } else if (event.type === "invoice.paid") {
-      result = await applyInvoicePaid(stripe, object);
+      result = await applyInvoicePaid(stripe, object, eventCreatedMs);
     } else if (event.type === "invoice.payment_failed") {
-      result = await applyInvoicePaymentFailed(stripe, object);
+      result = await applyInvoicePaymentFailed(stripe, object, eventCreatedMs);
     }
 
     await eventRef.set({
@@ -2269,7 +2314,12 @@ function createStripeBillingFunctions({
       applyCompletedSubscriptionCheckout,
       applySubscription,
       applyInvoicePaid,
-      applyInvoicePaymentFailed
+      applyInvoicePaymentFailed,
+      // The dispatcher, for the same reason: which event time each rail hands
+      // to applySubscription, and whether a throwing handler leaves the
+      // stripeBillingEvents row retryable, are properties of THIS function.
+      // Calling the appliers directly cannot observe either.
+      processStripeEvent
     }
   };
 }
