@@ -734,3 +734,103 @@ But it is worth a look on its own account, because a webhook that has never once
 a stale endpoint left registered in the Stripe dashboard pointing at a service whose signing secret
 differs, or real events being dropped. **Nothing was changed** — diagnosing it means touching
 production webhook configuration, which this window does not permit. Recorded for the morning.
+
+---
+
+# Separate security hotfix — the file-fetch SSRF (2026-09-07)
+
+Recorded here, in the soak evidence, but **kept separate from the dependency remediation**: it shares
+nothing with batches B0–B5.3, it was approved on its own, and it deploys two functions the remediation
+never touched. The soak gate above closed before this began and is not affected by it.
+
+Branch `ssrf-assessment` at `d138681e`. Approved by the operator on the morning of 7 September after
+two fresh adversarial reviews.
+
+## The five pre-deploy checks, and the one that mattered
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Rollback revisions snapshotted | **`chatgptmcp-00071-tir`** and **`chatgptworkspaceaction-00047-him`**, both at 100% traffic, read 07:31:37 UTC |
+| 2 | Exactly the affected functions | **PASS.** Call chain traced by hand, not taken from the plan: both sinks are reachable only from `nvChatGPTDispatchAction` (`index.js:24522`, `:24526`), which is called at `:26815` inside `nvHandleMcpToolCall` → `nvHandleMcpRequest` → **`chatgptMcp`** (`:26865`), and at `:26943` inside **`chatgptWorkspaceAction`** (`:26929`). No third caller |
+| 3 | No unrelated MCP / WhatsApp / eBay change | **PASS.** Diff vs the merge-base is 11 files: two docs, two new security modules, the two Woo files, `index.js`, and four test files. Six identifier hits for `MCP`/`whatsapp`/`ebay` were each inspected — all are comments or test-side flag names (`NIVADESK_MCP_INVENTORY`, `NV_MCP_EMAIL_RECEIPTS`), none changes behaviour. The `index.js` diff is seven hunks, all SSRF |
+| 4 | Unit, emulator, syntax, load | **PASS.** `npm test` exit 0, **1176 PASS / 0 FAIL**. Rules suite under `firebase emulators:exec --only firestore,storage`: exit 0, **127 PASS**. All five changed files pass `node -c`, and all four modules `require` cleanly (which a syntax check alone would not catch) |
+| 5 | HTTPS-only behaviour unchanged | **PASS.** Driven directly against `assertFetchableUrl`: `https://…`, `https://…:443/` and a trailing-dot host are accepted and normalised; `http://` on any port, a non-443 port, `ftp:`, `file:` and credentials-in-URL are each refused. Identical to what the deleted guard allowed — no scheme was widened |
+
+### The check that was not on the list, and would have caused an outage
+
+`firebase deploy` reads `functions/.env`, and **that file is gitignored — it exists only in the main
+checkout, not in the `ssrf-assessment` worktree the fix was built and tested in.** Deploying from that
+worktree as-is would have shipped both functions with **28 production environment variables missing**:
+every Stripe price id, the Apple billing configuration, `NIVADESK_XERO_SECRETS_READY`, and
+`NIVADESK_MALWARE_SCAN` / `NIVADESK_CLAMAV_URL` — silently turning off a security control that was
+approved and switched on three days earlier.
+
+Found by reading the two services' live environment before deploying and comparing it with the
+worktree. `.env` was copied across (it stays gitignored and cannot be committed), and the deploy log
+then confirms `Loaded environment variables from .env`. Every other file that exists in the main
+checkout but not the worktree was checked too: `apple-certificates/` is referenced by no code, and the
+rest are editor and backup artefacts.
+
+**One environment variable was deliberately allowed to disappear.** `TRACK17_WEBHOOK_TOKEN` was live on
+`chatgptMcp` as a literal, and is no longer in `.env` because last night's rotation moved it to Secret
+Manager. Nothing in `chatgptMcp` reads it — the only reader is `track17Webhook` (`index.js:21639`),
+which now takes it from Secret Manager on revision `track17webhook-00122-zux`. The literal was a stale
+copy of the already-revoked value, so dropping it completes the containment rather than breaking
+anything. Verified absent after the deploy; `NIVADESK_MALWARE_SCAN` verified still present.
+
+## The deploy
+
+```
+firebase deploy --only "functions:chatgptMcp,functions:chatgptWorkspaceAction" \
+  --project eggcraft-studio --non-interactive
+```
+
+T0 `2026-09-07T07:36:42Z` → complete `07:38:52Z`. Two functions, by name. Never `--only functions`.
+
+| Function | Before | After | State |
+|---|---|---|---|
+| `chatgptMcp` | `chatgptmcp-00071-tir` | **`chatgptmcp-00072-dok`** | Ready, 100% traffic |
+| `chatgptWorkspaceAction` | `chatgptworkspaceaction-00047-him` | **`chatgptworkspaceaction-00048-get`** | Ready, 100% traffic |
+
+## Post-deploy verification
+
+| Check | Result |
+|---|---|
+| `chatgptMcp` POST `tools/list`, unauthenticated | **200** — MCP discovery is public by design |
+| `chatgptWorkspaceAction` POST, unauthenticated | **401**, `{"ok":false,"error":"unauthenticated"}` — fails closed |
+| `chatgptWorkspaceAction` GET | **405** |
+| **Published MCP surface unchanged** | The live listing is **byte-identical** to the committed production snapshot `docs/evidence/tools-list-production-015d5792.json` — 19 tools, same order, same canonical JSON. The hotfix changed no capability |
+| Errors / 5xx on the two functions since T0 | **0** |
+| Errors / 5xx **project-wide** since T0 | **0** |
+| Positive control | 4 requests recorded (2× `chatgptmcp` 200, 1× 401, 1× 405), so the empty error result is real |
+
+An ad-hoc sha256 of the live listing differs from the recorded `7c838fb6…` figure. That is **not** a
+mismatch: the recorded hash is over the harness's canonical serialisation, not over a re-serialised
+JSON-RPC response. The comparable check — field-by-field against the committed snapshot — is identical,
+and is the one reported above.
+
+## What is NOT yet verified, and why
+
+The hostile-input behaviour of the deployed code is proved by 1176 checks over the exact tree that was
+deployed, including 35 guards each proved by removal, driving the real dispatcher. It has **not** been
+exercised against the production URL, because both entry points require a workspace-owner Firebase ID
+token and minting one is the operator's call, not the assistant's. The refusal cases would be safe
+(the guard refuses before any fetch and before any write); a positive "public HTTPS still works" case
+should target a URL that 404s, so the fetch completes but the handler stops at `!response.ok` and
+writes nothing to production.
+
+Rollback, if ever needed:
+
+```bash
+gcloud run services update-traffic chatgptmcp --project eggcraft-studio \
+  --region europe-west2 --to-revisions chatgptmcp-00071-tir=100
+gcloud run services update-traffic chatgptworkspaceaction --project eggcraft-studio \
+  --region europe-west2 --to-revisions chatgptworkspaceaction-00047-him=100
+```
+
+## Not deployed, deliberately
+
+The ten WooCommerce functions carry a refactor of the same private-address table. They are **not** the
+SSRF fix and were left on their existing revisions, per the instruction to deploy only the
+SSRF-affected functions. They are unchanged in behaviour and can ride the next Woo release. The web
+`/f/` route finding (MEDIUM) is a separate piece of work with its own deploy and is untouched here.
