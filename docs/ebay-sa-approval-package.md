@@ -551,15 +551,18 @@ they fail **silently** — no exception in any function.
 | Migrate later | You register the portal with a plain env value, then have to **rotate** it — and a rotation on this path is **silent**: nothing breaks visibly until eBay next validates the endpoint, when the 24-hour / 30-day markdown clock becomes a compliance failure. |
 | Never migrate | The token lives in `functions/.env` in plain text — the exact exposure class the TRACK17 incident was about. |
 
-### D7 — Secret replication policy: `user-managed --locations=europe-west2`, or `automatic`? **The two existing documents disagree.**
+### D7 — Secret replication policy — **DECIDED: `user-managed --locations=europe-west2`**
 
-`docs/ebay-runtime-service-account-proposal.md:822-823` uses `--replication-policy=user-managed
---locations="$REGION"`. `docs/ebay-functions-deploy-plan.md:56-57` uses
-`--replication-policy=automatic`. For a UK/EU project this is a **data-location decision, not
-cosmetics**, and **no assistant should settle it.**
+The two documents used to disagree: the proposal (`:822-823`) said `user-managed --locations="$REGION"`,
+the deploy plan (`:56-57`) said `automatic`. For a UK/EU project that is a **data-location decision, not
+cosmetics**, which is why it was put to the operator rather than settled quietly. **Resolved: the deploy
+plan now reads `user-managed --locations=europe-west2`, and all three documents agree.**
 
-**Recommended: `user-managed --locations=europe-west2`**, on the grounds that it matches every other
-regional choice in this project — but this is the operator's call. Whatever is chosen, **all six
+**DECIDED BY THE OPERATOR, 7 September 2026: `user-managed --locations=europe-west2`.** Not automatic.
+The reason it was theirs to make and not mine: automatic replication stores secret material across
+Google-selected regions worldwide, which for a UK/EU boundary project is a data-residency choice with
+legal weight, not a convenience setting. The recommendation happened to match, but the decision is
+recorded as theirs. Whatever is chosen, **all six
 secrets get it, created in one loop on one day**: none of them exists yet, so the precedent is set
 once and should not end up mixed.
 

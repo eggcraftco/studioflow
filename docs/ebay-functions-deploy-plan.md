@@ -54,7 +54,8 @@ Generated the way the tracking token was rotated, so no value reaches a terminal
 
 ```bash
 openssl rand -hex 32 | tr -d '\n' | gcloud secrets create EBAY_TOKEN_KEY \
-  --data-file=- --replication-policy=automatic --project eggcraft-studio
+  --data-file=- --replication-policy=user-managed --locations=europe-west2 \
+  --project eggcraft-studio
 ```
 
 The operator's two are created from a file they write and delete, or by pasting into
