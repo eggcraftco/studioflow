@@ -1092,7 +1092,8 @@ function createStripeBillingFunctions({
     }
 
     const status = String(subscription.status || "unknown");
-    const periodEnd = timestampFromUnix(subscription.current_period_end);
+    // Reads the items, not the subscription: current_period_end moved there.
+    const periodEnd = timestampFromUnix(stripeCurrentPeriodEndUnix(subscription));
     const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || "";
     const isDeleted = eventType === "customer.subscription.deleted";
     const shouldFallback = isDeleted || ["canceled", "unpaid", "incomplete_expired"].includes(status);
@@ -1179,10 +1180,10 @@ function createStripeBillingFunctions({
   }
 
   async function applyInvoicePaid(stripe, invoice) {
-    const subscriptionId = typeof invoice.subscription === "string"
-      ? invoice.subscription
-      : invoice.subscription?.id || "";
+    // parent.subscription_details.subscription first, legacy invoice.subscription second.
+    const subscriptionId = stripeSubscriptionIdFromInvoice(invoice);
     if (!subscriptionId) {
+      // Still correct for a genuine one-off invoice, which has no subscription.
       return { skipped: true, reason: "invoice_without_subscription" };
     }
 
@@ -1200,7 +1201,11 @@ function createStripeBillingFunctions({
 
   async function applyInvoicePaymentFailed(stripe, invoice) {
     let subscription = null;
-    const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id || "";
+    // Same drift as invoice.paid, but it fails quietly here: without the id the
+    // workspace still resolves through invoice.customer, so the failure is
+    // stamped and the handler looks successful while applySubscription is never
+    // called and the workspace never moves to past_due. Dunning depends on this.
+    const subscriptionId = stripeSubscriptionIdFromInvoice(invoice);
     if (subscriptionId) {
       try {
         subscription = await stripe.subscriptions.retrieve(subscriptionId);
@@ -2262,10 +2267,87 @@ function appleEventIsStale(existingData, eventSequenceMs) {
   return incoming < seen;
 }
 
+/**
+ * The id behind a Stripe reference, which is either the id or the expanded object.
+ */
+function stripeReferenceId(value) {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object") return "";
+  return typeof value.id === "string" ? value.id.trim() : "";
+}
+
+/**
+ * The subscription that generated an invoice.
+ *
+ * Stripe REMOVED `Invoice.subscription`: from 2025-03-31.basil onward the link
+ * lives at `invoice.parent.subscription_details.subscription`, and both of this
+ * account's webhook endpoints — and the pinned SDK's own default — run
+ * 2026-04-22.dahlia. The old read returned undefined for every event, so all
+ * seven invoice.paid events that ever arrived were skipped as
+ * "invoice_without_subscription" and no renewal was ever recorded.
+ *
+ * Order matters. The new location is preferred because it is where the pinned
+ * SDK says the field is; the legacy top-level field is only a fallback, so a
+ * payload replayed from an older API version (or an endpoint pinned back during
+ * a rollback) still resolves instead of silently skipping.
+ *
+ * An empty string is a real answer, not a failure: a one-off or manually issued
+ * invoice has no subscription at all, and `parent.type` is then "quote_details".
+ * Callers must keep skipping those.
+ */
+function stripeSubscriptionIdFromInvoice(invoice) {
+  if (!invoice || typeof invoice !== "object") return "";
+
+  const parent = invoice.parent;
+  const details = parent && typeof parent === "object" ? parent.subscription_details : null;
+  const current = details && typeof details === "object" ? stripeReferenceId(details.subscription) : "";
+  if (current) return current;
+
+  // Pre-2025-03-31.basil payloads only. Never reached on 2026-04-22.dahlia.
+  return stripeReferenceId(invoice.subscription);
+}
+
+/**
+ * The unix second at which a subscription's current billing period ends, or 0.
+ *
+ * `Subscription.current_period_end` moved onto each subscription ITEM in the
+ * same API generation. It is absent from the Subscription object on
+ * 2026-04-22.dahlia, which is why every Stripe ledger row in Firestore carries a
+ * null currentPeriodEnd while the Apple and Google rows — same field, same
+ * schema — carry a real one. That null is not cosmetic: it gates the 36-hour
+ * grace window in firestore.rules/storage.rules and it makes the expiry sweep's
+ * `where("billingCurrentPeriodEnd", "<", cutoff)` unable to ever match the row.
+ *
+ * With more than one item, the EARLIEST item end wins. That matches how Stripe
+ * itself defines the subscription-level value (its list filter is documented as
+ * "subscriptions whose minimum item current_period_end"), and it is the
+ * conservative direction here: this date extends paid access, so the latest end
+ * would keep a workspace entitled past what its earliest item paid for.
+ */
+function stripeCurrentPeriodEndUnix(subscription) {
+  if (!subscription || typeof subscription !== "object") return 0;
+
+  const items = subscription.items && Array.isArray(subscription.items.data) ? subscription.items.data : [];
+  let earliest = 0;
+  for (const item of items) {
+    const value = Number(item && item.current_period_end);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    if (!earliest || value < earliest) earliest = value;
+  }
+  if (earliest > 0) return earliest;
+
+  // Pre-basil payloads only, for the same reason as the invoice fallback above.
+  const legacy = Number(subscription.current_period_end);
+  return Number.isFinite(legacy) && legacy > 0 ? legacy : 0;
+}
+
 module.exports = {
   STRIPE_BILLING_ITEMS,
   APPLE_PLAN_PRODUCTS,
   createStripeBillingFunctions,
   // Exported for functions/test/qa/apple-billing-order.test.js.
-  appleEventIsStale
+  appleEventIsStale,
+  // Exported for functions/test/qa/stripe-invoice-api-drift.test.js.
+  stripeSubscriptionIdFromInvoice,
+  stripeCurrentPeriodEndUnix
 };
