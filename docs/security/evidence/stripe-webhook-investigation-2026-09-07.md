@@ -828,3 +828,66 @@ as it should.
 at `2026-04-22.dahlia`, `stripeClient()` passes no `apiVersion` override, and all 42 recorded events
 carry dahlia. The only way to reach a fallback is an operator pinning an endpoint back — the rollback
 case the comments name. **Not removed: that is the operator's call, and out of a frozen scope.**
+
+---
+
+# Addendum 6, 7 September — the focused re-review found a state-corruption path. STOPPED, not deployed.
+
+Seven frozen invariants, two lenses, every verdict driven through the real injected handlers via the
+factory's `_internal` bag — no source-text assertions. Both reviewers left the tree clean at `62883afe`.
+
+| Invariant | Verdict |
+|---|---|
+| 1. Every rail passes the real `event.created` | **HOLDS** — all five rails wrote `stripeEventSequence == event.created × 1000`; the owner Refresh and the reconcile job correctly are *not* treated as stale |
+| 2. Nothing moves backwards | **VIOLATED** |
+| 3. `payment_failed` cannot be falsely marked processed | **HOLDS** for every genuine failure |
+| 4. Transient failure leaves the event retryable | **HOLDS** — the dedupe row does **not** refuse the retry |
+| 5. Recovery converges | **HOLDS** in both orders |
+| 6. New shape reads never silently null | **HOLDS** — no shape found where a value was present and the read returned empty |
+| 7. Replay / dedupe | **HOLDS** sequentially; the concurrent case is a real check-then-write race that did not produce divergent state |
+
+## The HIGH, found independently by both lenses from different directions
+
+**A stale webhook re-grants a cancelled storage or team-seat add-on.** The ordering guard fires and the
+ledger row is protected — and then the company document is written from the stale payload anyway.
+
+Four links, each read in the shipped code:
+
+1. `writeStripeSubscriptionLedger` returns `{ skipped: true, reason: "stale_subscription_event" }`
+   (`stripeBilling.js:593`).
+2. `applySubscription` calls it as a bare `await …` and **discards the return value** (`:1109`).
+3. The `storage_addon` branch (`:1121`) and `team_seat_addon` branch (`:1138`) then write
+   `workspace.ref.set({…})` directly from the stale payload and **`return` before the resolver runs** —
+   so `recomputeEffectiveWorkspaceEntitlement`, which is what makes the plan rail safe, is never reached.
+4. The re-granted fields are the ones the server **enforces** on: `activeAdditionalTeamSeats()`
+   (`index.js:2409-2415`) reads `billingAdditionalTeamSeatQuantity` + `billingAdditionalTeamSeatStatus`,
+   and the storage add-on check reads its pair.
+
+Driven end to end: a Team workspace with 3 purchased seats and a 200 GB add-on, both cancelled at T2,
+then a stale T1 event — the add-ons come back. **It is durable and self-sustaining**: the next plan
+`invoice.paid` does not repair it.
+
+## Three more state-corruption paths, reported not fixed
+
+- **Equal `event.created` is applied, not skipped.** The guard is `eventSequence < seen` (`:591`) and
+  Stripe's `created` has one-second granularity. Two conflicting events in the same second: last writer
+  wins — observed moving `billingCurrentPeriodEnd` backwards and `billingStatus` active → trialing.
+- **The ordering pre-read's catch is fail-OPEN** (`:595-597`). Making `ledgerRef.get()` throw once let a
+  stale event apply in full, moving all three protected fields backwards **and** recording the event as
+  processed, so no redelivery repairs it.
+- **`applySubscription` reports `{updated: true}` for an event whose ledger write was stale-skipped**,
+  and `processStripeEvent` persists that verbatim — the event record states the opposite of what happened.
+
+## Pre-existing, and widened — not created by this patch
+
+Checked rather than assumed. Before this patch, `processStripeEvent` already passed `event.created` on
+the `customer.subscription.*` rail (`:1286` in the pre-patch file), so the guard already fired there and
+**the add-on corruption is already live in production on that rail today**. What the patch does is
+extend it to the `invoice.paid`, `invoice.payment_failed` and `checkout.session.completed` rails by
+making them pass event time too. The ordering guard itself landed in `ce1fb764` (3 September), before
+any of today's work.
+
+**DEPLOY STOPPED.** The operator's gate was "deploy is approved if this review finds no new
+HIGH/exploitable correctness blocker, otherwise STOP and report rather than entering another repair
+loop." It found one, with a demonstrated state-corruption path. Nothing was deployed, nothing was
+repaired, no endpoint event subscription was changed.
