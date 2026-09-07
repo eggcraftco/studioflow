@@ -891,3 +891,63 @@ any of today's work.
 HIGH/exploitable correctness blocker, otherwise STOP and report rather than entering another repair
 loop." It found one, with a demonstrated state-corruption path. Nothing was deployed, nothing was
 repaired, no endpoint event subscription was changed.
+
+---
+
+# Addendum 7, 7 September — the stale-event hotfix works, and introduces one regression. STOPPED.
+
+Commit `d0c7f431`. **All four frozen invariants HOLD**, proved by driving the real injected handlers
+through `_internal` against a fake Firestore and a fake Stripe — no source-text assertions anywhere.
+Suite **1205 → 1218 PASS**, exit 0.
+
+| Invariant | Verdict |
+|---|---|
+| 1. No mutation anywhere after a stale decision | **HOLDS** — all eight `workspace.ref` writes reachable from an event enumerated and each proved behind the gate, on all four rails, asserted over a whole-store snapshot rather than per-branch |
+| 2. Ordering-read failure fails closed and stays retryable | **HOLDS** — the `received` row opens before dispatch, `processedAt` lands only after the applier returns, so a throw leaves the event retryable; the redelivery was driven and applies; the webhook answers 500, it does not swallow to 200 |
+| 3. Equal `event.created` cannot race | **HOLDS, and it dissolves rather than being patched** — because what is applied is Stripe's canonical state, both members of a same-second tie write the same thing. Driven in both arrival orders; final projection byte-identical |
+| 4. A skipped event is recorded truthfully | **HOLDS** on every rail — `processingStatus: "skipped"`, `result.skipped: true`, `result.updated` undefined |
+
+The reviewer also checked its own probes were not vacuous: it temporarily reapplied the production
+defect and watched the same probes reproduce the corruption byte for byte
+(`{"addon":"storage_200gb","active":true}`, `billingStorageAddonMB 204800`; `{"purchasedSeatQuantity":3}`,
+`billingTeamMemberLimit 8`).
+
+## The HIGH: the fix leaks the free trial
+
+**A stale `checkout.session.completed` no longer spends the once-per-workspace free trial, and nothing
+ever repairs it.** This is a regression `d0c7f431` introduces, not a pre-existing bug.
+
+Verified in the shipped code:
+
+- `applyCompletedSubscriptionCheckout` stamps `billingTrialUsedAt` only inside
+  `if (result.updated && result.workspaceId)` (`stripeBilling.js:1125-1131`).
+- After the fix a stale checkout event returns `{skipped:true}` with no `updated`, so the stamp never
+  lands. Before the fix it returned `{updated:true}` — because the skip was discarded — so it did.
+- `billingTrialUsedAt` is the once-per-workspace trial guard, read at `index.js:2268`, `index.js:31880`
+  and `stripeBilling.js:1813` (`hasUsedTrial`).
+
+So the workspace can claim the fourteen-day trial again. Not state corruption — a revenue leak — but it
+meets the operator's stop condition.
+
+**The shape of the right answer, noted and NOT implemented.** `billingTrialUsedAt` is a *monotonic,
+once-ever* fact: staleness is irrelevant to it, because "this workspace has at some point started a
+trial" cannot become false by arriving late. The invariant "a stale event mutates nothing" is correct
+for *state*, and wrong for *monotonic facts*. Separating those two classes is the fix; deciding to make
+that separation is the operator's call.
+
+## Four lesser findings, reported not fixed
+
+- The watermark is a non-transactional read-modify-write, and the canonical retrieve widens the window
+  between read and write by one Stripe API call. Demonstrated with interleaved deliveries.
+- `invoice.paid`, `invoice.payment_failed` and `checkout.session.completed` retrieve the subscription in
+  the *caller*, before `applySubscription` makes the stale decision — so a stale event on those three
+  rails still costs one Stripe API call. (The `customer.subscription.*` rail costs zero, by design.)
+- The commit message and the comment at `:1152-1156` claim the subscription's "id, its customer and its
+  workspace metadata are immutable". **Stripe subscription metadata is mutable.** The claim is wrong as
+  written even though the reasoning survives for id and customer.
+- An event with no `created` is never stale and skips the ledger read entirely, so it carries no
+  fail-closed exposure — noted as correct, not as a defect.
+
+**DEPLOY STOPPED.** The operator's gate: "If it finds another state-corruption/HIGH path, STOP and
+report." It found one. Nothing deployed, nothing repaired, no endpoint event list changed, `/f/`
+untouched.
