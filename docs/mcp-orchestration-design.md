@@ -6,6 +6,10 @@ Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/U
 > operator's list was order search and read, customer search and read, and the workspace's ONE inventory
 > search; there has never been a customer capability on any assistant surface, so what ships behind
 > `NIVADESK_MCP_ORCHESTRATOR` is the two that exist: `search_commerce_orders` and `search_inventory`.
+> **The customer capability is not being written, either.** The operator settled that on 7 September
+> 2026: creating one would add a third capability to a frozen two-capability scope, so the third item on
+> the list above is a description of what was asked for, never a commitment to build it. The final new
+> MCP surface is exactly two: order search and read, non-financial, and one canonical inventory search.
 > `get_business_attention_summary`, `get_commerce_overview`,
 > `get_channel_performance`, `get_inventory_overview`, `get_payout_reconciliation_overview`,
 > `get_integration_health`, `get_accounting_sync_status` and `get_banking_attention_summary` came out —
@@ -17,6 +21,21 @@ Status: design, revision 2, 6 Sep 2026. Branch `mcp-orchestration`, worktree `/U
 > are DESIGNED is still accurate; what changed is which of them the release publishes, and this
 > document has not been rewritten around that — read it as the design, and §8.1 of
 > `docs/orchestrator-contract.md` as the surface.
+>
+> **Scope, 7 September 2026 — one of the two that ship no longer matches its design here, and the
+> paragraph above must not be read as covering it.** The operator took every monetary field out of both
+> kept capabilities. So `search_commerce_orders` does NOT emit the per-order `totals` block this document
+> designs for it — `grandTotal`, `paid`, `remaining`, `refunded`, `customerTotal`, `currency`, `vatDue`,
+> `platformCollectedTax` — nor the `data.currency` beside the rows, and it does not read
+> `ctx.financialInfo` or `entitlements.advancedFinanceEnabled` at all. The block and both conditions were
+> deleted rather than switched off. Every sentence below that describes what
+> `search_commerce_orders` returns as money is design history — §8.6's `customerTotal` addition
+> (`:865`), the row projection in §11 (`:1061`), the "money fields only with financialInfo" cell in the
+> permission matrix (`:1332`) and the draft tool description that offers "what it still owes" (`:1811`),
+> which the shipped description no longer says. Read the wire text in `functions/index.js` for what a
+> model is actually told. `search_inventory` never emitted a figure and is unchanged.
+> `functions/test/qa/mcp-no-money.test.js` enumerates every key both capabilities emit and refuses a
+> money-shaped NAME, in all eight flag states and for a caller holding the financial grant.
 >
 > **One part of this document is not a design and is therefore corrected here rather than left standing:
 > §5, the test plan.** It names a file per capability, and the files for the eight removed capabilities

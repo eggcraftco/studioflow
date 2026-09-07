@@ -355,7 +355,18 @@ checkAsync("two channels get the same figures, and only the presentation differs
   assert(!/^1\. /.test(chat), "ChatGPT does not");
 });
 
-checkAsync("a group thread sees the answer without the person and without the money", async () => {
+checkAsync("a group thread sees the answer without the person, and there is no money for it to lose", async () => {
+  // This check used to prove `row.totals` came back as `{restricted: true,
+  // reason: "channel_financial_policy"}`. After the reduction of 7 September
+  // 2026 the capability emits no `totals` for anybody, so asserting the
+  // redaction of it here would be asserting the redaction of a field that no
+  // longer exists — a check that passes for the wrong reason.
+  //
+  // The person half is unchanged and still end to end. The money half moves to
+  // where the rule actually lives: `envelope.applyChannelProfile`, taken
+  // directly below over the four shapes §6.4 names, plus the standing proof
+  // that this capability emits none in the first place
+  // (test/qa/mcp-no-money.test.js).
   const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);
   const group = waContext({
@@ -367,8 +378,7 @@ checkAsync("a group thread sees the answer without the person and without the mo
   const result = await instance.run({ capability: "search_commerce_orders", args: {}, ctx: group });
   const row = result.data.orders[0];
   assert.ok(row, "the fixture returned no order, so this check proves nothing");
-  assert.strictEqual(row.totals.restricted, true, "a shared thread was shown the takings");
-  assert.strictEqual(row.totals.reason, "channel_financial_policy");
+  assert.ok(!("totals" in row), "the capability handed a shared thread a totals block to redact");
   assert.strictEqual(row.customer.restricted, true, "a shared thread was shown the buyer");
   assert.strictEqual(row.customer.reason, "channel_pii_policy");
 });
@@ -443,13 +453,20 @@ checkAsync("a group thread is told which entity, never who the person is", async
   }
 });
 
-checkAsync("a one-to-one thread that allows both still gets both", async () => {
+checkAsync("a one-to-one thread keeps the person it is allowed, and gets no money either", async () => {
+  // The money half of this check was "a one-to-one thread lost the money it is
+  // allowed", asserting `row.totals.grandTotal` came back as a number. There is
+  // no money for any thread now, so what is worth pinning is the other
+  // direction: a permissive profile must not be the thing that puts money back.
+  // The redaction still discriminates — that is taken on
+  // `envelope.applyChannelProfile` above, over data it is given rather than
+  // data this capability produces.
   const snapshot = fixtures.mixedSnapshot();
   const instance = orchestratorOver(snapshot);
   const result = await instance.run({ capability: "search_commerce_orders", args: {}, ctx: waContext() });
   const row = result.data.orders[0];
-  assert.strictEqual(row.totals.restricted, undefined, "the redaction is following the capability, not the channel");
-  assert.strictEqual(typeof row.totals.grandTotal, "number", "a one-to-one thread lost the money it is allowed");
+  assert.ok(!("totals" in row), "a thread that allows financial data was handed money the capability should not hold");
+  assert.ok(!("currency" in result.data), "the workspace currency came back on a permissive channel");
   // The buyer is withheld only by the CHANNEL policy here. This fixture records
   // no customer on the first order, so the assertion is on the reason rather
   // than on the flag: "not_recorded" is the capability saying there is nobody,

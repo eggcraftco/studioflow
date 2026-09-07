@@ -84,45 +84,37 @@ check("a live Etsy shop is dated from its connection, on every capability that l
   }
 });
 
-check("no answer in this file hands VAT to a plan that does not include it", () => {
-  // The entitlement is a property of the WORKSPACE, not of one capability. A
-  // Starter workspace is refused VAT by get_order_financials, so a per-order
-  // total, a per-channel tax block and a headline tax block must all refuse it
-  // too — otherwise the plan gate is only as strong as the least careful read.
-  const snapshot = fixtures.mixedSnapshot();
-  const basic = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: false, chatgptAppEnabled: true } });
-  const withheld = ["vatDue", "vatBase", "platformCollectedTax", "taxResponsibility"];
-
-  for (const [name, handler, args] of [
-    ["search_commerce_orders", commerce.searchCommerceOrders, {}]
-  ]) {
-    const result = handler(snapshot, args, basic, { nowMs: snapshot.nowMs });
-    const serialised = JSON.stringify(result.data);
-    for (const key of withheld) {
-      assert.ok(!serialised.includes(`"${key}"`), `${name} put ${key} in front of a plan that does not include it`);
-    }
-    assert.ok(result.warnings.some((row) => row.code === "plan_limited"), `${name} withheld the figures without saying so`);
-    assert.ok(/NivaDesk Pro and Team/.test(result.warnings.find((row) => row.code === "plan_limited").message),
-      `${name} does not say where the missing figures live`);
-  }
-});
-
-check("a paid plan still gets the tax detail", () => {
+check("the plan and the role decide nothing here, because there is no money to decide about", () => {
+  // These three checks used to be a plan gate: a Starter workspace was refused
+  // VAT and platform tax, a Pro workspace was given them, and both were given
+  // what the order took. The operator's decision of 7 September 2026 removed the
+  // whole `totals` block and both conditions that produced it, so the gate has
+  // nothing behind it — and the honest test of a removed gate is that the answer
+  // is the same on either side of it.
+  //
+  // The enumerating guard lives in test/qa/mcp-no-money.test.js, which refuses
+  // a money-shaped field by its NAME, so a `grandTotalV2` is caught without
+  // being listed. What is pinned here is the narrower thing this file is for:
+  // the plan and the grant no longer change this capability's answer at all.
   const snapshot = fixtures.mixedSnapshot();
   const pro = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: true, chatgptAppEnabled: true } });
-  const search = commerce.searchCommerceOrders(snapshot, {}, pro, { nowMs: snapshot.nowMs });
-  assert.ok(search.data.orders.every((row) => typeof row.totals.vatDue === "number"));
-  assert.ok(!search.warnings.some((row) => row.code === "plan_limited"));
-});
-
-check("the money a basic plan IS allowed still answers the question", () => {
-  const snapshot = fixtures.mixedSnapshot();
   const basic = fixtures.ownerContext({ entitlements: { advancedFinanceEnabled: false, chatgptAppEnabled: true } });
-  const search = commerce.searchCommerceOrders(snapshot, {}, basic, { nowMs: snapshot.nowMs });
-  const row = search.data.orders.find((entry) => entry.orderId === "o_gbp");
-  assert.strictEqual(row.totals.grandTotal, 200, "what the order took is not the part the plan withholds");
-  assert.strictEqual(row.totals.remaining, 0);
-  assert.strictEqual(row.totals.currency, "GBP");
+  const noGrant = fixtures.ownerContext({ isOwner: false, financialInfo: false });
+
+  const answers = [pro, basic, noGrant].map((ctx) => commerce.searchCommerceOrders(snapshot, {}, ctx, { nowMs: snapshot.nowMs }));
+  assert.ok(answers[0].data.orders.length > 0, "the fixture returned no orders, so this check proves nothing");
+  assert.deepStrictEqual(answers[1].data, answers[0].data, "a plan without advanced finance is answered differently");
+  assert.deepStrictEqual(answers[2].data, answers[0].data, "a member without the financial grant is answered differently");
+  assert.deepStrictEqual(answers[1].warnings, answers[0].warnings, "the plan changes what this search says about itself");
+  assert.deepStrictEqual(answers[2].warnings, answers[0].warnings, "the grant changes what this search says about itself");
+
+  // As KEYS, not as substrings: `"paid"` is also the value of `paymentStatus`,
+  // which is a status word and stays.
+  for (const key of ["totals", "grandTotal", "vatDue", "vatBase", "platformCollectedTax", "taxResponsibility", "currency", "paid", "remaining", "refunded", "customerTotal"]) {
+    for (const answer of answers) {
+      assert.ok(!JSON.stringify(answer.data).includes(`"${key}":`), `${key} is still a field in the answer`);
+    }
+  }
 });
 
 /* ---------------------------------------------------------------- search */
@@ -187,12 +179,25 @@ check("many matches is a completed search, not a state that needs a human", () =
   assert.strictEqual(result.state, undefined, "an ordinary multi-row search must not flag itself as needing attention");
 });
 
-check("money fields are absent without financial access, and the answer says which section was withheld", () => {
+check("nothing is announced as withheld, because nothing is being withheld from anyone", () => {
+  // This used to assert the opposite half of the same gate: no `totals` for a
+  // member without the financial grant, plus a `section_not_permitted` warning
+  // naming the section they were refused. Both warnings went with the block.
+  //
+  // Saying "Order money is not included for your role" to a caller who would
+  // not have been shown money whatever their role is a false statement about
+  // the reader — it tells them there is a door, and tells a workspace OWNER on
+  // the top plan that their own role is the reason. Silence is the true answer:
+  // this capability is about workflow, and the money tools are elsewhere.
   const snapshot = fixtures.mixedSnapshot();
-  const restricted = fixtures.ownerContext({ isOwner: false, financialInfo: false });
-  const result = commerce.searchCommerceOrders(snapshot, {}, restricted, { nowMs: snapshot.nowMs });
-  assert.ok(result.data.orders.every((row) => !("totals" in row)));
-  assert.ok(result.warnings.some((row) => row.code === "section_not_permitted"));
+  for (const ctx of [fixtures.ownerContext(), fixtures.ownerContext({ isOwner: false, financialInfo: false })]) {
+    const result = commerce.searchCommerceOrders(snapshot, {}, ctx, { nowMs: snapshot.nowMs });
+    assert.ok(result.data.orders.every((row) => !("totals" in row)), "a totals block came back");
+    assert.ok(!result.warnings.some((row) => row.code === "section_not_permitted"),
+      "the answer claims a section was withheld from this caller; none was");
+    assert.ok(!result.warnings.some((row) => row.code === "plan_limited"),
+      "the answer claims the plan is holding figures back; it is not");
+  }
 });
 
 /* ------------------------------------------------------- channel performance */

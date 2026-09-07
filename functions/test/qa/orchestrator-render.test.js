@@ -194,17 +194,30 @@ check("every number in a redacted answer still comes from the redacted data", ()
     }
     assert.ok(built.summary.lines.length > 0, `${capability}: the redacted answer said nothing at all`);
   }
-  // The money really was taken out, or the loop above is checking numerals in
-  // an answer that was never redacted. `search_commerce_orders` puts an order's
-  // totals in `data.orders[]`, each row carrying its own currency.
-  const plain = commerce.searchCommerceOrders(fixtures.mixedSnapshot(), {}, ctx, { nowMs: fixtures.NOW });
-  assert.ok(plain.data.orders.some((row) => Number((row.totals || {}).grandTotal) > 0),
-    "the fixture no longer carries an order total, so this check proves nothing");
+  // This used to end by proving the redaction had work to do: it took the order
+  // totals `search_commerce_orders` emitted and asserted each came back
+  // `{restricted: true}`. The reduction of 7 September 2026 removed every
+  // monetary field from both kept capabilities, so no published answer carries
+  // a figure for a profile to remove, and asserting the redaction of a field
+  // that no longer exists is a check that passes for the wrong reason.
+  //
+  // Two halves instead. First: the published answer really has no money in it,
+  // redacted or otherwise — which is what makes the loop above a check about
+  // NUMERALS rather than a check about money.
   const orders = envelopeFor("search_commerce_orders", commerce.searchCommerceOrders, fixtures.mixedSnapshot(), {}, GROUP);
+  assert.ok(orders.data.orders.length > 0, "the fixture returned no orders, so this check proves nothing");
   for (const row of orders.data.orders) {
-    assert.strictEqual(row.totals && row.totals.restricted, true,
-      `a figure survived into a channel that may not see money: ${JSON.stringify(row.totals)}`);
+    assert.ok(!("totals" in row), `an order row still carries money: ${JSON.stringify(row.totals)}`);
   }
+  // Second: the redaction still discriminates, taken on the rule itself over a
+  // payload shaped the way this capability's used to be. The rule outlives the
+  // capability; test/qa/mcp-no-money.test.js is the standing proof that no
+  // published capability feeds it money any more.
+  const redacted = envelope.applyChannelProfile(
+    { orders: [{ orderId: "o_1", totals: { grandTotal: 200, paid: 200, currency: "GBP" } }] }, GROUP);
+  assert.strictEqual(redacted.orders[0].totals.restricted, true,
+    "a figure survived into a channel that may not see money");
+  assert.strictEqual(redacted.orders[0].totals.reason, "channel_financial_policy");
 });
 
 // The injection is written the way a hostile shop would write it: in the field
@@ -373,11 +386,18 @@ check("a group thread that may not see money gets none of it, in any capability"
     const leaks = moneyLeaks(built.data, "data");
     assert.deepStrictEqual(leaks, [], `${capability}: the payload still carries ${JSON.stringify(leaks)}`);
   }
-  // And the loop is not vacuous: the fixture really does carry money that the
-  // profile has to take out.
-  const open = envelopeFor("search_commerce_orders", commerce.searchCommerceOrders, fixtures.mixedSnapshot(), {});
-  assert.ok(open.data.orders.some((row) => Number((row.totals || {}).paid) > 0),
-    "the fixture no longer has a paid order, so this check proves nothing");
+  // The loop above is now vacuous in one specific sense, and it is worth
+  // saying which: since 7 September 2026 neither kept capability emits a money
+  // figure for the profile to take out, so `moneyLeaks` finds nothing because
+  // there is nothing rather than because the redaction worked. It stays as the
+  // check that no published capability starts producing one — but the DETECTOR
+  // has to be shown to fire, or a broken `moneyLeaks` would report clean
+  // forever. So it is run over the fourth shape §6.4 names, before and after.
+  const carrying = { providers: [{ provider: "square", currency: "GBP", unmatchedAmount: 40 }] };
+  assert.deepStrictEqual(moneyLeaks(carrying, "data"), [["data.providers[0].unmatchedAmount", 40]],
+    "the money detector no longer detects money");
+  assert.deepStrictEqual(moneyLeaks(envelope.applyChannelProfile(carrying, GROUP), "data"), [],
+    "the profile left a money-named number on a row that names its own currency");
 });
 
 check("a sentence carrying money is redacted in every currency the app offers, not thirteen of them", () => {

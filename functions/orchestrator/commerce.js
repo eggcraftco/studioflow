@@ -369,8 +369,35 @@ function commerceOverview(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } 
  * search_commerce_orders
  * ------------------------------------------------------------------ */
 
+/**
+ * The order search, with NO MONEY IN IT AT ALL.
+ *
+ * The operator's decision of 7 September 2026: the two capabilities this
+ * release ships carry no monetary field of any kind. Not a total, not what is
+ * paid, not what is left, not a refund, not VAT, not platform-collected tax,
+ * and not the currency the workspace keeps its books in — a currency code
+ * beside a figure is half of that figure, and a currency code on its own is a
+ * fact about the workspace's money this answer has no reason to state.
+ *
+ * It is not a withheld section either. There is no `financial` gate here and no
+ * plan gate, because there is nothing behind them to gate: `ctx.financialInfo`
+ * and `entitlements.advancedFinanceEnabled` decided what a `totals` block
+ * contained, and a boolean that still decides that is a boolean somebody flips
+ * back. The block is gone, the two conditions that produced it are gone with
+ * it, and `search_commerce_orders` no longer reads either field.
+ *
+ * What stays is not money: `paymentStatus` and `fulfillmentStatus` are the
+ * provider's own status WORDS from the canonical enums (commerce/envelope.js),
+ * carrying no amount and no currency, and a workflow answer that could not say
+ * whether an order is paid would not be worth asking.
+ *
+ * test/qa/mcp-no-money.test.js is the standing proof: it enumerates every key
+ * this capability can emit, at every depth, in every flag state and for a
+ * caller holding the financial entitlement, and fails on a money-shaped NAME
+ * rather than on the list of names removed today.
+ */
 function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
-  const { views, workspace } = selectOrders(snapshot, args);
+  const { views } = selectOrders(snapshot, args);
   const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
   const query = String(args.query || "").trim().toLowerCase();
   const warnings = [];
@@ -392,13 +419,6 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     return haystack.includes(query);
   });
 
-  // Two independent gates, and the answer needs both. The ROLE decides whether
-  // this member sees order money at all; the PLAN decides whether the money
-  // they see includes VAT and platform-collected tax. Checking only the role is
-  // how a Starter workspace that get_order_financials refuses VAT to could read
-  // the same VAT off a search result.
-  const financial = ctx.financialInfo === true;
-  const advanced = advancedFinance(ctx);
   const rows = matches.slice(0, limit).map((view) => {
     // The identifiers a SHOP wrote, taken as identifiers or not at all.
     //
@@ -448,30 +468,16 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     // not an order number, so a reader can tell "this order has no number"
     // from "we would not repeat what this shop wrote there".
     if (!shopNumber && view.orderNumber) row.orderNumberWithheld = "not_an_order_number";
-    if (financial) {
-      row.totals = {
-        grandTotal: round2(view.finance.revenue),
-        paid: round2(view.paidAmount),
-        remaining: round2(view.remainingAmount),
-        refunded: round2(view.finance.refunded),
-        customerTotal: round2(view.finance.customerTotal),
-        currency: view.currency
-      };
-      if (advanced) {
-        row.totals.vatDue = round2(view.finance.vatDue);
-        row.totals.platformCollectedTax = round2(view.finance.platformCollectedTax);
-        row.totals.taxResponsibility = view.finance.taxResponsibility;
-        row.totals.taxNeedsReview = view.finance.taxNeedsReview;
-      }
-    }
     return row;
   });
 
-  if (!financial) {
-    warnings.push(envelope.warning("section_not_permitted", "Order money is not included for your role.", { section: "totals" }));
-  } else if (!advanced) {
-    warnings.push(envelope.warning("plan_limited", `This plan reports what each order took, what is paid and what is left. ${PLAN_LIMITED_DETAIL}`));
-  }
+  // No `section_not_permitted` and no `plan_limited` warning either. Both said
+  // that money was being held back from THIS caller — one for the role, one for
+  // the plan — and neither is true any more: nobody gets order money here, so
+  // announcing a withheld section would tell a reader there is a door, and tell
+  // an owner on the top plan that their own role or plan is the reason they
+  // cannot see figures a paid tool (get_order_financials) still answers.
+  //
   // A PAGE is not a truncated read, and this used to say it was. The code was
   // `loader_cap_reached`, which `envelope.finish` takes as proof of
   // `partial: true` and the renderer quotes into "This answer is incomplete:
@@ -490,7 +496,12 @@ function searchCommerceOrders(snapshot, args = {}, ctx = {}, { nowMs = Date.now(
     data: {
       count: rows.length,
       matched: matches.length,
-      currency: workspace,
+      // No `currency`. It was the workspace's own code rather than any order's,
+      // and it survived the first pass at this reduction because it carried no
+      // figure — but a currency is a monetary field: it is the unit half of
+      // every amount, it states what this workspace's money is denominated in,
+      // and a row list with a currency on it reads as a row list whose amounts
+      // are somewhere nearby.
       orders: rows
     },
     warnings,

@@ -623,15 +623,30 @@ cannot reach one under any flag. What a second channel may call is the two rows 
 All are reads: class A, assurance 1, no outward effect — which is why a level-1 read binding may call
 every one of them.
 
-**Read does not mean money-free, and a channel author must not read the paragraph above as saying it
-does.** What came out is the money SUMMARIES — gross sales, VAT, fees, profit, payouts, the shelf's
-value. An order's OWN figures did not: `search_commerce_orders` puts a `totals` block on every row
+**Neither of them reports money — not a figure, and not a currency.** On 7 September 2026 the operator
+took every monetary field out of both. `search_commerce_orders` used to put a `totals` block on each row
 (`grandTotal`, `paid`, `remaining`, `refunded`, `customerTotal`, `currency`, plus `vatDue` and
-`platformCollectedTax` on an advanced plan) behind two gates that both have to open — `ctx.financialInfo`,
-the role, and the workspace plan. A caller without the role gets no `totals` at all and a
-`section_not_permitted` warning saying so. A binding whose profile sets `financial_data_allowed: false`
-gets the rows with `totals` replaced by `{ restricted: true, reason: "channel_financial_policy" }`, done
-for it in `envelope.applyChannelProfile` (§6.4) — the channel must not strip money itself.
+`platformCollectedTax` on an advanced plan) behind two gates — the `ctx.financialInfo` role grant and the
+workspace plan — and `data.currency` beside the rows. The block is gone, `data.currency` with it, and so
+are both conditions: nothing in either capability reads `ctx.financialInfo` or
+`entitlements.advancedFinanceEnabled` any more, which is the difference between a removal and a feature
+behind a flag somebody can flip back.
+
+There is no `section_not_permitted` and no `plan_limited` warning here either. Both said money was being
+withheld from THIS caller, and neither is true when no caller gets any: telling a workspace owner on the
+top plan that their role is why they cannot see figures is a false statement about the reader. The money
+tools this release ships are the 1.1.1 ones — `get_order_financials` and the two bank tools — untouched,
+with their own grants in front of them.
+
+What is NOT money and stays: `paymentStatus` and `fulfillmentStatus`, the provider's own status words out
+of the canonical enums, carrying no amount and no currency. `envelope.applyChannelProfile` (§6.4) still
+strips money for a binding with `financial_data_allowed: false`, because the rule outlives any one
+capability — it simply has nothing to strip from these two.
+
+`test/qa/mcp-no-money.test.js` is the standing proof, and it is written against the SHAPE rather than
+against the names deleted that day: it enumerates every key either capability emits, at every depth, in
+all eight flag states and for every caller including an owner holding the financial grant on an advanced
+plan, and refuses any key whose name is money-shaped. A field called `grandTotalV2` fails it.
 
 | capability | scopes | gates | PII | domains read |
 |------------|--------|-------|-----|--------------|

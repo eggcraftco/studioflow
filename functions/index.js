@@ -27080,7 +27080,14 @@ function nvMcpOrderToolSchemas() {
       {
         name: "search_commerce_orders",
         title: "Search orders across channels",
-        description: "Find orders from any channel and see the provider's own status separately from NivaDesk's workflow status: platform status, payment status, fulfilment status, external order id, connection, totals and last sync all stay distinct fields. Use it when the user names a shop, an external order number or a payment state. Buyer details are withheld for channels whose data policy restricts them. Do not ask for companyId.",
+        // No money in this sentence, because there is none in the answer. It
+        // used to say "connection, totals and last sync all stay distinct
+        // fields" while the reduction of 7 September 2026 took every monetary
+        // field out of the capability — a listing that promises totals is a
+        // listing that asks the model to go looking for them. Amounts, what is
+        // paid and what is left are get_order_financials' answer, which is a
+        // different tool with its own grant behind it.
+        description: "Find orders from any channel and see the provider's own status separately from NivaDesk's workflow status: platform status, payment status, fulfilment status, external order id, connection and last sync all stay distinct fields. It reports no amounts at all: no order total, nothing paid or outstanding, no refund, no tax and no currency. Use it when the user names a shop, an external order number or a payment state. Buyer details are withheld for channels whose data policy restricts them. Do not ask for companyId.",
         inputSchema: {
           type: "object",
           additionalProperties: false,

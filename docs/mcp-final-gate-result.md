@@ -226,6 +226,11 @@ contributed a non-manual order. Its return shape (`commerce.js:489-498`) is
 roster in it at all. On a workspace with manual orders and no connections, `sources` is `[]`: no channel
 is named, connected or otherwise.
 
+> Measured at `3f68dc88`, and one field of that shape has since gone. The operator's decision of
+> 7 September 2026 removed every monetary field from both kept capabilities, so the shape is now
+> `data { count, matched, orders }`: `currency` went with the per-order `totals` block. This finding and
+> its closure are unaffected — the shape is left here as it was on the day it was measured.
+
 **Invariant.** Reviewer-facing truth. This is a submission page telling OpenAI that a tool exhibits a
 behaviour it does not, which is precisely the 1.1.1 rejection shape — the argument the branch itself makes
 at `:85-91` about "customer search and read".

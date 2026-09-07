@@ -90,6 +90,12 @@ never dispatchable. Nothing was kept or dropped for it. Customer data reaches th
 on an order: `search_commerce_orders` declares `pii: ["name","email"]` and files an access-log row, and the
 production tool `get_order_detail` declares all four categories.
 
+**And it is not being written.** The operator settled that on 7 September 2026: a customer search does
+not exist today, and adding one would put a third capability into a scope that is frozen at two. The
+final new MCP surface for this submission is exactly two capabilities — order search and read,
+carrying no money, and one canonical inventory search. Any document that reads as though a customer
+capability is planned is describing the request, not the release.
+
 The first of the two is also published by `NIVADESK_MCP_INVENTORY` on its own, where an older handler
 answers it. It was a separate capability called `search_inventory_items` until §5.1 was closed.
 
@@ -98,12 +104,39 @@ thin adapters, so the WhatsApp channel can reuse them without a second copy of t
 (`docs/orchestrator-contract.md`). Each is read-only, class A, assurance 1, and reads only the domains
 it declares.
 
-Every one of them answers in the same envelope: `state`, `data`, `freshness.sources[]`, `partial`,
-`warnings[]` (a closed list of codes), `entityRefs`, `suggestedActions`, `summary.lines`. The two
-honesty rules that matter to a reviewer, because they are visible in a demo:
+**Neither of the two reports money.** On 7 September 2026 the operator took every monetary field out of
+both: no order total, nothing paid or outstanding, no refund, no VAT, no platform-collected tax, no
+payout, no payment amount — and no currency, because a currency code is the unit half of an amount and a
+statement about the workspace's money in its own right. The `totals` block `search_commerce_orders` put
+on each row and the `data.currency` beside them are gone, and so are the two conditions that produced
+them: nothing in either capability reads `ctx.financialInfo` or `entitlements.advancedFinanceEnabled` any
+more. That is the difference between a removal and a feature behind a switch. There is no
+`section_not_permitted` or `plan_limited` warning either — announcing a withheld section to a caller who
+would not have been shown money whatever their role is a false statement about the reader.
 
-- a source that contributed rows but cannot report a sync time sets `partial: true` and says which;
-- amounts in another currency are listed in their own rows and never converted.
+The money tools in this submission are the 1.1.1 ones, untouched: `get_order_financials`,
+`get_financial_overview`, `get_extra_spending_overview`, `get_dashboard_summary` and the two bank tools,
+each with its own grant in front of it. What the two new reads keep is not money: `paymentStatus` and
+`fulfillmentStatus` are the provider's own status WORDS out of the canonical enums, carrying no figure
+and no currency.
+
+`functions/test/qa/mcp-no-money.test.js` is the standing proof, and it is written against the shape
+rather than against the field names deleted that day: it enumerates every key either capability emits, at
+every depth, in all eight flag states, for every caller including a workspace owner holding the financial
+grant on an advanced plan, and refuses any key whose NAME is money-shaped. A field called `grandTotalV2`
+fails it.
+
+Every one of them answers in the same envelope: `state`, `data`, `freshness.sources[]`, `partial`,
+`warnings[]` (a closed list of codes), `entityRefs`, `suggestedActions`, `summary.lines`. The honesty
+rule that matters to a reviewer, because it is visible in a demo:
+
+- a source that contributed rows but cannot report a sync time sets `partial: true` and says which.
+
+A second bullet stood beside it until 7 September 2026 — "amounts in another currency are listed in their
+own rows and never converted" — and it was true of the capability as written on 6 September. The money
+removal above ends it: there are no amounts to list, in the workspace's currency or any other. The
+non-conversion rule itself is alive in `money.js` and is what the untouched 1.1.1 finance tools answer
+by; it is simply not something these two demonstrate.
 
 A third rule stood here until 7 September 2026 — "a channel that is not connected is named as not
 connected, never counted as zero" — and neither published capability does it. The roster that does is
@@ -511,7 +544,10 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    With manual orders and no shop connections, what the reviewer sees from `search_commerce_orders` is
    `count` and `matched` over the workspace's own orders and an EMPTY `sources` array: no channel is
    named, connected or not, because none contributed a row and none has a `commerceHealth` document
-   (§2.3). Do not stage the demo around a channel roster. Plus one `update_order_status` on an order with
+   (§2.3). Do not stage the demo around a channel roster. Do not stage it around a figure either: since
+   7 September 2026 neither tool returns a total, a balance, a tax or a currency, so a scripted "what is
+   this order worth" lands on `get_order_financials`, which is a different tool with the Financial
+   permission in front of it. Plus one `update_order_status` on an order with
    automatic updates **off**, so the notification boundary can be demonstrated without mailing a test
    address.
 8. Guide: move the TWO bullets under "Coming in the next version of the app" (§2.5) into "What you can
@@ -548,8 +584,11 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 >
 > **New in this version:** two read-only tools — one that searches orders across a workspace's sales
 > channels and one that searches its stock. Both report how fresh their data is and what they could not
-> include, and amounts in other currencies are listed separately rather than converted. Neither writes
-> anything, calls a shop, marketplace or bank, or modifies an external provider.
+> include. **Neither reports any monetary value**: no order total, nothing paid or outstanding, no
+> refund, no tax, no payout and no currency. The order search reports whether an order is paid as a
+> status word, never as an amount; the workspace's money stays with the finance tools that were already
+> in the app, behind the permissions they already have. Neither writes anything, calls a shop,
+> marketplace or bank, or modifies an external provider.
 >
 > **Unchanged:** the OAuth and discovery surface, the scope names, the workspace and role model, and the
 > behaviour of the tools from 1.1.1.

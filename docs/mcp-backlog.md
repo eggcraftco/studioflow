@@ -3,12 +3,13 @@
 The non-blocking half of the final gate. The verdict, and the nine issues that produced it, are in
 `docs/mcp-final-gate-result.md`.
 
-Nothing here argues against that verdict. Two kinds of entry: what was verified and holds — recorded so
-the negatives are not read as unchecked — and eight findings that are real but do not refuse the branch,
-each with what closing it would take. Read them as the list the next change is measured against.
+Nothing here argues against that verdict. Three kinds of entry: what was verified and holds — recorded so
+the negatives are not read as unchecked — the eight findings of §2, real but not refusing the branch, each
+with what closing it would take, and §4, what the money removal of 7 September walked past. Read them as
+the list the next change is measured against.
 
 - Repository: `/Users/gocmen/Developer/studioflow-mcp`, branch `mcp-orchestration`
-- Commit: `3f68dc88`, working tree clean before and after every measurement
+- Commit: `3f68dc88` for §1–§3; §4 was added against the tree after the money removal
 - Date: 7 September 2026
 
 ---
@@ -79,7 +80,11 @@ turn; a member with nothing; `workflowOnly`; `viewOnly` — against a fake Fires
 read.
 
 - no `orders` area → refused before a single read (reads: none);
-- no `financialInfo` → no `totals` key and a `section_not_permitted` warning;
+- no `financialInfo` → no `totals` key and a `section_not_permitted` warning. **Superseded on
+  7 September 2026**, and the stronger statement replaces it: `totals` is gone for every caller, the
+  warning with it, and neither kept capability reads `ctx.financialInfo` or
+  `entitlements.advancedFinanceEnabled` at all. `financialInfo` no longer changes this surface's answer
+  in any direction — `test/qa/mcp-no-money.test.js` asserts the three callers get byte-identical `data`;
 - no `bankFeed` → `companies/c1/bankConnections` is not read at all;
 - `workflowOnly` / `viewOnly` → inventory refused ("Inventory is not enabled for your role"), and
   `workflowOnly` sees only orders assigned to them (0 rows when the order is assigned to somebody else);
@@ -319,3 +324,43 @@ gains the orchestrator names only under the flag.
 `firebase emulators:exec --only firestore,storage` with `JAVA_HOME` set — `npm run test:rules` exit 0
 (127 PASS) and `test/run-e2e.sh` exit 0 (155 PASS). Full table in
 `docs/mcp-final-gate-result.md` §0.
+
+---
+
+## 4. Noticed while removing the money (7 September 2026)
+
+The decision that day was narrow — take every monetary field out of the two kept capabilities, close the
+documentation findings, and nothing else. These are what that pass walked past. None of them is a
+refusal; each is a line so the next change is measured against it rather than rediscovering it.
+
+- **`commerce.js` is on the live require graph and still carries the money half of two removed
+  capabilities.** `orchestrator/index.js` requires it for `searchCommerceOrders`, and the same module
+  holds `commerceOverview`, `channelPerformance`, `channelRows`, `settlementTotals`, `finishTax`,
+  `advancedFinance` and `PLAN_LIMITED_DETAIL`. That is unlike `attention.js`, `payouts.js`,
+  `integrationHealth.js` and `accountingStatus.js`, which §1 proves are absent from `require.cache`
+  in all four flag states. Nothing can call them — no registry row, no dispatcher case,
+  `mcp-reduced-surface.test.js` — so this is not a reachability finding; it is that the money
+  arithmetic now sits in the same file as the capability that must never do it, which is the shape a
+  future edit reintroduces it from. Closing it: move `commerceOverview` and `channelPerformance` into a
+  module nothing on the live path requires, the way the other four already are.
+- **`orderView.buildOrderView` still computes the full finance engine for every order the search
+  reads**, and nothing emits any of it. `loaders.js`'s own header argues that "a read nobody may see is a
+  read that should not happen … it puts data in a process that was refused it, one line away from an
+  answer" — this is the same sentence about a computation rather than a read: `finance.revenue`,
+  `vatDue`, `platformFee` and the rest are built for a caller who may not have the financial grant, then
+  dropped. It is also the one derivation `paymentStatus` genuinely needs (`derivedPaymentStatus` reads
+  `finance.refunded`), so it cannot simply be deleted. Closing it: a flag on `buildOrderView` that
+  computes only what a money-free caller needs, and the status derivation reading that.
+- **`envelope.MONEY_BLOCK_KEYS`, `MONEY_NAME` and `MONEY_IN_TEXT` now have no published producer.** The
+  channel-profile redaction they drive is still correct and still tested directly, but with both kept
+  capabilities money-free nothing on the published surface feeds them, so a regression in
+  `applyChannelProfile` would be caught only by its own unit checks. `orchestrator-render.test.js` was
+  changed on 7 September to exercise the detector explicitly for that reason. Worth knowing before the
+  WhatsApp channel publishes a capability that does carry money.
+- **The submission's §7 release-note block is prose that nothing parses for money claims.**
+  `mcp-tool-annotations.test.js` parses the annotation numbers out of `docs/mcp-tool-annotations.md`, and
+  `mcp-reduced-surface.test.js` reads the guide chapter out of the built corpus and checks the names
+  against the registry — but the paste-to-OpenAI paragraph is checked by a person. Two of the three false
+  claims closed on 6 and 7 September lived there. Closing it: extend the annotations test to assert the
+  §7 block names no field the published capabilities do not emit, the way B3's closure already suggests
+  for behaviours.
