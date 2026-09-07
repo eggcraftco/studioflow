@@ -562,8 +562,8 @@ plan now reads `user-managed --locations=europe-west2`, and all three documents 
 The reason it was theirs to make and not mine: automatic replication stores secret material across
 Google-selected regions worldwide, which for a UK/EU boundary project is a data-residency choice with
 legal weight, not a convenience setting. The recommendation happened to match, but the decision is
-recorded as theirs. Whatever is chosen, **all six
-secrets get it, created in one loop on one day**: none of them exists yet, so the precedent is set
+recorded as theirs. **All six secrets get this policy, created in one loop on one day**: none of them
+exists yet, so the precedent is set
 once and should not end up mixed.
 
 ### D8 — FCM: predefined role now, or custom role from the start? *(proposal §3.3)*
