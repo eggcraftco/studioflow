@@ -687,3 +687,85 @@ Today that line is unreachable — checkout creates exactly one line item. If it
 subscription has more than ten items and the period end being written is the earliest of a page, not
 of the subscription, which is the over-granting direction. That is the point at which the resolver has
 to start paging.
+
+---
+
+# Addendum 4, 7 September — the invoice fix, and a second drift that was worse than the first
+
+The fix asked for was `invoice.paid`. Establishing it properly surfaced a second field drift with a
+wider blast radius, confirmed from the pinned SDK's own type definitions and then from production data.
+
+## Two drifts, both proved from the SDK types
+
+| | `applyInvoicePaid` | `applySubscription` |
+|---|---|---|
+| Read | `invoice.subscription` | `subscription.current_period_end` |
+| Status in the pinned SDK | **removed** — no such member on `Invoice` (`Invoices.d.ts`, enumerated: `customer` :223, `parent` :344, `status` :393, `subtotal` :398, nothing in the gap where `subscription` sorts) | **removed** from `Subscription`; moved to each **item** (`SubscriptionItems.d.ts:50`) |
+| Now reads | `invoice.parent.subscription_details.subscription` (`:852`, `string \| Subscription`) | `subscription.items.data[].current_period_end`, earliest wins |
+| Legacy fallback | kept | kept |
+
+Stripe's own wording corroborates the second: the list filter is documented as *"subscriptions whose
+**minimum item** current_period_end"* (`Subscriptions.d.ts:2377`) — the field is per-item by design.
+
+## Why the second drift is the more serious one
+
+`invoice.subscription` broke one event type that production was not even subscribed to.
+`current_period_end` is read in `applySubscription`, which is the choke point for **every**
+`customer.subscription.*` event, both invoice handlers and the checkout completion. So it has been
+silently null on every Stripe row since the API version moved.
+
+Confirmed by data, with a clean control:
+
+| Provider | Ledger rows | `currentPeriodEnd` populated |
+|---|---|---|
+| stripe | 5 | **0** |
+| apple | 3 | 3 |
+| google | 1 | 1 |
+
+Apple and Google write the same field into the same collection through the same schema and land a
+value. The field is not unwritten — only the Stripe read was empty.
+
+### What that null touches, sized honestly
+
+`billingCurrentPeriodEnd` appears in `firestore.rules:148-149` and `storage.rules:216-217`, inside
+`trialLapsed()`. It is the **fallback** arm: a trialing workspace is judged lapsed by
+`billingTrialEndsAt`, and only when that is absent does the rule fall back to
+`billingCurrentPeriodEnd`. With the field always null, that fallback arm can never fire — a
+defence-in-depth clause that has been dead for Stripe workspaces.
+
+**How reachable is it today? Measured, not assumed:** of 63 workspaces, 5 have
+`billingStatus == "trialing"`, and **all 5 carry `billingTrialEndsAt`**. The fallback arm is therefore
+**not currently reachable** — this is a latent weakening, not a live hole. It also drives the sweeper
+query `.where("billingCurrentPeriodEnd", "<", cutoff)` (`stripeBilling.js:2174`), which can never match
+a null row, and backs an index in `firestore.indexes.json:12`.
+
+## A third defect the same pass found: dunning never fires
+
+`applyInvoicePaymentFailed` did not early-return on an empty id. It fell through, resolved the
+workspace via `invoice.customer` (which still exists), stamped `billingPaymentFailedAt` and **looked
+successful** — while `applySubscription` was never called, so the workspace **never moved to
+`past_due`**. Latent rather than observed, since no `invoice.payment_failed` event has ever arrived,
+but a fix that only patched `invoice.paid` would have left dunning broken and looking healthy.
+
+## Verification, re-run independently
+
+- `cd functions && npm test` → **exit 0, 1202 PASS, 0 FAIL**.
+- `node test/qa/stripe-invoice-api-drift.test.js` → **exit 0, 26 checks**.
+- **The original production defect, restored by hand**: reverting `applyInvoicePaid` to the removed
+  `invoice.subscription` read turns the suite red on a *behavioural* check, not a textual one —
+  `a dahlia invoice.paid records the renewal, dated from the item — the renewal was skipped:
+  {"skipped":true,"reason":"invoice_without_subscription"}`. The production symptom is now an assertion.
+- **The second drift, restored by hand**: reverting to `subscription.current_period_end` turns four
+  checks red, including `billingCurrentPeriodEnd is not a Timestamp: null`.
+
+That behavioural coverage did not exist in the first commit — every call-site check was a
+`SOURCE.indexOf()`, so the production defect could be restored with the suite fully green. The
+handlers are closures over an injected-dependency factory and could not be called at all; they are now
+exported through the factory's existing `_internal` bag (which `index.js` already destructures away
+before registering anything, so nothing new is deployable) and run against a fake Firestore and a fake
+Stripe. 25 exact mutations, every one red.
+
+**Not deployed. No backfill.** The change is forward-only: the 7 skipped events stay skipped and the 5
+null ledger rows stay null until the next `customer.subscription.*` delivery for each. And the two
+invoice events stay off the live endpoint until this code is reviewed and deployed — adding them first
+would deliver to a handler that could not read them.
