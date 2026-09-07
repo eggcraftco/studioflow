@@ -12,8 +12,8 @@ of any secret was read, printed or written down.
 
 | # | Precondition | State |
 |---|---|---|
-| 1 | The dependency soak closes | **2026-09-07 04:28:31 UTC**, a full twenty-four hours from its start. The 05:41 UTC job is the closing *report*, not the gate |
-| 2 | The soak's closing readback is clean | pending the retrospective full-window query |
+| 1 | The dependency soak closes | **DONE.** The window ended 2026-09-07 04:28:31 UTC, a full twenty-four hours from its start; the 05:41 UTC job is the closing *report*, not the gate |
+| 2 | The soak's closing readback is clean | **DONE — PASS.** Read retrospectively at 04:29:53 UTC over the whole window: 0 errors, 0 5xx, 1151 requests as the positive control, 19/19 scheduler jobs on time, 0 query gaps; re-read project-wide with no service filter, also 0. All seven 4xx identified by name. `docs/security/evidence/amazon/functions-deploy-2026-09-06.md` |
 | 3 | The operator approves the functions deploy separately | pending |
 | 4 | Round 167 is live and its smoke is clean | **done**, `docs/ebay-web-deploy-round-167.md` |
 | 5 | **The runtime service account exists** | **MISSING — see below. This blocks step 2 outright** |
