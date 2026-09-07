@@ -672,6 +672,7 @@ so a late reading is as good as a live one.
 requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps.
 
 | Soak readback, 2026-09-06 23:46:37 UTC (19 h 18 m in, gcloud) | 0 ERROR entries, 0 requests returning 5xx, 963 requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps |
+| Post-gate check, 2026-09-07 04:33:18 UTC (gcloud) | 0 ERROR entries, 0 requests returning 5xx, 1153 requests as the positive control (1144 2xx, 2 3xx, 7 4xx — the same seven already named), 19 of 19 scheduler jobs enabled and on time, 0 query gaps. The window is closed and the verdict unchanged; recorded because the recurring check ran, not because anything moved |
 
 ## Rollback used
 
