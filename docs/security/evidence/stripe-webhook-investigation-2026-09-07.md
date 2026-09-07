@@ -561,3 +561,64 @@ function — or disable it. Do **not** add its secret as a second `defineSecret`
 production handler accept sandbox events signed by a sandbox key, and the live `STRIPE_SECRET_KEY`
 could not fetch their objects anyway. Separately, and on its own merits, add `invoice.paid` and
 `invoice.payment_failed` to the live endpoint before the next real subscription.
+
+---
+
+# Addendum 3, 7 September — the change that was made, and the one that was deliberately not
+
+## Made: the sandbox endpoint is disabled
+
+| | |
+|---|---|
+| Endpoint | `we_1TcSpBD3VBItFZ5T9i6K9Ytj` — "NivaDesk Billing Webhook" |
+| Account | `acct_1TcRjHD3VBItFZ5T` (NivaDesk **sandbox**) |
+| Was | Active, 6 events, pointing at the production URL, **100 % error rate** |
+| Now | **Disabled** |
+| Method | Dashboard → destination → **Disable** (not Delete, not Roll secret) |
+
+Stripe's own confirmation text records why this is the reversible choice: *"Events will no longer be
+sent to this destination, but you'll still be able to make edits to it."* Re-enabling is one click on
+the same menu. **The signing secret was not rolled and nothing was deleted.**
+
+Disable rather than re-point, for a reason worth writing down: there is no sandbox-appropriate URL to
+re-point at, and the endpoint delivered nothing successfully anyway — a 100 % error rate means no
+working capability is lost. What does stop is somebody's ability to exercise the sandbox billing flow
+end to end, which is what the endpoint's own description says it was built for. If that is wanted back,
+the answer is a sandbox listener, not this endpoint.
+
+**Verified afterwards:** the live endpoint `we_1TgKjqRVZaURcx14uD5VAzvu` is untouched — still Active,
+still 4 events, still 0 % error rate.
+
+## NOT made: `invoice.paid` was not added to the live endpoint
+
+This was the obvious next step and it would have been wrong. The handler that would receive those
+events is **already broken on the API version both endpoints run**.
+
+`applyInvoicePaid` (`functions/stripeBilling.js:1181`) reads:
+
+```js
+const subscriptionId = typeof invoice.subscription === "string"
+  ? invoice.subscription : invoice.subscription?.id || "";
+if (!subscriptionId) return { skipped: true, reason: "invoice_without_subscription" };
+```
+
+`invoice.subscription` was removed in newer API versions and moved under
+`invoice.parent.subscription_details.subscription`. Both endpoints run **2026-04-22.dahlia**.
+
+Not an inference — the production ledger settles it. Of every `invoice.paid` event that has ever
+reached the handler:
+
+```
+  7  invoice.paid -> invoice_without_subscription (livemode=false, api=2026-04-22.dahlia)
+```
+
+**Seven of seven skipped.** A 100 % failure rate on that path.
+
+So subscribing the live endpoint to `invoice.paid` today would deliver events to a handler that skips
+every one. The webhook would show green, the ledger would fill with skipped rows, and renewals still
+would not be recorded — a worse state than the current honest gap, because it looks fixed. The next
+real subscription would be trusted to a rail that does not work.
+
+**Correct order, and the reason for it:** fix the field read (with a fallback to the legacy shape so an
+older API version still works), ship it, *then* add `invoice.paid` and `invoice.payment_failed` to the
+live endpoint. The code fix is in progress on this branch; the endpoint change waits for it.
