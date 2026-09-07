@@ -269,3 +269,27 @@ no longer second-hand.
 it explains why two tests were not valid and why a third class of test may never be. Passing this
 control requires an observed finding, or a written statement from Google that one is unobtainable in
 this configuration — neither of which exists yet.
+
+
+## Our reply, sent 2026-09-07
+
+Sent as an **inline reply on the existing support thread** to `cloudsupport@google.com` from
+`contact@eggcraft.co.uk`, so it attaches to case 75151719 automatically rather than opening a second
+conversation. Gmail confirmed delivery; the thread now shows the outbound message from EGGcraft Team.
+
+Full text: `google-case-75151719-reply-sent.txt` (same directory).
+
+**What it says, in short:**
+
+| Part | Content |
+|---|---|
+| 1 | The retest Google asked for: new job `amazon-crtd-verify-0907`, execution `-sl6mf`, `europe-west2`, trigger at `2026-09-07T07:29:33.694378Z`, **53 h 12 m** after activation, twenty polls over forty minutes, **no CRTD finding of any category** — with the positive control stated so the absence cannot be read as a failed query |
+| 1 | One question only, and it is one that only Google can answer: did the watcher attach to that execution, and if not, what determines attachment for a gen2 job on a project-level Premium activation |
+| 2 | The ETD tier question, asked as a general rule: can a project-only Premium deployment under an organization on Standard **ever** expose the promoted finding, or does it require organization-level Premium |
+
+**Deliberately not in it:** no secret, token or credential; no VPC, subnet, service-account or image
+name; no promise of further CRTD or ETD testing; and **not** the `threat_detector` log question, which
+Google had already answered — asking it again would have cost a round trip.
+
+**Case status: awaiting Google.** Control 3 (IDS/IPS) remains **In Progress**, not Passed. The test job
+`amazon-crtd-verify-0907` is left in place so Google can inspect it.
