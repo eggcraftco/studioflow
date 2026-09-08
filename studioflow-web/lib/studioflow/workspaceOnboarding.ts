@@ -468,10 +468,29 @@ function onboardingPayload(
     businessTemplateAppliedAt: serverTimestamp(),
     // The boolean AND the timestamp. Two server readers ask for the boolean with
     // `=== true` (getSetupChecklist and the admin completion count), so a path
-    // that wrote only the timestamp finished onboarding in a way the server
-    // could not see: the checklist kept offering steps the workspace had already
-    // done. This is the smart/standard template path, which somebody reaches by
-    // going through setup — a genuine completion, so it may say so.
+    // that writes only the timestamp finishes onboarding in a way the server
+    // cannot see, and the checklist goes on offering steps the workspace has
+    // already done. This is the smart/standard template path, which somebody
+    // reaches by going through setup — a genuine completion, so it may say so.
+    //
+    // DORMANT ON THE WEB AS THINGS STAND, and better said plainly here than
+    // left reading as a fix that changed something. Both ways out of this
+    // function are already covered elsewhere:
+    //
+    //   * saveWorkspaceOnboardingTemplate (below) is reachable only from
+    //     AppShell's completeWorkspaceOnboarding, which nothing calls: the
+    //     screen that used to call it, WorkspaceOnboardingScreen, is no longer
+    //     rendered anywhere. OnboardingWizard replaced it.
+    //   * workspaceOnboardingPresetPayload feeds saveOnboardingAnswers, which
+    //     spreads this payload FIRST and then writes its own
+    //     `businessOnboardingCompleted: true` and action "wizard" over the top.
+    //     That — in onboardingWizard.ts — is the completion write that runs
+    //     today, and it is correct.
+    //
+    // Kept because the moment either route carries traffic the field has to be
+    // here, and a template path that silently wrote a timestamp and no boolean
+    // is the exact bug this line exists to prevent. The native apps still use
+    // their own equivalents of both.
     //
     // Deliberately NOT added to saveWorkspaceOnboardingSkip below. Pressing Skip
     // is declining setup, not completing it, and the one-time backfill

@@ -249,7 +249,16 @@ export type WorkspaceSettingsOverview = {
   integrationCustomerSync: string;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
+  /** Setup is over, one way or another — a finish AND a Skip both stamp
+   *  `businessOnboardingCompletedAt`, and both mean "do not ask again". */
   businessOnboardingCompleted: boolean;
+  /** Setup was FINISHED. The boolean on its own, which is what the server tests
+   *  (`businessOnboardingCompleted === true`, in getSetupChecklist and in the
+   *  admin completion count) and what the Skip path deliberately never writes.
+   *  Anything that would congratulate somebody reads this one: to a skipper,
+   *  a ticked "Set up business profile" is the product claiming they did a
+   *  thing they had just declined to do. */
+  businessOnboardingFinished: boolean;
   /** The workshop's own word for each order card, keyed by card id. Set from
    *  the trades chosen during setup: a jeweller's materials card reads
    *  "Metals & Stones", a baker's "Ingredients". Empty means use the defaults. */
@@ -1325,6 +1334,9 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
     businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
       booleanValue(data.businessOnboardingCompleted, false),
+    // Strictly the boolean, the way the server reads it. No timestamp, so a
+    // Skip does not land here.
+    businessOnboardingFinished: data.businessOnboardingCompleted === true,
     orderCardLabels: (() => {
       const raw = data.orderCardLabels;
       if (!raw || typeof raw !== "object") return {};
