@@ -68,11 +68,57 @@ function deriveEvents(snapshot = {}) {
   const settings = snapshot.settings && typeof snapshot.settings === "object" ? snapshot.settings : {};
   const onboardedAt = firstTime(settings.businessOnboardingCompletedAt);
   if (onboardedAt !== null) {
-    // The wizard does not record when it was STARTED, so completion stands for
-    // both. Saying "started" here from a completion stamp is not a guess: you
-    // cannot finish something you did not begin.
+    // The stamp says the wizard was ANSWERED, not that it was finished.
+    //
+    // Every client writes `businessOnboardingCompletedAt` on the way out of the
+    // wizard, and the Skip button is one of the ways out
+    // (`studioflow-web/lib/studioflow/workspaceOnboarding.ts:527`;
+    // `EGGcraft/ContentView.swift:10707`, whose action parameter DEFAULTS to
+    // "skip"). Reading the timestamp alone therefore counts a refusal as a
+    // completion: on the live estate that is 22 of the 40 stamped workspaces
+    // (`docs/onboarding/completion-backfill-2026-09-07.md`), which is why the
+    // funnel over-reports finished onboarding by roughly 2.5x. The action field
+    // is the discriminator the clients already write, and only the literal
+    // "skip" diverts — an absent or unrecognised action stays a completion,
+    // because reclassifying stamps whose author we cannot identify would be a
+    // second guess on top of the one being fixed.
+    const action = String(settings.businessOnboardingCompletedAction || "").trim().toLowerCase();
+    const skipped = action === "skip";
+
+    // A skip still counts as STARTED, and this is the firmer half of the
+    // inference rather than the looser one: the Skip button lives inside the
+    // wizard, so the surface rendered and a person refused it. Nobody can press
+    // a button on a screen they were never shown. (The completion case rests on
+    // the same shape of argument — you cannot finish what you did not begin —
+    // and the wizard still stamps neither start.)
+    //
+    // The choice decides which recovery cohort these 22 workspaces land in, so
+    // it is not cosmetic. Withholding `onboarding_started` would drop them in
+    // with "signed up, onboarding never started" — the 21 workspaces carrying
+    // no stamp at all — and the two need opposite treatment: one has never seen
+    // the setup, the other has seen it and said no.
+    // `docs/onboarding/current-user-recovery-cohort-2026-09-08.md` already
+    // partitions the estate that way (cohort B*, "onboarding started, not
+    // completed", whose rule is exactly `action == "skip"`), and this keeps the
+    // derivation and that partition telling the same story.
     push("onboarding_started", onboardedAt, "wizard");
-    push("onboarding_completed", onboardedAt, "wizard");
+
+    // `onboarding_skipped` is already declared in the registry
+    // (`events.js:33`) at activation weight 0, so deriving it records the
+    // refusal without paying it as progress — and gives the cohort a positive
+    // marker instead of an absence. It is meaningful like the event it
+    // replaces and carries the same timestamp, so a skipper's meaningful-event
+    // count and dates do not move; only the name does.
+    push(skipped ? "onboarding_skipped" : "onboarding_completed", onboardedAt, "wizard");
+
+    // Known, and deliberately NOT fixed here. With `onboarding_completed`
+    // withheld, `activation.js:205` reports a skipper as state "onboarding",
+    // reason "onboarding_in_progress" — right about the cohort, wrong about the
+    // tense, since nothing is in progress. That string belongs to activation.js
+    // and rewriting it is a different edit with different blast radius; it is
+    // pinned by the test named "a skip is a refusal, not a completion — and the
+    // state it lands in is named honestly" so the wrong tense is visible in the
+    // suite rather than discovered from a dashboard.
   }
 
   // ---- orders: the shape of the document says how it arrived
