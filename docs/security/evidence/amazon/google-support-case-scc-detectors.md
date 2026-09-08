@@ -293,3 +293,71 @@ Google had already answered — asking it again would have cost a round trip.
 
 **Case status: awaiting Google.** Control 3 (IDS/IPS) remains **In Progress**, not Passed. The test job
 `amazon-crtd-verify-0907` is left in place so Google can inspect it.
+
+---
+
+## Google's second response — read first-hand, 8 September 2026
+
+| Field | Value |
+|---|---|
+| From | Google Cloud Support `<cloudsupport@google.com>`, engineer **Murali Selvaraj** |
+| Received | **2026-09-08 05:58** local (BST) |
+| Read | First-hand from the support thread in `contact@eggcraft.co.uk`, not relayed |
+| Prompted by | Our reply of 7 September carrying the third CRTD test (`amazon-crtd-verify-0907`) |
+
+### Event Threat Detection — CLOSED by Google, and closed as a tier limitation
+
+Google's own words, quoted because the distinction matters:
+
+> As a general rule within Security Command Center, findings are surfaced based on the tier of the
+> resource they are **anchored to**. Event Threat Detection is exclusively a Premium-tier feature […]
+> Because of the **known issue** where the Malware: Bad Domain finding loses its project-level
+> metadata, the backend defaults to anchoring it to the **Organization** level. However, because your
+> Organization is on the **Standard** tier, it lacks the entitlement to display Premium ETD findings,
+> causing the finding to be **dropped entirely from your view**.
+>
+> Therefore, a project-only Premium deployment inside a Standard-tier organization **cannot expose this
+> promoted finding**.
+
+**The status, recorded in the terms this actually warrants:**
+
+| | |
+|---|---|
+| Detector or configuration issue on our side | **Not indicated** |
+| Project SCC pipeline | **Healthy** — confirmed by Google |
+| Absence of the finding | **Explained**, by tier/anchoring behaviour Google confirms and calls a known issue on their side |
+| Further Bad Domain testing | **Do not perform.** No test can succeed; the entitlement, not the trigger, is what withholds the finding |
+
+**ETD is not "failed" and not "misconfigured".** It is **not observable in the current SCC tier
+topology, confirmed by Google Support.** Those are different claims and only the second one is true:
+nothing we built is wrong, and no change we could make inside the project would alter the outcome.
+Making it observable would mean Premium at the **organisation** level — a purchasing decision, not a
+remediation.
+
+This also retires the question the first response left open. On 7 September we asked whether a
+project-only Premium deployment under a Standard-tier organisation could ever expose the promoted
+finding. The answer is no, in writing.
+
+### Cloud Run Threat Detection — escalated to Google's Product Specialist team
+
+> Because you have successfully eliminated propagation time, regional support, enablement state, and
+> the delivery pipeline as variables, the absence of this finding requires a backend investigation.
+>
+> I have reached out to our **Product specialist team** by raising an internal request. They will
+> review the backend to determine **whether the watcher attached to this Gen 2 execution** and
+> investigate **why the payload did not trigger the finding**.
+>
+> I will keep you informed […] on or before **September 10th 2026 at 22:30 IST (GMT +5:30)**.
+
+Committed next update: **2026-09-10 22:30 IST = 17:00 UTC**.
+
+Four hypotheses are now eliminated **by Google's own agreement**, not merely by our testing:
+propagation time, regional support, enablement state, and the delivery chain.
+
+**Standing instructions while the escalation is open:**
+
+- The test job **`amazon-crtd-verify-0907`** stays in place and is **not deleted** — Google may need to
+  inspect it, and it is the execution their Product Specialist team has been asked about.
+- **No further CRTD test is to be run** unless Google explicitly requests one. A fourth execution adds
+  no information and would muddy the one they are investigating.
+- No reply is owed right now. The next move is Google's.
