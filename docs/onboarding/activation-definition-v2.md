@@ -418,3 +418,329 @@ Each line can be accepted or rejected on its own.
 | 10 | Accept the migration (§5) | activated 24 → 11; high-risk 28 → 40 |
 
 **If only one line is approved, it should be #1.** Everything uncomfortable in this document follows from it, and it is the line the 33 orders were read to justify.
+
+---
+---
+
+# Revision A — the stable predicate
+
+**Status:** revision, appended. **§0–§7 above are the accepted baseline and are unchanged** — nothing in them has been rewritten, so the operator can read what moved and why.
+**Date:** 2026-09-08
+**Scope:** predicate design only. No code was written, nothing was wired, nothing was deployed. All production reads were read-only and aggregate-first per `docs/onboarding/privacy-note-cohort-queries.md`; no customer name, design name, email, phone or address appears below, and every identifier is truncated to 6 characters.
+
+**Why this exists.** Three of the six clauses in §2's `SUBSTANTIVE_ORDER` rest on signals the operator ruled out: `designName`, which our own Quick Create is scheduled to auto-fill; the placeholder-name set, which is incomplete against shipped localisations; and `projectNumber`, which has never been emitted. §2 is correct about today's estate but is not *stable* — it would decay without anyone noticing. Revision A rebuilds the predicate from signals that cannot decay, and states the cost of every clause it drops.
+
+---
+
+## A.0 The result, first
+
+| | v1 | v2 (§2, accepted) | **v2.1 (stable)** |
+|---|---|---|---|
+| Activated of 63 | 24 | **11** | **11** |
+| The eleven | — | `395OJD KSQide QNxWP8 aiVY7U cDaMyi dKncGl iZFBJq n06Uzp test_s vhCSyL zIYkFB` | **the same eleven, byte for byte** |
+| Substantive orders of the 393 in live workspaces | — | 354 | **354** |
+| Dead-cohort orders passing | — | 0 of 33 | **0 of 33** |
+
+> **The headline does not move. Not one workspace is gained, not one is lost, and the same 354 of 393 orders pass.** The revision buys stability, and it is free.
+
+That is the number to hold onto: had it moved, this section would say so in its first line rather than in a footnote. It did not.
+
+---
+
+## A.1 What was measured
+
+Read-only pass over `eggcraft-studio`, 2026-09-08, re-derived from scratch rather than copied from §5.
+
+| | |
+|---|---|
+| Company documents (the 63) | 63 |
+| Order documents | 448 |
+| `isDeleted: true` | 11 — all of them inside live workspaces |
+| Non-deleted | 437 |
+| Non-deleted **and** in one of the 63 | **393** |
+| In orphaned tenants (no company document) | 44, across 24 `companyId`s |
+| Dead cohort re-resolved from the 11 workspace prefixes | **33 orders, none deleted** |
+
+The dead cohort reproduces exactly: 33 orders, 11 workspaces, and every one of the six accepted clauses fires on **0 of 33**. §2's central claim survives re-derivation.
+
+One correction to §5's table while re-deriving it: `aiVY7U` holds 8 order documents of which **7 carry `isDeleted: true`**; its single substantive order is its only live one. §5's "8 orders / 1 substantive" is right, but the gap between those two numbers is deletion, not emptiness.
+
+---
+
+## A.2 Signal 1 — `designName` is **dropped**
+
+### A.2.1 The expiry is real, and it is ours
+
+`generatedProjectName()` (`functions/orders/projectNumber.js:73`) auto-fills a blank design name, and **all four** order-creation paths reach it or default it:
+
+- `createWebOrder` — `index.js:15182`, `const attemptName = designName || generatedProjectName(attemptCustomerName, attemptNumber)`. Unconditional: the field is *always* written, generated when the person left it blank.
+- `createSwiftOrder` — `index.js:15962`, same call behind `if (!cleanOrderText(namedPayload.designName, "", 180))`.
+
+Both mint the number in the same transaction, and `readNextProjectNumber` (`projectNumber.js:41-48`) returns `base + 1` with `base ≥ 0`, so **in production the number is always ≥ 1** and the generated shape always carries a `#N`.
+
+Verified today: `projectNumber` present on **0 of 448** order documents; generated pattern matched on **0 of 448**. No production order has been through Quick Create. The clause is clean *because the feature has not been used yet*, which is not a property a definition should depend on.
+
+### A.2.2 The guard it would have needed, and why "provable" is not "safe"
+
+`generatedProjectName` emits exactly four shapes:
+
+| # | Shape | When |
+|---|---|---|
+| 1 | `Project #N` | blank / whitespace / placeholder customer name, `N ≥ 1` |
+| 2 | `<cleaned name> · Project #N` | real customer name, `N ≥ 1` |
+| 3 | `Project` | `N ≤ 0` — unreachable from either caller, reachable from the exported pure function and asserted by `functions/test/qa/project-number.test.js:101-102` |
+| 4 | `<cleaned name> · Project` | as 3 |
+
+§2's guard is `/^(.+ · )?Project #\d+$/i`. It covers shapes 1 and 2 and **misses 3 and 4** — the `#`-less tail the module's own test pins. A complete guard is `/^(?:.+·\s*)?Project(?:\s*#\s*\d+)?$/i`, and I confirmed it matches all four shapes and still matches 0 of 448 stored design names.
+
+So the guard is writable and provable. **It is still the wrong clause**, for a reason no regex fixes: the moment Quick Create is used, a blank design name stops being *absent* and starts being *a string that looks like work*. Every future audit of this field has to re-prove that our own generator has not drifted — a new tail, a translated tail, a different separator — and the failure mode is silent over-counting, which is precisely v1's disease.
+
+### A.2.3 It has already fired on a value nobody typed
+
+This is not hypothetical. Across all 437 non-deleted orders, **exactly one** order is substantive under §2 *only* because of the design-name clause. Its stored design name is the literal string `Untitled design` — the **client's read-side display fallback**, written into the model at `studioflow-web/lib/studioflow/firestore.ts:1515` (and five more read sites), `OrderListCard.tsx:410`, `BankSpendingView.swift:1932` and `bankInsights.ts:361`. Nobody typed it. A client read an order with a blank design name, substituted a label for the screen, and a later whole-document save put the label on disk.
+
+| | |
+|---|---|
+| Workspace | `fmVbKr` — an **orphaned tenant**, outside the 63, so it does not move the headline |
+| Order | `hVRX0V` |
+| Money / line items / fulfilment / contact | all false |
+| Customer name | placeholder-or-empty |
+| Verdict under §2 | **substantive** |
+| Verdict under v2.1 | not substantive |
+
+**The design-name clause's only unique contribution in the entire 448-document estate is a false positive**, and its mechanism — a client display default reaching storage — is the same mechanism as the localised-placeholder gap in §A.3. The guard against `Project #N` would not have caught it, because `Untitled design` is not a generated project name.
+
+### A.2.4 What dropping it costs
+
+| Population | Orders that lose substantive status | Workspaces that lose activation |
+|---|---|---|
+| The 63 live workspaces (393 orders) | **0** | **0** |
+| Orphaned tenants (44 orders) | 1 — the `Untitled design` row above | n/a (invisible to every reader) |
+
+**Cost: nothing, and the one thing it loses is a thing it should never have counted.** Dropped.
+
+---
+
+## A.3 Signal 2 — the customer-name clause is **kept**, on a closed set
+
+### A.3.1 There is exactly one localised writer, and it is enumerable
+
+The operator's concern is right and I can now bound it precisely. Searching all four surfaces for writes of a localised placeholder into `customerName`:
+
+| Site | What it does | Writes? |
+|---|---|---|
+| `EGGcraft/ContentView.swift:19404` (`addOrderFromSchedule`) | `newOrder.customerName = t("New Project", lang: seciliDil)` | **YES — the only one** |
+| `EGGcraft/ContentView.swift:9678, 10312, 19174`, `SiparisDetayView.swift:1934`, `MusterilerView.swift:632, 1341`, `QuickCreateProjectSheet.swift:80` | `t("New Project", …)` as a label | no |
+| `EGGcraft/Siparis.swift:420`, `ContentView.swift:13325`, `FirebaseManager.swift:1643, 3120`, `MusterilerView.swift:1397` | English literal `"New Project"` | yes, but already in the set |
+| `studioflow-android/.../OrderDetailScreen.kt:6034` | `customerName.trim().ifBlank { "New Project" }` — English literal | yes, already in the set |
+| `studioflow-android/.../QuickCreateProjectDialog.kt:118`, `OrdersScreen.kt:534` | `t("New Project")` as a label | no |
+| `studioflow-web/components/AppShell.tsx:2120`, `QuickCreateProjectDialog.tsx:198,204` | key always sent; `t()` used only for labels | no |
+| `functions/index.js:15052` (absent-key fallback), `index.js:23999` (MCP path) | English literal `"New Project"` | yes, already in the set |
+
+`t()` (`DilMotoru.swift:3674-3678`) resolves from `studioFlowFeatureTranslations`, then `globalDilSozlugu`, then returns the key. `"New Project"` appears in exactly one of those tables (`DilMotoru.swift:932`). **So the complete set of strings that line 19404 can ever write is the twelve values of that one row** — closed, finite, and derivable by construction rather than by guesswork.
+
+### A.3.2 The set, and the machine check that it is complete
+
+`studioSupportedLanguages` (`DilMotoru.swift:5`) names the twelve languages NivaDesk ships — one list, so the wizard and Settings cannot disagree. I extracted every translation value for the `New Project` **and** `New Order` keys out of all four shipped tables and tested the hardened set against them mechanically rather than by eye:
+
+| Table | Entries checked | Not covered |
+|---|---|---|
+| `EGGcraft/DilMotoru.swift:932` — `New Project` | 12 | 0 |
+| `EGGcraft/DilMotoru.swift:931` — `New Order` | 12 | 0 |
+| `studioflow-android/.../StudioTranslations.kt:375` — `New Project` | 11 | 0 |
+| `studioflow-web/lib/studioflow/language.ts:142` — `New Project` | 11 | 0 |
+| `studioflow-web/lib/studioflow/macTranslations.ts:9488` — `New Project` | 11 | 0 |
+| **Total values not covered** | | **0** |
+
+`PLACEHOLDER_NAMES` v2.1 — 26 entries, lower-cased and trimmed:
+
+> the server's four (`projectNumber.js:60-62`) — `new order`, `new project`, `yeni sipariş`, `yeni proje`
+> the `New Project` row — `neues projekt`, `nouveau projet`, `nuovo progetto`, `nuevo proyecto`, `novo projeto`, `новый проект`, `新規プロジェクト`, `新项目`, `مشروع جديد`, `नया प्रोजेक्ट`
+> the `New Order` row — `neue bestellung`, `nouvelle commande`, `nuovo ordine`, `nuevo pedido`, `novo pedido`, `новый заказ`, `新規注文`, `新订单`, `طلب جديد`, `नया ऑर्डर`
+> two client-local variants that are not in any server list — `新建项目`, `yeni siparis`
+
+The `New Order` row is included defensively: no writer produces it today, and no real customer is plausibly named "Neue Bestellung".
+
+Measured over all 437 non-deleted orders: **72 match the server's four literals, 0 match any localised value the baseline added, 0 match any value this revision adds, 4 are deliberately empty, and 361 are real names.** The set is wider than the estate needs — which is the point. The zero is the gap not having been *hit* yet, not the gap not existing.
+
+### A.3.3 The set has already diverged, and this is the proof it needs maintaining
+
+`StudioTranslations.kt:375` translates `New Project` into Chinese as **`新建项目`**. `DilMotoru.swift:932` and both web tables use **`新项目`**. Two different strings, same key, same product. Android never writes a localised placeholder today, so nothing is broken — but a translation table that already disagrees with itself is a table that will disagree again, and the direction of that error is **false activation**.
+
+That is why §A.10 asks for a mechanical guard rather than a longer list.
+
+### A.3.4 What dropping the clause instead would cost
+
+| Population | Orders carried **only** by the customer-name clause | Workspaces that would lose activation |
+|---|---|---|
+| The 63 live workspaces | **1** (in `zIYkFB`, which activates on money anyway) | **0** |
+| Orphaned tenants | 4 | n/a |
+
+So dropping it is also free *today* — and I am recommending against it. The clause costs one closed list to maintain and buys the case the product is explicitly built for: **a job named for a real person that has not been priced yet.** Dropping it would leave that job invisible until money appeared, which is the mistake §2 exists to stop making in the other direction. Keeping it is the smaller risk, and §A.10 makes the risk mechanical.
+
+### A.3.5 The same gap has a second live consequence — recorded, not fixed
+
+`upsertCustomerForWebOrder` (`index.js:13955`) and its sibling (`index.js:14041`) refuse to create a customer document when the order's name is one of the **four English/Turkish literals**. A localised placeholder passes that check. A German-locale Mac creating an order from the schedule would therefore mint a **ghost customer document** named after a placeholder — the exact bug the comment at `projectNumber.js:56-59` says the list exists to prevent. Zero such rows exist today. This is an observation from reading, out of scope here, and named so it is not rediscovered as a mystery later.
+
+---
+
+## A.4 Signal 3 — `projectNumber` is **not used**, and was not
+
+No clause in §2 or in v2.1 reads `projectNumber`. Confirmed absent in production: present on **0 of 448** order documents. The field is real, minted correctly and tested (`functions/test/qa/project-number.test.js`), but it has never reached disk, so it is not evidence of anything yet. Nothing in this revision waits on it.
+
+---
+
+## A.5 One clause is **added** — `payments`
+
+Dropping a clause without checking what else is available would be trading coverage for stability. `payments` is the one addition that survives every test the others fail:
+
+- **Not a creation default anywhere.** Absent from `createWebOrder`'s payload (`index.js:15086-15147`) and from the MCP path's payload (`index.js:24048-24104`); `Siparis()` initialises it empty.
+- **Not plan-gated and not role-gated.** It is deliberately excluded from `SWIFT_FINANCE_ORDER_FIELDS` (`index.js:15670-15680`), whose own comment says the payment ledger is not one of the plan-gated figures — "every plan can record who paid what".
+- **The server already treats it as proof of work.** `undoQuickCreate` (`index.js:15819-15825`) refuses to undo an order when `payments` is non-empty, alongside `lineItems`, `clientFiles`, `invoiceNumber` and `paidAmount`. That is a shipped, product-blessed "this order has been worked on" test, and v2.1's clause list is close to a superset of it.
+- **Fires 0 of 33 on the dead cohort**, 25.4% on the live non-fixture rest.
+
+It matters most for the case money cannot cover — see the next section.
+
+---
+
+## A.6 `SUBSTANTIVE_ORDER` v2.1 — the stable predicate
+
+> An order `o` with `o.isDeleted !== true` is **substantive** if **any** of the following holds:
+>
+> 1. **Money** — `Number(o.orderValue) > 0 || Number(o.paidAmount) > 0 || Number(o.remainingAmount) > 0 || Number(o.watchPurchasePrice) > 0`
+> 2. **Named customer** — `trim(o.customerName) !== ""` **and** `lower(trim(o.customerName)) ∉ PLACEHOLDER_NAMES` (the 26-entry closed set of §A.3.2)
+> 3. **Line items** — `Array.isArray(o.lineItems) && o.lineItems.length > 0`
+> 4. **Fulfilment** — `o.isDispatched === true || o.isDelivered === true || trim(o.trackingNumber) !== ""`
+> 5. **Contact channel** — `trim(o.emailAddress) !== "" || trim(o.whatsappNumber) !== "" || trim(o.instagramUsername) !== ""`
+> 6. **Payment recorded** — `Array.isArray(o.payments) && o.payments.length > 0`
+>
+> Changed from §2: clause 4 (`designName`, guarded) is **removed**; `PLACEHOLDER_NAMES` grows from 14 to 26 entries and is now closed by construction; clause 6 (`payments`) is **added**.
+
+**Why the predicate is a disjunction and must stay one — the case that makes it non-negotiable.** A `workflowOnly` member **cannot write money at all**: `createWebOrder` forces `orderValue`, `paidAmount` and `remainingAmount` to `0` (`index.js:15058-15060`), `createSwiftOrder` zeroes all four money fields plus fees and tax (`index.js:15939-15948`), and the MCP path does the same (`index.js:24036-24038`). Today the money clause alone would produce the same 11 workspaces — but a money-only predicate would **structurally deny activation to any workspace whose work is done by workflow-only members**, forever, by design rather than by accident. Clauses 2-6 are what keep that from happening.
+
+---
+
+## A.7 The clause ledger
+
+For every kept clause: the field, the code that writes it, its value at creation on **all four** creation paths, and how many of the 63 workspaces it alone would activate.
+
+**A correction to §1.1 while establishing this.** §1.1 calls `createWebOrder` "the single creation path for web *and* Android". There are **four**:
+
+| # | Path | Location | Serves |
+|---|---|---|---|
+| 1 | `createWebOrder` | `index.js:15029` | web, Android, Swift Quick Create |
+| 2 | `createSwiftOrder` | `index.js:15880` | Swift full-order save, offline-queue replay |
+| 3 | `nvChatGPTCreateOrder` / `nvOrderDefaults` | `index.js:23998-24104` | the MCP surface |
+| 4 | connector importers | `functions/commerce/`, `etsy*.js`, Woo/Square | shop-imported orders |
+
+Path 3 was not in §1.1's account. Its defaults were checked field by field for this table; it changes no conclusion, but a predicate that had missed it would have been proved against three of four writers.
+
+| # | Clause | Field(s) | Written by default at creation? | dead 33 | rest 138 | fixture 222 | alone activates, of 63 |
+|---|---|---|---|---|---|---|---|
+| 1 | Money | `orderValue`, `paidAmount`, `remainingAmount`, `watchPurchasePrice` | **No.** P1 `watchPurchasePrice: 0` hardcoded (`15093`), `paidAmount`/`remainingAmount` from request and `0` when absent, `orderValue` not in the payload at all; P2 writes only keys the client sent, `Siparis()` init `0.0`; P3 all default `0` (`24036-24038, 24056`) | 0% | 94.9% | 100% | **11** |
+| 2 | Named customer | `customerName` | **Written, but every default value is a placeholder.** P1 absent key → `"New Project"` (`15052`); P2 from `Siparis.swift:420` `"New Project"`, or localised only at `ContentView.swift:19404`; P3 → `"New Project"` (`23999`). All 26 covered by the set | 0% | 95.7% | 100% | **11** |
+| 3 | Line items | `lineItems` | **No — absent from every creation payload.** Reaches a document only through `updateWebOrder`'s allow-list (`index.js:12900, 12966-12990`), which sanitises it and writes a history entry; `Siparis()` init empty | 0% | 21.0% | 0% | **6** |
+| 4 | Fulfilment | `isDispatched`, `isDelivered`, `trackingNumber` | **No.** P1 `isDispatched: false` (`15105`), `trackingNumber: ""` (`15106`), `isDelivered: false` (`15108`); P3 `Boolean(args.…)` → false (`24068`, `24071`), `trackingNumber` `""` (`24069`). Auto-dispatch from courier movement only fires once a person has entered a tracking number | 0% | 60.9% | 86.0% | **4** |
+| 5 | Contact channel | `emailAddress`, `whatsappNumber`, `instagramUsername` | **No.** P1 all three `""` hardcoded (`15099-15101`); P3 all three from args, `""` when absent (`24062-24064`) | 0% | 36.2% | 0.5% | **9** |
+| 6 | Payment recorded | `payments` | **No — absent from every creation payload** (`15086-15147`, `24048-24104`); `Siparis()` init empty; excluded from `SWIFT_FINANCE_ORDER_FIELDS` so it is not stripped for workflow-only or on lower plans | 0% | 25.4% | 0% | **7** |
+
+`rest` = the 138 live-workspace orders outside the dead cohort and the fixture. Every solo set is a subset of the same 11 workspaces.
+
+**Field presence in production, as a cross-check on "not a default".** A field a creation path never writes should be *absent* from most documents, not merely zero — and it is: `orderValue` is present on **12 of 448** orders (all twelve provider-stamped, i.e. importer-written, and all `> 0`), `payments` on **112**, `lineItems` on **101**. By contrast `paidAmount` — which every creation path does write — is present on **444 of 448**. Presence and absence agree with the code.
+
+---
+
+## A.8 Clauses considered and rejected, with the numbers that rejected them
+
+Rejecting on judgement alone is how §2's design-name clause got in. These were rejected on the dead cohort:
+
+| Candidate | Fires on the dead 33 | Alone activates | Verdict |
+|---|---|---|---|
+| `notes` non-empty | **1** | 9 | **Rejected — leaks.** Carried from `requestData` at creation (`15102`) |
+| `communication` non-empty | **1** | 9 | **Rejected — leaks** |
+| `customFields` non-empty | **2** | 11 | **Rejected — leaks**, and it is a user-editable string map (`normalizeStringMap`, `index.js:7056`), already excluded from the commerce test by §3.1 |
+| `clientFiles` non-empty | **1** | 2 | **Rejected — leaks**, as §1.3 already found |
+| `designLink` non-empty | 0 | 6 | Clean, but adds no workspace. Not adopted — a clause that changes nothing is a clause to re-audit for nothing |
+| `invoiceNumber` non-empty | 0 | 3 | Clean and cheap; adds no workspace. **Approvable as an optional seventh clause**, not recommended |
+
+**The widening test, and why it is the whole argument.** Adding the three "clean-looking" narrative fields (`notes`, `communication`, `designLink`) raises activation from 11 to **12** — and the workspace it gains is `omUX4b`, one of the eleven dead workspaces whose 33 orders this entire document was written to exclude. Adding `customFields` and `clientFiles` as well raises it to **13**, gaining `Yl4v2S` — the workspace with seventeen empty orders that §5 singles out. **Every widening of this predicate re-admits exactly the population it exists to exclude.** That is the clearest evidence available that the six kept clauses are at the right boundary.
+
+---
+
+## A.9 The migration table, recomputed with the stable predicate
+
+Recomputed from scratch on 2026-09-08 with v2.1, not copied from §5.
+
+### Headline
+
+| | v1 | v2 (§5) | **v2.1** | change vs §5 |
+|---|---|---|---|---|
+| Activated | 24 | 11 | **11** | **none** |
+| Unactivated | 39 | 52 | **52** | **none** |
+
+Composed of 14 lost, 1 gained, 10 unchanged-activated, 38 unchanged-unactivated — **identical to §5.**
+
+### Every workspace, checked individually
+
+| §5 said | v2.1 says |
+|---|---|
+| The 14 that lose activation — `2R4ltp, 61nNqj, Jro4NL, LdCRwO, MN8lHV, P5eI1V, RrFWqj, YeOKKh, Yl4v2S, Zr9KG4, omUX4b, p5bfCb, qrOKIC, tNFtO5` | **all 14 still lose it.** Every clause fires 0 on every one of their orders |
+| The 10 that keep it — `iZFBJq, test_s, KSQide, n06Uzp, zIYkFB, 395OJD, vhCSyL, aiVY7U, cDaMyi, dKncGl` | **all 10 still keep it** |
+| The 1 that gains it — `QNxWP8` | **still gains it** (12 orders, all with money and line items, commerce-provider-stamped) |
+
+### Per-domain satisfier counts
+
+| Domain | §5 | v2.1 | Re-verified how |
+|---|---|---|---|
+| Commerce (§3.1) | 1 | **1** — `QNxWP8` | provider-stamped **and** substantive |
+| Bespoke studio (§3.2) | 10 | **10** — the other ten | substantive **and** no provider |
+| Finance (§3.3) | 0 | **0** | 1250 bank transactions read; `linkedOrderId` non-empty on **0** |
+| Inventory (§3.4) | 0 | **0** | 11 movements and 12 items read; `kind === "used"` with a non-empty `ref` on **0** |
+| **Any (activated)** | 11 | **11** | |
+
+**Two of the 11 are still not customers** (`test_s` the fixture, `iZFBJq` the operator). **External activated workspaces: 9 of 63 — 14%.** §4's uncomfortable consequence stands unchanged: unactivated rises 39 → 52, and 12 workspaces move to high risk.
+
+### Spot-checks of the evidence §A was told not to re-derive
+
+Re-run anyway, cheaply, because a revision that trusts its own baseline unverified is not a revision:
+
+| Claim | Re-measured |
+|---|---|
+| `source` is inverted | dead **72.7%** vs 6.7% across all other live-workspace orders (§1.3's 23.8% excluded the fixture; both are the same finding) — **confirmed** |
+| `deliveryTime` means nothing | histogram `45×187, 30×143, 1×63, 60×7, 14×6, 90×4`; **45 on 33 of 33** dead orders — **confirmed** |
+| `taxRate: 20` arrives free | 10 of the 33 dead orders carry `taxRate: 20` having earned nothing — **confirmed** |
+| The 33 fail every clause | 0 of 33 on all six v2.1 clauses, and 0 of 33 including deleted documents — **confirmed** |
+| `projectNumber` unemitted | 0 of 448 — **confirmed** |
+| Generated design names in production | 0 of 448 under §2's guard **and** 0 under the complete four-shape guard — **confirmed** |
+
+---
+
+## A.10 The one thing that must not be left to memory
+
+v2.1's only maintenance liability is `PLACEHOLDER_NAMES`. It is closed **today** because exactly one line writes a localised placeholder and it reads one dictionary key — but a thirteenth language, a reworded key, or a second `t()`-writing create button reopens it silently, and the error direction is **false activation**: a workspace credited with delivering value it never delivered.
+
+A list cannot defend itself. A test can. **When the next phase writes the predicate into `functions/lifecycle/derive.js`, it should carry a guard test that:**
+
+1. reads the `New Project` and `New Order` rows out of `EGGcraft/DilMotoru.swift`, `studioflow-android/.../StudioTranslations.kt`, `studioflow-web/lib/studioflow/language.ts` and `macTranslations.ts`;
+2. asserts every value in them is in `PLACEHOLDER_NAMES`, lower-cased and trimmed;
+3. asserts the Swift row covers every entry of `studioSupportedLanguages`, so **adding a language fails the build** rather than quietly widening activation.
+
+That check runs green today across all four tables — 0 values uncovered — which is why it is worth pinning while it is true. It is also the same lesson already recorded twice in this project: the predicate must be **one exported pure function that both readers import** (§6.2), and a test written against a copy of the code confirms the bug instead of catching it.
+
+---
+
+## A.11 Approval sheet — Revision A
+
+Additions to §7. Each stands alone; none changes the activated count.
+
+| # | Decision | Effect if approved |
+|---|---|---|
+| A1 | Replace §2's `SUBSTANTIVE_ORDER` with **v2.1** (§A.6) | activated stays **11**; predicate no longer expires |
+| A2 | **Drop** the `designName` clause | costs 0 workspaces and 0 live orders; removes the one clause already observed producing a false positive |
+| A3 | **Keep** the customer-name clause on the 26-entry closed set (§A.3.2) | costs one maintained list; keeps the named-but-unpriced job visible |
+| A4 | **Add** the `payments` clause | costs nothing today; covers the workflow-only role, which cannot write money at all |
+| A5 | Reject `notes`, `communication`, `customFields`, `clientFiles` (§A.8) | prevents re-admitting `omUX4b` and `Yl4v2S` |
+| A6 | Require the localisation guard test (§A.10) before the predicate ships | adding a language fails the build instead of widening activation |
+| A7 | Record that there are **four** creation paths, not one (§A.7) | future audits prove against `nvOrderDefaults` too |
+
+**If only one line of Revision A is approved, it should be A2.** It is the clause our own roadmap was about to break, and it is the only one that has already been caught counting a label as work.
