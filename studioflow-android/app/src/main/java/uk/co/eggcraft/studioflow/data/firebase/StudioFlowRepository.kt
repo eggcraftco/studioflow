@@ -4474,8 +4474,15 @@ private fun workspaceSettings(
         quickReplyRules = jsonQuickReplyTemplateItems(data["customRulesJSON"], fallback.quickReplyRules),
         businessType = stringValue(data["businessType"], fallback.businessType),
         businessDescriptionPrompt = stringValue(data["businessDescriptionPrompt"], fallback.businessDescriptionPrompt),
+        // Two questions, and they have different answers for the 22 workspaces
+        // that pressed Skip: setup is OVER for them (the stamp is on the
+        // document), and the wizard was never FINISHED (the boolean was
+        // deliberately not written). The tolerant read decides whether to open
+        // the wizard; the strict one is what a checklist may tick.
         businessOnboardingCompleted = data.containsKey("businessOnboardingCompletedAt") ||
             boolValue(data["businessOnboardingCompleted"], fallback.businessOnboardingCompleted),
+        businessOnboardingWizardCompleted =
+            boolValue(data["businessOnboardingCompleted"], fallback.businessOnboardingWizardCompleted),
         activeStatuses = jsonStringList(data["activeStatusesJSON"], fallback.activeStatuses),
         customSteps = jsonTitleList(data["customStepsJSON"], fallback.customSteps),
         customToggles = jsonTitleList(data["customTogglesJSON"], fallback.customToggles),

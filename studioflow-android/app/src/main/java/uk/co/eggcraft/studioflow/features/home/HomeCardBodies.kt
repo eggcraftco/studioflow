@@ -535,9 +535,18 @@ private fun HomeGettingStartedBody(
     // six steps for everybody, which is exactly why it is not the list we ask
     // for. "Set up business profile" used to be hardcoded ticked here — the
     // card congratulated a workspace that had never opened Settings — so it now
-    // reads the completion the rest of the app reads.
+    // reads a real completion.
+    //
+    // The STRICT completion, not the tolerant one the wizard's gate uses. The
+    // tolerant read is true for anyone who pressed Skip, because a Skip stamps
+    // the workspace with the completed-at date and deliberately never writes
+    // the boolean — so the fallback list ticked "Set up business profile" for
+    // exactly the people who had refused to do it. The server does not: its own
+    // checklist marks that step done on `businessOnboardingCompleted === true`
+    // and nothing else, and this is the fallback for the server's list, so it
+    // has to agree with it or it tells a different story when the call is slow.
     val localSteps = listOf(
-        SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", state.workspaceSettings.businessOnboardingCompleted),
+        SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", state.workspaceSettings.businessOnboardingWizardCompleted),
         SetupStep("customer", "Add your first customer", "Orders, notes and files all hang off a customer.", "Customers", "Add customer", state.customers.isNotEmpty()),
         SetupStep("order", "Create your first order", "The record everything else in NivaDesk attaches to.", "Orders", "Create order", state.orders.isNotEmpty()),
         SetupStep("shop", "Connect your shop", "Import orders automatically from Shopify or WooCommerce.", "Settings", "Connect shop", fromStore),

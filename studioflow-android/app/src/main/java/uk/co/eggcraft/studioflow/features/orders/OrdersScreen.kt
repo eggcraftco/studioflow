@@ -102,6 +102,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.customerNameKey
 import uk.co.eggcraft.studioflow.data.model.emailName
+import uk.co.eggcraft.studioflow.features.onboarding.onboardingProgressStore
 import uk.co.eggcraft.studioflow.features.shell.LocalHideSensitiveNumbers
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.features.shell.privateCurrencyText
@@ -829,6 +830,21 @@ private fun OrderListPane(
             // first-run state the iOS/macOS app already shows.
             if (state.orders.isEmpty() && !state.loading) {
                 item(key = "orders-first-run") {
+                    val firstRunContext = LocalContext.current
+                    // Reopening setup starts it again, so whatever this device
+                    // remembered of the last run is finished with. Without this
+                    // the reopened wizard would come up on the step a previous
+                    // run was abandoned at, which is not what "run it again"
+                    // means.
+                    val onboardingProgress = remember(
+                        firstRunContext, state.user?.uid, state.workspace?.id
+                    ) {
+                        onboardingProgressStore(
+                            firstRunContext,
+                            state.user?.uid.orEmpty(),
+                            state.workspace?.id.orEmpty()
+                        )
+                    }
                     OrdersFirstRunCard(
                         creating = state.creatingOrder,
                         // The pane is handed an opener only when this member may
@@ -855,6 +871,7 @@ private fun OrderListPane(
                             // stamp; this does the same. The `false` stays
                             // because the boolean falls back to its previous
                             // value when the field is absent.
+                            onboardingProgress.clear()
                             onUpdateWorkspaceSettings(
                                 mapOf(
                                     "businessOnboardingCompleted" to false,
