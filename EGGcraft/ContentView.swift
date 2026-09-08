@@ -10466,6 +10466,13 @@ struct ContentView: View {
                         lang: seciliDil,
                         saving: onboardingWizardSaving,
                         errorText: onboardingWizardError,
+                        // Scoped to this person in this workspace, so a second
+                        // account or a second workspace on the same Mac cannot
+                        // walk into somebody else's half-answered wizard.
+                        draftOwner: OnboardingWizardDraftStore.owner(
+                            uid: authVM.currentUserId ?? "",
+                            companyId: firebaseManager.currentCompanyId
+                        ),
                         onFinish: { answers in
                             applyOnboardingWizardAnswers(answers)
                         },
@@ -10728,6 +10735,12 @@ struct ContentView: View {
         if action != "skip" {
             payload["businessOnboardingCompleted"] = true
         }
+
+        // Setup is over for this workspace either way, so the unfinished draft
+        // goes. Skipping is not completing, but it is a refusal — and a refusal
+        // is the one thing that must never be resumed or asked about again.
+        OnboardingWizardDraftStore.clear()
+
         Firestore.firestore()
             .collection("companySettings")
             .document(companyId)
@@ -10747,6 +10760,12 @@ struct ContentView: View {
         }
 
         businessOnboardingCompletedInCloud = false
+
+        // Running setup again means starting it again: a draft left from the
+        // last attempt would drop somebody back into the middle of a wizard
+        // they just asked to re-run from the top.
+        OnboardingWizardDraftStore.clear()
+
         Firestore.firestore()
             .collection("companySettings")
             .document(companyId)

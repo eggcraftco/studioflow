@@ -76,8 +76,14 @@ struct HomeSetupChecklist: Decodable {
 ///
 /// An action with no tab of its own returns "" and the step is drawn without a
 /// way in, rather than sent somewhere approximate — the same rule the web card
-/// follows (a step with no href is disabled). The assistant is a popover on
-/// Apple, not a tab, so it has no entry.
+/// follows (a step with no href is disabled).
+///
+/// `assistant` used to be one of those, on the grounds that the assistant is a
+/// popover here rather than a tab. But AI Replies IS a tab (`AutoReplyView`),
+/// it is where the assistant is given the workspace's data, and it is the same
+/// screen Android's `assistant` step opens. Left out, it made an entire
+/// checklist inert: the server's `ai` path builds a list whose steps are ALL
+/// `assistant`, so that workspace got a card of rows that went nowhere.
 func homeSetupDestination(forAction action: String) -> String {
     switch action {
     case "integrations": return "Settings"
@@ -85,6 +91,7 @@ func homeSetupDestination(forAction action: String) -> String {
     case "new_customer": return "Customers"
     case "bank": return "BankSpending"
     case "inventory": return "Inventory"
+    case "assistant": return "QuickReply"
     default: return ""
     }
 }
@@ -172,8 +179,13 @@ final class HomeData: ObservableObject {
     /// answer than an error about a card.
     private func loadSetupChecklist(companyId: String) async {
         do {
+            // The workspace is named, never left to the server to guess: every
+            // other callable in this app passes `companyId`, and the fallback
+            // (`activeCompanyIdForUid`) reads a users/ document that lags a
+            // workspace switch — which would answer this card with the previous
+            // workspace's checklist.
             let result = try await Functions.functions(region: "europe-west2")
-                .httpsCallable("getSetupChecklist").call([String: Any]())
+                .httpsCallable("getSetupChecklist").call(["companyId": companyId])
             if let payload = result.data as? [String: Any],
                JSONSerialization.isValidJSONObject(payload),
                let encoded = try? JSONSerialization.data(withJSONObject: payload),

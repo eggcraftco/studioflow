@@ -389,7 +389,18 @@ struct HomeGettingStartedBody: View {
         // Nothing is "next" for a workspace the server says has been served —
         // the general path activates on any one piece of real work, so a card
         // that kept pointing at the rest would be asking for work already done.
-        let next = served ? nil : all.first { !$0.done }
+        //
+        // And the recommendation has to be somewhere somebody can GO. The
+        // server's first line ("Tell us what you'd like help with") carries no
+        // action, so it maps to no destination — and it is not-done for every
+        // workspace that has not been through setup, which is precisely the
+        // population this card exists for. Taken first it filled the square with
+        // a disabled capsule and an inert panel, and on a 1×1 that panel is the
+        // whole card. It is passed over unless it is all that is left, which is
+        // the rule Android already follows.
+        let next = served
+            ? nil
+            : (all.first { !$0.done && !$0.destination.isEmpty } ?? all.first { !$0.done })
         let todo = all.filter { !$0.done && $0.id != next?.id }
 
         VStack(alignment: .leading, spacing: 9) {
@@ -549,8 +560,15 @@ struct HomeCheckRow: View {
         .opacity(state == .done ? 0.65 : 1)
         // A gesture, not a wrapping Button: this app has overflowed the SwiftUI
         // stack guard on real hardware, and a modifier costs no view depth.
+        //
+        // Masked rather than always attached: an unconditional tap gesture is
+        // RECOGNISED even when it calls nothing, so a row with no destination
+        // ate the tap that belongs to the card. On a phone the card itself opens
+        // the screen it summarises (`HomeCardShell`), and a checklist of inert
+        // rows laid over it turned the card into a dead patch. `.subviews`
+        // leaves this tap unrecognised, so it reaches the card underneath.
         .contentShape(Rectangle())
-        .onTapGesture { onOpen?() }
+        .gesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .subviews : .all)
         .accessibilityAddTraits(onOpen != nil ? AccessibilityTraits.isButton : AccessibilityTraits())
     }
 
@@ -631,8 +649,13 @@ struct HomeNextPanel: View {
         // capsule is the smallest thing on the card. A gesture rather than a
         // wrapping Button — a modifier costs no view depth, and this app has
         // overflowed the SwiftUI stack guard on real hardware.
+        //
+        // And masked when there is nowhere to go, for the same reason as the
+        // rows above: a panel that recognises the tap and then does nothing
+        // takes it away from the card, which on a phone is the way into the
+        // screen this card is about.
         .contentShape(Rectangle())
-        .onTapGesture { onOpen?() }
+        .gesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .subviews : .all)
     }
 
     private func eyebrow(_ text: String) -> some View {
@@ -675,6 +698,10 @@ struct HomeNextPanel: View {
             .disabled(onOpen == nil)
             // A step with nowhere to go keeps its words and loses its promise.
             .opacity(onOpen == nil ? 0.55 : 1)
+            // And loses its claim on the tap. A disabled control is still the
+            // thing under your finger, and on a phone that finger was aimed at
+            // the card, which opens the screen this card is about.
+            .allowsHitTesting(onOpen != nil)
     }
 
     private var buttonLabel: some View {
