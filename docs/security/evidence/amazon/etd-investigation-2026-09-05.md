@@ -1,4 +1,7 @@
-# Event Threat Detection — investigation record (2026-09-05): Google support / ETD investigation required
+# Event Threat Detection — investigation record (2026-09-05)
+
+> **CLOSED 8 September 2026 by Google Cloud Support, case 75151719.** The three runs below did
+> everything right and could never have succeeded. Read §Closure at the end before the detail.
 
 ## Configuration read live at 2026-09-05T13:06:14Z
 
@@ -74,3 +77,37 @@ deleted after run 3 (`test-artifacts-cleanup-2026-09-05.md`); the DNS logging
 policy and the detector configuration stay as they are, so a finding that
 arrives later is delivered through the same notification config → Pub/Sub →
 e-mail chain proven in `scc-finding-2026-09-05.md`.
+
+
+---
+
+## Closure — 8 September 2026, Google Cloud Support case 75151719
+
+Google's engineer answered the question this record was written to ask, in writing and unambiguously.
+
+**Why no finding could ever have appeared.** Security Command Center surfaces a finding according to
+the tier of the resource it is **anchored to**. `Malware: Bad Domain` hits a **known issue on Google's
+side** where it loses its project-level metadata, so the backend anchors it at the **organisation**
+level instead. Our organisation is on **Standard**, which carries no entitlement to display a
+Premium-tier ETD finding, so the finding is **dropped entirely** before it can reach our project view.
+
+Google's conclusion, verbatim: *a project-only Premium deployment inside a Standard-tier organisation
+cannot expose this promoted finding.*
+
+**What that means for this record.** The three runs on 5 September were correctly executed against a
+correctly configured detector, and the absence of a finding was never evidence of a fault. Specifically:
+
+| | |
+|---|---|
+| Detector or configuration issue on our side | **Not indicated** |
+| Project SCC pipeline | **Healthy** — Google's words, and independently proven here by a real Cloud Armor finding travelling the whole notification config → Pub/Sub → e-mail chain |
+| The absence of a finding | **Explained** by tier and anchoring behaviour Google confirms |
+| Further Bad Domain testing | **Do not perform.** No test can succeed; what withholds the finding is the entitlement, not the trigger |
+
+**The wording matters and is deliberate.** This is **not observable in the current SCC tier topology**.
+It is not "failed" and it is not "misconfigured" — nothing built here is wrong, and no change available
+inside the project would alter the result. Making the finding observable would require Premium at the
+**organisation** level, which is a purchasing decision, not a remediation.
+
+The DNS logging policy and the detector configuration stay exactly as they are. If Google ever changes
+the anchoring behaviour, a finding will arrive through the chain already proven.
