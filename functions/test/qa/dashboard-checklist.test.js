@@ -15,12 +15,18 @@ const check = (name, run) => checks.push({ name, run });
 
 const WEB = path.join(__dirname, "..", "..", "..", "studioflow-web");
 const source = fs.readFileSync(path.join(WEB, "app", "dashboard", "page.tsx"), "utf8");
+// The server call and the action->href map now live in one module that the dashboard,
+// the Home page and HomeCardBodies all import, instead of being copied into each. These
+// checks follow the code: grepping the page for a literal that moved is how a correct
+// refactor gets reported as a regression.
+const shared = fs.readFileSync(path.join(WEB, "lib", "studioflow", "setupChecklist.ts"), "utf8");
 const start = source.indexOf("function GettingStartedCard");
 const body = start > 0 ? source.slice(start, source.indexOf("\n}\n", start)) : "";
 
 check("the card asks the server what this workspace should do", () => {
   assert.ok(start > 0, "GettingStartedCard is gone");
-  assert.ok(body.includes('"getSetupChecklist"'), "the card still shows a hardcoded list to everybody");
+  assert.ok(shared.includes('"getSetupChecklist"'), "nothing calls getSetupChecklist any more");
+  assert.ok(body.includes("loadSetupChecklist"), "the card still shows a hardcoded list to everybody");
   assert.ok(body.includes("server.steps"), "the server's steps are not used");
 });
 
@@ -43,7 +49,13 @@ check("the fixed five steps survive only as the fallback", () => {
   // rather than an empty card or an error.
   assert.ok(source.includes("const GETTING_STARTED_STEPS"), "the fallback was deleted");
   assert.ok(body.includes(": GETTING_STARTED_STEPS.map("), "there is no fallback when the call fails");
-  assert.ok(body.includes(".catch(() => undefined)"), "a failed call would surface as an error on the dashboard");
+  // The property, not the idiom: a failed load must not reach the user. It is now
+  // caught twice — once inside loadSetupChecklist, which returns null, and again
+  // around the call — so assert that a catch exists rather than that one spelling of
+  // it does. The previous check pinned ".catch(() => undefined)" and went red on a
+  // try/catch that is strictly safer.
+  assert.ok(/catch\s*(\(|\{)/.test(body), "a failed call would surface as an error on the dashboard");
+  assert.ok(shared.includes("catch"), "loadSetupChecklist does not swallow its own failure");
 });
 
 check("the card leaves when the workspace has been served", () => {
@@ -61,7 +73,8 @@ check("every action the server can name has somewhere to go", () => {
   // A step whose action is unmapped renders as a dead row, which is worse than
   // one step fewer.
   const { SETUP_STEP_COPY, SETUP_PRELUDE } = require("../../lifecycle/checklist");
-  const hrefs = source.slice(source.indexOf("const SETUP_STEP_HREFS"), source.indexOf("};", source.indexOf("const SETUP_STEP_HREFS")));
+  const hrefs = shared.slice(shared.indexOf("SETUP_STEP_HREFS"), shared.indexOf("};", shared.indexOf("SETUP_STEP_HREFS")));
+  assert.ok(hrefs.length > 0, "SETUP_STEP_HREFS was not found in the shared module");
   const actions = new Set();
   for (const copy of Object.values(SETUP_STEP_COPY)) if (copy.action) actions.add(copy.action);
   // The prelude's copy lives in the same module.
