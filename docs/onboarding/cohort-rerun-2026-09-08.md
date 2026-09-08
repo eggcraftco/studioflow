@@ -1,4 +1,8 @@
-# Cohort re-measurement, 8 September 2026 — and what v2.1 does to it
+# Activation v2.1 baseline, 8 September 2026
+
+> **This is a BASELINE, not an impact measurement.** None of the client work is deployed, so nothing
+> here can reflect it. Recorded as the reference population against which a later, post-deploy run is
+> compared.
 
 Read-only. Aggregate-first, no names, per `privacy-note-cohort-queries.md`.
 
