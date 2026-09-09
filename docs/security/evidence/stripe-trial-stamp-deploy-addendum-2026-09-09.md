@@ -191,3 +191,201 @@ message). Do not deploy `stripeWebhook` or `resyncStripeWorkspaceEntitlements` f
 need: the write-time guard above, this check green, the other 48 still green, and a fresh review of the
 resync rail. Rollback targets (§2.3) and the branch-carry rule remain correct for whenever that candidate
 exists.
+
+## 6. L1 closed: the decision is taken again at the moment of writing (10 September, after midnight)
+
+Operator authorisation, 9 September late: fix L1 on `dc37909c`, narrowly; prepare for deploy; **no
+production deploy permission**; no production data changed; no Chrome. §4 and §5 above stand as the
+record of the STOP and the NO-GO they were written for. This section is the closure. Everything below was
+run on the working tree that became the commit named in §6.7.
+
+### 6.1 The change (`functions/stripeBilling.js`)
+
+Two mechanisms, one transaction, no Stripe call inside it.
+
+- **The write is one Firestore transaction.** `applySubscription` (`:1335`) resolves the workspace, takes
+  the pre-read (`stripeSubscriptionEventOrdering`, `:609`), retrieves canonical state exactly as before —
+  and then hands the write to `commitStripeSubscriptionApply` (`:1462`). Inside `runTransaction` the
+  callback reads the ledger row, the whole `subscriptions` collection and the workspace document first
+  (`readEntitlementInputs`, `:915`), then writes the ledger row, the add-on fields (seat quantity and the
+  limit computed from it in the same `set`) or the plan resolve, and the fallback stamps — or writes
+  nothing. Reads before writes is Firestore's rule; reading the workspace document is what makes two
+  applies for *different* subscriptions of one workspace serialise on the engine instead of each resolving
+  from a picture that is missing the other.
+- **The decision is taken again on the committed row.** Two checks at `:1486-1487`:
+  (a) `eventSequence < stripeEventSequence` now → stale after all → `{ stale }` and no write, whatever
+  the pre-read said; (b) the row's **`stripeApplyGeneration`** (new field, `stripeApplyGenerationOf`,
+  `:533`; incremented by every applied write, `:708`) differs from the generation this apply read
+  **before its snapshot** → `{ conflict }` and no write. On a conflict `applySubscription` re-reads Stripe
+  *outside* the transaction (`retrieveCanonicalSubscription`, `:1433`) and retries against the generation
+  it saw, at most `STRIPE_APPLY_CONFLICT_RETRIES = 3` times (`:542`); then it throws, which keeps the
+  webhook retryable (500 → redelivery; `stripeBillingEvents` row stays `received`). The watermark is
+  written as `max(seen, event)` (`:707`) and a resync still leaves it alone.
+- **The generation is read before the snapshot on every rail.** The `customer.subscription.*` rail already
+  pre-read before its retrieve. The three rails that retrieve first (checkout `:1200`, `invoice.paid`
+  `:1602`, `invoice.payment_failed` `:1634`) now take `stripeApplyBaseline` (`:1451`) — the same pre-read —
+  *before* their retrieve and pass it in; each keeps its one retrieve and its existing error semantics.
+  The resync reads every Stripe row's generation **before `subscriptions.list`** (`:1868`) and hands each
+  listed subscription its expected generation (`:1905`); a row the baseline does not know (a re-subscribe
+  under a new id) is expected at 0, which is how an absent row reads, so it applies.
+- **The resync's closing step is under the same guard.** Deactivating rows Stripe no longer lists,
+  clearing add-on fields no active row backs, and the plan resolve used to be three writes computed from
+  the list; they are now one transaction (`:1926`) computed from the rows as they stand, and an unlisted
+  row is touched only if it still carries its baseline generation (`:1937-1938`) — "Stripe no longer
+  lists it" is a claim about the list's snapshot and is not made about a row that is newer than it.
+- **The resolver is split, not changed.** `recomputeEffectiveWorkspaceEntitlement` (`:1082`) is now
+  `readEntitlementInputs` + pure `resolveWorkspaceEntitlement` (`:925`) + one merge write, so the apply
+  can run the resolve inside its transaction with this subscription's row substituted for the pending
+  write. The Apple, Google and scheduled callers keep calling the wrapper; the one visible difference for
+  them is that the workspace document is read on every resolve rather than only on the no-plan branch.
+
+Not changed: the ordering rule itself (`<`, never `<=`), the trial-stamp exception (§2.1 and the fix
+document's A–E), `processStripeEvent`, the checkout session and portal callables, `deleteMyAccount`'s
+cleanup helper.
+
+### 6.2 Tests — fake Firestore (`stripe-invoice-api-drift.test.js`, 49 → 55 checks)
+
+The L1 check (`:1990`) is kept verbatim and is now **green**. Six checks added (`:2143-2409`), each driven
+through `processStripeEvent` or the real `resyncStripeWorkspaceEntitlements` callable (run as the
+callable, with the fake Stripe supplied through the module cache for the duration of the call):
+
+| # | Check | What it pins |
+|---|---|---|
+| 1 | in-flight applies that read the seats **and** the storage alive cannot write either back after both were cancelled | requirement 1 on both add-on branches; skip reason names the out-ranking event; `state()` byte-identical after the two late applies; **zero writes** by them |
+| 2 | an owner resync whose list read the seats alive cannot write them back over a webhook cancellation that landed after the list | requirement 2; conflict logged; exactly **one** re-read of Stripe; cancellation stands; watermark untouched; generation 3 |
+| 3 | a resync applied first is corrected by the webhook that follows, and a re-subscribe or a quantity change through resync still applies | resync-first → webhook; resync listing the cancellation agrees; new id applies at generation 0; quantity 2 → 4 → 1 all apply; a listed cancelled row is not filed "missing at provider" |
+| 4 | two events in the same second … converge on the cancellation whichever lands last | equal is not stale; the late one conflicts, re-reads, applies the cancellation; retrieves `active, active, canceled, canceled` |
+| 5 | concurrent applies of the plan, the seats and the storage on one workspace contend, and each still sees the others | three transactions at once; fake reports retries > 0; all three rows and both add-ons present |
+| 6 | a failed apply transaction and an exhausted conflict retry each leave no partial write, and the redelivery repairs both | commit failure → only the event row written, `received`, no `processedAt`; redelivery lands whole. Perpetual conflict → 1 + 3 re-reads then throws, generation advanced only by the other writer, watermark unmoved; redelivery lands |
+
+The fake gained what these need: a version per collection so a transaction that read the
+`subscriptions` collection is overtaken by a row written under it, and a `failCommit` injection. The
+existing trial checks A–E, the retry check (§2.1), the retrieve-error and stale-event checks ran unchanged
+(the suite's count guard is 55). `trial-checkout` 7/7, `apple-billing-order`, `entitlement-shopify`,
+`shopify-billing`, `commerce-woo-adapter`: green.
+
+**Red on removal** (each mutation applied to the fixed file alone, suite re-run, file restored and
+byte-compared to the fixed copy):
+
+| Mutation | Result |
+|---|---|
+| M1 delete the write-time stale re-check (`:1486`) | **2 red**: the L1 check and #1 (the late apply lands, `updated: true`) |
+| M2 delete the generation-conflict check (`:1487`) | **3 red**: #2 (resync writes its old list), #4 (equal-second apply writes its old snapshot), #6 (the contested apply is "handled") |
+| M3 write `stripeEventSequence` as-is instead of `max(seen, event)` | green — the re-check at `:1486` already refuses every write that would lower it; `max` is belt and braces |
+| M4 resync takes its expected generation from a read **after** the list instead of before | **1 red**: #2 — the ordering of the generation read relative to the snapshot is load-bearing |
+
+### 6.3 Firestore emulator (`stripe-apply-transaction.test.mjs`, new, 5 checks — the evidence the fake cannot give)
+
+`firebase emulators:exec --only firestore --project eggcraft-studio "node functions/test/qa/stripe-apply-transaction.test.mjs"`
+runs the shipped factory through `firebase-admin` against the emulator, real `runTransaction`, real
+`serverTimestamp`, a fake Stripe. All five **PASS**:
+
+1. **L1 interleave**: A held at its retrieve, B cancels, A released → A `skipped / stale_subscription_event
+   / appliedEventSequence = B's`; workspace `cancelled / 0 / limit 5`; watermark B's; and Firestore's own
+   proof that A wrote nothing — the workspace document's and the ledger row's **`updateTime` are equal
+   before and after A** (any write by A carries a `serverTimestamp`).
+2. **The transaction itself**: A's transaction held open *after* its reads, B started while A holds. The
+   emulator serialised B **behind A's read locks** (the server-SDK semantics: reads lock, writers wait;
+   B did not commit within 1.5 s while A was held), then A committed, then B's cancellation landed over
+   it — 4 callback attempts for 3 transactions, cancellation the last word, watermark B's. The check
+   accepts either engine behaviour (optimistic re-run or pessimistic wait) and records which occurred;
+   the guard is correct under both because the re-check reads the committed row after the lock is held.
+3. **Resync race**: list snapshot taken, webhook cancellation applied, list released → conflict logged,
+   exactly one re-read, cancellation stands, generation 3, `billingUpdatedBy: stripe_owner_resync`.
+4. **Resync first, then webhook; re-subscribe and quantity change** (the callable's one-minute throttle is
+   real time here; the check clears the request stamp between refreshes, standing for the minute).
+5. **Three subscriptions applied at once**: 6 callback attempts for 3 transactions — three real
+   contention retries on the engine — and every row and add-on survives with generation 1 each.
+
+The file sits in `test/qa/*.test.mjs`, so `npm run test:rules` now includes it (needs the emulator, like
+the other seven).
+
+### 6.4 Full suite on the final code
+
+`npm test` (emulator-independent tier, 102 suites): exit 0, **1,231 PASS, 0 FAIL** (was 1,223 in §2.2:
++6 drift checks, +2 elsewhere counted by the same grep). Run once, on the tree that was committed.
+
+### 6.5 Deploy list, re-derived
+
+Method as before — every factory-level and module-level unit of `stripeBilling.js` compared
+comment-stripped between live (`0ad2a2aa`) and the candidate, then each exported handler traced through
+the module's call graph to the changed units. The previous two-function answer was **not** carried over;
+it no longer holds, because the L1 fix touched the shared resolver.
+
+| Export | Reaches changed code | Why | Serving revision (read 10 Sep, 100 % traffic) |
+|---|---|---|---|
+| `stripeWebhook` | **yes — carries the fix** | all four rails → `applySubscription` → `commitStripeSubscriptionApply` | `stripewebhook-00046-peq` (2026-09-06T01:48:01Z) |
+| `resyncStripeWorkspaceEntitlements` | **yes — carries the fix** | baseline, guarded applies, closing transaction | `resyncstripeworkspaceentitlements-00031-seb` (06T03:03:53Z) |
+| `scheduledBillingEntitlementReconcile` | yes | `recomputeEffectiveWorkspaceEntitlement` (split resolver) | `scheduledbillingentitlementreconcile-00008-poq` (06T01:55:31Z) |
+| `verifyAppleSubscriptionPurchase` | yes | same resolver via `persistApplePlanSubscription` | `verifyapplesubscriptionpurchase-00009-qop` (06T03:04:01Z) |
+| `appleAppStoreServerNotification` | yes | same | `appleappstoreservernotification-00009-mek` (06T02:09:35Z) |
+| `verifyGooglePlayPurchase` | yes | same | `verifygoogleplaypurchase-00009-yaf` (06T04:14:48Z) |
+| `googlePlayRtdnNotification` | yes | same | `googleplayrtdnnotification-00009-rey` (06T03:38:14Z) |
+| `createStripeCheckoutSession`, `createStripeCustomerPortalSession`, `prepareAppleSubscriptionPurchase`, `prepareGooglePlayPurchase` | no | — | not in the list |
+| `deleteMyAccount` (index.js, via `_internal.cancelWorkspaceStripeSubscriptionsForDeletion`) | no | helper unchanged, reaches nothing changed | not in the list |
+
+**The deploy list is the seven.** Two of them carry the L1 guard; the other five carry only the split
+resolver, which reads the same rows, writes the same fields and differs by one extra workspace read — they
+are functionally compatible with the live resolver either way, and none reads `stripeApplyGeneration`.
+Deploying all seven from one commit keeps every writer of the ledger and the workspace on one version of
+the resolver; deploying only the two closes L1 and leaves five functions on the old resolver, which is
+safe but is a mixed state to reason about later. Recommendation: the seven, by name, in one command:
+
+```
+firebase deploy --only "functions:stripeWebhook,functions:resyncStripeWorkspaceEntitlements,functions:scheduledBillingEntitlementReconcile,functions:verifyAppleSubscriptionPurchase,functions:appleAppStoreServerNotification,functions:verifyGooglePlayPurchase,functions:googlePlayRtdnNotification"
+```
+
+Never `--only functions` (branch divergence, `functions-deploy-branch-divergence`). Every serving revision
+above was created on 6 September from the same deploy session as the two already recorded in §2.3.
+
+### 6.6 Rollback and the branch carry
+
+Rollback per service is `gcloud run services update-traffic <service> --region europe-west2 --project
+eggcraft-studio --to-revisions <revision>=100` to the revision in the table. Rolling `stripewebhook` and
+`resyncstripeworkspaceentitlements` back **re-opens the live add-on HIGH (Addendum 6), the invoice
+API-drift skips, and L1** — L1 is present in live by the same read-decide-then-write shape (§4); it never
+shipped fixed. Rolling the other five back changes nothing observable. The new ledger field
+`stripeApplyGeneration` is ignored by the live code, so a rollback needs no data change; a later re-deploy
+of the fix picks the field up where it stands.
+
+Branch carry is unchanged from §2.3: `git merge --ff-only stripe-trial-stamp` onto
+`macbook-save-before-macstudio-2026-06-01` from the main checkout, push, deploy from there; every other
+worktree that deploys functions rebases first; `git merge-base --is-ancestor <§6.7 commit> HEAD` as the
+pre-deploy guard.
+
+### 6.7 Commit, limitations, decision
+
+**Commit:** see the git log entry after this section's commit ("L1 closed: …"); the exact hash is in the
+report to the operator and in memory. Product change: `functions/stripeBilling.js` only. Tests:
+`stripe-invoice-api-drift.test.js` (+6, harness extended), `stripe-apply-transaction.test.mjs` (new).
+Evidence: this section. `node_modules` symlink removed before the commit.
+
+**Limitations, stated:**
+
+- Under the server SDK's pessimistic locking (observed on the emulator, documented for production) a
+  transaction now holds read locks on every ledger row and the workspace document for its duration. The
+  callback makes no network call, so the hold is milliseconds; concurrent applies of one workspace, and
+  non-transactional writes to its document, wait rather than fail. Contention beyond the SDK's five
+  attempts throws, which is retryable on both rails.
+- The generation read for the three retrieve-first rails is taken by `stripeApplyBaseline` only when the
+  session's or invoice's own references resolve a workspace; when they do not (a subscription nothing can
+  find yet), `applySubscription` resolves and pre-reads after the retrieve, which is the pre-fix window,
+  confined to that case.
+- Rows written before this deploy carry no `stripeApplyGeneration`; they read as 0 and start counting at
+  the first applied write. A row at legacy 0 and an absent row are indistinguishable to the guard, which
+  is safe: both mean "nothing applied since the baseline".
+- Not in scope, observed while here, **not HIGH**: (i) `planUpdatePayload` writes the base plan's
+  `billingTeamMemberLimit` on every plan resolve, so a plan renewal after a seat purchase leaves that
+  display field at 5 while `billingAdditionalTeamSeatQuantity` stays 3 — enforcement
+  (`activeAdditionalTeamSeats`, `effectiveTeamSeatLimit`, index.js) reads the add-on fields, not this one;
+  pre-existing, unchanged, #5 above deliberately does not assert it. (ii) The resync's closing reconcile
+  clears seat/storage fields when no active **Stripe** add-on row exists, as the live code did from the
+  list — an Apple add-on on a workspace whose owner presses the Stripe refresh is cleared until the Apple
+  path re-grants it; pre-existing, mirrored on purpose to keep this change narrow.
+- The mutation runs prove the tests are load-bearing for the guard; they do not prove the absence of a
+  third interleaving nobody has driven. The emulator run proves the transaction semantics the fake
+  models; it is not a production observation — no production data was read for L1 beyond the revision
+  list, and none was changed.
+
+**Decision: GO** for the seven-function deploy in §6.5 from the commit in §6.7, subject to the operator's
+separate deploy approval, which this section does not constitute. No new HIGH was found while closing L1.

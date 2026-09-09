@@ -5,6 +5,11 @@
 > reproduced a cancelled add-on written back by an in-flight apply. That is a HIGH state-corruption path
 > present in live and in this candidate; under the STOP rule the recommendation below is withdrawn and
 > the decision is **NO-GO** until a write-time guard exists. The trial-stamp fix and its checks stand.
+>
+> **Closed, 10 September:** the write-time guard exists — addendum §6 (one transaction, the decision taken
+> again on the committed row, a generation read before every snapshot, the resync bound to the same
+> guard; 55/55 fake, 5/5 emulator, 1,231 full suite, red-on-removal shown). Deploy list re-derived: seven
+> functions (§6.5). Decision **GO**, deploy approval separate.
 
 Date: 9 September 2026. Branch **`stripe-trial-stamp`** (worktree `/Users/gocmen/Developer/studioflow-stripe`),
 cut from the deploy branch `macbook-save-before-macstudio-2026-06-01` at `9be6a597`, which already carries

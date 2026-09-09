@@ -164,7 +164,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 49;
+const EXPECTED_CHECKS = 55;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -434,7 +434,12 @@ class FakeTimestamp {
 // each document path as it is read and returns an Error to throw, or nothing.
 // Invariant 2 is a claim about what happens when the ordering pre-read fails, so
 // it cannot be checked without a read that can fail.
-function fakeFirestore(seed = {}, { failGet = null } = {}) {
+//
+// `failCommit` is the other injection: called once per transaction attempt at
+// the moment the attempt would commit, it returns an Error to throw instead —
+// a commit that fails after the function ran, which is the failure a Firestore
+// transaction can actually have. Nothing pending is written when it fires.
+function fakeFirestore(seed = {}, { failGet = null, failCommit = null } = {}) {
   const store = new Map(Object.entries(seed).map(([key, value]) => [key, { ...value }]));
   const queries = [];
   // Every write, in order, with the fields it carried — so a check can say
@@ -446,6 +451,12 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
   // document somebody else wrote in the meantime is retried from the top, not
   // committed over them.
   const versions = new Map();
+  // A version per collection, bumped when any direct child is written, so a
+  // transaction that read the collection — the entitlement resolve reads every
+  // ledger row — is overtaken by a row added or changed under it, the way
+  // Firestore treats a query read inside a transaction.
+  const collectionVersions = new Map();
+  const transactions = { attempts: 0, retries: 0 };
 
   function documentRef(docPath) {
     const id = docPath.slice(docPath.lastIndexOf("/") + 1);
@@ -476,6 +487,8 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
         }
         store.set(docPath, next);
         versions.set(docPath, (versions.get(docPath) || 0) + 1);
+        const parentPath = docPath.slice(0, docPath.lastIndexOf("/"));
+        collectionVersions.set(parentPath, (collectionVersions.get(parentPath) || 0) + 1);
         writes.push({ path: docPath, fields: Object.keys(value) });
       }
     };
@@ -490,11 +503,18 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
   // exercised in a single process.
   async function runTransaction(fn) {
     for (let attempt = 0; attempt < 8; attempt += 1) {
+      transactions.attempts += 1;
+      if (attempt > 0) transactions.retries += 1;
       const readVersions = new Map();
+      const readCollections = new Map();
       const pending = [];
       const transaction = {
         async get(ref) {
           await new Promise((resolve) => setImmediate(resolve));
+          if (typeof ref.doc === "function") {
+            readCollections.set(ref.path, collectionVersions.get(ref.path) || 0);
+            return ref.get();
+          }
           readVersions.set(ref.path, versions.get(ref.path) || 0);
           return ref.get();
         },
@@ -503,8 +523,11 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
       };
       const result = await fn(transaction);
       await new Promise((resolve) => setImmediate(resolve));
-      const overtaken = [...readVersions].some(([docPath, seen]) => (versions.get(docPath) || 0) !== seen);
+      const overtaken = [...readVersions].some(([docPath, seen]) => (versions.get(docPath) || 0) !== seen)
+        || [...readCollections].some(([collectionPath, seen]) => (collectionVersions.get(collectionPath) || 0) !== seen);
       if (overtaken) continue;
+      const injected = failCommit ? failCommit(attempt) : null;
+      if (injected) throw injected;
       for (const write of pending) await write();
       return result;
     }
@@ -537,7 +560,7 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
     return { path: collectionPath, doc: (id) => documentRef(`${collectionPath}/${id}`), ...query([], 0) };
   }
 
-  return { db: { collection: (name) => collectionRef(name), runTransaction }, store, queries, writes };
+  return { db: { collection: (name) => collectionRef(name), runTransaction }, store, queries, writes, transactions };
 }
 
 // Only the fields planUpdatePayload reads. The assertions below are about which
@@ -590,8 +613,37 @@ function dahliaInvoice(overrides = {}) {
 // The workspace is found through billingSubscriptionId, not through a
 // metadata.workspaceId shortcut, so the resolved id has to be right for the
 // handler to find anything at all.
-function harness({ retrieve, workspace: workspaceSeed, seed, failGet, requireWorkspaceForBilling } = {}) {
-  const { db, store, queries, writes } = fakeFirestore({
+const OWNER_UID = "owner-uid";
+const STRIPE_MODULE = require.resolve("stripe");
+
+// The owner's "Refresh subscription access", run as the callable it is. The
+// callable builds its own Stripe client with `new (require("stripe"))(key)`, so
+// the harness's fake client is handed to it through the module cache for the
+// duration of the call, and the two env flags configStatus() reads are set
+// for that long as well. Both are restored whatever happens.
+async function runOwnerResync(built, stripe) {
+  const savedEnv = { STRIPE_BILLING_ENABLED: process.env.STRIPE_BILLING_ENABLED, STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY };
+  const savedModule = require.cache[STRIPE_MODULE];
+  process.env.STRIPE_BILLING_ENABLED = "true";
+  process.env.STRIPE_SECRET_KEY = "sk_test_stub";
+  require.cache[STRIPE_MODULE] = { id: STRIPE_MODULE, filename: STRIPE_MODULE, loaded: true, exports: function FakeStripe() { return stripe; } };
+  try {
+    return await built.resyncStripeWorkspaceEntitlements({ auth: { uid: OWNER_UID }, data: { companyId: WORKSPACE } });
+  } finally {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    if (savedModule) require.cache[STRIPE_MODULE] = savedModule;
+    else delete require.cache[STRIPE_MODULE];
+  }
+}
+
+// `list` answers stripe.subscriptions.list for the resync; `owner` installs a
+// workspace resolver that reads the workspace as it stands in the fake store,
+// which is what the resync callable needs to run at all.
+function harness({ retrieve, list, workspace: workspaceSeed, seed, failGet, failCommit, requireWorkspaceForBilling, owner } = {}) {
+  const { db, store, queries, writes, transactions } = fakeFirestore({
     [`companies/${WORKSPACE}`]: {
       billingPlan: "demo",
       billingStatus: "free",
@@ -600,16 +652,27 @@ function harness({ retrieve, workspace: workspaceSeed, seed, failGet, requireWor
       ...(workspaceSeed || {})
     },
     ...(seed || {})
-  }, { failGet });
+  }, { failGet, failCommit });
   const retrieved = [];
+  const listed = [];
   const stripe = {
     subscriptions: {
       async retrieve(id) {
         retrieved.push(id);
         return retrieve ? retrieve(id) : dahliaSubscription();
+      },
+      async list(params) {
+        listed.push(params);
+        return { object: "list", has_more: false, data: list ? await list(params) : [] };
       }
     }
   };
+  const ownerResolver = async () => ({
+    uid: OWNER_UID,
+    companyId: WORKSPACE,
+    companyRef: db.collection("companies").doc(WORKSPACE),
+    companyData: { ...(store.get(`companies/${WORKSPACE}`) || {}) }
+  });
   const built = createStripeBillingFunctions({
     admin: {
       firestore: Object.assign(() => db, {
@@ -630,7 +693,7 @@ function harness({ retrieve, workspace: workspaceSeed, seed, failGet, requireWor
     PLAN_ENTITLEMENTS,
     // The webhook checks never reach a callable; the checkout-guard check below
     // does, and hands in a resolver that reads the workspace as it stands NOW.
-    requireWorkspaceForBilling: requireWorkspaceForBilling || (async () => { throw new Error("no callable is exercised here"); }),
+    requireWorkspaceForBilling: requireWorkspaceForBilling || (owner ? ownerResolver : async () => { throw new Error("no callable is exercised here"); }),
     workspaceOrderRole: () => "owner",
     normalizeWorkspaceRole: (role) => role,
     workspaceRoleLabel: (role) => role
@@ -647,6 +710,9 @@ function harness({ retrieve, workspace: workspaceSeed, seed, failGet, requireWor
     queries,
     writes,
     retrieved,
+    listed,
+    transactions,
+    resync: () => runOwnerResync(built, stripe),
     db,
     workspace: () => store.get(`companies/${WORKSPACE}`) || null,
     ledgerRows: () => [...store.entries()].filter(([key]) => key.startsWith(ledgerPrefix)).map(([, row]) => row),
@@ -1922,9 +1988,13 @@ check("a failed trial-stamp transaction leaves the event retryable, and the rede
 });
 
 check("an apply that read the add-on alive cannot write it back after a later apply cancelled it (L1 interleave)", () => {
-  // Addendum 7's first lesser finding, driven rather than reasoned about. The
-  // ordering decision is taken BEFORE the canonical retrieve, and the ledger and
-  // add-on writes that follow re-check nothing. So: A is ruled current, retrieves
+  // Addendum 7's first lesser finding, driven rather than reasoned about — and
+  // the regression pin for its fix. Before the fix the ordering decision was
+  // taken BEFORE the canonical retrieve, and the ledger and add-on writes that
+  // followed re-checked nothing; this check was red at dc37909c. Now the write
+  // is one transaction that takes the decision again on the committed row, and
+  // removing that re-check (the `stale` return in commitStripeSubscriptionApply)
+  // turns this check red again. So: A is ruled current, retrieves
   // the seat add-on while Stripe still has it active, and is held before it
   // writes; Stripe cancels; B is ruled current, retrieves the cancellation and
   // writes it; A is released and writes what it retrieved. The invariant this
@@ -2019,6 +2089,395 @@ function withoutFullLineComments(text) {
     .replace(/^[ \t]*\/\*[\s\S]*?\*\/[ \t]*$/gm, "")
     .replace(/^[ \t]*\/\/[^\n]*$/gm, "");
 }
+
+// ---- L1 closed: the decision is taken again at the moment of writing ---------
+// Everything above ran against the pre-read alone. From here on the claims are
+// about what happens AFTER the pre-read: an apply that was ruled current, took
+// its snapshot, and lost the race to something newer. The invariant in every
+// check is the same one as the L1 check's — the workspace ends where Stripe
+// is, whichever apply lands last — and the second invariant is that a losing
+// apply writes NOTHING, not even a no-op re-write of the same values.
+
+// A retrieve that can be held. hold(id) makes the next retrieve of that id
+// wait for release(); `started` resolves when the apply has actually reached
+// the retrieve, so a check can be sure the apply was ruled current and holds
+// its snapshot before the check moves Stripe. Deterministic: nothing depends
+// on timing, only on the order the check drives.
+function holdableRetrieve(canonical) {
+  const gates = new Map();
+  const retrieves = [];
+  return {
+    retrieves,
+    retrieve: (id) => {
+      const current = canonical(id);
+      retrieves.push(`${id}:${current.status}`);
+      const gate = gates.get(id);
+      if (gate) {
+        gates.delete(id);
+        gate.started();
+        return gate.promise;
+      }
+      return current;
+    },
+    hold(id) {
+      let release = () => {};
+      let started = () => {};
+      const startedPromise = new Promise((resolve) => { started = resolve; });
+      const promise = new Promise((resolve) => { release = resolve; });
+      gates.set(id, { promise, started });
+      return { started: startedPromise, release };
+    }
+  };
+}
+
+async function untilTrue(predicate, label) {
+  for (let turn = 0; turn < 10_000; turn += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`gave up waiting for ${label}`);
+}
+
+const SEAT_WORKSPACE = { billingPlan: "team_monthly", billingStatus: "active", billingPlanSource: "manual_workspace" };
+
+check("in-flight applies that read the seats and the storage alive cannot write either back after both were cancelled", () => {
+  // Requirement 1 on both add-on branches at once, seats and storage, with the
+  // computed seat limit riding along: two applies are ruled current and held
+  // holding both add-ons alive, both are cancelled underneath them, both
+  // resume. Neither may land, and neither may write.
+  const BASE = 1_800_000;
+  const status = { [SEAT_SUB]: "active", [STORAGE_SUB]: "active" };
+  const stripeState = holdableRetrieve((id) => (
+    id === SEAT_SUB ? seatSubscription({ status: status[id] }) : storageSubscription({ status: status[id] })
+  ));
+  const h = harness({ retrieve: stripeState.retrieve, workspace: SEAT_WORKSPACE });
+  const row = (id) => h.ledgerRows().find((entry) => entry.externalSubscriptionId === id);
+  return (async () => {
+    await h.processStripeEvent(h.stripe, { id: "evt_both_seat0", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() } });
+    await h.processStripeEvent(h.stripe, { id: "evt_both_storage0", type: "customer.subscription.updated", created: BASE, data: { object: storageSubscription() } });
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, 3);
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 8);
+    assert.strictEqual(h.workspace().billingStorageAddonMB, 200 * 1024);
+
+    const seatHold = stripeState.hold(SEAT_SUB);
+    const storageHold = stripeState.hold(STORAGE_SUB);
+    const applySeatA = h.processStripeEvent(h.stripe, { id: "evt_both_seatA", type: "customer.subscription.updated", created: BASE + 100, data: { object: seatSubscription() } });
+    await seatHold.started;
+    const applyStorageA = h.processStripeEvent(h.stripe, { id: "evt_both_storageA", type: "customer.subscription.updated", created: BASE + 100, data: { object: storageSubscription() } });
+    await storageHold.started;
+
+    status[SEAT_SUB] = "canceled";
+    status[STORAGE_SUB] = "canceled";
+    await h.processStripeEvent(h.stripe, { id: "evt_both_seatB", type: "customer.subscription.deleted", created: BASE + 200, data: { object: seatSubscription({ status: "canceled" }) } });
+    await h.processStripeEvent(h.stripe, { id: "evt_both_storageB", type: "customer.subscription.deleted", created: BASE + 200, data: { object: storageSubscription({ status: "canceled" }) } });
+    const cancelled = h.workspace();
+    assert.strictEqual(cancelled.billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(cancelled.billingTeamMemberLimit, 5);
+    assert.strictEqual(cancelled.billingStorageAddonStatus, "cancelled");
+    assert.strictEqual(cancelled.billingStorageAddonMB, 0);
+    const afterB = h.state();
+    const writesAfterB = h.writes.length;
+
+    storageHold.release(storageSubscription({ status: "active" }));
+    seatHold.release(seatSubscription({ status: "active" }));
+    const late = await captureWarningsAsync(() => Promise.all([applySeatA, applyStorageA]));
+    for (const [label, result] of [["seats", late.value[0]], ["storage", late.value[1]]]) {
+      assert.strictEqual(result.skipped, true, `${label}: the late apply landed: ${JSON.stringify(result)}`);
+      assert.strictEqual(result.reason, "stale_subscription_event", label);
+      assert.strictEqual(result.appliedEventSequence, (BASE + 200) * 1000, `${label}: the skip does not name the event that out-ranked it`);
+    }
+    assert.ok(late.lines.some((line) => /out-ranked while being applied/i.test(line)), "the write-time drop was not logged");
+
+    const w = h.workspace();
+    assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled", "seats came back");
+    assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0);
+    assert.strictEqual(w.billingTeamMemberLimit, 5, "the seat limit came back");
+    assert.strictEqual(w.billingStorageAddonStatus, "cancelled", "storage came back");
+    assert.strictEqual(w.billingStorageAddonMB, 0);
+    assert.strictEqual(w.billingStorageAddonSubscriptionId, "");
+    assert.strictEqual(row(SEAT_SUB).stripeEventSequence, (BASE + 200) * 1000, "the seat watermark moved backwards");
+    assert.strictEqual(row(STORAGE_SUB).stripeEventSequence, (BASE + 200) * 1000, "the storage watermark moved backwards");
+    assert.strictEqual(h.state(), afterB, "a late apply mutated persistent state after the cancellations");
+    assert.deepStrictEqual(
+      h.writes.slice(writesAfterB).map((write) => write.path).filter((docPath) => !docPath.startsWith("stripeBillingEvents/")),
+      [],
+      "a late apply wrote something — a re-write of the same values is still a write"
+    );
+  })();
+});
+
+check("an owner resync whose list read the seats alive cannot write them back over a webhook cancellation that landed after the list", () => {
+  // Requirement 2. The resync has no event time, so the watermark cannot rule
+  // it stale — the pre-fix shape applied its list unconditionally. Now the
+  // resync reads every row's generation BEFORE it lists, and the write refuses
+  // a snapshot older than a row that moved: it re-reads Stripe and applies what
+  // it finds, which is the cancellation.
+  const BASE = 1_800_000;
+  const status = { [SEAT_SUB]: "active" };
+  const stripeState = holdableRetrieve(() => seatSubscription({ status: status[SEAT_SUB] }));
+  let listHold = null;
+  const h = harness({
+    owner: true,
+    retrieve: stripeState.retrieve,
+    list: async () => {
+      const snapshot = [seatSubscription({ status: status[SEAT_SUB] })];
+      if (listHold) {
+        const held = listHold;
+        listHold = null;
+        await held;
+      }
+      return snapshot;
+    },
+    workspace: SEAT_WORKSPACE
+  });
+  const row = () => h.ledgerRows().find((entry) => entry.externalSubscriptionId === SEAT_SUB);
+  return (async () => {
+    await h.processStripeEvent(h.stripe, { id: "evt_rs_seat0", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() } });
+    assert.strictEqual(row().stripeApplyGeneration, 1, "the applied row does not carry a generation");
+
+    let releaseList = () => {};
+    listHold = new Promise((resolve) => { releaseList = resolve; });
+    const resync = h.resync();
+    await untilTrue(() => h.listed.length === 1, "the resync to take its list snapshot");
+
+    status[SEAT_SUB] = "canceled";
+    const cancel = await h.processStripeEvent(h.stripe, { id: "evt_rs_seatB", type: "customer.subscription.deleted", created: BASE + 200, data: { object: seatSubscription({ status: "canceled" }) } });
+    assert.strictEqual(cancel.updated, true, JSON.stringify(cancel));
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(row().stripeApplyGeneration, 2);
+    const retrievesBefore = stripeState.retrieves.length;
+
+    releaseList();
+    const finished = await captureWarningsAsync(() => resync);
+    assert.strictEqual(finished.value.ok, true, JSON.stringify(finished.value));
+    assert.strictEqual(finished.value.resynced, true);
+    assert.ok(finished.lines.some((line) => /applied by another writer/i.test(line)), "the conflict was not logged");
+    assert.deepStrictEqual(stripeState.retrieves.slice(retrievesBefore), [`${SEAT_SUB}:canceled`],
+      "the resync applied its old list instead of re-reading Stripe once");
+
+    const w = h.workspace();
+    assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled", "the resync wrote its old list over the cancellation");
+    assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0);
+    assert.strictEqual(w.billingTeamMemberLimit, 5);
+    assert.strictEqual(w.billingPlan, "team_monthly", "the manual plan was not preserved through the resync");
+    assert.strictEqual(w.billingUpdatedBy, "stripe_owner_resync");
+    assert.strictEqual(row().providerStatus, "canceled", "the listed row was filed as missing at the provider");
+    assert.strictEqual(row().activeForEntitlement, false);
+    assert.strictEqual(row().stripeEventSequence, (BASE + 200) * 1000, "a resync moved the watermark");
+    assert.strictEqual(row().stripeApplyGeneration, 3, "the re-read apply did not advance the generation");
+  })();
+});
+
+check("a resync applied first is corrected by the webhook that follows, and a re-subscribe or a quantity change through resync still applies", () => {
+  // Requirement 2's other half: the guard must not block the legitimate paths.
+  // Resync first, webhook after, gives the webhook's answer; a resync that
+  // lists the cancellation agrees with it; a new subscription under a new id
+  // is a new row at generation 0 and applies; a quantity change on a row
+  // nothing else touched applies, up and down.
+  const BASE = 1_800_000;
+  const NEW_SEAT_SUB = "sub_1PdahliaSeatsAgain";
+  const seatsAgain = (quantity, overrides = {}) => seatSubscription({
+    id: NEW_SEAT_SUB,
+    items: { object: "list", has_more: false, data: [{ id: "si_seat_again", quantity, price: { id: "price_seat_monthly" }, current_period_end: PERIOD_END }] },
+    ...overrides
+  });
+  const canonical = new Map([[SEAT_SUB, seatSubscription()]]);
+  let listing = [seatSubscription({ status: "active" })];
+  const h = harness({ owner: true, retrieve: (id) => canonical.get(id), list: async () => listing, workspace: SEAT_WORKSPACE });
+  const row = (id) => h.ledgerRows().find((entry) => entry.externalSubscriptionId === id);
+  return (async () => {
+    const first = await h.resync();
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, 3, "the resync did not apply the listed seats");
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 8);
+    assert.strictEqual(row(SEAT_SUB).stripeEventSequence, undefined, "a resync armed the watermark");
+    assert.strictEqual(row(SEAT_SUB).stripeApplyGeneration, 1);
+
+    canonical.set(SEAT_SUB, seatSubscription({ status: "canceled" }));
+    const cancel = await h.processStripeEvent(h.stripe, { id: "evt_rsw_cancel", type: "customer.subscription.deleted", created: BASE + 200, data: { object: seatSubscription({ status: "canceled" }) } });
+    assert.strictEqual(cancel.updated, true, `the webhook after a resync was refused: ${JSON.stringify(cancel)}`);
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 5);
+    assert.strictEqual(row(SEAT_SUB).stripeApplyGeneration, 2);
+    assert.strictEqual(row(SEAT_SUB).stripeEventSequence, (BASE + 200) * 1000);
+
+    listing = [seatSubscription({ status: "canceled" })];
+    await h.resync();
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled", "a resync listing the cancellation undid it");
+    assert.strictEqual(row(SEAT_SUB).stripeApplyGeneration, 3, "a resync on an untouched row was refused");
+    assert.strictEqual(row(SEAT_SUB).stripeEventSequence, (BASE + 200) * 1000);
+
+    // Re-subscribe under a new id; Stripe's list (status: all) keeps naming the cancelled one.
+    canonical.set(NEW_SEAT_SUB, seatsAgain(2));
+    listing = [seatSubscription({ status: "canceled" }), seatsAgain(2)];
+    const resubscribed = await h.resync();
+    assert.strictEqual(resubscribed.ok, true, JSON.stringify(resubscribed));
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "active", "a legitimate re-subscribe was blocked");
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, 2);
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 7);
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatSubscriptionId, NEW_SEAT_SUB);
+    assert.strictEqual(row(NEW_SEAT_SUB).stripeApplyGeneration, 1);
+    assert.strictEqual(row(SEAT_SUB).providerStatus, "canceled", "a row Stripe still lists was filed as missing at the provider");
+
+    for (const [quantity, limit] of [[4, 9], [1, 6]]) {
+      canonical.set(NEW_SEAT_SUB, seatsAgain(quantity));
+      listing = [seatSubscription({ status: "canceled" }), seatsAgain(quantity)];
+      await h.resync();
+      assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, quantity, `a quantity change to ${quantity} was blocked`);
+      assert.strictEqual(h.workspace().billingTeamMemberLimit, limit);
+      assert.strictEqual(row(NEW_SEAT_SUB).quantity, quantity);
+    }
+    assert.strictEqual(row(NEW_SEAT_SUB).stripeApplyGeneration, 3);
+  })();
+});
+
+check("two events in the same second, one holding the seats alive and one the cancellation, converge on the cancellation whichever lands last", () => {
+  // Invariant 3 at write time. Equal is not stale, so the late apply is not
+  // dropped — and its snapshot is not written either: the row moved under it,
+  // so it re-reads Stripe and applies the cancellation it finds. Both members
+  // of the tie end up having written the same canonical state.
+  const BASE = 1_800_000;
+  const status = { [SEAT_SUB]: "active" };
+  const stripeState = holdableRetrieve(() => seatSubscription({ status: status[SEAT_SUB] }));
+  const h = harness({ retrieve: stripeState.retrieve, workspace: SEAT_WORKSPACE });
+  const row = () => h.ledgerRows().find((entry) => entry.externalSubscriptionId === SEAT_SUB);
+  return (async () => {
+    await h.processStripeEvent(h.stripe, { id: "evt_tie_0", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() } });
+
+    const hold = stripeState.hold(SEAT_SUB);
+    const applyA = h.processStripeEvent(h.stripe, { id: "evt_tie_A", type: "customer.subscription.updated", created: BASE + 100, data: { object: seatSubscription() } });
+    await hold.started;
+
+    status[SEAT_SUB] = "canceled";
+    const b = await h.processStripeEvent(h.stripe, { id: "evt_tie_B", type: "customer.subscription.deleted", created: BASE + 100, data: { object: seatSubscription({ status: "canceled" }) } });
+    assert.strictEqual(b.updated, true, JSON.stringify(b));
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(row().stripeApplyGeneration, 2);
+
+    hold.release(seatSubscription({ status: "active" }));
+    const a = await captureWarningsAsync(() => applyA);
+    assert.strictEqual(a.value.updated, true, `the equal-second apply was dropped: ${JSON.stringify(a.value)}`);
+    assert.strictEqual(a.value.active, false, `the equal-second apply wrote its old snapshot: ${JSON.stringify(a.value)}`);
+    assert.strictEqual(a.value.purchasedSeatQuantity, 0);
+    assert.ok(a.lines.some((line) => /applied by another writer/i.test(line)), "the conflict was not logged");
+    assert.deepStrictEqual(stripeState.retrieves, [
+      `${SEAT_SUB}:active`, `${SEAT_SUB}:active`, `${SEAT_SUB}:canceled`, `${SEAT_SUB}:canceled`
+    ], "the late apply did not re-read Stripe exactly once after the conflict");
+
+    const w = h.workspace();
+    assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0);
+    assert.strictEqual(w.billingTeamMemberLimit, 5);
+    assert.strictEqual(row().stripeEventSequence, (BASE + 100) * 1000);
+    assert.strictEqual(row().stripeApplyGeneration, 3);
+  })();
+});
+
+check("concurrent applies of the plan, the seats and the storage on one workspace contend, and each still sees the others", () => {
+  // Three subscriptions of one workspace applied at once. Each transaction
+  // reads the workspace and every ledger row, so they contend on the fake
+  // exactly as on Firestore: whichever commits later is re-run over the
+  // earlier result, and the total the last one resolves includes all three.
+  const BASE = 1_800_000;
+  const plan = dahliaSubscription({ metadata: { studioFlowBillingKey: "team_monthly" } });
+  const bodies = new Map([[SUB, plan], [SEAT_SUB, seatSubscription()], [STORAGE_SUB, storageSubscription()]]);
+  const h = harness({ retrieve: (id) => bodies.get(id), workspace: { billingPlan: "demo", billingStatus: "free" } });
+  return (async () => {
+    const results = await Promise.all([
+      h.processStripeEvent(h.stripe, { id: "evt_c_plan", type: "customer.subscription.updated", created: BASE, data: { object: plan } }),
+      h.processStripeEvent(h.stripe, { id: "evt_c_seat", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() } }),
+      h.processStripeEvent(h.stripe, { id: "evt_c_storage", type: "customer.subscription.updated", created: BASE, data: { object: storageSubscription() } })
+    ]);
+    for (const result of results) assert.strictEqual(result.updated, true, JSON.stringify(result));
+    assert.ok(h.transactions.retries > 0, "the three applies never contended, so this proves nothing about serialisation");
+
+    const w = h.workspace();
+    assert.strictEqual(w.billingPlan, "team_monthly");
+    assert.strictEqual(w.billingStatus, "active");
+    assert.strictEqual(w.billingActivePlanSubscriptionCount, 1);
+    assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 3, "the seats were lost");
+    assert.strictEqual(w.billingAdditionalTeamSeatStatus, "active");
+    assert.strictEqual(w.billingStorageAddonMB, 200 * 1024, "the storage was lost");
+    assert.strictEqual(w.billingStorageAddonStatus, "active");
+    const rows = h.ledgerRows();
+    assert.strictEqual(rows.length, 3, "a ledger row was lost");
+    for (const row of rows) assert.strictEqual(row.stripeApplyGeneration, 1, `${row.externalSubscriptionId} was applied more than once`);
+    for (const row of rows) assert.strictEqual(row.stripeEventSequence, BASE * 1000);
+  })();
+});
+
+check("a failed apply transaction and an exhausted conflict retry each leave no partial write, and the redelivery repairs both", () => {
+  // The two ways the write can fail now, and what they must leave behind:
+  // nothing but the event row at "received" with no processedAt, so Stripe's
+  // redelivery is let through by the dedupe and lands the whole apply.
+  const BASE = 1_800_000;
+  let armed = false;
+  let fired = 0;
+  let beforeRetrieve = null;
+  const h = harness({
+    retrieve: async () => {
+      if (beforeRetrieve) await beforeRetrieve();
+      return seatSubscription();
+    },
+    failCommit: () => {
+      if (!armed) return null;
+      armed = false;
+      fired += 1;
+      return new Error("firestore commit unavailable");
+    },
+    workspace: SEAT_WORKSPACE
+  });
+  const row = () => h.ledgerRows().find((entry) => entry.externalSubscriptionId === SEAT_SUB);
+  const eventRow = (id) => h.store.get(`stripeBillingEvents/${id}`);
+  return (async () => {
+    // (a) The commit fails.
+    const event = { id: "evt_txfail_seat", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() } };
+    const before = h.state();
+    const writesBefore = h.writes.length;
+    armed = true;
+    await captureWarningsAsync(() => assert.rejects(() => h.processStripeEvent(h.stripe, event), /firestore commit unavailable/,
+      "a failed apply transaction was swallowed and the delivery reported as handled"));
+    assert.strictEqual(fired, 1, "the injected failure did not fire at the commit");
+    assert.strictEqual(h.state(), before, "a failed transaction left a partial entitlement change behind");
+    assert.deepStrictEqual(h.writes.slice(writesBefore).map((write) => write.path), [`stripeBillingEvents/${event.id}`],
+      "something other than the event row was written by a transaction that did not commit");
+    assert.strictEqual(eventRow(event.id).processingStatus, "received");
+    assert.strictEqual(eventRow(event.id).processedAt, undefined, "processedAt was stamped, so the dedupe would refuse the redelivery");
+
+    const retried = await h.processStripeEvent(h.stripe, event);
+    assert.strictEqual(retried.updated, true, `the redelivery was refused: ${JSON.stringify(retried)}`);
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, 3);
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 8);
+    assert.strictEqual(row().stripeApplyGeneration, 1);
+    assert.strictEqual(row().stripeEventSequence, BASE * 1000);
+    assert.strictEqual(eventRow(event.id).processingStatus, "processed");
+    assert.ok(eventRow(event.id).processedAt instanceof FakeTimestamp);
+
+    // (b) The row keeps moving: another writer with no event time (a resync's
+    // apply) lands between every re-read and the write. After the last retry
+    // the apply gives up — retryable — having written nothing of its own.
+    let others = 0;
+    beforeRetrieve = async () => {
+      others += 1;
+      await h.applySubscription(seatSubscription(), "manual.owner_resync");
+    };
+    const contested = { id: "evt_conflict_seat", type: "customer.subscription.updated", created: BASE + 100, data: { object: seatSubscription() } };
+    await captureWarningsAsync(() => assert.rejects(() => h.processStripeEvent(h.stripe, contested), /applied by another writer/,
+      "an apply that could never win was reported as handled"));
+    assert.strictEqual(others, 4, "the apply did not re-read Stripe once per conflict before giving up");
+    beforeRetrieve = null;
+    assert.strictEqual(row().stripeApplyGeneration, 1 + 4, "the losing apply advanced the generation itself");
+    assert.strictEqual(row().stripeEventSequence, BASE * 1000, "the losing apply moved the watermark");
+    assert.strictEqual(eventRow(contested.id).processingStatus, "received");
+    assert.strictEqual(eventRow(contested.id).processedAt, undefined);
+
+    const repaired = await h.processStripeEvent(h.stripe, contested);
+    assert.strictEqual(repaired.updated, true, `the redelivery was refused: ${JSON.stringify(repaired)}`);
+    assert.strictEqual(row().stripeApplyGeneration, 6);
+    assert.strictEqual(row().stripeEventSequence, (BASE + 100) * 1000);
+    assert.strictEqual(eventRow(contested.id).processingStatus, "processed");
+  })();
+});
 
 check("the comment stripper cannot delete a line of code", () => {
   const sample = [
