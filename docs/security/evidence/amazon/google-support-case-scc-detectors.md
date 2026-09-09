@@ -361,3 +361,134 @@ propagation time, regional support, enablement state, and the delivery chain.
 - **No further CRTD test is to be run** unless Google explicitly requests one. A fourth execution adds
   no information and would muddy the one they are investigating.
 - No reply is owed right now. The next move is Google's.
+
+---
+
+## Google's third response — read first-hand, 9 September 2026
+
+| Field | Value |
+|---|---|
+| From | Google Cloud Support `<cloudsupport@google.com>`, engineer **Murali Selvaraj**, relaying the **Product Specialist team** |
+| Received | **2026-09-09 09:23** local (BST) — 32 hours *before* the committed update time (10 Sep 22:30 IST) |
+| Read | First-hand from the support thread in `contact@eggcraft.co.uk`, in the operator's own browser session. The console case page (`support/cases/detail/v2/75151719`) did not render (JavaScript sources failed to load); the mail thread is the source |
+| Prompted by | The 8 September escalation to the Product Specialist team |
+| Reply owed | Yes — the mail ends "Looking for your response." The response they want is the result of the job below |
+
+### Verbatim
+
+> Hello,
+>
+> Thank you for your patience and cooperation regarding this issue. I have received an update from the Product Specialist team and stated below.
+>
+> Please run the below commands in GCloud.
+>
+> ```
+> JOB_NAME="ktd-test-base64-elf-$(date -u +%Y-%m-%d-%H-%M-%S-utc)"
+>
+> gcloud run jobs create $JOB_NAME \
+> --project $PROJECT \
+> --region $REGION \
+> --image marketplace.gcr.io/google/ubuntu2404:latest \
+> --command sh \
+> --args "-c","sleep 60; base64 -d f0VMRgIB; sleep 10" \
+> --wait
+> ```
+>
+> If you prefer to keep the crtd-test naming convention from the documentation run the below command
+>
+> ```
+> JOB_NAME="crtd-test-base64-elf-$(date -u +%Y-%m-%d-%H-%M-%S-utc)"
+>
+> gcloud run jobs create $JOB_NAME \
+> --project $PROJECT \
+> --region $REGION \
+> --image marketplace.gcr.io/google/ubuntu2404:latest \
+> --command sh \
+> --args "-c","sleep 660; base64 -d f0VMRgIB; sleep 10" \
+> --wait
+> ```
+>
+> I hope this above information helps you. Please reach out to me if you need any assistance further.
+>
+> Looking for your response.
+>
+> Best Regards,
+> Murali Selvaraj
+
+### What they did not say
+
+The 8 September mail promised a backend check of **whether the watcher attached** to
+`amazon-crtd-verify-0907-sl6mf`. This reply does not report that check. It replaces the
+question with a fourth execution under a spec the specialists chose. Read plainly: they want a
+run whose variables *they* control before they commit to a statement about the watcher.
+
+### Their spec against our three executions
+
+| | Our three runs (`amazon-crtd-test` ×2, `amazon-crtd-verify-0907`) | Google's requested run |
+|---|---|---|
+| Job name | `amazon-crtd-…` | **`ktd-test-base64-elf-<utc>`** (or `crtd-test-base64-elf-<utc>`) |
+| Image | project image `…/nivadesk-amazon:be1dd111` (Debian, `node:22-slim` base) | **`marketplace.gcr.io/google/ubuntu2404:latest`** (Google's public Ubuntu 24.04) |
+| Shell | `bash -c` | `sh -c` |
+| Payload | `sleep 60; base64 -d f0VMRgIB; sleep 10` | identical; second variant **`sleep 660`** (11 minutes before the payload) |
+| Service account | `amazon-sync@nivadesk-amazon` | unspecified → default compute SA `145308107004-compute@developer.gserviceaccount.com` (exists, enabled; `iam.automaticIamGrantsForDefaultServiceAccounts` is enforced, so it holds no project role — the payload needs none) |
+| Network | direct VPC egress `amazon-vpc`/`amazon-subnet` | none |
+| Execution environment | second generation (explicit) | unspecified → second generation is the default for jobs |
+| `--wait` | not used; execution polled | used; the command blocks until the execution ends |
+
+Two of these differences can plausibly matter to a runtime watcher, and both are theirs, not
+ours: the **base image** (a watcher that instruments the container may not handle a slim
+Debian image the way it handles Google's Ubuntu image) and the **job-name prefix** (`ktd` is
+Container Threat Detection's internal name; a prefix suggests their backend locates test
+executions by name). The `sleep 660` variant says, without saying it, that the watcher may take
+up to ten minutes to attach to a new execution — our payload fired at +60 s in all three runs.
+
+### The alert mails are not detector results
+
+Four "[ALERT - No severity] a message landed on scc-findings on nivadesk-amazon" mails arrived
+today (06:32, 06:54, 11:26, 17:28 BST) after several on 7–8 September. Cross-checked against the
+SCC v2 API at 2026-09-09 ~19:40 BST: the project still holds exactly **two** findings —
+Cloud Armor *Increasing Deny Ratio* (created 2026-09-05T05:29:30Z, `eventTime` now
+**2026-09-09T16:20:00Z**) and Compliance *OS_LOGIN_DISABLED* (2026-09-05). No CRTD or ETD
+category exists. The 17:28 BST alert is the 16:20Z re-evaluation of the Cloud Armor finding being
+republished by the notification config; the earlier alerts are the same finding's earlier
+updates (only its latest `eventTime` is retained). The alert policy fires on
+`pubsub.googleapis.com/topic/send_message_operation_count` for topic `scc-findings`, i.e. on any
+publish, including updates to an existing finding. **Nothing new has been detected.**
+
+### State after this reply
+
+| | |
+|---|---|
+| ETD | Unchanged — closed by Google on 8 September as a tier/anchoring limitation |
+| CRTD | Open. Google has now **explicitly requested** a fourth execution under their spec |
+| Standing rule "no further CRTD test unless Google explicitly requests one" | **Condition met.** The operator's separate 8 September hold ("do not run a new ETD/CRTD test") predates this request and is the operator's to lift — **the job has not been run** |
+| `amazon-crtd-verify-0907` | Stays in place, not deleted |
+| Control 3 (IDS/IPS) | **In Progress**, not Passed |
+| Amazon Developer Profile application | **Not submitted**; this reply changes nothing in it yet |
+| Effect on the Amazon application | None today. If the Google-spec run produces the finding, Control 3's CRTD half becomes "verified with Google's own procedure" and the ETD half stays "not observable in this tier topology, confirmed by Google" — whether that combination is *Passed* is the operator's decision. If it produces nothing, the case goes back to Google with the watcher question answered by their own spec, which is the strongest position we can hold |
+
+### Prepared, not executed
+
+Exactly their first variant, with the two placeholders resolved (region `europe-west2`, where
+the project's Cloud Run resources and the three earlier executions live):
+
+```
+PROJECT=nivadesk-amazon
+REGION=europe-west2
+JOB_NAME="ktd-test-base64-elf-$(date -u +%Y-%m-%d-%H-%M-%S-utc)"
+gcloud run jobs create $JOB_NAME \
+  --project $PROJECT \
+  --region $REGION \
+  --image marketplace.gcr.io/google/ubuntu2404:latest \
+  --command sh \
+  --args "-c","sleep 60; base64 -d f0VMRgIB; sleep 10" \
+  --wait
+```
+
+Run plan once the operator lifts the hold: variant 1 (`sleep 60`) first; poll the project's
+findings for 40 minutes as before; only if nothing appears, variant 2 (`sleep 660`), which is
+also Google-requested. Record job name, execution id, trigger timestamp and the container log
+line for each. Do not deviate from their spec (no `--service-account`, no VPC, no project
+image); if the default compute service account is rejected at create time, stop and record it
+rather than substituting `amazon-sync@` silently — the point of this run is that the variables
+are Google's.
