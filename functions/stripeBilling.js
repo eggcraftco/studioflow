@@ -1203,9 +1203,13 @@ function createStripeBillingFunctions({
   //
   //   (2) CANONICAL STATE. `stripe` is passed by the rail that is handed a
   //       webhook PAYLOAD (customer.subscription.*). The event is then used only
-  //       to IDENTIFY the subscription — its id, its customer and its workspace
-  //       metadata are immutable, which is what makes identification safe even
-  //       when the body is stale — and what gets applied is the subscription
+  //       to IDENTIFY the subscription: its id and its customer never change,
+  //       and `metadata.workspaceId` is written once by createStripeCheckoutSession
+  //       and never rewritten by NivaDesk — a NivaDesk rule, not a Stripe
+  //       guarantee (Stripe lets metadata be edited), which is why the resolver
+  //       also falls back to the subscription id and the customer. That is what
+  //       makes identification safe even when the body is stale — and what gets
+  //       applied is the subscription
   //       Stripe currently holds. A late delivery therefore re-applies present
   //       truth instead of an old snapshot, which is what makes an equal
   //       `event.created` (Stripe's granularity is one second) a non-event rather

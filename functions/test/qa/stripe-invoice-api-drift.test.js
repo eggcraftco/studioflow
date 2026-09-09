@@ -164,7 +164,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 47;
+const EXPECTED_CHECKS = 48;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -1866,6 +1866,58 @@ check("a cancellation followed by a new checkout does not hand out a second free
         else process.env[key] = savedEnv[key];
       }
     }
+  })();
+});
+
+check("a failed trial-stamp transaction leaves the event retryable, and the redelivery stamps", () => {
+  // The stamp is written after applySubscription returns, so a Firestore
+  // failure inside stampTrialUsedIfMissing must not be swallowed into a
+  // "processed" row. The applier throws, processStripeEvent throws before it
+  // stamps processedAt, stripeWebhook's catch answers 500 so Stripe redelivers,
+  // and the dedupe — which keys on processedAt — lets the redelivery through to
+  // write the stamp the first delivery missed. The injected failure is the
+  // transaction's own read of the company document, armed for that one read.
+  let armed = false;
+  let fired = 0;
+  const h = harness({
+    retrieve: () => trialingSubscription(),
+    workspace: UNSTAMPED_WORKSPACE,
+    failGet: (docPath) => {
+      if (!armed || docPath !== WORKSPACE_DOC) return null;
+      armed = false;
+      fired += 1;
+      return new Error("firestore transaction unavailable");
+    }
+  });
+  return (async () => {
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_txfail_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: trialingSubscription() }
+    });
+    const before = h.state();
+    const event = checkoutEvent("evt_txfail_stale", BASE_SEQ - 500);
+    armed = true;
+    await captureWarningsAsync(() => assert.rejects(
+      () => h.processStripeEvent(h.stripe, event),
+      /firestore transaction unavailable/,
+      "a failed stamp transaction was swallowed and the delivery reported as handled"
+    ));
+    assert.strictEqual(fired, 1, "the injected failure did not fire on the transaction's read");
+    assert.strictEqual(h.workspace().billingTrialUsedAt, undefined, "a stamp was written despite the failed transaction");
+    assert.strictEqual(h.state(), before, "the failed delivery mutated persistent state");
+    const row = h.store.get(`stripeBillingEvents/${event.id}`);
+    assert.ok(row, "the event row was not opened");
+    assert.strictEqual(row.processingStatus, "received", "a delivery whose stamp failed was filed as finished");
+    assert.strictEqual(row.processedAt, undefined, "processedAt was stamped, so the dedupe would refuse the redelivery");
+
+    // Stripe redelivers the same event id.
+    const retried = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, event));
+    assert.notDeepStrictEqual(retried.value, { duplicate: true }, "the dedupe refused the redelivery of a delivery that never finished");
+    assert.strictEqual(retried.value.skipped, true);
+    assert.strictEqual(retried.value.billingTrialUsedAtStamped, true, "the redelivery did not write the stamp the failed delivery missed");
+    assert.ok(h.workspace().billingTrialUsedAt instanceof FakeTimestamp);
+    const finished = h.store.get(`stripeBillingEvents/${event.id}`);
+    assert.strictEqual(finished.processingStatus, "skipped");
+    assert.ok(finished.processedAt instanceof FakeTimestamp, "the redelivery was not filed as finished");
   })();
 });
 
