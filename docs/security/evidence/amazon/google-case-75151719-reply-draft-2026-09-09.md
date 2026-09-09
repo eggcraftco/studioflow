@@ -66,9 +66,8 @@ same three hours returned nothing.
 Because the payload is scheduled 660 s into the task and the task timeout is 600 s, every attempt was
 terminated before reaching it. Cloud Logging for the job shows the termination at 20:26:33.975Z,
 20:36:53.821Z and 20:47:12.277Z ("Terminating task because it has reached the maximum timeout of 600
-seconds") and no `base64` line at all. At the time of writing the execution is still in its retry
-cycle (retriedCount 1, next retry scheduled 30 minutes after 20:47:06Z); with the default retry limit it
-will end as failed on its own, and we have not intervened.
+seconds") and no `base64` line at all. The execution finished on its own as failed at
+2026-09-09T20:57:45.877Z (succeeded 0); we did not intervene.
 
 We are treating this variant as a test that could not be completed under its effective settings, not
 as a detection result: nothing was executed for the detector to observe. We ran the command exactly as
@@ -104,7 +103,6 @@ EGGcraft Ltd — NivaDesk
 
 - Every timestamp and identifier above was read from the live project on 9 September; the
   `threat_detector` log read was made at 20:51:02Z with `--freshness=3h` and returned no entries.
-- If the execution `-krjtg` completes before this is sent, replace "still in its retry cycle" with its
-  final completion time and failed count; nothing else in the draft depends on it.
+- The execution `-krjtg` completed (failed) at 20:57:45.877Z; the draft states that final time.
 - The draft states our own policy neutrally and does not describe the timeout as anyone's error; the
   command, the effective setting and the log are simply laid side by side.
