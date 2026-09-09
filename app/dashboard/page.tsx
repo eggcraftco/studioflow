@@ -8,8 +8,7 @@ import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle"
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { httpsCallable } from "firebase/functions";
-import { db, functions } from "@/lib/firebase/client";
+import { db } from "@/lib/firebase/client";
 import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
@@ -34,6 +33,7 @@ import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
+import { loadSetupChecklist, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -98,18 +98,10 @@ const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?
   { id: "domain", labelKey: "Put customer links on your name", href: "/settings?section=client-domain" }
 ];
 
-/** Where each server-named step sends somebody. */
-const SETUP_STEP_HREFS: Record<string, string> = {
-  integrations: "/settings?section=integrations&category=commerce&intent=connect-shop",
-  new_order: "/orders",
-  new_customer: "/customers",
-  bank: "/bank",
-  inventory: "/inventory",
-  assistant: "/chatgpt"
-};
-
-type SetupChecklistStep = { key: string; title: string; detail: string; action: string; done: boolean };
-type SetupChecklist = { ok: boolean; path: string; complete: boolean; steps: SetupChecklistStep[]; doneCount: number; headline: string };
+// The action→route map, the types and the call itself moved to
+// lib/studioflow/setupChecklist.ts when the Home card came to need the same
+// three. Two copies of a map like that is how a step goes dead on one screen
+// and stays alive on the other.
 
 function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   workspaceId: string;
@@ -136,11 +128,16 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   // The steps this workspace actually came for. Silent on failure: somebody
   // whose checklist will not load should see the dashboard they opened, and the
   // five-step fallback below is still better than an error about a card.
+  //
+  // The workspace is named in the call now. It used to be sent as `{}`, and the
+  // server then answered for whichever workspace it considers the caller's
+  // active one — which for anybody who belongs to more than one is not
+  // necessarily the workspace this dashboard is showing.
   useEffect(() => {
     let cancelled = false;
-    httpsCallable<Record<string, never>, SetupChecklist>(functions, "getSetupChecklist")({})
-      .then(result => { if (!cancelled) setServer(result.data); })
-      .catch(() => undefined);
+    void loadSetupChecklist(workspaceId).then(next => {
+      if (!cancelled && next) setServer(next);
+    });
     return () => { cancelled = true; };
   }, [workspaceId]);
 
@@ -151,7 +148,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
     ? server.steps.map(step => ({
         id: step.key,
         labelKey: step.title,
-        href: SETUP_STEP_HREFS[step.action] || "",
+        href: setupStepHref(step.action),
         done: step.done
       }))
     : GETTING_STARTED_STEPS.map(step => ({

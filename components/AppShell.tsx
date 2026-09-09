@@ -47,6 +47,7 @@ import {
   saveOnboardingAnswers,
   type OnboardingAnswers,
 } from "@/lib/studioflow/onboardingWizard";
+import { clearOnboardingProgress } from "@/lib/studioflow/onboardingProgress";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
   formatStudioMoney,
@@ -600,6 +601,10 @@ const DEMO_BANNER_COLLAPSED_KEY = "demoPlanBannerCollapsedCompanyV1";
 const TRIAL_BANNER_COLLAPSED_KEY = "nivadesk-trial-banner-collapsed";
 const TRIAL_ENDED_SEEN_KEY = "nivadesk-trial-ended-seen";
 
+// Per workspace, per browser: hiding the Continue setup card is a convenience,
+// not a decision worth storing on the account.
+const CONTINUE_SETUP_DISMISSED_KEY = "nivadesk-continue-setup-dismissed";
+
 // Mirrors `trialHasExpired` in functions/index.js — a trial that has run out
 // keeps `billingStatus: "trialing"` on the company doc, and the server simply
 // stops granting the paid plan. Without this the countdown banner would sit at
@@ -944,6 +949,119 @@ function DemoPlanBanner({
         type="button"
         aria-label={t("Collapse")}
         onClick={() => setCollapsed(true)}
+        style={{
+          border: 0,
+          background: "rgba(120, 120, 140, 0.12)",
+          color: "inherit",
+          borderRadius: 999,
+          width: 26,
+          height: 26,
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * §113's "Continue setup" card.
+ *
+ * The wizard takes the whole screen only for a workspace with nothing in it.
+ * Someone who abandoned setup and then started working would otherwise have no
+ * route back to it at all — the old gate read "not set up yet" as "has no
+ * orders", so a single order closed the door for good.
+ *
+ * A strip, not a modal, and it can be dismissed: §113 is explicit that setup
+ * must not lock the user on every login. Dismissal is per workspace and per
+ * browser, and the ?setup=continue link keeps working afterwards.
+ */
+function ContinueSetupBanner({
+  companyId,
+  t,
+  onContinue,
+}: {
+  companyId: string;
+  t: (text: string) => string;
+  onContinue: () => void;
+}) {
+  const [dismissedCompanyId, setDismissedCompanyId] = useState(() => {
+    try {
+      return window.localStorage.getItem(CONTINUE_SETUP_DISMISSED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  if (companyId && dismissedCompanyId === companyId) return null;
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 14px",
+        background: "var(--surface, #fff)",
+        borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+        fontSize: 13,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          background: "rgba(37, 99, 235, 0.12)",
+          fontSize: 14,
+        }}
+      >
+        ⚙
+      </span>
+      <span style={{ flex: 1, minWidth: 220 }}>
+        <strong style={{ display: "block", fontSize: 12.5 }}>
+          {t("You started setting up your workspace but never finished.")}
+        </strong>
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {t("You can change all of this later in Settings.")}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onContinue}
+        style={{
+          border: 0,
+          background: "#2563eb",
+          color: "#fff",
+          borderRadius: 8,
+          padding: "7px 12px",
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        {t("Continue setup")}
+      </button>
+      <button
+        type="button"
+        aria-label={t("Dismiss")}
+        onClick={() => {
+          setDismissedCompanyId(companyId);
+          try {
+            window.localStorage.setItem(CONTINUE_SETUP_DISMISSED_KEY, companyId);
+          } catch {
+            /* private mode — state just won't persist */
+          }
+        }}
         style={{
           border: 0,
           background: "rgba(120, 120, 140, 0.12)",
@@ -1686,16 +1804,133 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     return new URLSearchParams(window.location.search).get("fromSetup") === "1";
   }, [pathname]);
 
-  const showWorkspaceOnboarding = Boolean(
+  // §113's "Continue setup" route. Somebody who left setup half-finished asks
+  // for it back with ?setup=continue, and the request is honoured on the same
+  // condition the wizard itself runs on — that setup has not been completed —
+  // and NOT on the workspace being empty. Nothing is written down for it: it is
+  // a request, so it lives in the URL and closing the tab ends it.
+  //
+  // It is mirrored into state because pressing the card changes only the query
+  // string, and `pathname` — all this can depend on without pulling in
+  // useSearchParams and its prerender rules — does not change with it.
+  //
+  // And the state is put BACK in step with the URL on popstate, which is the
+  // fix for a real trap: browser Back drops ?setup=continue, but a `clicked`
+  // flag that only reset on a pathname change survived it, so the wizard stayed
+  // up and Back could not get out of it. One click on a dismissible card became
+  // a screen the app would not let go of — exactly what §113 forbids. Back now
+  // does what anybody would expect it to do: it puts you back where you were,
+  // with the draft intact for the next time you ask.
+  const [setupResumeRequested, setSetupResumeRequested] = useState(false);
+  useEffect(() => {
+    const readUrl = () => {
+      try {
+        setSetupResumeRequested(
+          new URLSearchParams(window.location.search).get("setup") === "continue",
+        );
+      } catch {
+        setSetupResumeRequested(false);
+      }
+    };
+    readUrl();
+    window.addEventListener("popstate", readUrl);
+    return () => window.removeEventListener("popstate", readUrl);
+  }, [pathname]);
+
+  /**
+   * Has this workspace finished setup? Nothing to do with how much work is in
+   * it.
+   *
+   * The two were fused into one condition, and the order count won: a workspace
+   * with a single order could never get back into setup, because "not set up
+   * yet" was being read as "empty". That is exactly the person §113 is about —
+   * someone who abandoned the questions part-way, then went and did some work
+   * (or had a connector import it) and can now never be asked them again.
+   *
+   * Someone who FINISHED setup, Skip included, is not in here and should not
+   * be: both paths stamp `businessOnboardingCompletedAt`, which is what this
+   * flag reads. Re-running setup on purpose is a separate control that the web
+   * client does not have — the native apps do.
+   */
+  const workspaceSetupIncomplete = Boolean(
     user &&
     workspace &&
     settings &&
-    !setupPassthrough &&
     !settings.businessOnboardingCompleted &&
-    financeOrdersLoaded &&
-    financeOrders.length === 0 &&
     memberCanAccess(workspace, "settings") &&
     roleCanSetUpWorkspace(workspace.role),
+  );
+
+  /**
+   * A draft only exists while setup is genuinely unfinished.
+   *
+   * `businessOnboardingCompleted` here is the tolerant reader — it is true for
+   * a finish and for a Skip, both of which end setup — so the draft goes the
+   * moment either lands, from this browser or any other. Which is also what
+   * makes re-entry right: a native "Run Business Setup" clears the workspace's
+   * completion and means start again, and by then this browser has nothing
+   * stale left to resume from.
+   */
+  useEffect(() => {
+    if (!workspace?.id || !user?.uid) return;
+    if (!settings?.businessOnboardingCompleted) return;
+    clearOnboardingProgress(workspace.id, user.uid);
+  }, [workspace?.id, user?.uid, settings?.businessOnboardingCompleted]);
+
+  /**
+   * When the wizard takes over the whole screen.
+   *
+   * Automatically only for a workspace with no orders in it — a brand-new one,
+   * where taking over the screen IS the onboarding start and interrupts no
+   * work. A workspace that already has orders gets in by asking
+   * (?setup=continue), from the Continue setup card below; it is never
+   * hijacked, which is what §113 means by not locking the user on every login.
+   *
+   * `financeOrdersLoaded` still guards the automatic case so the wizard cannot
+   * flash up before the order count is known. A resume request does not wait
+   * for it: the answer would not change what happens.
+   */
+  const setupTakeoverIsAutomatic = Boolean(
+    workspaceSetupIncomplete &&
+    !setupPassthrough &&
+    financeOrdersLoaded &&
+    financeOrders.length === 0,
+  );
+  const showWorkspaceOnboarding = Boolean(
+    workspaceSetupIncomplete &&
+    !setupPassthrough &&
+    (setupResumeRequested || setupTakeoverIsAutomatic),
+  );
+  /**
+   * Whether the wizard can be walked out of.
+   *
+   * Only when the resume request is the ONLY thing holding it open. On an empty
+   * workspace the takeover happens on its own and every route behind it renders
+   * the wizard too, so there is nowhere to be let out to — a way out there would
+   * be a button that appears to do nothing, which is worse than no button.
+   * §110 allows the full-screen interrupt at onboarding start; §113 is about
+   * everything after it.
+   */
+  const canLeaveResumedSetup = Boolean(setupResumeRequested && !setupTakeoverIsAutomatic);
+
+  // The card is for the other half: setup unfinished, but there is work in here
+  // already, so the wizard is not going to open by itself. Not shown while the
+  // wizard is up, and not on a Connect tab.
+  //
+  // The order count is a REQUIREMENT here, not a leftover of the automatic
+  // case, and it must be a counted one. Before the orders arrive the list is
+  // empty because nothing has loaded, not because the workspace is new — so on
+  // a brand-new workspace's very first sign-in this card used to appear for the
+  // moment before the wizard took over, telling somebody who had been in the
+  // app for two seconds that they had started setting it up and never
+  // finished. It says a true thing about people who have work in here and an
+  // unfinished setup, and nothing at all until it knows which it is looking at.
+  const showContinueSetupCard = Boolean(
+    workspaceSetupIncomplete &&
+    !showWorkspaceOnboarding &&
+    !setupPassthrough &&
+    financeOrdersLoaded &&
+    financeOrders.length > 0,
   );
   // The "add your first project" guide is only for genuinely new users: no orders
   // yet and the guide not already completed. (Previously `firstProjectGuide === null`
@@ -1973,6 +2208,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         workspaceOnboardingPromptSeed(businessType, language),
       );
       await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
+      // The draft has been answered for real. Cleared here rather than on the
+      // way out of the ready screen, because the answers are on the workspace
+      // from this line on and a draft that outlives them is a second, staler
+      // copy of the same setup waiting to be resumed.
+      clearOnboardingProgress(workspace.id, user.uid);
       setFinishedAnswers(answers);
     } catch (failure) {
       setOnboardingError(failure instanceof Error ? failure.message : t("Could not save your setup."));
@@ -2027,6 +2267,24 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  /**
+   * Out of a wizard somebody reopened, back to the page they left.
+   *
+   * Withdraws the request and takes ?setup=continue off the URL, because
+   * leaving it there means the next reload walks straight back in. `replace`
+   * rather than `back`: the entry it replaces is the one the card pushed, so
+   * the history has no stranded "setup" step in it either way, and a person who
+   * arrived by pasting the link is not thrown off the site.
+   *
+   * It writes nothing. Not the completion stamp and above all not the `skip`
+   * action — refusing setup and putting it down for now are different answers
+   * and only one of them is recorded on the workspace.
+   */
+  function leaveResumedSetup() {
+    setSetupResumeRequested(false);
+    router.replace(pathname);
+  }
+
   async function completeWorkspaceOnboarding(
     action: "smart" | "standard" | "skip",
   ) {
@@ -2045,6 +2303,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           action === "smart",
         );
       }
+      // Finished or declined, setup is over either way and there is nothing
+      // left to resume. Skip in particular: it is a refusal, not an abandonment,
+      // and the one thing that must never happen is being asked to carry on
+      // with something you said no to.
+      clearOnboardingProgress(workspace.id, user.uid);
       setSettings((current) => {
         const mergedSettings = current
           ? { ...current, businessOnboardingCompleted: true }
@@ -2083,24 +2346,41 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <OnboardingReady
             answers={finishedAnswers}
             t={t}
-            onOpen={() => {
+            onOpen={(href) => {
               setSettings((current) => {
                 const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
                 if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
                 return merged;
               });
               window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
+              // Land on the step they chose, or on the first one. Without this
+              // the wizard let go and whatever route the tab was on rendered —
+              // in practice the empty dashboard, which is the one screen that
+              // cannot show a brand-new workspace anything.
+              if (href) router.push(href);
             }}
           />
         ) : (
           <OnboardingWizard
+            /* The draft is read once, at mount, under this exact scope. Keying
+               on it means a different workspace or a different account gets a
+               new wizard rather than one still holding the last one's answers. */
+            key={`${workspace?.id ?? ""}:${user?.uid ?? ""}`}
             t={t}
             language={language}
             saving={onboardingSaving}
             error={t(onboardingError)}
+            companyId={workspace?.id ?? ""}
+            userId={user?.uid ?? ""}
             onFinish={(answers) => void completeOnboardingWizard(answers)}
             onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
             onConnect={(answers, href) => connectFromOnboarding(answers, href)}
+            /* Offered ONLY to somebody who reopened setup themselves. At
+               onboarding start there is nowhere to be let out to — every route
+               renders the wizard — and §110 allows the interrupt there. Nothing
+               is written and the draft is kept, so the Continue setup card
+               opens straight back onto this step. */
+            onExit={canLeaveResumedSetup ? leaveResumedSetup : undefined}
             connected={onboardingConnected}
           />
         )}
@@ -2147,6 +2427,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             companyId={workspace.id}
             t={t}
             onViewPlans={() => router.push("/settings?section=plan-access")}
+          />
+        ) : null}
+        {showContinueSetupCard && workspace ? (
+          <ContinueSetupBanner
+            companyId={workspace.id}
+            t={t}
+            onContinue={() => {
+              // The state opens the wizard now; the query string makes the
+              // route addressable — a "finish your setup" link can point at
+              // it — and survives a reload of this tab. `push`, not `replace`,
+              // so this page stays behind it and Back is a way out.
+              setSetupResumeRequested(true);
+              router.push(`${pathname}?setup=continue`);
+            }}
           />
         ) : null}
         <div

@@ -16,6 +16,7 @@ import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
+import { nextSetupStep, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 
 /**
  * The eleven card bodies.
@@ -2162,7 +2163,16 @@ export function QuickActionsCardBody({ size, t, onQuickAction }: CardBodyProps) 
 
 /* --------------------------------------------------------- Getting started */
 
-/** Where each setup step sends the user, and the sentence that explains it. */
+/**
+ * The fallback list, for a checklist call that has not answered or could not.
+ *
+ * The same six steps for everybody, which is exactly why it is not the list the
+ * card asks for: it tells a jeweller doing bespoke commissions to connect the
+ * online shop they do not have. The workspace's own list comes from
+ * getSetupChecklist (lib/studioflow/setupChecklist.ts), built from the goal
+ * they picked and from the same requirements table activation is measured
+ * against, so the checklist and the measurement cannot drift apart.
+ */
 const SETUP_STEPS = [
   { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
   { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
@@ -2172,28 +2182,60 @@ const SETUP_STEPS = [
   { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
 ] as const;
 
+type GettingStartedStep = {
+  id: string; label: string; blurb: string; href: string; cta: string; done: boolean;
+};
+
 export function GettingStartedCardBody({
-  size, data, t, skipped = [], onSkip, onRestoreSkipped,
+  size, data, t, skipped = [], onSkip, onRestoreSkipped, checklist, setupFinished = false,
 }: CardBodyProps & {
   skipped?: string[];
   onSkip?: (stepId: string) => void;
   onRestoreSkipped?: () => void;
+  /** This workspace's own steps. Null while the call is in flight, and null for
+   *  good if it failed — the six below are then what the card draws. */
+  checklist?: SetupChecklist | null;
+  /** Whether setup was FINISHED, for the fallback's first step. Strictly the
+   *  boolean the server tests, so a Skip does not tick it. */
+  setupFinished?: boolean;
 }) {
-  const steps = SETUP_STEPS.filter((step) => !skipped.includes(step.id)).map((step) => ({
-    ...step,
-    done:
-      step.id === "profile" ? true :
-      step.id === "customer" ? data.customers.length > 0 :
-      step.id === "order" ? data.orders.length > 0 :
-      // A store order carries the shop's own status field; that is the only
-      // signal on the order itself that it did not come from this app.
-      step.id === "shop" ? data.orders.some((order) =>
-        Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])) :
-      step.id === "inventory" ? (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0 :
-      data.bankTransactions.length > 0,
-  }));
+  // The server's steps carry their own words; the CTA is a plain "Continue"
+  // because the panel's heading has already named the step. Their titles and
+  // blurbs are not in the translation tables yet, so they read in English until
+  // somebody adds them — the same gap the Android and Apple cards have.
+  const allSteps: GettingStartedStep[] = checklist
+    ? checklist.steps.map((step) => ({
+        id: step.key,
+        label: step.title,
+        blurb: step.detail,
+        href: setupStepHref(step.action),
+        cta: "Continue",
+        done: step.done,
+      }))
+    : SETUP_STEPS.map((step) => ({
+        ...step,
+        done:
+          // Was `true`, unconditionally: the card congratulated a workspace
+          // that had never opened Settings, and every list it drew was a step
+          // shorter than the work actually left. It reads the completion the
+          // rest of the app reads now, and reads it strictly, so somebody who
+          // pressed Skip is not told they finished.
+          step.id === "profile" ? setupFinished :
+          step.id === "customer" ? data.customers.length > 0 :
+          step.id === "order" ? data.orders.length > 0 :
+          // A store order carries the shop's own status field; that is the only
+          // signal on the order itself that it did not come from this app.
+          step.id === "shop" ? data.orders.some((order) =>
+            Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])) :
+          step.id === "inventory" ? (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0 :
+          data.bankTransactions.length > 0,
+      }));
+  // Skips are recorded against step ids, and the server names its steps
+  // differently ("order_created", not "order"), so a step waved off under the
+  // local list is simply not one of these — nothing is hidden by accident.
+  const steps = allSteps.filter((step) => !skipped.includes(step.id));
   const complete = steps.filter((step) => step.done).length;
-  const next = steps.find((step) => !step.done);
+  const next = nextSetupStep(steps);
   const done = steps.filter((step) => step.done);
   const todo = steps.filter((step) => !step.done && step.id !== next?.id);
 
@@ -2380,10 +2422,17 @@ function NextStepPanel({
           {compact ? null : <p>{t(step.blurb)}</p>}
         </div>
         {/* The square has no width for "Connect your shop" twice — the panel's
-            heading already named the step, so the button just moves. */}
-        <Link className="home-next-button" href={step.href}>
-          {t(inline || compact ? "Continue" : step.cta)}
-        </Link>
+            heading already named the step, so the button just moves.
+
+            No destination, no button: the server can name a step that is a
+            statement rather than somewhere to go ("Tell us what you'd like help
+            with"), and a capsule that says Continue and continues nowhere is
+            worse than a panel that simply reads as a line of text. */}
+        {step.href ? (
+          <Link className="home-next-button" href={step.href}>
+            {t(inline || compact ? "Continue" : step.cta)}
+          </Link>
+        ) : null}
       </div>
     </div>
   );
