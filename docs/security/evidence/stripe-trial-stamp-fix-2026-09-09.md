@@ -14,6 +14,11 @@
 > **§6.7's fallback closed, 10 September:** a retrieve-first rail without a baseline now re-reads Stripe after
 > resolving the workspace (addendum §7; 56/56 fake, 6/6 emulator, M5 red). Deploy scope: **2 mandatory**
 > (`stripeWebhook`, `resyncStripeWorkspaceEntitlements`), 5 optional and measured neutral (7/7 same).
+>
+> **Status, 10 September: live + carried to the source branch; awaiting natural-traffic observation.** Deployed
+> 2026-09-09T23:00Z as `stripewebhook-00047-por` / `resyncstripeworkspaceentitlements-00032-xej` from `76c5e3c3`;
+> merged into `macbook-save-before-macstudio-2026-06-01` as `b6b30acc` (`stripe-l1-deploy-2026-09-10.md`). Open:
+> no alert policy exists; the 24-hour check (to 2026-09-10T23:00:56Z) is a person running the §4 queries.
 
 Date: 9 September 2026. Branch **`stripe-trial-stamp`** (worktree `/Users/gocmen/Developer/studioflow-stripe`),
 cut from the deploy branch `macbook-save-before-macstudio-2026-06-01` at `9be6a597`, which already carries

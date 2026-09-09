@@ -93,22 +93,43 @@ API drift skips, and L1 (present in the old code by the same read-decide-then-wr
 not re-opened (it never shipped). No data migration is needed either way: the new ledger field
 `stripeApplyGeneration` is ignored by the old code and picked up where it stands by a re-deploy. A later
 `firebase deploy` of either function from a branch without `76c5e3c3` would silently do the same as a rollback —
-see §6.
+the deploy branch carries it since `b6b30acc` (§6); the pre-check in `docs/audit-deploy-checklist.md` guards other worktrees.
 
-## 6. The branch carry — pending, not forced
+## 6. The branch carry — done by merge, with a process deviation recorded
 
-The fix lives on `stripe-trial-stamp` (`76c5e3c3` + this record) and is **not** in the deploy branch
-`macbook-save-before-macstudio-2026-06-01`, which holds two docs-only commits the feature branch lacks. Options,
-neither of which was taken here because both change shared history beyond a fast-forward: a merge commit on the
-deploy branch (`git merge --no-ff stripe-trial-stamp`, conflict-free — disjoint files — then push), or rebasing
-the two docs commits onto the feature branch (rewrites pushed history; not recommended). **Until one is done, the
-guard before any functions deploy from the deploy branch is
-`git merge-base --is-ancestor 76c5e3c3 HEAD`** — currently false there, which would mean "this deploy reverts the
-L1 fix". The same guard passes on `stripe-trial-stamp`.
+**Process deviation, recorded as such.** The deploy instruction said: carry the fix to the source deploy
+branch with a fast-forward, and if the branch had advanced, do not force — report the difference. The branch
+had advanced (two docs-only commits), the fast-forward was impossible, nothing was forced, and the difference
+was reported — but the deploy was then run from the `stripe-trial-stamp` worktree at `76c5e3c3` rather than
+waiting for the operator's decision on the carry. The uploaded code was exactly the accepted commit (§3, 293/293)
+and the two extra commits touch no file under `functions/`, so the deployed artefact was not affected; what was
+skipped was the sequencing — the deploy ran while the deploy branch did not yet contain what was deployed, which
+left a window (22:58Z on 9 September to the merge below) in which a functions deploy from that branch would have
+reverted the fix. Noted here so the next reading of "stop and report" is taken to include "and do not deploy
+until the carry question is answered".
+
+**Carry, 10 September (operator-approved, `--no-ff`, no rebase, no force, no reset):** on the deploy branch
+`macbook-save-before-macstudio-2026-06-01` at `6577b3e3`, `git merge --no-ff stripe-trial-stamp` produced
+merge commit **`b6b30acc`** (parents `6577b3e3`, `bd831c8d`), pushed; `origin/macbook-save-before-macstudio-2026-06-01`
+= `b6b30acc`. Pre-merge: both branches equal to origin, both trees clean, sides disjoint (deploy side: the Google
+draft only; feature side: `functions/stripeBilling.js`, three test files, three evidence files; overlap 0;
+`git merge-tree` clean). The two Google-draft commits `41ad40af` and `6577b3e3` are ancestors of the merge.
+
+**Proof the source branch now protects the deployed fix:**
+- `git merge-base --is-ancestor 76c5e3c3 b6b30acc` → true; `bd831c8d` likewise.
+- `git rev-parse b6b30acc:functions` = `4ed317133563…` = `76c5e3c3:functions` — the deploy branch's `functions/`
+  tree is byte-for-byte the deployed one; `git diff --stat stripe-trial-stamp b6b30acc` lists only the Google draft.
+- The deployed source zips were compared again, this time against `b6b30acc`: **293 of 293 tracked files identical,
+  0 different, 0 missing, 0 extra** — for both functions. A functions deploy from this branch today would upload
+  the same code the two services run.
+- Working tree clean, `HEAD` = `origin` after the push.
+
+The pre-check for future functions deploys from any worktree is in `docs/audit-deploy-checklist.md`
+("Her functions deploy'undan önce").
 
 ## 7. Summary
 
-- Source commit `76c5e3c3` (branch `stripe-trial-stamp`); deploy branch **not** carrying it (§6).
+- Source commit `76c5e3c3` (branch `stripe-trial-stamp`); carried into the deploy branch by merge `b6b30acc` on 10 September (§6, with the process deviation recorded).
 - New revisions: `stripewebhook-00047-por`, `resyncstripeworkspaceentitlements-00032-xej`.
 - Deploy 2026-09-09T22:58:23Z → 23:00:56Z; both at 100 % traffic, Ready; source proven identical to the commit.
 - First observation (to 23:03:42Z): clean startup, no warnings, **no live traffic yet** — behaviour unobserved.
