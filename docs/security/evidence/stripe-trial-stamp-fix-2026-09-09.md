@@ -25,13 +25,13 @@ One production file, one function, two helpers — `functions/stripeBilling.js`,
 | `stampTrialUsedIfMissing(workspaceId)` (`:1178`) | `admin.firestore().runTransaction`: read the company document, return `{stamped:false, reason:"already_stamped"}` if `billingTrialUsedAt` is set, else `set({ billingTrialUsedAt: serverTimestamp() }, { merge: true })` inside the transaction. One decision, one write, contention retried by Firestore |
 
 The workspace is the one `applySubscription` resolved through the trusted references
-(`metadata.workspaceId` → subscription id → customer id, `stripeBilling.js:1234-1240`); the stale return
-already carried `workspaceId` (`:1252`), so no second resolution was added. Every other rail, field and
+(`metadata.workspaceId` → subscription id → customer id, `stripeBilling.js:1237-1241`); the stale return
+already carried `workspaceId` (`:1255`), so no second resolution was added. Every other rail, field and
 invariant is untouched: the ordering decision, the ledger writer, the canonical retrieve, the add-on
 branches and the entitlement recompute are exactly `d0c7f431`'s.
 
 Not changed, on purpose: `createStripeCheckoutSession`'s guard (`hasUsedTrial` = stamp **or** a live
-`billingSubscriptionId`, `:1813-1814`) — it already reads the stamp as a boolean, which is why the fix
+`billingSubscriptionId`, `:1865-1866`) — it already reads the stamp as a boolean, which is why the fix
 is a write and not a read.
 
 ## 2. Tests — the handlers run, not read
