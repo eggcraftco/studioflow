@@ -462,8 +462,375 @@ Operator's conditional approval (in chat, 03:25 UTC): B5.1 → B5.2 → B5.3 eac
 | listInventoryMovements | listinventorymovements-00001-map | 401 | listinventorymovements-00002-wuj | 401 |
 | listInventoryRecipes | listinventoryrecipes-00001-tan | 401 | listinventoryrecipes-00002-mod | 401 |
 
-6: fifteen-minute watch (03:36:28 → 03:52:00): _pending_.
+6: fifteen-minute watch (03:36:28 → 03:52:18 UTC): **0 ERROR entries, 0 request 5xx**; traffic was the probe set (401s and the Play RTDN endpoint's 200 to an empty body, as baselined) — passed. Four conditions met → B5.2 started under the operator's standing approval.
+
+## B5.2 — callables last deployed in August, chunk 2 (45 functions)
+
+Started under the operator's standing approval after B5.1's clean gate. Same seven steps.
+
+1–2: snapshot and baseline probes at 03:52–03:54: 1 × 200, 1 × 400, 42 × 401, 1 × 403, 0 × 5xx.
+3: started 2026-09-06T03:54:37Z from `b278ef6a` (functions code identical to `4b44eef9`); "Deploy complete" 03:58:14 (3 min 37 s), **45 of 45 "Successful update operation"**, exit 0.
+4: at 03:58:14 all 45 services report a new Ready revision (table below).
+5: probes re-run at 03:58:19 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| listLibraryFiles | listlibraryfiles-00002-kig | 401 | listlibraryfiles-00003-luf | 401 |
+| listMySupportTickets | listmysupporttickets-00044-kuj | 401 | listmysupporttickets-00045-qus | 401 |
+| listPurchases | listpurchases-00001-wup | 401 | listpurchases-00002-sar | 401 |
+| listStocktakes | liststocktakes-00001-tad | 401 | liststocktakes-00002-yis | 401 |
+| listSuppliers | listsuppliers-00002-tug | 401 | listsuppliers-00003-zic | 401 |
+| listWorkspaceTickets | listworkspacetickets-00041-vey | 401 | listworkspacetickets-00042-guw | 401 |
+| mergeInventoryCategories | mergeinventorycategories-00001-bep | 401 | mergeinventorycategories-00002-kov | 401 |
+| nvViewSharedFile | nvviewsharedfile-00005-fuv | 400 | nvviewsharedfile-00006-vif | 400 |
+| pandleDisconnect | pandledisconnect-00001-cik | 401 | pandledisconnect-00002-heg | 401 |
+| pandleRejectMatch | pandlerejectmatch-00002-wot | 401 | pandlerejectmatch-00003-hof | 401 |
+| pandleSaveMappings | pandlesavemappings-00001-vik | 401 | pandlesavemappings-00002-waz | 401 |
+| parseOpeningStock | parseopeningstock-00003-fuj | 401 | parseopeningstock-00004-xuc | 401 |
+| pinMessageInThread | pinmessageinthread-00002-ten | 401 | pinmessageinthread-00003-gap | 401 |
+| prepareAppleSubscriptionPurchase | prepareapplesubscriptionpurchase-00005-qoh | 401 | prepareapplesubscriptionpurchase-00006-ciq | 401 |
+| prepareGooglePlayPurchase | preparegoogleplaypurchase-00005-dat | 401 | preparegoogleplaypurchase-00006-dug | 401 |
+| previewClearAllOrdersTax | previewclearallorderstax-00001-nap | 401 | previewclearallorderstax-00002-ciw | 401 |
+| purgeDeletedOrders | purgedeletedorders-00003-sah | 403 | purgedeletedorders-00004-giv | 403 |
+| receivePurchase | receivepurchase-00003-fin | 401 | receivepurchase-00004-pov | 401 |
+| recordInventoryLoss | recordinventoryloss-00001-gax | 401 | recordinventoryloss-00002-boz | 401 |
+| registerLibraryFile | registerlibraryfile-00002-fom | 401 | registerlibraryfile-00003-xin | 401 |
+| releaseInventoryFromOrder | releaseinventoryfromorder-00002-ceg | 401 | releaseinventoryfromorder-00003-wet | 401 |
+| removeClientDomain | removeclientdomain-00006-rub | 401 | removeclientdomain-00007-dul | 401 |
+| renameLibraryFile | renamelibraryfile-00001-taw | 401 | renamelibraryfile-00002-wij | 401 |
+| requestClientDomain | requestclientdomain-00001-dod | 401 | requestclientdomain-00002-zub | 401 |
+| reserveInventoryForOrder | reserveinventoryfororder-00002-wed | 401 | reserveinventoryfororder-00003-zac | 401 |
+| resetOrderWorkspaceCardLayout | resetorderworkspacecardlayout-00062-pol | 401 | resetorderworkspacecardlayout-00063-gol | 401 |
+| resolveClientDomain | resolveclientdomain-00001-cud | 200 | resolveclientdomain-00002-nic | 200 |
+| restoreLibraryFile | restorelibraryfile-00001-nuc | 401 | restorelibraryfile-00002-hoc | 401 |
+| resyncIntegrationCustomer | resyncintegrationcustomer-00001-jez | 401 | resyncintegrationcustomer-00002-rip | 401 |
+| saveClientPortalBranding | saveclientportalbranding-00001-duy | 401 | saveclientportalbranding-00002-taz | 401 |
+| saveDashboardWidgetVisibility | savedashboardwidgetvisibility-00052-rud | 401 | savedashboardwidgetvisibility-00053-zap | 401 |
+| saveIntegrationSyncSettings | saveintegrationsyncsettings-00003-xak | 401 | saveintegrationsyncsettings-00004-hop | 401 |
+| saveInventoryCategories | saveinventorycategories-00001-xir | 401 | saveinventorycategories-00002-cuf | 401 |
+| saveInventoryLocation | saveinventorylocation-00001-xoh | 401 | saveinventorylocation-00002-rus | 401 |
+| saveInventoryRecipe | saveinventoryrecipe-00001-mev | 401 | saveinventoryrecipe-00002-qiy | 401 |
+| saveOrderCardDisplaySettings | saveordercarddisplaysettings-00039-quc | 401 | saveordercarddisplaysettings-00040-siv | 401 |
+| saveOrderPortalSettings | saveorderportalsettings-00001-soj | 401 | saveorderportalsettings-00002-mig | 401 |
+| saveOrderWorkspaceCardLayout | saveorderworkspacecardlayout-00061-mib | 401 | saveorderworkspacecardlayout-00062-gen | 401 |
+| savePdfExportSettings | savepdfexportsettings-00077-rin | 401 | savepdfexportsettings-00078-nen | 401 |
+| savePersonalInterfaceSettings | savepersonalinterfacesettings-00019-rid | 401 | savepersonalinterfacesettings-00020-sin | 401 |
+| savePurchase | savepurchase-00004-guz | 401 | savepurchase-00005-vot | 401 |
+| saveQuickReplyContribution | savequickreplycontribution-00016-tel | 401 | savequickreplycontribution-00017-jab | 401 |
+| saveQuickReplySettings | savequickreplysettings-00085-sez | 401 | savequickreplysettings-00086-gof | 401 |
+| saveStocktakeCounts | savestocktakecounts-00001-pob | 401 | savestocktakecounts-00002-git | 401 |
+| saveSupplier | savesupplier-00002-puj | 401 | savesupplier-00003-bed | 401 |
+
+6: fifteen-minute watch (03:54:37 → 04:10:47 UTC): **0 ERROR entries, 0 request 5xx**; the only traffic was the probe set — passed. Four conditions met → B5.3 started under the operator's standing approval.
+
+## B5.3 — callables last deployed in August, chunk 3 (32 functions)
+
+Started under the operator's standing approval after B5.2's clean gate. Same seven steps.
+
+1–2: snapshot at 04:11:08, baseline probes at 04:11:11: 1 × 400, 31 × 401, 0 × 5xx.
+3: started 2026-09-06T04:12:34Z from `39608e61` (functions code identical to `4b44eef9`); "Deploy complete" 04:15:24 (2 min 50 s), **32 of 32 "Successful update operation"**, exit 0.
+4: at 04:15:24 all 32 services report a new Ready revision (table below).
+5: probes re-run at 04:15:29 — identical to the baseline; ERROR/5xx since the deploy start: 0.
+
+| Function | Revision before (rollback target) | Probe before | Revision after | Probe after |
+|---|---|---|---|---|
+| saveSwiftWorkspaceCardProfile | saveswiftworkspacecardprofile-00050-rer | 401 | saveswiftworkspacecardprofile-00051-yif | 401 |
+| saveTypeWorkspaceCardLayout | savetypeworkspacecardlayout-00003-deg | 401 | savetypeworkspacecardlayout-00004-tab | 401 |
+| saveUploadSafetySettings | saveuploadsafetysettings-00082-sag | 401 | saveuploadsafetysettings-00083-suh | 401 |
+| saveWorkspaceBlockHeadings | saveworkspaceblockheadings-00093-ceb | 401 | saveworkspaceblockheadings-00094-jul | 401 |
+| saveWorkspaceCardLayout | saveworkspacecardlayout-00103-nif | 401 | saveworkspacecardlayout-00104-hem | 401 |
+| saveWorkspaceCustomRole | saveworkspacecustomrole-00047-wed | 401 | saveworkspacecustomrole-00048-qiz | 401 |
+| saveWorkspaceLogo | saveworkspacelogo-00070-zer | 401 | saveworkspacelogo-00071-jin | 401 |
+| saveWorkspaceSidebarLayout | saveworkspacesidebarlayout-00053-mar | 401 | saveworkspacesidebarlayout-00054-vej | 401 |
+| saveWorkspaceSmsSettings | saveworkspacesmssettings-00004-kuf | 401 | saveworkspacesmssettings-00005-xel | 401 |
+| sendThreadMessage | sendthreadmessage-00046-fiv | 401 | sendthreadmessage-00047-maf | 401 |
+| setClientSubdomain | setclientsubdomain-00001-cuc | 401 | setclientsubdomain-00002-mig | 401 |
+| setInventoryItemStatus | setinventoryitemstatus-00003-tub | 401 | setinventoryitemstatus-00004-nid | 401 |
+| setSharedPersonalNoteEditingPresence | setsharedpersonalnoteeditingpresence-00028-sec | 401 | setsharedpersonalnoteeditingpresence-00029-hub | 401 |
+| setTrialPlan | settrialplan-00001-put | 401 | settrialplan-00002-reh | 401 |
+| setWebsiteAssistant | setwebsiteassistant-00001-guw | 401 | setwebsiteassistant-00002-sup | 401 |
+| sharePersonalNoteWithWorkspaceMember | sharepersonalnotewithworkspacemember-00030-mug | 401 | sharepersonalnotewithworkspacemember-00031-riw | 401 |
+| shopifyCompleteConnect | shopifycompleteconnect-00002-vir | 401 | shopifycompleteconnect-00003-goj | 401 |
+| startStocktake | startstocktake-00001-bag | 401 | startstocktake-00002-pet | 401 |
+| swapInventoryForOrder | swapinventoryfororder-00001-tub | 401 | swapinventoryfororder-00002-xib | 401 |
+| syncWorkspaceAcceptedJoinRequests | syncworkspaceacceptedjoinrequests-00105-sih | 401 | syncworkspaceacceptedjoinrequests-00106-zin | 401 |
+| testQuickReplyApiKey | testquickreplyapikey-00003-qaw | 401 | testquickreplyapikey-00004-wom | 401 |
+| trashLibraryFile | trashlibraryfile-00002-tiz | 401 | trashlibraryfile-00003-fuv | 401 |
+| undoClearAllOrdersTax | undoclearallorderstax-00001-ric | 401 | undoclearallorderstax-00002-tux | 401 |
+| undoWorkspaceBackupImport | undoworkspacebackupimport-00002-daq | 401 | undoworkspacebackupimport-00003-zok | 401 |
+| unlinkLibraryFile | unlinklibraryfile-00001-vez | 401 | unlinklibraryfile-00002-vim | 401 |
+| unpinMessageInThread | unpinmessageinthread-00002-yih | 401 | unpinmessageinthread-00003-meq | 401 |
+| updateWebCustomer | updatewebcustomer-00088-vir | 401 | updatewebcustomer-00089-vuz | 401 |
+| updateWorkspaceMemberAccess | updateworkspacememberaccess-00045-giq | 401 | updateworkspacememberaccess-00046-juf | 401 |
+| validateWorkspacePlanAction | validateworkspaceplanaction-00102-pev | 401 | validateworkspaceplanaction-00103-gux | 401 |
+| verifyClientDomain | verifyclientdomain-00006-zem | 401 | verifyclientdomain-00007-vic | 401 |
+| verifyGooglePlayPurchase | verifygoogleplaypurchase-00008-riw | 401 | verifygoogleplaypurchase-00009-yaf | 401 |
+| websiteChatRequestHuman | websitechatrequesthuman-00001-der | 400 | websitechatrequesthuman-00002-ras | 400 |
+
+6: fifteen-minute watch (04:12:34 → 04:28:31 UTC): the readback printed 0 ERROR entries and 0 request 5xx **but is UNVERIFIED** — at 04:28:57 the gcloud credentials were found expired ("Reauthentication failed. cannot prompt during non-interactive execution"), the watch script had suppressed stderr, and the same window showed no request at all, which is not credible after a probe set. The last query known to have worked was step 4 at 04:15:24. The window was then re-read through the Logs Explorer in the operator's own console session (project eggcraft-studio), which does not depend on the expired CLI credential:
+
+| Readback (Logs Explorer, 04:12:34 → 04:31:00 UTC, the 32 B5.3 services) | Result |
+|---|---|
+| `severity>=ERROR OR httpRequest.status>=500` | **0 results** ("No data found") |
+| Positive control: `httpRequest.status>0` | **32 results** — the 32 step-5 probes at 04:15:29–04:15:33 (31 × 401, websiteChatRequestHuman 400, all `curl 8.7.1`), every one on the new revision; severity Warning only |
+
+The positive control proves the query and time window reach the right logs, so the empty error query is a real zero rather than a credential failure. B5.3's 15-minute gate is therefore **passed (verified through the console, not gcloud)**: 0 ERROR entries, 0 request 5xx, and the only traffic in the window was the probe set. The gcloud readback will be repeated after the operator's `gcloud auth login` in the morning as a second source, but the gate no longer depends on it.
+
+With B5.3 the August group (B5.1–B5.3, 122 functions) is on the remediated tree: **350 of 414** deployed. The 64 remaining are the June/July group (B6.1, B6.2), which per the plan and the operator's rule waits for a **24-hour soak** with no new batch, then the operator's go.
+
+## 24-hour soak
+
+**Soak start: 2026-09-06 04:28:31 UTC** (B5.3's gate was verified through the console after the gcloud credential expired, see above; the soak clock runs from the end of that gate). While the gcloud credential is expired the two-hourly checks run through the Logs Explorer and Cloud Scheduler pages in the operator's console session; a check that cannot be done is recorded as a gap, never as a clean result. No new batch until 2026-09-07 04:28 UTC at the earliest, and then only on the operator's go. Checks every two hours (errors and 5xx since the soak start across all 350 deployed functions, traffic by status class, the eight Scheduler jobs' state and next run, event-trigger executions), appended here; the 24-hour result subsection closes it.
+
+### Soak readback — 2026-09-06 10:29:50 UTC (six hours in)
+
+The gcloud credential works again, so this readback is from the CLI, and the watch script no longer
+sends any gcloud stderr to `/dev/null` — a failed query now prints `GAP` and is counted, so an empty
+result can no longer be mistaken for a clean one.
+
+| Check (all 350 deployed functions, since 2026-09-06 04:28:31 UTC) | Result |
+|---|---|
+| `severity>=ERROR` | 0 entries |
+| `httpRequest.status>=500` | 0 requests |
+| Positive control: all requests by status class | 240 requests — 239 2xx, 1 3xx, no 4xx, no 5xx |
+| Cloud Scheduler (europe-west2) | 19 jobs, all ENABLED, every one with a recent last attempt and a future next run |
+| Event-triggered functions, last two hours | stampOrderFinance 10, syncWorkflowSafeOrderView 10, notifyCustomerOnStatusChange 10 — all INFO |
+| Query gaps | 0 |
+
+Six of the twenty-four hours are clean on every axis: no errors, no 5xx, real traffic present, no
+scheduler drift, event triggers firing. The soak continues; the next batch (B6.1, B6.2 — the 64
+June/July functions) stays closed until 2026-09-07 04:28 UTC and the operator's go.
+
+### Soak readback gap — 2026-09-06 10:29 UTC to 17:20 UTC
+
+**No readback exists for these seven hours, and that is recorded rather than smoothed over.** Both
+paths are unavailable at once: the gcloud credential expired again ("Reauthentication failed. cannot
+prompt during non-interactive execution"), and the console fallback now lands on a Google sign-in
+challenge because the browser session expired. The assistant does not sign in to anything, so neither
+route can be used until the operator restores one of them.
+
+The two-hourly watch did not fill the gap either: only two entries exist in the soak log, at 04:28
+and 10:29. The scheduled check did not fire.
+
+**What this does and does not mean.** It does not mean anything went wrong; it means nobody looked.
+Cloud Logging retains the entries, so the whole window is still readable — a single query over
+`2026-09-06T04:28:31Z` to the present recovers it in full once either credential works. Until that
+query runs, the soak cannot be called clean, and the 24-hour result due at 04:28 UTC on 7 September
+cannot be produced.
+
+**What the operator does:** run `gcloud auth login` (and `gcloud auth application-default login`), or
+sign back in to the Cloud console in the browser. Either one is enough.
+
+| Window | Readback | Result |
+|---|---|---|
+| 04:28:31 → 04:31 UTC (B5.3 gate) | console | 0 errors, 0 5xx, 32 probes as the positive control |
+| 04:28:31 → 10:29:50 UTC | gcloud | 0 errors, 0 5xx, 240 requests, 19 scheduler jobs on time |
+| 10:29:50 → 17:20 UTC | none at the time | **recovered — see below** |
+
+### Gap recovered — 2026-09-06 17:16:31 UTC
+
+The operator ran `gcloud auth login`, and one query over the whole soak window closed the hole. This
+is why the entry above says nobody looked rather than something broke: the readback is retrospective
+and the retained entries answered for the unobserved hours as completely as a live check would have.
+
+| Check, 2026-09-06 04:28:31 → 17:16:31 UTC (all 350 deployed functions, 12 h 48 m) | Result |
+|---|---|
+| `severity>=ERROR` | **0** |
+| `httpRequest.status>=500` | **0** |
+| Positive control, all requests by class | **693** — 691 2xx, 2 3xx, no 4xx, no 5xx |
+| Cloud Scheduler (europe-west2) | 19 jobs, all ENABLED, every one with a recent attempt and a future next run |
+| Event-triggered functions, last two hours | stampOrderFinance 12, syncWorkflowSafeOrderView 10, notifyCustomerOnStatusChange 10, scanUploadedFile 4 — all INFO |
+| Query gaps | **0** |
+
+Thirteen of the twenty-four hours are now verified end to end with no unobserved window inside them.
+
+**Confirmed a second time, independently.** With the console session restored, the same window was
+read through the Logs Explorer with a broader query — every `cloud_run_revision` in the project, not
+only the 350 deployed functions, `severity>=ERROR OR httpRequest.status>=500`, 04:28:31 → 17:30 UTC.
+Result: **No data found**. Two paths, two query shapes, one answer, and the wider one would have
+caught an error in a function this deployment never touched.
+
+### The two timestamps, and which one is the gate
+
+Asked before the functions approval, because two different times were in circulation.
+
+| Time (UTC) | What it is |
+|---|---|
+| **2026-09-07 04:28:31** | **The gate.** The soak began at 04:28:31 on 6 September, at the end of B5.3's fifteen-minute watch, so a full twenty-four hours ends exactly one day later. Nothing may be deployed from the remediation batches before this moment |
+| 2026-09-07 05:41 | **The report, not the gate.** The scheduled job that writes the closing readback is `41 6 7 9 *` in local time, and local is BST, so it fires at 05:41 UTC — one hour and thirteen minutes **after** the window closes |
+
+So the two do not conflict and nothing is being shortened: the later time is the report, and it is
+deliberately after the end of the window rather than before it. The window itself is untouched at a
+full twenty-four hours.
+
+The report is scheduled late for a reason. The whole soak is answered by one retrospective query over
+`04:28:31Z` to the end, which can only be run once the end has passed; running it earlier would
+certify a shorter window. That query is also what recovered the seven unobserved hours earlier today,
+so a late reading is as good as a live one.
+
+**Progress at 22:54 UTC, 18 h 26 m in, 5 h 34 m to go:** 0 errors, 0 requests returning 5xx, 926
+requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps.
+
+| Soak readback, 2026-09-06 23:46:37 UTC (19 h 18 m in, gcloud) | 0 ERROR entries, 0 requests returning 5xx, 963 requests as the positive control, 19 of 19 scheduler jobs enabled and on time, 0 query gaps |
+| Post-gate check, 2026-09-07 04:33:18 UTC (gcloud) | 0 ERROR entries, 0 requests returning 5xx, 1153 requests as the positive control (1144 2xx, 2 3xx, 7 4xx — the same seven already named), 19 of 19 scheduler jobs enabled and on time, 0 query gaps. The window is closed and the verdict unchanged; recorded because the recurring check ran, not because anything moved |
 
 ## Rollback used
 
 None so far.
+
+## The gate closed — the full window, read retrospectively
+
+**2026-09-07 04:29:53 UTC**, one minute and twenty-two seconds after the window ended at 04:28:31.
+One query over the whole soak, `2026-09-06T04:28:31Z` → now, exactly as planned: the answer to a
+24-hour soak can only be read once the 24 hours have passed, and reading it earlier would have
+certified a shorter window.
+
+| Measure | Result |
+|---|---|
+| Functions queried | 350, the full batch set B0–B5.3 |
+| `severity>=ERROR` since the soak began | **0** |
+| Requests returning 5xx since the soak began | **0** |
+| Positive control — all requests by status class | **1151** (1142 2xx, 2 3xx, 7 4xx). Non-zero, so an empty error result means *no errors*, not *no query* |
+| Cloud Scheduler (europe-west2) | **19 of 19 ENABLED**, every one with a recent attempt and a future next run |
+| Event-triggered functions, last two hours | syncWorkflowSafeOrderView 10, stampOrderFinance 10, notifyCustomerOnStatusChange 10 — all INFO |
+| Query gaps | **0** |
+
+**Widened, because the batch filter cannot see outside itself.** The table above filters to the 350
+deployed functions, so a 5xx in a function this deployment never touched would not appear in it. The
+same window was therefore re-read with no service filter at all — every `cloud_run_revision` in the
+project, `severity>=ERROR OR httpRequest.status>=500`, `timestamp>="2026-09-06T04:28:31Z"`:
+**0 entries.** The clean result is project-wide, not batch-shaped.
+
+### The seven 4xx, each accounted for
+
+A 4xx is not automatically benign, so all seven were identified rather than waved past.
+
+| Count | Service | What it was |
+|---|---|---|
+| 3 | `track17webhook` | **Ours.** The token-revocation proof at 19:58 UTC: the old token, the URL-parameter form, and no token, each correctly refused 401 |
+| 1 | `nvviewsharedfile` | **Ours.** `GET /f/zzprobenotreal` from the web-route reachability probe at 01:08 UTC, answered 404 by the function as designed |
+| 3 | `stripewebhook` | **Not ours, and not this deployment's — see below** |
+
+**GATE VERDICT: PASS.** Twenty-four hours, zero errors, zero 5xx project-wide, every scheduled job on
+time, no unobserved window, and no gap in any query.
+
+### A separate standing problem the soak surfaced, which is not a soak failure
+
+`stripewebhook` is rejecting genuine Stripe deliveries. Over the last fourteen days it has received
+**14 requests and answered 400 to every one of them — zero successes.** The requests carry
+`User-Agent: Stripe/1.0 (+https://stripe.com/docs/webhooks)` from Stripe's own address range, and
+arrive at the raw Cloud Run URL `stripewebhook-…-nw.a.run.app`. The handler rejects before writing any
+application log line, which is the shape of a signature that does not verify.
+
+Three things say plainly that this is **not** a finding against the dependency remediation, and the
+gate above is not weakened by it:
+
+- It **predates the soak by ten days** — the same 400s appear on 27, 28 and 29 August.
+- It is a **4xx, not a 5xx or an ERROR**: the endpoint is refusing, not failing.
+- The billing rail that matters is healthy in the same window: `scheduledBillingEntitlementReconcile`
+  ran **338 times, all 200**.
+
+But it is worth a look on its own account, because a webhook that has never once succeeded is either
+a stale endpoint left registered in the Stripe dashboard pointing at a service whose signing secret
+differs, or real events being dropped. **Nothing was changed** — diagnosing it means touching
+production webhook configuration, which this window does not permit. Recorded for the morning.
+
+---
+
+# Separate security hotfix — the file-fetch SSRF (2026-09-07)
+
+Recorded here, in the soak evidence, but **kept separate from the dependency remediation**: it shares
+nothing with batches B0–B5.3, it was approved on its own, and it deploys two functions the remediation
+never touched. The soak gate above closed before this began and is not affected by it.
+
+Branch `ssrf-assessment` at `d138681e`. Approved by the operator on the morning of 7 September after
+two fresh adversarial reviews.
+
+## The five pre-deploy checks, and the one that mattered
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Rollback revisions snapshotted | **`chatgptmcp-00071-tir`** and **`chatgptworkspaceaction-00047-him`**, both at 100% traffic, read 07:31:37 UTC |
+| 2 | Exactly the affected functions | **PASS.** Call chain traced by hand, not taken from the plan: both sinks are reachable only from `nvChatGPTDispatchAction` (`index.js:24522`, `:24526`), which is called at `:26815` inside `nvHandleMcpToolCall` → `nvHandleMcpRequest` → **`chatgptMcp`** (`:26865`), and at `:26943` inside **`chatgptWorkspaceAction`** (`:26929`). No third caller |
+| 3 | No unrelated MCP / WhatsApp / eBay change | **PASS.** Diff vs the merge-base is 11 files: two docs, two new security modules, the two Woo files, `index.js`, and four test files. Six identifier hits for `MCP`/`whatsapp`/`ebay` were each inspected — all are comments or test-side flag names (`NIVADESK_MCP_INVENTORY`, `NV_MCP_EMAIL_RECEIPTS`), none changes behaviour. The `index.js` diff is seven hunks, all SSRF |
+| 4 | Unit, emulator, syntax, load | **PASS.** `npm test` exit 0, **1176 PASS / 0 FAIL**. Rules suite under `firebase emulators:exec --only firestore,storage`: exit 0, **127 PASS**. All five changed files pass `node -c`, and all four modules `require` cleanly (which a syntax check alone would not catch) |
+| 5 | HTTPS-only behaviour unchanged | **PASS.** Driven directly against `assertFetchableUrl`: `https://…`, `https://…:443/` and a trailing-dot host are accepted and normalised; `http://` on any port, a non-443 port, `ftp:`, `file:` and credentials-in-URL are each refused. Identical to what the deleted guard allowed — no scheme was widened |
+
+### The check that was not on the list, and would have caused an outage
+
+`firebase deploy` reads `functions/.env`, and **that file is gitignored — it exists only in the main
+checkout, not in the `ssrf-assessment` worktree the fix was built and tested in.** Deploying from that
+worktree as-is would have shipped both functions with **28 production environment variables missing**:
+every Stripe price id, the Apple billing configuration, `NIVADESK_XERO_SECRETS_READY`, and
+`NIVADESK_MALWARE_SCAN` / `NIVADESK_CLAMAV_URL` — silently turning off a security control that was
+approved and switched on three days earlier.
+
+Found by reading the two services' live environment before deploying and comparing it with the
+worktree. `.env` was copied across (it stays gitignored and cannot be committed), and the deploy log
+then confirms `Loaded environment variables from .env`. Every other file that exists in the main
+checkout but not the worktree was checked too: `apple-certificates/` is referenced by no code, and the
+rest are editor and backup artefacts.
+
+**One environment variable was deliberately allowed to disappear.** `TRACK17_WEBHOOK_TOKEN` was live on
+`chatgptMcp` as a literal, and is no longer in `.env` because last night's rotation moved it to Secret
+Manager. Nothing in `chatgptMcp` reads it — the only reader is `track17Webhook` (`index.js:21639`),
+which now takes it from Secret Manager on revision `track17webhook-00122-zux`. The literal was a stale
+copy of the already-revoked value, so dropping it completes the containment rather than breaking
+anything. Verified absent after the deploy; `NIVADESK_MALWARE_SCAN` verified still present.
+
+## The deploy
+
+```
+firebase deploy --only "functions:chatgptMcp,functions:chatgptWorkspaceAction" \
+  --project eggcraft-studio --non-interactive
+```
+
+T0 `2026-09-07T07:36:42Z` → complete `07:38:52Z`. Two functions, by name. Never `--only functions`.
+
+| Function | Before | After | State |
+|---|---|---|---|
+| `chatgptMcp` | `chatgptmcp-00071-tir` | **`chatgptmcp-00072-dok`** | Ready, 100% traffic |
+| `chatgptWorkspaceAction` | `chatgptworkspaceaction-00047-him` | **`chatgptworkspaceaction-00048-get`** | Ready, 100% traffic |
+
+## Post-deploy verification
+
+| Check | Result |
+|---|---|
+| `chatgptMcp` POST `tools/list`, unauthenticated | **200** — MCP discovery is public by design |
+| `chatgptWorkspaceAction` POST, unauthenticated | **401**, `{"ok":false,"error":"unauthenticated"}` — fails closed |
+| `chatgptWorkspaceAction` GET | **405** |
+| **Published MCP surface unchanged** | The live listing is **byte-identical** to the committed production snapshot `docs/evidence/tools-list-production-015d5792.json` — 19 tools, same order, same canonical JSON. The hotfix changed no capability |
+| Errors / 5xx on the two functions since T0 | **0** |
+| Errors / 5xx **project-wide** since T0 | **0** |
+| Positive control | 4 requests recorded (2× `chatgptmcp` 200, 1× 401, 1× 405), so the empty error result is real |
+
+An ad-hoc sha256 of the live listing differs from the recorded `7c838fb6…` figure. That is **not** a
+mismatch: the recorded hash is over the harness's canonical serialisation, not over a re-serialised
+JSON-RPC response. The comparable check — field-by-field against the committed snapshot — is identical,
+and is the one reported above.
+
+## What is NOT yet verified, and why
+
+The hostile-input behaviour of the deployed code is proved by 1176 checks over the exact tree that was
+deployed, including 35 guards each proved by removal, driving the real dispatcher. It has **not** been
+exercised against the production URL, because both entry points require a workspace-owner Firebase ID
+token and minting one is the operator's call, not the assistant's. The refusal cases would be safe
+(the guard refuses before any fetch and before any write); a positive "public HTTPS still works" case
+should target a URL that 404s, so the fetch completes but the handler stops at `!response.ok` and
+writes nothing to production.
+
+Rollback, if ever needed:
+
+```bash
+gcloud run services update-traffic chatgptmcp --project eggcraft-studio \
+  --region europe-west2 --to-revisions chatgptmcp-00071-tir=100
+gcloud run services update-traffic chatgptworkspaceaction --project eggcraft-studio \
+  --region europe-west2 --to-revisions chatgptworkspaceaction-00047-him=100
+```
+
+## Not deployed, deliberately
+
+The ten WooCommerce functions carry a refactor of the same private-address table. They are **not** the
+SSRF fix and were left on their existing revisions, per the instruction to deploy only the
+SSRF-affected functions. They are unchanged in behaviour and can ride the next Woo release. The web
+`/f/` route finding (MEDIUM) is a separate piece of work with its own deploy and is untouched here.

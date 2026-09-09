@@ -7,6 +7,38 @@ Bu dalda kör `firebase deploy --only functions` GÜVENSİZ: canlıda bu daldan 
 var ve prune `wooCommerceSiparis`'i siler (hafıza notu: functions-deploy-branch-divergence).
 İsimle deploy prune yapmaz. Deploy edilmeyen fonksiyon eski kodla çalışmaya devam eder.
 
+## Her functions deploy'undan önce — kaynak/ancestor ön kontrolü (10 Eyl 2026'dan itibaren kalıcı)
+
+Stripe L1/trial-stamp düzeltmesi `76c5e3c3` canlıda (`stripewebhook-00047-por`,
+`resyncstripeworkspaceentitlements-00032-xej`) ve `b6b30acc` merge'iyle bu dalda. Bu commit'i
+içermeyen bir daldan yapılan **her** functions deploy'u — hangi fonksiyon olursa olsun, aynı bundle
+gider — o iki fonksiyonu yeniden deploy ettiğinde düzeltmeyi sessizce geri alır. Diğer worktree'ler
+(`onboarding-retention`, `ebay-connector`, `mcp-orchestration`, `openai-resubmission`,
+`whatsapp-channel`, `ssrf-assessment` …) kendi dalından functions deploy etmeden önce bu bloğu çalıştırır;
+kırmızıysa önce `git merge origin/macbook-save-before-macstudio-2026-06-01` (ff ya da normal merge;
+rebase/force yok), sonra deploy.
+
+```bash
+# 1. Düzeltme bu dalda mı? Değilse DUR.
+git fetch -q origin
+git merge-base --is-ancestor 76c5e3c3 HEAD || { echo "STOP: Stripe L1 fix (76c5e3c3) bu dalda yok — deploy onu geri alir"; exit 1; }
+
+# 2. Çalışma ağacı temiz ve functions/.env yerinde mi? (.env yoksa deploy env'leri SİLER)
+[ -z "$(git status --porcelain | grep -v '^??')" ] || { echo "STOP: kirli agac"; exit 1; }
+[ -f functions/.env ] || { echo "STOP: functions/.env yok"; exit 1; }
+
+# 3. functions/ ağacı deploy dalının başıyla aynı mı? Farklıysa fark yalnız senin bilinçli değişikliğin olmalı.
+[ "$(git rev-parse HEAD:functions)" = "$(git rev-parse origin/macbook-save-before-macstudio-2026-06-01:functions)" ] \
+  && echo "functions/ == deploy dali" || git diff --stat origin/macbook-save-before-macstudio-2026-06-01 HEAD -- functions/
+
+# 4. Yalnız adıyla; asla --only functions.
+npx firebase deploy --project eggcraft-studio --only functions:<ad>,functions:<ad>
+```
+
+Deploy sonrası: `gcloud run services describe <servis> --region europe-west2 --format="value(status.traffic[0].revisionName,status.traffic[0].percent,status.conditions[0].status)"`
+yeni revizyonu %100 ve Ready göstermeli. Stripe fonksiyonlarında ayrıca yüklenen kaynak zip'i commit'le
+dosya dosya karşılaştırılır — yöntem ve rollback: `docs/security/evidence/stripe-l1-deploy-2026-09-10.md`.
+
 ## 1) Gitmesi gerekenler (48 fonksiyon)
 
 Gövdesi ya da kullandığı yardımcı gerçekten değişenler.

@@ -1,0 +1,59 @@
+Hello Murali,
+
+Thank you — your understanding of the case is accurate, and your answers resolved three of our open hypotheses.
+
+We have now carried out exactly what you recommended: a brand-new Cloud Run job running the same base64 command, well after the 24-hour propagation window.
+
+PART 1 - CRTD retest on a new job, 53 hours after activation
+
+  Project              nivadesk-amazon (145308107004)
+  Region               europe-west2
+  CRTD effective       ENABLED, updateTime 2026-09-05T02:17:51Z
+  Module               BASE64_ELF_FILE_CMDLINE, effective ENABLED
+  Job name             amazon-crtd-verify-0907   (new job; the earlier amazon-crtd-test had been deleted)
+  Job created          2026-09-07T07:28:08.601104Z
+  Execution ID         amazon-crtd-verify-0907-sl6mf
+  Execution started    2026-09-07T07:28:27.355698Z
+  Trigger executed     2026-09-07T07:29:33.694378Z
+  Execution completed  2026-09-07T07:29:45.674080Z  (succeeded)
+  Elapsed since CRTD activation: 53 hours 12 minutes
+
+Command, exactly as documented:
+  bash -c "sleep 60; base64 -d f0VMRgIB; sleep 10"
+
+Container log line confirming the trigger ran:
+  2026-09-07T07:29:33.694378Z  base64: f0VMRgIB: No such file or directory
+
+The job uses the second-generation execution environment.
+
+RESULT: no Cloud Run Threat Detection finding of any category.
+
+We polled every two minutes for forty minutes, from 2026-09-07T07:30:26Z to 08:10:52Z - twenty polls - via:
+  GET https://securitycenter.googleapis.com/v2/projects/145308107004/sources/-/findings
+
+Every poll returned the same two findings and no CRTD finding:
+  2026-09-07T07:07:30  Increasing Deny Ratio  ACTIVE
+  2026-09-05T11:39:18  OS_LOGIN_DISABLED      ACTIVE
+
+We want to be clear that this is a real absence rather than a failed query: the same call returns those two unrelated findings on every poll, so it is reaching Security Command Center and reading this project correctly.
+
+So propagation time is now excluded, along with region support, project-level activation, the FAILED_PRECONDITION, and the delivery chain. We understand from your reply that there is no customer-visible indicator of watcher attachment, so we cannot determine from our side whether the watcher attached to this execution.
+
+Could you check from the backend whether the CRTD watcher attached to execution amazon-crtd-verify-0907-sl6mf at 2026-09-07T07:29:33Z, and if it did not, what determines attachment for a second-generation Cloud Run job in a project-level Premium activation?
+
+PART 2 - ETD Malware: Bad Domain, a question rather than a further test
+
+Your explanation was that the finding is escalated to organization level when project metadata is absent, and is then dropped from our project-level Premium view because our organization is on the Standard tier.
+
+We would like that confirmed as a general rule, because it determines whether any test we run could ever succeed:
+
+  Can a project-only Premium deployment, inside an organization whose SCC tier is Standard, ever expose this promoted finding?
+
+  Or does surfacing it require Premium at the organization level?
+
+If organization-level Premium is required, please say so plainly and we will record this detector as unobtainable in our current configuration. That is a legitimate answer for us.
+
+For context on why this matters: both detectors are evidence for an IDS/IPS control in a compliance review. We are not treating that control as passed, and we would rather record "not obtainable in this configuration, per Google" than leave it open indefinitely.
+
+Best regards,
+EGGcraft Team

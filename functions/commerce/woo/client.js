@@ -2,8 +2,7 @@
 // drive it without a store. Basic auth over HTTPS with the consumer pair;
 // pagination by X-WP-TotalPages; every non-2xx becomes an error that carries
 // the status, so the retry policy can classify it (§5.5).
-const dns = require("dns");
-const { isPrivateAddress } = require("./url");
+const { resolvePublicAddresses } = require("../../security/privateAddress");
 
 const DEFAULT_PER_PAGE = 50;
 
@@ -17,22 +16,17 @@ const DEFAULT_PER_PAGE = 50;
  * long as the connection lived. Checked here because here is where every
  * outbound request goes.
  *
- * Resolution is per request rather than cached: caching would reintroduce
- * exactly the staleness this exists to close.
+ * The rule and the address ranges now live in security/privateAddress.js, so
+ * that this and the caller-supplied-URL fetch in security/remoteFetch.js are
+ * one implementation rather than three. This is the WooCommerce wrapper around
+ * it: same behaviour, same two error strings, resolution still per request and
+ * never cached.
  */
-async function assertPublicHost(host, resolve = (name) => dns.promises.lookup(name, { all: true })) {
-  const name = String(host || "").trim().toLowerCase();
-  if (!name) throw new WooApiError("woo_private_address", 0);
-  let addresses;
+async function assertPublicHost(host, resolve = undefined) {
   try {
-    addresses = await resolve(name);
+    await resolvePublicAddresses(host, resolve ? { resolve } : {});
   } catch (error) {
-    throw new WooApiError(`woo_dns_failed: ${String(error?.message || error).slice(0, 80)}`, 0);
-  }
-  if (!addresses.length) throw new WooApiError("woo_dns_failed: no address", 0);
-  // Every answer, not the first: a host that returns one public and one private
-  // address is not safe, and which one a connection picks is not ours to say.
-  if (addresses.some((row) => isPrivateAddress(row.address))) {
+    if (error?.reason === "dns_failed") throw new WooApiError(`woo_dns_failed: ${String(error.message).slice(0, 80)}`, 0);
     throw new WooApiError("woo_private_address", 0);
   }
 }
