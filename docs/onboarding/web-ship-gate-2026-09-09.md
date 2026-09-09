@@ -131,3 +131,24 @@ Rollback: `git revert f765d0e && git push origin main`.
 
 Do not sweep this branch into another round by accident: a later `rsync … && git add -A` on `main`
 does not see it, and that is the point of the branch.
+
+## 7. Native store-release line — builds at this head, 9 September 2026, 20:15 UTC
+
+Run from this worktree at `7aab1f44` (the web package plus the `substantiveOrder` module, which no client
+imports yet), with the same commands the standing rule requires — a real build, not a parse:
+
+| Target | Command | Result |
+|---|---|---|
+| Android | `./gradlew assembleDebug` (JAVA_HOME = Android Studio JBR) | **BUILD SUCCESSFUL in 16s** |
+| iOS | `xcodebuild -project EGGcraft.xcodeproj -scheme EGGcraft -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath <scratch>/dd-ios build` | **BUILD SUCCEEDED** |
+| macOS | same scheme, `-destination 'platform=macOS'`, `-derivedDataPath <scratch>/dd-ios` (sharing the DerivedData the iOS build had already resolved packages into) | **BUILD SUCCEEDED** (98 warnings, none new) |
+
+One false start worth recording: the first macOS attempt with its own fresh DerivedData under the
+scratch directory failed before compiling — `Could not resolve package dependencies … Package.swift
+cannot be accessed` for the Firebase and GoogleSignIn checkouts. Not a code failure; the retry against the
+already-resolved DerivedData built clean. Use a DerivedData that has resolved packages (or
+`/tmp/dd-home-mac`, which earlier sessions used) for macOS verification.
+
+What the store lines still need from the operator, and what this branch does not do: version/build
+bumps in `EGGcraft.xcodeproj` and `app/build.gradle.kts`, archives and uploads (ASC / Play Console), and
+the release notes. The code is ready for them; nothing has been archived or uploaded.
