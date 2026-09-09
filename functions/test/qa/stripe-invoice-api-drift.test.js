@@ -164,7 +164,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 55;
+const EXPECTED_CHECKS = 56;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -2476,6 +2476,122 @@ check("a failed apply transaction and an exhausted conflict retry each leave no 
     assert.strictEqual(row().stripeApplyGeneration, 6);
     assert.strictEqual(row().stripeEventSequence, (BASE + 100) * 1000);
     assert.strictEqual(eventRow(contested.id).processingStatus, "processed");
+  })();
+});
+
+check("a retrieve-first rail whose references resolve no workspace before its retrieve applies a fresh read, never the snapshot it resolved the workspace from", () => {
+  // The fallback the closure evidence (§6.7) left open, now closed. Checkout and
+  // both invoice rails retrieve the subscription themselves; their baseline —
+  // the generation read BEFORE that retrieve — needs the session's or invoice's
+  // own references to resolve the workspace. When they do not (a first checkout
+  // whose session carries neither metadata nor a stored customer, an invoice
+  // with neither), only the RETRIEVED subscription's metadata resolves it, and
+  // the generation is read after the snapshot: a cancellation applied between
+  // the rail's retrieve and that read is invisible to it, and — being in the
+  // same second, or a resync with no event time — invisible to the watermark
+  // as well. So: A takes its first read (seats alive) and is held; B applies
+  // the cancellation; A resumes, resolves the workspace from its read. It must
+  // apply what Stripe holds now, not what it read. No ledger row exists before
+  // A and B, so no workspace field names the subscription — the only way a
+  // real first checkout reaches this path.
+  const BASE = 1_800_000;
+  const SEAT_NEW = "sub_1PdahliaSeatsFirst";
+  const seatFirst = (overrides = {}) => seatSubscription({ id: SEAT_NEW, ...overrides });
+  const events = {
+    "checkout.session.completed": (created) => ({
+      id: `evt_fb_checkout_${created}`, type: "checkout.session.completed", created,
+      data: { object: { id: "cs_fb", object: "checkout.session", mode: "subscription", subscription: SEAT_NEW } }
+    }),
+    "invoice.paid": (created) => ({
+      id: `evt_fb_paid_${created}`, type: "invoice.paid", created,
+      data: { object: { id: "in_fb_paid", object: "invoice", metadata: {}, parent: { type: "subscription_details", quote_details: null, subscription_details: { metadata: {}, subscription: SEAT_NEW } } } }
+    }),
+    // metadata: null, so the rail's own resolver reaches the retrieved
+    // subscription's metadata (with {} it never does and skips before applying).
+    "invoice.payment_failed": (created) => ({
+      id: `evt_fb_failed_${created}`, type: "invoice.payment_failed", created,
+      data: { object: { id: "in_fb_failed", object: "invoice", metadata: null, parent: { type: "subscription_details", quote_details: null, subscription_details: { metadata: {}, subscription: SEAT_NEW } } } }
+    })
+  };
+  const cases = [
+    { rail: "checkout.session.completed", b: "webhook" },
+    { rail: "checkout.session.completed", b: "resync" },
+    { rail: "invoice.paid", b: "webhook" },
+    { rail: "invoice.payment_failed", b: "webhook" }
+  ];
+  return (async () => {
+    for (const { rail, b } of cases) {
+      const label = `${rail} / B=${b}`;
+      const status = { [SEAT_NEW]: "active" };
+      const stripeState = holdableRetrieve(() => seatFirst({ status: status[SEAT_NEW] }));
+      const h = harness({
+        owner: b === "resync",
+        retrieve: stripeState.retrieve,
+        list: async () => [seatFirst({ status: status[SEAT_NEW] })],
+        workspace: SEAT_WORKSPACE
+      });
+      const row = () => h.ledgerRows().find((entry) => entry.externalSubscriptionId === SEAT_NEW);
+
+      const hold = stripeState.hold(SEAT_NEW);
+      const applyA = h.processStripeEvent(h.stripe, events[rail](BASE));
+      await hold.started;
+      assert.strictEqual(row(), undefined, `${label}: a row existed before A's first read`);
+
+      status[SEAT_NEW] = "canceled";
+      if (b === "webhook") {
+        const cancel = await h.processStripeEvent(h.stripe, { id: "evt_fb_B", type: "customer.subscription.deleted", created: BASE, data: { object: seatFirst({ status: "canceled" }) } });
+        assert.strictEqual(cancel.updated, true, `${label}: ${JSON.stringify(cancel)}`);
+      } else {
+        const resync = await h.resync();
+        assert.strictEqual(resync.ok, true, `${label}: ${JSON.stringify(resync)}`);
+      }
+      assert.strictEqual(row().activeForEntitlement, false, `${label}: B did not land`);
+      assert.strictEqual(row().stripeApplyGeneration, 1);
+      const retrievesBeforeRelease = stripeState.retrieves.length;
+
+      hold.release(seatFirst({ status: "active" }));
+      const a = await captureWarningsAsync(() => applyA);
+      assert.ok(!a.value.skipped || a.value.reason !== "workspace_not_found", `${label}: the fallback path was not reached: ${JSON.stringify(a.value)}`);
+
+      // The outcome first — this is the line a removed protection turns red.
+      const w = h.workspace();
+      assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled", `${label}: A wrote the snapshot it resolved the workspace from over the cancellation: ${JSON.stringify({ aResult: a.value, seatStatus: w.billingAdditionalTeamSeatStatus, seatQuantity: w.billingAdditionalTeamSeatQuantity, teamMemberLimit: w.billingTeamMemberLimit, rowActive: row().activeForEntitlement, generation: row().stripeApplyGeneration })}`);
+      assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0, label);
+      assert.strictEqual(w.billingTeamMemberLimit, 5, label);
+      assert.strictEqual(w.billingAdditionalTeamSeatSubscriptionId, "", label);
+      assert.strictEqual(row().activeForEntitlement, false, `${label}: the row came back alive`);
+      assert.strictEqual(row().providerStatus, "canceled", label);
+      assert.strictEqual(row().stripeApplyGeneration, 2, `${label}: A's fresh read was not applied`);
+      assert.strictEqual(row().stripeEventSequence, BASE * 1000, `${label}: watermark`);
+
+      // Then the mechanism: one fresh read after the workspace was resolved, and
+      // no generation conflict — which is what tells this path apart from §6's.
+      assert.deepStrictEqual(stripeState.retrieves.slice(retrievesBeforeRelease), [`${SEAT_NEW}:canceled`],
+        `${label}: A did not re-read Stripe exactly once after resolving the workspace from its snapshot`);
+      assert.ok(!a.lines.some((line) => /applied by another writer/i.test(line)),
+        `${label}: the generation conflict fired — meaning the baseline was taken before the retrieve, so this case did not exercise the fallback`);
+    }
+
+    // The control: the same race with a session that DOES carry the workspace
+    // reference. The baseline is then taken before the retrieve, B moves the
+    // generation, and A's write is refused as a conflict and re-read — the
+    // §6 path — so both roads end at the cancellation.
+    const status = { [SEAT_NEW]: "active" };
+    const stripeState = holdableRetrieve(() => seatFirst({ status: status[SEAT_NEW] }));
+    const h = harness({ retrieve: stripeState.retrieve, workspace: SEAT_WORKSPACE });
+    const hold = stripeState.hold(SEAT_NEW);
+    const applyA = h.processStripeEvent(h.stripe, {
+      id: "evt_fb_control", type: "checkout.session.completed", created: BASE,
+      data: { object: { id: "cs_fb_control", object: "checkout.session", mode: "subscription", subscription: SEAT_NEW, customer: CUSTOMER, metadata: { workspaceId: WORKSPACE } } }
+    });
+    await hold.started;
+    status[SEAT_NEW] = "canceled";
+    await h.processStripeEvent(h.stripe, { id: "evt_fb_control_B", type: "customer.subscription.deleted", created: BASE, data: { object: seatFirst({ status: "canceled" }) } });
+    hold.release(seatFirst({ status: "active" }));
+    const a = await captureWarningsAsync(() => applyA);
+    assert.ok(a.lines.some((line) => /applied by another writer/i.test(line)), "control: with a baseline the race is caught as a generation conflict");
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled", `control: ${JSON.stringify(a.value)}`);
+    assert.strictEqual(h.ledgerRows().find((entry) => entry.externalSubscriptionId === SEAT_NEW).stripeApplyGeneration, 2);
   })();
 });
 

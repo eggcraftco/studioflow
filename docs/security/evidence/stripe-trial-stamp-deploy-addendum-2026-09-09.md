@@ -390,3 +390,132 @@ Evidence: this section. `node_modules` symlink removed before the commit.
 
 **Decision: GO** for the seven-function deploy in §6.5 from the commit in §6.7, subject to the operator's
 separate deploy approval, which this section does not constitute. No new HIGH was found while closing L1.
+
+## 7. The §6.7 fallback closed, and the deploy scope stated without ambiguity (10 September)
+
+Operator, 10 September: the L1 transaction, mutation and emulator evidence is accepted; GO is **not**
+accepted while §6.7's "if the workspace cannot be resolved before the retrieve, the old window remains"
+stands. This section closes that path only. No deploy, no production change, no Chrome.
+
+### 7.1 Where the fallback is, and when it is reached
+
+The three retrieve-first rails take their baseline (`stripeApplyBaseline`, `:1467`) from the session's
+or invoice's **own** references — `metadata.workspaceId`, the subscription id, the customer — before they
+retrieve. When none resolves a workspace the baseline is `null`, the rail retrieves anyway, and
+`applySubscription` resolves the workspace from the **retrieved subscription's** references (`:1358`
+onward). Up to `d8b605ae` it then took its pre-read and wrote the snapshot it had resolved the workspace
+from. That snapshot predates the pre-read, so the generation it compared against had been read *after*
+anything that landed in between; and whatever landed in between — a cancellation in the **same second**,
+or an owner resync, which carries **no event time** — is invisible to the watermark as well. Nothing
+refused the write.
+
+Reachability in production, from the code: a NivaDesk checkout session carries `metadata.workspaceId`
+(`:2106-2127`), a customer created before the session and written to the workspace as
+`billingCustomerId` (`:476-488`), and `subscription_data.metadata` with the same workspace id; Stripe
+copies the subscription's metadata onto every invoice's `parent.subscription_details.metadata`. So for
+NivaDesk-created subscriptions the baseline resolves through the workspace id or the stored customer, and
+the fallback is reached only when the session or invoice lacks those references while the subscription
+still carries the workspace metadata — a session or invoice not created by NivaDesk (a Dashboard
+subscription whose metadata was set by hand), or a workspace document that no longer exists under the
+metadata id while the customer is not stored on any other. Narrow, but it is the resolver's designed
+path, the harness fixtures reach it directly, and it cannot be proved unreachable from guards alone: it
+is closed instead.
+
+### 7.2 The change (`stripeBilling.js :1398-1401`)
+
+```
+const generationFromCaller = expectedGeneration !== null && expectedGeneration !== undefined;
+const snapshotPredatesPreRead = subscriptionIsCanonical && !baselineApplies && !generationFromCaller;
+if (stripe && (!subscriptionIsCanonical || snapshotPredatesPreRead)) current = await retrieveCanonicalSubscription(...)
+```
+
+A retrieve-first rail's subscription is trusted for the write **only behind a baseline**. Without one, it
+is used to identify the subscription and resolve the workspace — nothing else — and, once the workspace is
+resolved and the pre-read taken, Stripe is read again and *that* is applied under the §6 transaction.
+This is the operator's prescription verbatim: resolve, then baseline, then re-fetch canonical, then the
+existing guard. The webhook-body rail is unchanged (it already retrieved after its pre-read); the owner
+resync is unchanged (its generation was read before the list, `generationFromCaller`); a rail with a
+baseline is unchanged (one retrieve, no extra call). Cost: one additional Stripe call, on the fallback path
+only. A workspace that nothing resolves is still `workspace_not_found` — skipped, never written — and a
+failing re-read throws, which is the existing retry contract (500 → redelivery; row stays `received`).
+
+### 7.3 The test — fake Firestore (`stripe-invoice-api-drift.test.js :2482`, 55 → 56)
+
+One check, five runs. Four fallback cases: `checkout.session.completed` with B a **same-second
+`customer.subscription.deleted`**; the same with B an **owner resync** (no event time); `invoice.paid`
+and `invoice.payment_failed` with the same-second B. In each, no ledger row and no workspace field names
+the subscription (the shape of a real first checkout), the session/invoice carries no reference, A is held
+at its first retrieve with the seats alive, B lands, A resumes and resolves the workspace from its read.
+Asserted, outcome first: seats `cancelled / 0 / limit 5`, row inactive and `canceled`, generation 2 (B's
+apply, then A's fresh read applied), watermark B's second; then the mechanism: exactly **one** re-read of
+Stripe after the workspace was resolved, and **no** generation-conflict line — which is what tells this
+path apart from §6's. A fifth, control run gives the session its workspace reference: the baseline is then
+taken before the retrieve, B moves the generation, and A's write is refused as a conflict and re-read —
+the §6 road — ending at the same cancellation.
+
+**Red on removal** — mutation M5 restores the `d8b605ae` condition (`if (stripe && !subscriptionIsCanonical)`),
+suite re-run, file restored and byte-compared: **1 red, the new check**, first case,
+`checkout.session.completed / B=webhook: A wrote the snapshot it resolved the workspace from over the
+cancellation: {"aResult":{"updated":true,"workspaceId":"ws_drift","addon":"additional_team_seat_mon…`
+(the runner truncates at 200 characters; the assertion that failed is the seats' status, which the fixed
+code passes). The other 55 stay green under M5, so the fallback was not covered by any earlier check.
+`trial-checkout` 7/7.
+
+### 7.4 The test — Firestore emulator (`stripe-apply-transaction.test.mjs :439`, 5 → 6)
+
+The checkout fallback race with the same-second cancellation, on the real engine: row absent before A's
+first read, B applied (generation 1), A released → exactly one re-read, no conflict line, seats
+`cancelled / 0 / 5`, row inactive `canceled`, generation 2, watermark B's. **6/6 PASS**; the five §6.3
+checks re-ran unchanged because they share the file (4 attempts / 6 attempts as before).
+
+### 7.5 Deploy scope, stated as two separate facts
+
+**Mandatory — carries the L1 fix and this closure (2):** `stripeWebhook` (all four rails →
+`applySubscription` → `commitStripeSubscriptionApply`, the baselines, the fallback re-read) and
+`resyncStripeWorkspaceEntitlements` (baseline before the list, guarded applies, closing transaction).
+Without these two the HIGH stays open.
+
+**Optional — behaviour-neutral resolver refactor (5):** `scheduledBillingEntitlementReconcile`,
+`verifyAppleSubscriptionPurchase`, `appleAppStoreServerNotification`, `verifyGooglePlayPurchase`,
+`googlePlayRtdnNotification`. They reach changed *code* only through
+`recomputeEffectiveWorkspaceEntitlement`, which was split into read + pure resolve + one write. Whether
+that is neutral was **measured, not asserted**: the live module (`0ad2a2aa`, with its resolver exposed
+through a temporary copy) and the candidate were run against the Firestore emulator on identically seeded
+workspaces for seven scenarios — Stripe plan with both add-ons; no plan → demo after a cancellation; no
+plan, `unpaid` → expired; manual plan preserved; Shopify plan preserved; two active plans (Apple Team
+out-ranks Stripe Pro, duplicate fields set); Apple grace period — comparing the returned result, every
+written field except the `*At` timestamps, and the set of timestamp fields written: **7 same, 0
+different**.
+
+Does leaving the five on the old binary next to the new transactions create an inconsistency? No, and
+here is the write path. The old resolver reads the `subscriptions` collection, reads the workspace on the
+no-plan branch, and merge-writes the same payload (proved above); it never reads or writes
+`stripeApplyGeneration`, which the guard ignores when absent. The scheduled reconcile's row flip
+(`activeForEntitlement: false, providerStatus: "expired"` on a plan row past its period end) is the same
+non-transactional merge-set in both versions and does not bump the generation in either — correctly,
+because it is derived from a date and is never newer than Stripe's truth: a Stripe apply that then lands
+writes canonical state over it (right), and a resync's listed state does the same. Apple and Google write
+their own `apple_…`/`google_…` rows, never Stripe rows. Under the server SDK's pessimistic locking their
+non-transactional writes wait for an open apply transaction rather than interleave with it. The pre-existing
+race between the reconcile's stale decision and a concurrent apply exists identically with the old and the
+new resolver and is not part of L1. So the five are **not** required for correctness; deploying them is a
+version-unity choice and is presented as exactly that. Rollback anchors for all seven remain as in §6.5.
+
+### 7.6 Candidate, limitations, decision
+
+**Candidate commit:** the commit carrying this section — code, both test files and this evidence in one
+commit, hash reported to the operator and recorded in memory. Product change since `d8b605ae`:
+`stripeBilling.js` +23/−9 lines, all in `applySubscription`'s canonical-state step and one comment.
+
+**Remaining behavioural limitations** (unchanged from §6.7 except the first, which is closed):
+- ~~pre-read after the retrieve when the rail's references resolve nothing~~ — closed by §7.2; the
+  remaining behaviour on that path is one extra Stripe call.
+- Pessimistic read locks for the transaction's duration (milliseconds; no network call inside).
+- Rows from before the deploy read as generation 0 until first applied; indistinguishable from an absent
+  row, which is safe.
+- Not L1, not changed, not HIGH: `planUpdatePayload` writes the base `billingTeamMemberLimit` on a plan
+  resolve (enforcement reads the add-on fields); the resync's closing reconcile considers Stripe add-on
+  rows only, as live does.
+
+**Decision: GO** for the mandatory two, from the candidate commit, by name; the five are optional and
+neutral. Deploy approval remains the operator's separate act. No new HIGH was found.

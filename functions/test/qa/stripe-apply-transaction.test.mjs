@@ -436,7 +436,52 @@ await check("three subscriptions of one workspace applied at once on Firestore c
   console.log(`      (three transactions, ${h.stats.attempts} callback attempts)`);
 });
 
-if (ran !== 5) { console.log(`FAIL  expected 5 checks, ran ${ran}`); process.exit(1); }
+await check("fallback on Firestore: a first checkout whose session resolves no workspace before its retrieve cannot write the seats it read over a same-second cancellation", async () => {
+  // The §6.7 fallback, on the real engine: no ledger row and no workspace field
+  // names the subscription yet, the session carries neither metadata nor a
+  // customer, so the rail's baseline is null and the workspace is resolved only
+  // from the retrieved subscription. A is held at that retrieve (seats alive);
+  // B, the cancellation, in the same second, lands; A resumes. A must re-read
+  // Stripe after its pre-read and apply the cancellation it finds.
+  const WS = `ws_fb_${RUN}`;
+  const SEAT = `sub_seat_fb_${RUN}`;
+  const BASE = 1_800_000;
+  const status = { [SEAT]: "active" };
+  const seat = (overrides = {}) => subscription(SEAT, "additional_team_seat_monthly", { status: status[SEAT], quantity: 3, workspaceId: WS, priceId: "price_seat", ...overrides });
+  const stripeState = holdableRetrieve(() => seat());
+  await seedWorkspace(WS);
+  const h = build(WS, { retrieve: stripeState.retrieve });
+
+  const hold = stripeState.hold(SEAT);
+  const applyA = h.processStripeEvent(h.stripe, {
+    id: `evt_fb_A_${RUN}`, type: "checkout.session.completed", created: BASE,
+    data: { object: { id: `cs_fb_${RUN}`, object: "checkout.session", mode: "subscription", subscription: SEAT } }
+  });
+  await hold.started;
+  assert.strictEqual((await h.ledger(SEAT)).exists, false, "a row existed before A's first read");
+
+  status[SEAT] = "canceled";
+  const b = await h.processStripeEvent(h.stripe, { id: `evt_fb_B_${RUN}`, type: "customer.subscription.deleted", created: BASE, data: { object: seat({ status: "canceled" }) } });
+  assert.strictEqual(b.updated, true, JSON.stringify(b));
+  assert.strictEqual((await h.ledger(SEAT)).data().stripeApplyGeneration, 1);
+  const retrievesBefore = stripeState.retrieves.length;
+
+  hold.release(seat({ status: "active" }));
+  const a = await silenceWarnings(() => applyA);
+  assert.deepStrictEqual(stripeState.retrieves.slice(retrievesBefore), [`${SEAT}:canceled`], "A did not re-read Stripe exactly once after resolving the workspace from its snapshot");
+  assert.ok(!a.lines.some((line) => /applied by another writer/i.test(line)), "the generation conflict fired, so the baseline was not null and this did not exercise the fallback");
+  const w = await h.workspace();
+  const row = (await h.ledger(SEAT)).data();
+  assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled", `A wrote the snapshot it resolved the workspace from over the cancellation: ${JSON.stringify(a.value)}`);
+  assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0);
+  assert.strictEqual(w.billingTeamMemberLimit, 5);
+  assert.strictEqual(row.activeForEntitlement, false);
+  assert.strictEqual(row.providerStatus, "canceled");
+  assert.strictEqual(row.stripeApplyGeneration, 2, "A's fresh read was not applied");
+  assert.strictEqual(row.stripeEventSequence, BASE * 1000);
+});
+
+if (ran !== 6) { console.log(`FAIL  expected 6 checks, ran ${ran}`); process.exit(1); }
 if (failures) { console.log(`\n❌ ${failures} failing`); process.exit(1); }
 console.log("\n✅ STRIPE APPLY TRANSACTION (Firestore emulator) GEÇTİ");
 process.exit(0);

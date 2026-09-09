@@ -10,6 +10,10 @@
 > again on the committed row, a generation read before every snapshot, the resync bound to the same
 > guard; 55/55 fake, 5/5 emulator, 1,231 full suite, red-on-removal shown). Deploy list re-derived: seven
 > functions (§6.5). Decision **GO**, deploy approval separate.
+>
+> **§6.7's fallback closed, 10 September:** a retrieve-first rail without a baseline now re-reads Stripe after
+> resolving the workspace (addendum §7; 56/56 fake, 6/6 emulator, M5 red). Deploy scope: **2 mandatory**
+> (`stripeWebhook`, `resyncStripeWorkspaceEntitlements`), 5 optional and measured neutral (7/7 same).
 
 Date: 9 September 2026. Branch **`stripe-trial-stamp`** (worktree `/Users/gocmen/Developer/studioflow-stripe`),
 cut from the deploy branch `macbook-save-before-macstudio-2026-06-01` at `9be6a597`, which already carries

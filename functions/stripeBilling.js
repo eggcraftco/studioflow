@@ -1382,9 +1382,23 @@ function createStripeBillingFunctions({
       };
     }
 
-    // (2) Canonical state.
+    // (2) Canonical state. Retrieved here in two cases. The first is the
+    // webhook BODY rail (customer.subscription.*), as before. The second is a
+    // retrieve-first rail that could not resolve the workspace from the
+    // session's or invoice's own references — and so could not take its
+    // baseline — before it retrieved, and whose retrieved subscription is what
+    // resolved the workspace above: that snapshot predates the pre-read just
+    // taken, so it is trusted to IDENTIFY the subscription and for nothing
+    // else, exactly like a body, and what is applied is a read taken after the
+    // pre-read. The owner resync keeps its list entry: its generation was read
+    // before the list. Without this second case, a cancellation applied between
+    // that rail's retrieve and this pre-read — a same-second webhook, a resync,
+    // both invisible to the watermark — was written over by the old snapshot,
+    // because the generation it compared against had been read after the event.
+    const generationFromCaller = expectedGeneration !== null && expectedGeneration !== undefined;
+    const snapshotPredatesPreRead = subscriptionIsCanonical && !baselineApplies && !generationFromCaller;
     let current = subscription;
-    if (stripe && !subscriptionIsCanonical) {
+    if (stripe && (!subscriptionIsCanonical || snapshotPredatesPreRead)) {
       current = await retrieveCanonicalSubscription(stripe, subscriptionId);
     }
 
@@ -1394,9 +1408,9 @@ function createStripeBillingFunctions({
     }
 
     // (3) The write, checked again at the moment it lands.
-    let generation = expectedGeneration === null || expectedGeneration === undefined
-      ? ordering.generation
-      : Math.max(0, Math.floor(Number(expectedGeneration) || 0));
+    let generation = generationFromCaller
+      ? Math.max(0, Math.floor(Number(expectedGeneration) || 0))
+      : ordering.generation;
     for (let attempt = 0; ; attempt += 1) {
       const outcome = await commitStripeSubscriptionApply({
         workspace, subscription: current, item, eventType, ordering, expectedGeneration: generation
@@ -1445,9 +1459,11 @@ function createStripeBillingFunctions({
   // calling applySubscription (checkout, both invoice rails): the same ordering
   // decision applySubscription would take, taken BEFORE their retrieve so the
   // generation it carries predates the snapshot. Null when the references at
-  // hand resolve no workspace yet; applySubscription then resolves and
-  // pre-reads on its own after the retrieve, which leaves the pre-fix window
-  // open only for a subscription nothing can find.
+  // hand resolve no workspace yet; applySubscription then resolves from the
+  // retrieved subscription's own references, pre-reads, and — because that
+  // snapshot predates the pre-read — re-reads Stripe before it writes (see the
+  // canonical-state step there). A workspace nothing resolves is skipped as
+  // workspace_not_found, never written.
   async function stripeApplyBaseline({ workspaceId, subscriptionId, customerId, eventType, eventCreatedMs = 0 }) {
     const workspace = await workspaceRefFromStripeRefs({ workspaceId, subscriptionId, customerId });
     if (!workspace) return null;
