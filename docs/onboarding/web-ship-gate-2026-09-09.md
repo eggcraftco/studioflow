@@ -105,3 +105,29 @@ reopen, skip-safe checklist) go out with the next App Store / Play release lines
 build-and-verify pass (`xcodebuild` + `BUILD SUCCESSFUL`, per the standing rule). The web deploy
 does not wait for them and they do not wait for it. One known footgun stays flagged, not fixed:
 `markBusinessOnboardingCompletedForCurrentCompany(action: String = "skip")` defaults to skip.
+
+## 6. Staged for deploy — 9 September 2026, 20:05 UTC (not pushed)
+
+The file-scoped plan in §4 has been executed up to the push line, on an isolated branch of the publish
+repo so nothing on its `main` moved:
+
+| | |
+|---|---|
+| Publish repo | `~/Developer/studioflow-hostinger-publish-20260530`, `main` = `origin/main` = `3705865` (Round 167), untouched |
+| Staging branch | **`onboarding-round-168`**, one commit **`f765d0e`** "Round 168: onboarding resumes where it stopped, and Skip stays Skip" |
+| Contents | the 9 base-identical files replaced, `onboardingProgress.ts` + `setupChecklist.ts` added, `language.ts` patched with the one hunk (12 files; every replaced file was checked equal to the branch-point base `bc26a7ba` before being overwritten) |
+| Build there | `tsc --noEmit` exit 0; `next build` exit 0, "Compiled successfully" — with the eBay files present, which the worktree build could not test |
+| Built chunks | `nivadesk-onboarding-progress` (1 file), `setup=continue` (1), `Continue setup` (2) — the markers §4 step 5 verifies on the live site after the push |
+| Not done | the push. Hostinger auto-deploys `main`; the branch is local only |
+
+The deploy is now one command, to run only on the operator's "canlıya at":
+
+```bash
+cd ~/Developer/studioflow-hostinger-publish-20260530 && git checkout main && git merge --ff-only onboarding-round-168 && git push origin main
+```
+
+Then wait ~3 minutes, check the hPanel deployment row for `f765d0e`, and verify by chunk (§4 step 5).
+Rollback: `git revert f765d0e && git push origin main`.
+
+Do not sweep this branch into another round by accident: a later `rsync … && git add -A` on `main`
+does not see it, and that is the point of the branch.
