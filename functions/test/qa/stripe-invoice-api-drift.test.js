@@ -164,7 +164,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 48;
+const EXPECTED_CHECKS = 49;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -1918,6 +1918,92 @@ check("a failed trial-stamp transaction leaves the event retryable, and the rede
     const finished = h.store.get(`stripeBillingEvents/${event.id}`);
     assert.strictEqual(finished.processingStatus, "skipped");
     assert.ok(finished.processedAt instanceof FakeTimestamp, "the redelivery was not filed as finished");
+  })();
+});
+
+check("an apply that read the add-on alive cannot write it back after a later apply cancelled it (L1 interleave)", () => {
+  // Addendum 7's first lesser finding, driven rather than reasoned about. The
+  // ordering decision is taken BEFORE the canonical retrieve, and the ledger and
+  // add-on writes that follow re-check nothing. So: A is ruled current, retrieves
+  // the seat add-on while Stripe still has it active, and is held before it
+  // writes; Stripe cancels; B is ruled current, retrieves the cancellation and
+  // writes it; A is released and writes what it retrieved. The invariant this
+  // check holds is that the workspace ends where Stripe is — seats cancelled —
+  // whichever apply lands last. The gate is deterministic: A's retrieve does not
+  // resolve until this check resolves it, so no timing is involved.
+  const BASE = 1_800_000;
+  let canonical = seatSubscription({ status: "active" });
+  let gate = null;
+  let markStarted = () => {};
+  const retrieves = [];
+  const h = harness({
+    retrieve: () => {
+      retrieves.push(canonical.status);
+      if (gate) {
+        const held = gate;
+        gate = null;
+        markStarted();
+        return held;
+      }
+      return canonical;
+    },
+    workspace: {
+      billingPlan: "team_monthly",
+      billingStatus: "active",
+      billingAdditionalTeamSeatQuantity: 3,
+      billingAdditionalTeamSeatStatus: "active",
+      billingAdditionalTeamSeatSubscriptionId: SEAT_SUB,
+      billingTeamMemberLimit: 8
+    }
+  });
+  const ledger = () => h.ledgerRows().find((row) => String(row.stripeSubscriptionId || row.externalSubscriptionId || "") === SEAT_SUB) || h.ledgerRows()[0];
+  return (async () => {
+    // E0: the add-on is live and the watermark is armed.
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_l1_base", type: "customer.subscription.updated", created: BASE, data: { object: seatSubscription() }
+    });
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "active");
+    assert.strictEqual(ledger().stripeEventSequence, BASE * 1000);
+
+    // A: ruled current, then held at its retrieve with the add-on still active.
+    let releaseA = () => {};
+    const started = new Promise((resolve) => { markStarted = resolve; });
+    gate = new Promise((resolve) => { releaseA = () => resolve(seatSubscription({ status: "active" })); });
+    const applyA = h.processStripeEvent(h.stripe, {
+      id: "evt_l1_A", type: "customer.subscription.updated", created: BASE + 100, data: { object: seatSubscription() }
+    });
+    await started;
+    assert.deepStrictEqual(retrieves, ["active", "active"], "A did not reach its retrieve after being ruled current");
+
+    // Stripe cancels; B is ruled current, retrieves the cancellation and applies it.
+    canonical = seatSubscription({ status: "canceled" });
+    const b = await h.processStripeEvent(h.stripe, {
+      id: "evt_l1_B", type: "customer.subscription.deleted", created: BASE + 200, data: { object: seatSubscription({ status: "canceled" }) }
+    });
+    assert.strictEqual(b.updated, true, `B was refused: ${JSON.stringify(b)}`);
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled");
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatQuantity, 0);
+    assert.strictEqual(h.workspace().billingTeamMemberLimit, 5);
+    assert.strictEqual(ledger().stripeEventSequence, (BASE + 200) * 1000);
+    const afterB = h.state();
+
+    // A resumes with the data it retrieved before the cancellation.
+    releaseA();
+    const a = await captureWarningsAsync(() => applyA);
+    const w = h.workspace();
+    const observed = {
+      aResult: a.value,
+      seatStatus: w.billingAdditionalTeamSeatStatus,
+      seatQuantity: w.billingAdditionalTeamSeatQuantity,
+      teamMemberLimit: w.billingTeamMemberLimit,
+      watermark: ledger().stripeEventSequence
+    };
+    assert.strictEqual(w.billingAdditionalTeamSeatStatus, "cancelled",
+      `an apply that read the seats alive wrote them back over the cancellation: ${JSON.stringify(observed)}`);
+    assert.strictEqual(w.billingAdditionalTeamSeatQuantity, 0, `purchased seats came back: ${JSON.stringify(observed)}`);
+    assert.strictEqual(w.billingTeamMemberLimit, 5, `the seat limit came back: ${JSON.stringify(observed)}`);
+    assert.strictEqual(ledger().stripeEventSequence, (BASE + 200) * 1000, `the watermark moved backwards: ${JSON.stringify(observed)}`);
+    assert.strictEqual(h.state(), afterB, "the late apply mutated persistent state after a newer apply had landed");
   })();
 });
 

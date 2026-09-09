@@ -1,5 +1,11 @@
 # Stripe billing hotfix — the trial stamp as the one exception, and the deploy that carries both HIGHs closed
 
+> **Superseded on the deploy question, 9 September late:** the addendum
+> `stripe-trial-stamp-deploy-addendum-2026-09-09.md` §4 drove Addendum 7's first lesser finding and
+> reproduced a cancelled add-on written back by an in-flight apply. That is a HIGH state-corruption path
+> present in live and in this candidate; under the STOP rule the recommendation below is withdrawn and
+> the decision is **NO-GO** until a write-time guard exists. The trial-stamp fix and its checks stand.
+
 Date: 9 September 2026. Branch **`stripe-trial-stamp`** (worktree `/Users/gocmen/Developer/studioflow-stripe`),
 cut from the deploy branch `macbook-save-before-macstudio-2026-06-01` at `9be6a597`, which already carries
 the four hotfix commits (`3b4e1761`, `1a2aabee`, `9a08cda6`, `d0c7f431`) and the STOP record
