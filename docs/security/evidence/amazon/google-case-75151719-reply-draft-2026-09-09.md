@@ -1,6 +1,6 @@
 # Case 75151719 — reply draft, 9 September 2026 (NOT SENT)
 
-Status: draft for the operator's review. Nothing has been sent. Facts below were read from Cloud Run,
+Status (10 September 2026): **sent by the operator from the existing e-mail thread; awaiting Google's reply.** Test results delivered; no further test, poller or message from this side until Google answers. The text below is the draft as it stood before sending. Facts below were read from Cloud Run,
 Cloud Logging and the Security Command Center v2 API between 19:30Z and 21:05Z on 9 September; the
 second execution finished (failed) on its own at 20:57:45Z and no further test or poller has been
 started.
