@@ -529,8 +529,9 @@ same direct-VPC egress the three earlier executions had.
 | Payload line | **19:32:54.693Z** `base64: f0VMRgIB: No such file or directory`, then `Container called exit(0).` |
 | Relative to activation | 2 d 17 h 11 m after project Premium activation (2026-09-07 02:21:20Z enablement of CRTD) |
 
-**Findings, polled through the SCC v2 API every three minutes from 19:34Z to 20:19Z (fifteen polls, HTTP
-200 each): the project held exactly two findings throughout — Cloud Armor *Increasing Deny Ratio* and
+**Findings, checked through the SCC v2 API at 19:33Z and then every three minutes from 19:45:36Z to 20:19:19Z
+(12 polls, HTTP 200 each, read with a lenient JSON parser after the first poller choked on a control
+character inside the Cloud Armor finding and was replaced at 19:45Z): the project held exactly two findings throughout — Cloud Armor *Increasing Deny Ratio* and
 Compliance *OS_LOGIN_DISABLED* — and no finding of any threat, execution, ELF, base64 or container
 category appeared.** The 40-minute window Google's earlier answers used ("detection latency of minutes")
 closed at 20:13Z with nothing.
