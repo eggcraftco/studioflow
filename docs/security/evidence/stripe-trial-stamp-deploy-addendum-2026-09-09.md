@@ -355,8 +355,9 @@ pre-deploy guard.
 
 ### 6.7 Commit, limitations, decision
 
-**Commit:** see the git log entry after this section's commit ("L1 closed: …"); the exact hash is in the
-report to the operator and in memory. Product change: `functions/stripeBilling.js` only. Tests:
+**Commit:** `d8b605ae928599a3f5fff4bda620da77bd7af355` on `stripe-trial-stamp` ("L1 closed: the apply decides
+again at the moment of writing, in one transaction"), pushed to origin; this hash line is the only later
+change on the branch, in a docs-only commit. Product change: `functions/stripeBilling.js` only. Tests:
 `stripe-invoice-api-drift.test.js` (+6, harness extended), `stripe-apply-transaction.test.mjs` (new).
 Evidence: this section. `node_modules` symlink removed before the commit.
 
