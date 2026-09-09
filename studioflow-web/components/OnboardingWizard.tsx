@@ -293,6 +293,7 @@ export function OnboardingWizard({
     const answers = restoreAnswers(defaults, saved?.answers);
     return {
       answers,
+      resumed: Boolean(saved),
       step: saved
         ? resumeStepNumber(saved.step, STEP_ORDER, key =>
             stepIsAnswered(key as OnboardingStepKey, answers))
@@ -301,9 +302,18 @@ export function OnboardingWizard({
   });
   const [step, setStep] = useState(restored.step);
   const [answers, setAnswers] = useState<OnboardingAnswers>(restored.answers);
+  // A draft has to mean somebody STARTED, not that the wizard was opened. The
+  // basics step arrives pre-filled from the browser's locale and timezone, so
+  // "this step is answerable" is already true at mount and cannot be the test;
+  // the test is that the reader changed something. Resuming an existing draft
+  // counts as touched, because they started on an earlier visit.
+  const [touched, setTouched] = useState(restored.resumed);
+  const goToStep = (next: number) => { setTouched(true); setStep(next); };
 
-  const set = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) =>
+  const set = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) => {
+    setTouched(true);
     setAnswers(current => ({ ...current, [key]: value }));
+  };
 
   // The plan step arrives with a recommendation already chosen, so it is
   // answerable the moment it opens — the reader confirms it or picks another.
@@ -316,8 +326,9 @@ export function OnboardingWizard({
   // object, one origin's localStorage — and silent when there is no storage to
   // write to.
   useEffect(() => {
+    if (!touched) return;
     writeOnboardingProgress(companyId, userId, { step: stepKey, answers });
-  }, [companyId, userId, stepKey, answers]);
+  }, [companyId, userId, stepKey, answers, touched]);
 
   // Fourteen days from now, which is what sign-up wrote. Shown so the price has
   // a date attached rather than being an abstract "later".
@@ -658,7 +669,7 @@ export function OnboardingWizard({
               </button>
             ) : null}
             {step > 1 ? (
-              <button type="button" className="onboard-btn" onClick={() => setStep(step - 1)} disabled={saving}>
+              <button type="button" className="onboard-btn" onClick={() => goToStep(step - 1)} disabled={saving}>
                 {t("Back")}
               </button>
             ) : null}
@@ -667,7 +678,7 @@ export function OnboardingWizard({
               className="onboard-btn onboard-btn-primary"
               disabled={!canContinue || saving}
               onClick={() => {
-                if (step < TOTAL_STEPS) { setStep(step + 1); return; }
+                if (step < TOTAL_STEPS) { goToStep(step + 1); return; }
                 onFinish(answers);
               }}
             >
