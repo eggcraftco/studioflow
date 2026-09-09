@@ -519,3 +519,8 @@ commit, hash reported to the operator and recorded in memory. Product change sin
 
 **Decision: GO** for the mandatory two, from the candidate commit, by name; the five are optional and
 neutral. Deploy approval remains the operator's separate act. No new HIGH was found.
+
+## 8. Deployed
+
+The two mandatory functions were deployed from `76c5e3c3` on 2026-09-09T22:58–23:01Z — record, checks, watch queries and
+rollback in `stripe-l1-deploy-2026-09-10.md`. The five optional functions were not deployed. Nothing above is changed by this.
