@@ -64,18 +64,33 @@ const block = SOURCE.slice(
 }
 
 // 5. The stamp is written when a trial subscription actually STARTS — in
-// applyCompletedSubscriptionCheckout, conditional on the subscription carrying
-// a trial — never when the checkout page is merely opened (audit S#11: opening
-// the payment page and closing it used to burn the workspace's one trial), and
-// never unconditionally (an add-on purchase must not spend it either).
+// applyCompletedSubscriptionCheckout, conditional on Stripe's own record of the
+// subscription carrying a trial — never when the checkout page is merely opened
+// (audit S#11: opening the payment page and closing it used to burn the
+// workspace's one trial), never unconditionally (an add-on purchase must not
+// spend it either), and only while it is still absent, so a late delivery
+// cannot move the date an earlier one set.
+//
+// The BEHAVIOUR is proved by running the handler in
+// stripe-invoice-api-drift.test.js ("a stale trial checkout still spends the
+// once-per-workspace trial…", "an existing trial stamp keeps its date…",
+// "a checkout whose subscription shows no trial writes no stamp…", "two
+// concurrent deliveries… write the stamp once", "a cancellation followed by a
+// new checkout does not hand out a second free trial"). What is read off the
+// source here is only the shape: which function owns the stamp, and that the
+// session-opening path does not.
 {
   const after = SOURCE.slice(SOURCE.indexOf("const session = await stripe.checkout.sessions.create(sessionPayload);"));
   const sessionBlock = after.slice(0, after.indexOf("stripePendingCheckout"));
   assert(!/billingTrialUsedAt:/.test(sessionBlock), "opening a checkout session does not spend the trial");
   const completed = SOURCE.slice(SOURCE.indexOf("async function applyCompletedSubscriptionCheckout("));
   const completedBlock = completed.slice(0, completed.indexOf("\n  }\n"));
-  assert(/startedTrial/.test(completedBlock) && /billingTrialUsedAt/.test(completedBlock), "the completed checkout writes the stamp");
-  assert(/\.\.\.\(startedTrial \? \{ billingTrialUsedAt/.test(completedBlock), "the stamp is conditional on the subscription having a trial");
+  assert(/subscriptionShowsTrial\(subscription\)/.test(completedBlock), "the completed checkout decides the stamp from Stripe's retrieved subscription");
+  assert(/stampTrialUsedIfMissing\(result\.workspaceId\)/.test(completedBlock), "the completed checkout writes the stamp through the write-once path");
+  assert(!/billingTrialUsedAt:/.test(completedBlock), "the stamp is no longer written inline beside the session fields, where it was gated on `updated`");
+  const stamper = SOURCE.slice(SOURCE.indexOf("async function stampTrialUsedIfMissing("));
+  const stamperBlock = stamper.slice(0, stamper.indexOf("\n  }\n"));
+  assert(/runTransaction/.test(stamperBlock) && /if \(data\.billingTrialUsedAt\) return/.test(stamperBlock), "the stamp is written once, inside a transaction");
   pass("the one trial is spent only when a trial subscription starts");
 }
 

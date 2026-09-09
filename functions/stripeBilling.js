@@ -521,6 +521,26 @@ function createStripeBillingFunctions({
     return planKey === "demo" ? "none" : "stripe";
   }
 
+  // How many times a Stripe ledger row has been APPLIED — by a webhook, an
+  // invoice rail, a checkout or the owner's resync. The watermark
+  // (stripeEventSequence) orders webhook events against each other, but it says
+  // nothing about a write that carried no event time, and a resync's list
+  // snapshot is exactly that. The generation is what every writer reads BEFORE
+  // it takes its Stripe snapshot and compares again, inside its transaction, at
+  // the moment it writes: a mismatch means somebody applied this row in
+  // between, so the snapshot in hand is not known to be the newest and is not
+  // written. Rows from before this field existed read as 0.
+  function stripeApplyGenerationOf(row) {
+    const value = Math.floor(Number(row?.stripeApplyGeneration || 0));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  // On a generation conflict the apply re-reads Stripe and tries again with the
+  // generation it just saw; each retry costs one Stripe call. The writer that
+  // caused the conflict has already committed by the time it is seen, so a
+  // second conflict needs a third writer in the same window.
+  const STRIPE_APPLY_CONFLICT_RETRIES = 3;
+
   function stripeSubscriptionLedgerId(subscriptionId) {
     return `stripe_${String(subscriptionId || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180)}`;
   }
@@ -589,8 +609,11 @@ function createStripeBillingFunctions({
   async function stripeSubscriptionEventOrdering({ workspace, subscriptionId, eventType, eventCreatedMs = 0 }) {
     const ledgerRef = workspace.ref.collection("subscriptions").doc(stripeSubscriptionLedgerId(subscriptionId));
     const eventSequence = Number(eventCreatedMs) > 0 ? Number(eventCreatedMs) : 0;
-    if (eventSequence <= 0) return { checked: true, stale: false, ledgerRef, eventSequence: 0, seen: 0 };
 
+    // Read even without an event time. A resync or reconcile can never be
+    // stale, but the row's generation from BEFORE its snapshot is what the
+    // write-time check compares against (stripeApplyGenerationOf), and a
+    // decision taken without it would have nothing to compare.
     let existing = null;
     try {
       existing = await ledgerRef.get();
@@ -601,7 +624,13 @@ function createStripeBillingFunctions({
       throw error instanceof Error ? error : new Error(String(error));
     }
 
-    const seen = Number(existing.exists ? existing.data()?.stripeEventSequence || 0 : 0);
+    const row = existing.exists ? existing.data() || {} : {};
+    const seen = Number(row.stripeEventSequence || 0);
+    const generation = stripeApplyGenerationOf(row);
+    if (eventSequence <= 0) {
+      return { checked: true, stale: false, subscriptionId, ledgerRef, eventSequence: 0, seen, generation };
+    }
+
     // Strictly older, never equal. Stripe's `created` has one-second granularity,
     // so two events for the same subscription can share a timestamp; treating
     // equal as stale would drop the second one, and a cancellation delivered in
@@ -615,7 +644,7 @@ function createStripeBillingFunctions({
         subscriptionId, eventType, eventSequence, seen
       });
     }
-    return { checked: true, stale, ledgerRef, eventSequence, seen };
+    return { checked: true, stale, subscriptionId, ledgerRef, eventSequence, seen, generation };
   }
 
   async function writeStripeSubscriptionLedger({
@@ -627,7 +656,14 @@ function createStripeBillingFunctions({
     periodEnd,
     customerId,
     shouldFallback,
-    ordering
+    ordering,
+    // Inside applySubscription's transaction both are supplied: the row goes
+    // through `transaction`, and `existingRow` is what that same transaction
+    // read, so the watermark and the generation are advanced from committed
+    // state rather than from the pre-read. Without a transaction (the unit
+    // checks) the row is read and written directly.
+    transaction = null,
+    existingRow = undefined
   }) {
     const subscriptionId = String(subscription?.id || "").trim();
     if (!workspace?.ref || !subscriptionId || !item) return { skipped: true, reason: "ledger_write_not_applicable" };
@@ -647,6 +683,14 @@ function createStripeBillingFunctions({
     const ledgerRef = ordering.ledgerRef;
     const eventSequence = Number(ordering.eventSequence) > 0 ? Number(ordering.eventSequence) : 0;
 
+    let current = existingRow;
+    if (current === undefined) {
+      const snapshot = await ledgerRef.get();
+      current = snapshot.exists ? snapshot.data() || {} : null;
+    }
+    const seenNow = Number(current?.stripeEventSequence || 0);
+    const generation = stripeApplyGenerationOf(current) + 1;
+
     const metadata = subscription.metadata || {};
     const activeForEntitlement = subscriptionActiveForEntitlement(status, shouldFallback);
     const quantity = Math.max(
@@ -654,10 +698,14 @@ function createStripeBillingFunctions({
       Number(Array.isArray(subscription.items?.data) ? subscription.items.data[0]?.quantity || 1 : 1) || 1
     );
 
-    await ledgerRef.set({
+    const row = {
       provider: "stripe",
-      // Only advanced by a real webhook delivery; a reconcile leaves it alone.
-      ...(eventSequence > 0 ? { stripeEventSequence: eventSequence } : {}),
+      // Only advanced by a real webhook delivery — a reconcile leaves it alone —
+      // and never moved backwards: an apply that lands after a newer event has
+      // raised the watermark (a conflict retry that re-read Stripe, a same-second
+      // tie) keeps the higher value.
+      ...(eventSequence > 0 ? { stripeEventSequence: Math.max(seenNow, eventSequence) } : {}),
+      stripeApplyGeneration: generation,
       subscriptionType: item.type,
       planTier: item.type === "plan" ? planTierForItem(item) : "",
       internalPlanKey: item.plan || "",
@@ -676,15 +724,16 @@ function createStripeBillingFunctions({
       environment: subscription.livemode === true ? "live" : "test",
       lastProviderEventType: String(eventType || ""),
       verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(current?.createdAt ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() })
+    };
 
-    const ledgerSnap = await ledgerRef.get();
-    if (!ledgerSnap.exists || !ledgerSnap.data()?.createdAt) {
-      await ledgerRef.set({ createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    }
+    if (transaction) transaction.set(ledgerRef, row, { merge: true });
+    else await ledgerRef.set(row, { merge: true });
 
-    return { written: true, eventSequence };
+    // `row` is the row as it will read once committed — for the entitlement
+    // resolve that runs in the same transaction and cannot see its own write.
+    return { written: true, eventSequence, generation, row: { ...(current || {}), ...row } };
   }
 
   function timestampFromAppleMillis(milliseconds) {
@@ -856,14 +905,29 @@ function createStripeBillingFunctions({
     return persistApplePlanSubscription(workspace, transaction, options);
   }
 
-  async function recomputeEffectiveWorkspaceEntitlement(workspace, {
+  // The resolver, in two halves so applySubscription can run it INSIDE its
+  // transaction: Firestore wants every read before the first write, so the
+  // inputs are read up front (through the transaction when there is one) and
+  // the resolve itself is pure — it returns the workspace patch and the result
+  // and writes nothing. recomputeEffectiveWorkspaceEntitlement below is the
+  // read-resolve-write wrapper the Apple, Google, resync-less and scheduled
+  // paths keep using.
+  async function readEntitlementInputs(workspace, transaction = null) {
+    const subscriptionsRef = workspace.ref.collection("subscriptions");
+    const subscriptionSnapshot = transaction ? await transaction.get(subscriptionsRef) : await subscriptionsRef.get();
+    const currentSnap = transaction ? await transaction.get(workspace.ref) : await workspace.ref.get();
+    return {
+      rows: subscriptionSnapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })),
+      currentData: currentSnap.exists ? currentSnap.data() || {} : {}
+    };
+  }
+
+  function resolveWorkspaceEntitlement({ rows, currentData }, {
     triggerEventType = "",
     triggerProviderStatus = "",
     triggerCustomerId = ""
   } = {}) {
-    const subscriptionSnapshot = await workspace.ref.collection("subscriptions").get();
-    const activePlanSubscriptions = subscriptionSnapshot.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+    const activePlanSubscriptions = rows
       .filter((entry) => (
         entry.subscriptionType === "plan"
         && entry.activeForEntitlement === true
@@ -898,18 +962,18 @@ function createStripeBillingFunctions({
       // Preserve a manually granted plan. A manual_workspace plan has no Stripe plan
       // subscription, so the resolver must not downgrade it to Demo just because an
       // add-on purchase (storage/seats) created a Stripe customer with no plan sub.
-      const currentSnap = await workspace.ref.get();
-      const currentData = currentSnap.data() || {};
       const currentSource = String(currentData.billingPlanSource || "").trim().toLowerCase();
       const currentPlan = String(currentData.billingPlan || "").trim();
       if (currentSource.includes("manual") && currentPlan && currentPlan !== "demo") {
-        await workspace.ref.set({ ...resolutionFields }, { merge: true });
         return {
-          plan: currentPlan,
-          provider: "manual",
-          activePlanSubscriptionCount: 0,
-          hasMultipleActiveSubscriptions: false,
-          preservedManualPlan: true
+          payload: { ...resolutionFields },
+          result: {
+            plan: currentPlan,
+            provider: "manual",
+            activePlanSubscriptionCount: 0,
+            hasMultipleActiveSubscriptions: false,
+            preservedManualPlan: true
+          }
         };
       }
 
@@ -923,13 +987,15 @@ function createStripeBillingFunctions({
       // Demo the moment anything triggered a resolve.
       const shopifyStatus = String(currentData.shopifySubscriptionStatus || currentData.billingStatus || "").trim().toLowerCase();
       if (currentSource === "shopify" && currentPlan && currentPlan !== "demo" && ["active", "trialing", "past_due"].includes(shopifyStatus)) {
-        await workspace.ref.set({ ...resolutionFields }, { merge: true });
         return {
-          plan: currentPlan,
-          provider: "shopify",
-          activePlanSubscriptionCount: 0,
-          hasMultipleActiveSubscriptions: false,
-          preservedShopifyPlan: true
+          payload: { ...resolutionFields },
+          result: {
+            plan: currentPlan,
+            provider: "shopify",
+            activePlanSubscriptionCount: 0,
+            hasMultipleActiveSubscriptions: false,
+            preservedShopifyPlan: true
+          }
         };
       }
 
@@ -940,30 +1006,31 @@ function createStripeBillingFunctions({
           ? "cancelled"
           : "free";
 
-      await workspace.ref.set(planUpdatePayload("demo", legacyStatus, triggerProviderStatus || "free", {
-        billingPlanSource: "entitlement_resolver",
-        billingEffectivePlanTier: "free_demo",
-        billingEffectiveStatus: "free",
-        billingEffectiveProvider: "none",
-        billingEffectiveSubscriptionId: "",
-        billingCustomerId: String(triggerCustomerId || ""),
-        billingSubscriptionId: "",
-        billingSubscriptionItemKey: "",
-        billingInterval: "",
-        billingCurrentPeriodEnd: null,
-        billingStorageAddonMB: 0,
-        billingAdditionalTeamSeatQuantity: 0,
-        billingAdditionalTeamSeatKey: "",
-        billingAdditionalTeamSeatStatus: "cancelled",
-        billingAdditionalTeamSeatSubscriptionId: "",
-        ...resolutionFields
-      }), { merge: true });
-
       return {
-        plan: "demo",
-        provider: "none",
-        activePlanSubscriptionCount: 0,
-        hasMultipleActiveSubscriptions: false
+        payload: planUpdatePayload("demo", legacyStatus, triggerProviderStatus || "free", {
+          billingPlanSource: "entitlement_resolver",
+          billingEffectivePlanTier: "free_demo",
+          billingEffectiveStatus: "free",
+          billingEffectiveProvider: "none",
+          billingEffectiveSubscriptionId: "",
+          billingCustomerId: String(triggerCustomerId || ""),
+          billingSubscriptionId: "",
+          billingSubscriptionItemKey: "",
+          billingInterval: "",
+          billingCurrentPeriodEnd: null,
+          billingStorageAddonMB: 0,
+          billingAdditionalTeamSeatQuantity: 0,
+          billingAdditionalTeamSeatKey: "",
+          billingAdditionalTeamSeatStatus: "cancelled",
+          billingAdditionalTeamSeatSubscriptionId: "",
+          ...resolutionFields
+        }),
+        result: {
+          plan: "demo",
+          provider: "none",
+          activePlanSubscriptionCount: 0,
+          hasMultipleActiveSubscriptions: false
+        }
       };
     }
 
@@ -996,19 +1063,27 @@ function createStripeBillingFunctions({
       common.billingSubscriptionId = String(selected.externalSubscriptionId || "");
     }
 
-    await workspace.ref.set(planUpdatePayload(
-      effectivePlanKey,
-      mappedEffectiveStatus(selected.providerStatus),
-      String(selected.providerStatus || "active"),
-      common
-    ), { merge: true });
-
     return {
-      plan: effectivePlanKey,
-      provider: effectiveProvider,
-      activePlanSubscriptionCount: activePlanSubscriptions.length,
-      hasMultipleActiveSubscriptions
+      payload: planUpdatePayload(
+        effectivePlanKey,
+        mappedEffectiveStatus(selected.providerStatus),
+        String(selected.providerStatus || "active"),
+        common
+      ),
+      result: {
+        plan: effectivePlanKey,
+        provider: effectiveProvider,
+        activePlanSubscriptionCount: activePlanSubscriptions.length,
+        hasMultipleActiveSubscriptions
+      }
     };
+  }
+
+  async function recomputeEffectiveWorkspaceEntitlement(workspace, options = {}) {
+    const inputs = await readEntitlementInputs(workspace);
+    const { payload, result } = resolveWorkspaceEntitlement(inputs, options);
+    await workspace.ref.set(payload, { merge: true });
+    return result;
   }
 
   function itemByPriceId(priceId) {
@@ -1119,20 +1194,84 @@ function createStripeBillingFunctions({
       return { skipped: true, reason: "subscription_not_found_on_checkout" };
     }
 
+    // The row's generation is read BEFORE the retrieve, so the write-time check
+    // in applySubscription compares against the state as it stood when this
+    // snapshot was taken, not a moment later (see stripeApplyGenerationOf).
+    const baseline = await stripeApplyBaseline({
+      workspaceId: session.metadata?.workspaceId,
+      subscriptionId,
+      customerId: stripeReferenceId(session.customer),
+      eventType: "checkout.session.completed",
+      eventCreatedMs
+    });
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const result = await applySubscription(subscription, "checkout.session.completed", eventCreatedMs);
+    const result = await applySubscription(subscription, "checkout.session.completed", eventCreatedMs, {
+      stripe, subscriptionIsCanonical: true, baseline
+    });
+
+    // The once-per-workspace trial stamp is the ONE thing a stale event may
+    // still write, and the only one. "A stale event mutates nothing" is the
+    // rule for STATE: a plan, a period end, an add-on, a checkout session id
+    // can each be rolled backwards by a late delivery, so a late delivery may
+    // not touch them. "This workspace has, at some point, started a free
+    // trial" is not state — it is a fact that cannot become false by arriving
+    // late, and every reader of it (`hasUsedTrial` in
+    // createStripeCheckoutSession, index.js's workspaceHasUsedTrial, the
+    // Shopify guard) reads it as a boolean. d0c7f431 gated the stamp on
+    // `result.updated`, which a stale checkout no longer carries, so the stamp
+    // was dropped; once a cancellation had cleared billingSubscriptionId the
+    // workspace could buy a second free fortnight.
+    //
+    // Three rules, each pinned by stripe-invoice-api-drift.test.js:
+    //   1. The evidence is Stripe's, never the event's: the subscription
+    //      retrieved a moment ago shows "trialing" or a trial_end. No trial in
+    //      the canonical record, no stamp — an ambiguous event does not
+    //      manufacture trial usage.
+    //   2. The workspace is the one applySubscription resolved through the
+    //      trusted references; no resolved workspace, no stamp.
+    //   3. Written only when absent, inside a transaction, so an existing stamp
+    //      keeps its date and two concurrent deliveries cannot both write.
+    let trialStamp = null;
+    if (result.workspaceId && subscriptionShowsTrial(subscription)) {
+      trialStamp = await stampTrialUsedIfMissing(result.workspaceId);
+    }
 
     if (result.updated && result.workspaceId) {
-      const startedTrial = String(subscription.status || "") === "trialing" || Number(subscription.trial_end || 0) > 0;
       await admin.firestore().collection("companies").doc(result.workspaceId).set({
         billingCheckoutSessionId: session.id || "",
-        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
-        // Stamped only now that a subscription with a trial really exists.
-        ...(startedTrial ? { billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp() } : {})
+        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
 
-    return result;
+    // Recorded on the event row either way, so a skipped event that spent the
+    // trial says so rather than reading as "nothing happened".
+    return trialStamp && trialStamp.stamped ? { ...result, billingTrialUsedAtStamped: true } : result;
+  }
+
+  /** Stripe's own record says a trial exists or existed on this subscription. */
+  function subscriptionShowsTrial(subscription) {
+    if (!subscription || typeof subscription !== "object") return false;
+    if (String(subscription.status || "") === "trialing") return true;
+    const trialEnd = Number(subscription.trial_end);
+    return Number.isFinite(trialEnd) && trialEnd > 0;
+  }
+
+  /**
+   * billingTrialUsedAt, written once. A transaction rather than a merge-set:
+   * the read and the write have to be one decision, or two deliveries of the
+   * same checkout — Stripe retries, and it retries concurrently — could each
+   * read "absent" and each write, the second moving the date the first set.
+   */
+  async function stampTrialUsedIfMissing(workspaceId) {
+    const db = admin.firestore();
+    const ref = db.collection("companies").doc(workspaceId);
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.exists ? snapshot.data() || {} : {};
+      if (data.billingTrialUsedAt) return { stamped: false, reason: "already_stamped" };
+      transaction.set(ref, { billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { stamped: true };
+    });
   }
 
   // The ONE place a Stripe subscription mutates a workspace: the ledger row, the
@@ -1151,9 +1290,13 @@ function createStripeBillingFunctions({
   //
   //   (2) CANONICAL STATE. `stripe` is passed by the rail that is handed a
   //       webhook PAYLOAD (customer.subscription.*). The event is then used only
-  //       to IDENTIFY the subscription — its id, its customer and its workspace
-  //       metadata are immutable, which is what makes identification safe even
-  //       when the body is stale — and what gets applied is the subscription
+  //       to IDENTIFY the subscription: its id and its customer never change,
+  //       and `metadata.workspaceId` is written once by createStripeCheckoutSession
+  //       and never rewritten by NivaDesk — a NivaDesk rule, not a Stripe
+  //       guarantee (Stripe lets metadata be edited), which is why the resolver
+  //       also falls back to the subscription id and the customer. That is what
+  //       makes identification safe even when the body is stale — and what gets
+  //       applied is the subscription
   //       Stripe currently holds. A late delivery therefore re-applies present
   //       truth instead of an old snapshot, which is what makes an equal
   //       `event.created` (Stripe's granularity is one second) a non-event rather
@@ -1173,7 +1316,37 @@ function createStripeBillingFunctions({
   //       a cancelled subscription comes back as itself with status canceled,
   //       which is the right answer. `isDeleted` below also forces the fallback
   //       from the event type, so that rail does not depend on the status alone.
-  async function applySubscription(subscription, eventType, eventCreatedMs = 0, { stripe = null } = {}) {
+  //
+  //   (3) THE WRITE IS ONE TRANSACTION, AND THE DECISION IS TAKEN AGAIN INSIDE IT.
+  //       (1) and (2) are decided before the write, and Stripe's state can move
+  //       between the two: an apply that retrieved the seats alive, held for a
+  //       moment, and then wrote them back after a later apply had already
+  //       cancelled them (Addendum 7, L1). So the ledger row, the add-on fields
+  //       and the entitlement recompute go into a single Firestore transaction
+  //       that re-reads the row and refuses to write if (a) a newer event has
+  //       raised the watermark since — stale after all — or (b) the row's
+  //       generation (stripeApplyGenerationOf) has moved since this apply's
+  //       snapshot was taken — someone applied this row in between, so the
+  //       snapshot is not known to be newest; the apply then re-reads Stripe
+  //       and tries again against the generation it saw. Both checks read the
+  //       committed row at the moment of writing, which the pre-read cannot.
+  //       No Stripe call happens inside the transaction: a retried callback
+  //       must not have side effects, and the re-read runs between attempts.
+  async function applySubscription(subscription, eventType, eventCreatedMs = 0, {
+    stripe = null,
+    // The subscription in hand is already canonical — the caller retrieved it
+    // a frame ago, or it came out of a fresh list — so `stripe` is kept for a
+    // conflict re-read only and is not spent on a retrieve up front.
+    subscriptionIsCanonical = false,
+    // From stripeApplyBaseline: the workspace and the ordering decision taken
+    // BEFORE the caller's own retrieve, used in place of the resolve and the
+    // pre-read below, which would otherwise run AFTER that snapshot.
+    baseline = null,
+    // From the owner resync: this row's generation as read BEFORE the list
+    // call that produced `subscription`. It overrides the pre-read's
+    // generation, which for the resync is read after the snapshot.
+    expectedGeneration = null
+  } = {}) {
     const eventMetadata = subscription?.metadata || {};
     const subscriptionId = String(subscription?.id || "").trim();
     if (!subscriptionId) {
@@ -1182,7 +1355,10 @@ function createStripeBillingFunctions({
       return { skipped: true, reason: "subscription_not_found_on_event" };
     }
 
-    const workspace = await workspaceRefFromStripeRefs({
+    const baselineApplies = Boolean(
+      baseline && baseline.workspace && baseline.ordering && baseline.ordering.subscriptionId === subscriptionId
+    );
+    const workspace = baselineApplies ? baseline.workspace : await workspaceRefFromStripeRefs({
       workspaceId: eventMetadata.workspaceId,
       subscriptionId,
       customerId: stripeReferenceId(subscription.customer)
@@ -1193,7 +1369,7 @@ function createStripeBillingFunctions({
 
     // (1) Ordering, before any mutation and before the Stripe call — a stale
     // redelivery must not cost an API request either.
-    const ordering = await stripeSubscriptionEventOrdering({
+    const ordering = baselineApplies ? baseline.ordering : await stripeSubscriptionEventOrdering({
       workspace, subscriptionId, eventType, eventCreatedMs
     });
     if (ordering.stale === true) {
@@ -1206,110 +1382,215 @@ function createStripeBillingFunctions({
       };
     }
 
-    // (2) Canonical state.
+    // (2) Canonical state. Retrieved here in two cases. The first is the
+    // webhook BODY rail (customer.subscription.*), as before. The second is a
+    // retrieve-first rail that could not resolve the workspace from the
+    // session's or invoice's own references — and so could not take its
+    // baseline — before it retrieved, and whose retrieved subscription is what
+    // resolved the workspace above: that snapshot predates the pre-read just
+    // taken, so it is trusted to IDENTIFY the subscription and for nothing
+    // else, exactly like a body, and what is applied is a read taken after the
+    // pre-read. The owner resync keeps its list entry: its generation was read
+    // before the list. Without this second case, a cancellation applied between
+    // that rail's retrieve and this pre-read — a same-second webhook, a resync,
+    // both invisible to the watermark — was written over by the old snapshot,
+    // because the generation it compared against had been read after the event.
+    const generationFromCaller = expectedGeneration !== null && expectedGeneration !== undefined;
+    const snapshotPredatesPreRead = subscriptionIsCanonical && !baselineApplies && !generationFromCaller;
     let current = subscription;
-    if (stripe) {
-      current = await stripe.subscriptions.retrieve(subscriptionId);
-      if (!current || typeof current !== "object" || String(current.id || "").trim() !== subscriptionId) {
-        // Not a transient network error, but the same answer: refuse to apply
-        // anything and let the redelivery try again rather than falling back to
-        // the payload this retrieve exists to distrust.
-        throw new Error(`Stripe returned no usable subscription for ${subscriptionId}`);
-      }
+    if (stripe && (!subscriptionIsCanonical || snapshotPredatesPreRead)) {
+      current = await retrieveCanonicalSubscription(stripe, subscriptionId);
     }
 
-    const metadata = current.metadata || {};
-    const item = itemFromMetadataOrSubscription(metadata, current);
+    const item = itemFromMetadataOrSubscription(current.metadata || {}, current);
     if (!item) {
       return { skipped: true, reason: "billing_item_not_found" };
     }
 
+    // (3) The write, checked again at the moment it lands.
+    let generation = generationFromCaller
+      ? Math.max(0, Math.floor(Number(expectedGeneration) || 0))
+      : ordering.generation;
+    for (let attempt = 0; ; attempt += 1) {
+      const outcome = await commitStripeSubscriptionApply({
+        workspace, subscription: current, item, eventType, ordering, expectedGeneration: generation
+      });
+      if (outcome.stale) {
+        console.warn("Stripe subscription event was out-ranked while being applied; not applied.", {
+          subscriptionId, eventType, eventSequence: ordering.eventSequence, seen: outcome.seen
+        });
+        return {
+          skipped: true,
+          reason: "stale_subscription_event",
+          workspaceId: workspace.id,
+          eventSequence: ordering.eventSequence,
+          appliedEventSequence: outcome.seen
+        };
+      }
+      if (!outcome.conflict) return outcome.result;
+
+      if (!stripe || attempt >= STRIPE_APPLY_CONFLICT_RETRIES) {
+        // Retryable on purpose: the webhook answers 500 and Stripe redelivers,
+        // the resync reports the failure to the owner. Nothing was written.
+        throw new Error(
+          `Stripe subscription ${subscriptionId} was applied by another writer while ${eventType} was in flight; not applied`
+        );
+      }
+      console.warn("Stripe subscription was applied by another writer while this apply was in flight; re-reading Stripe.", {
+        subscriptionId, eventType, expectedGeneration: generation, generation: outcome.generation
+      });
+      current = await retrieveCanonicalSubscription(stripe, subscriptionId);
+      generation = outcome.generation;
+    }
+  }
+
+  async function retrieveCanonicalSubscription(stripe, subscriptionId) {
+    const current = await stripe.subscriptions.retrieve(subscriptionId);
+    if (!current || typeof current !== "object" || String(current.id || "").trim() !== subscriptionId) {
+      // Not a transient network error, but the same answer: refuse to apply
+      // anything and let the redelivery try again rather than falling back to
+      // the payload this retrieve exists to distrust.
+      throw new Error(`Stripe returned no usable subscription for ${subscriptionId}`);
+    }
+    return current;
+  }
+
+  // The pre-read for the rails that retrieve the subscription themselves before
+  // calling applySubscription (checkout, both invoice rails): the same ordering
+  // decision applySubscription would take, taken BEFORE their retrieve so the
+  // generation it carries predates the snapshot. Null when the references at
+  // hand resolve no workspace yet; applySubscription then resolves from the
+  // retrieved subscription's own references, pre-reads, and — because that
+  // snapshot predates the pre-read — re-reads Stripe before it writes (see the
+  // canonical-state step there). A workspace nothing resolves is skipped as
+  // workspace_not_found, never written.
+  async function stripeApplyBaseline({ workspaceId, subscriptionId, customerId, eventType, eventCreatedMs = 0 }) {
+    const workspace = await workspaceRefFromStripeRefs({ workspaceId, subscriptionId, customerId });
+    if (!workspace) return null;
+    const ordering = await stripeSubscriptionEventOrdering({ workspace, subscriptionId, eventType, eventCreatedMs });
+    return { workspace, ordering };
+  }
+
+  // One transaction: the ledger row, the workspace's add-on fields (or the
+  // entitlement resolve for a plan) and the fallback stamps, or nothing at all.
+  // Resolves to { result } when written, { stale, seen } when a newer event
+  // landed first, { conflict, generation } when the row moved under us.
+  async function commitStripeSubscriptionApply({ workspace, subscription: current, item, eventType, ordering, expectedGeneration }) {
     const status = String(current.status || "unknown");
     // Reads the items, not the subscription: current_period_end moved there.
     const periodEnd = timestampFromUnix(stripeCurrentPeriodEndUnix(current));
     const customerId = stripeReferenceId(current.customer);
     const isDeleted = eventType === "customer.subscription.deleted";
     const shouldFallback = isDeleted || ["canceled", "unpaid", "incomplete_expired"].includes(status);
+    const eventSequence = Number(ordering.eventSequence) > 0 ? Number(ordering.eventSequence) : 0;
+    const ledgerRef = ordering.ledgerRef;
 
-    // Every verified Stripe subscription update is persisted in a provider-neutral
-    // ledger. Apple and Google purchase handlers can later write the same schema,
-    // while billingPlan continues to serve existing clients during rollout.
-    await writeStripeSubscriptionLedger({
-      workspace,
-      subscription: current,
-      item,
-      eventType,
-      status,
-      periodEnd,
-      customerId,
-      shouldFallback,
-      ordering
+    return admin.firestore().runTransaction(async (transaction) => {
+      // Reads first — Firestore's rule, and also what makes the two checks and
+      // the resolve one consistent picture: the row this event orders against,
+      // every row the resolve ranks, and the workspace document. Reading the
+      // workspace here is what serialises two applies for DIFFERENT
+      // subscriptions of one workspace (seats and storage, say): whichever
+      // commits second is retried by Firestore over the first's result instead
+      // of resolving from a picture that is missing it.
+      const ledgerSnap = await transaction.get(ledgerRef);
+      const inputs = await readEntitlementInputs(workspace, transaction);
+      const existingRow = ledgerSnap.exists ? ledgerSnap.data() || {} : null;
+      const seenNow = Number(existingRow?.stripeEventSequence || 0);
+      const generationNow = stripeApplyGenerationOf(existingRow);
+
+      if (eventSequence > 0 && seenNow > 0 && eventSequence < seenNow) return { stale: true, seen: seenNow };
+      if (generationNow !== expectedGeneration) return { conflict: true, generation: generationNow };
+
+      // Every verified Stripe subscription update is persisted in a provider-neutral
+      // ledger. Apple and Google purchase handlers write the same schema, while
+      // billingPlan continues to serve existing clients during rollout.
+      const ledger = await writeStripeSubscriptionLedger({
+        workspace,
+        subscription: current,
+        item,
+        eventType,
+        status,
+        periodEnd,
+        customerId,
+        shouldFallback,
+        ordering,
+        transaction,
+        existingRow
+      });
+
+      if (item.type === "storage_addon") {
+        const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
+        transaction.set(workspace.ref, {
+          billingCustomerId: customerId,
+          billingStorageAddonMB: addonActive ? item.storageAddonMB : 0,
+          billingStorageAddonKey: addonActive ? item.key : "",
+          billingStorageAddonStatus: addonActive ? status : "cancelled",
+          billingStorageAddonSubscriptionId: addonActive ? current.id : "",
+          billingStorageAddonCurrentPeriodEnd: periodEnd,
+          billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          billingUpdatedBy: "stripe_webhook",
+          billingExportAccessPreserved: true
+        }, { merge: true });
+
+        return { result: { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive } };
+      }
+
+      if (item.type === "team_seat_addon") {
+        const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
+        const firstSubscriptionItem = Array.isArray(current.items?.data) ? current.items.data[0] : null;
+        const requestedQuantity = Math.max(1, Number(firstSubscriptionItem?.quantity || 1) || 1);
+        const purchasedSeatQuantity = addonActive ? Math.min(5, Math.floor(requestedQuantity)) : 0;
+        // The quantity and the limit computed from it land in the same write;
+        // they cannot be seen apart.
+        transaction.set(workspace.ref, {
+          billingCustomerId: customerId,
+          billingAdditionalTeamSeatQuantity: purchasedSeatQuantity,
+          billingAdditionalTeamSeatKey: addonActive ? item.key : "",
+          billingAdditionalTeamSeatStatus: addonActive ? status : "cancelled",
+          billingAdditionalTeamSeatSubscriptionId: addonActive ? current.id : "",
+          billingAdditionalTeamSeatCurrentPeriodEnd: periodEnd,
+          billingTeamIncludedSeats: 5,
+          billingTeamSelfServiceMax: 10,
+          billingTeamMemberLimit: 5 + purchasedSeatQuantity,
+          billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          billingUpdatedBy: "stripe_webhook",
+          billingExportAccessPreserved: true
+        }, { merge: true });
+
+        return { result: { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive, purchasedSeatQuantity } };
+      }
+
+      // The resolve ranks the rows as they will stand once this transaction
+      // commits: the collection as read, with this subscription's row replaced
+      // by the one being written.
+      const rows = inputs.rows.filter((row) => row.id !== ledgerRef.id).concat([{ id: ledgerRef.id, ...ledger.row }]);
+      const { payload, result: entitlementResolution } = resolveWorkspaceEntitlement(
+        { rows, currentData: inputs.currentData },
+        { triggerEventType: eventType, triggerProviderStatus: status, triggerCustomerId: customerId }
+      );
+      transaction.set(workspace.ref, {
+        ...payload,
+        ...(shouldFallback ? {
+          billingPreviousPaidPlan: item.plan,
+          billingPreviousSubscriptionItemKey: item.key,
+          billingPreviousInterval: item.interval || ""
+        } : {})
+      }, { merge: true });
+
+      return {
+        result: {
+          updated: true,
+          workspaceId: workspace.id,
+          providerPlanEvent: item.plan,
+          providerStatus: status,
+          effectivePlan: entitlementResolution.plan,
+          effectiveProvider: entitlementResolution.provider,
+          activePlanSubscriptionCount: entitlementResolution.activePlanSubscriptionCount,
+          hasMultipleActiveSubscriptions: entitlementResolution.hasMultipleActiveSubscriptions
+        }
+      };
     });
-
-    if (item.type === "storage_addon") {
-      const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
-      await workspace.ref.set({
-        billingCustomerId: customerId,
-        billingStorageAddonMB: addonActive ? item.storageAddonMB : 0,
-        billingStorageAddonKey: addonActive ? item.key : "",
-        billingStorageAddonStatus: addonActive ? status : "cancelled",
-        billingStorageAddonSubscriptionId: addonActive ? current.id : "",
-        billingStorageAddonCurrentPeriodEnd: periodEnd,
-        billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        billingUpdatedBy: "stripe_webhook",
-        billingExportAccessPreserved: true
-      }, { merge: true });
-
-      return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive };
-    }
-
-    if (item.type === "team_seat_addon") {
-      const addonActive = !shouldFallback && ["active", "trialing", "past_due"].includes(status);
-      const firstSubscriptionItem = Array.isArray(current.items?.data) ? current.items.data[0] : null;
-      const requestedQuantity = Math.max(1, Number(firstSubscriptionItem?.quantity || 1) || 1);
-      const purchasedSeatQuantity = addonActive ? Math.min(5, Math.floor(requestedQuantity)) : 0;
-      await workspace.ref.set({
-        billingCustomerId: customerId,
-        billingAdditionalTeamSeatQuantity: purchasedSeatQuantity,
-        billingAdditionalTeamSeatKey: addonActive ? item.key : "",
-        billingAdditionalTeamSeatStatus: addonActive ? status : "cancelled",
-        billingAdditionalTeamSeatSubscriptionId: addonActive ? current.id : "",
-        billingAdditionalTeamSeatCurrentPeriodEnd: periodEnd,
-        billingTeamIncludedSeats: 5,
-        billingTeamSelfServiceMax: 10,
-        billingTeamMemberLimit: 5 + purchasedSeatQuantity,
-        billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        billingUpdatedBy: "stripe_webhook",
-        billingExportAccessPreserved: true
-      }, { merge: true });
-
-      return { updated: true, workspaceId: workspace.id, addon: item.key, active: addonActive, purchasedSeatQuantity };
-    }
-
-    const entitlementResolution = await recomputeEffectiveWorkspaceEntitlement(workspace, {
-      triggerEventType: eventType,
-      triggerProviderStatus: status,
-      triggerCustomerId: customerId
-    });
-
-    if (shouldFallback) {
-      await workspace.ref.set({
-        billingPreviousPaidPlan: item.plan,
-        billingPreviousSubscriptionItemKey: item.key,
-        billingPreviousInterval: item.interval || ""
-      }, { merge: true });
-    }
-
-    return {
-      updated: true,
-      workspaceId: workspace.id,
-      providerPlanEvent: item.plan,
-      providerStatus: status,
-      effectivePlan: entitlementResolution.plan,
-      effectiveProvider: entitlementResolution.provider,
-      activePlanSubscriptionCount: entitlementResolution.activePlanSubscriptionCount,
-      hasMultipleActiveSubscriptions: entitlementResolution.hasMultipleActiveSubscriptions
-    };
   }
 
   // The third argument is what stops a renewal being undone. Before the drift
@@ -1333,8 +1614,18 @@ function createStripeBillingFunctions({
       return { skipped: true, reason: "invoice_without_subscription" };
     }
 
+    // Pre-read before the retrieve, for the same reason as on the checkout rail.
+    const baseline = await stripeApplyBaseline({
+      workspaceId: stripeInvoiceWorkspaceId(invoice),
+      subscriptionId,
+      customerId: stripeReferenceId(invoice.customer),
+      eventType: "invoice.paid",
+      eventCreatedMs
+    });
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const result = await applySubscription(subscription, "invoice.paid", eventCreatedMs);
+    const result = await applySubscription(subscription, "invoice.paid", eventCreatedMs, {
+      stripe, subscriptionIsCanonical: true, baseline
+    });
     if (result.updated && result.workspaceId) {
       await admin.firestore().collection("companies").doc(result.workspaceId).set({
         billingLastInvoiceId: invoice.id || "",
@@ -1353,7 +1644,16 @@ function createStripeBillingFunctions({
     // stamped and the handler looks successful while applySubscription is never
     // called and the workspace never moves to past_due. Dunning depends on this.
     const subscriptionId = stripeSubscriptionIdFromInvoice(invoice);
+    let baseline = null;
     if (subscriptionId) {
+      // Pre-read before the retrieve, for the same reason as on the checkout rail.
+      baseline = await stripeApplyBaseline({
+        workspaceId: stripeInvoiceWorkspaceId(invoice),
+        subscriptionId,
+        customerId: stripeReferenceId(invoice.customer),
+        eventType: "invoice.payment_failed",
+        eventCreatedMs
+      });
       try {
         subscription = await stripe.subscriptions.retrieve(subscriptionId);
       } catch (error) {
@@ -1370,7 +1670,7 @@ function createStripeBillingFunctions({
     }
 
     const metadata = invoice.metadata || subscription?.metadata || {};
-    const workspace = await workspaceRefFromStripeRefs({
+    const workspace = baseline ? baseline.workspace : await workspaceRefFromStripeRefs({
       workspaceId: metadata.workspaceId,
       subscriptionId,
       customerId: typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id
@@ -1384,7 +1684,9 @@ function createStripeBillingFunctions({
 
     let resolution = null;
     if (subscription) {
-      resolution = await applySubscription(subscription, "invoice.payment_failed", eventCreatedMs);
+      resolution = await applySubscription(subscription, "invoice.payment_failed", eventCreatedMs, {
+        stripe, subscriptionIsCanonical: true, baseline
+      });
       // Invariant: after a stale decision NOTHING mutates, and that includes the
       // failure stamp below. This rail is the only caller that writes the
       // workspace unconditionally rather than behind `result.updated`, so it is
@@ -1572,11 +1874,19 @@ function createStripeBillingFunctions({
     });
 
     const stripe = stripeClient(config.secretKey);
+
+    // The generation of every Stripe row, read BEFORE the list call below and
+    // BEFORE any of it is applied. Each row's apply and the closing reconcile
+    // compare against this: a row somebody applied after this read — a webhook
+    // that cancelled, or granted, while the list was in flight — is newer than
+    // the list, and the list must not be written over it. Rows the list does
+    // not name are only ever touched if they still carry this generation.
+    const baselineRows = await companyRef.collection("subscriptions").where("provider", "==", "stripe").get();
+    const baselineGenerations = new Map(baselineRows.docs.map((doc) => [doc.id, stripeApplyGenerationOf(doc.data() || {})]));
+
     const foundSubscriptionIds = new Set();
     let foundSubscriptionCount = 0;
     let recognisedSubscriptionCount = 0;
-    let activeSeatSubFound = false;
-    let activeStorageSubFound = false;
     let startingAfter = null;
 
     // Read all subscription states from Stripe. The client cannot provide a plan,
@@ -1601,11 +1911,17 @@ function createStripeBillingFunctions({
         if (!item) continue;
 
         recognisedSubscriptionCount += 1;
-        const subStatus = String(subscription.status || "").trim().toLowerCase();
-        const subActiveForEntitlement = ["active", "trialing", "past_due"].includes(subStatus);
-        if (subActiveForEntitlement && item.type === "team_seat_addon") activeSeatSubFound = true;
-        if (subActiveForEntitlement && item.type === "storage_addon") activeStorageSubFound = true;
-        await applySubscription(subscription, "manual.owner_resync");
+        // The list entry is a fresh read and is applied as such; `stripe` is
+        // for the conflict re-read only. A row created after the baseline
+        // (a re-subscribe under a new id) is expected at generation 0, exactly
+        // as an absent row reads, so a legitimate new subscription applies.
+        await applySubscription(subscription, "manual.owner_resync", 0, {
+          stripe,
+          subscriptionIsCanonical: true,
+          expectedGeneration: baselineGenerations.has(stripeSubscriptionLedgerId(subscriptionId))
+            ? baselineGenerations.get(stripeSubscriptionLedgerId(subscriptionId))
+            : 0
+        });
       }
 
       if (!page.has_more || !(page.data || []).length) {
@@ -1615,75 +1931,97 @@ function createStripeBillingFunctions({
       }
     } while (startingAfter);
 
-    // Disable stale Stripe ledger records that are no longer returned by Stripe.
-    // This prevents an old cached entitlement from surviving a provider-side removal.
-    const existingStripeRecords = await companyRef.collection("subscriptions")
-      .where("provider", "==", "stripe")
-      .get();
+    // The closing reconcile — deactivate Stripe rows the list no longer names,
+    // clear add-on fields no active row backs, resolve the plan — used to work
+    // from the list itself and from three separate writes, so a webhook that
+    // granted or cancelled an add-on while the list was in flight was undone
+    // by it. It now reads the rows as they stand at this moment, in one
+    // transaction, and touches an unlisted row only if nothing has applied it
+    // since the baseline above: "Stripe no longer lists it" is a claim about
+    // the list's snapshot, and it is not made about a row that is newer.
+    const closing = await admin.firestore().runTransaction(async (transaction) => {
+      const rowsSnap = await transaction.get(companyRef.collection("subscriptions"));
+      const companySnap = await transaction.get(companyRef);
+      const currentData = companySnap.exists ? companySnap.data() || {} : {};
 
-    const staleBatch = admin.firestore().batch();
-    let staleRecordsDeactivated = 0;
-    existingStripeRecords.docs.forEach((doc) => {
-      const data = doc.data() || {};
-      const externalSubscriptionId = String(data.externalSubscriptionId || "").trim();
-      if (!externalSubscriptionId || foundSubscriptionIds.has(externalSubscriptionId)) return;
-      if (data.activeForEntitlement === true) staleRecordsDeactivated += 1;
-      staleBatch.set(doc.ref, {
-        activeForEntitlement: false,
-        autoRenew: false,
-        providerStatus: "not_found_during_resync",
-        lastProviderEventType: "manual.owner_resync_missing_at_provider",
-        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      let staleRecordsDeactivated = 0;
+      const rows = [];
+      for (const doc of rowsSnap.docs) {
+        const data = { id: doc.id, ...(doc.data() || {}) };
+        const externalSubscriptionId = String(data.externalSubscriptionId || "").trim();
+        const unlisted = data.provider === "stripe" && externalSubscriptionId && !foundSubscriptionIds.has(externalSubscriptionId);
+        const untouchedSinceBaseline = baselineGenerations.has(doc.id) && baselineGenerations.get(doc.id) === stripeApplyGenerationOf(data);
+        if (!unlisted || !untouchedSinceBaseline) {
+          rows.push(data);
+          continue;
+        }
+        if (data.activeForEntitlement === true) staleRecordsDeactivated += 1;
+        const deactivated = {
+          activeForEntitlement: false,
+          autoRenew: false,
+          providerStatus: "not_found_during_resync",
+          lastProviderEventType: "manual.owner_resync_missing_at_provider",
+          stripeApplyGeneration: stripeApplyGenerationOf(data) + 1
+        };
+        transaction.set(doc.ref, {
+          ...deactivated,
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        rows.push({ ...data, ...deactivated });
+      }
+
+      // Reconcile the add-on fields against the rows. If no active seat/storage
+      // add-on row remains, clear any stale add-on fields so the resolve below
+      // does not keep inflating the effective allowance.
+      const activeAddonRow = (type) => rows.some((row) => (
+        row.provider === "stripe" && row.subscriptionType === type && row.activeForEntitlement === true
+      ));
+      const addonReconcile = {};
+      if (!activeAddonRow("team_seat_addon")) {
+        addonReconcile.billingAdditionalTeamSeatQuantity = 0;
+        addonReconcile.billingAdditionalTeamSeatKey = "";
+        addonReconcile.billingAdditionalTeamSeatStatus = "cancelled";
+        addonReconcile.billingAdditionalTeamSeatSubscriptionId = "";
+        // Reset the effective seat limit to the base plan allowance (no purchased seats).
+        const reconcilePlanKey = String(currentData.billingPlan || "demo").trim();
+        const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
+        addonReconcile.billingTeamMemberLimit = reconcileEntitlements.teamMemberLimit;
+      }
+      if (!activeAddonRow("storage_addon")) {
+        addonReconcile.billingStorageAddonMB = 0;
+        addonReconcile.billingStorageAddonKey = "";
+        addonReconcile.billingStorageAddonStatus = "cancelled";
+        addonReconcile.billingStorageAddonSubscriptionId = "";
+      }
+      if (Object.keys(addonReconcile).length) {
+        addonReconcile.billingUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+        addonReconcile.billingUpdatedBy = "stripe_resync_reconcile";
+        addonReconcile.billingExportAccessPreserved = true;
+      }
+
+      const { payload, result: resolution } = resolveWorkspaceEntitlement({ rows, currentData }, {
+        triggerEventType: "manual.owner_resync_completed",
+        triggerProviderStatus: "verified",
+        triggerCustomerId: customerId
+      });
+
+      // In the order the three writes used to land, so a later field wins.
+      transaction.set(companyRef, {
+        ...addonReconcile,
+        ...payload,
+        billingLastEntitlementResyncCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        billingLastEntitlementResyncCompletedBy: uid,
+        billingLastEntitlementResyncFoundSubscriptions: foundSubscriptionCount,
+        billingLastEntitlementResyncRecognisedSubscriptions: recognisedSubscriptionCount,
+        billingLastEntitlementResyncStaleRecordsDeactivated: staleRecordsDeactivated,
+        billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        billingUpdatedBy: "stripe_owner_resync"
       }, { merge: true });
+
+      return { staleRecordsDeactivated, resolution };
     });
-    await staleBatch.commit();
-
-    // Reconcile add-on doc fields against Stripe. If no active seat/storage add-on
-    // subscription exists at the provider, clear any stale add-on fields so the
-    // recompute below does not keep inflating the effective allowance.
-    const addonReconcile = {};
-    if (!activeSeatSubFound) {
-      addonReconcile.billingAdditionalTeamSeatQuantity = 0;
-      addonReconcile.billingAdditionalTeamSeatKey = "";
-      addonReconcile.billingAdditionalTeamSeatStatus = "cancelled";
-      addonReconcile.billingAdditionalTeamSeatSubscriptionId = "";
-      // Reset the effective seat limit to the base plan allowance (no purchased seats).
-      const reconcilePlanKey = String(companyData.billingPlan || "demo").trim();
-      const reconcileEntitlements = PLAN_ENTITLEMENTS[reconcilePlanKey] || PLAN_ENTITLEMENTS.demo;
-      addonReconcile.billingTeamMemberLimit = reconcileEntitlements.teamMemberLimit;
-    }
-    if (!activeStorageSubFound) {
-      addonReconcile.billingStorageAddonMB = 0;
-      addonReconcile.billingStorageAddonKey = "";
-      addonReconcile.billingStorageAddonStatus = "cancelled";
-      addonReconcile.billingStorageAddonSubscriptionId = "";
-    }
-    if (Object.keys(addonReconcile).length) {
-      addonReconcile.billingUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
-      addonReconcile.billingUpdatedBy = "stripe_resync_reconcile";
-      addonReconcile.billingExportAccessPreserved = true;
-      await companyRef.set(addonReconcile, { merge: true });
-    }
-
-    const resolution = await recomputeEffectiveWorkspaceEntitlement(companyRef && {
-      id: companyId,
-      ref: companyRef
-    }, {
-      triggerEventType: "manual.owner_resync_completed",
-      triggerProviderStatus: "verified",
-      triggerCustomerId: customerId
-    });
-
-    await companyRef.set({
-      billingLastEntitlementResyncCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
-      billingLastEntitlementResyncCompletedBy: uid,
-      billingLastEntitlementResyncFoundSubscriptions: foundSubscriptionCount,
-      billingLastEntitlementResyncRecognisedSubscriptions: recognisedSubscriptionCount,
-      billingLastEntitlementResyncStaleRecordsDeactivated: staleRecordsDeactivated,
-      billingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      billingUpdatedBy: "stripe_owner_resync"
-    }, { merge: true });
+    const { staleRecordsDeactivated, resolution } = closing;
 
     return {
       ok: true,
@@ -2535,6 +2873,18 @@ function stripeReferenceId(value) {
  * Both resolve to "" here, by different branches. Callers must keep skipping
  * them: the bug was that the skip fired for everything, not that it exists.
  */
+// The workspace id an invoice carries: its own metadata first, then the
+// subscription metadata Stripe copies onto parent.subscription_details. Only a
+// hint for the resolver, which falls back to the subscription and the customer.
+function stripeInvoiceWorkspaceId(invoice) {
+  if (!invoice || typeof invoice !== "object") return "";
+  const own = String(invoice.metadata?.workspaceId || "").trim();
+  if (own) return own;
+  const parent = invoice.parent;
+  const details = parent && typeof parent === "object" ? parent.subscription_details : null;
+  return details && typeof details === "object" ? String(details.metadata?.workspaceId || "").trim() : "";
+}
+
 function stripeSubscriptionIdFromInvoice(invoice) {
   if (!invoice || typeof invoice !== "object") return "";
 
