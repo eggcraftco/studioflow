@@ -492,3 +492,54 @@ line for each. Do not deviate from their spec (no `--service-account`, no VPC, n
 image); if the default compute service account is rejected at create time, stop and record it
 rather than substituting `amazon-sync@` silently — the point of this run is that the variables
 are Google's.
+
+---
+
+## The fourth run — Google's own spec, 9 September 2026
+
+Authorised by the operator on 9 September ("run the fourth CRTD run with Google's spec, `sleep 60`
+variant first"). Everything Google's Product Specialists chose was kept: the job-name prefix, the public
+Ubuntu 24.04 image, `sh -c`, the payload, the default compute service account, `--wait`.
+
+### 4a. Their command, verbatim — refused by our own org policy
+
+```
+JOB_NAME=ktd-test-base64-elf-2026-09-09-19-30-37-utc      issued 2026-09-09T19:30:37Z
+ERROR: (gcloud.run.jobs.create) FAILED_PRECONDITION: Constraint constraints/run.allowedVPCEgress
+violated for attempting CreateJob with annotation "run.googleapis.com/vpc-access-egress" set to null.
+```
+
+The effective policy on `nivadesk-amazon` is `run.allowedVPCEgress: allowedValues [all-traffic]`
+(`gcloud resource-manager org-policies describe … --effective`); a job with no VPC egress cannot be
+created in this project at all. No job resource was left behind. The policy was not relaxed.
+
+### 4b. The same command plus the one thing the policy forces — ran and succeeded
+
+Added, and nothing else: `--vpc-egress all-traffic --network amazon-vpc --subnet amazon-subnet` — the
+same direct-VPC egress the three earlier executions had.
+
+| | |
+|---|---|
+| Job | `ktd-test-base64-elf-2026-09-09-19-31-33-utc` (created 19:31:33Z) |
+| Execution | `ktd-test-base64-elf-2026-09-09-19-31-33-utc-gsvq2`, uid `cdbf4978-d960-4464-84b3-10b1f34a7fd0` |
+| Image (resolved) | `marketplace.gcr.io/google/ubuntu2404@sha256:1492cf11140e5aed3cb371956fd80ebb5919296ed3f5c739c11753227c2f1d0c` |
+| Command / args | `sh` / `-c`, `sleep 60; base64 -d f0VMRgIB; sleep 10` |
+| Service account | `145308107004-compute@developer.gserviceaccount.com` (the default; enabled; holds no project role) |
+| Start → completion | 2026-09-09T19:31:43.358Z → 19:33:07.978Z, succeeded 1 / failed 0 |
+| Payload line | **19:32:54.693Z** `base64: f0VMRgIB: No such file or directory`, then `Container called exit(0).` |
+| Relative to activation | 2 d 17 h 11 m after project Premium activation (2026-09-07 02:21:20Z enablement of CRTD) |
+
+**Findings, polled through the SCC v2 API every three minutes from 19:34Z to 20:19Z (fifteen polls, HTTP
+200 each): the project held exactly two findings throughout — Cloud Armor *Increasing Deny Ratio* and
+Compliance *OS_LOGIN_DISABLED* — and no finding of any threat, execution, ELF, base64 or container
+category appeared.** The 40-minute window Google's earlier answers used ("detection latency of minutes")
+closed at 20:13Z with nothing.
+
+So the fourth execution reproduces the first three under the variables Google chose: their image, their
+name, their shell, the default service account. The one difference between their spec and what ran is
+VPC egress, which our policy makes unconditional and which the three earlier runs also had.
+
+### 4c. Their second variant (`sleep 660`) — run next, same addition
+
+Started 20:16Z as `crtd-test-base64-elf-<utc>`; the eleven-minute wait before the payload is the point of
+the variant. Recorded below when it completes.
