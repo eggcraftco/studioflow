@@ -1122,17 +1122,69 @@ function createStripeBillingFunctions({
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const result = await applySubscription(subscription, "checkout.session.completed", eventCreatedMs);
 
+    // The once-per-workspace trial stamp is the ONE thing a stale event may
+    // still write, and the only one. "A stale event mutates nothing" is the
+    // rule for STATE: a plan, a period end, an add-on, a checkout session id
+    // can each be rolled backwards by a late delivery, so a late delivery may
+    // not touch them. "This workspace has, at some point, started a free
+    // trial" is not state — it is a fact that cannot become false by arriving
+    // late, and every reader of it (`hasUsedTrial` in
+    // createStripeCheckoutSession, index.js's workspaceHasUsedTrial, the
+    // Shopify guard) reads it as a boolean. d0c7f431 gated the stamp on
+    // `result.updated`, which a stale checkout no longer carries, so the stamp
+    // was dropped; once a cancellation had cleared billingSubscriptionId the
+    // workspace could buy a second free fortnight.
+    //
+    // Three rules, each pinned by stripe-invoice-api-drift.test.js:
+    //   1. The evidence is Stripe's, never the event's: the subscription
+    //      retrieved a moment ago shows "trialing" or a trial_end. No trial in
+    //      the canonical record, no stamp — an ambiguous event does not
+    //      manufacture trial usage.
+    //   2. The workspace is the one applySubscription resolved through the
+    //      trusted references; no resolved workspace, no stamp.
+    //   3. Written only when absent, inside a transaction, so an existing stamp
+    //      keeps its date and two concurrent deliveries cannot both write.
+    let trialStamp = null;
+    if (result.workspaceId && subscriptionShowsTrial(subscription)) {
+      trialStamp = await stampTrialUsedIfMissing(result.workspaceId);
+    }
+
     if (result.updated && result.workspaceId) {
-      const startedTrial = String(subscription.status || "") === "trialing" || Number(subscription.trial_end || 0) > 0;
       await admin.firestore().collection("companies").doc(result.workspaceId).set({
         billingCheckoutSessionId: session.id || "",
-        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
-        // Stamped only now that a subscription with a trial really exists.
-        ...(startedTrial ? { billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp() } : {})
+        billingCheckoutCompletedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
 
-    return result;
+    // Recorded on the event row either way, so a skipped event that spent the
+    // trial says so rather than reading as "nothing happened".
+    return trialStamp && trialStamp.stamped ? { ...result, billingTrialUsedAtStamped: true } : result;
+  }
+
+  /** Stripe's own record says a trial exists or existed on this subscription. */
+  function subscriptionShowsTrial(subscription) {
+    if (!subscription || typeof subscription !== "object") return false;
+    if (String(subscription.status || "") === "trialing") return true;
+    const trialEnd = Number(subscription.trial_end);
+    return Number.isFinite(trialEnd) && trialEnd > 0;
+  }
+
+  /**
+   * billingTrialUsedAt, written once. A transaction rather than a merge-set:
+   * the read and the write have to be one decision, or two deliveries of the
+   * same checkout — Stripe retries, and it retries concurrently — could each
+   * read "absent" and each write, the second moving the date the first set.
+   */
+  async function stampTrialUsedIfMissing(workspaceId) {
+    const db = admin.firestore();
+    const ref = db.collection("companies").doc(workspaceId);
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.exists ? snapshot.data() || {} : {};
+      if (data.billingTrialUsedAt) return { stamped: false, reason: "already_stamped" };
+      transaction.set(ref, { billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { stamped: true };
+    });
   }
 
   // The ONE place a Stripe subscription mutates a workspace: the ledger row, the

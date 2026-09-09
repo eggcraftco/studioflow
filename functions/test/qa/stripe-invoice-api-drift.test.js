@@ -164,7 +164,7 @@ let failures = 0;
 const checks = [];
 function check(name, run) { checks.push({ name, run }); }
 
-const EXPECTED_CHECKS = 42;
+const EXPECTED_CHECKS = 47;
 
 const SUB = "sub_1PdahliaRenewal";
 const CUSTOMER = "cus_1PdahliaOwner";
@@ -437,6 +437,15 @@ class FakeTimestamp {
 function fakeFirestore(seed = {}, { failGet = null } = {}) {
   const store = new Map(Object.entries(seed).map(([key, value]) => [key, { ...value }]));
   const queries = [];
+  // Every write, in order, with the fields it carried — so a check can say
+  // "exactly one write touched billingTrialUsedAt" instead of inferring it from
+  // the end state, which two writes of the same field would leave identical.
+  const writes = [];
+  // A version per document, bumped on every write. This is what lets
+  // runTransaction below behave like Firestore's: a transaction that read a
+  // document somebody else wrote in the meantime is retried from the top, not
+  // committed over them.
+  const versions = new Map();
 
   function documentRef(docPath) {
     const id = docPath.slice(docPath.lastIndexOf("/") + 1);
@@ -466,8 +475,40 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
           else next[field] = fieldValue;
         }
         store.set(docPath, next);
+        versions.set(docPath, (versions.get(docPath) || 0) + 1);
+        writes.push({ path: docPath, fields: Object.keys(value) });
       }
     };
+  }
+
+  // Optimistic transactions, the way Firestore runs them: reads note the
+  // document version they saw, writes are held until the function returns, and
+  // a commit that finds one of its reads overtaken retries the whole function.
+  // Each read yields a turn first, so two transactions started in the same tick
+  // — two webhook deliveries of one checkout — interleave rather than run one
+  // after the other, which is the only way the "written once" claim can be
+  // exercised in a single process.
+  async function runTransaction(fn) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const readVersions = new Map();
+      const pending = [];
+      const transaction = {
+        async get(ref) {
+          await new Promise((resolve) => setImmediate(resolve));
+          readVersions.set(ref.path, versions.get(ref.path) || 0);
+          return ref.get();
+        },
+        set(ref, value, options) { pending.push(() => ref.set(value, options)); return transaction; },
+        update(ref, value) { pending.push(() => ref.set(value, { merge: true })); return transaction; }
+      };
+      const result = await fn(transaction);
+      await new Promise((resolve) => setImmediate(resolve));
+      const overtaken = [...readVersions].some(([docPath, seen]) => (versions.get(docPath) || 0) !== seen);
+      if (overtaken) continue;
+      for (const write of pending) await write();
+      return result;
+    }
+    throw new Error("fake runTransaction: contention did not resolve");
   }
 
   function collectionRef(collectionPath) {
@@ -496,7 +537,7 @@ function fakeFirestore(seed = {}, { failGet = null } = {}) {
     return { path: collectionPath, doc: (id) => documentRef(`${collectionPath}/${id}`), ...query([], 0) };
   }
 
-  return { db: { collection: (name) => collectionRef(name) }, store, queries };
+  return { db: { collection: (name) => collectionRef(name), runTransaction }, store, queries, writes };
 }
 
 // Only the fields planUpdatePayload reads. The assertions below are about which
@@ -549,8 +590,8 @@ function dahliaInvoice(overrides = {}) {
 // The workspace is found through billingSubscriptionId, not through a
 // metadata.workspaceId shortcut, so the resolved id has to be right for the
 // handler to find anything at all.
-function harness({ retrieve, workspace: workspaceSeed, seed, failGet } = {}) {
-  const { db, store, queries } = fakeFirestore({
+function harness({ retrieve, workspace: workspaceSeed, seed, failGet, requireWorkspaceForBilling } = {}) {
+  const { db, store, queries, writes } = fakeFirestore({
     [`companies/${WORKSPACE}`]: {
       billingPlan: "demo",
       billingStatus: "free",
@@ -569,7 +610,7 @@ function harness({ retrieve, workspace: workspaceSeed, seed, failGet } = {}) {
       }
     }
   };
-  const { _internal } = createStripeBillingFunctions({
+  const built = createStripeBillingFunctions({
     admin: {
       firestore: Object.assign(() => db, {
         FieldValue: { serverTimestamp: () => SERVER_TIMESTAMP, delete: () => DELETE_SENTINEL },
@@ -587,18 +628,24 @@ function harness({ retrieve, workspace: workspaceSeed, seed, failGet } = {}) {
     APPLE_ROOT_CA_CERTS_PEM: null,
     GOOGLE_PLAY_SERVICE_ACCOUNT: null,
     PLAN_ENTITLEMENTS,
-    requireWorkspaceForBilling: async () => { throw new Error("no callable is exercised here"); },
+    // The webhook checks never reach a callable; the checkout-guard check below
+    // does, and hands in a resolver that reads the workspace as it stands NOW.
+    requireWorkspaceForBilling: requireWorkspaceForBilling || (async () => { throw new Error("no callable is exercised here"); }),
     workspaceOrderRole: () => "owner",
     normalizeWorkspaceRole: (role) => role,
     workspaceRoleLabel: (role) => role
   });
+  const { _internal } = built;
 
   const ledgerPrefix = `companies/${WORKSPACE}/subscriptions/`;
   return {
     ..._internal,
+    // The callable, unwrapped: the fake onCall above returns the handler itself.
+    createStripeCheckoutSession: built.createStripeCheckoutSession,
     stripe,
     store,
     queries,
+    writes,
     retrieved,
     db,
     workspace: () => store.get(`companies/${WORKSPACE}`) || null,
@@ -1593,6 +1640,235 @@ check("the ledger write refuses to run without a fresh ordering decision", () =>
 // A grep, kept only for the handlers the checks above do not run. It is scoped
 // to the factory, because the two resolvers below it keep the legacy reads on
 // purpose as their fallback.
+// ---- the trial stamp: the one fact a stale event may still write ------------
+// d0c7f431 made a stale checkout.session.completed return {skipped:true} with
+// no `updated`, and the once-per-workspace trial stamp was gated on `updated`,
+// so a late checkout delivery stopped spending the free fortnight. Once a
+// cancellation cleared billingSubscriptionId, the workspace could buy a second
+// trial. The rule that fixes it, pinned here: billingTrialUsedAt is written when
+// Stripe's own record shows a trial and the workspace resolved, ONLY if absent,
+// inside a transaction — and it is the ONLY field a stale event may touch.
+
+/** Every [document, field] whose value differs between two state snapshots. */
+function stateDiff(before, after) {
+  const read = (snapshot) => new Map(JSON.parse(snapshot).map(([docPath, fields]) => [docPath, new Map(fields)]));
+  const left = read(before);
+  const right = read(after);
+  const changes = [];
+  for (const docPath of new Set([...left.keys(), ...right.keys()])) {
+    const l = left.get(docPath) || new Map();
+    const r = right.get(docPath) || new Map();
+    for (const field of new Set([...l.keys(), ...r.keys()])) {
+      if (JSON.stringify(l.get(field)) !== JSON.stringify(r.get(field))) changes.push(`${docPath}.${field}`);
+    }
+  }
+  return changes.sort();
+}
+
+const TRIAL_END = PERIOD_END;
+const trialingSubscription = (overrides = {}) => dahliaSubscription({ status: "trialing", trial_start: TRIAL_END - 1_209_600, trial_end: TRIAL_END, ...overrides });
+const checkoutEvent = (id, created, sessionId = id) => ({
+  id, type: "checkout.session.completed", created,
+  data: { object: { id: `cs_${sessionId}`, object: "checkout.session", mode: "subscription", subscription: SUB } }
+});
+const WORKSPACE_DOC = `companies/${WORKSPACE}`;
+const BASE_SEQ = 1_800_000;
+
+/** A workspace that has never spent its trial, with both add-ons cancelled — the state the leak needs. */
+const UNSTAMPED_WORKSPACE = {
+  billingPlan: "demo",
+  billingStatus: "free",
+  billingAdditionalTeamSeatQuantity: 0,
+  billingAdditionalTeamSeatStatus: "cancelled",
+  billingStorageAddonMB: 0,
+  billingStorageAddonStatus: "cancelled"
+};
+
+check("a stale trial checkout still spends the once-per-workspace trial, and writes nothing else", () => {
+  const h = harness({ retrieve: () => trialingSubscription(), workspace: UNSTAMPED_WORKSPACE });
+  return (async () => {
+    const applied = await h.processStripeEvent(h.stripe, {
+      id: "evt_trial_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: trialingSubscription() }
+    });
+    assert.strictEqual(applied.updated, true);
+    assert.strictEqual(h.workspace().billingStatus, "trialing");
+    assert.strictEqual(h.workspace().billingTrialUsedAt, undefined, "the subscription rail must not stamp the trial; that is the checkout rail's job");
+
+    const before = h.state();
+    const writesBefore = h.writes.length;
+    const stale = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, checkoutEvent("evt_trial_checkout_stale", BASE_SEQ - 500)));
+
+    assert.strictEqual(stale.value.skipped, true, `the stale checkout was applied: ${JSON.stringify(stale.value)}`);
+    assert.strictEqual(stale.value.reason, "stale_subscription_event");
+    assert.strictEqual(stale.value.billingTrialUsedAtStamped, true, "the event record must say the trial was spent");
+    assert.ok(h.workspace().billingTrialUsedAt instanceof FakeTimestamp, "billingTrialUsedAt was not written");
+    assert.deepStrictEqual(stateDiff(before, h.state()), [`${WORKSPACE_DOC}.billingTrialUsedAt`],
+      "a stale checkout may write the trial stamp and nothing else");
+    // The per-rail stamps stay behind `updated`: a stale session id must not
+    // overwrite a newer one, and the plan/add-ons must not move.
+    assert.strictEqual(h.workspace().billingCheckoutSessionId, undefined);
+    assert.strictEqual(h.workspace().billingStorageAddonStatus, "cancelled");
+    assert.strictEqual(h.workspace().billingAdditionalTeamSeatStatus, "cancelled");
+    const workspaceWrites = h.writes.slice(writesBefore).filter((write) => write.path === WORKSPACE_DOC);
+    assert.deepStrictEqual(workspaceWrites.map((write) => write.fields), [["billingTrialUsedAt"]],
+      "exactly one write reached the workspace, carrying only the stamp");
+  })();
+});
+
+check("an existing trial stamp keeps its date through a stale and a current checkout", () => {
+  const EARLIER = new FakeTimestamp(1_600_000_000_000);
+  const h = harness({ retrieve: () => trialingSubscription(), workspace: { ...UNSTAMPED_WORKSPACE, billingTrialUsedAt: EARLIER } });
+  return (async () => {
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_kept_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: trialingSubscription() }
+    });
+    const before = h.state();
+    const stale = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, checkoutEvent("evt_kept_stale", BASE_SEQ - 500)));
+    assert.strictEqual(stale.value.skipped, true);
+    assert.strictEqual(stale.value.billingTrialUsedAtStamped, undefined, "a stale checkout claimed to stamp a trial that was already spent");
+    assert.strictEqual(h.state(), before, "a stale checkout on a stamped workspace mutated something");
+    assert.strictEqual(h.workspace().billingTrialUsedAt.toMillis(), EARLIER.toMillis());
+
+    const current = await h.processStripeEvent(h.stripe, checkoutEvent("evt_kept_current", BASE_SEQ + 500));
+    assert.strictEqual(current.updated, true, `the current checkout was refused: ${JSON.stringify(current)}`);
+    assert.strictEqual(current.billingTrialUsedAtStamped, undefined);
+    assert.strictEqual(h.workspace().billingCheckoutSessionId, "cs_evt_kept_current", "a current checkout still records its session");
+    assert.strictEqual(h.workspace().billingTrialUsedAt.toMillis(), EARLIER.toMillis(), "a current checkout moved the date of an existing stamp");
+  })();
+});
+
+check("a checkout whose subscription shows no trial writes no stamp, stale or current", () => {
+  // The evidence is Stripe's record. An active subscription with no trial_end is
+  // a paid start, not a trial, however the event arrived.
+  const h = harness({ retrieve: () => dahliaSubscription({ status: "active", trial_end: null }), workspace: UNSTAMPED_WORKSPACE });
+  return (async () => {
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_paid_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: dahliaSubscription() }
+    });
+    const before = h.state();
+    const stale = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, checkoutEvent("evt_paid_stale", BASE_SEQ - 500)));
+    assert.strictEqual(stale.value.skipped, true);
+    assert.strictEqual(h.state(), before, "a stale checkout without a trial mutated persistent state");
+
+    const current = await h.processStripeEvent(h.stripe, checkoutEvent("evt_paid_current", BASE_SEQ + 500));
+    assert.strictEqual(current.updated, true);
+    assert.strictEqual(h.workspace().billingCheckoutSessionId, "cs_evt_paid_current");
+    assert.strictEqual(h.workspace().billingTrialUsedAt, undefined, "a trial was manufactured from a subscription that never had one");
+  })();
+});
+
+check("two concurrent deliveries of a stale trial checkout write the stamp once, and a replay writes nothing", () => {
+  // Stripe retries, and it retries concurrently. Two deliveries of the same
+  // checkout — different event ids, both stale — must leave one stamp with one
+  // date. The fake's transactions interleave and retry like Firestore's, so a
+  // read-then-write here would produce two writes and fail this check.
+  const h = harness({ retrieve: () => trialingSubscription(), workspace: UNSTAMPED_WORKSPACE });
+  return (async () => {
+    await h.processStripeEvent(h.stripe, {
+      id: "evt_conc_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: trialingSubscription() }
+    });
+    const writesBefore = h.writes.length;
+    const [first, second] = await captureWarningsAsync(() => Promise.all([
+      h.processStripeEvent(h.stripe, checkoutEvent("evt_conc_a", BASE_SEQ - 500)),
+      h.processStripeEvent(h.stripe, checkoutEvent("evt_conc_b", BASE_SEQ - 400))
+    ])).then((captured) => captured.value);
+    assert.strictEqual(first.skipped, true);
+    assert.strictEqual(second.skipped, true);
+    const stampWrites = h.writes.slice(writesBefore).filter((write) => write.path === WORKSPACE_DOC && write.fields.includes("billingTrialUsedAt"));
+    assert.strictEqual(stampWrites.length, 1, `the stamp was written ${stampWrites.length} times`);
+    assert.strictEqual([first, second].filter((result) => result.billingTrialUsedAtStamped === true).length, 1,
+      "exactly one of the two deliveries may claim the stamp");
+    const stamped = h.workspace().billingTrialUsedAt;
+    assert.ok(stamped instanceof FakeTimestamp);
+
+    // A third delivery of an event id already processed is refused by the dedupe
+    // before any handler runs, and the stamp keeps its date.
+    const replay = await h.processStripeEvent(h.stripe, checkoutEvent("evt_conc_a", BASE_SEQ - 500));
+    assert.deepStrictEqual(replay, { duplicate: true });
+    assert.strictEqual(h.workspace().billingTrialUsedAt.toMillis(), stamped.toMillis());
+  })();
+});
+
+check("a cancellation followed by a new checkout does not hand out a second free trial", () => {
+  // The leak end to end, through the real handlers. The trial is spent by a
+  // STALE checkout — the one path d0c7f431 missed — the subscription is then
+  // cancelled, which clears billingSubscriptionId (the guard's other arm), and
+  // the workspace opens a fresh checkout. With the stamp in place the session
+  // is created without trial_period_days. The control at the end removes the
+  // stamp and shows the same checkout asking Stripe for fourteen free days —
+  // which is what the guard reads, and what the leak would have allowed.
+  //
+  // The checkout handler builds its own Stripe client from the secret, so the
+  // SDK's session-create method is replaced on the resource prototype for the
+  // duration of this check and restored after; nothing leaves the process.
+  const Stripe = require("stripe");
+  const sessionsProto = Object.getPrototypeOf(new Stripe("sk_test_stub").checkout.sessions);
+  const originalCreate = sessionsProto.create;
+  const ENV = ["STRIPE_BILLING_ENABLED", "STRIPE_SECRET_KEY", "STRIPE_INTERNAL_TEST_BILLING_ENABLED", "STRIPE_INTERNAL_TEST_EMAILS", "STRIPE_PRICE_PRO_MONTHLY", "STRIPE_ALLOW_LIVE_BILLING"];
+  const savedEnv = Object.fromEntries(ENV.map((key) => [key, process.env[key]]));
+  const created = [];
+  return (async () => {
+    let canonical = trialingSubscription();
+    let h;
+    h = harness({
+      retrieve: () => canonical,
+      workspace: { ...UNSTAMPED_WORKSPACE, ownerUid: "owner_1" },
+      requireWorkspaceForBilling: async () => ({
+        uid: "owner_1", companyId: WORKSPACE,
+        companyRef: h.db.collection("companies").doc(WORKSPACE),
+        companyData: { ...h.workspace() }
+      })
+    });
+    try {
+      sessionsProto.create = async function create(payload) { created.push(payload); return { id: `cs_created_${created.length}`, url: "https://checkout.stripe.test/s" }; };
+      Object.assign(process.env, {
+        STRIPE_BILLING_ENABLED: "true", STRIPE_SECRET_KEY: "sk_test_stub",
+        STRIPE_INTERNAL_TEST_BILLING_ENABLED: "true", STRIPE_INTERNAL_TEST_EMAILS: "owner@example.test",
+        STRIPE_PRICE_PRO_MONTHLY: "price_test_pro"
+      });
+      delete process.env.STRIPE_ALLOW_LIVE_BILLING;
+      const request = { data: { itemKey: "pro_monthly" }, auth: { token: { email: "owner@example.test" } } };
+
+      // 1. The trial is spent by a stale checkout only.
+      await h.processStripeEvent(h.stripe, { id: "evt_resub_sub", type: "customer.subscription.updated", created: BASE_SEQ, data: { object: trialingSubscription() } });
+      const stale = await captureWarningsAsync(() => h.processStripeEvent(h.stripe, checkoutEvent("evt_resub_stale", BASE_SEQ - 500)));
+      assert.strictEqual(stale.value.billingTrialUsedAtStamped, true);
+
+      // 2. Cancellation: the plan falls back and billingSubscriptionId is cleared.
+      canonical = dahliaSubscription({ status: "canceled", trial_end: TRIAL_END });
+      const deleted = await h.processStripeEvent(h.stripe, { id: "evt_resub_deleted", type: "customer.subscription.deleted", created: BASE_SEQ + 500, data: { object: canonical } });
+      assert.strictEqual(deleted.updated, true, `the cancellation was refused: ${JSON.stringify(deleted)}`);
+      assert.strictEqual(h.workspace().billingPlan, "demo");
+      assert.strictEqual(h.workspace().billingSubscriptionId, "", "cancellation no longer clears billingSubscriptionId; the guard's second arm would mask this check");
+      assert.ok(h.workspace().billingTrialUsedAt instanceof FakeTimestamp, "the stamp did not survive the cancellation");
+
+      // 3. A new checkout: no second trial.
+      const response = await h.createStripeCheckoutSession(request);
+      assert.strictEqual(response.configured, true, `checkout refused: ${JSON.stringify(response)}`);
+      assert.strictEqual(created.length, 1);
+      assert.strictEqual(created[0].mode, "subscription");
+      assert.strictEqual(created[0].subscription_data.trial_period_days, undefined, "a second free trial was offered");
+      assert.strictEqual(created[0].payment_method_collection, undefined, "a card-free start was offered without a trial");
+
+      // 4. Control: with the stamp gone, the same checkout asks for fourteen free
+      //    days — the stamp is exactly what stands between a cancellation and a
+      //    second trial.
+      const doc = h.store.get(WORKSPACE_DOC);
+      delete doc.billingTrialUsedAt;
+      const leaked = await h.createStripeCheckoutSession(request);
+      assert.strictEqual(leaked.configured, true);
+      assert.strictEqual(created.length, 2);
+      assert.strictEqual(created[1].subscription_data.trial_period_days, 14, "the control did not reproduce the leak; the check proves nothing");
+    } finally {
+      sessionsProto.create = originalCreate;
+      for (const key of ENV) {
+        if (savedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = savedEnv[key];
+      }
+    }
+  })();
+});
+
 const SOURCE = fs.readFileSync(path.join(__dirname, "..", "..", "stripeBilling.js"), "utf8");
 
 // Comments are stripped WHOLE LINES ONLY. A naive /\/\/[^\n]*/ is not string
