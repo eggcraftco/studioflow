@@ -1,9 +1,9 @@
 # Case 75151719 — reply draft, 9 September 2026 (NOT SENT)
 
 Status: draft for the operator's review. Nothing has been sent. Facts below were read from Cloud Run,
-Cloud Logging and the Security Command Center v2 API between 19:30Z and 20:51Z on 9 September; the
-second execution was still inside its retry cycle at the last read (20:47:48Z) and no further test or
-poller has been started.
+Cloud Logging and the Security Command Center v2 API between 19:30Z and 21:05Z on 9 September; the
+second execution finished (failed) on its own at 20:57:45Z and no further test or poller has been
+started.
 
 Reply into the existing thread ("Google Cloud Support 75151719: Event Threat Detection and Cloud Run
 Threat Detection produce no findings for Google's documented test procedures on a project").
