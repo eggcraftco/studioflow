@@ -1,0 +1,37 @@
+=== 2026-09-10T11:46:32Z services
+function                         revision                           ready  runtimeSA                                sec  env  hash ingress    invokers
+beginEbayConnect                 beginebayconnect-00001-waj         True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+claimEbayConnectState            claimebayconnectstate-00001-run    True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+disconnectEbay                   disconnectebay-00001-dep           True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+ebayNotifications                ebaynotifications-00001-wuv        True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+ebayOAuthCallback                ebayoauthcallback-00001-bij        True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+getEbayConnections               getebayconnections-00001-gun       True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+previewEbayImport                previewebayimport-00001-vul        True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+reconcileEbayConnections         reconcileebayconnections-00001-xan True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:ebay-connector
+reconcileEbayConnectionsNightly  reconcileebayconnectionsnightly-00001-tiy True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:ebay-connector
+reconcileEbayDeletions           reconcileebaydeletions-00001-sah   True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:ebay-connector
+retryEbayImportFailures          retryebayimportfailures-00001-pep  True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+revealRestrictedCustomer         revealrestrictedcustomer-00001-vom True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+runEbayImport                    runebayimport-00001-tod            True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+syncEbayNow                      syncebaynow-00001-gun              True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+updateEbayConnectionSettings     updateebayconnectionsettings-00001-kat True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+verifyEbayConnection             verifyebayconnection-00001-buj     True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   648dc3f all        run.invoker:allUsers
+ebayEventWorker                  ebayeventworker-00001-cej          True   ebay-connector@eggcraft-studio.iam.gserv 6    ok   60f528e all        run.invoker:477037475099-compute,ebay-connector
+
+=== 2026-09-10T11:46:57Z scheduler jobs
+  firebase-schedule-reconcileEbayConnections-europe-west2 | every 15 minutes | Europe/London | ENABLED | oidc SA: ebay-connector@eggcraft-studio.iam.gserviceaccount.com | uri: https://europe-west2-eggcraft-studio.cloudfunctions.net/reconcileEbayConnections | lastAttempt: - | status: -1
+  firebase-schedule-reconcileEbayConnectionsNightly-europe-west2 | every day 02:40 | Europe/London | ENABLED | oidc SA: ebay-connector@eggcraft-studio.iam.gserviceaccount.com | uri: https://europe-west2-eggcraft-studio.cloudfunctions.net/reconcileEbayConnections | lastAttempt: - | status: -1
+  firebase-schedule-reconcileEbayDeletions-europe-west2 | every 10 minutes | Europe/London | ENABLED | oidc SA: ebay-connector@eggcraft-studio.iam.gserviceaccount.com | uri: https://europe-west2-eggcraft-studio.cloudfunctions.net/reconcileEbayDeletions | lastAttempt: - | status: -1
+
+=== 2026-09-10T11:46:59Z refusal probes (no credentials, no signature)
+  beginEbayConnect           POST {} no auth -> 401 {"error":{"message":"You must be signed in to read workspace billing limits.","status":"UNAUTHENTICATED"}}
+  getEbayConnections         POST {} no auth -> 401 {"error":{"message":"You must be signed in to read workspace billing limits.","status":"UNAUTHENTICATED"}}
+  revealRestrictedCustomer   POST {} no auth -> 401 {"error":{"message":"You must be signed in to read workspace billing limits.","status":"UNAUTHENTICATED"}}
+  syncEbayNow                POST {} no auth -> 401 {"error":{"message":"You must be signed in to read workspace billing limits.","status":"UNAUTHENTICATED"}}
+  ebayOAuthCallback          GET -> 405 {"ok":false}
+  ebayOAuthCallback          POST unsigned -> 401 {"ok":false}
+  ebayNotifications          GET (no challenge) -> 200 eBay notification endpoint
+  ebayNotifications          POST unsigned -> 401 {"ok":false,"error":"invalid_signature"}
+  reconcileEbayConnections   POST no token -> 403 <html><head><meta http-equiv="content-type" content="text/html;charset=utf-8"><title>403 Forbidden</title></head><b
+
+=== 2026-09-10T11:47:00Z logs from the ebay services since deploy start (severity>=WARNING) + sweep lines

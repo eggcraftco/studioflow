@@ -1,0 +1,84 @@
+--- /private/tmp/claude-501/-Users-gocmen-Developer-studioflow-app/d8da66a6-bfcd-49fb-8094-94f4223b908a/scratchpad/ebay/live-firestore.rules	2026-09-10 12:41:43
++++ firestore.rules	2026-09-10 11:49:56
+@@ -715,6 +715,14 @@
+       allow read, write: if false;
+     }
+ 
++    // The reveal rate-limit counters (companies/{cid}/revealCounters/{uid}). A
++    // member who could reset their own counter could read every buyer's address
++    // in one sitting. Server-only, and named in both wildcard deny-lists below
++    // for the same reason as restrictedCustomer.
++    match /companies/{companyId}/revealCounters/{document=**} {
++      allow read, write: if false;
++    }
++
+     // Stock locations and build recipes: same rule as the rest of inventory,
+     // server-written so a recipe cannot quietly change what a build consumes.
+     match /companies/{companyId}/inventoryLocations/{document=**} {
+@@ -919,6 +927,7 @@
+         && collectionId != 'bankAuditLog'
+         && collectionId != 'piiAccessLog'
+         && collectionId != 'restrictedCustomer'
++        && collectionId != 'revealCounters'
+         && collectionId != 'deviceTokens'
+         && collectionId != 'inventoryLocations'
+         && collectionId != 'inventoryRecipes'
+@@ -978,6 +987,7 @@
+         && collectionId != 'bankAuditLog'
+         && collectionId != 'piiAccessLog'
+         && collectionId != 'restrictedCustomer'
++        && collectionId != 'revealCounters'
+         && collectionId != 'deviceTokens'
+         && collectionId != 'inventoryLocations'
+         && collectionId != 'inventoryRecipes'
+@@ -1180,6 +1190,34 @@
+     match /squareConnectStates/{document=**} {
+       allow read, write: if false;
+     }
++    // eBay connector: seller OAuth credentials, connect states, the buyer index, the deletion ledger,
++    // the daily quota counter, the notification signing-key cache and the presented-code registry
++    // are server-only.
++    match /ebayConnections/{document=**} {
++      allow read, write: if false;
++    }
++    match /ebayConnectStates/{document=**} {
++      allow read, write: if false;
++    }
++    match /ebayBuyers/{document=**} {
++      allow read, write: if false;
++    }
++    match /ebayDeletionRequests/{document=**} {
++      allow read, write: if false;
++    }
++    match /ebayQuota/{document=**} {
++      allow read, write: if false;
++    }
++    match /ebayNotificationKeys/{document=**} {
++      allow read, write: if false;
++    }
++    // The presented-code registry (design §5.5). Written by the callback function
++    // alone: the document id is sha256hex of an eBay authorization code, and a
++    // client that could create one could pre-register a code it had observed and
++    // stop the genuine seller's landing from ever exchanging it.
++    match /ebayPresentedCodes/{document=**} {
++      allow read, write: if false;
++    }
+     // Accounting connector: OAuth state pool and the realm → workspace map are server-only.
+     match /accountingConnectStates/{document=**} {
+       allow read, write: if false;
+@@ -1246,6 +1284,15 @@
+       allow read, write: if false;
+     }
+ 
++    // What a scanner said about each uploaded file, and — while a file is
++    // still being withheld — the download token being held back from it. A
++    // client that could read this collection could read the token out of it
++    // and reach a file that has not been cleared, which is the whole thing the
++    // scan exists to prevent. Server-only, both directions.
++    match /fileScans/{document=**} {
++      allow read, write: if false;
++    }
++
+     // How far each retention pass has got. One timestamp per retention period,
+     // no personal data — but it decides which orders the sweep looks at, and
+     // anybody who could push it forward would stop buyer details ever being

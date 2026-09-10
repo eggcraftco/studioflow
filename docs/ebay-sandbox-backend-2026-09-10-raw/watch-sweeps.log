@@ -1,0 +1,39 @@
+--- 2026-09-10T11:49:49Z poll 1
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T11:55:00Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   (log rows: 1 )
+--- 2026-09-10T11:50:52Z poll 2
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T11:55:00Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   (log rows: 1 )
+--- 2026-09-10T11:51:56Z poll 3
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T11:55:00Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   (log rows: 1 )
+--- 2026-09-10T11:53:00Z poll 4
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T11:55:00Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   (log rows: 1 )
+--- 2026-09-10T11:54:03Z poll 5
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T11:55:00Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   (log rows: 1 )
+--- 2026-09-10T11:55:07Z poll 6
+  job reconcileEbayConnections | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-10T12:00:00Z
+  job reconcileEbayConnectionsNightly | lastAttempt: - | status.code: -1 | scheduleTime: 2026-09-11T01:40:00Z
+  job reconcileEbayDeletions | lastAttempt: 2026-09-10T11:55:01.766059Z | status.code: (none = OK) | scheduleTime: 2026-09-10T12:05:03.791382Z
+   2026-09-10T11:47:00.746063Z reconcileebayconnections WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header. Empt
+   2026-09-10T11:55:01.787963Z reconcileebaydeletions INFO HTTP 200 
+   (log rows: 2 )
+=== 2026-09-10T11:55:10Z both frequent sweeps have been invoked at least once; stopping the watch
+=== 2026-09-10T11:55:10Z watch done

@@ -1,0 +1,66 @@
+[
+  {
+    "insertId": "6aa29bc0000478b6d055c65a",
+    "labels": {
+      "deployment-scheduled": "true",
+      "execution_id": "vh6djyp7kmle",
+      "firebase-functions-hash": "648dc3f53f51f6cdef0956116666fff27cd2fe04",
+      "goog-managed-by": "cloudfunctions",
+      "instanceId": "00a41e8c1d9431aea9e2ba4ef97450484edf1d7598d409656cc24b49df989babaa08bae2023f745902acaeaa6b349e298b743eda85728074106f09c440260b8b1e218b14e1ce018a9232c95628cc",
+      "run.googleapis.com/base_image_versions": "us-docker.pkg.dev/serverless-runtimes/google-22-full/runtimes/nodejs22:nodejs22_20260819_22_23_2_RC00"
+    },
+    "logName": "projects/eggcraft-studio/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-10T12:00:00.299938055Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "reconcileebayconnections",
+        "location": "europe-west2",
+        "project_id": "eggcraft-studio",
+        "revision_name": "reconcileebayconnections-00001-xan",
+        "service_name": "reconcileebayconnections"
+      },
+      "type": "cloud_run_revision"
+    },
+    "spanId": "18225614547136724749",
+    "textPayload": "ebay reconcile sweep: connector off\n",
+    "timestamp": "2026-09-10T12:00:00.293046Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.029810162s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.187.141.228",
+      "requestMethod": "POST",
+      "requestSize": "1373",
+      "requestUrl": "https://europe-west2-eggcraft-studio.cloudfunctions.net/reconcileEbayConnections",
+      "responseSize": "97",
+      "serverIp": "216.239.36.54",
+      "status": 200,
+      "userAgent": "Google-Cloud-Scheduler"
+    },
+    "insertId": "6aa29bc00004b29722aaa6ff",
+    "labels": {
+      "deployment-scheduled": "true",
+      "firebase-functions-hash": "648dc3f53f51f6cdef0956116666fff27cd2fe04",
+      "goog-managed-by": "cloudfunctions",
+      "instanceId": "00a41e8c1d9431aea9e2ba4ef97450484edf1d7598d409656cc24b49df989babaa08bae2023f745902acaeaa6b349e298b743eda85728074106f09c440260b8b1e218b14e1ce018a9232c95628cc"
+    },
+    "logName": "projects/eggcraft-studio/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-09-10T12:00:00.314979064Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "reconcileebayconnections",
+        "location": "europe-west2",
+        "project_id": "eggcraft-studio",
+        "revision_name": "reconcileebayconnections-00001-xan",
+        "service_name": "reconcileebayconnections"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "fcee63ddff46bf0d",
+    "timestamp": "2026-09-10T12:00:00.254930Z",
+    "trace": "projects/eggcraft-studio/traces/c78531b777c9d08fc217c5dcd8de0968",
+    "traceSampled": true
+  }
+]
