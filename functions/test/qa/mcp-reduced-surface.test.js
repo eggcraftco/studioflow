@@ -272,13 +272,18 @@ check("render.js branches on names it can never be handed", () => {
  * two in step, so reading the artefact tests the surface and still fails on an
  * unbuilt edit.
  */
-function comingBullets(marker) {
+function chapterText() {
   const corpus = require("../../assistant/guideCorpus.json").sections || [];
   const chapter = corpus.find((section) => section.id === "chatgpt-app");
   assert.ok(chapter, "the guide has no chatgpt-app chapter any more");
   // `search` carries the EN text followed by the TR one, so both languages'
   // blocks are sliceable out of the same field.
-  const text = String(chapter.search || chapter.text || "");
+  return String(chapter.search || chapter.text || "");
+}
+
+/** The bullets directly under one heading of the chapter, in one language. */
+function bulletsUnder(marker) {
+  const text = chapterText();
   // The heading also appears in the chapter's " · "-joined heading list, so
   // match it as its own LINE, which is where the bullets follow it.
   const heading = `\n${marker}\n`;
@@ -294,28 +299,27 @@ function comingBullets(marker) {
   return bullets.join("\n");
 }
 
-check("the guide promises only capabilities that have a registry row", () => {
-  // The fifth door, and the one that reaches a paying user. The reduction did
-  // not touch studioflow-web/lib/publicSite/guide.ts: on 7 September 2026 its
-  // ChatGPT chapter still carried four "coming in the next version" bullets,
-  // three of them entirely describing capabilities removed on 6 September and
-  // the fourth promising a stock overview and valuation that also came out. It
-  // compiles into functions/assistant/guideCorpus.json, which is what the
-  // in-app assistant answers from, and two places in
-  // docs/mcp-submission-1.2.0.md told the operator to publish those bullets on
-  // flip day. A bot that offers a tool the app does not publish sends the
-  // reader somewhere that is not there — the guide rule, and the shape of the
-  // 1.1.1 rejection.
+check("the guide promises only capabilities that have a registry row, each under the heading its flag state earns", () => {
+  // The fifth door, and the one that reaches a paying user. The guide compiles
+  // into functions/assistant/guideCorpus.json, which is what the in-app
+  // assistant answers from. A bot that offers a tool the app does not publish
+  // sends the reader somewhere that is not there — the guide rule, and the
+  // shape of the 1.1.1 rejection.
   //
-  // Both halves of this check are keyed on the registry. What is hand-written
-  // is the phrase per name, for the same reason REMOVED itself is hand-written
-  // and can only be: a capability that has no registry row cannot be enumerated
-  // from the registry. What CANNOT drift is the set of names — every REMOVED
-  // name must have a phrase, and every flag-gated published capability must
-  // have a marker the guide carries.
-  const EN = "Coming in the next version of the app";
-  const TR = "Uygulamanın sonraki sürümünde geliyor";
-
+  // Three sets, all keyed on the registry so none can fall behind it:
+  //   * REMOVED capabilities (no registry row) may be promised NOWHERE in the
+  //     chapter, in either language;
+  //   * capabilities the 1.2.0 release publishes — RELEASE_FLAGS, the
+  //     operator's decision of 10 September 2026: the orchestrator flag alone —
+  //     must be described under "What you can ask";
+  //   * capabilities that exist behind a flag the release does not flip must
+  //     be described under "Coming in the next version of the app", with a
+  //     caveat bullet that counts them.
+  // What is hand-written is the phrase per name: a capability that has no
+  // registry row cannot be enumerated from the registry.
+  const RELEASE_FLAGS = Object.freeze({ orchestrator: true });
+  const ASK = { en: "What you can ask", tr: "Neler sorabilirsiniz" };
+  const COMING = { en: "Coming in the next version of the app", tr: "Uygulamanın sonraki sürümünde geliyor" };
   /** The promise that identifies each removed capability, in both languages. */
   const REMOVED_PROMISES = Object.freeze({
     get_business_attention_summary: { en: /needs attention today/i, tr: /nelere bakılmalı/i },
@@ -327,48 +331,58 @@ check("the guide promises only capabilities that have a registry row", () => {
     get_accounting_sync_status: { en: /Pandle|Xero|QuickBooks/i, tr: /Pandle|Xero|QuickBooks/i },
     get_banking_attention_summary: { en: /uncategorised bank lines/i, tr: /kategorisiz banka satırları/i }
   });
-
-  /** And what the guide must say about each capability the flags DO publish. */
-  const PUBLISHED_MARKERS = Object.freeze({
+  /** What the guide must say about each capability the flags publish. */
+  const MARKERS = Object.freeze({
     search_commerce_orders: { en: /find an order from any channel/i, tr: /herhangi bir kanaldaki siparişi bulma/i },
     search_inventory: { en: /search your stock by name/i, tr: /stoğunuzu ad, SKU/i },
     create_inventory_item: { en: /add an item from a photo/i, tr: /fotoğraftan ürün ekleyebilirsiniz/i }
   });
-
-  // Neither table may fall behind the registry.
+  // None of the three tables may fall behind the registry.
   assert.deepStrictEqual(Object.keys(REMOVED_PROMISES).sort(), [...REMOVED_NAMES].sort(),
     "every removed capability needs the promise that identifies it, or this check stops covering it");
   const flagsOff = new Set(registry.publishedNames({}));
-  const gated = registry.publishedNames({ inventory: true, orchestrator: true }).filter((name) => !flagsOff.has(name));
-  assert.deepStrictEqual(Object.keys(PUBLISHED_MARKERS).sort(), [...gated].sort(),
-    "the flags publish a capability the guide has no marker for: give it an EN+TR bullet and add it here (the guide rule)");
+  const releaseNames = new Set(registry.publishedNames(RELEASE_FLAGS));
+  const released = [...releaseNames].filter((name) => !flagsOff.has(name)).sort();
+  const stillGated = registry.publishedNames({ inventory: true, orchestrator: true, emailReceipts: true })
+    .filter((name) => !releaseNames.has(name)).sort();
+  assert.deepStrictEqual([...released, ...stillGated].sort(), Object.keys(MARKERS).sort(),
+    "a flag publishes a capability the guide has no marker for: give it an EN+TR bullet and add it here (the guide rule)");
+  assert.ok(released.length > 0 && stillGated.length > 0,
+    "this check expects both a released and a still-gated capability; if the release changed, revisit the headings it reads");
 
-  for (const [language, marker] of [["EN", EN], ["TR", TR]]) {
-    const block = comingBullets(marker);
-    const key = language.toLowerCase();
-
+  const whole = chapterText();
+  for (const key of ["en", "tr"]) {
+    const language = key.toUpperCase();
     for (const [name, promise] of Object.entries(REMOVED_PROMISES)) {
-      assert.ok(
-        !promise[key].test(block),
-        `the ${language} guide promises ${name} ("${(block.match(promise[key]) || [""])[0]}"), and it has no registry row. ` +
-        `${REMOVED[name]}. A bot that offers a tool the app does not publish sends the reader somewhere that is not there.`
-      );
+      assert.ok(!promise[key].test(whole),
+        `the ${language} guide promises ${name} ("${(whole.match(promise[key]) || [""])[0]}"), and it has no registry row. ` +
+        `${REMOVED[name]}. A bot that offers a tool the app does not publish sends the reader somewhere that is not there.`);
     }
-    for (const [name, mark] of Object.entries(PUBLISHED_MARKERS)) {
-      assert.ok(
-        mark[key].test(block),
-        `the ${language} guide no longer describes ${name}, which the flags publish. ` +
-        `If the bullet was reworded, update its marker here; if the capability left the release, it leaves the registry too.`
-      );
+    const ask = bulletsUnder(ASK[key]);
+    const coming = bulletsUnder(COMING[key]);
+    for (const name of released) {
+      assert.ok(MARKERS[name][key].test(ask),
+        `the ${language} guide does not describe ${name} under "${ASK[key]}", and the release publishes it. ` +
+        "If the bullet was reworded, update its marker here; if the capability left the release, it leaves the registry too.");
+      assert.ok(!MARKERS[name][key].test(coming),
+        `the ${language} guide still lists ${name} as coming, and the release publishes it`);
     }
-    // A block that says "four" while carrying two is how the flip-day
+    for (const name of stillGated) {
+      assert.ok(MARKERS[name][key].test(coming),
+        `the ${language} guide does not list ${name} under "${COMING[key]}"; its flag is not part of the release, so it is not in "${ASK[key]}"`);
+      assert.ok(!MARKERS[name][key].test(ask),
+        `the ${language} guide offers ${name} under "${ASK[key]}", and the release does not publish it`);
+    }
+    // A caveat that says "two" while carrying one is how the flip-day
     // instruction went wrong in the first place.
-    const bulletCount = block.split("\n").filter((line) => line.startsWith("- ")).length - 1;
-    const stated = /\bThe (two|three|four|five|six) below\b/i.exec(block) || /\bAşağıdaki (iki|üç|dört|beş|altı) madde\b/i.exec(block);
+    const bulletCount = coming.split("\n").filter((line) => line.startsWith("- ")).length - 1;
+    const stated = /\bThe (one|two|three|four|five|six) below\b/i.exec(coming) || /\bAşağıdaki (tek|iki|üç|dört|beş|altı) madde\b/i.exec(coming);
     assert.ok(stated, `the ${language} caveat bullet must say how many capabilities are described below it`);
-    const WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, iki: 2, "üç": 3, "dört": 4, "beş": 5, altı: 6 };
+    const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, tek: 1, iki: 2, "üç": 3, "dört": 4, "beş": 5, altı: 6 };
     assert.strictEqual(WORDS[stated[1].toLowerCase()], bulletCount,
       `the ${language} caveat says "${stated[1]}" and there are ${bulletCount} capability bullets under it`);
+    assert.strictEqual(bulletCount, stillGated.length,
+      `the ${language} "coming" block describes ${bulletCount} capabilities; the flags the release does not flip hold ${stillGated.length}`);
   }
 });
 
@@ -547,8 +561,10 @@ check("the guide says the cross-channel search reports no amounts, in both langu
     en: /(currency the order was taken in|amounts? stay in the currency)/i,
     tr: /(para biriminde kalır|siparişin alındığı para biriminde)/i
   };
-  for (const [language, marker] of [["EN", "Coming in the next version of the app"], ["TR", "Uygulamanın sonraki sürümünde geliyor"]]) {
-    const block = comingBullets(marker);
+  // Read from "What you can ask": the 1.2.0 release publishes the search, so
+  // that is where the guide describes it (the check above pins the heading).
+  for (const [language, marker] of [["EN", "What you can ask"], ["TR", "Neler sorabilirsiniz"]]) {
+    const block = bulletsUnder(marker);
     const key = language.toLowerCase();
     for (const says of SAYS_NONE[key]) {
       assert.ok(says.test(block),

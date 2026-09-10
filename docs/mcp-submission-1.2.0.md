@@ -202,7 +202,7 @@ Nothing changes until a flag is set to `"1"` in the deployed function's environm
 | none (today) | **19** | — |
 | `NIVADESK_MCP_EMAIL_RECEIPTS` | 19 | `attach_bank_receipt` gains `receiptUrl` / `emailReceipt` inputs and two description sentences |
 | `NIVADESK_MCP_INVENTORY` | **21** | adds `search_inventory`, `create_inventory_item`; one sentence appended to `attach_bank_receipt`'s description |
-| `NIVADESK_MCP_ORCHESTRATOR` | **21** | adds the two read tools the reduction kept — `search_inventory` (with the filters and the freshness block) and `search_commerce_orders`; **three annotation corrections** across two tools (§3.1); two extra `initialize.instructions` lines |
+| `NIVADESK_MCP_ORCHESTRATOR` | **21** | adds the two read tools the reduction kept — `search_inventory` (with the filters and the freshness block) and `search_commerce_orders`; **three annotation corrections** across two tools (§3.1); two extra `initialize.instructions` lines; one sentence appended to the descriptions of `create_order`, `update_order_status` (the customer message) and `attach_bank_receipt` (OCR and file replacement) — the flag may append to a reviewed description and never rewrite it, pinned by `mcp-tools-list-snapshot` |
 | inventory + orchestrator | **22** | all of the above, and **not 23**: `search_inventory` is the one tool both flags publish, so it is listed once (§5.1) |
 
 ### 3.1 The three annotation corrections — the headline of the release notes, not a footnote
@@ -335,13 +335,15 @@ still answers it, because everything new on this branch stays behind `NIVADESK_M
 Pinned by `test/qa/mcp-one-inventory-search.test.js`, which fails if a second inventory search ever
 appears in a published listing in **any** flag state.
 
-### 5.2 `update_order_status` idempotency (blocking)
+### 5.2 `update_order_status` idempotency — DECIDED (operator, 10 September 2026)
 
-Ship `nvMcpStatusNoOpGuard` — a repeat of the status the order already has returns success without
-writing, without a history entry and without a notification — and `idempotentHint` stays `true` as it is
-on the wire today. Without the guard the hint goes out as `false`, which is honest but is a third wire
-change to explain. The registry entry already names the guard token; adding it without flipping the hint
-fails the build.
+**Ship `idempotentHint: false`, no no-op guard in this submission.** The hint says what the handler does:
+a repeat with the same status appends a second history entry. A guard — a repeat of the status the order
+already has returns success without writing, without a history entry and without a notification — would
+let the hint go back to `true` honestly, but it is a behaviour change to a frozen tool, and this
+submission changes no handler. The registry no longer declares a `pendingGuard` for the tool; if a later
+release adds the guard, the hint flips in the same commit and the guard-token rule in `assertRegistry` is
+re-armed then. The third wire change is therefore explained in §7 rather than avoided.
 
 ### 5.3 `attach_bank_receipt` URL fetch (blocking if `NIVADESK_MCP_EMAIL_RECEIPTS` is flipped)
 
@@ -519,11 +521,15 @@ Recommendation: keep the carve-out, disclosed on each tool. The operator signs t
 one annotation position a reviewer could reasonably disagree with — and what is being signed is nine tools,
 not the seven this section described until 7 September 2026.
 
-### 5.8 Flip order
+### 5.8 Flip order — DECIDED (operator, 10 September 2026)
 
-Recommended: all three flags together, one submission, so the reviewer sees the finished surface once —
-and, more importantly, so the corrected annotations reach the wire. Inventory-and-email first would leave
-two known-wrong `openWorldHint` values live for longer.
+**`NIVADESK_MCP_ORCHESTRATOR=1` alone. `NIVADESK_MCP_INVENTORY` and `NIVADESK_MCP_EMAIL_RECEIPTS` stay
+unset.** The wire the reviewer scans is then exactly what §7 describes: 21 tools — the 19 reviewed ones
+plus two read-only searches — the three annotation corrections, and the three appended description
+sentences (§3). `create_inventory_item` (a write tool, and the one advertising a read scope) and the
+email-receipt inputs are not in this release, so nothing unnamed reaches the reviewer. The earlier
+recommendation — all three flags at once — is withdrawn: it would have put a write tool the release notes
+do not name in front of the reviewer, and it needed the scope correction of the backlog's §6 item 1 first.
 
 ---
 
@@ -531,7 +537,9 @@ two known-wrong `openWorldHint` values live for longer.
 
 Nothing here runs from this worktree; it is the order the steps have to happen in.
 
-1. Close §5.1, §5.2, §5.7 and §5.8, and decide the two bank tools' access-log flags (§5.5). The rest can
+1. ~~Close §5.1, §5.2, §5.7 and §5.8, and decide the two bank tools' access-log flags (§5.5).~~ Done, 10
+   September 2026: §5.1 closed earlier; §5.2 = `false`, no guard; §5.7 signed as the nine-tool carve-out;
+   §5.8 = orchestrator flag alone; the two bank tools file their row behind that flag (§5.5). The rest can
    follow the submission if it is written down; those change what the reviewer sees or what is recorded.
 2. Merge the branch. The listing does not move: the flags are off.
 3. **Deploy the web connect page** (§5.4). It is the only web change on this branch and the flag flip is
@@ -539,9 +547,16 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
    which overrides the server's own default and mints exactly the narrow token that flip-day then
    refuses. Before or with step 4, never after. (Deploying it EARLY is harmless: with the flag off the
    server's own default is the same two scopes.)
-4. Set the chosen flags on `chatgptMcp` and deploy it (functions only, from a clean main checkout —
-   remember the branch-divergence rule: a blind `firebase deploy --only functions` from a save branch has
-   pushed stale functions before).
+4. Set `NIVADESK_MCP_ORCHESTRATOR=1` in `functions/.env` of the main checkout and deploy **the seven
+   functions that read the flag, by name, in one command** — not `chatgptMcp` alone. Traced on 10 September
+   2026 (`docs/openai-resubmission-package-2026-09-10.md` §5): `chatgptMcp` (listing, instructions,
+   dispatcher, scope enforcement), `chatgptWorkspaceAction` (the same dispatcher over REST),
+   `chatgptOAuthAuthorize`, `chatgptOAuthApprove`, `chatgptOAuthRegister`, `chatgptOAuthAuthorizationServer`,
+   `chatgptOAuthProtectedResource` (the default grant the flag widens, `nvOAuthMintDefaultScope` /
+   `nvOAuthDefaultScope`). A function left on the old revision keeps the flag off: an authorize endpoint
+   minting the 1.1.1 two-scope grant beside an MCP endpoint enforcing scopes would refuse every new
+   connection on the finance and notes tools. Never a blind `firebase deploy --only functions` — the
+   branch-divergence rule — and run the source/ancestor pre-check in `docs/audit-deploy-checklist.md` first.
 5. Record the deployed listing as `test/fixtures/mcp/tools-list.1.2.0.json` from the **deployed** server,
    and diff it against the registry projection for those exact flags. The current fixture has no
    all-three-flags state; generate the one that matches what was deployed.
@@ -606,8 +621,17 @@ Nothing here runs from this worktree; it is the order the steps have to happen i
 > of stating a sync time it does not have. **Neither reports any monetary value**: no order total, nothing paid or outstanding, no
 > refund, no tax, no payout and no currency. The order search reports whether an order is paid as a
 > status word, never as an amount; the workspace's money stays with the finance tools that were already
-> in the app, behind the permissions they already have. Neither writes anything, calls a shop,
-> marketplace or bank, or modifies an external provider.
+> in the app, behind the permissions they already have. Neither changes any workspace record, calls a
+> shop, marketplace or bank, or modifies an external provider; the order search files the one access-log
+> row disclosed under the read-only definition above, because it can show the assistant customer names.
 >
-> **Unchanged:** the OAuth and discovery surface, the scope names, the workspace and role model, and the
-> behaviour of the tools from 1.1.1.
+> **Also on the wire in this version:** three tool descriptions gain one sentence each, saying on the
+> tool what its justification says — `create_order` and `update_order_status` that the workspace's own
+> notification rules can e-mail or SMS the customer, `attach_bank_receipt` that image receipts are read
+> with Google Vision OCR and that attaching to a transaction that already has a receipt replaces it and
+> deletes the previous file. And two read tools that were already in the app, `get_bank_spending_summary`
+> and `search_bank_transactions`, now record the same access-log row as the other reads when they show the
+> assistant a counterparty name — the disclosed exception, applied consistently.
+>
+> **Unchanged:** the OAuth and discovery surface, the scope names, the workspace and role model, and what
+> every tool from 1.1.1 does when called: no handler changed in this version.

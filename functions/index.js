@@ -26375,6 +26375,21 @@ const NV_MCP_FLAGS = {
   inventory: NV_MCP_INVENTORY,
   orchestrator: NV_MCP_ORCHESTRATOR
 };
+// Two sentences the model reads in the tool descriptions, behind the same flag
+// as the annotation corrections they belong to, because the reviewed listing
+// must not move under a merge. They say on the tool what the registry's
+// openWorldHint / destructiveHint justifications say about it: a create or a
+// status change can put a message in the customer's inbox through the
+// workspace's own notification rules (initialize.instructions says so too,
+// flag-on), and a receipt is OCR'd by a third party and replaces the file a
+// transaction already carried. mcp-tools-list-snapshot.test.js pins that the
+// flag appends exactly these and changes nothing else on the reviewed tools.
+const NV_MCP_CUSTOMER_MESSAGE_NOTE = NV_MCP_ORCHESTRATOR
+  ? " The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it."
+  : "";
+const NV_MCP_RECEIPT_EFFECTS_NOTE = NV_MCP_ORCHESTRATOR
+  ? " Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted."
+  : "";
 
 /* ------------------------------------------------------------------ *
  * The Niva Orchestrator, and the thin adapters that put it on MCP.
@@ -26506,7 +26521,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "create_order",
       title: "Create order",
-      description: "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
+      description: "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order." + NV_MCP_CUSTOMER_MESSAGE_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26654,7 +26669,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "update_order_status",
       title: "Update order status",
-      description: "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
+      description: "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order." + NV_MCP_CUSTOMER_MESSAGE_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26974,7 +26989,7 @@ function nvMcpOrderToolSchemas() {
       title: "Attach receipt to a bank transaction",
       description: (NV_MCP_EMAIL_RECEIPTS
         ? "Attach an invoice/receipt to the matching bank transaction in NivaDesk. The document can come from the chat (`receipt`), from a link you found for the user — including an attachment in their email or a hosted invoice page (`receiptUrl`) — or, when the invoice is only in an email body, from the message itself (`emailReceipt`). When the user asks to file the invoices sitting in their mail, read each one, then call this tool per invoice; NivaDesk matches it to the bank transaction by amount and date."
-        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + (NV_MCP_INVENTORY ? " If the photo shows a physical item rather than a document, use create_inventory_item instead." : "") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : ""),
+        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + (NV_MCP_INVENTORY ? " If the photo shows a physical item rather than a document, use create_inventory_item instead." : "") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : "") + NV_MCP_RECEIPT_EFFECTS_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,

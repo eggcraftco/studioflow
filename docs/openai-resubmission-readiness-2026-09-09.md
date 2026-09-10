@@ -1,5 +1,11 @@
 # OpenAI Resubmission Readiness Report — NivaDesk for ChatGPT
 
+> **10 September 2026:** decisions A–C taken by the operator (A: orchestrator flag alone, no inventory write
+> tool; B: `update_order_status` `idempotentHint: false`, no guard; C: the nine-tool access-log carve-out
+> kept and disclosed on each tool) and the open metadata items below closed on this branch —
+> `docs/openai-resubmission-package-2026-09-10.md` is the resulting submission package. This report is kept as
+> written; §7's "none of these is made yet" and §8's "not today" describe 9 September.
+
 Date: 9 September 2026. Branch `openai-resubmission` (worktree `/Users/gocmen/Developer/studioflow-openai-review`),
 cut from `mcp-orchestration` at `c61057b1`, the commit the final gate passed on. Nothing in this branch is
 deployed, no flag is set, and nothing has been submitted: the last submission is the operator's separate

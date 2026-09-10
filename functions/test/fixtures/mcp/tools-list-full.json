@@ -5051,7 +5051,7 @@
         {
           "name": "create_order",
           "title": "Create order",
-          "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
+          "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -5298,7 +5298,7 @@
         {
           "name": "update_order_status",
           "title": "Update order status",
-          "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
+          "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -6110,7 +6110,7 @@
         {
           "name": "attach_bank_receipt",
           "title": "Attach receipt to a bank transaction",
-          "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId.",
+          "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId. Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -6392,7 +6392,7 @@
         {
           "name": "create_order",
           "title": "Create order",
-          "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
+          "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -6639,7 +6639,7 @@
         {
           "name": "update_order_status",
           "title": "Update order status",
-          "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
+          "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -7451,7 +7451,7 @@
         {
           "name": "attach_bank_receipt",
           "title": "Attach receipt to a bank transaction",
-          "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. If the photo shows a physical item rather than a document, use create_inventory_item instead. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId.",
+          "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. If the photo shows a physical item rather than a document, use create_inventory_item instead. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId. Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted.",
           "inputSchema": {
             "type": "object",
             "additionalProperties": false,

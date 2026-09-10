@@ -64,12 +64,25 @@ const PRODUCTION = {
 const CANDIDATE = {
   commit: null,
   file: "tools-list-candidate-flags-off.json",
-  label: "mcp-orchestration working tree, all MCP flags unset"
+  label: "openai-resubmission working tree, all MCP flags unset"
+};
+/**
+ * The same tree with the 1.2.0 release flag set (operator decision, 10
+ * September 2026: NIVADESK_MCP_ORCHESTRATOR alone). This is the listing the
+ * reviewer's "Scan Tools" will read after the flag-on deploy; it is recorded
+ * here so the platform form can be checked against it value by value, and it
+ * takes no part in the flags-off parity verdict below.
+ */
+const CANDIDATE_RELEASE = {
+  commit: null,
+  file: "tools-list-candidate-orchestrator-on.json",
+  label: "openai-resubmission working tree, NIVADESK_MCP_ORCHESTRATOR=1 (the 1.2.0 release flag set)",
+  flags: { NIVADESK_MCP_ORCHESTRATOR: "1" }
 };
 
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
-function capture(commit) {
+function capture(commit, flags = {}) {
   const fromWorkingTree = commit === null;
   const scratch = fromWorkingTree ? null : fs.mkdtempSync(path.join(os.tmpdir(), `nv-parity-${commit}-`));
   if (!fromWorkingTree) {
@@ -98,6 +111,7 @@ function capture(commit) {
 
   const driver = `
     for (const k of Object.keys(process.env)) if (/MCP/.test(k)) delete process.env[k];
+    Object.assign(process.env, ${JSON.stringify(flags)});
     const api = require(${JSON.stringify(indexPath)});
     process.stdout.write("<<<NVJSON>>>" + JSON.stringify(api._nvMcpToolsWithSecuritySchemes()) + "<<<END>>>");
   `;
@@ -122,8 +136,8 @@ function capture(commit) {
 let failed = false;
 const results = {};
 
-for (const target of [PRODUCTION, CANDIDATE]) {
-  const captured = capture(target.commit);
+for (const target of [PRODUCTION, CANDIDATE, CANDIDATE_RELEASE]) {
+  const captured = capture(target.commit, target.flags || {});
   const fromWorkingTree = target.commit === null;
   // The SHA the evidence was taken at, never the word "HEAD": a label that says
   // HEAD is true on the day it is written and silently false afterwards.
@@ -131,7 +145,9 @@ for (const target of [PRODUCTION, CANDIDATE]) {
   const dirty = git("status", "--porcelain", "--", "functions").length > 0;
   const snapshot = {
     meta: {
-      what: "MCP tools/list, every MCP feature flag UNSET",
+      what: target.flags && Object.keys(target.flags).length
+        ? `MCP tools/list with ${Object.entries(target.flags).map(([k, v]) => `${k}=${v}`).join(", ")} and every other MCP flag UNSET`
+        : "MCP tools/list, every MCP feature flag UNSET",
       source: target.label,
       commit: fromWorkingTree ? head : git("rev-parse", target.commit),
       ...(fromWorkingTree ? { capturedFrom: "working tree", functionsTreeDirtyAtCapture: dirty } : {}),

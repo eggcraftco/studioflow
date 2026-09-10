@@ -1897,11 +1897,11 @@ named explicitly (`available`, `partiallyReserved`, `reserved`, `incoming`, `use
    cases OpenAI could not see (`update_*` idempotency and `attach_bank_receipt` retry) are decided by the
    emulator behaviour tests in §5.4; and one hint we previously shipped as `false` was wrong, which we
    found by tracing the tool's effect rather than its handler."
-2. **Runtime behaviour corrections**, each with a parity test: the `update_order_status` / `update_note` /
-   `pin_note` / `archive_note` no-op guard (§1.4.8) so `idempotentHint:true` is true under the strict
-   definition; the `update_order_status` status vocabulary gate (§1.4.9); the URL fetch guard (§1.4.10);
-   OAuth scope enforcement per tool, which also corrects `create_inventory_item` from `orders.read` to
-   `orders.write` (§1.4.4).
+2. **Runtime behaviour corrections** — PROPOSED, and NOT in 1.2.0 (operator, 10 September 2026): the
+   `update_order_status` / `update_note` / `pin_note` / `archive_note` no-op guard (§1.4.8) is not shipped, so
+   `update_order_status` goes out as `idempotentHint:false`; the status vocabulary gate (§1.4.9) and the URL
+   fetch guard (§1.4.10) are not in this release; and the wire KEEPS `create_inventory_item` at `orders.read`
+   — the tool is unpublished in 1.2.0, and its scope is corrected in the release that publishes it (§1.4.4).
 3. **Audit and access-log corrections**: `ACCESS_SOURCES` gains `rest` and `whatsapp`,
    `chatgptWorkspaceAction` stops stamping its REST reads as `mcp`, and the orchestrator audit record gets
    a named collection, retention and rules entry (§2.4). `MCP_ACTIONS_READING_PII` has already been
@@ -1919,7 +1919,7 @@ named explicitly (`available`, `partiallyReserved`, `reserved`, `incoming`, `use
    `NIVADESK_MCP_ORCHESTRATOR=1` (2 tools: `search_inventory`, `search_commerce_orders`, plus the
    discovery and annotation changes). `search_inventory` is the one tool both flags publish, so all
    three on is **22** tools rather than 23. The list OpenAI reviews is whichever projection was
-   deployed, and `mcp-tools-report.js --compare` proves it. Recommended: all three on, one submission,
+   deployed, and `mcp-tools-report.js --compare` proves it. Decided 10 September 2026: the orchestrator flag alone (submission doc §5.8);
    so the reviewer sees the finished surface once — and, more importantly, so the corrected annotations
    are what they review.
 7. **Test cases**: the five 1.1.1 cases re-run on the review account (customer exactly "OpenAI Review Test

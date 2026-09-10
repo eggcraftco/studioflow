@@ -1177,36 +1177,28 @@ const TREE_EN: GuideNode[] = [
             "Orders: find orders by customer, reference, design name or status; open one; add a note; change its status or design status; create a new order. Workflow-only members see only the orders assigned to them, and money fields are hidden from roles without the Financial permission.",
             "Notes: create, search, open, append to, edit, pin and archive your own personal notes. Team notes are not changed from ChatGPT.",
             "Finance and dashboard: an order's financials, the dashboard summary, the financial overview and extra spending for a month, year or date range — on the Starter plan in the basic shape, on Pro and Team with profit and remaining balances.",
-            "Banking: monthly spending by category and merchant, recurring costs, search of bank transactions, and receipts — send a receipt or invoice photo and NivaDesk matches it to the bank line; if several lines could fit it asks which; if the payment has not arrived yet the receipt waits under Banking ▸ Receipts and is matched when it does. Attaching receipts is for the workspace owner."
+            "Banking: monthly spending by category and merchant, recurring costs, search of bank transactions, and receipts — send a receipt or invoice photo and NivaDesk matches it to the bank line; if several lines could fit it asks which; if the payment has not arrived yet the receipt waits under Banking ▸ Receipts and is matched when it does. Attaching receipts is for the workspace owner.",
+            "Across your channels: find an order from any channel — Shopify, Etsy, WooCommerce, Square, Amazon, eBay or one you took yourself — by order number, the shop's own order number, customer, date, or payment or fulfilment state. The shop's own status stays a separate field from your NivaDesk status, so you can see where the two disagree, and the answer says when each channel that contributed last synced, or says it cannot tell. It reports no amounts at all: it tells you where an order is and whether it is paid, never what it was worth, and it names no currency. For the figures, ask about that order's financials — a different tool, with your Financial permission in front of it. Buyer details are withheld for channels whose own data policy restricts them.",
+            "Inventory: search your stock by name, SKU, serial number, brand, model, category or location, and narrow it to low stock, reserved items, a status or a place."
           ] },
-          // The two cross-channel reads are built and tested but are NOT in the
-          // published ChatGPT app: they arrive with the 1.2.0 submission, behind
-          // NIVADESK_MCP_ORCHESTRATOR / NIVADESK_MCP_INVENTORY. When the operator
-          // flips those flags, move these bullets up into "What you can ask" and
-          // delete this heading with its first bullet. Until then the heading is
-          // what keeps the guide honest: a bot that offers a tool the app does
-          // not publish sends the reader somewhere that is not there.
-          //
-          // There were four bullets here until 7 September 2026, and three of
-          // them described capabilities the 6 September reduction removed — a
-          // per-channel money summary, an attention list, a connection and
-          // accounting roster — while the fourth promised a stock overview and
-          // valuation that also came out. Only the two below have registry rows,
-          // so only the two below may be written up. Anything named here must
-          // have one: functions/test/qa/mcp-reduced-surface.test.js reads this
-          // chapter out of the built corpus and checks it against the registry.
-          //
-          // The cross-channel bullet then said "Amounts stay in the currency the
-          // order was taken in", which was true of the capability as written on
-          // 6 September and false of it a day later: the operator's decision of
-          // 7 September took every monetary field out of both, `currency`
-          // included. A guide sentence about a figure the tool does not return
-          // is how a reader learns to ask for something that is not there.
+          // Version 1.2.0 of the ChatGPT app (operator decision, 10 September
+          // 2026) publishes the two cross-channel reads behind
+          // NIVADESK_MCP_ORCHESTRATOR alone, so the channel search and the
+          // stock search sit under "What you can ask" above. The photo add
+          // (create_inventory_item) is behind NIVADESK_MCP_INVENTORY, which is
+          // not part of that release, so it is the one capability left here.
+          // This heading is what keeps the guide honest: a bot that offers a
+          // tool the app does not publish sends the reader somewhere that is
+          // not there. Anything named here must have a registry row —
+          // functions/test/qa/mcp-reduced-surface.test.js reads this chapter
+          // out of the built corpus and checks each block against the registry
+          // and the release flag. Deploy order matters too: this text goes
+          // live with the assistant functions only AFTER chatgptMcp has been
+          // deployed with the flag set (docs/openai-resubmission-package-2026-09-10.md).
           { kind: "sub", text: "Coming in the next version of the app" },
           { kind: "bullets", items: [
-            "The two below are built and tested but are not in the version of the NivaDesk app published in ChatGPT today, so asking for them now gets you the answers above instead. They arrive with the next release, and nothing on your side has to change for it.",
-            "Across your channels: find an order from any channel — Shopify, Etsy, WooCommerce, Square, Amazon, eBay or one you took yourself — by order number, the shop's own order number, customer, date, or payment or fulfilment state. The shop's own status stays a separate field from your NivaDesk status, so you can see where the two disagree, and the answer says when each channel that contributed last synced, or says it cannot tell. It reports no amounts at all: it tells you where an order is and whether it is paid, never what it was worth, and it names no currency. For the figures, ask about that order's financials — a different tool, with your Financial permission in front of it. Buyer details are withheld for channels whose own data policy restricts them.",
-            "Inventory: search your stock by name, SKU, serial number, brand, model, category or location, and narrow it to low stock, reserved items, a status or a place. You can also add an item from a photo: NivaDesk reads the photo, says what it thinks the item is, and only adds it once you confirm."
+            "The one below is built and tested but is not in the version of the NivaDesk app published in ChatGPT today, so asking for it now gets you the answers above instead. It arrives with a later release, and nothing on your side has to change for it.",
+            "Inventory from a photo: add an item from a photo — NivaDesk reads the photo, says what it thinks the item is, and only adds it once you confirm."
           ] },
           { kind: "sub", text: "When your customer hears about it" },
           { kind: "bullets", items: [
@@ -2408,27 +2400,22 @@ const TREE_TR: GuideNode[] = [
             "Siparişler: müşteri, referans, tasarım adı ya da duruma göre sipariş bulma; birini açma; not ekleme; durumunu veya tasarım durumunu değiştirme; yeni sipariş oluşturma. Yalnızca iş akışı üyeleri sadece kendilerine atanan siparişleri görür; Financial izni olmayan rollerden para alanları gizlenir.",
             "Notlar: kendi kişisel notlarınızı oluşturma, arama, açma, sonuna ekleme, düzenleme, sabitleme ve arşivleme. Ekip notları ChatGPT'den değiştirilmez.",
             "Finans ve pano: bir siparişin finansı, pano özeti, finansal genel bakış ve bir ay, yıl ya da tarih aralığı için ek harcamalar — Starter planda temel biçimde, Pro ve Team'de kâr ve kalan bakiyelerle.",
-            "Banka: kategori ve satıcıya göre aylık harcama, tekrarlayan giderler, banka hareketlerinde arama ve fişler — bir fiş ya da fatura fotoğrafı gönderin, NivaDesk onu banka satırıyla eşleştirir; birden fazla satır uyuyorsa hangisi olduğunu sorar; ödeme henüz gelmediyse fiş Banking ▸ Receipts altında bekler ve geldiğinde eşlenir. Fiş ekleme çalışma alanı sahibine özeldir."
+            "Banka: kategori ve satıcıya göre aylık harcama, tekrarlayan giderler, banka hareketlerinde arama ve fişler — bir fiş ya da fatura fotoğrafı gönderin, NivaDesk onu banka satırıyla eşleştirir; birden fazla satır uyuyorsa hangisi olduğunu sorar; ödeme henüz gelmediyse fiş Banking ▸ Receipts altında bekler ve geldiğinde eşlenir. Fiş ekleme çalışma alanı sahibine özeldir.",
+            "Kanallarınız genelinde: herhangi bir kanaldaki siparişi bulma — Shopify, Etsy, WooCommerce, Square, Amazon, eBay ya da kendi aldığınız siparişler — sipariş numarası, mağazanın kendi sipariş numarası, müşteri, tarih ya da ödeme ve gönderim durumuna göre. Mağazanın kendi durumu sizin NivaDesk durumunuzdan ayrı bir alan olarak durur, böylece ikisinin çeliştiği yeri görürsünüz; yanıt, katkı veren her kanalın en son ne zaman senkronlandığını söyler, söyleyemiyorsa bunu söyler. Hiçbir tutar döndürmez: siparişin nerede olduğunu ve ödenip ödenmediğini söyler, ne kadar olduğunu değil; para birimi de vermez. Rakamlar için o siparişin finansını sorun — o ayrı bir araçtır ve önünde Financial izniniz durur. Kendi veri politikası kısıtlayan kanallarda alıcı bilgileri gösterilmez.",
+            "Envanter: stoğunuzu ad, SKU, seri numarası, marka, model, kategori ya da konuma göre arama; düşük stok, rezerve ürünler, bir durum ya da bir yere göre daraltma."
           ] },
-          // Aynı not, İngilizcesindeki gibi: bu iki madde hazır ve testli ama
-          // yayındaki ChatGPT uygulamasında YOK; 1.2.0 gönderimiyle, bayraklar
-          // açıldığında gelir. Bayraklar açıldığında bu maddeleri "Neler
-          // sorabilirsiniz" altına taşıyın, başlığı ve ilk maddeyi silin.
-          // 7 Eylül 2026'ya kadar burada dört madde vardı; üçü 6 Eylül
-          // indirgemesinin kaldırdığı yetenekleri anlatıyordu, dördüncüsü de
-          // kaldırılan stok değerlemesini. Burada adı geçen her şeyin registry
-          // satırı olmak zorunda.
-          //
-          // Kanal maddesi ayrıca "Tutarlar siparişin alındığı para biriminde
-          // kalır" diyordu: 6 Eylül'deki yetenek için doğru, bir gün sonrası
-          // için yanlış. 7 Eylül kararı iki yetenekten de her parasal alanı —
-          // para birimi dahil — çıkardı; olmayan bir rakamı anlatan kılavuz
-          // cümlesi, okuyucuya orada olmayan bir şeyi sormayı öğretir.
+          // İngilizcesindeki gibi: 1.2.0 (operatör kararı, 10 Eylül 2026) yalnız
+          // NIVADESK_MCP_ORCHESTRATOR bayrağını açar; kanal araması ve stok
+          // araması bu yüzden yukarıda "Neler sorabilirsiniz" altında. Fotoğraftan
+          // ürün ekleme NIVADESK_MCP_INVENTORY arkasında ve o sürümde yok; burada
+          // kalan tek madde o. Burada adı geçen her şeyin registry satırı olmak
+          // zorunda; mcp-reduced-surface testi bu bölümü derlenmiş corpus'tan
+          // okuyup registry ve sürüm bayrağıyla karşılaştırır. Bu metin, chatgptMcp
+          // bayrakla deploy edildikten SONRA asistan fonksiyonlarıyla yayına alınır.
           { kind: "sub", text: "Uygulamanın sonraki sürümünde geliyor" },
           { kind: "bullets", items: [
-            "Aşağıdaki iki madde hazır ve testli ama bugün ChatGPT'de yayında olan NivaDesk sürümünde yok; şimdi sorarsanız yukarıdaki yanıtları alırsınız. Sonraki sürümle gelirler ve bunun için sizin tarafınızda bir şey değişmesi gerekmez.",
-            "Kanallarınız genelinde: herhangi bir kanaldaki siparişi bulma — Shopify, Etsy, WooCommerce, Square, Amazon, eBay ya da kendi aldığınız siparişler — sipariş numarası, mağazanın kendi sipariş numarası, müşteri, tarih ya da ödeme ve gönderim durumuna göre. Mağazanın kendi durumu sizin NivaDesk durumunuzdan ayrı bir alan olarak durur, böylece ikisinin çeliştiği yeri görürsünüz; yanıt, katkı veren her kanalın en son ne zaman senkronlandığını söyler, söyleyemiyorsa bunu söyler. Hiçbir tutar döndürmez: siparişin nerede olduğunu ve ödenip ödenmediğini söyler, ne kadar olduğunu değil; para birimi de vermez. Rakamlar için o siparişin finansını sorun — o ayrı bir araçtır ve önünde Financial izniniz durur. Kendi veri politikası kısıtlayan kanallarda alıcı bilgileri gösterilmez.",
-            "Envanter: stoğunuzu ad, SKU, seri numarası, marka, model, kategori ya da konuma göre arama; düşük stok, rezerve ürünler, bir durum ya da bir yere göre daraltma. Ayrıca fotoğraftan ürün ekleyebilirsiniz: NivaDesk fotoğrafı okur, ürünün ne olduğunu düşündüğünü söyler ve yalnızca siz onayladıktan sonra ekler."
+            "Aşağıdaki tek madde hazır ve testli ama bugün ChatGPT'de yayında olan NivaDesk sürümünde yok; şimdi sorarsanız yukarıdaki yanıtları alırsınız. Daha sonraki bir sürümle gelir ve bunun için sizin tarafınızda bir şey değişmesi gerekmez.",
+            "Fotoğraftan envanter: fotoğraftan ürün ekleyebilirsiniz — NivaDesk fotoğrafı okur, ürünün ne olduğunu düşündüğünü söyler ve yalnızca siz onayladıktan sonra ekler."
           ] },
           { kind: "sub", text: "Müşteriniz ne zaman haber alır" },
           { kind: "bullets", items: [

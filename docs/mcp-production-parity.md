@@ -5,7 +5,12 @@
 > descriptions, same input schemas, same annotations, same advertised scopes. Both listings hash to
 > `7c838fb68a5b6e97571ec9605638913014e06931765e4b0dbe0bd53cbce64984`. **Zero differences to classify.**
 
-Measured 6 Sep 2026, read-only. No authenticated call was made to production. The candidate side is
+Measured 6 Sep 2026, read-only. No authenticated call was made to production. **Re-measured 10 Sep 2026
+against the live source itself:** production is now revision `chatgptmcp-00072-dok` (7 Sep, the SSRF
+hotfix deploy — `docs/security/evidence/amazon/functions-deploy-2026-09-06.md`), whose `index.js` matches no
+commit in this repository; so its uploaded source zip was downloaded and its flags-off `tools/list` built
+the same way (`functions/index.js` sha256 `d5ae16fd…`): **19 tools, listing sha256 `7c838fb6…64984`** —
+the same bytes as the `015d5792` baseline below and as the candidate at the resubmission commit. The candidate side is
 captured from the working tree rather than a commit, and each capture stamps the HEAD sha it was taken
 at into `docs/evidence/tools-list-candidate-flags-off.json` — so re-running the harness re-measures what
 is actually there. It used to archive a fixed commit (`56b6591c`) while calling it "HEAD"; five commits

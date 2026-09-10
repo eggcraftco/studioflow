@@ -1,7 +1,9 @@
 # NivaDesk MCP — tool annotations and their justification
 
-Status: 6 September 2026. Applies to `functions/index.js` `exports.chatgptMcp` at branch
-`mcp-orchestration`. The values in this document come from `functions/orchestrator/registry.js`, which is
+Status: 6 September 2026; decisions A–C of 10 September 2026 applied (orchestrator flag only,
+`update_order_status` idempotentHint `false` without a guard, the access-log carve-out kept and disclosed —
+see `docs/openai-resubmission-package-2026-09-10.md`). Applies to `functions/index.js` `exports.chatgptMcp` at
+branch `openai-resubmission`. The values in this document come from `functions/orchestrator/registry.js`, which is
 the only place they are written; `functions/test/qa/mcp-tool-annotations.test.js` fails the build if this
 document and that table ever say different things.
 
@@ -104,7 +106,9 @@ publishes a name into `tools/list`, and a name in the listing with no handler be
 list-versus-dispatcher split all over again, so a name is never added here first.
 
 The two flagged read capabilities carry the same four values — `true / false / true / false` — and that is
-not a copy-paste. They are pure functions over data NivaDesk already holds: they write nothing (no module
+not a copy-paste. They are pure functions over data NivaDesk already holds: the capability modules themselves
+write nothing — the one write on the path, for `search_commerce_orders`, is the access-log row the dispatcher
+files before the call, disclosed on that tool's own `readOnlyHint` reason; `search_inventory` files none (no module
 under `functions/orchestrator/` may import or call a writer at all — the parenthetical here used to argue
 the narrower point that the accounting attention queue is read and never opened through
 `store.openAttention`, which belonged to `get_accounting_sync_status`, and neither surviving capability
@@ -137,14 +141,14 @@ test compares the served one against it.
 | `update_order_status` | `openWorldHint` | false | **true** | Same trigger, on the path it was written for. A status change sends the buyer an e-mail, and an SMS through Twilio where the workspace enabled it. The tool pushes nothing to Shopify, Etsy or any marketplace — but the effect of calling it reaches a third-party sender and the customer, and that is what the hint is about. |
 | `update_order_status` | `idempotentHint` | true | **false** | A repeat with the same status appends a *second* history entry, for a reason nothing in the handler reveals: `nvHistoryItem` mints a fresh `crypto.randomUUID()` and `Timestamp.now()` on every call, so the `arrayUnion` can never dedupe. The order's history — which the user sees — grows on each call. |
 
-The third row is a value we would rather have kept. It becomes `true` honestly the moment the tool grows a
-no-op guard: read the document first, and when every requested field already equals the requested value,
-return the current state without writing (no history entry, no document write, and therefore no second
-customer notification). That guard is a behaviour change to a frozen tool and belongs with the rest of the
-1.2.0 work, not with this document. Until then the registry names the guard it is waiting for
-(`pendingGuard`), and the test fails the build in both directions: if the hint is flipped before the guard
-exists, and if the guard appears while the hint is still `false`. The annotation and the behaviour ship
-together or neither ships.
+The third row is a value we would rather have kept, and the decision on it is taken (operator, 10 September
+2026): **1.2.0 ships `idempotentHint: false`, which is what the handler does, and adds no no-op guard.** A
+guard — read the document first and, when every requested field already equals the requested value, return
+the current state without writing — would make the hint `true` honestly, but it is a behaviour change to a
+frozen tool and is not part of this submission. If a later release adds it, the hint flips to `true` in the
+same commit: the registry's guard-token rule (`pendingGuard`, re-declared at that point) fails the build if
+the guard appears while the hint is still `false`, or the hint is flipped ahead of the guard. Until then
+the registry declares no pending guard for this tool.
 
 ## Per-tool justification
 
@@ -237,7 +241,7 @@ discovery document exposes as `annotationJustification`.
 
 ### `get_order_financials`
 
-- **readOnlyHint true** — Because it computes totals over the workspace's own order documents; the only write it makes is the piiAccessLog row recording the read.
+- **readOnlyHint true** — Because it computes totals over the workspace's own order documents; the only writes it makes are piiAccessLog rows recording the read: one for the read itself, and a second when the outbound policy withholds a marketplace buyer's name, recording that the name was withheld rather than shown.
 - **destructiveHint false** — Because no order or payment record is altered by the calculation.
 - **idempotentHint true** — Because the same order returns the same figures and creates nothing.
 - **openWorldHint false** — Because every figure comes from NivaDesk's own records; no bank, payment or accounting provider is called.
@@ -332,7 +336,9 @@ than an annotation, and the surface under review must not move on its own:
    release (see the note under the table).
 2. **`create_inventory_item` advertises `orders.read`.** `nvMcpOAuthScopesForTool` has no case for it, so
    it falls to the default — a write tool advertising a read scope. The registry records what is on the
-   wire rather than what it should be, because correcting it changes the OAuth surface.
+   wire rather than what it should be, because correcting it changes the OAuth surface. Deferred with the
+   tool itself (operator, 10 September 2026): 1.2.0 flips `NIVADESK_MCP_ORCHESTRATOR` alone, so this tool is
+   not published and no reviewer sees the scope; the correction belongs to the release that publishes it.
 
    This item used to end "nothing enforces scope at call time today either: `context.scope` is captured
    and never checked", and that is no longer true. `context.missingScopes` is one rule over the

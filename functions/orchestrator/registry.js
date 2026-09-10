@@ -236,12 +236,14 @@ const TOOL_REGISTRY = [
     // UUID and Timestamp per call, so the arrayUnion appends instead of
     // deduping). Both are corrected behind the flag.
     liveAnnotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    // idempotentHint goes back to true only together with the no-op guard, not
-    // on its own. assertRegistry() fails the build the moment the guard token
-    // appears in the handler while the hint is still false, so the guard cannot
-    // land without the annotation catching up, and the annotation cannot be
-    // flipped ahead of the guard.
-    pendingGuard: { token: "nvMcpStatusNoOpGuard", hint: "idempotentHint", flipsTo: true },
+    // Operator decision, 10 September 2026 (readiness report §7 B): the hint
+    // ships as `false`, which is what the handler does, and no no-op guard is
+    // added in this submission — a guard is a behaviour change to a frozen
+    // tool. Should a later release add one, the hint flips to `true` in the
+    // same commit: name the guard token here again at that point, and
+    // assertRegistry() will refuse a handler that has the token while the
+    // hint is still false, or a hint flipped ahead of the guard.
+    pendingGuard: null,
     justification: {
       readOnlyHint: "Because the call sets status and/or designStatus on the order document.",
       destructiveHint: "Because the previous status value is overwritten and is not recoverable from the field.",
@@ -427,7 +429,7 @@ const TOOL_REGISTRY = [
     liveAnnotations: null,
     pendingGuard: null,
     justification: {
-      readOnlyHint: `Because it computes totals over the workspace's own order documents; ${ACCESS_LOG_NOTE}.`,
+      readOnlyHint: "Because it computes totals over the workspace's own order documents; the only writes it makes are piiAccessLog rows recording the read: one for the read itself, and a second when the outbound policy withholds a marketplace buyer's name, recording that the name was withheld rather than shown.",
       destructiveHint: "Because no order or payment record is altered by the calculation.",
       idempotentHint: "Because the same order returns the same figures and creates nothing.",
       openWorldHint: "Because every figure comes from NivaDesk's own records; no bank, payment or accounting provider is called."
@@ -635,7 +637,10 @@ const TOOL_REGISTRY = [
     // Advertised as orders.read today because nvMcpOAuthScopesForTool falls to
     // its default for this name — a write tool advertising a read scope. The
     // registry records what is on the wire; correcting it is a change to the
-    // OAuth surface and belongs with the 1.2.0 submission, not here.
+    // OAuth surface and belongs with the release that publishes this tool.
+    // 1.2.0 is not that release: the operator's decision of 10 September 2026
+    // flips NIVADESK_MCP_ORCHESTRATOR alone, so this tool stays unpublished
+    // and the wire never shows the scope (docs/mcp-backlog.md §6, item 1).
     scopes: ["orders.read"],
     permission: { guard: "nvRequireInventoryAccess", area: "orders", write: true, financial: false, bankFeed: false, ownerOnly: false },
     riskClass: "C",

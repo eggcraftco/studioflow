@@ -152,19 +152,46 @@ check("with the flag on, the list only GAINS tools — nothing is removed or reo
     `the flag adds ${after.length - before.length} tool(s); the registry publishes ${ORCHESTRATOR_ADDS.length}`);
 });
 
-check("the flag-on listing differs from the reviewed one ONLY by the new tools and the two known annotation corrections", () => {
-  // The corrections create_order/update_order_status carry are the ones the
-  // runtime audit found; they ride the same submission flag. Anything else
-  // changing here is an accident.
+check("the flag-on listing differs from the reviewed one ONLY by the new tools, the registry's pending corrections and the disclosed description sentences", () => {
+  // Three reviewed tools may differ under the flag, each in exactly two ways:
+  // its hints move by the corrections the registry holds back for it (none for
+  // attach_bank_receipt), and its description gains one appended sentence that
+  // says on the tool what the justification says about it — the customer
+  // message a create or a status change can send, and the OCR and file
+  // replacement a receipt attachment does. Nothing else on a reviewed tool may
+  // move, and no other reviewed tool may move at all.
   const before = new Map(listings.off.tools.map((tool) => [tool.name, tool]));
-  const changed = [];
+  const changed = new Map();
   for (const tool of listings.orchestrator.tools) {
     const previous = before.get(tool.name);
     if (!previous) continue;
-    if (JSON.stringify(previous) !== JSON.stringify(tool)) changed.push(tool.name);
+    if (JSON.stringify(previous) !== JSON.stringify(tool)) changed.set(tool.name, { previous, tool });
   }
-  assert.deepStrictEqual(changed.sort(), ["create_order", "update_order_status"],
-    `unexpected changes to reviewed tools: ${changed.join(", ")}`);
+  assert.deepStrictEqual([...changed.keys()].sort(), ["attach_bank_receipt", "create_order", "update_order_status"],
+    `unexpected changes to reviewed tools: ${[...changed.keys()].join(", ")}`);
+
+  const DISCLOSED = {
+    create_order: /^ The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS\. Say so before you do it\.$/,
+    update_order_status: /^ The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS\. Say so before you do it\.$/,
+    attach_bank_receipt: /^ Image receipts are read with Google Vision OCR\. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted\.$/
+  };
+  for (const [name, { previous, tool }] of changed) {
+    assert.ok(tool.description.startsWith(previous.description),
+      `${name}: the flag may only APPEND to the reviewed description, never rewrite it`);
+    const appended = tool.description.slice(previous.description.length);
+    assert.ok(DISCLOSED[name].test(appended),
+      `${name}: the flag appended a sentence this check does not know: "${appended}"`);
+    assert.deepStrictEqual(tool.annotations, registry.annotationsFor(name, { orchestrator: true }),
+      `${name}: the flag-on hints are not the registry's verified values`);
+    const corrections = (registry.correctionsPending().find((row) => row.name === name) || { changes: [] })
+      .changes.map((change) => change.hint).sort();
+    const moved = Object.keys(tool.annotations).filter((hint) => tool.annotations[hint] !== previous.annotations[hint]).sort();
+    assert.deepStrictEqual(moved, corrections,
+      `${name}: hints moved (${moved.join(", ")}) that the registry does not list as pending corrections (${corrections.join(", ")})`);
+    const rest = (entry) => ({ ...entry, description: undefined, annotations: undefined });
+    assert.deepStrictEqual(rest(tool), rest(previous),
+      `${name}: something other than the description sentence and the corrected hints changed`);
+  }
 });
 
 check("every new capability is fully described: title, description, schema, annotations, scopes", () => {

@@ -664,21 +664,33 @@ check("assertRegistry refuses the mistakes it exists for", () => {
   rejects((t) => { t[0].riskClass = "Z"; }, "an unknown risk class");
   rejects((t) => { t[0].permission.ownerOnly = "yes"; }, "a non-boolean permission flag");
 
-  // The pending-guard coupling, in both directions.
-  const withGuard = clone();
-  const guarded = withGuard.find((e) => e.pendingGuard);
-  assert.ok(guarded, "expected at least one entry waiting on a behaviour guard");
-  const token = guarded.pendingGuard.token;
+  // The pending-guard coupling, in both directions — exercised on a clone that
+  // declares a guard, because the shipped table declares none: the operator's
+  // decision of 10 September 2026 (§5.2) ships update_order_status as
+  // idempotentHint false with no no-op guard. The rule stays armed for the
+  // release that adds one.
+  const GUARD = { token: "nvMcpStatusNoOpGuard", hint: "idempotentHint", flipsTo: true };
+  const arm = (t) => { const e = t.find((x) => x.name === "update_order_status"); e.pendingGuard = { ...GUARD }; return e; };
   rejects(
-    (t) => { const e = t.find((x) => x.pendingGuard); e.annotations[e.pendingGuard.hint] = e.pendingGuard.flipsTo; },
+    (t) => { const e = arm(t); e.annotations[e.pendingGuard.hint] = e.pendingGuard.flipsTo; },
     "a hint flipped ahead of the guard it names"
   );
-  assert.throws(
-    () => registry.assertRegistry(clone(), `function ${token}() {}`),
-    /flip idempotentHint to true/,
-    "should have refused a hint left behind after its guard shipped"
-  );
-  // And it passes against the real handler source, where the guard is absent.
+  {
+    const armed = clone();
+    arm(armed);
+    assert.throws(
+      () => registry.assertRegistry(armed, `function ${GUARD.token}() {}`),
+      /flip idempotentHint to true/,
+      "should have refused a hint left behind after its guard shipped"
+    );
+  }
+  // The shipped table declares no guard — the decision is recorded in the
+  // table, not only in a document — and it passes against the real handler
+  // source, where the guard token is absent.
+  assert.ok(!registry.TOOL_REGISTRY.some((e) => e.pendingGuard),
+    "the registry declares a pending guard again; §5.2 (10 September 2026) decided that none ships in 1.2.0");
+  assert.ok(!new RegExp(`\\b${GUARD.token}\\b`).test(indexSource),
+    "the no-op guard token is in index.js while the registry declares no guard; §5.2 decided no guard ships in 1.2.0");
   assert.strictEqual(registry.assertRegistry(registry.TOOL_REGISTRY, indexSource), true);
 });
 

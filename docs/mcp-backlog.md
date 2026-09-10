@@ -412,8 +412,9 @@ The gate passed on all five checks. Nothing below is a disagreement between the 
 the dispatcher and the documents about the two new capabilities, and nothing below touches the flags-off
 byte-identity, the money invariant or the customer-search invariant. Each was measured, not read.
 
-- **The design still tells the reviewer that 1.2.0 corrects `create_inventory_item`'s advertised scope,
-  and it does not.** `docs/mcp-orchestration-design.md:1902-1904` lists, among the runtime corrections
+- ~~**The design still tells the reviewer that 1.2.0 corrects `create_inventory_item`'s advertised scope,
+  and it does not.**~~ **Closed 10 September 2026:** `:1900-1904` now say the correction is not in 1.2.0 and
+  the wire keeps `orders.read` for an unpublished tool; the registry comment says the same. Original text: `docs/mcp-orchestration-design.md:1902-1904` lists, among the runtime corrections
   the submission ships, "OAuth scope enforcement per tool, which also corrects `create_inventory_item`
   from `orders.read` to `orders.write` (§1.4.4)". The registry deliberately keeps the read scope —
   `functions/orchestrator/registry.js:637-641`, whose own comment says "a write tool advertising a read
@@ -428,8 +429,9 @@ byte-identity, the money invariant or the customer-search invariant. Each was me
   new capabilities, and it is a pre-existing hidden tool. Closing it: either make the correction and add
   the test `:1560` promises, or move `:1904` into the design's proposal voice and say the wire keeps
   `orders.read` for this release.
-- **The §7 release-note text says "two read-only tools" while §5.8 recommends a flip that puts three
-  new tools on the wire, one of them a write tool.** `docs/mcp-submission-1.2.0.md:600` opens the
+- ~~**The §7 release-note text says "two read-only tools" while §5.8 recommends a flip that puts three
+  new tools on the wire, one of them a write tool.**~~ **Closed 10 September 2026:** §5.8 now decides the
+  orchestrator flag alone, so §7's "two read-only tools" is what the wire carries. Original text: `docs/mcp-submission-1.2.0.md:600` opens the
   paste-to-OpenAI block with "**New in this version:** two read-only tools", which is exactly right for
   `NIVADESK_MCP_ORCHESTRATOR` on its own. `:524-526` (§5.8) recommends "all three flags together, one
   submission, so the reviewer sees the finished surface once", and under that flip the reviewer also
@@ -441,8 +443,10 @@ byte-identity, the money invariant or the customer-search invariant. Each was me
   step 8 item in §5 above. Closing it: either name the third tool in the §7 block with a sentence
   saying it is a pre-existing hidden tool now being published, or make §5.8 recommend flipping the
   orchestrator flag alone, so what §7 describes is what the wire carries.
-- **`docs/evidence/tools-list-candidate-flags-off.json`'s `meta` block is still stale, and the one
-  condition for closing it is now met.** The entry in §5 above records the staleness and says "Closing
+- ~~**`docs/evidence/tools-list-candidate-flags-off.json`'s `meta` block is still stale, and the one
+  condition for closing it is now met.**~~ **Closed 9/10 September 2026:** regenerated on a clean tree by the
+  readiness pass and again with the 10 September evidence commit; both listing hashes still read
+  `7c838fb68a5b6e97…`. Original text: The entry in §5 above records the staleness and says "Closing
   it: regenerate on a clean tree, which is the one condition a pass that is itself editing
   `functions/index.js` cannot meet." The gate run changed no code, so the tree was clean throughout:
   `meta.commit` reads `75fa8ff4…` and `meta["functions/index.js sha256 …"]` reads `f2ca4b98…` while the

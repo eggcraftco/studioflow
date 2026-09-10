@@ -1,21 +1,21 @@
 {
   "meta": {
-    "what": "MCP tools/list, every MCP feature flag UNSET",
-    "source": "openai-resubmission working tree, all MCP flags unset",
+    "what": "MCP tools/list with NIVADESK_MCP_ORCHESTRATOR=1 and every other MCP flag UNSET",
+    "source": "openai-resubmission working tree, NIVADESK_MCP_ORCHESTRATOR=1 (the 1.2.0 release flag set)",
     "commit": "2ee5f6c1fbb8ff740cbf7c4d985e0f185b549c35",
     "capturedFrom": "working tree",
     "functionsTreeDirtyAtCapture": true,
     "functions/index.js sha256 (pristine, before any harness shim)": "8b80dec2158baf2c7e241e5df5efbacb5968b45a224cdf69e3d98c58f95ac927",
     "exportShimAppendedToScratchCopy": false,
-    "toolCount": 19,
-    "listingSha256": "7c838fb68a5b6e97571ec9605638913014e06931765e4b0dbe0bd53cbce64984",
+    "toolCount": 21,
+    "listingSha256": "10316e28601d75f03a6238945feaef27e6bfa21c6ff8ec887c5cae63fac918f5",
     "regenerate": "node docs/evidence/capture-tools-list.js --write"
   },
   "tools": [
     {
       "name": "create_order",
       "title": "Create order",
-      "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
+      "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -87,7 +87,7 @@
         "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "securitySchemes": [
         {
@@ -262,7 +262,7 @@
     {
       "name": "update_order_status",
       "title": "Update order status",
-      "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
+      "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -291,8 +291,8 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "securitySchemes": [
         {
@@ -1074,7 +1074,7 @@
     {
       "name": "attach_bank_receipt",
       "title": "Attach receipt to a bank transaction",
-      "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId.",
+      "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId. Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1157,6 +1157,197 @@
           ]
         }
       ]
+    },
+    {
+      "name": "search_inventory",
+      "title": "Search inventory",
+      "description": "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Part of a name, SKU, serial number, brand, model, category or location."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "partiallyReserved",
+              "reserved",
+              "incoming",
+              "used",
+              "sold",
+              "removed",
+              "archived"
+            ]
+          },
+          "lowStock": {
+            "type": "boolean",
+            "description": "Only items at or below their low-stock level."
+          },
+          "reserved": {
+            "type": "boolean",
+            "description": "Only items being held for an order."
+          },
+          "location": {
+            "type": "string",
+            "description": "Only items kept here."
+          },
+          "category": {
+            "type": "string",
+            "description": "Only items in this category."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum items to return (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "search_commerce_orders",
+      "title": "Search orders across channels",
+      "description": "Find orders from any channel and see the provider's own status separately from NivaDesk's workflow status: platform status, payment status, fulfilment status, external order id, connection and last sync all stay distinct fields. It reports no amounts at all: no order total, nothing paid or outstanding, no refund, no tax and no currency. Use it when the user names a shop, an external order number or a payment state. Buyer details are withheld for channels whose data policy restricts them. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Order number, project number, external order id, customer name or email."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "all",
+              "manual",
+              "shopify",
+              "etsy",
+              "woocommerce",
+              "square",
+              "amazon",
+              "ebay",
+              "faire"
+            ],
+            "description": "Limit to one channel."
+          },
+          "manualSource": {
+            "type": "string",
+            "description": "With source \"manual\", narrow to where it came from."
+          },
+          "workflowStatus": {
+            "type": "string",
+            "description": "NivaDesk's own status word for the order."
+          },
+          "platformStatus": {
+            "type": "string",
+            "description": "The shop's own status word, matched as the provider spells it."
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "pending",
+              "authorized",
+              "paid",
+              "partially_paid",
+              "partially_refunded",
+              "refunded",
+              "voided",
+              "unknown"
+            ]
+          },
+          "fulfillmentStatus": {
+            "type": "string",
+            "enum": [
+              "unfulfilled",
+              "partial",
+              "fulfilled",
+              "unknown"
+            ]
+          },
+          "fromDate": {
+            "type": "string",
+            "description": "First day of the range, YYYY-MM-DD."
+          },
+          "toDate": {
+            "type": "string",
+            "description": "Last day of the range, YYYY-MM-DD."
+          },
+          "needsAttention": {
+            "type": "boolean",
+            "description": "Only orders held for review or already overdue."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum orders to return (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
     }
   ]
 }
