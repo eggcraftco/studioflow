@@ -289,6 +289,37 @@ entered no credentials), the same two-load sequence as in the emulator:
 | `/orders` at 23:29:56Z | the client asked the server (fresh ask stamp), stored `nv_feedback_enabled_… = "1"`, and the account menu read Account · **Send feedback** · Visit website · Sign Out |
 | `/orders` again at 23:31:15Z, inside the window | **no new ask** (stamp still 23:29:56Z) and the menu still carried **Send feedback** — the 7f scenario, now passing on production |
 
+## 11f. Pilot widened to every workspace (10 September 2026, 23:39Z)
+
+Operator decision: the manual **Send feedback** entry for everyone; the automatic invitation only for first meaningful
+successes **after the widening instant**; the inbox unchanged (the same three admin addresses); no e-mail, no push.
+
+| Setting | Before (pilot) | After |
+|---|---|---|
+| `NIVADESK_FEEDBACK` | `1` | `1` |
+| `NIVADESK_FEEDBACK_WORKSPACES` | `GuglEFKSEKNTq1xibFpJav3EWkY2` | **`*`** (every workspace; `pilotAllows` treats `*` as "all") |
+| `NIVADESK_FEEDBACK_INVITE_FROM_MS` | `1789079284000` (22:28:04Z) | **`1789083566000` = 2026-09-10T23:39:26Z** |
+
+The previous values are kept in a gitignored copy next to the chain log; `functions/.env` itself is gitignored.
+
+**Deploy** (runbook pre-checks passed: Stripe and allowlist ancestors, clean tree, HEAD `7a1c7f7f` at the origin tip,
+`functions/` tree identical to the one deployed at 22:28Z): the six callables updated by name 23:39:26–23:43:20Z, all
+Ready at 100 % traffic with the three flags read back from Cloud Run — `getfeedbackprompt-00002-git`,
+`dismissfeedbackprompt-00002-zaj`, `submitfeedback-00002-jih`, `listfeedback-00002-taj`,
+`getfeedbackdetail-00002-mov`, `updatefeedbackstatus-00002-lom`. Nothing else moved (`chatgptmcp-00073-fuz`,
+`stripewebhook-00047-por`, `getsetupchecklist-00003-noh`, `beginebayconnect-00002-cod`,
+`previewebayimport-00002-hac` unchanged). No web change was needed: the web already shows the entry whenever the server
+answers `enabled: true`.
+
+**Who gets the automatic invitation now:** a user whose workspace's first substantive order was created **after
+23:39:26Z on 10 September 2026** (creation stamp, never `paymentDate`; unknown stamp → no invitation), in a session
+that has not answered or dismissed the campaign, within the 7-day and 30-day caps. Everyone whose first success is
+older sees no card, ever — including the test workspace itself (its synthetic first success is 22:45:58Z).
+
+**Rollback:** restore the two previous values in `functions/.env` and redeploy the same six callables by name (the
+web needs nothing). **Feedback records are never deleted by a rollback** — `feedback` and `feedbackState` documents stay
+as they are; only who may see the entry and the card changes.
+
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | Why it exists | To remove |
