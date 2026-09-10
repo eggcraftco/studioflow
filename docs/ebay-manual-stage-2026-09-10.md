@@ -104,10 +104,19 @@ seller beforehand.
   consent. Nothing about NivaDesk's stored connection, its `sell.fulfillment.readonly` scope or `autoSync: false`
   changes.
 
-**The sandbox web checkout (the route that would set checkout complete properly):** not usable from this browser.
-`www.sandbox.ebay.com/myb/PurchaseHistory` answers with eBay's "We looked everywhere" error page (checked again at
-22:0xZ), as `/mys/sold`, `/mys/active` and `/sh/ord` did earlier this evening; the sandbox home page returned no
-rendered content. So "the buyer presses Pay now" cannot be handed to the operator as a working step today.
+**The sandbox web checkout — correction: it is available, we were simply signed out.** `/myb/PurchaseHistory` kept
+answering with eBay's "We looked everywhere" page, and the same was true of `/mys/sold`, `/mys/active` and `/sh/ord`
+earlier this evening. At 22:0xZ the sandbox **home page rendered normally and its toolbar reads "Sign in"** — the
+browser has no session on `www.sandbox.ebay.com`. The OAuth consent sign-ins all happened on `signin.sandbox.ebay.com`
+inside the Explorer's token flow and did not leave a site session behind. So those error pages were the signed-out
+state, not broken pages, and the earlier note calling this route "unreliable" was wrong.
+
+This makes the **normal buyer checkout the first thing to try**, and it is the route that properly sets
+`CheckoutStatus.Status` to `Complete` — exactly what the Fulfillment API tests, and something marking the order paid
+from the seller's side may not achieve. Operator step: sign in on the sandbox **site** as `TESTUSER_nivadesk_buyer2`,
+open Purchase History, and complete checkout on the £5.00 order (the listing is `AutoPay false`, so the order is
+sitting unpaid and awaiting exactly this). No real card: the sandbox uses test payment methods, and the assistant
+enters no payment details.
 
 **Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change.
 
