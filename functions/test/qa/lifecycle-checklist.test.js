@@ -116,6 +116,45 @@ check("a workspace with no answers still gets something to do", () => {
   assert.strictEqual(worked.headline, "You're set up");
 });
 
+check("a started-but-empty first order is named as such and pointed back at (firstOrder: shell)", () => {
+  const result = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [], firstOrder: { state: "shell", shellId: "abc123", shellCount: 2 } });
+  const step = result.steps.find((s) => s.key === "order_created");
+  assert.ok(step, "the order step is gone");
+  assert.strictEqual(step.title, "Complete your first project");
+  assert.strictEqual(step.action, "open_order");
+  assert.deepStrictEqual(step.target, { orderId: "abc123" });
+  assert.strictEqual(step.done, false);
+  // Same key, same count: the activation table did not move.
+  const plain = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [] });
+  assert.strictEqual(result.doneCount, plain.doneCount);
+  assert.deepStrictEqual(result.steps.map((s) => s.key), plain.steps.map((s) => s.key));
+  assert.strictEqual(result.complete, false);
+});
+
+check("with no order at all, or with firstOrder absent, the step reads as it always did (firstOrder: none)", () => {
+  for (const firstOrder of [undefined, null, { state: "none" }]) {
+    const result = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [], firstOrder });
+    const step = result.steps.find((s) => s.key === "order_created");
+    assert.strictEqual(step.title, "Create your first project");
+    assert.strictEqual(step.action, "new_order");
+    assert.strictEqual(step.target, undefined);
+  }
+  // A shell state without an id has nowhere to send anybody — it falls back too.
+  const noId = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [], firstOrder: { state: "shell" } });
+  assert.strictEqual(noId.steps.find((s) => s.key === "order_created").action, "new_order");
+});
+
+check("a substantive first order ticks the step whatever the words (firstOrder: substantive)", () => {
+  const result = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [ev("order_created")], firstOrder: { state: "substantive", orderId: "real1" } });
+  const step = result.steps.find((s) => s.key === "order_created");
+  assert.strictEqual(step.done, true);
+  assert.strictEqual(step.title, "Create your first project");
+  assert.strictEqual(step.target, undefined);
+  // And the shell words never appear on a done step, even if the caller is inconsistent.
+  const odd = setupChecklist({ profile: { onboardingMainGoal: "repairs_service" }, events: [ev("order_created")], firstOrder: { state: "shell", shellId: "x" } });
+  assert.strictEqual(odd.steps.find((s) => s.key === "order_created").title, "Create your first project");
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }

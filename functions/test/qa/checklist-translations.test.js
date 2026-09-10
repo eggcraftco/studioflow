@@ -9,7 +9,7 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const { SETUP_STEP_COPY, SETUP_PRELUDE, setupChecklist } = require("../../lifecycle/checklist");
+const { SETUP_STEP_COPY, SETUP_PRELUDE, SETUP_SHELL_COPY, setupChecklist } = require("../../lifecycle/checklist");
 const { ACTIVATION_PATHS } = require("../../lifecycle/activation");
 
 let failures = 0;
@@ -38,6 +38,9 @@ function allStrings() {
     if (copy.title) out.add(copy.title);
     if (copy.detail) out.add(copy.detail);
   }
+  // The shell variant of the first-order step is on-screen copy too.
+  out.add(SETUP_SHELL_COPY.title);
+  out.add(SETUP_SHELL_COPY.detail);
   // The prelude's copy is not exported as a map of its own, so it is collected
   // by running every path — which also proves nothing renders that the module
   // cannot produce.

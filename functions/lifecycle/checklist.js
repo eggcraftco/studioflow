@@ -40,6 +40,21 @@ const STEP_COPY = Object.freeze({
   accounting_connected: { title: "Connect your accounting", detail: "QuickBooks or Xero, so the books stay in step.", action: "integrations" }
 });
 
+/**
+ * The words for the first-order step when the workspace has STARTED an order
+ * that is still a shell (docs/onboarding/substantive-order-wiring.md §3.3).
+ *
+ * Same key as the ordinary step, so `doneCount`, `complete` and the activation
+ * table do not move; only the words and the destination change. The
+ * destination is the shell itself: the way back to the order the person
+ * abandoned, not a new one.
+ */
+const SHELL_STEP_COPY = Object.freeze({
+  title: "Complete your first project",
+  detail: "You started one — add the customer, what it is worth or what it contains, and it counts.",
+  action: "open_order"
+});
+
 /** The step that comes before the path's own, where one is worth showing. */
 const PRELUDE = Object.freeze({
   commerce: ["integration_connected"],
@@ -94,12 +109,25 @@ function setupChecklist(input = {}) {
     steps.push({ key: name, ...copy, done: seen.has(name) });
   }
 
+  // What the workspace's orders say about its first real job, when the caller
+  // read them: { state: "none" | "shell" | "substantive", shellId? }. Absent
+  // means today's behaviour — the step reads only from the events.
+  const firstOrder = input.firstOrder && typeof input.firstOrder === "object" ? input.firstOrder : null;
+
   for (const name of required) {
     const copy = STEP_COPY[name];
     // A requirement with no words is left out rather than shown as an event
     // name: one step fewer beats an instruction nobody can follow.
     if (!copy) continue;
-    steps.push({ key: name, ...copy, done: doneNames.has(name) });
+    const done = doneNames.has(name);
+    // A started-but-empty order is named as such and pointed back at, instead
+    // of the person being asked to create another one. Only when the step is
+    // not done: a substantive order makes the words irrelevant.
+    if (name === "order_created" && !done && firstOrder && firstOrder.state === "shell" && firstOrder.shellId) {
+      steps.push({ key: name, ...SHELL_STEP_COPY, target: { orderId: String(firstOrder.shellId) }, done: false });
+      continue;
+    }
+    steps.push({ key: name, ...copy, done });
   }
 
   const doneCount = steps.filter((step) => step.done).length;
@@ -114,4 +142,4 @@ function setupChecklist(input = {}) {
   };
 }
 
-module.exports = { setupChecklist, SETUP_STEP_COPY: STEP_COPY, SETUP_PRELUDE: PRELUDE };
+module.exports = { setupChecklist, SETUP_STEP_COPY: STEP_COPY, SETUP_PRELUDE: PRELUDE, SETUP_SHELL_COPY: SHELL_STEP_COPY };

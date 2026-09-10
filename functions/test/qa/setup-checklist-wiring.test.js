@@ -31,12 +31,21 @@ check("any member may see their own workspace's progress", () => {
 
 check("it reads one document per question, not the whole workspace", () => {
   // A dashboard card that read hundreds of documents on every load is a card
-  // nobody could afford to show. Every probe is limit(1).
+  // nobody could afford to show. Every probe is limit(1) — except the first
+  // order, which since v2.1 is a bounded page of the newest fifty handed to the
+  // SUBSTANTIVE_ORDER predicate (docs/onboarding/substantive-order-wiring.md
+  // §3.2): "an order exists" is not "the first project was created". Fifty,
+  // twice — the ordered read and its unordered fallback — and nothing else.
   const limits = body.match(/\.limit\((\d+)\)/g) || [];
-  assert.ok(limits.length >= 6, `only ${limits.length} bounded reads`);
-  for (const limit of limits) {
-    assert.strictEqual(limit, ".limit(1)", `a probe reads more than one document: ${limit}`);
-  }
+  assert.ok(limits.length >= 7, `only ${limits.length} bounded reads`);
+  const ones = limits.filter((limit) => limit === ".limit(1)");
+  const fifties = limits.filter((limit) => limit === ".limit(50)");
+  assert.ok(ones.length >= 6, `only ${ones.length} single-document probes`);
+  assert.strictEqual(fifties.length, 2, "the first-order read is one bounded query plus its fallback, no more");
+  assert.strictEqual(ones.length + fifties.length, limits.length, `a probe reads an unexpected page size: ${limits.join(" ")}`);
+  assert.ok(body.includes("firstOrderProgress(recentOrders.docs"), "the bounded page is not handed to the predicate");
+  assert.ok(body.includes('mark("order_created", firstOrder.state === "substantive")'), "an order that merely exists still ticks the first-project step");
+  assert.ok(!body.includes('mark("order_created", !anyOrder.empty)'), "the old existence probe is still what ticks the step");
 });
 
 check("no query here needs an index nobody has deployed", () => {
@@ -48,6 +57,16 @@ check("no query here needs an index nobody has deployed", () => {
   // Two equality filters on the same query would need one too.
   const doubleEquality = /\.where\([^)]*"=="[^)]*\)\s*\n?\s*\.where\([^)]*"=="/.test(body);
   assert.ok(!doubleEquality, "two equality filters on one query need a composite index");
+  // The one ordered query (companyId == … orderBy paymentDate) does need a
+  // composite index, so it is declared, and it falls back to the unordered read
+  // rather than failing as "no orders" while the index is missing or building.
+  const ordered = body.match(/\.orderBy\("([A-Za-z]+)", "desc"\)\.limit\(50\)\.get\(\)\s*\n?\s*\.catch\(\(\) => db\.collection\("siparisler"\)\.where\("companyId", "==", companyId\)\.limit\(50\)\.get\(\)\)/);
+  assert.ok(ordered, "the ordered first-order read has no unordered fallback");
+  assert.strictEqual(ordered[1], "paymentDate", "ordering by a field most orders lack drops them (createdAt is on 65 of 450 sampled orders)");
+  const indexes = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "..", "firestore.indexes.json"), "utf8"));
+  const declared = (indexes.indexes || []).some((index) => index.collectionGroup === "siparisler" &&
+    JSON.stringify(index.fields) === JSON.stringify([{ fieldPath: "companyId", order: "ASCENDING" }, { fieldPath: "paymentDate", order: "DESCENDING" }]));
+  assert.ok(declared, "the composite index siparisler(companyId ASC, paymentDate DESC) is not declared in firestore.indexes.json");
 });
 
 check("a probe that fails answers 'not done' rather than throwing the card away", () => {
