@@ -55,7 +55,12 @@ function oauthParamsFromLocation(): OAuthParams {
     client_id: params.get("client_id") ?? "",
     redirect_uri: params.get("redirect_uri") ?? "",
     state: params.get("state") ?? "",
-    scope: params.get("scope") ?? "orders.read orders.write",
+    // Empty, not a grant this page invented. When ChatGPT names no scope the
+    // SERVER decides what the connection gets (nvOAuthDefaultScope), which is
+    // the list its own metadata advertises; a default typed here was smaller
+    // than that list, so a connection made without an explicit scope could not
+    // call the finance tools the same server advertises.
+    scope: params.get("scope") ?? "",
     code_challenge: params.get("code_challenge") ?? "",
     code_challenge_method: params.get("code_challenge_method") ?? "",
     resource: params.get("resource") ?? "https://nivadesk.app/chatgptMcp"

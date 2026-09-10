@@ -20,7 +20,8 @@ export default async function ChatGPTConnectPage({
     client_id: firstValue(params.client_id),
     redirect_uri: firstValue(params.redirect_uri),
     state: firstValue(params.state),
-    scope: firstValue(params.scope, "orders.read orders.write"),
+    // Empty on purpose: the server owns the default grant. See ChatGPTConnectClient.
+    scope: firstValue(params.scope, ""),
     code_challenge: firstValue(params.code_challenge),
     code_challenge_method: firstValue(params.code_challenge_method),
     resource: firstValue(params.resource, "https://nivadesk.app/chatgptMcp")
