@@ -161,3 +161,30 @@ workspaces whose only orders are shells — the eleven with 33 dead orders among
 ticked first step and start showing the way back to the order they abandoned. The funnel's activated
 count reads 11 instead of 24, which is the number the operator already accepted as the baseline; the
 checklist and the funnel then disagree about nothing, because they read one function.
+
+## 6. Wired — 10 September 2026 (night), on this branch
+
+The freeze lifted with the Stripe fix live and carried, so §3 was executed as written, with one
+deviation the data forced.
+
+| Step | Done | Where |
+|---|---|---|
+| §3.1 the funnel | `derive.js` skips an order that is not substantive before it can push `order_created` / `external_order_imported`; `order_delivered` untouched | `functions/lifecycle/derive.js`; `lifecycle-derive.test.js` "a shell order derives no order_created…", "a shop-imported shell derives no external_order_imported either" (the file's earlier order fixtures were shells by v2.1 and now carry `orderValue`) |
+| §3.2 the checklist server | `getSetupChecklist` reads the newest fifty orders, hands them to `firstOrderProgress`, ticks `order_created` only for `state: "substantive"`, passes `firstOrder` to the model; fallback to the unordered `limit(50)` read if the index is missing | `functions/index.js` `getSetupChecklist` |
+| §3.3 the model | `setupChecklist({ …, firstOrder })`: for `order_created`, not done, `state: "shell"` with a `shellId` → "Complete your first project" / `open_order` / `target: { orderId }`; same key, same `doneCount` | `functions/lifecycle/checklist.js` (`SETUP_SHELL_COPY` exported); `lifecycle-checklist.test.js` three cases (shell / none-or-absent / substantive); `checklist-translations.test.js` walks the two new strings — added to `language.ts` in all eleven languages |
+| §3.4 web | `setupStepHref(action, target)`: `open_order` + id → `/orders?orderId=<id>`, no id → `""`; the dashboard card and the Home card pass `step.target`; the response mapper keeps `target.orderId` | `studioflow-web/lib/studioflow/setupChecklist.ts`, `app/dashboard/page.tsx`, `components/home/HomeCardBodies.tsx`; `dashboard-checklist.test.js` "the way back to a shell order carries the order id…" |
+| §3.4 native | `open_order` → the Orders list on Android (`setupStepDestination`) and Apple (`homeSetupDestination`), so the step is never a dead row; opening the exact order (the `target`) is left for the store lines, with the models | `HomeCardBodies.kt`, `HomeView.swift` |
+| index | `siparisler (companyId ASC, paymentDate DESC)` added to `firestore.indexes.json` and created in production with `gcloud firestore indexes composite create` (operation started 02:14 UTC) | |
+
+**Deviation: the bounded read orders by `paymentDate`, not `createdAt`.** A read-only census of 450
+production orders across 51 workspaces on 10 September: `paymentDate` on 446, `createdAt` on 65,
+`createdAtMs` on 12, neither creation stamp on 373. Firestore's `orderBy` drops documents without the
+field, so `orderBy("createdAt")` would have read only 65 of 450 and told most workspaces they have no
+first project — the direction of error the checklist can afford only in the rare case, not as the rule.
+`paymentDate` is the order date every creation path writes (`nvOrderDefaults` stamps it from the input
+or `now`). The four in 450 without it fall to the fallback read's list order.
+
+**Scope kept out, on purpose (§3.5 and the night's authorization):** no new event, no activation weight,
+no message trigger, no backfill. The deploy that follows is `getSetupChecklist` by name only; the funnel
+(`getActivationFunnel`) keeps its 1.x derivation in production until the v2.1 dry-run comparison and
+rollout package are accepted — see `docs/onboarding/activation-v2.1-rollout-2026-09-10.md`.

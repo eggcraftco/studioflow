@@ -2208,7 +2208,7 @@ export function GettingStartedCardBody({
         id: step.key,
         label: step.title,
         blurb: step.detail,
-        href: setupStepHref(step.action),
+        href: setupStepHref(step.action, step.target),
         cta: "Continue",
         done: step.done,
       }))

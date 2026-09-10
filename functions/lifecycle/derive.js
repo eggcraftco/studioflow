@@ -22,6 +22,7 @@
 // Firestore, no clock, no network.
 
 const { describeEvent } = require("./events");
+const { isSubstantiveOrder } = require("./substantiveOrder");
 
 function millisOf(value) {
   if (value === null || value === undefined) return null;
@@ -127,6 +128,14 @@ function deriveEvents(snapshot = {}) {
     const createdAt = firstTime(order.createdAtMs, order.createdAt, order.paymentDate);
     const fromShop = Boolean(order.commerce && order.commerce.provider) ||
       Boolean(order.customFields && order.customFields.Source);
+    // A shell is not an event (docs/onboarding/substantive-order-wiring.md §3.1).
+    // Every creation path writes a complete-looking document before anybody
+    // types — placeholder customer, status, delivery window, tax stamps — and
+    // counting those activated eleven workspaces that only ever opened a form.
+    // The same test on an imported order on purpose: an importer that writes an
+    // empty envelope should not activate a workspace either. A delivered order
+    // is substantive by the fulfilment clause, so `order_delivered` is unaffected.
+    if (!isSubstantiveOrder(order)) continue;
     if (fromShop) push("external_order_imported", createdAt, id);
     else push("order_created", createdAt, id);
     if (order.isDelivered === true) push("order_delivered", firstTime(order.deliveredAtMs, order.updatedAt, createdAt), id);

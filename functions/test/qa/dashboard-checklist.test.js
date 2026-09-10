@@ -72,11 +72,12 @@ check("a step with nowhere to send anybody does not pretend to be a link", () =>
 check("every action the server can name has somewhere to go", () => {
   // A step whose action is unmapped renders as a dead row, which is worse than
   // one step fewer.
-  const { SETUP_STEP_COPY, SETUP_PRELUDE } = require("../../lifecycle/checklist");
+  const { SETUP_STEP_COPY, SETUP_PRELUDE, SETUP_SHELL_COPY } = require("../../lifecycle/checklist");
   const hrefs = shared.slice(shared.indexOf("SETUP_STEP_HREFS"), shared.indexOf("};", shared.indexOf("SETUP_STEP_HREFS")));
   assert.ok(hrefs.length > 0, "SETUP_STEP_HREFS was not found in the shared module");
   const actions = new Set();
   for (const copy of Object.values(SETUP_STEP_COPY)) if (copy.action) actions.add(copy.action);
+  if (SETUP_SHELL_COPY && SETUP_SHELL_COPY.action) actions.add(SETUP_SHELL_COPY.action);
   // The prelude's copy lives in the same module.
   const prelude = require("../../lifecycle/checklist");
   assert.ok(prelude.SETUP_PRELUDE, "the prelude is not exported");
@@ -91,6 +92,20 @@ check("the styles it relies on exist", () => {
   for (const rule of [".getting-started-card", ".getting-started-steps", ".getting-started-tick", ".getting-started-steps button:disabled"]) {
     assert.ok(css.includes(rule), `${rule} is not styled, so the card renders bare`);
   }
+});
+
+check("the way back to a shell order carries the order id, and goes nowhere without one", () => {
+  // substantive-order-wiring.md §3.4: an actionable card always has a valid
+  // target, or it is not rendered as actionable.
+  assert.ok(shared.includes("export function setupStepHref(action: string, target?"), "setupStepHref does not take the step's target");
+  assert.ok(/open_order/.test(shared), "open_order is unknown to the web");
+  assert.ok(shared.includes("/orders?orderId="), "the shell step does not deep-link to the order");
+  // The two callers hand the target through rather than the action alone.
+  assert.ok(body.includes("setupStepHref(step.action, step.target)"), "the dashboard card drops the target");
+  const home = fs.readFileSync(path.join(WEB, "components", "home", "HomeCardBodies.tsx"), "utf8");
+  assert.ok(home.includes("setupStepHref(step.action, step.target)"), "the Home card drops the target");
+  // And the response mapper keeps the id the server sent.
+  assert.ok(shared.includes("target"), "loadSetupChecklist does not read the step's target");
 });
 
 (async () => {

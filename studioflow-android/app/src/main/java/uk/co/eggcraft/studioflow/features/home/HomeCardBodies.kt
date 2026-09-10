@@ -505,6 +505,10 @@ private data class SetupStep(
 private fun setupStepDestination(action: String): String = when (action) {
     "integrations" -> "Settings"
     "new_order" -> "Orders"
+    // The way back to a started-but-empty first order (the server's
+    // "Complete your first project" step). The list for now; opening the exact
+    // order needs the step's target plumbed through the repository model.
+    "open_order" -> "Orders"
     "new_customer" -> "Customers"
     "bank" -> "BankSpending"
     "inventory" -> "Inventory"

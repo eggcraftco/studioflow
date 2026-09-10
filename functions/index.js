@@ -29501,8 +29501,14 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
  *
  * Deliberately built from `limit(1)` probes rather than from the full
  * derivation the admin funnel uses: a checklist only needs to know WHETHER a
- * workspace has an order, not how many, and a dashboard card that read eight
- * hundred documents on every load would be a card nobody could afford to show.
+ * workspace has a customer, a bank, a shop — not how many — and a dashboard
+ * card that read eight hundred documents on every load would be a card nobody
+ * could afford to show.
+ *
+ * The one exception is the first order, which is read as a bounded page of the
+ * newest fifty and handed to the pure SUBSTANTIVE_ORDER predicate: an order
+ * document exists the moment somebody opens the form, so "an order exists" is
+ * not "the first project was created" (docs/onboarding/substantive-order-wiring.md §3.2).
  *
  * Any member may ask — this is the workspace's own progress, not billing or
  * admin data, and hiding it from everyone but the owner would hide it from the
@@ -29511,11 +29517,22 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
 exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, false);
   const lifecycle = require("./lifecycle/checklist");
+  const substantiveOrder = require("./lifecycle/substantiveOrder");
   const db = admin.firestore();
 
-  const [settingsSnap, anyOrder, anyCustomer, anyBank, anyAccounting, anyInventory, shopifySnap] = await Promise.all([
+  const [settingsSnap, recentOrders, anyCustomer, anyBank, anyAccounting, anyInventory, shopifySnap] = await Promise.all([
     db.collection("companySettings").doc(companyId).get(),
-    db.collection("siparisler").where("companyId", "==", companyId).limit(1).get(),
+    // The newest orders, bounded. Ordered by `paymentDate` — the order date every
+    // creation path writes (446 of 450 orders sampled on 10 Sep 2026 carry it;
+    // `createdAt` only 65) — because ordering by a field most documents lack
+    // would silently drop them. Fifty is the newest page: for the population
+    // this step exists for (a handful of shells) it is the whole book; for a
+    // real order buried under fifty later shells the step would ask for work
+    // already done, the one direction of error a checklist can afford. The
+    // fallback drops the ordering if the composite index is missing, rather
+    // than failing as "no orders".
+    db.collection("siparisler").where("companyId", "==", companyId).orderBy("paymentDate", "desc").limit(50).get()
+      .catch(() => db.collection("siparisler").where("companyId", "==", companyId).limit(50).get()),
     db.collection("musteriler").where("companyId", "==", companyId).limit(1).get(),
     db.collection("companies").doc(companyId).collection("bankConnections").limit(1).get(),
     db.collection("companies").doc(companyId).collection("accountingConnections").limit(1).get(),
@@ -29541,7 +29558,10 @@ exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) =
     .limit(1).get()
     .catch(() => ({ empty: true }));
   mark("external_order_imported", !imported.empty);
-  mark("order_created", !anyOrder.empty);
+  // An empty document is not a first project: only a substantive order ticks
+  // the step. A shell is named as such by the checklist and pointed back at.
+  const firstOrder = substantiveOrder.firstOrderProgress(recentOrders.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+  mark("order_created", firstOrder.state === "substantive");
   mark("customer_created", !anyCustomer.empty);
   mark("integration_connected", !shopifySnap.empty || !imported.empty);
   mark("bank_connected", !anyBank.empty);
@@ -29560,7 +29580,7 @@ exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) =
     mark("inventory_consumed_by_order", !consumed.empty);
   }
 
-  const checklist = lifecycle.setupChecklist({ profile: settings, events });
+  const checklist = lifecycle.setupChecklist({ profile: settings, events, firstOrder });
   return { ok: true, companyId, ...checklist };
 });
 

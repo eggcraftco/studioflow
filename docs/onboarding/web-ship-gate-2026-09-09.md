@@ -152,3 +152,19 @@ already-resolved DerivedData built clean. Use a DerivedData that has resolved pa
 What the store lines still need from the operator, and what this branch does not do: version/build
 bumps in `EGGcraft.xcodeproj` and `app/build.gradle.kts`, archives and uploads (ASC / Play Console), and
 the release notes. The code is ready for them; nothing has been archived or uploaded.
+
+## 8. Published — 10 September 2026, 02:08 UTC, as **Round 169**
+
+The staged package went live under the next round number, not the one the branch carried: by the
+time it shipped, `main` of the publish repo had moved to `4be81fc` "Round 168: the connect page lets
+the server decide the scope" (the OpenAI 1.2.0 deploy), so "Round 168" is that change alone.
+
+| | |
+|---|---|
+| Publish repo commit | `0210a19` "Round 169: onboarding resumes where it stopped, and Skip stays Skip" — `f765d0e` cherry-picked onto `4be81fc` (`git cherry-pick -x`, message renamed); the 12 files of §6, nothing else in the tree moved; the connect-page change is preserved |
+| Local gate before the push | `tsc --noEmit` clean; `node scripts/hostinger-build.mjs` (the real `next build`) "Compiled successfully", `NEXT_BUILD_EXIT code 0` in 23 s; markers `nivadesk-onboarding-progress` and `setup=continue` present in the built chunk |
+| Push | `4be81fc..0210a19 main -> main` at 02:08:47 UTC; Hostinger auto-built `main` |
+| Live verification (by chunk, not by page HTML) | 02:11:49 UTC: `/dashboard` references 16 chunks (was 15); `nivadesk-onboarding-progress` ×1, `setup=continue` ×1, `Continue setup` ×2 in the served JS — none of the three before the push |
+| Live UI (existing-flow check, §2 I–K) | signed in as the review account (a finished workspace): `/dashboard` and `/home` render, no wizard, no "Continue setup" card, no `nivadesk-onboarding-progress:*` key, no console error, no application error; Home's Getting started card shows its first open step as before |
+| Not verified live | the fresh-workspace resume path (A–F, H, L–N) — that needs a workspace that has not finished setup, and no such live account was available without a sign-in; it stands on the emulator run in §2 |
+| Rollback | `cd ~/Developer/studioflow-hostinger-publish-20260530 && git revert 0210a19 && git push origin main` |

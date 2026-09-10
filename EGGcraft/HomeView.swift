@@ -88,6 +88,10 @@ func homeSetupDestination(forAction action: String) -> String {
     switch action {
     case "integrations": return "Settings"
     case "new_order": return "Orders"
+    // The way back to a started-but-empty first order (the server's
+    // "Complete your first project" step). The list for now; opening the exact
+    // order needs the step's target plumbed through the model.
+    case "open_order": return "Orders"
     case "new_customer": return "Customers"
     case "bank": return "BankSpending"
     case "inventory": return "Inventory"

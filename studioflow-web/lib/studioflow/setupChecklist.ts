@@ -22,6 +22,9 @@ export type SetupChecklistStep = {
    *  Empty means the step is a statement rather than somewhere to go. */
   action: string;
   done: boolean;
+  /** Where an `open_order` step points: the order the person started and left
+   *  (functions/lifecycle/substantiveOrder.js decides which). Absent otherwise. */
+  target?: { orderId?: string };
 };
 
 export type SetupChecklist = {
@@ -49,10 +52,19 @@ export const SETUP_STEP_HREFS: Record<string, string> = {
   bank: "/bank",
   inventory: "/inventory",
   assistant: "/chatgpt",
+  // The way back to a started-but-empty first order. The orders page reads
+  // `orderId` from the query and opens that order; without an id there is
+  // nothing to open, so the step stays a statement rather than a dead button.
+  open_order: "/orders",
 };
 
-export function setupStepHref(action: string) {
-  return SETUP_STEP_HREFS[String(action || "").trim()] || "";
+export function setupStepHref(action: string, target?: { orderId?: string }) {
+  const key = String(action || "").trim();
+  if (key === "open_order") {
+    const orderId = String(target?.orderId || "").trim();
+    return orderId ? `/orders?orderId=${encodeURIComponent(orderId)}` : "";
+  }
+  return SETUP_STEP_HREFS[key] || "";
 }
 
 /**
@@ -110,13 +122,17 @@ export async function loadSetupChecklist(companyId: string): Promise<SetupCheckl
         // A step with no words is not a step somebody can follow.
         if (!title) return null;
         const key = String(step?.key ?? "").trim() || title;
-        return {
+        const mapped: SetupChecklistStep = {
           key,
           title,
           detail: String(step?.detail ?? ""),
           action: String(step?.action ?? ""),
           done: step?.done === true,
-        } satisfies SetupChecklistStep;
+        };
+        // The id of the order a shell step points back at, when the server sent one.
+        const orderId = String(step?.target?.orderId ?? "").trim();
+        if (orderId) mapped.target = { orderId };
+        return mapped;
       })
       .filter((step): step is SetupChecklistStep => step !== null);
     if (steps.length === 0) return null;

@@ -46,9 +46,9 @@ check("dates are read in every shape the database stores them in", () => {
 check("an order that came from a shop is an import; one somebody typed is not", () => {
   const result = deriveEvents({
     orders: [
-      { id: "o1", createdAtMs: T0, commerce: { provider: "etsy", externalId: "1042" } },
-      { id: "o2", createdAtMs: T0 + DAY, customFields: { Source: "Shopify" } },
-      { id: "o3", createdAtMs: T0 + 2 * DAY }
+      { id: "o1", orderValue: 120, createdAtMs: T0, commerce: { provider: "etsy", externalId: "1042" } },
+      { id: "o2", orderValue: 120, createdAtMs: T0 + DAY, customFields: { Source: "Shopify" } },
+      { id: "o3", orderValue: 120, createdAtMs: T0 + 2 * DAY }
     ]
   });
   assert.deepStrictEqual(names(result), ["external_order_imported", "external_order_imported", "order_created"]);
@@ -57,7 +57,7 @@ check("an order that came from a shop is an import; one somebody typed is not", 
 });
 
 check("a workspace that has only typed its own orders has not imported anything", () => {
-  const result = deriveEvents({ orders: [{ id: "o1", createdAtMs: T0 }] });
+  const result = deriveEvents({ orders: [{ id: "o1", orderValue: 120, createdAtMs: T0 }] });
   assert.strictEqual(activationProgress(result.events, "commerce").activated, false);
   assert.strictEqual(activationProgress(result.events, "general").activated, true, "typing a real order is still real work");
 });
@@ -204,7 +204,7 @@ check("a workspace with no onboarding stamp derives no onboarding at all", () =>
     { businessOnboardingCompletedAt: null },
     { businessOnboardingCompletedAt: "not a date", businessOnboardingCompletedAction: "wizard" }
   ]) {
-    const result = deriveEvents({ settings, orders: [{ id: "o1", createdAtMs: T0 }] });
+    const result = deriveEvents({ settings, orders: [{ id: "o1", orderValue: 120, createdAtMs: T0 }] });
     assert.deepStrictEqual(names(result), ["order_created"], `${JSON.stringify(settings)} invented an onboarding event`);
   }
   assert.deepStrictEqual(names(deriveEvents({ settings: {} })), []);
@@ -212,7 +212,7 @@ check("a workspace with no onboarding stamp derives no onboarding at all", () =>
 
 check("the events come back in the order they happened", () => {
   const result = deriveEvents({
-    orders: [{ id: "o2", createdAtMs: T0 + 5 * DAY }, { id: "o1", createdAtMs: T0 }],
+    orders: [{ id: "o2", orderValue: 120, createdAtMs: T0 + 5 * DAY }, { id: "o1", orderValue: 120, createdAtMs: T0 }],
     customers: [{ id: "c1", createdAtMs: T0 + 2 * DAY }]
   });
   const times = result.events.map((e) => e.atMs);
@@ -223,7 +223,7 @@ check("every derived name is one the registry declares", () => {
   // A derivation emitting a name nobody declared would be silently ignored by
   // the engine, and the workspace would look inactive for no visible reason.
   const result = deriveEvents({
-    orders: [{ id: "o1", createdAtMs: T0, commerce: { provider: "etsy" } }, { id: "o2", createdAtMs: T0, isDelivered: true }],
+    orders: [{ id: "o1", orderValue: 120, createdAtMs: T0, commerce: { provider: "etsy" } }, { id: "o2", orderValue: 120, createdAtMs: T0, isDelivered: true }],
     customers: [{ id: "c1", createdAtMs: T0 }],
     bankConnections: [{ id: "b1", linkedAt: T0 }],
     bankTransactions: [{ id: "t1", reviewedAt: T0, linkedOrderId: "o1" }],
@@ -267,12 +267,37 @@ check("the whole path: documents in, a lifecycle state out", () => {
   const derived = deriveEvents({
     settings: { businessOnboardingCompletedAt: T0 },
     etsyConnections: [{ id: "e1", status: "connected", connectedAtMs: T0 }],
-    orders: [{ id: "o1", createdAtMs: T0 + DAY, commerce: { provider: "etsy", externalId: "1" } }]
+    orders: [{ id: "o1", orderValue: 120, createdAtMs: T0 + DAY, commerce: { provider: "etsy", externalId: "1" } }]
   });
   const state = lifecycleState({ events: derived.events, path: "commerce", nowMs: T0 + 60 * DAY });
   assert.strictEqual(state.progress.activated, true, "the order did arrive; they were served once");
   assert.strictEqual(state.state, "dormant");
   assert.strictEqual(state.reason, "no_meaningful_activity");
+});
+
+check("a shell order derives no order_created — an empty document is not a first project", () => {
+  // Every creation path writes a complete-looking document before anybody
+  // types: placeholder customer, status, delivery window, tax stamps. None of
+  // that is evidence of work, and v2.1 says so (substantive-order-wiring.md §3.1).
+  const shell = deriveEvents({ orders: [{ id: "o1", createdAtMs: T0, customerName: "New Project", status: "Not Yet", deliveryTime: 45, taxRate: 20 }] });
+  assert.deepStrictEqual(names(shell), []);
+  assert.strictEqual(activationProgress(shell.events, "general").activated, false, "a shell must not activate a workspace");
+  // The same document with one real thing in it is an order again.
+  const real = deriveEvents({ orders: [{ id: "o1", createdAtMs: T0, customerName: "Ada Lovelace", status: "Not Yet" }] });
+  assert.deepStrictEqual(names(real), ["order_created"]);
+});
+
+check("a shop-imported shell derives no external_order_imported either", () => {
+  // An importer that writes an empty envelope should not activate a commerce
+  // workspace: the commerce predicate is provider-stamped AND substantive.
+  const shell = deriveEvents({ orders: [{ id: "o1", createdAtMs: T0, commerce: { provider: "etsy", externalId: "1" } }] });
+  assert.deepStrictEqual(names(shell), []);
+  assert.strictEqual(activationProgress(shell.events, "commerce").activated, false);
+  const real = deriveEvents({ orders: [{ id: "o1", createdAtMs: T0, orderValue: 40, commerce: { provider: "etsy", externalId: "1" } }] });
+  assert.deepStrictEqual(names(real), ["external_order_imported"]);
+  // A delivered order is substantive by the fulfilment clause, so delivery is never lost.
+  const delivered = deriveEvents({ orders: [{ id: "o2", createdAtMs: T0, isDelivered: true }] });
+  assert.deepStrictEqual(names(delivered), ["order_created", "order_delivered"]);
 });
 
 (async () => {
