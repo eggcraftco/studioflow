@@ -153,6 +153,26 @@ read it from the browser's network panel before changing anything.
   first preview too), touch nothing in the feedback paths, and are not hidden. Not fixed here: they are seed data
   gaps, and the rules in question are not this package's.
 
+## 11a. State of the design pass (recorded separately from the eBay work)
+
+The design corrections asked for after the first preview are **in the candidate commit `4f6f47ed`** and are not
+waiting on anything:
+
+| Area | Done |
+|---|---|
+| Form copy | "Choose an option and send. Add a note if you like." replaces the "one tap is enough" line; the privacy line now names exactly what is sent (account and workspace details, current page, language, platform) and says customer, order and bank records are not attached — checked against the record the server actually writes |
+| Form behaviour | visible × close button; Escape closes; focus moves to the first choice on open and back to the opener (or the account button) on close; a typed draft survives a close and is cleared only on send; a stray backdrop click cannot discard a draft; sending/error/success states distinct, the draft kept on error |
+| Manual vs invited | the manual form's secondary button reads **Cancel** (the invitation's reads *Not now*); closing the manual form records **no** dismissal — pinned by the emulator run (`dismissals=0`) |
+| Mobile | 390×844: the dialog sits inside the viewport (374×523 at x=18, y=161), the page does not scroll sideways; the mobile navigation carries its own "Send feedback" entry |
+| Inbox list | the app's own styled selects for Status/Type; sender and workspace grouped in one column; the note preview clamped to two lines with the full text in the detail; status shown as a readable badge (label plus colour, never colour alone); empty, loading and error states present; the table scrolls inside its own container |
+| Inbox copy | "Status changes and internal notes are visible only to admins." |
+| Detail screen | the full-width Back band replaced by a small "← Back to feedback" link; the person's message in its own emphasised block; date/workspace/sender/technical context demoted to a secondary definition list; **Trigger**, **Topic** and **Type** are three separate labelled fields; status is a normal-height select, the internal note a comfortable 4-row box; "Saved." appears only after a successful save and disappears as soon as anything changes again; Save disabled until there is a change |
+| Dev overlay "1 Issue" | opened and identified: two Firestore listener refusals from the **emulator seed shape** — a `users/{uid}` read the rules allow only for the same uid, and the `messageThreads` list rule meeting a null `memberUids` on the seeded company. Both pre-date this branch (they fired in the first preview too), touch nothing in the feedback paths, and were not hidden. Not fixed here: they are seed-data gaps in rules this package does not own |
+| Evidence | eleven screenshots re-rendered with one consistent synthetic note through form → list → detail, plus the mobile form and menu; `run-findings.txt` records the behavioural checks |
+
+Nothing in this package depends on the eBay sandbox work, and nothing in the eBay sandbox work depends on this. They
+are separate branches of the same commit history and separate approvals.
+
 ## 11. What stays out of this package
 
 Native screens, the §36/§37 prompt types (need trustworthy activation data — the v2.1 cutover package, kept separate),
