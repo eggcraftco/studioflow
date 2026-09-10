@@ -57,6 +57,22 @@ live catch-all regardless.
 `revealCounters`; no minting of connect states, presented codes, buyer documents; no counter reset). CI's
 "rules + e2e (Firestore emulator)" job on the same tree: success (run 34471692589, 11:33Z).
 
+### 2.1 Decision and publication (12:51–12:53Z)
+
+The operator delegated the choice to the best native practice; that is option A: rules are one versioned artifact,
+published exactly as committed, never hand-edited for a deploy. Sequence: clean tree at `94552412` (== origin);
+the **full** rules suite (`npm run test:rules`, nine `*.test.mjs` files) against the Firestore + Storage emulators with
+this very file — exit 0; then `firebase deploy --only firestore:rules`. The compiler reported one pre-existing
+warning (`[W] 1093:11` ternary result types — a line untouched by this diff) and compiled successfully.
+
+| | |
+|---|---|
+| Released | 2026-09-10T12:52:42.984Z, ruleset **`8256326f-61f2-44e3-8f5d-e96e47024f0a`** (previous: `f7e615d0`, 4 Sep) |
+| Content check | the live ruleset read back through the Rules API is **byte-identical** to HEAD's `firestore.rules` (1,310 lines, sha256 `e86b3c1a712de656…`) |
+| Change vs previous live | 47 lines added, 0 removed — the eBay lines and the `fileScans` block, all `allow read, write: if false` |
+| Effect | `revealCounters` is now server-only for members (the one real exposure of §2 is closed); the seven eBay collections and `fileScans` carry explicit denies in addition to the root catch-all |
+| Records | `firestore-rules-deploy.log`, `firestore-rules-live-8256326f.rules` in the raw folder |
+
 ## 3. The sixteen — names, identity, secrets, triggers, and what they do with the connector off
 
 Every one is created through `createEbayConnectorFunctions` (`functions/index.js:6191-6212`) whose `onCall`/`onRequest`/
@@ -219,10 +235,8 @@ No rules were published, so there is nothing to roll back on the rules side.
 
 ## 7. Open items and blockers
 
-1. **Firestore rules — operator decision needed (§2).** Publishing HEAD's `firestore.rules` ships the 36 eBay lines
-   together with the unrelated `fileScans` block (9 lines, deny-only, declarative under the root catch-all). Until the
-   eBay lines are live, a member can reset their own `revealCounters` document — irrelevant while no
-   `restrictedCustomer` row exists, **a blocker before the connector switch goes on**.
+1. ~~Firestore rules — operator decision needed~~ **Resolved 12:52Z (§2.1):** HEAD's `firestore.rules` is live as
+   ruleset `8256326f`; the `revealCounters` exposure is closed; the rules blocker before the connector switch is gone.
 2. **Runtime SA's own enqueue leg still not behaviourally proven** (`cloudtasks.enqueuer` for `ebay-connector@`, row 4, and
    the reflexive `actAs`, row 5): nothing in this step enqueues — the sweeps return before any row with the connector
    off, the ledger is empty, and no notification is registered. First exercised by a real notification or an import once
@@ -230,5 +244,5 @@ No rules were published, so there is nothing to roll back on the rules side.
 3. The next step's items, unchanged: Hostinger `NIVADESK_EBAY_CALLBACK_KEY`; the portal deletion token (prove the
    challenge locally first — the endpoint now answers challenges); the connector switch for one workspace; Sandbox OAuth →
    order → refund.
-4. The malware-scan `fileScans` rules block is on the branch but not live since 4 Sep — a separate, non-eBay decision.
+4. The malware-scan `fileScans` rules block went live with the same release (it had been on the branch since 4 Sep).
 
