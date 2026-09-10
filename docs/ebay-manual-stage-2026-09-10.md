@@ -178,6 +178,39 @@ was measured rather than assumed, and the answer is yes for this sandbox.
 under a minute at that point, so this reads as propagation into the Fulfillment API rather than the structural
 exclusion of §2b, which no longer applies. One bounded wait and a single re-check follow — not a polling loop.
 
+## 2g. Decisive: eBay's own Fulfillment API does not have the order either (22:2xZ)
+
+The preview was run once more after a single bounded three-minute wait, and then the same question was put to eBay
+directly, with the **seller's** token, through the API Explorer.
+
+| Check | Time (Z) | Result |
+|---|---|---|
+| NivaDesk preview, 7 days | 22:17:52 | `Orders found: 0` |
+| NivaDesk preview, 7 days | 22:20:52 | `Orders found: 0` (quota 17 → 19 across the two, so both calls really ran) |
+| **Fulfillment API `GET /sell/fulfillment/v1/order`** (the exact API and scope the connector uses) | ~22:23 | **HTTP 200, `{"total": 0, "limit": 50, "offset": 0, "orders": []}`** |
+| Trading `GetOrders`, seller role | 22:16 | the order is there: `Completed`, checkout `Complete`, `AmountPaid 6.00 GBP` |
+
+**Reading.** Roughly seven minutes after the order became checkout-complete and paid, eBay's Fulfillment API returns
+an empty list for this seller — not a filtered-out order, an empty account. The Trading API shows the same order as
+completed and paid at the same moment. So the two APIs disagree, and NivaDesk is reading the one that has nothing in
+it. **Nothing in NivaDesk is at fault and nothing in NivaDesk can fix this**: the connector's only order source is
+`sell.fulfillment.readonly`.
+
+**What this leaves.** The order was made with `PlaceOffer` and settled with `CompleteSale`, both Trading API calls,
+which is the only route this sandbox allowed (the buyer's web checkout pages are missing or reporting themselves down,
+§2d.1). An order created and paid that way may simply never reach the Sandbox's Fulfillment service, or may reach it
+after a delay far longer than anything worth polling for. Both are consistent with what was measured; neither can be
+distinguished from here tonight.
+
+**Stopped here deliberately.** No more probing, no polling loop. The order, the listing and the two test users stay in
+the sandbox as they are. NivaDesk's side is untouched: **0 orders, `importState: none`, `autoSync: false`**, the
+connection still read-only with its two scopes, nothing deployed.
+
+**If this is picked up again**, the one cheap thing worth doing is a single Fulfillment `getOrders` call and a single
+NivaDesk preview after some hours have passed. If the list is still empty, the honest conclusion is that this sandbox
+cannot produce a Fulfillment-visible order through the Trading route, and the order/import acceptance tests need
+either a working buyer checkout in the sandbox web UI or a different sandbox seller account.
+
 ### 2d.1 The two other buyer-side entry points, probed once each — both unusable
 
 | Page | Result (22:0xZ) |
