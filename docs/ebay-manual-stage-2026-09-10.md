@@ -15,11 +15,17 @@ Approved scope: `docs/ebay-manual-sync-stage-prep-2026-09-10.md` (prepared read-
 | 19:51:40 | **Preview, 90 days** from the web (owner) — the first real Sandbox API read after the deploy | HTTP 200 in 5.35 s on `previewebayimport-00002-hac`; UI "Orders found: 0 · Duplicate orders prevented: 0 · Not paid yet: 0 · Cancelled: 0"; `ebayQuota` 1 → 14 calls (13 creation slices, all successful — an API error surfaces as an error, not as zeros); `syncLog` `import_preview` "0 found"; orders/identities/held/buyers/restricted all still 0 (`05-preview-function-log.json`, `06-preview-readback.txt`) |
 | 19:5x–20:0x | Sandbox test data preparation: buyer test user form filled (`TESTUSER_nivadesk_buyer1`, site UK) — password and *Register* by the operator, who confirmed the registration; API Explorer set to Sandbox / site (3) UK / Trading API, request URL `https://api.sandbox.ebay.com/ws/api.dll` | the operator completed the seller's "Get OAuth User Token" consent once; the first `GetUser` executed afterwards answered `Failure` with `Header "X-EBAY-API-APP-NAME" does not exist` (error 10011) twice — the Explorer sent the call **without a user token** (the page had been re-rendered by an operation change in between), so the seller identity is **not yet verified** |
 
-## 2. Paused here — waiting for the operator (no new attempts, by instruction)
+| 22:0x–22:1x | The Explorer session had expired by the time the first re-attached token was used ("Your session expired. Please refresh the page and try again."); the page was refreshed (site UK, GetUser body prepared) and the operator signed in as the seller once more (sandbox sign-in page showed `testuser_nivadesk_seller1`, consent "Review and Grant Application Access: NivaDesk" — an Explorer-only token; NivaDesk's stored read-only connection unchanged) | — |
+| 21:13:54 (eBay clock) | `GetUser` with the seller's Explorer token, Sandbox, site (3) UK | `Ack Success`; `Email contact@nivadesk.co.uk`, `RegistrationDate 2026-09-10T18:52:04Z`, `NewUser true`, feedback 500 — the seller registered at 18:52Z with that address (the response viewer truncated before the `UserID` element; the sign-in page named `testuser_nivadesk_seller1`) |
+| 21:17:24 | `VerifyAddFixedPriceItem` (site UK, category 75576, £5.00, quantity 2, `AutoPay false`, picture `https://nivadesk.app/icon.png`, flat Royal Mail 2nd class £1.00, returns 30 days) | `Ack Warning` — two warnings only: `RefundOption` ignored (21916711), additional postage cost not given; no error → the listing is acceptable |
+| 21:18:22 | **`AddFixedPriceItem`**, same body without `RefundOption` and with `ShippingServiceAdditionalCost 0.00` | **`Ack Success`, ItemID `110590626185`**, StartTime 2026-09-10T21:18:22Z, EndTime 2026-10-10T21:18:22Z — one synthetic sandbox listing on the seller's account |
 
-Waiting for: the seller token to be attached again in the API Explorer tab (operator action), then `GetUser` to confirm
-`TESTUSER_nivadesk_seller1`, then one synthetic listing, the buyer token + `GetUser` for `TESTUSER_nivadesk_buyer1`, one
-`PlaceOffer`, and the acceptance run (narrow-window preview → import → second import → Sync now). Chrome tabs left as
+## 2. Next — the purchase (operator step: the buyer's Explorer token)
+
+Done since the pause: seller token re-obtained, `GetUser`, `VerifyAddFixedPriceItem`, `AddFixedPriceItem` (ItemID `110590626185`).
+Next: the operator signs in to the Explorer's token flow as `TESTUSER_nivadesk_buyer1` (Switch account on the sandbox
+sign-in page), `GetUser` confirms the buyer, `PlaceOffer` (Purchase, quantity 1, £5.00) on item `110590626185`, then the
+acceptance run in NivaDesk (narrow-window preview → import → second import → Sync now). Chrome tabs left as
 they are: NivaDesk settings (owner), API Explorer (GetUser prepared), Sandbox Registration. Nothing else was changed.
 
 Current settings: `autoSync` off; flag document unchanged; three functions switched on; no order, listing or buyer
