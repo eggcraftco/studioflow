@@ -34,8 +34,14 @@ check("the fixture is the captured sandbox response, or the stand-in is named as
   }
   console.log("      (no captured sandbox fixture yet — running against test/fixtures/ebay-synthetic-order.json; capturing it is an owner action and a gate on NIVADESK_EBAY_CONNECTOR=1 in production)");
   assert.ok(orderFixture._synthetic, "the stand-in must say it is one");
+  // "Committed" means tracked by git, not present on disk: since e7f59525 the marker is git-ignored and lives only on
+  // the deploying machine (sandbox rollout, 10 Sep 2026), so its presence there says nothing about shipping. Without a
+  // git repository (a bare checkout in CI would still have one) the old existence check stands in.
   const marker = path.join(__dirname, "..", "..", ".ebay-secrets-ready");
-  assert.ok(!fs.existsSync(marker), "functions/.ebay-secrets-ready is committed but no captured sandbox fixture exists — capture the fixture before shipping (design §8.1, §15)");
+  let tracked;
+  try { tracked = require("child_process").execFileSync("git", ["ls-files", "--", marker], { cwd: path.dirname(marker), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0; }
+  catch { tracked = fs.existsSync(marker); }
+  assert.ok(!tracked, "functions/.ebay-secrets-ready is committed but no captured sandbox fixture exists — capture the fixture before shipping (design §8.1, §15)");
 });
 
 check("the documented paths are removed: registration identity, tax identity, checkout notes, shipTo, pickup, gift details", () => {

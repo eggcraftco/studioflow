@@ -56,6 +56,10 @@ const said = (res) => JSON.stringify(res.payload);
   await check("begin refuses when the connector switch is off, the flag is off, or the server has no keyset; and for a non-owner", async () => {
     await assert.rejects(buildEbay({ connectorOn: false }).fns.beginEbayConnect({ auth, data: {} }), /not enabled/);
     await assert.rejects(buildEbay({ providerFlag: false }).fns.beginEbayConnect({ auth, data: {} }), /not enabled/);
+    // The workspace gate: the provider switch alone opens no consent screen; an exact entry or the wildcard does.
+    await assert.rejects(buildEbay({ workspaceFlag: false }).fns.beginEbayConnect({ auth, data: {} }), /not enabled for this workspace/);
+    await assert.rejects(buildEbay({ workspaceFlag: "other" }).fns.beginEbayConnect({ auth, data: {} }), /not enabled for this workspace/);
+    assert.ok((await buildEbay({ workspaceFlag: "*" }).fns.beginEbayConnect({ auth, data: { companyId: "c1" } })).state, "the wildcard opens it");
     await assert.rejects(buildEbay({ configured: false }).fns.beginEbayConnect({ auth, data: {} }), /not configured/);
     await assert.rejects(buildEbay({ owner: false }).fns.beginEbayConnect({ auth: { uid: "u2" }, data: {} }), /not owner/);
   });

@@ -3,10 +3,18 @@
 //
 //   { shadow: { enabled: false, providers: { shopify: true }, connections: { "shopify:eggcraft.myshopify.com": true } },
 //     queue:  { enabled: false, providers: {}, connections: {} },
-//     connectors: { enabled: false, providers: { ebay: false }, connections: { "ebay:<connectionId>": false } } }
+//     connectors: { enabled: false, providers: { ebay: false }, connections: { "ebay:<connectionId>": false },
+//                   workspaces: { "ebay:<companyId>": true, "ebay:*": false } } }
 //
 // A connection entry beats a provider entry beats the global switch, so one
-// store can run in shadow while the rest of the world is untouched. Cached
+// store can run in shadow while the rest of the world is untouched.
+//
+// `workspaces` is the second, narrower gate on STARTING a connection
+// (`beginEbayConnect`): a provider may be switched on for the sweeps and the
+// queue while no workspace, or exactly one, is allowed to begin a new OAuth
+// flow. Closed by default — no entry means no workspace may begin, whatever the
+// provider entry says; `"ebay:*": true` is the explicit way to open it to all,
+// and an exact `"ebay:<companyId>"` entry beats the wildcard in both directions. Cached
 // for a minute per instance: a webhook burst must not become a read storm.
 //
 // `connectors` is the runtime switch for a whole connector (eBay first): the
@@ -48,6 +56,21 @@ function flagEnabled(flags, area, provider, connectionId) {
   return section.enabled === true;
 }
 
+/**
+ * May this workspace BEGIN a connection with this provider? Exact entry, then the
+ * wildcard, then closed — never the provider entry and never the global switch,
+ * so switching a provider on for its sweeps opens no consent screen anywhere.
+ */
+function workspaceEnabled(flags, area, provider, companyId) {
+  const section = (flags && flags[area]) || EMPTY[area] || EMPTY.shadow;
+  const workspaces = section.workspaces && typeof section.workspaces === "object" ? section.workspaces : {};
+  const exact = `${provider}:${String(companyId || "")}`;
+  if (companyId && Object.prototype.hasOwnProperty.call(workspaces, exact)) return workspaces[exact] === true;
+  const wildcard = `${provider}:*`;
+  if (Object.prototype.hasOwnProperty.call(workspaces, wildcard)) return workspaces[wildcard] === true;
+  return false;
+}
+
 function resetCommerceFlagCache() { cache = { at: 0, flags: null }; }
 
-module.exports = { readCommerceFlags, flagEnabled, resetCommerceFlagCache, EMPTY_COMMERCE_FLAGS: EMPTY };
+module.exports = { readCommerceFlags, flagEnabled, workspaceEnabled, resetCommerceFlagCache, EMPTY_COMMERCE_FLAGS: EMPTY };

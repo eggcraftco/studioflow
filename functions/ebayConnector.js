@@ -216,6 +216,8 @@ function createEbayConnectorFunctions(deps) {
 
   async function flagsNow() { return flagsModule.readCommerceFlags(db(), { now: now() }); }
   async function flagOn(connectionId) { return flagsModule.flagEnabled(await flagsNow(), "connectors", "ebay", connectionId); }
+  /** The narrow gate on STARTING a flow (flags.js `workspaces`): closed unless this workspace, or `*`, is listed. */
+  async function workspaceFlagOn(companyId) { return flagsModule.workspaceEnabled(await flagsNow(), "connectors", "ebay", companyId); }
   async function providerFlagOn() { const flags = await flagsNow(); const section = flags.connectors || {}; if (section.providers && Object.prototype.hasOwnProperty.call(section.providers, "ebay")) return section.providers.ebay === true; return section.enabled === true; }
 
   async function writeSyncEvent(ref, event) {
@@ -507,6 +509,8 @@ function createEbayConnectorFunctions(deps) {
     if (!connectorOn()) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
     if (!configured() || !String(ruName() || "").trim()) throw new HttpsError("failed-precondition", "eBay is not configured on this server yet.");
     if (!(await providerFlagOn())) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
+    // The rollout gate: one workspace at a time, by an explicit entry, never by the provider switch alone.
+    if (!(await workspaceFlagOn(companyId))) throw new HttpsError("failed-precondition", "eBay is not enabled for this workspace yet.");
     const origin = String(request.data?.origin || "") === "native" ? "native" : "web";
     const state = crypto.randomBytes(32).toString("base64url");
     const nonce = crypto.randomBytes(24).toString("base64url");
