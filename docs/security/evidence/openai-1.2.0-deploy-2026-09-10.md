@@ -141,3 +141,59 @@ Per group, to the "Before" revision in §4's table (`gcloud run services update-
 
 **Deploy verdict:** all 19 functions and the web round succeeded and match the source; nothing partial. The one open
 verification item is the review-account connection (§5), not a deployment failure.
+
+## 9. Review-account OAuth connection and read-only smoke — done (10 September, 01:05–01:13Z)
+
+**Path: the normal user login and OAuth flow, no custom token, no IAM change, no password handled here.** The
+account and workspace were taken from the testing instructions (`review@nivadesk.app`, readiness §2) and verified
+read-only against Firebase Auth and Firestore before anything else: uid `KSQidetb3oOSItE9amLISf9Lh6h2`, one owned
+workspace `KSQidetb3oOSItE9amLISf9Lh6h2` ("My Studio", pro_monthly, active, 1 member). The browser's own session was
+not assumed: the in-app browser opened the flow with no cookies.
+
+| Step | Result |
+|---|---|
+| Dynamic client registration (`POST /chatgptOAuthRegister`, the same call ChatGPT makes) | **201**; client "NivaDesk release smoke 2026-09-10 (operator-driven)", `redirect_uris` echoed as `http://localhost:8765/callback` (http allowed on localhost only), `token_endpoint_auth_method: none` |
+| Authorize (`GET /chatgptOAuthAuthorize`, PKCE S256, `state`, **no `scope` parameter** — as ChatGPT sends it) | **302** to `https://nivadesk.app/chatgpt/connect?…&scope=<six names>` — the flag-on server default, six scopes, passed through to the consent page |
+| Consent page (Round 168 build, in-app browser) | "Connect NivaDesk" with the notice "…will send the authorization to localhost:8765"; the e-mail field was filled by the assistant, **the password was typed by the operator**, then "Sign in and continue" → workspace "My Studio" → Allow. Endpoint log: `chatgptOAuthWorkspaces` 200, `chatgptOAuthApprove` 200 (plus one CORS 204 each) — all on the new revisions |
+| Callback | received on the local listener at **01:11:00Z**, `state` matched, no error; the code was exchanged and the file deleted |
+| Token (`POST /chatgptOAuthToken`, `code_verifier`) | **200**, `token_type: Bearer`, `expires_in: 2592000` (30 days), **6 scopes granted** — the widened default, exactly what the flag-on listing needs (submission doc §5.4) |
+| Server record | `chatgptOAuthTokens`: a new row created 01:11:16Z for the review uid, `companyId` = the review workspace, 6 scopes, `source` and `uid` fields (the current record shape); nothing revoked, nothing else touched. The review uid also holds **23 older records** (May–September, with 3-, 5- and 6-scope grants) — every one minted before the flip and therefore refused on the finance and notes tools under enforcement until that client reconnects; the ChatGPT-side review connection is one of them and **must be reconnected before the review test cases are run** |
+
+**Authenticated MCP calls with the real token** (`https://mcp.nivadesk.app/chatgptMcp`, revision `chatgptmcp-00073-fuz`
+— 10 × HTTP 200 in the request log since 01:11Z, no warnings):
+
+| Call | Arguments | Outcome |
+|---|---|---|
+| `initialize` | — | protocol 2025-06-18, 6 instruction lines |
+| `tools/list` (authenticated, not the anonymous discovery) | — | **21 tools**, same listing hash `10316e28…` as the anonymous fetch and the candidate snapshot |
+| `search_orders` | `query: "OpenAI Review Test"` | **SUCCESS** — "Found 1 order(s)."; `structuredContent.orders` = 1 row with the order fields (id, status, designStatus, priority…) |
+| `get_order_detail` | `orderId: 22uckzfA8lGXYjj1JxCM` (the review test order) | **SUCCESS** — one order object, id present, status and design fields present |
+| `search_commerce_orders` (new) | `query: "OpenAI Review Test"` | **SUCCESS** — envelope `ok/action/state/data/freshness/partial/warnings/entityRefs/suggestedActions/summary`; 1 entity ref, 0 warnings, **no money-shaped key** |
+| `search_inventory` (new, the canonical search) | `{}` | **SUCCESS** — same envelope, **5 entity refs** (the review workspace already holds stock items), 0 warnings, no money-shaped key |
+| `get_bank_spending_summary` | `{}` | **SUCCESS** — connected feed, period, totals, 9 receipts waiting for the bank, 2 recurring subscriptions, 0 categories/top merchants (an owner reading their own feed) |
+| `search_bank_transactions` | `query: "ESET"` | **SUCCESS** — 1 transaction returned (the review feed's ESET row) |
+
+Nothing was refused: the review account is the workspace owner, so every gate — membership, Orders area, Financial
+permission, Bank Spending (owner) — and the six-scope grant let the reads through. **No permission-denied and no empty
+result occurred**, so neither classification was exercised on this account; the role/area refusals are pinned by
+`mcp-permissions` (25 checks) rather than observed here. No write tool was called; no order, item, status, message or
+e-mail was created or sent.
+
+**Server-side behaviour, PII-free.** `companies/<review ws>/piiAccessLog` gained **7 rows at 01:11:18–56Z**, one per
+read that hands over a person, `source: mcp`: `search_orders` ×2 (subject kind `order`, no id — a set read; categories
+name/email/phone/address), `get_order_detail` ×2 (`order`, id present), `search_commerce_orders` ×1 (`order`, name/email
+— the registry's categories for it), `get_bank_spending_summary` ×1 and `search_bank_transactions` ×1 (`bank_transaction`,
+`name` — the two bank rows that ship behind the flag). `search_inventory` filed none (stock carries no person). That is the
+disclosed carve-out, row for row as `docs/mcp-tool-annotations.md` describes it, on the live revision.
+
+**Housekeeping.** The smoke connection ("NivaDesk release smoke 2026-09-10") is a live 30-day grant for the review
+workspace; the operator can end it under Settings ▸ Account ▸ ChatGPT connections whenever convenient — no other
+connection was removed or altered. The private scratch files (code, verifier, token) were deleted after use; none of
+them was printed or committed.
+
+**Remaining for the next step.** (1) Reconnect the ChatGPT-side review connection (pre-flip grant). (2) Test data: the
+review workspace already holds stock items (5 refs) and the ESET row exists; the ESET row must be reset to "no receipt"
+before test case 5; test cases 1–3 figures to re-verify on the workspace. (3) The write-requiring cases
+(`update_order_status` on an order with automatic updates off, `attach_bank_receipt`) belong to the platform-form step.
+**No blocker remains for Scan Tools and the form update:** the listing the scanner will read is the one recorded in §5,
+and the authenticated path is proven end to end.
