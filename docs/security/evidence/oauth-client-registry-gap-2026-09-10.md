@@ -4,6 +4,10 @@ Date found: 10 September 2026, 01:36 UTC, while running Scan Tools on the 1.2.0 
 platform. Severity: **HIGH** — a live production regression of the published app's connect flow, not a
 security hole. Nothing in this note was changed in production; §5 is the proposed fix for the operator.
 
+> **Correction, 10 Sep morning** (`oauth-client-restore-package-2026-09-10.md` §3): the client was not registered on
+> 21 Aug — its first authorization code is dated 2026-06-22, so it predates log retention; the 21 Aug registration is a
+> different, unused id. Everything else in this note stands; the repair package supersedes §5.
+
 ## 1. What happens
 
 The OpenAI platform (Scan Tools) and ChatGPT (Add/Reconnect NivaDesk) send every authorize request with
