@@ -159,6 +159,25 @@ order, no listing change, no money, no card, no change to NivaDesk's stored conn
 `CheckoutStatus.Status` from `Incomplete` to `Complete`, which is the property the Fulfillment API tests, and whether
 NivaDesk's preview can now see the order. Both readings follow in §2f.
 
+## 2f. The order is now checkout-complete and paid — the open question from §2c is answered (22:16Z)
+
+Trading `GetOrders`, **seller role**, immediately after the `CompleteSale`:
+
+| Field | Before (§2c / §2d) | After |
+|---|---|---|
+| `OrderStatus` | `Active` | **`Completed`** |
+| `CheckoutStatus.Status` | `Incomplete` | **`Complete`** |
+| `AmountPaid` | `0.0 GBP` | **`6.00 GBP`** (the £5.00 item plus £1.00 postage) |
+| `PaidTime` | — | **2026-09-10T22:16:30.208Z** |
+| `CheckoutStatus.PaymentMethod` | `None` | `None` (unchanged; the order was settled by the seller's mark, not by a payment instrument) |
+
+So marking the order paid **did** move checkout to `Complete`. The documentation only promised the paid mark, so this
+was measured rather than assumed, and the answer is yes for this sandbox.
+
+**The NivaDesk preview run seconds later still returned `Orders found: 0`.** The order had been checkout-complete for
+under a minute at that point, so this reads as propagation into the Fulfillment API rather than the structural
+exclusion of §2b, which no longer applies. One bounded wait and a single re-check follow — not a polling loop.
+
 ### 2d.1 The two other buyer-side entry points, probed once each — both unusable
 
 | Page | Result (22:0xZ) |
