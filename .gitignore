@@ -143,3 +143,5 @@ studioflow-web/public/NivaDesk_Demo.mp4
 
 # written by scripts/audit-gate.mjs on every run; the CI keeps it as an artifact
 audit-report/
+# eBay: the deploy-time marker that arms EBAY_RUNTIME lives only on the deploying machine
+functions/.ebay-secrets-ready

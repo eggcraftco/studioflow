@@ -119,8 +119,9 @@ Production RuName, production keyset, the Cloudflare Worker cutover: **not part 
 
 **Order** (`ebay-morning-package-2026-09-10.md` §3 has every command): 0 re-read the live facts → 1 create the SA, keep
 `uniqueId` → 2 three project roles → 3 reflexive `actAs` (+ D9) → 4 six secrets, empty, D7 policy, accessor bindings;
-values in (operator) → 5 marker file; deploy **`ebayEventWorker` alone**; `run.invoker` ×2 and `cloudtasks.enqueuer` on the
-new resources → 6 queue `--log-sampling-ratio=1.0` → 7 pre-flight tests A and B → 8 the other sixteen by name, switch off →
+values in (operator) → 5 marker file; deploy **`ebayEventWorker` alone**; then the **three post-deploy bindings** on the new
+resources — `cloudtasks.enqueuer` on the queue for `ebay-connector@` (row 4), `run.invoker` on the service for
+`ebay-connector@` (row 6) and for the compute default (row 8) → 6 queue `--log-sampling-ratio=1.0` → 7 pre-flight tests A and B → 8 the other sixteen by name, switch off →
 9 challenge hash proved locally, then the portal: destination + `MARKETPLACE_ACCOUNT_DELETION` subscription + *Send Test
 Notification* → ledger row `done`. Post-deploy watch: all 17 ready, project-wide ERROR/5xx window with a positive control,
 and the two frequent sweeps seen returning clean on an empty set at least once (deploy plan step 3); callback matrix
@@ -128,7 +129,7 @@ and the two frequent sweeps seen returning clean on an empty set at least once (
 
 **Rollback** is deletion, not revert — none of the seventeen exists today: remove the marker, redeploy so `EBAY_RUNTIME`
 becomes `{}`, delete the seventeen functions, the three scheduler jobs and the queue, drain, then unwind the bindings,
-then the account. **Never delete the SA while a revision names it.** Partial rollback of the two post-deploy bindings alone
+then the account. **Never delete the SA while a revision names it.** Partial rollback of the three post-deploy bindings alone (rows 4, 6, 8)
 is safe: enqueue degrades to the inline fallbacks, worker retries are lost, nothing goes down.
 
 **First sandbox OAuth → order → payment → refund** (its own approval and its own evidence file; needs the connector switch
