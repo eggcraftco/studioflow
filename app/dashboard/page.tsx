@@ -148,7 +148,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
     ? server.steps.map(step => ({
         id: step.key,
         labelKey: step.title,
-        href: setupStepHref(step.action),
+        href: setupStepHref(step.action, step.target),
         done: step.done
       }))
     : GETTING_STARTED_STEPS.map(step => ({
