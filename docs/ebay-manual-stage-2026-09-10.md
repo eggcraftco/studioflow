@@ -27,6 +27,35 @@ Approved scope: `docs/ebay-manual-sync-stage-prep-2026-09-10.md` (prepared read-
 | 21:44:15 (eBay clock) | NivaDesk **Preview, 7 days** (owner, web) after the purchase | `ordersFound 0` — one `getOrders` call (quota 14 → 15), `syncLog import_preview "0 found"`; the new order is not yet visible through the Fulfillment API |
 | 21:45:29 | Trading `GetOrders` as the **buyer** (`OrderRole Buyer`, today, `OrderStatus All`) | `Ack Success`, one order: **OrderID `110590626185-10000012799510`, OrderStatus `Active`, AmountPaid 0.0 GBP, eBayPaymentStatus `NoPaymentFailure`** — the order exists on eBay's side, unpaid (AutoPay off, checkout not completed) |
 
+## 2b. Blocker — the order exists on eBay but the connector cannot see it: the Fulfillment API returns only checkout-complete (paid) orders
+
+| Time (Z) | Check | Result |
+|---|---|---|
+| 21:44:15 | NivaDesk Preview, 7 days | `ordersFound 0` |
+| 21:45:29 | Trading `GetOrders` (buyer role, today, all statuses) | the order **is** there: `110590626185-10000012799510`, `OrderStatus Active`, `AmountPaid 0.0 GBP`, `eBayPaymentStatus NoPaymentFailure` |
+| 21:46:00 | NivaDesk Preview, 7 days (second run) | `ordersFound 0` |
+| 21:51 (after a ~5-minute propagation wait) | NivaDesk Preview, 7 days (third run) | `ordersFound 0` — not a propagation delay |
+
+**Reading.** The connector reads eBay's **Sell Fulfillment API** `getOrders` (`sell.fulfillment.readonly` — the only scope this
+connection has). That API covers orders whose **checkout is complete**; an order awaiting payment is not in it
+(eBay KB 5204; Fulfillment API Overview). `PlaceOffer` with `AutoPay false` creates exactly such an order: committed,
+`Active`, unpaid. So NivaDesk is behaving correctly — there is nothing for it to read yet. The web card's
+*"Include orders that are not paid yet"* cannot help either: that flag filters orders the API returned with
+`orderPaymentStatus PENDING`, and this order is not returned at all.
+
+**What would make it visible:** the order has to be paid / checkout-completed in the sandbox. Options, none taken:
+
+1. **Trading `CompleteSale` with the SELLER's token** — one call (`ItemID`/`TransactionID` or `OrderID`, `<Paid>true</Paid>`),
+   the seller marking the order as paid, which is how offline-payment orders are settled. Needs the Explorer's user token
+   switched back to `TESTUSER_nivadesk_seller1` (one operator sign-in). No card, no money, no production.
+2. **The buyer pays on the sandbox site** (`Pay now` in Purchase History) — the sandbox site pages have been returning
+   errors for this account all evening (`/mys/*`, `/myb/PurchaseHistory` → "Error Page"), so this is unreliable.
+3. **Order API v2 checkout session** (`initiateCheckoutSession` → `placeOrder`) — **not viable here**: the buyer token's
+   granted scopes do not include member checkout, guest checkout needs card details (which the assistant never enters),
+   and eBay restricts that API.
+
+**Recommended:** option 1. It is a single seller-token call and touches nothing outside the sandbox.
+
 ## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
 
 Twice now the "Get OAuth User Token" flow, after the operator's "Switch account → TESTUSER_nivadesk_buyer1 → password →
