@@ -2,7 +2,7 @@
   "meta": {
     "what": "MCP tools/list, every MCP feature flag UNSET",
     "source": "openai-resubmission working tree, all MCP flags unset",
-    "commit": "5f3c238a3fbe03054227e210b87d52d04070cbd3",
+    "commit": "b74cc1970811630d11413bef6c136d2d3b95f33b",
     "capturedFrom": "working tree",
     "functionsTreeDirtyAtCapture": false,
     "functions/index.js sha256 (pristine, before any harness shim)": "8b80dec2158baf2c7e241e5df5efbacb5968b45a224cdf69e3d98c58f95ac927",
