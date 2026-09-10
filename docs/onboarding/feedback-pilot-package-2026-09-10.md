@@ -281,6 +281,14 @@ repeated on a second origin (`127.0.0.1` instead of `localhost`) where the new c
 2026-09-10T23:20:30Z** (the `nv_feedback_enabled_` marker found in the served chunk). No functions, rules or flags
 touched. Rollback = `git revert 1c4eaed` in the publish repo.
 
+**Confirmed on the live site with the pilot user** (the operator signed in as `contact@nivadesk.co.uk`; the assistant
+entered no credentials), the same two-load sequence as in the emulator:
+
+| Load | Observed |
+|---|---|
+| `/orders` at 23:29:56Z | the client asked the server (fresh ask stamp), stored `nv_feedback_enabled_… = "1"`, and the account menu read Account · **Send feedback** · Visit website · Sign Out |
+| `/orders` again at 23:31:15Z, inside the window | **no new ask** (stamp still 23:29:56Z) and the menu still carried **Send feedback** — the 7f scenario, now passing on production |
+
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | Why it exists | To remove |
