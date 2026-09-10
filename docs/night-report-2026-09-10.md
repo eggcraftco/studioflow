@@ -38,3 +38,4 @@ Bu dosya ilerledikçe güncellenir; her deploy için kaynak/revision/rollback ka
 - 03:02Z — Etsy envanter + AC-ETSY matrisi; izleme önerisi; Stripe/Google/W2 kayıtları. Deploy dalı docs push.
 - 03:08Z — Etsy `etsy-retention.mjs` tohumu düzeltildi (companies doc), 14/14 PASS; rapor özeti eklendi; son push.
 - 08:45Z — OAuth client kaydı create() ile geri yazıldı (operatör onayı). 08:47Z gerçek ChatGPT reconnect (302/200/200), 08:49Z read-only tool çağrıları 200 + 2 piiAccessLog satırı. Kanıt: oauth-client-restore-2026-09-10.md.
+- 08:56Z — Scan Tools (platform OAuth → consent → 21 tool, üçlü hint canlı wire ile birebir); 09:05Z 63 gerekçe alanı (200 kr sınırı) dolduruldu; Release Notes'a idempotentHint eki; TC1'e gerçek ChatGPT doğrulaması. Reload ile kalıcılık doğrulandı. Şifre, 7 attestation ve Submit operatörde. Kanıt: openai-1.2.0-form-completion-2026-09-10.md.
