@@ -91,3 +91,50 @@ before/after diff → sandbox seller username → the operator signs in to nivad
 Connect in Settings → Integrations → eBay; consent in the sandbox sign-in; then the read-only verification
 (`verifyEbayConnection` → one `getOrders` read) and the workspace/seller/environment match from the connection document,
 tokens never shown.
+
+## 8. Part 2 — the account switch, the seller, the consent, the connection (18:30–19:03Z)
+
+**Account.** The operator moved to `contact@nivadesk.co.uk` (Auth uid `GuglEFKSEKNTq1xibFpJav3EWkY2`, created 18:30:37Z,
+password provider). It owns exactly one workspace, **`GuglEFKSEKNTq1xibFpJav3EWkY2` "test"** (created today, plan trialing):
+0 orders, 0 customers, 0 bank/accounting/inventory/ticket documents, 0 eBay connections — an empty test workspace, so no
+new workspace was created (the app allows one active workspace per account anyway). The Chrome session first showed the
+review account (`review@nivadesk.app`, "My Studio") — nothing was clicked in it; the operator signed out and back in as
+`contact@nivadesk.co.uk`; the profile page then read Workspace `test`, Role `Owner`, User ID `GuglEF…WkY2`.
+
+**Flag document.** `appConfig/commerce` merge-written at 18:40:22Z: only `connectors` was added —
+`providers.ebay: true`, `workspaces["ebay:GuglEFKSEKNTq1xibFpJav3EWkY2"]: true`; `shadow`, `queue` and the note byte-identical
+before and after (diff in the run log).
+
+**Sandbox seller.** No record in either mailbox (contact@eggcraft.co.uk: only the 5 Sep welcome and 6 Sep keys-changed
+mails from dev-relations@ebay.com; gunes.gocmen@gmail.com: nothing). The registration form was filled by the assistant
+with non-secret values (username `TESTUSER_nivadesk_seller1`, NivaDesk / Sandbox, contact@nivadesk.co.uk, site United
+Kingdom (3), the form's own defaults for feedback score 500 and registration date 01.01.2006); the operator typed the
+password and pressed *Register*; the page confirmed `successfully registered sandbox user TESTUSER_nivadesk_seller1`.
+
+**The flow, correlated.**
+
+| Time (UTC) | Where | Record |
+|---|---|---|
+| 18:53:53 | `beginEbayConnect` | HTTP 200 (owner of `test`); one `ebayConnectStates` row: `environment: sandbox`, `origin: web`, `used: false` |
+| 18:53:5x | browser | `signin.sandbox.ebay.com` with `ru` → `auth2.sandbox.ebay.com/oauth2/consents`, `client_id` = the sandbox App ID, `redirect_uri` = `EGGCRAFT_LIMITE-EGGCRAFT-NivaDe-nerasfwi`, scopes `sell.fulfillment.readonly` + `commerce.identity.readonly`, `response_type=code` |
+| 18:58 | browser | the operator signed in as the sandbox seller; consent page "Review and Grant Application Access: NivaDesk" listing the two permissions |
+| 19:01:46.567 | `ebayOAuthCallback` | HTTP 200 (the web relay's signed POST) — the state burned (`used: true`), one row in `ebayPresentedCodes`, the code exchanged, the identity read |
+| 19:01:51.380 | Firestore | **`ebayConnections/GuglEFKSEKNTq1xibFpJav3EWkY2__mtm4ubrcsv2`**: `companyId` = the test workspace, `connectedByUid` = its owner, `environment: sandbox`, `sellerUsername: testuser_nivadesk_seller1`, `sellerUserId: mtm4ubrcsv2`, `registrationMarketplaceId: EBAY_GB`, `accountType: INDIVIDUAL`, `marketplaces: [EBAY_GB/GBP]`, `readOnly: true`, `status: connected`, `scopes` = the two above; `credentials/current` holds only `accessTokenEncrypted` / `refreshTokenEncrypted` and their timestamps (values never read); `syncLog: connected` |
+| 19:01:5x | UI | "eBay account connected." — Sandbox · Read only · Connection Healthy · EBAY_GB · Calls used today 0 / 500 |
+| 19:03:07.159 | `verifyEbayConnection` (*Check now*) | HTTP 200 — one `getOrders` read (limit 1, last 24 h, the only call that proves `sell.fulfillment.readonly`); `lastVerifiedAtMs` 19:03:08.763Z; `ebayQuota/2026-09-10`: `calls: 1`, `byFamily.orders: 1`, `byConnection[…mtm4ubrcsv2]: 1`; UI "The eBay connection is working." — Calls used today 1 / 500 |
+
+The identity read at the callback (`commerce.identity`) and the *Check now* `getOrders` are the two read-only Sandbox
+API calls of this step. No WARNING/ERROR from any `ebay*` service between 18:53Z and 19:03Z. **Workspace ↔ seller ↔
+environment match:** connection document's `companyId` == the chosen workspace, `connectedByUid` == its owner
+(`contact@nivadesk.co.uk`), `environment` == `sandbox` == the deployed `NIVADESK_EBAY_ENVIRONMENT`, seller == the user
+registered minutes earlier.
+
+**Final state of the test workspace:** listed in `connectors.workspaces` (open for *beginning* connections — it now has
+one), connected read-only, `importState: none`, `lastSyncAtMs: 0`, 0 orders; `settings.autoSync: true` on the
+connection, but the sweeps, the worker, `syncEbayNow` and the import functions still run with the connector switch
+**off** in their containers, so nothing syncs or imports until those functions are deployed with the switch — the
+next stage's decision. The other 12 functions and the worker are unchanged; OpenAI/Stripe/checklist untouched.
+
+**Not done, by instruction:** no order, payment, refund or shipping test; no production keyset, no production OAuth,
+no portal deletion-token change; no ownership or membership change; no password or token read.
+
