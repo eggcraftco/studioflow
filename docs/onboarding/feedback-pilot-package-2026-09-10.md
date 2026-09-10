@@ -240,11 +240,20 @@ Web published 22:36:34Z (the feedback markers found in the served chunk). All ch
 
 | 7f | **Finding — the manual entry can vanish for up to ten minutes after a reload** | Observed in the first tab at ~22:56Z: its account menu read Account · Visit website · Sign Out, **without Send feedback**, although the same user saw the entry in a fresh tab minutes earlier. Cause, confirmed in `FeedbackCenter.tsx`: on mount the client restores only a cached *"show the card"* answer; when the last server ask is under ten minutes old it returns early **without calling `onAvailability`**, so `feedbackEnabled` stays `false` in `AppShell` and the entry is not rendered until the next ask (next page change after the window, or a new tab). Behaviour, not data: nothing is lost and the server is unaffected. **Fix candidate (not deployed tonight):** persist `enabled` in the same session cache and call `onAvailability(true)` on the early return — a few lines in one component, then a web Round. The pilot can run with this; it only shortens how often the manual entry is visible after reloads |
 
-**Admin inbox (§9 steps 8–9) needs a different sign-in.** Authority is checked in two places against the same three
-addresses — `NIVADESK_ADMIN_EMAILS` in `AdminInsightsHub.tsx` (web, gates `/admin`) and `SUPPORT_ADMIN_EMAILS` in
-`functions/index.js` (server, gates the three admin callables): `nivadesk@gmail.com`, `eggcraftco@gmail.com`,
-`contact@eggcraft.co.uk`. The pilot user is none of them, by design. The inbox check therefore needs the operator
-signed in as one of the three; the assistant enters no credentials.
+| 8 | Admin inbox — list | **Yes.** The operator signed in as `contact@eggcraft.co.uk` (one of the three admin addresses; the assistant entered no credentials); `/admin` rendered Admin Insights and its **Customer Feedback** item at 22:58Z. The list showed the one record: 10 Sept 2026 23:39 (London) · General feedback / A suggestion · It's okay · **test** / contact@nivadesk.co.uk · the note · **New** · Open; the Status/Type filters; and "Status changes and internal notes are visible only to admins." Server: `listfeedback` invoked 22:58:12Z |
+| 9 | Admin inbox — detail and status change | **Yes.** Open → "← Back to feedback", the message in its own block, Received / Workspace (name + id) / From / **Trigger Manual** / **Topic A suggestion** / **Type General feedback** / Experience / Page (`/orders · web · English`), Status select, 4-row internal note, Save disabled until a change. Status → **Reviewing** + note "Pilot check: seen by an admin; no action needed." → Save → **"Saved."** and History gained a second row. Server (`updatefeedbackstatus` 22:59:16Z): `status reviewing`, `adminNote` stored, `statusHistory[1].byUid` = the admin's uid (`contact@eggcraft.co.uk`), the first entry still the pilot user's; `updatedAtMs` 22:59:16Z. Back in the list the badge reads **Reviewing** |
+| 9a | No automatic contact with the user | 0 in-app notifications in the test workspace, 0 mail-queue documents to the user; the user's `feedbackState` untouched by the admin change (`shows 1`, `dismissals 1`, `submissions 1`) |
+| 9b | Other users cannot read feedback | not probed live (it would need a non-admin client identity); covered by the rules suite (`feedback-rules.test.mjs`, 20 checks, the `feedback` root and `feedbackState` are server-only) and the live ruleset being byte-identical to the deployed file |
+
+**Verdict: the pilot check passed end to end** — every §9 step observed on the live system, every server write read back with
+its fields, and one behavioural finding (7f) recorded with a fix candidate. No screenshots were saved from the live run
+(the assistant's browser captures are not files); the emulator screenshots in `feedback-v1-2026-09-10-raw/` remain the
+visual record, and the live run is documented by timestamps, function logs and document reads above.
+
+**Admin authority, for the record:** three addresses, checked in `AdminInsightsHub.tsx` (`NIVADESK_ADMIN_EMAILS`, gates
+`/admin` on the web) and `functions/index.js` (`SUPPORT_ADMIN_EMAILS`, gates `listFeedback`, `getFeedbackDetail`,
+`updateFeedbackStatus` on the server, verified e-mail required): `nivadesk@gmail.com`, `eggcraftco@gmail.com`,
+`contact@eggcraft.co.uk`. No admin was added.
 
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
