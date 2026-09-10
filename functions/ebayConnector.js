@@ -568,10 +568,14 @@ function createEbayConnectorFunctions(deps) {
       // is reached only from the native startUrl, and a web state has an
       // authorizeUrl already.
       if (String(row.origin || "") !== "native") return { error: "claimed" };
+      // The workspace gate again (see beginEbayConnect): a delisted workspace's state is not claimed
+      // and not consumed — it simply expires.
+      if (!(await workspaceFlagOn(String(row.companyId || "")))) return { error: "workspace" };
       tx.update(ref, { claimedAtMs: now(), nonceHash: sha256hex(nonce) });
       return { row };
     });
     if (claimed.error === "permission-denied") throw new HttpsError("permission-denied", "This eBay connection was started by a different NivaDesk user.");
+    if (claimed.error === "workspace") throw new HttpsError("failed-precondition", "eBay is not enabled for this workspace yet.");
     if (claimed.error) throw new HttpsError("failed-precondition", "The eBay sign-in link has expired or was already used. Start again.");
     const row = claimed.row;
     // The ticket is minted over the FRESH nonce this claim just wrote, and over
@@ -886,6 +890,13 @@ function createEbayConnectorFunctions(deps) {
       answer(200, { ok: false, outcome: "error", reason: verdict.reason, rid }); return;
     }
     const stateData = verdict.row;
+    // The workspace gate, asked again at the end of the flow: a consent that began while the
+    // workspace was listed does not complete once the listing is gone. The state is already
+    // burned above; the code is spent like the other post-burn refusals, so nothing live remains.
+    if (!(await workspaceFlagOn(String(stateData.companyId || "")))) {
+      await spendAndDiscardCode(code, String(stateData.redirectRuName || ""));
+      answer(200, { ok: false, outcome: "error", reason: "workspace", rid }); return;
+    }
     try {
       const tokens = await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateData.redirectRuName || ruName()), fetchImpl });
       const accessToken = String(tokens?.access_token || "");

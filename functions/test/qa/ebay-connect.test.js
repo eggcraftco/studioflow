@@ -261,6 +261,37 @@ const said = (res) => JSON.stringify(res.payload);
       "…and it is a connection in the workspace whose state presented the code, which is exactly the §5 outcome");
   });
 
+  await check("a consent that began while the workspace was listed is refused at the callback once the listing is gone (reason=workspace): state burned, code spent, no identity call, no connection", async () => {
+    const live = buildEbay();
+    const begun = await live.fns.beginEbayConnect({ auth, data: {} });
+    // The listing goes between the consent screen and eBay's return: only the wildcard-free, empty map remains.
+    live.store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: true }, connections: {}, workspaces: {} } });
+    require("../../commerce/flags").resetCommerceFlagCache();
+    const res = await callbackPost(live.fns, { state: begun.state, code: "DELISTED-CODE", nonce: begun.nonce });
+    assert.strictEqual(res.payload.outcome, "error", said(res)); assert.strictEqual(res.payload.reason, "workspace", said(res));
+    assert.strictEqual(live.store.read(`ebayConnectStates/${begun.state}`).used, true, "burned like any other refusal");
+    assert.deepStrictEqual(live.calls.codes, ["DELISTED-CODE"], "the code is spent, not left alive");
+    assert.strictEqual(live.calls.identities, 0, "no identity call");
+    assert.strictEqual(live.store.paths("ebayConnections/").filter((x) => x.split("/").length === 2).length, 0, "no connection document");
+    // And a replay of the same state answers `state`, not `workspace`: the burn came first.
+    const replay = await callbackPost(live.fns, { state: begun.state, code: "DELISTED-CODE-2", nonce: begun.nonce });
+    assert.strictEqual(replay.payload.reason, "state", said(replay));
+  });
+
+  await check("the native claim refuses a delisted workspace and leaves the state unclaimed and unconsumed; relisting lets the same link work", async () => {
+    const live = buildEbay();
+    const begun = await live.fns.beginEbayConnect({ auth, data: { origin: "native" } });
+    live.store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: true }, connections: {}, workspaces: {} } });
+    require("../../commerce/flags").resetCommerceFlagCache();
+    await assert.rejects(live.fns.claimEbayConnectState({ auth, data: { state: begun.state } }), /not enabled for this workspace/);
+    const row = live.store.read(`ebayConnectStates/${begun.state}`);
+    assert.strictEqual(row.used, false); assert.strictEqual(Number(row.claimedAtMs || 0), 0, "not consumed by the refusal");
+    live.store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: true }, connections: {}, workspaces: { "ebay:c1": true } } });
+    require("../../commerce/flags").resetCommerceFlagCache();
+    const claimed = await live.fns.claimEbayConnectState({ auth, data: { state: begun.state } });
+    assert.ok(claimed.ticket && claimed.nonce, "the same link works once the workspace is listed again");
+  });
+
   await check("a state minted for the sandbox is refused on a production server (reason=environment) — nothing is stored, and the code is spent rather than left alive", async () => {
     const sandbox = buildEbay();
     const begun = await sandbox.fns.beginEbayConnect({ auth, data: {} });
