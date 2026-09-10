@@ -118,6 +118,28 @@ open Purchase History, and complete checkout on the £5.00 order (the listing is
 sitting unpaid and awaiting exactly this). No real card: the sandbox uses test payment methods, and the assistant
 enters no payment details.
 
+## 2d. The buyer signed in on the sandbox site; checkout is still not complete (22:0xZ)
+
+The operator signed in on `www.sandbox.ebay.com` as the buyer: the toolbar reads **"Hi testuser_nivadesk_buyer2!"**,
+the home page and the listing page render normally. So the site works and the session is real.
+
+**But `/myb/PurchaseHistory` still answers with eBay's "We looked everywhere" page while signed in.** My earlier note
+saying those errors were purely the signed-out state was wrong in this part: the page is unavailable in this sandbox
+whether or not there is a session. Recorded rather than smoothed over.
+
+**The order did not move.** Trading `GetOrders` (buyer role) immediately after the sign-in:
+
+| Field | Value |
+|---|---|
+| `OrderStatus` | `Active` (unchanged) |
+| `CheckoutStatus.Status` | **`Incomplete`** (unchanged) |
+| `CheckoutStatus.PaymentMethod` | `None` (unchanged) |
+| `AmountPaid` | `0.0 GBP` (unchanged) |
+| last modified | 2026-09-10T21:42:09Z — the purchase itself, nothing since |
+
+Signing in is not checkout. Something still has to walk the order through payment, and the page that normally offers
+that is missing here.
+
 **Independent confirmation the purchase is real.** The listing's own page on the sandbox site
 (`www.sandbox.ebay.com/itm/110590626185`, read while signed out) renders normally and shows **"Last one · 1 sold"**,
 seller `testuser_nivadesk_seller1`, GBP 5.00, free Royal Mail 2nd Class, 30-day returns. One of the two units is gone,
