@@ -255,6 +255,31 @@ visual record, and the live run is documented by timestamps, function logs and d
 `updateFeedbackStatus` on the server, verified e-mail required): `nivadesk@gmail.com`, `eggcraftco@gmail.com`,
 `contact@eggcraft.co.uk`. No admin was added.
 
+## 11e. Finding 7f fixed and published as Round 172 (10–11 September 2026)
+
+**The change** (`studioflow-web/components/FeedbackCenter.tsx`, source commit `949446d9` on the deploy branch,
+9 insertions / 1 deletion): a fourth session key, `nv_feedback_enabled_<company>_<uid>`, stores the server's last
+`enabled` answer next to the ask stamp; on a mount inside the ten-minute window the effect now reports that stored
+answer through `onAvailability` instead of returning silently. A session from the previous build (stamp present, no
+stored answer) falls through and asks once, then behaves like a new one. Nothing server-side changed.
+
+**Verified in the emulator, not on paper.** Firestore + Auth + Functions emulators (Java from Android Studio's JBR),
+a seeded owner whose active workspace carries the pilot id, the dev server on port 3000, the in-app browser:
+
+| Step | Observed |
+|---|---|
+| First load of `/orders` | server asked (`enabled: true, show: false, reason: no_first_success` — no orders, so no invitation, which is the exact shape of the live finding); session gained the ask stamp 23:16:10Z **and** `nv_feedback_enabled_… = "1"` |
+| Reload 37 s later, inside the window | **no server ask** (stamp unchanged, the functions emulator's `getFeedbackPrompt` counter did not move) and the account menu still read **Account · Send feedback · Visit website · Sign Out** — the entry that vanished on the live site in 7f |
+
+Two pitfalls met on the way, recorded so the next emulator run is faster: the functions emulator takes its flags from
+`functions/.env` (the production pilot lines), not from the shell that starts it — a host `NIVADESK_FEEDBACK_WORKSPACES`
+does not override it, so the seeded workspace had to carry the production pilot id; and the in-app browser served the
+previous build's `AppShell` chunk from its HTTP cache even after `.next` was cleared (transferSize 0), so the check was
+repeated on a second origin (`127.0.0.1` instead of `localhost`) where the new chunk really executed.
+
+**Published:** publish repo **Round 172** `1c4eaed` (the one file, `tsc` clean), on top of Round 171. No functions,
+rules or flags touched. Rollback = `git revert 1c4eaed` in the publish repo.
+
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | Why it exists | To remove |
