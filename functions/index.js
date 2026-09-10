@@ -30202,6 +30202,25 @@ exports.getSetupChecklist = onCall({ region: "europe-west2" }, async (request) =
   return { ok: true, companyId, ...checklist };
 });
 
+// Feedback v1 (functions/feedback.js): the first-success prompt, the note itself
+// and the admin inbox. Off unless NIVADESK_FEEDBACK=1; the inbox is admin-only
+// whatever the flag says.
+const feedbackExports = require("./feedback").createFeedbackFunctions({
+  admin, HttpsError, onCall,
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  isAdminRequest: (request) => {
+    const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+    return Boolean(request.auth && request.auth.token?.email_verified === true && SUPPORT_ADMIN_EMAILS.has(email));
+  },
+  featureEnabled: () => process.env.NIVADESK_FEEDBACK === "1"
+});
+exports.getFeedbackPrompt = feedbackExports.getFeedbackPrompt;
+exports.dismissFeedbackPrompt = feedbackExports.dismissFeedbackPrompt;
+exports.submitFeedback = feedbackExports.submitFeedback;
+exports.listFeedback = feedbackExports.listFeedback;
+exports.getFeedbackDetail = feedbackExports.getFeedbackDetail;
+exports.updateFeedbackStatus = feedbackExports.updateFeedbackStatus;
+
 /**
  * Record that somebody was handed personal data by the server.
  *

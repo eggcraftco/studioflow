@@ -1,0 +1,176 @@
+"use strict";
+
+// Feedback v1 — what the product asks a person, when it may ask, and what an
+// answer has to look like before it is written down. Pure: no Firestore, no
+// clock, no network (the callables in ../feedback.js hand the clock in).
+//
+// Spec: NivaDesk_Native_Onboarding_Feedback_Retention_AI_Spec.md §3.3, §32,
+// §34, §35, §40–§44. The one prompt this release ships is §34's "first success"
+// question, asked after the workspace's first SUBSTANTIVE order (the same
+// predicate the checklist uses — an empty order opened by mistake is not a
+// success, and a brand-new workspace has had none). Everything else the spec
+// lists (§36 missing-expectation, §37 non-activation) waits for activation
+// data that can be trusted; those triggers are recorded as not built, not
+// approximated.
+//
+// The caps come from messaging.js so this prompt obeys the same rules as
+// every other in-app message: one feedback prompt per seven days, a closed
+// prompt stays closed for the dismissal cooldown, and an answered campaign is
+// never asked again. The manual "Send feedback" entry is not a prompt and is
+// not subject to any of that — only to the abuse limits below.
+
+const crypto = require("crypto");
+const messaging = require("./messaging");
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+const CAMPAIGN_FIRST_SUCCESS = "first_success_feedback";
+const CAMPAIGNS = Object.freeze([CAMPAIGN_FIRST_SUCCESS]);
+const TRIGGERS = Object.freeze(["first_success", "manual"]);
+/** What the form lets a person say the note is about. */
+const KINDS = Object.freeze(["problem", "missing_feature", "suggestion"]);
+/** §34's effort rating, used as the one required answer. */
+const EXPERIENCES = Object.freeze(["easy", "okay", "difficult"]);
+/** §41. */
+const FEEDBACK_TYPES = Object.freeze([
+  "onboarding_effort", "activation_blocker", "missing_expectation", "feature_request", "bug_report",
+  "confusion", "general_feedback", "cancellation_reason", "interview_note"
+]);
+/** §42. */
+const CATEGORIES = Object.freeze([
+  "integration", "orders", "projects", "customers", "inventory", "banking", "receipts", "invoicing", "payments",
+  "accounting", "shipping", "ai_chatgpt", "mobile", "performance", "ux", "terminology", "pricing", "other"
+]);
+/** §43. */
+const IMPACTS = Object.freeze(["minor", "annoyance", "slows_work", "blocked", "churn_risk"]);
+/** §44. */
+const STATUSES = Object.freeze(["new", "reviewing", "planned", "in_progress", "shipped", "closed", "not_planned"]);
+
+const LIMITS = Object.freeze({
+  textMax: 2000,
+  pageMax: 200,
+  clientKeyMax: 80,
+  adminNoteMax: 2000,
+  languageMax: 40,
+  // Abuse limits per person per workspace. Five in an hour is a person who is
+  // upset; the sixth is a script.
+  perHour: 5,
+  perDay: 20,
+  // The same note twice inside ten minutes is a double click, not two notes.
+  duplicateWindowMs: 10 * 60 * 1000,
+  // A client key is the form's own idempotency handle: a retry after a lost
+  // response finds the note it already wrote.
+  clientKeyWindowMs: DAY_MS,
+  // A prompt that was shown and neither answered nor closed may be shown again
+  // after this long — messaging.js's feedbackPromptMaxPer7d, read as a window.
+  showWindowMs: 7 * DAY_MS,
+  historyKeep: 50
+});
+
+const text = (value) => (typeof value === "string" ? value : value == null ? "" : String(value)).trim();
+const list = (value) => (Array.isArray(value) ? value : []);
+const millis = (value) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : 0; };
+
+function isKnownCampaign(campaign) { return CAMPAIGNS.includes(text(campaign)); }
+
+/** §41's type from what the person chose; the first-success prompt with no kind is §34's effort rating. */
+function feedbackTypeFor(trigger, kind) {
+  const k = text(kind);
+  if (k === "problem") return "bug_report";
+  if (k === "missing_feature") return "feature_request";
+  if (k === "suggestion") return "general_feedback";
+  return text(trigger) === "first_success" ? "onboarding_effort" : "general_feedback";
+}
+
+function stageFor(trigger) { return text(trigger) === "first_success" ? "onboarding" : "active"; }
+
+/**
+ * May the first-success prompt be shown to this person right now?
+ *
+ * @param {object} input  { nowMs, enabled, firstOrder: { state }, state: { shows, dismissals, done } }
+ * @returns {{show: boolean, campaign: string, reason: string}}  reason is "" when it may be shown
+ */
+function promptEligibility(input = {}) {
+  const campaign = CAMPAIGN_FIRST_SUCCESS;
+  const nowMs = millis(input.nowMs);
+  if (input.enabled !== true) return { show: false, campaign, reason: "feature_off" };
+  if (!nowMs) return { show: false, campaign, reason: "no_clock" };
+  const first = input.firstOrder && typeof input.firstOrder === "object" ? input.firstOrder : { state: "none" };
+  if (first.state !== "substantive") {
+    return { show: false, campaign, reason: first.state === "shell" ? "first_order_is_shell" : "no_first_success" };
+  }
+  const state = input.state && typeof input.state === "object" ? input.state : {};
+  if (list(state.done).includes(campaign)) return { show: false, campaign, reason: "already_answered" };
+  const history = list(state.shows)
+    .filter((entry) => entry && text(entry.campaign) === campaign && millis(entry.atMs) > nowMs - LIMITS.showWindowMs && millis(entry.atMs) <= nowMs)
+    .map((entry) => ({ campaign, channel: "in_app", kind: "feedback_prompt", atMs: millis(entry.atMs) }));
+  const dismissals = list(state.dismissals)
+    .filter((entry) => entry && text(entry.campaign) === campaign)
+    .map((entry) => ({ campaign, atMs: millis(entry.atMs) }));
+  const decision = messaging.messageDecision({ campaign, channel: "in_app", kind: "feedback_prompt", nowMs }, { history, dismissals });
+  return decision.send ? { show: true, campaign, reason: "" } : { show: false, campaign, reason: decision.reason };
+}
+
+/**
+ * The shape a submission must have. Only the experience is required: a
+ * one-tap answer is a real answer, and a person who has nothing to add should
+ * not be made to type something to be allowed to say "okay".
+ */
+function submissionShape(input = {}) {
+  const problems = [];
+  const trigger = text(input.trigger) || "manual";
+  if (!TRIGGERS.includes(trigger)) problems.push("trigger");
+  const experience = text(input.experience).toLowerCase();
+  if (!EXPERIENCES.includes(experience)) problems.push("experience");
+  const kind = text(input.kind).toLowerCase();
+  if (kind && !KINDS.includes(kind)) problems.push("kind");
+  const body = text(input.text);
+  if (body.length > LIMITS.textMax) problems.push("text_too_long");
+  const page = text(input.page).slice(0, LIMITS.pageMax);
+  const clientKey = text(input.clientKey);
+  if (clientKey.length > LIMITS.clientKeyMax) problems.push("client_key");
+  const language = text(input.language).slice(0, LIMITS.languageMax);
+  const campaign = trigger === "first_success" ? CAMPAIGN_FIRST_SUCCESS : "";
+  return {
+    ok: problems.length === 0,
+    problems,
+    value: { trigger, campaign, experience, kind, text: body, page, clientKey, language, feedbackType: feedbackTypeFor(trigger, kind), stage: stageFor(trigger) }
+  };
+}
+
+function textHash(value) {
+  return crypto.createHash("sha256").update(text(value).toLowerCase().replace(/\s+/g, " ")).digest("hex");
+}
+
+/** The abuse limits, from what this person already sent in this workspace. */
+function rateLimitVerdict(submissions, nowMs) {
+  const now = millis(nowMs);
+  const stamps = list(submissions).map((entry) => millis(entry && entry.atMs)).filter((at) => at > 0 && at <= now);
+  if (stamps.filter((at) => at > now - HOUR_MS).length >= LIMITS.perHour) return { allowed: false, reason: "too_many_this_hour" };
+  if (stamps.filter((at) => at > now - DAY_MS).length >= LIMITS.perDay) return { allowed: false, reason: "too_many_today" };
+  return { allowed: true, reason: "" };
+}
+
+/** The id of an earlier note this one repeats, or "": a retry under the same client key, or the same words twice within minutes. */
+function duplicateOf(submissions, candidate, nowMs) {
+  const now = millis(nowMs);
+  const key = text(candidate && candidate.clientKey);
+  const hash = textHash(candidate && candidate.text);
+  const kind = text(candidate && candidate.kind);
+  const experience = text(candidate && candidate.experience);
+  for (const entry of list(submissions).slice().reverse()) {
+    if (!entry || !text(entry.id)) continue;
+    const at = millis(entry.atMs);
+    if (key && text(entry.clientKey) === key && at > now - LIMITS.clientKeyWindowMs) return text(entry.id);
+    if (at > now - LIMITS.duplicateWindowMs && text(entry.textHash) === hash && text(entry.kind) === kind && text(entry.experience) === experience) return text(entry.id);
+  }
+  return "";
+}
+
+function trimHistory(entries, keep = LIMITS.historyKeep) { return list(entries).slice(-keep); }
+
+module.exports = {
+  CAMPAIGN_FIRST_SUCCESS, CAMPAIGNS, TRIGGERS, KINDS, EXPERIENCES, FEEDBACK_TYPES, CATEGORIES, IMPACTS, STATUSES, LIMITS,
+  isKnownCampaign, feedbackTypeFor, stageFor, promptEligibility, submissionShape, textHash, rateLimitVerdict, duplicateOf, trimHistory
+};
