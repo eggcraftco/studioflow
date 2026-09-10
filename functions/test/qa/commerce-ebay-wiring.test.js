@@ -25,7 +25,11 @@ check("the six eBay secrets are declared only behind the marker, and EBAY_RUNTIM
   assert.ok(index.includes("const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};"), "the fifth secret rides the dedicated identity, never the default compute account");
   assert.ok(index.includes('const ebaySecretValue = (name) => process.env[name] || "";'));
   assert.ok(index.includes('callbackKey: () => ebaySecretValue("EBAY_CALLBACK_KEY"),'), "read at call time, like the other four");
-  assert.ok(!fs.existsSync(path.join(root, ".ebay-secrets-ready")), "the marker must not be committed by the connector work — it is the owner's step after the secrets and the service account exist");
+  // "Committed" = tracked by git: the marker is git-ignored since e7f59525 and present only on the deploying machine.
+  let markerTracked;
+  try { markerTracked = require("child_process").execFileSync("git", ["ls-files", "--", ".ebay-secrets-ready"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0; }
+  catch { markerTracked = fs.existsSync(path.join(root, ".ebay-secrets-ready")); }
+  assert.ok(!markerTracked, "the marker must not be committed by the connector work — it is the owner's step after the secrets and the service account exist");
 });
 
 check("the callback is POST-only, signed, JSON-answering and instance-capped (§5.4)", () => {
