@@ -277,8 +277,9 @@ does not override it, so the seeded workspace had to carry the production pilot 
 previous build's `AppShell` chunk from its HTTP cache even after `.next` was cleared (transferSize 0), so the check was
 repeated on a second origin (`127.0.0.1` instead of `localhost`) where the new chunk really executed.
 
-**Published:** publish repo **Round 172** `1c4eaed` (the one file, `tsc` clean), on top of Round 171. No functions,
-rules or flags touched. Rollback = `git revert 1c4eaed` in the publish repo.
+**Published:** publish repo **Round 172** `1c4eaed` (the one file, `tsc` clean), on top of Round 171; **live at
+2026-09-10T23:20:30Z** (the `nv_feedback_enabled_` marker found in the served chunk). No functions, rules or flags
+touched. Rollback = `git revert 1c4eaed` in the publish repo.
 
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
