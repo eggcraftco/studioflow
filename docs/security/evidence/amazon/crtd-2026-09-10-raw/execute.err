@@ -1,0 +1,9 @@
+Creating execution...
+Provisioning resources...................done
+Done.
+Execution [crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk] has successfully started running.
+
+View details about this execution by running:
+gcloud run jobs executions describe crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk
+
+Or visit https://console.cloud.google.com/run/jobs/executions/details/europe-west2/crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk?project=145308107004

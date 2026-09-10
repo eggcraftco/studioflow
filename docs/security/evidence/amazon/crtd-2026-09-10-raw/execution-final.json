@@ -1,0 +1,104 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Execution",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/client-name": "gcloud",
+      "run.googleapis.com/client-version": "580.0.0",
+      "run.googleapis.com/creator": "contact@eggcraft.co.uk",
+      "run.googleapis.com/execution-environment": "gen2",
+      "run.googleapis.com/lastModifier": "contact@eggcraft.co.uk",
+      "run.googleapis.com/network-interfaces": "[{\"network\": \"amazon-vpc\", \"subnetwork\": \"amazon-subnet\"}]",
+      "run.googleapis.com/operation-id": "8797d26f-23b9-4cdc-8490-1d570aea020f",
+      "run.googleapis.com/vpc-access-egress": "all-traffic"
+    },
+    "creationTimestamp": "2026-09-10T09:29:35.770806Z",
+    "generation": 1,
+    "labels": {
+      "client.knative.dev/nonce": "qec_qew_bob",
+      "cloud.googleapis.com/location": "europe-west2",
+      "run.googleapis.com/job": "crtd-test-base64-elf-2026-09-10-09-28-57-utc",
+      "run.googleapis.com/jobGeneration": "1",
+      "run.googleapis.com/jobResourceVersion": "1789032539024027",
+      "run.googleapis.com/jobUid": "cd7d31e8-8ca0-4964-9771-8101df4b7597",
+      "run.googleapis.com/satisfiesPzs": "true"
+    },
+    "name": "crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk",
+    "namespace": "145308107004",
+    "ownerReferences": [
+      {
+        "apiVersion": "serving.knative.dev/v1",
+        "blockOwnerDeletion": true,
+        "controller": true,
+        "kind": "Job",
+        "name": "crtd-test-base64-elf-2026-09-10-09-28-57-utc",
+        "uid": "cd7d31e8-8ca0-4964-9771-8101df4b7597"
+      }
+    ],
+    "resourceVersion": "AAZbHcPYRqM",
+    "selfLink": "/apis/run.googleapis.com/v1/namespaces/145308107004/executions/crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk",
+    "uid": "4e3f6d1e-0f7c-4181-9baf-79f61c66a3ec"
+  },
+  "spec": {
+    "parallelism": 1,
+    "taskCount": 1,
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "args": [
+              "-c",
+              "sleep 660; base64 -d f0VMRgIB; sleep 10"
+            ],
+            "command": [
+              "sh"
+            ],
+            "image": "marketplace.gcr.io/google/ubuntu2404@sha256:1492cf11140e5aed3cb371956fd80ebb5919296ed3f5c739c11753227c2f1d0c",
+            "resources": {
+              "limits": {
+                "cpu": "1000m",
+                "memory": "512Mi"
+              }
+            }
+          }
+        ],
+        "maxRetries": 0,
+        "serviceAccountName": "145308107004-compute@developer.gserviceaccount.com",
+        "timeoutSeconds": "900"
+      }
+    }
+  },
+  "status": {
+    "completionTime": "2026-09-10T09:40:57.318314Z",
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-09-10T09:40:57.318314Z",
+        "message": "Execution completed successfully in 11m18.33s.",
+        "status": "True",
+        "type": "Completed"
+      },
+      {
+        "lastTransitionTime": "2026-09-10T09:29:37.111088Z",
+        "message": "Provisioned imported containers.",
+        "status": "True",
+        "type": "ResourcesAvailable"
+      },
+      {
+        "lastTransitionTime": "2026-09-10T09:29:43.882751Z",
+        "message": "Started deployed execution in 6.77s.",
+        "status": "True",
+        "type": "Started"
+      },
+      {
+        "lastTransitionTime": "2026-09-10T09:29:36.658781Z",
+        "message": "Imported container image.",
+        "status": "True",
+        "type": "ContainerReady"
+      }
+    ],
+    "logUri": "https://console.cloud.google.com/logs/viewer?project=nivadesk-amazon&advancedFilter=resource.type%3D%22cloud_run_job%22%0Aresource.labels.job_name%3D%22crtd-test-base64-elf-2026-09-10-09-28-57-utc%22%0Aresource.labels.location%3D%22europe-west2%22%0Alabels.%22run.googleapis.com/execution_name%22%3D%22crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk%22",
+    "observedGeneration": 1,
+    "startTime": "2026-09-10T09:29:38.979057Z",
+    "succeededCount": 1
+  }
+}
