@@ -149,31 +149,92 @@ check("if the Amazon connector has shipped, the buyer never reaches the order do
     "document. The ingestion path has to divert them before the engine sees them.");
 });
 
-check("if Amazon has shipped, its secrets are not readable by every function", () => {
+check("if Amazon or eBay has shipped, its secrets are not readable by every function", () => {
   // Every function runs as the default compute service account, so a secret
   // granted to one is reachable by all of them. Tolerable for what ships today;
-  // not tolerable for the key that opens a seller's Amazon account.
+  // not tolerable for the key that opens a seller's marketplace account — and
+  // eBay's obligations are the same class as Amazon's, so the same rule.
   const wiredBy = amazonAdapterCallers();
   const source = fs.readFileSync(path.join(root, "index.js"), "utf8");
-  const amazonSecrets = [...source.matchAll(/defineSecret\("(AMAZON_[A-Z_0-9]*|NIVADESK_AMAZON_[A-Z_0-9]*)"\)/g)].map((m) => m[1]);
+  const marketplaceSecrets = [...source.matchAll(/defineSecret\("((?:AMAZON|EBAY)_[A-Z_0-9]*|NIVADESK_(?:AMAZON|EBAY)_[A-Z_0-9]*)"\)/g)].map((m) => m[1]);
 
-  if (!wiredBy.length && !amazonSecrets.length) return; // nothing to protect yet
+  if (!wiredBy.length && !marketplaceSecrets.length) return; // nothing to protect yet
 
-  assert.ok(amazonSecrets.length > 0,
+  assert.ok(marketplaceSecrets.length > 0,
     `the Amazon adapter is wired in by ${wiredBy.join(", ")} but no Amazon secret is declared — ` +
     "where is the credential coming from?");
 
-  // Any trigger that mounts an Amazon secret must run as its own identity.
+  // The eBay secrets are declared behind a marker file, and every eBay trigger
+  // spreads EBAY_RUNTIME — which must carry the dedicated identity beside the
+  // secrets, so the two cannot be separated by a later edit.
+  if (marketplaceSecrets.some((name) => /EBAY/.test(name))) {
+    assert.ok(/const EBAY_RUNTIME = EBAY_SECRETS_READY \? \{ secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT \} : \{\};/.test(source),
+      "EBAY_RUNTIME no longer carries the dedicated service account beside the eBay secrets");
+    assert.ok(/const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio\.iam\.gserviceaccount\.com";/.test(source),
+      "the eBay service account is no longer named");
+  }
+
+  // Any trigger that mounts a marketplace secret must run as its own identity:
+  // a literal serviceAccount, or the EBAY_RUNTIME spread that carries one.
   const mounts = [...source.matchAll(/secrets:\s*\[([^\]]*)\]/g)]
     .map((m) => ({ list: m[1], at: m.index }))
-    .filter((entry) => amazonSecrets.some((name) => entry.list.includes(name.replace(/^NIVADESK_/, "").replace(/^AMAZON_/, "AMAZON_"))
-      || /AMAZON/.test(entry.list)));
+    .filter((entry) => marketplaceSecrets.some((name) => entry.list.includes(name)) || /AMAZON|EBAY_SECRET/.test(entry.list));
   for (const mount of mounts) {
     const options = source.slice(Math.max(0, mount.at - 400), mount.at + mount.list.length + 200);
-    assert.ok(/serviceAccount:\s*["'`]/.test(options),
-      "a function mounts an Amazon secret while running as the default compute service account, which " +
-      "every other function also runs as. Give the Amazon functions a dedicated service account and " +
-      "grant the Amazon secrets only to it — see access-control-policy.md, 'Open remediation'.");
+    assert.ok(/serviceAccount:\s*["'`]/.test(options) || /serviceAccount: EBAY_SERVICE_ACCOUNT/.test(options) || /\.\.\.EBAY_RUNTIME/.test(options),
+      "a function mounts a marketplace secret while running as the default compute service account, which " +
+      "every other function also runs as. Give the marketplace functions a dedicated service account and " +
+      "grant their secrets only to it — see access-control-policy.md, 'Open remediation'.");
+  }
+  // And no eBay secret may be mounted by name outside the runtime bundle.
+  const bareMounts = [...source.matchAll(/secrets:\s*\[[^\]]*EBAY_[A-Z_]+[^\]]*\]/g)].filter((m) => !/EBAY_SECRET_PARAMS/.test(m[0]));
+  assert.deepStrictEqual(bareMounts.map((m) => m[0]), [], "an eBay secret is mounted outside EBAY_RUNTIME");
+});
+
+// The trip-wire above is one-directional: it asks whether a function that NAMES
+// a marketplace secret also names an identity. It says nothing about a function
+// that USES marketplace code without mounting the secret at all — which is the
+// same policy broken from the other side, and fails at runtime rather than at
+// deploy. releaseHeldIntegrationOrders did exactly that: it called into the eBay
+// connector's internals, which unbox the seller's token under EBAY_TOKEN_KEY, in
+// a shared callable that mounts no eBay secret. `process.env.EBAY_TOKEN_KEY` is
+// undefined there, so every held eBay order failed to release, silently, into a
+// counter that reported 'left in place'.
+check("a function that runs eBay connector code also mounts the eBay runtime", () => {
+  const source = fs.readFileSync(path.join(root, "index.js"), "utf8");
+  // Top-level symbols in file order: exported triggers, const triggers and
+  // plain functions. Each one's body runs to the next symbol's start.
+  const marks = [];
+  for (const m of source.matchAll(/^(?:exports\.(\w+)\s*=\s*(on[A-Za-z]+)\(|const\s+(\w+)\s*=\s*(on[A-Za-z]+)\(|(?:async\s+)?function\s+(\w+)\s*\()/gm)) {
+    marks.push({ name: m[1] || m[3] || m[5], trigger: Boolean(m[2] || m[4]), at: m.index });
+  }
+  const symbols = marks.map((mark, i) => ({ ...mark, body: source.slice(mark.at, i + 1 < marks.length ? marks[i + 1].at : source.length) }));
+  const mountsRuntime = (symbol) => /\.\.\.EBAY_RUNTIME/.test(symbol.body.slice(0, 600));
+  const usesEbayInternals = (body) => /ebayExports\._internal\./.test(body);
+
+  // Which triggers can reach a symbol, following plain functions up to their
+  // callers (runEbayEventTask is a plain function; ebayEventWorker is what runs it).
+  const triggersReaching = (symbol, seen = new Set()) => {
+    if (seen.has(symbol.name)) return [];
+    seen.add(symbol.name);
+    if (symbol.trigger) return [symbol];
+    const callers = symbols.filter((other) => other !== symbol && new RegExp(`\\b${symbol.name}\\s*\\(`).test(other.body));
+    return callers.flatMap((caller) => triggersReaching(caller, seen));
+  };
+
+  const users = symbols.filter((symbol) => usesEbayInternals(symbol.body));
+  assert.ok(users.length > 0, "nothing in index.js calls the eBay connector any more — has the wiring moved?");
+  for (const user of users) {
+    const triggers = triggersReaching(user);
+    assert.ok(triggers.length > 0, `${user.name} runs eBay connector code but no trigger reaches it`);
+    for (const trigger of triggers) {
+      assert.ok(mountsRuntime(trigger),
+        `${trigger.name} reaches eBay connector code (through ${user.name}) without spreading EBAY_RUNTIME. ` +
+        "The eBay internals unbox the seller's credentials under EBAY_TOKEN_KEY, which is mounted only by that " +
+        "bundle — so this throws \"No eBay key is configured.\" in production. Adding `secrets:` alone is not the " +
+        "fix: secrets and the ebay-connector@ identity travel together (access-control-policy.md §5). Hand the " +
+        "work to ebayEventWorker instead, the way retryCommerceEvent does.");
+    }
   }
 });
 
@@ -203,6 +264,10 @@ check("the policy still admits which controls are interface-level", () => {
     "the policy no longer records that every function runs as the same service account");
   assert.ok(/Before the Amazon connector serves a production seller/.test(policy),
     "the policy no longer states when that stops being acceptable");
+  assert.ok(/and the eBay connector\s+likewise/.test(policy),
+    "the policy no longer says the eBay connector is held to the same separation");
+  assert.ok(/ebay-connector@eggcraft-studio/.test(policy) && /ebayEventWorker/.test(policy),
+    "the policy no longer names eBay's identity and its own worker");
 });
 
 for (const { name, run } of checks) {

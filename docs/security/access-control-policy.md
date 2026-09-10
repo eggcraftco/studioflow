@@ -156,15 +156,33 @@ anything currently shipped. It is written down here because it is a real
 weakening of least privilege, and because there is one place it stops being
 acceptable:
 
-**Before the Amazon connector serves a production seller**, the credentials that
-open Amazon — the LWA client secret and the key that seals each seller's refresh
-token — must be readable only by the Amazon functions themselves, through a
-dedicated service account with no other grants. The default compute service
+**Before the Amazon connector serves a production seller**, and the eBay connector
+likewise, the credentials that open the marketplace — Amazon's LWA client secret
+and eBay's application keyset, and the key that seals each seller's refresh
+token — must be readable only by that connector's functions themselves, through
+a dedicated service account with no other grants. The default compute service
 account must not hold `secretAccessor` on them. A marketplace's data protection
 obligations do not survive an arrangement where any function in the system can
-read the key to it.
+read the key to it. eBay's functions run as `ebay-connector@eggcraft-studio` and
+its tasks ride their own Cloud Tasks queue (`ebayEventWorker`), never the shared
+`commerceEventWorker`, so no other connector's key is ever mounted beside eBay's.
+What that separation buys is **secret isolation, not data isolation**: `ebay-connector@` holds
+`roles/datastore.user` at project scope like every runtime identity here (Firestore IAM has no
+collection scope and Security Rules do not apply to the Admin SDK), so it can read and write the whole
+database; what it cannot do is read another connector's secrets, and no other identity can read its
+(`docs/ebay-sa-approval-package.md` §1.9).
 
-A check in the suite fails if Amazon code ships without that separation.
+A check in the suite fails if Amazon or eBay code ships without that separation.
+
+That separation has two directions, and the suite now checks both. A function
+that **mounts** a marketplace secret must run as that connector's own identity —
+and a function that **runs** the connector's code must mount its secrets. The
+second one was missed once: a shared callable called into the eBay connector to
+release a parked order, mounted no eBay secret (it cannot: it cannot take the
+eBay identity either), and so threw `No eBay key is configured.` on every attempt
+— silently, into a counter that read 'left in place'. The rule that follows from
+it is not "add the secret": a shared callable hands the work to that connector's
+own worker instead.
 
 ## 6. Administrative access to production
 

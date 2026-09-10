@@ -384,9 +384,12 @@ function normalizeEbayOrder(order, ctx = {}) {
       provider_display_name: "eBay",
       connection_display_name: text(ctx.accountName, 200) || "eBay",
       // The seller's own site, not always ebay.co.uk: a German seller opening
-      // a UK link lands on a page that cannot find their order.
+      // a UK link lands on a page that cannot find their order. Resolved from
+      // the same chain identity.marketplace_id uses — the connection's word,
+      // then the line's own site — so a caller that passes no marketplaceId
+      // does not send every order to the UK.
       external_admin_url: externalId
-        ? `https://${(ebayMarketplace(ctx.marketplaceId) || { host: "www.ebay.co.uk" }).host}/mesh/ord/details?orderid=${encodeURIComponent(externalId)}`
+        ? `https://${(ebayMarketplace(ctx.marketplaceId || order?.lineItems?.[0]?.listingMarketplaceId) || { host: "www.ebay.co.uk" }).host}/mesh/ord/details?orderid=${encodeURIComponent(externalId)}`
         : null,
       provider_metadata: {
         version: 1, schema_version: 1,

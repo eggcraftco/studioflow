@@ -1,0 +1,19 @@
+{
+  "_synthetic": { "note": "Hand-written stand-in for test/fixtures/ebay-sandbox-fulfillments.json (getShippingFulfillments). The contact block is what the split must remove; the tracking is what it must keep.", "apiVersion": "v1" },
+  "total": 1,
+  "fulfillments": [
+    {
+      "fulfillmentId": "9405511899223197428490",
+      "shippedDate": "2026-09-03T14:10:00.000Z",
+      "shippingCarrierCode": "RoyalMail",
+      "shipmentTrackingNumber": "RM123456789GB",
+      "shipTo": {
+        "fullName": "Ada Lovelace",
+        "primaryPhone": { "phoneNumber": "+44 7700 900000" },
+        "contactAddress": { "addressLine1": "10 Analytical Way", "addressLine2": "Flat 3", "city": "London", "postalCode": "N1 1AA", "countryCode": "GB" }
+      },
+      "contactEmail": "ada@example.com",
+      "lineItems": [{ "lineItemId": "10001", "quantity": 1 }, { "lineItemId": "10002", "quantity": 2 }]
+    }
+  ]
+}

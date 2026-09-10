@@ -608,7 +608,7 @@ export async function listHeldIntegrationOrders(workspace: WorkspaceContext) {
 
 export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext) {
   return withWebSyncStatus(async () => {
-    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; stillHeld?: number; message?: string }>(
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; queued?: number; stillHeld?: number; message?: string }>(
       functions,
       "releaseHeldIntegrationOrders"
     );

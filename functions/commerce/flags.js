@@ -2,15 +2,25 @@
 // flag document, never by a deploy. `appConfig/commerce`:
 //
 //   { shadow: { enabled: false, providers: { shopify: true }, connections: { "shopify:eggcraft.myshopify.com": true } },
-//     queue:  { enabled: false, providers: {}, connections: {} } }
+//     queue:  { enabled: false, providers: {}, connections: {} },
+//     connectors: { enabled: false, providers: { ebay: false }, connections: { "ebay:<connectionId>": false } } }
 //
 // A connection entry beats a provider entry beats the global switch, so one
 // store can run in shadow while the rest of the world is untouched. Cached
 // for a minute per instance: a webhook burst must not become a read storm.
+//
+// `connectors` is the runtime switch for a whole connector (eBay first): the
+// sweeps, Sync now, import and the queue read it per connection; get, verify,
+// disconnect and account-deletion compliance never do. Off by default, so a
+// deploy activates nothing and a rollback needs no redeploy.
 const CACHE_MS = 60 * 1000;
 let cache = { at: 0, flags: null };
 
-const EMPTY = Object.freeze({ shadow: { enabled: false, providers: {}, connections: {} }, queue: { enabled: false, providers: {}, connections: {} } });
+const EMPTY = Object.freeze({
+  shadow: { enabled: false, providers: {}, connections: {} },
+  queue: { enabled: false, providers: {}, connections: {} },
+  connectors: { enabled: false, providers: {}, connections: {} }
+});
 
 async function readCommerceFlags(db, { now = Date.now(), force = false } = {}) {
   if (!force && cache.flags && now - cache.at < CACHE_MS) return cache.flags;
@@ -20,7 +30,8 @@ async function readCommerceFlags(db, { now = Date.now(), force = false } = {}) {
     const data = snap.exists ? (snap.data() || {}) : {};
     flags = {
       shadow: { ...EMPTY.shadow, ...(data.shadow || {}) },
-      queue: { ...EMPTY.queue, ...(data.queue || {}) }
+      queue: { ...EMPTY.queue, ...(data.queue || {}) },
+      connectors: { ...EMPTY.connectors, ...(data.connectors || {}) }
     };
   } catch (error) {
     console.warn("commerce flags: read failed, everything stays off:", error?.message || error);

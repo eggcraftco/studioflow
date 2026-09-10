@@ -375,5 +375,21 @@ check("every fixture in this file produces an applicable envelope", () => {
   }
 });
 
+// §8.3 — the admin link is the order's OWN site. With no ctx.marketplaceId the
+// first version fell back to ebay.co.uk for every order, the exact bug the
+// adapter's own comment warned about, while identity.marketplace_id read the
+// line's listingMarketplaceId correctly. Both layers must use the same chain.
+check("a DE order with no ctx.marketplaceId links to ebay.de, not ebay.co.uk", () => {
+  const german = order({ lineItems: [ring({ listingMarketplaceId: "EBAY_DE", purchaseMarketplaceId: "EBAY_DE" }), band({ listingMarketplaceId: "EBAY_DE", purchaseMarketplaceId: "EBAY_DE" })] });
+  const env = normalizeEbayOrder(german, { connectionId: "con_ebay_1", accountName: "EGGcraft", eventOrigin: "provider" });
+  assert.strictEqual(env.identity.marketplace_id, "EBAY_DE");
+  assert.ok(env.source.external_admin_url.startsWith("https://www.ebay.de/"), env.source.external_admin_url);
+  assert.ok(env.source.external_admin_url.includes("orderid=12-09113-42375"));
+  // The connection's word still wins when it is given.
+  assert.ok(normalizeEbayOrder(german, { ...ctx, marketplaceId: "EBAY_US" }).source.external_admin_url.startsWith("https://www.ebay.com/"));
+  // An unknown site falls back to the UK host rather than producing a broken link.
+  assert.ok(normalizeEbayOrder(order({ lineItems: [ring({ listingMarketplaceId: "EBAY_XX" })] }), { connectionId: "c" }).source.external_admin_url.startsWith("https://www.ebay.co.uk/"));
+});
+
 console.log(failures === 0 ? "\n✅ COMMERCE EBAY ADAPTER GEÇTİ" : `\n❌ ${failures} BAŞARISIZ`);
 process.exit(failures === 0 ? 0 : 1);

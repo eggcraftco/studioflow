@@ -2528,6 +2528,558 @@ private fun etsyRelative(atMs: Long, t: (String) -> String): String {
     return "$days " + if (days == 1) t("day ago") else t("days ago")
 }
 
+// ---------------------------------------------------------------------------
+// eBay
+//
+// Settings → Integrations → eBay. A mirror of
+// studioflow-web/app/settings/EbayIntegrationSection.tsx and
+// EGGcraft/EbayIntegrationView.swift: the same cards, the same order, the same
+// sentences. Two things shape it:
+//
+//   * Connect opens nivadesk.app in the browser, not eBay. A native app cannot
+//     set the first-party cookie that binds the callback to the browser that
+//     started the flow, so the start page does that half (docs §5.2). There is
+//     no deep link back into this app and none is needed: coming back to the
+//     front is the signal, and then we simply ask the server again.
+//   * Every card branches on `specStatus`, the server's own word for the row.
+//     Reading `lastErrorCode` and deciding for ourselves is how three clients
+//     end up with three different ideas of "healthy".
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun EbayDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+
+    var loading by remember { mutableStateOf(true) }
+    var configured by remember { mutableStateOf(true) }
+    var environment by remember { mutableStateOf("sandbox") }
+    var connections by remember {
+        mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EbayConnectionRow>>(emptyList())
+    }
+    var busy by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    // The seller has left for the browser. Coming back to the front is the only
+    // signal we get that the flow may have finished.
+    var awaitingReturn by remember { mutableStateOf(false) }
+    var confirmDisconnect by remember { mutableStateOf(false) }
+    var sinceDays by remember { mutableStateOf(90) }
+    var includeUnpaid by remember { mutableStateOf(false) }
+    var includeCancelled by remember { mutableStateOf(true) }
+    var preview by remember {
+        mutableStateOf<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EbayImportPreview?>(null)
+    }
+    var imported by remember {
+        mutableStateOf<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EbayImportResult?>(null)
+    }
+
+    // A disconnected row is not a connection, so it is never the one on screen.
+    val connection = connections.firstOrNull { it.status == "connected" }
+        ?: connections.firstOrNull { it.status != "disconnected" }
+
+    // keepError: a reload is not evidence that whatever just failed is fine now.
+    // The live check sets a message and then reloads; clearing unconditionally
+    // deleted it a moment after it appeared.
+    suspend fun reload(keepError: Boolean = false) {
+        val ws = workspace ?: return
+        try {
+            val result = repository.ebayConnections(ws.id)
+            connections = result.connections
+            configured = result.configured
+            environment = result.environment
+            if (!keepError) errorText = ""
+        } catch (failure: Exception) {
+            errorText = failure.message ?: t("Could not load.")
+        } finally {
+            loading = false
+        }
+    }
+
+    /** One place for busy state and messages, so no action leaves either behind. */
+    fun run(key: String, action: suspend () -> Unit) {
+        if (busy.isNotEmpty()) return
+        scope.launch {
+            busy = key
+            errorText = ""
+            // The last action's green line has nothing to say about this one,
+            // and leaving it puts a success message above the error that
+            // contradicts it.
+            notice = ""
+            try {
+                action()
+            } catch (failure: Exception) {
+                errorText = failure.message ?: t("Could not load.")
+            } finally {
+                busy = ""
+            }
+        }
+    }
+
+    fun connect() = run("connect") {
+        val ws = workspace ?: return@run
+        val url = repository.ebayBeginConnect(ws.id)
+        if (url.isEmpty()) throw IllegalStateException(t("eBay did not complete the connection. Try again."))
+        // nivadesk.app, never eBay's authorize URL: the start page signs the
+        // owner in, claims the state once and sets the browser-binding cookie
+        // this app cannot set (docs §5.2).
+        awaitingReturn = true
+        uriHandler.openUri(url)
+        notice = t("The button opens nivadesk.app in your browser. Sign in if asked, approve on eBay, then come back here.")
+    }
+
+    LaunchedEffect(workspace?.id) { reload() }
+
+    // Coming back from the browser: the OAuth callback finished the connection
+    // server-side, so there is nothing to hand back into the app — just look again.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, awaitingReturn) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && awaitingReturn) {
+                awaitingReturn = false
+                scope.launch { reload() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DetailColumn {
+        if (errorText.isNotEmpty()) Text(errorText, color = DangerRed, fontWeight = FontWeight.SemiBold)
+        else if (notice.isNotEmpty()) Text(notice, color = StudioGreen, fontWeight = FontWeight.SemiBold)
+
+        if (loading) {
+            Text(t("Loading..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@DetailColumn
+        }
+
+        if (!configured) {
+            // Not a fault: this server has no eBay application wired up.
+            DetailCard(title = "eBay", icon = Icons.Filled.ShoppingCart) {
+                Text(t("eBay is not set up on this server yet. Contact support and we will enable it."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            return@DetailColumn
+        }
+
+        if (connection == null) {
+            // ---- Before connecting -----------------------------------------
+            DetailCard(title = t("Connect your eBay account"), icon = Icons.Filled.Lock) {
+                Text(t("Connect your eBay seller account once; orders, payments and refunds arrive on their own."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // True of the scopes this half asks for, and only those.
+                Text(t("NivaDesk will read your orders. It will not change listings, prices or stock."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (environment == "sandbox") {
+                    Text(t("Sandbox — test orders only"), fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (isOwner) {
+                    Button(onClick = { connect() }, enabled = busy.isEmpty()) {
+                        Text(if (busy == "connect") t("Opening eBay…") else t("Connect eBay"))
+                    }
+                    if (awaitingReturn) {
+                        OutlinedButton(onClick = { awaitingReturn = false; scope.launch { reload() } }) {
+                            Text(t("Finish connection"))
+                        }
+                    }
+                    Text(t("The button opens nivadesk.app in your browser. Sign in if asked, approve on eBay, then come back here."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text(t("Only the workspace owner can connect or disconnect an eBay account."),
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            return@DetailColumn
+        }
+
+        // ---- The connected account -----------------------------------------
+        val sites = connection.marketplaces.filter { it.enabled }.joinToString(", ") { it.marketplace }
+        DetailCard(title = connection.title.ifBlank { "eBay" }, icon = Icons.Filled.ShoppingCart) {
+            Text(
+                "${t("eBay seller")} · ${if (connection.isSandbox) t("Sandbox") else t("Production")} · ${t("Read only")}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            EbayStatLine(t("Connection"), t(ebayStatusLabel(connection.specStatus)))
+            EbayStatLine(t("eBay sites"), sites.ifBlank { "—" })
+            EbayStatLine(t("Last successful sync"), ebayRelative(connection.lastSuccessAtMs, t))
+            EbayStatLine(t("Last full check"), ebayRelative(connection.lastFullReconciliationAtMs, t))
+            EbayStatLine(t("Calls used today"), "${connection.quotaToday} / ${connection.quotaShare}")
+
+            val sentence = ebaySpecStatusSentence(connection.specStatus, connection.lastErrorCode, t)
+            if (sentence.isNotEmpty()) Text(sentence, color = DangerRed)
+            // The 18-month refresh authorisation is running out. A date is the
+            // only useful form of that warning.
+            if (connection.reauthorizeByMs > 0 && connection.lastErrorCode == "refresh_token_expiring") {
+                val date = java.text.DateFormat
+                    .getDateInstance(java.text.DateFormat.MEDIUM, uk.co.eggcraft.studioflow.language.studioLocale(lang))
+                    .format(java.util.Date(connection.reauthorizeByMs))
+                Text(t("Reconnect eBay before {date} to keep syncing.").replace("{date}", date), color = DangerRed)
+            }
+
+            if (connection.needsReconnect && isOwner) {
+                Button(onClick = { connect() }, enabled = busy != "connect") {
+                    Text(if (busy == "connect") t("Opening eBay…") else t("Reconnect eBay"))
+                }
+            }
+            OutlinedButton(
+                enabled = busy != "verify",
+                onClick = {
+                    run("verify") {
+                        val ws = workspace ?: return@run
+                        val answer = repository.ebayVerify(ws.id, connection.id)
+                        if (answer.first) {
+                            notice = t("The eBay connection is working.")
+                            reload()
+                        } else {
+                            errorText = ebayReasonSentence(answer.second, t)
+                            reload(keepError = true)
+                        }
+                    }
+                },
+            ) { Text(if (busy == "verify") t("Checking…") else t("Check now")) }
+            OutlinedButton(
+                enabled = busy != "sync" && connection.status == "connected",
+                onClick = {
+                    run("sync") {
+                        val ws = workspace ?: return@run
+                        val outcome = repository.ebaySyncNow(ws.id, connection.id)
+                        // held and failed are part of what happened. Reading only
+                        // created and updated is how a pass where every order
+                        // failed gets reported as a success.
+                        notice = t("Synced: {created} new, {updated} updated, {held} held, {failed} failed")
+                            .replace("{created}", "${outcome.created}")
+                            .replace("{updated}", "${outcome.updated}")
+                            .replace("{held}", "${outcome.held}")
+                            .replace("{failed}", "${outcome.failed}")
+                        reload(keepError = true)
+                    }
+                },
+            ) { Text(if (busy == "sync") t("Syncing…") else t("Sync now")) }
+            Text(t("Sync now checks the last 24 hours."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // No listing or stock write exists in this half, and the screen says
+            // so rather than leaving the seller to find out.
+            Text(t("Listings and stock stay managed on eBay."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        // ---- Choose what to import -----------------------------------------
+        if (isOwner && !connection.importDone) {
+            DetailCard(title = t("Choose what to import"), icon = Icons.Filled.Tune) {
+                Text(t("Preview writes nothing. It counts the orders eBay has in the period and how many are already here."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("How far back"), fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(7, 30, 90).forEach { days ->
+                        FilterChip(
+                            selected = sinceDays == days,
+                            onClick = { sinceDays = days },
+                            label = { Text(t("{count} days").replace("{count}", "$days")) },
+                        )
+                    }
+                }
+                EbayToggleLine(t("Include orders that are not paid yet"), includeUnpaid) { includeUnpaid = it }
+                EbayToggleLine(t("Include cancelled orders"), includeCancelled) { includeCancelled = it }
+                OutlinedButton(
+                    enabled = busy != "preview" && connection.status == "connected",
+                    onClick = {
+                        run("preview") {
+                            val ws = workspace ?: return@run
+                            imported = null
+                            preview = repository.ebayPreviewImport(ws.id, connection.id, sinceDays)
+                        }
+                    },
+                ) { Text(if (busy == "preview") t("Checking…") else t("Preview")) }
+                Button(
+                    enabled = busy != "import" && connection.status == "connected",
+                    onClick = {
+                        run("import") {
+                            val ws = workspace ?: return@run
+                            preview = null
+                            imported = repository.ebayRunImport(
+                                ws.id, connection.id, sinceDays, includeUnpaid, includeCancelled,
+                            )
+                            reload(keepError = true)
+                        }
+                    },
+                ) { Text(if (busy == "import") t("Importing…") else t("Import")) }
+
+                preview?.let { found ->
+                    EbayStatLine(
+                        t("Orders found"),
+                        // Truncated means the budget ran out before the window
+                        // did, so the number is a floor. Printing it plain reads
+                        // as a total.
+                        if (found.truncated) {
+                            t("estimate — more than {count} orders").replace("{count}", "${found.ordersFound}")
+                        } else {
+                            "${found.ordersFound}"
+                        },
+                    )
+                    EbayStatLine(t("Duplicate orders prevented"), "${found.duplicatesPrevented}")
+                    EbayStatLine(t("Not paid yet"), "${found.unpaid}")
+                    EbayStatLine(t("Cancelled"), "${found.cancelled}")
+                    if (found.marketplaces.isNotEmpty()) {
+                        EbayStatLine(t("eBay sites"), found.marketplaces.joinToString(", "))
+                    }
+                }
+                imported?.let { done ->
+                    EbayStatLine(t("Imported"), "${done.outcome.created}")
+                    EbayStatLine(t("Updated"), "${done.outcome.updated}")
+                    if (done.outcome.held > 0) EbayStatLine(t("Held"), "${done.outcome.held}")
+                    if (done.outcome.failed > 0) EbayStatLine(t("Failed"), "${done.outcome.failed}")
+                }
+
+                // The cursor is only "paused" once a run has actually stopped
+                // short; no cursor at all means no import has run yet.
+                if (connection.importComplete == false) {
+                    Text(t("Import paused — press Import again to continue."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (connection.importFailedCount > 0) {
+                    Text(
+                        t("{count} orders could not be imported.").replace("{count}", "${connection.importFailedCount}"),
+                        color = DangerRed,
+                    )
+                    OutlinedButton(
+                        enabled = busy != "retry",
+                        onClick = {
+                            run("retry") {
+                                val ws = workspace ?: return@run
+                                val result = repository.ebayRetryImportFailures(ws.id, connection.id)
+                                notice = t("{count} orders were brought in on the retry.")
+                                    .replace("{count}", "${result.second}")
+                                reload(keepError = true)
+                            }
+                        },
+                    ) { Text(t("Retry")) }
+                }
+            }
+        }
+
+        // ---- What comes in --------------------------------------------------
+        if (isOwner) {
+            DetailCard(title = t("What comes in"), icon = Icons.Filled.Refresh) {
+                fun save(patch: Map<String, Any?>) = run("settings") {
+                    val ws = workspace ?: return@run
+                    repository.ebayUpdateSettings(ws.id, connection.id, patch)
+                    notice = t("Settings saved.")
+                    reload(keepError = true)
+                }
+                EbayToggleLine(
+                    t("Check eBay for new and changed orders automatically"),
+                    connection.settings.autoSync,
+                    if (busy == "settings") null else ({ on: Boolean -> save(mapOf("autoSync" to on)) }),
+                )
+                EbayToggleLine(
+                    t("Include orders that are not paid yet"),
+                    connection.settings.includeUnpaid,
+                    if (busy == "settings") null else ({ on: Boolean -> save(mapOf("includeUnpaid" to on)) }),
+                )
+                EbayToggleLine(
+                    t("Include cancelled orders"),
+                    connection.settings.includeCancelled,
+                    if (busy == "settings") null else ({ on: Boolean -> save(mapOf("includeCancelled" to on)) }),
+                )
+                Text(t("eBay sites"), fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Only the sites this account has actually sold on are offered:
+                // a list of every eBay marketplace would be a guess about the
+                // seller, and a guess with a switch beside it.
+                if (connection.marketplaces.isEmpty()) {
+                    Text(t("The eBay sites you sell on appear here after the first orders arrive."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    connection.marketplaces.forEach { site ->
+                        val label = if (site.currency.isBlank()) site.marketplace else "${site.marketplace} · ${site.currency}"
+                        EbayToggleLine(
+                            label,
+                            site.enabled,
+                            if (busy == "settings") null else ({ on: Boolean ->
+                                run("settings") {
+                                    val ws = workspace ?: return@run
+                                    repository.ebaySetMarketplace(ws.id, connection.id, site.marketplace, on)
+                                    notice = t("Settings saved.")
+                                    reload(keepError = true)
+                                }
+                            }),
+                        )
+                    }
+                }
+            }
+        }
+
+        CommerceSyncHealthCard(state, provider = "ebay")
+
+        // ---- Recent activity ------------------------------------------------
+        DetailCard(title = t("Recent activity"), icon = Icons.Filled.Timeline) {
+            EbayStatLine(t("Last checked"), ebayRelative(connection.lastSyncAtMs, t))
+            if (connection.recentEvents.isEmpty()) {
+                Text(t("Nothing has happened on this connection yet."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                connection.recentEvents.forEach { event ->
+                    EbayStatLine(ebayEventSentence(event.type, t), ebayRelative(event.atMs, t))
+                }
+            }
+        }
+
+        // ---- Disconnect -----------------------------------------------------
+        if (isOwner) {
+            DetailCard(title = t("Disconnect eBay"), icon = Icons.Filled.Link) {
+                if (confirmDisconnect) {
+                    Text(t("Disconnect this eBay account? Syncing stops and the stored eBay access is destroyed. The orders already imported stay in this workspace."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(
+                        enabled = busy != "disconnect",
+                        onClick = {
+                            run("disconnect") {
+                                val ws = workspace ?: return@run
+                                repository.ebayDisconnect(ws.id, connection.id)
+                                confirmDisconnect = false
+                                preview = null
+                                imported = null
+                                notice = t("eBay account disconnected. Your orders stay in NivaDesk.")
+                                reload(keepError = true)
+                            }
+                        },
+                    ) { Text(t("Disconnect")) }
+                    OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
+                } else {
+                    OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect eBay")) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EbayStatLine(name: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(name, modifier = Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun EbayToggleLine(text: String, checked: Boolean, onChange: ((Boolean) -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange, enabled = onChange != null)
+    }
+}
+
+/** Codes into words. This is the ONLY place an eBay code becomes a sentence — a
+ *  technical code must never reach the screen — and every English string below
+ *  has an entry in the other eleven languages (StudioTranslations.kt). Word for
+ *  word the same as lib/studioflow/ebay.ts and EbayIntegration.swift. */
+private fun ebayErrorSentence(code: String, t: (String) -> String): String = when (code.trim()) {
+    "credentials_rejected", "token_unreadable" ->
+        t("eBay no longer accepts this connection. Reconnect to continue syncing.")
+    "app_credentials_invalid", "token_request_invalid" ->
+        t("eBay sync is temporarily unavailable. NivaDesk has been notified.")
+    "permission_missing" -> t("eBay refused a permission. Reconnect and approve every permission.")
+    "rate_limited" -> t("eBay is rate-limiting this account. Sync resumes automatically.")
+    "partial_pass" -> t("Some eBay orders could not be imported. See Sync health.")
+    "provider_unavailable" -> t("eBay could not be reached. Sync retries automatically.")
+    "environment_mismatch" ->
+        t("This eBay connection belongs to the sandbox. Disconnect it and connect your live account.")
+    "refresh_token_expiring" -> t("Reconnect eBay to keep syncing.")
+    "disconnected" -> t("eBay account disconnected.")
+    // "", "truncated" and "paused_by_owner" are benign: they are not faults and
+    // must not put a red line on a healthy connection.
+    else -> ""
+}
+
+/** Why a connection is not where it should be, whatever the code behind it. */
+private fun ebaySpecStatusSentence(specStatus: String, lastErrorCode: String, t: (String) -> String): String {
+    if (specStatus == "reauthorization_required") {
+        return ebayErrorSentence(lastErrorCode, t)
+            .ifEmpty { t("eBay no longer accepts this connection. Reconnect to continue syncing.") }
+    }
+    if (specStatus == "suspended") {
+        return if (lastErrorCode == "environment_mismatch") {
+            t("This eBay connection belongs to the sandbox. Disconnect it and connect your live account.")
+        } else {
+            t("eBay sync is paused on this server.")
+        }
+    }
+    // Degraded with a benign code is the six-hour staleness rule, not an error.
+    if (specStatus == "degraded") {
+        return ebayErrorSentence(lastErrorCode, t)
+            .ifEmpty { t("eBay has not synced for a while. See Sync health.") }
+    }
+    return ""
+}
+
+/** The pill on the header card. Returns the English key; the caller translates it. */
+private fun ebayStatusLabel(specStatus: String): String = when (specStatus) {
+    "reauthorization_required" -> "Reconnect required"
+    "suspended" -> "Paused"
+    "degraded" -> "Needs attention"
+    "connected_read_only" -> "Healthy"
+    else -> "Connected"
+}
+
+/** The `reason` a callback or a live check comes back with. */
+private fun ebayReasonSentence(reason: String, t: (String) -> String): String = when (reason.trim()) {
+    "state" -> t("The eBay sign-in link has expired or was already used. Start again.")
+    "browser" -> t("Finish connecting eBay in the same browser you started from.")
+    "environment" -> t("This eBay account belongs to a different environment.")
+    "no_seller" -> t("eBay did not tell us which seller account this is. Reconnect and approve every permission.")
+    "disabled" -> t("eBay is not set up on this server yet. Contact support and we will enable it.")
+    else -> ebayErrorSentence(reason, t).ifEmpty { t("eBay did not complete the connection. Try again.") }
+}
+
+/** One line of Recent activity, in words. The server writes event types —
+ *  `sync_partial`, `token_refresh_failed` — and a technical code must never
+ *  reach the screen. Showing the type with its underscores swapped for spaces
+ *  is still the code; it only looks friendlier. */
+private fun ebayEventSentence(type: String, t: (String) -> String): String = when (type.trim()) {
+    "connected" -> t("Connected")
+    "reconnected" -> t("Reconnected")
+    "disconnected" -> t("Disconnected")
+    "sync_completed" -> t("Sync finished")
+    "sync_partial" -> t("Sync finished with something outstanding")
+    "sync_bisected" -> t("A busy window was split and read in parts")
+    "catch_up_completed" -> t("Caught up on what changed while disconnected")
+    "nightly_completed" -> t("Nightly check finished")
+    "import_started" -> t("Import started")
+    "import_resumed" -> t("Import resumed")
+    "import_finished" -> t("Import finished")
+    "import_preview" -> t("Import preview")
+    "order_imported" -> t("Order imported")
+    "order_import_failed" -> t("An order could not be imported")
+    "order_needs_review" -> t("An order needs a look")
+    "rate_limited" -> t("eBay is rate-limiting this account")
+    "reauthorization_required" -> t("eBay asked for the connection to be renewed")
+    "refresh_token_expiring" -> t("The eBay authorisation is close to expiring")
+    "token_refresh_failed" -> t("Renewing the eBay connection failed")
+    "app_credentials_invalid" -> t("eBay refused NivaDesk's application credentials")
+    "environment_mismatch" -> t("This connection belongs to another eBay environment")
+    "verify_failed" -> t("The connection check failed")
+    "buyer_deleted" -> t("A buyer's details were erased at eBay's request")
+    else -> t("Activity")
+}
+
+/** "5 minutes ago" in the seller's language, from a millisecond timestamp. */
+private fun ebayRelative(atMs: Long, t: (String) -> String): String {
+    if (atMs <= 0L) return t("Never")
+    val seconds = ((System.currentTimeMillis() - atMs) / 1000).coerceAtLeast(0L)
+    val minutes = (seconds / 60).toInt()
+    if (minutes < 1) return t("Just now")
+    if (minutes < 60) return "$minutes " + if (minutes == 1) t("minute ago") else t("minutes ago")
+    val hours = minutes / 60
+    if (hours < 24) return "$hours " + if (hours == 1) t("hour ago") else t("hours ago")
+    val days = hours / 24
+    return "$days " + if (days == 1) t("day ago") else t("days ago")
+}
+
 @Composable
 private fun ClientDomainDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -3209,12 +3761,26 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
         @Suppress("UNCHECKED_CAST")
         val etsyRows = etsy.first as List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyConnectionRow>
         val squareRows = runCatching { repository.squareConnections(ws.id) }.getOrDefault(emptyList()).filter { it.status != "disconnected" }
+        // eBay's card state comes from the rows the server returns, and the
+        // attention count is the server's own specStatus: the status table
+        // lives once (functions/commerce/ebay/status.js) and the clients copy
+        // its words rather than each re-reading lastErrorCode their own way. A
+        // workspace where the connector is switched off settles empty here,
+        // which reads Available — the card the grid drew before eBay existed.
+        val ebayRows = runCatching { repository.ebayConnections(ws.id).connections }
+            .getOrDefault(emptyList())
+            .filter { it.status != "disconnected" }
+        val ebayFirst = ebayRows.firstOrNull()
         signals = IntegrationSignals(
             squareConnections = squareRows.size,
             squareConnectionsNeedingAttention = squareRows.count { it.status == "reconnect_required" || it.lastErrorCode.isNotEmpty() },
             shopifyStores = stores.associate { it.shop to it.status },
             etsyShops = etsyRows.size,
             etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
+            ebayConnections = ebayRows.size,
+            ebayConnectionsNeedingAttention = ebayRows.count { it.needsAttention },
+            ebayAccount = ebayFirst?.title.orEmpty(),
+            ebaySandbox = ebayFirst?.isSandbox == true,
             channels = mapOf(
                 "inbound" to IntegrationChannel(inbound.first, inbound.second, inbound.third),
             ),
@@ -3238,6 +3804,7 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
                 "square" -> SquareDetail(state)
                 "paypal" -> PayPalDetail(state)
                 "etsy" -> EtsyDetail(state)
+                "ebay" -> EbayDetail(state)
                 else -> InboundDetail(state)
             }
         }

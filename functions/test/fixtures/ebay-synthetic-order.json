@@ -1,0 +1,107 @@
+{
+  "_synthetic": {
+    "note": "Hand-written stand-in for test/fixtures/ebay-sandbox-order.json, which the owner captures from the sandbox seller (design §8.1, §15 step 2). Shaped from the Sell Fulfillment API v1 getOrder reference. Carries every kind of personal field the split must remove: a phone, an addressLine2, a companyName, checkout notes, a gift message with sender and recipient names, a personalised variation aspect, and two line items.",
+    "apiVersion": "v1"
+  },
+  "orderId": "12-09113-42375",
+  "legacyOrderId": "170009134375-2314958900123",
+  "creationDate": "2026-09-02T09:00:00.000Z",
+  "lastModifiedDate": "2026-09-02T10:30:00.000Z",
+  "orderFulfillmentStatus": "NOT_STARTED",
+  "orderPaymentStatus": "PAID",
+  "sellerId": "eggcraft_uk",
+  "salesRecordReference": "1042",
+  "buyerCheckoutNotes": "Please leave with neighbour at 12 Analytical Way if out",
+  "buyer": {
+    "username": "ada_l",
+    "taxAddress": { "city": "London", "countryCode": "GB", "postalCode": "N1 1AA", "stateOrProvince": "Greater London" },
+    "taxIdentifier": { "taxpayerId": "GB999999973", "taxIdentifierType": "VAT", "issuingCountry": "GB" },
+    "buyerRegistrationAddress": {
+      "fullName": "Ada Lovelace",
+      "companyName": "Lovelace Analytical Ltd",
+      "email": "ada@example.com",
+      "primaryPhone": { "phoneNumber": "+44 7700 900000" },
+      "contactAddress": { "addressLine1": "10 Analytical Way", "addressLine2": "Flat 3", "city": "London", "stateOrProvince": "Greater London", "postalCode": "N1 1AA", "countryCode": "GB" }
+    }
+  },
+  "pricingSummary": {
+    "priceSubtotal": { "value": "100.00", "currency": "GBP" },
+    "priceDiscount": { "value": "10.00", "currency": "GBP" },
+    "deliveryCost": { "value": "5.00", "currency": "GBP" },
+    "deliveryDiscount": { "value": "0.00", "currency": "GBP" },
+    "tax": { "value": "21.00", "currency": "GBP" },
+    "total": { "value": "116.00", "currency": "GBP" }
+  },
+  "cancelStatus": { "cancelState": "NONE_REQUESTED", "cancelRequests": [] },
+  "paymentSummary": {
+    "totalDueSeller": { "value": "101.20", "currency": "GBP" },
+    "payments": [
+      {
+        "paymentMethod": "EBAY",
+        "paymentReferenceId": [{ "referenceId": "PAY-9F2-7710", "referenceType": "EXTERNAL_TRANSACTION_ID" }],
+        "paymentStatus": "PAID",
+        "paymentDate": "2026-09-02T09:02:00.000Z",
+        "amount": { "value": "116.00", "currency": "GBP" }
+      }
+    ],
+    "refunds": []
+  },
+  "fulfillmentStartInstructions": [
+    {
+      "fulfillmentInstructionsType": "SHIP_TO",
+      "ebaySupportedFulfillment": false,
+      "minEstimatedDeliveryDate": "2026-09-08T09:00:00.000Z",
+      "maxEstimatedDeliveryDate": "2026-09-11T09:00:00.000Z",
+      "shippingStep": {
+        "shippingCarrierCode": "RoyalMail",
+        "shippingServiceCode": "UK_RoyalMailSecondClassStandard",
+        "shipTo": {
+          "fullName": "Ada Lovelace",
+          "companyName": "Lovelace Analytical Ltd",
+          "email": "ada@example.com",
+          "primaryPhone": { "phoneNumber": "+44 7700 900000" },
+          "contactAddress": { "addressLine1": "10 Analytical Way", "addressLine2": "Flat 3", "city": "London", "stateOrProvince": "Greater London", "postalCode": "N1 1AA", "countryCode": "GB" }
+        }
+      }
+    }
+  ],
+  "lineItems": [
+    {
+      "lineItemId": "10001",
+      "legacyItemId": "110419977151",
+      "legacyVariationId": "660001",
+      "sku": "RING-1",
+      "title": "Signet ring",
+      "quantity": 1,
+      "soldFormat": "FIXED_PRICE",
+      "listingMarketplaceId": "EBAY_GB",
+      "purchaseMarketplaceId": "EBAY_GB",
+      "lineItemFulfillmentStatus": "NOT_STARTED",
+      "lineItemCost": { "value": "90.00", "currency": "GBP" },
+      "deliveryCost": { "shippingCost": { "value": "5.00", "currency": "GBP" } },
+      "ebayCollectAndRemitTaxes": [{ "taxType": "VAT", "amount": { "value": "19.00", "currency": "GBP" }, "collectionMethod": "GROSS", "ebayReference": { "name": "VAT", "value": "GB123456789" } }],
+      "total": { "value": "114.00", "currency": "GBP" },
+      "itemLocation": { "location": "London, United Kingdom", "countryCode": "GB", "postalCode": "E1 6AN" },
+      "variationAspects": [{ "name": "Size", "value": "M" }, { "name": "Engraving", "value": "Ada & Charles 07700 900123" }],
+      "giftDetails": { "message": "Happy birthday from all of us", "senderName": "Charles Babbage", "recipientName": "Ada Lovelace", "recipientEmail": "ada.gift@example.com" }
+    },
+    {
+      "lineItemId": "10002",
+      "legacyItemId": "110419977152",
+      "sku": "BAND-2",
+      "title": "Wedding band",
+      "quantity": 2,
+      "soldFormat": "FIXED_PRICE",
+      "listingMarketplaceId": "EBAY_GB",
+      "purchaseMarketplaceId": "EBAY_GB",
+      "lineItemFulfillmentStatus": "NOT_STARTED",
+      "lineItemCost": { "value": "10.00", "currency": "GBP" },
+      "deliveryCost": { "shippingCost": { "value": "0.00", "currency": "GBP" } },
+      "ebayCollectAndRemitTaxes": [{ "taxType": "VAT", "amount": { "value": "2.00", "currency": "GBP" }, "collectionMethod": "GROSS", "ebayReference": { "name": "VAT", "value": "GB123456789" } }],
+      "total": { "value": "12.00", "currency": "GBP" },
+      "variationAspects": []
+    }
+  ],
+  "totalFeeBasisAmount": { "value": "116.00", "currency": "GBP" },
+  "totalMarketplaceFee": { "value": "14.80", "currency": "GBP" }
+}
