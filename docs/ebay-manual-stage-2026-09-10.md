@@ -20,6 +20,13 @@ Approved scope: `docs/ebay-manual-sync-stage-prep-2026-09-10.md` (prepared read-
 | 21:17:24 | `VerifyAddFixedPriceItem` (site UK, category 75576, £5.00, quantity 2, `AutoPay false`, picture `https://nivadesk.app/icon.png`, flat Royal Mail 2nd class £1.00, returns 30 days) | `Ack Warning` — two warnings only: `RefundOption` ignored (21916711), additional postage cost not given; no error → the listing is acceptable |
 | 21:18:22 | **`AddFixedPriceItem`**, same body without `RefundOption` and with `ShippingServiceAdditionalCost 0.00` | **`Ack Success`, ItemID `110590626185`**, StartTime 2026-09-10T21:18:22Z, EndTime 2026-10-10T21:18:22Z — one synthetic sandbox listing on the seller's account |
 
+| 22:3x | Resolution of §2a: `TESTUSER_nivadesk_buyer1`'s password was not accepted (the operator could sign in only as the seller), so a **second buyer** was registered — form filled by the assistant (`TESTUSER_nivadesk_buyer2`, Niva Buyer, `contact+ebaybuyer2@nivadesk.co.uk`, site UK), password and *Register* by the operator; the portal confirmed "You have successfully registered sandbox user TESTUSER_nivadesk_buyer2". The Explorer token flow was then driven step by step (Switch account → buyer2 → the operator's password → consent) | — |
+| 22:4x | `GetUser` with the new Explorer token (site UK) | `Ack Success`, **`Email contact+ebaybuyer2@nivadesk.co.uk`** — the buyer, not the seller |
+| 22:4x | **`PlaceOffer`** as the buyer: `Action Purchase`, `Quantity 1`, `MaxBid 5.00 GBP`, `ItemID 110590626185` (site UK) | **`Ack Success`, TransactionID `10000012799510`, OrderLineItemID `110590626185-10000012799510`**, current price 5.0 — one sandbox order now exists on the seller's account (`AutoPay false`: payment status to be read from the Fulfillment API by NivaDesk's preview) |
+
+| 21:44:15 (eBay clock) | NivaDesk **Preview, 7 days** (owner, web) after the purchase | `ordersFound 0` — one `getOrders` call (quota 14 → 15), `syncLog import_preview "0 found"`; the new order is not yet visible through the Fulfillment API |
+| 21:45:29 | Trading `GetOrders` as the **buyer** (`OrderRole Buyer`, today, `OrderStatus All`) | `Ack Success`, one order: **OrderID `110590626185-10000012799510`, OrderStatus `Active`, AmountPaid 0.0 GBP, eBayPaymentStatus `NoPaymentFailure`** — the order exists on eBay's side, unpaid (AutoPay off, checkout not completed) |
+
 ## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
 
 Twice now the "Get OAuth User Token" flow, after the operator's "Switch account → TESTUSER_nivadesk_buyer1 → password →
