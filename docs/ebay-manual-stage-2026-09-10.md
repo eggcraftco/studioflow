@@ -20,6 +20,25 @@ Approved scope: `docs/ebay-manual-sync-stage-prep-2026-09-10.md` (prepared read-
 | 21:17:24 | `VerifyAddFixedPriceItem` (site UK, category 75576, £5.00, quantity 2, `AutoPay false`, picture `https://nivadesk.app/icon.png`, flat Royal Mail 2nd class £1.00, returns 30 days) | `Ack Warning` — two warnings only: `RefundOption` ignored (21916711), additional postage cost not given; no error → the listing is acceptable |
 | 21:18:22 | **`AddFixedPriceItem`**, same body without `RefundOption` and with `ShippingServiceAdditionalCost 0.00` | **`Ack Success`, ItemID `110590626185`**, StartTime 2026-09-10T21:18:22Z, EndTime 2026-10-10T21:18:22Z — one synthetic sandbox listing on the seller's account |
 
+## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
+
+Twice now the "Get OAuth User Token" flow, after the operator's "Switch account → TESTUSER_nivadesk_buyer1 → password →
+Sign in", returned a token whose `GetUser` answers with the **seller's** identity: `Email contact@nivadesk.co.uk`,
+`RegistrationDate 2026-09-10T18:52:04Z` — the seller's registration, not the buyer's (registered later, e-mail
+`contact+ebaybuyer1@nivadesk.co.uk`). So no buyer token yet; `PlaceOffer` cannot run (a seller cannot buy their own item).
+
+Cause: the sandbox sign-in keeps the seller session ("Welcome back! testuser_nivadesk_seller1", "Stay signed in"
+checked), and the browser autofills the **seller's** saved password into the buyer's password field, so the buyer
+sign-in silently does not take and the already-granted seller session is re-used. This is also eBay's own documented
+trap — the buyer and seller should be separated (different session / not the same signed-in identity).
+
+**The corrected operator step (once):** on the Explorer's "Get OAuth User Token", when the buyer's "Welcome back!
+TESTUSER_nivadesk_buyer1" page appears, (1) **clear** the pre-filled password box, (2) uncheck **Stay signed in**,
+(3) type the **buyer's** password (the one set when the buyer was registered — not the seller's), (4) Sign in, (5)
+**Agree and Continue**. If it still returns the seller, the buyer's password is unknown/wrong → reset it from the
+sandbox sign-in "Forgot your password?" or re-register a fresh buyer. Nothing is retried automatically until the
+operator confirms.
+
 ## 2. Next — the purchase (operator step: the buyer's Explorer token)
 
 Done since the pause: seller token re-obtained, `GetUser`, `VerifyAddFixedPriceItem`, `AddFixedPriceItem` (ItemID `110590626185`).
