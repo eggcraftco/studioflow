@@ -47,12 +47,25 @@ check("an Amazon order is scrubbed thirty days after it was delivered", () => {
 check("a workshop's own customer is never scrubbed, whatever the shop", () => {
   // The line this whole file exists to hold. These are the workshop's own
   // relationships and its own records.
-  for (const provider of ["shopify", "woocommerce", "etsy", "square", "ebay", "inbound"]) {
+  for (const provider of ["shopify", "woocommerce", "etsy", "square", "inbound"]) {
     const order = amazonOrder({ commerce: { provider }, deliveredAtMs: T0 });
     const decision = scrubDecision(order, T0 + 400 * DAY);
     assert.strictEqual(decision.scrub, false, `${provider} order was scrubbed`);
     assert.strictEqual(decision.reason, "no_retention_rule", provider);
   }
+});
+
+check("an eBay buyer's details go ninety days after delivery — when eBay itself stops showing the address", () => {
+  // eBay withholds addressLine1/2 for any order older than 90 days; NivaDesk
+  // holding them longer than eBay does is not minimisation (design §8.4).
+  const order = amazonOrder({ commerce: { provider: "ebay" }, deliveredAtMs: T0 });
+  assert.strictEqual(scrubDecision(order, T0 + 89 * DAY).scrub, false, "scrubbed early");
+  assert.strictEqual(scrubDecision(order, T0 + 89 * DAY).reason, "not_due");
+  const due = scrubDecision(order, T0 + 91 * DAY);
+  assert.strictEqual(due.scrub, true);
+  assert.strictEqual(due.reason, "ebay_address_withheld_after_90d");
+  // Amazon's thirty days are untouched by the second period.
+  assert.strictEqual(scrubDecision(amazonOrder(), T0 + 31 * DAY).reason, "amazon_dpp");
 });
 
 check("an order the workshop typed itself has no provider and no rule", () => {
@@ -153,7 +166,8 @@ check("every field named for removal is a field an order really has", () => {
 
 check("the retention table says which providers impose a deadline and which do not", () => {
   assert.strictEqual(PROVIDER_RETENTION.amazon.days, 30);
-  for (const provider of ["shopify", "woocommerce", "etsy", "square", "ebay", "inbound"]) {
+  assert.strictEqual(PROVIDER_RETENTION.ebay.days, 90, "eBay's period is ninety days after delivery");
+  for (const provider of ["shopify", "woocommerce", "etsy", "square", "inbound"]) {
     assert.strictEqual(PROVIDER_RETENTION[provider].days, 0, `${provider} imposes a deadline it did not ask for`);
   }
 });

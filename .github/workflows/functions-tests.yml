@@ -2,16 +2,42 @@
 # touches them. Two jobs because they need different things:
 #
 #   unit      test/qa + test/inventory against the hand-built fake Firestore —
-#             no emulator, no Java, seconds.
+#             no emulator, no Java, seconds. It first re-derives the committed
+#             signature/ticket vectors (§5.5) from the real implementations, so a
+#             canonical string that moved on BOTH sides at once is named rather
+#             than only failing.
 #   emulator  the Firestore security-rules suites (test/qa/*.test.mjs) and the
 #             end-to-end suites (test/e2e) against a real Firestore emulator —
 #             the only tier that can catch a document that maps fine and stores
 #             badly, or a rule that lets the wrong user write.
+#   relay     the two studioflow-web scripts that EXECUTE app/ebay/callback/
+#             route.ts and app/ebay/ticket/route.ts — the only things that do.
+#             check-ebay-relay-vectors.mjs compiles the real routes and hands
+#             what they produced to the real ebayOAuthCallback, so it is the one
+#             check that can see the HMAC implementations — the relay's and now
+#             the ticket's — drift. Its failure mode is silent and
+#             production-only (an opaque 401 → `unavailable` on every seller's
+#             connect), and it was previously recorded as "runs in CI" while
+#             running nowhere.
+#             check-ebay-callback-regressions.mjs is the ten cases the operator's
+#             report cites by id (EBAY-REG-01 … 10): the same chain driven end to
+#             end, asserting the CONSEQUENCE rather than the bytes — which state
+#             document was burned, which connection was written, which
+#             authorization code reached eBay. Nine of the ten were shown to fail
+#             on the pre-ticket source before they were committed.
 #
 # The integration tier (test/run-integration.sh) needs Auth + Functions
 # emulators and a seed step; it stays local until it is made hermetic.
 name: functions-tests
 
+# The two lists are written out twice, identically, on purpose: GitHub Actions
+# does not support YAML anchors, so an alias here would fail the whole workflow
+# to parse. The web paths are the half of the eBay callback contract that lives
+# outside `functions/` — before they were listed, a change to the route fired NO
+# workflow at all, and the route owns one of the two HMAC implementations. The
+# ticket (§5.5) widened that half: its verifier lives in lib/studioflow/
+# ebayTicket.ts, its cookie names in ebayFlow.ts, and the settings section is now
+# a caller of the sealing route, so all three are listed for the same reason.
 on:
   push:
     paths:
@@ -19,12 +45,34 @@ on:
       - "firestore.rules"
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
+      - "studioflow-web/app/ebay/**"
+      - "studioflow-web/app/settings/EbayIntegrationSection.tsx"
+      - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/lib/studioflow/ebayFlow.ts"
+      - "studioflow-web/lib/studioflow/ebayTicket.ts"
+      - "studioflow-web/lib/studioflow/ebayAdmission.ts"
+      - "studioflow-web/lib/studioflow/ebayTicketSpend.ts"
+      - "studioflow-web/lib/studioflow/ebayScreenRules.ts"
+      - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
+      - "studioflow-web/package.json"
   pull_request:
     paths:
       - "functions/**"
       - "firestore.rules"
       - "firebase.json"
       - ".github/workflows/functions-tests.yml"
+      - "studioflow-web/app/ebay/**"
+      - "studioflow-web/app/settings/EbayIntegrationSection.tsx"
+      - "studioflow-web/lib/studioflow/ebay.ts"
+      - "studioflow-web/lib/studioflow/ebayFlow.ts"
+      - "studioflow-web/lib/studioflow/ebayTicket.ts"
+      - "studioflow-web/lib/studioflow/ebayAdmission.ts"
+      - "studioflow-web/lib/studioflow/ebayTicketSpend.ts"
+      - "studioflow-web/lib/studioflow/ebayScreenRules.ts"
+      - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
+      - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
+      - "studioflow-web/package.json"
   workflow_dispatch:
 
 concurrency:
@@ -47,7 +95,35 @@ jobs:
           cache: npm
           cache-dependency-path: functions/package-lock.json
       - run: npm ci
+      # The committed vectors, verified before the suites that read them: the
+      # generator recomputes every frozen answer from the real implementations
+      # and exits non-zero if one moved. `npm test` would go red too, but this
+      # step names WHICH value drifted, which the assertion cannot.
+      - run: npm run test:vectors
       - run: npm test
+
+  relay:
+    name: eBay callback (route ↔ function): relay vectors + cited regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: studioflow-web/package-lock.json
+      # Only the web tree is installed: both scripts need `next` (for NextRequest)
+      # and the web tree's own `tsc` to compile the routes, and the functions qa
+      # harness they drive the answer through pulls in no external package at all.
+      - run: npm ci
+        working-directory: studioflow-web
+      - run: npm run test:relay
+        working-directory: studioflow-web
+      # The ten cited regressions. A separate step so a failure names itself in
+      # the job log without the relay's output in front of it.
+      - run: npm run test:ebay-regressions
+        working-directory: studioflow-web
 
   emulator:
     name: rules + e2e (Firestore emulator)

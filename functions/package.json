@@ -17,6 +17,7 @@
   },
   "scripts": {
     "test": "for f in test/qa/*.test.js test/inventory/*.test.js; do node \"$f\" || exit 1; done",
+    "test:vectors": "node test/fixtures/generate-ebay-callback-vectors.mjs",
     "test:rules": "for f in test/qa/*.test.mjs; do node \"$f\" || exit 1; done",
     "test:e2e": "test/run-e2e.sh",
     "test:integration": "test/run-integration.sh",

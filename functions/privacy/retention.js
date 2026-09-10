@@ -40,9 +40,13 @@ const PROVIDER_RETENTION = Object.freeze({
   // Amazon Data Protection Policy: PII deleted within 30 days of fulfilment,
   // beyond what tax and legal record-keeping requires.
   amazon: { days: 30, reason: "amazon_dpp" },
-  // eBay, and the shops a workshop runs itself, impose no deletion deadline on
-  // the seller's own copy of an order they fulfilled.
-  ebay: { days: 0, reason: "" },
+  // eBay stops returning addressLine1/addressLine2 for any order more than 90
+  // days old — after that point eBay no longer shows the seller the address,
+  // and NivaDesk holding it longer is not minimisation. Ninety days after
+  // delivery the restricted document goes and the order keeps the sale.
+  ebay: { days: 90, reason: "ebay_address_withheld_after_90d" },
+  // The shops a workshop runs itself impose no deletion deadline on the
+  // seller's own copy of an order they fulfilled.
   shopify: { days: 0, reason: "" },
   woocommerce: { days: 0, reason: "" },
   etsy: { days: 0, reason: "" },

@@ -970,8 +970,15 @@ export default function OrdersPage() {
                   void (async () => {
                     try {
                       const result = await releaseHeldIntegrationOrders(currentWorkspace);
+                      // eBay orders are handed to their own worker rather than
+                      // imported inside the call, so they are on their way in
+                      // rather than in — saying "0 imported" would be wrong.
+                      const importedNow = result?.imported ?? 0;
+                      const onTheWay = result?.queued ?? 0;
                       dispatchStudioToast({
-                        message: `${result?.imported ?? 0} ${t("orders imported")}`,
+                        message: onTheWay > 0
+                          ? `${importedNow + onTheWay} ${t("orders are being imported")}`
+                          : `${importedNow} ${t("orders imported")}`,
                       });
                       setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
                       setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));

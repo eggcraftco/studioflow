@@ -46,6 +46,11 @@ async function countWhere(collection, field, value) {
 }
 
 async function wipe() {
+  for (const company of [COMPANY, OTHER]) {
+    await db.recursiveDelete(db.collection("ebayConnections").doc(`${company}__seller`));
+    await db.collection("ebayConnectStates").doc(`ebay-state-${company}`).delete();
+    await db.collection("ebayBuyers").doc(`${company}__hash`).delete();
+  }
   for (const col of ETSY_COLLECTIONS) {
     for (const company of [COMPANY, OTHER]) {
       const snap = await db.collection(col).where("companyId", "==", company).get();
@@ -94,6 +99,14 @@ async function seed() {
     shop: "", companyId: company, linkedUid: company, linkedEmail: `${company}@example.com`,
     status: "active", accessToken: "shpat_install_owned_" + company, syncEnabled: true
   });
+  // eBay: a connection with its credentials subtree, a connect state and a buyer index row per workspace.
+  for (const company of [COMPANY, OTHER]) {
+    const ref = db.collection("ebayConnections").doc(`${company}__seller`);
+    await ref.set({ companyId: company, provider: "ebay", status: "connected", sellerUserIdHash: "h" });
+    await ref.collection("credentials").doc("current").set({ accessTokenEncrypted: { v: 1, iv: "x", tag: "y", data: "z" } });
+    await db.collection("ebayConnectStates").doc(`ebay-state-${company}`).set({ companyId: company, uid: company, used: false });
+    await db.collection("ebayBuyers").doc(`${company}__hash`).set({ companyId: company, provider: "ebay", usernameHash: "hash", orderIds: ["o1"] });
+  }
   await db.collection("shopifyStores").doc(OWN_STORE).set({ ...store(COMPANY), shop: OWN_STORE });
   await db.collection("shopifyStores").doc(OTHER_STORE).set({ ...store(OTHER), shop: OTHER_STORE });
   for (const storeId of [OWN_STORE, OTHER_STORE]) {
@@ -117,6 +130,16 @@ async function seed() {
     assert.strictEqual(report.etsyCustomerLinks, 3);
     assert.strictEqual(report.shopifyStoresUnlinked, 1);
     assert.strictEqual(report.shopifySyncLogRows, 2);
+    assert.strictEqual(report.ebayConnections, 1); assert.strictEqual(report.ebayConnectStates, 1); assert.strictEqual(report.ebayBuyers, 1);
+  });
+
+  await check("the eBay connection tree, connect state and buyer index go; the neighbour's stay", async () => {
+    assert.strictEqual((await db.collection("ebayConnections").doc(`${COMPANY}__seller`).get()).exists, false);
+    assert.strictEqual((await db.collection("ebayConnections").doc(`${COMPANY}__seller`).collection("credentials").doc("current").get()).exists, false, "the boxed credentials went with the tree");
+    assert.strictEqual((await db.collection("ebayConnectStates").doc(`ebay-state-${COMPANY}`).get()).exists, false);
+    assert.strictEqual((await db.collection("ebayBuyers").doc(`${COMPANY}__hash`).get()).exists, false);
+    assert.strictEqual((await db.collection("ebayConnections").doc(`${OTHER}__seller`).get()).exists, true);
+    assert.strictEqual((await db.collection("ebayBuyers").doc(`${OTHER}__hash`).get()).exists, true);
   });
 
   await check("every Etsy root row keyed by the deleted workspace is gone", async () => {

@@ -150,8 +150,12 @@ check("one pass per retention period, so a longer rule cannot stall a shorter on
   // sixty-day order stalling deletion for everybody behind it.
   assert.ok(/retentionPeriodsInDays\(\)/.test(source), "the sweep no longer enumerates the retention periods");
   assert.ok(/sweepRetentionPeriod\(days, nowMs\)/.test(source), "the sweep no longer runs a pass per period");
-  assert.deepStrictEqual(retention.retentionPeriodsInDays(), [30],
+  // Amazon's thirty days and eBay's ninety (eBay withholds the address itself
+  // after 90 days) — two passes, and neither may hold the other's cursor.
+  assert.deepStrictEqual(retention.retentionPeriodsInDays(), [30, 90],
     "the retention table changed; check the passes still make sense");
+  assert.deepStrictEqual(retention.PROVIDER_RETENTION.ebay, { days: 90, reason: "ebay_address_withheld_after_90d" },
+    "eBay's retention period is no longer ninety days after delivery");
   assert.deepStrictEqual(retention.retentionPeriodsInDays({ ebay: { days: 60, reason: "x" } }), [30, 60],
     "a second period does not produce a second pass");
   // An order belonging to another period must not hold this pass's cursor.

@@ -61,7 +61,10 @@ const CONNECTORS = [
   { name: "Etsy", file: ["etsyConnect.js"], evidence: /encryptToken\(/ },
   { name: "the bank feed (TrueLayer)", file: ["bankFeed.js"], evidence: /refreshTokenBox: encryptToken\(/ },
   { name: "Pandle", file: ["pandle.js"], evidence: /accessTokenBox: encryptToken\(/ },
-  { name: "accounting (QuickBooks and Xero)", file: ["accountingFunctions.js"], evidence: /encryptToken\(plain, credentialsFor\(provider\)\.tokenKey\(\)\)/ }
+  { name: "accounting (QuickBooks and Xero)", file: ["accountingFunctions.js"], evidence: /encryptToken\(plain, credentialsFor\(provider\)\.tokenKey\(\)\)/ },
+  // eBay boxes both tokens under its own key list (EBAY_TOKEN_KEY, one or two
+  // keys) in a server-only credentials document, never on the connection row.
+  { name: "eBay", file: ["ebayConnector.js"], evidence: /accessTokenEncrypted: box\(accessToken\), refreshTokenEncrypted: box\(refresh\)/ }
 ];
 
 for (const connector of CONNECTORS) {
@@ -181,6 +184,27 @@ check("nothing new writes a credential as a plain string", () => {
   assert.deepStrictEqual(found, [],
     "a credential is being written as a plain string. Seal it with security/tokenBox, or — if it is " +
     "genuinely not stored — add it to the allow-list above with the reason:\n  " + found.join("\n  "));
+});
+
+check("no eBay file writes a bare credential to a document, and the connector never spells a token endpoint", () => {
+  // The token endpoint, the boxes and the keys are the pure modules' business;
+  // the connector only ever writes a box. A bare `refreshToken:` inside a
+  // Firestore write anywhere under commerce/ebay or the connector would be the
+  // shape of the bug this file exists for.
+  const files = [path.join(root, "ebayConnector.js")];
+  const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (entry.name.endsWith(".js")) files.push(full); } };
+  walk(path.join(root, "commerce", "ebay"));
+  assert.ok(files.length >= 10, "the eBay modules are where they were");
+  for (const file of files) {
+    const body = fs.readFileSync(file, "utf8");
+    const rel = path.relative(root, file);
+    const writes = [...body.matchAll(/\.(?:set|update|create)\(\s*\{([\s\S]{0,600}?)\}/g)].map((m) => m[1]);
+    for (const written of writes) {
+      for (const field of ["refreshToken", "accessToken", "clientSecret", "nonce"]) {
+        assert.ok(!new RegExp(`\\b${field}\\s*:`).test(written), `${rel} writes a bare ${field} to a document. Seal it with security/tokenBox first.`);
+      }
+    }
+  }
 });
 
 check("Amazon's short-lived access token is never written down", () => {
