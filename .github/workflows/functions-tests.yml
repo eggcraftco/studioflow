@@ -103,7 +103,7 @@ jobs:
       - run: npm test
 
   relay:
-    name: eBay callback (route ↔ function): relay vectors + cited regressions
+    name: "eBay callback (route ↔ function): relay vectors + cited regressions"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
