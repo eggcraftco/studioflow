@@ -212,6 +212,10 @@ Afterwards `git status` in the publish repo showed exactly the seven feedback pa
 **Lesson for the next round:** the publish repo is not a mirror of `studioflow-web`; it has its own history. Sync it
 file-scoped, and dry-run `rsync -an --delete` before ever considering the wholesale form.
 
+**Round 171 pushed** (publish repo `c854641`, on top of Round 170 `4e3a05f`): the seven feedback paths and nothing
+else, staged by name so no build artefact rode along, after `tsc --noEmit` passed on the patched tree. The Hostinger
+build takes it from there.
+
 ## 11. What stays out of this package
 
 Native screens, the §36/§37 prompt types (need trustworthy activation data — the v2.1 cutover package, kept separate),
