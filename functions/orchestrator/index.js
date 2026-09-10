@@ -1,0 +1,282 @@
+"use strict";
+
+/**
+ * The Niva Orchestrator: one set of capabilities, any number of channels.
+ *
+ * ChatGPT reaches it through thin MCP adapters in index.js; the WhatsApp
+ * gateway (a later function in this same codebase) builds an instance with the
+ * same deps and calls `run()` with `channel.type: "whatsapp"`. Nothing about a
+ * capability knows which asked — that is the whole point, and it is why the
+ * business rules cannot drift between the two surfaces.
+ *
+ * `run()` order matters and is fixed:
+ *   1. resolve the capability (unknown name, or a name whose flag is off → refuse)
+ *   2. assert permission BEFORE any read (§38)
+ *   3. record the PII access, when the capability declares one
+ *   4. load ONLY the domains the capability declares
+ *   4b. record any marketplace PII the outbound policy refused to release
+ *   5. run the pure handler
+ *   6. build the envelope (freshness, warnings, partial) and the §13 summary
+ */
+
+const registry = require("./registry");
+const contextModule = require("./context");
+const envelope = require("./envelope");
+const render = require("./render");
+const loadersModule = require("./loaders");
+
+// Only the modules the reduced 1.2.0 surface can reach. `attention.js`,
+// `payouts.js`, `integrationHealth.js`, `accountingStatus.js` and the money
+// half of `commerce.js` are still on disk and are required by nothing on this
+// path: the scope reduction of 6 September 2026 took every banking, payout,
+// accounting and financial-summary capability out of the release, and "out"
+// means no registry row and no dispatch, not a flag left off. Requiring a dead
+// module here would be the first step back to publishing it.
+const commerce = require("./commerce");
+const inventory = require("./inventory");
+
+/**
+ * capability name → the pure function behind it.
+ *
+ * The key order is the registry's order, because `listCapabilities()` returns
+ * registry order and the contract test compares the two. `search_inventory`
+ * comes first for that reason and no other: its registry row sits with the
+ * inventory tools, ahead of the one capability only the orchestrator flag
+ * publishes.
+ *
+ * This map is the dispatch half of the reduction, and it is deliberately the
+ * SHORTER of the two lists it has to agree with: a capability with no registry
+ * row can never be published, and a capability with no entry here can never be
+ * run. Both halves are asserted against the registry in
+ * test/qa/mcp-reduced-surface.test.js, so a removed name cannot come back
+ * through either door on its own.
+ */
+const HANDLERS = Object.freeze({
+  search_inventory: inventory.searchInventoryItems,
+  search_commerce_orders: commerce.searchCommerceOrders
+});
+
+const CAPABILITY_NAMES = Object.freeze(Object.keys(HANDLERS));
+
+/**
+ * Old capability names that still resolve, and what they resolve to.
+ *
+ * `search_inventory_items` was the orchestrator's own inventory search until
+ * the workspace's two inventory searches were folded into one published tool
+ * (docs/mcp-inventory-search-decision.md). The name stays reachable because a
+ * channel or a caller may already use it, and breaking that buys nothing — but
+ * it is NOT a capability: it has no registry row, so it can never be published,
+ * never appears in `listCapabilities()`, and is never dispatchable by name over
+ * MCP. An alias is a spelling. A second registry row is a second tool on the
+ * wire, and that is what was wrong.
+ */
+const CAPABILITY_ALIASES = Object.freeze({
+  search_inventory_items: "search_inventory"
+});
+
+const resolveCapabilityName = (name) => {
+  const requested = String(name || "");
+  return Object.prototype.hasOwnProperty.call(CAPABILITY_ALIASES, requested)
+    ? CAPABILITY_ALIASES[requested]
+    : requested;
+};
+
+/**
+ * Who the access log says made this read.
+ *
+ * `actorRole` is free text in `privacy/accessLog.js` (`text(input.actorRole,
+ * 60)`), with no closed list to fall back on, and both rows below hardcoded
+ * "chatgpt_connection" in a function whose whole purpose is to be
+ * channel-agnostic — so the first WhatsApp read of customer data would have
+ * filed a row saying a ChatGPT connection made it, on top of `source` landing
+ * as "unknown". One value per channel type, derived, so a new channel cannot
+ * inherit another one's name by accident.
+ */
+const ACTOR_ROLES = Object.freeze({
+  mcp: "chatgpt_connection",
+  rest: "chatgpt_connection",
+  whatsapp: "whatsapp_binding",
+  app: "workspace_member"
+});
+
+const actorRoleFor = (ctx) => ACTOR_ROLES[(ctx && ctx.channel && ctx.channel.type) || "mcp"] || "assistant_channel";
+
+function createOrchestrator(deps = {}) {
+  const loaders = deps.loaders || loadersModule.createLoaders({ db: deps.db, now: deps.now });
+  const flags = registry.normalizeFlags(deps.flags || {});
+
+  const contextDeps = {
+    loadCompany: deps.loadCompany || loaders.loadCompany,
+    uidHasCompanyAccess: deps.uidHasCompanyAccess,
+    uidIsCompanyOwner: deps.uidIsCompanyOwner,
+    uidCanAccessWorkspaceArea: deps.uidCanAccessWorkspaceArea,
+    // The role RESOLVER, not just the normaliser: custom roles live in
+    // `memberCustomRoles`/`customRoles` and only this function reads them.
+    workspaceMemberRole: deps.workspaceMemberRole,
+    normalizeWorkspaceRole: deps.normalizeWorkspaceRole,
+    billingEntitlementsForCompany: deps.billingEntitlementsForCompany,
+    roleCanAccessFinancialInfo: deps.roleCanAccessFinancialInfo,
+    accountingReaderCanRead: deps.accountingReaderCanRead,
+    inventoryAccessAllowed: deps.inventoryAccessAllowed
+  };
+
+  /**
+   * The capabilities this deployment publishes, under the flags it was built
+   * with — and, when a channel binding's profile is given, under that binding's
+   * own policy as well (WA §11 allowedCapabilities, §14, §15).
+   *
+   * MCP calls it with no argument and gets the flag projection, which is what
+   * `tools/list` serves. The WhatsApp gateway passes its binding profile and
+   * gets the subset that binding may call, out of the same table: there is no
+   * second tool set to drift out of step with the first (WA §81).
+   */
+  function listCapabilities({ channelProfile = null } = {}) {
+    return registry.publishedForChannel({ flags, channelProfile })
+      .map((entry) => entry.name)
+      .filter((name) => CAPABILITY_NAMES.includes(name));
+  }
+
+  /**
+   * `overrides` exists for one case: a caller that has ALREADY read the company
+   * document during this same request (the MCP dispatcher does, in
+   * nvRequireChatGPTWorkspaceAccessWithOAuth) passes its own `loadCompany` so
+   * the document is not read twice. The rule it must keep is the rule the
+   * design states: the snapshot has to come from this request, never from a
+   * cache that survives it, or a revoked member keeps their access.
+   */
+  async function resolveContext(input, overrides = {}) {
+    return contextModule.resolveContext(input, { ...contextDeps, ...overrides });
+  }
+
+  async function run({ capability, args = {}, ctx, request = {} } = {}) {
+    // An alias is resolved before anything else, so everything downstream —
+    // the registry row, the flag check, the access-log note, the envelope's
+    // `action` and the rendered summary — speaks the canonical name. A caller
+    // that says `search_inventory_items` gets an answer that says
+    // `search_inventory`, which is the tool that answered.
+    const name = resolveCapabilityName(capability);
+    const entry = registry.entryFor(name);
+    const handler = HANDLERS[name];
+    if (!entry || !handler) throw new contextModule.OrchestratorError("invalid-argument", `Unknown capability "${name}".`);
+    // `flag` is one key for every capability but the inventory search, which
+    // names two because either flag publishes it. Asking the registry which
+    // flags gate a row — rather than indexing `flags` by `entry.flag` — is the
+    // difference between "on when any of its flags is on" and a lookup that
+    // silently misses when the field is a list.
+    const gates = registry.flagsFor(entry);
+    if (gates.length > 0 && !gates.some((gate) => flags[gate] === true)) {
+      throw new contextModule.OrchestratorError("failed-precondition", `The ${name} capability is not switched on in this deployment.`);
+    }
+
+    // Permission first, before a single document is read.
+    contextModule.assertCapability(ctx, entry);
+
+    // The one PII-logging mechanism. A capability that hands over a person says
+    // so in the registry, and the row is written whether or not the read then
+    // succeeds.
+    //
+    // The predicate is `piiAccessLogged`, the field the MCP dispatcher keys on
+    // (`nvMcpPiiLoggedActions`). It used to be `entry.pii.length > 0` — a
+    // second predicate over one registry, while the contract document claimed
+    // in so many words that "the registry is the only list, so a channel cannot
+    // describe a read differently from the way the MCP dispatcher describes
+    // it". The two agree on today's orchestrator entries and disagree on
+    // `get_bank_spending_summary` and `search_bank_transactions`, so the first
+    // orchestrator capability to copy that shape would have logged on WhatsApp
+    // and not on MCP.
+    if (entry.piiAccessLogged === true && typeof deps.recordPiiAccess === "function") {
+      const subjectId = String(args.orderId || "");
+      deps.recordPiiAccess({
+        companyId: ctx.companyId,
+        actorUid: ctx.uid,
+        actorEmail: ctx.email || "",
+        actorRole: actorRoleFor(ctx),
+        action: "assistant",
+        source: ctx.channel.type,
+        // The subject the capability is about, from the registry — the same
+        // field the MCP dispatcher builds its row from, so the two surfaces
+        // cannot describe one read differently.
+        subject: { kind: entry.piiSubject || "order", id: subjectId },
+        categories: [...entry.pii],
+        // Two of the dispatcher's own conventions, for its own reasons. An
+        // empty subject id with nothing said reads as a row whose subject went
+        // missing rather than as a read of a SET. And `source` is normalised
+        // against `accessLog.ACCESS_SOURCES` at write time, which has no
+        // `whatsapp` in it — so without naming the channel here, the door a
+        // WhatsApp read came through is not recoverable from the row at all.
+        note: `capability=${name} channel=${ctx.channel.type}${subjectId ? "" : " subject=set"}`
+      }).catch(() => undefined);
+    }
+
+    const nowMs = typeof deps.now === "function" ? deps.now() : Date.now();
+    const snapshot = await loaders.snapshotFor(entry.domainNeeds || [], ctx, { settings: ctx.settings });
+
+    // The other half of privacy/outbound.js's third rule: "THE DECISION IS
+    // RECORDED ... a block nobody can see is indistinguishable from a feature
+    // that quietly does not work." The loader applies redactForChannel and,
+    // being pure, cannot write the audit row; nothing else on this path did,
+    // so a marketplace block made by one of these reads left no trace at
+    // all, while the same block made by search_orders left one.
+    //
+    // One row per provider and reason, carrying `recordCount`, rather than one
+    // per order: the loader projects up to a thousand orders for one question.
+    if (typeof deps.recordPiiBlock === "function") {
+      for (const block of (snapshot.piiBlocks || [])) {
+        Promise.resolve(deps.recordPiiBlock({
+          companyId: ctx.companyId,
+          actorUid: ctx.uid,
+          actorEmail: ctx.email || "",
+          actorRole: actorRoleFor(ctx),
+          action: "assistant",
+          source: ctx.channel.type,
+          // A set, not a record: the id is empty on purpose, and the provider
+          // is what makes "show me every Amazon decision" answerable.
+          subject: { kind: "order", id: "", provider: block.provider, externalId: "" },
+          // What the policy WITHHELD, declared the way nvSafeOrderForChatGPT
+          // declares it so both surfaces file one shape.
+          categories: ["name", "email", "phone", "address"],
+          recordCount: block.orders,
+          note: `${block.minimal ? "minimal" : "blocked"}:${block.reason} capability=${name} channel=${ctx.channel.type} subject=set orders=${block.orders} fields=${block.fieldsRemoved}`
+        })).catch(() => undefined);
+      }
+    }
+    const result = handler(snapshot, args, ctx, { nowMs }) || {};
+
+    const built = envelope.finish({
+      capability: name,
+      state: result.state || "completed",
+      data: result.data || {},
+      sources: result.sources || [],
+      warnings: result.warnings || [],
+      partial: result.partial === true,
+      entityRefs: result.entityRefs || [],
+      suggestedActions: result.suggestedActions || [],
+      nowMs,
+      channelProfile: ctx.channel && ctx.channel.profile
+    });
+    built.summary.lines = render.summaryFor(built, { style: ctx.channel.type === "whatsapp" ? "compact" : "chat" });
+    if (typeof deps.audit === "function") {
+      Promise.resolve(deps.audit({
+        requestId: String(request.requestId || ""),
+        channelType: ctx.channel.type,
+        companyId: ctx.companyId,
+        userId: ctx.uid,
+        capability: name,
+        resultState: built.state,
+        recordsRead: {
+          orders: (snapshot.orders || []).length,
+          bankTransactions: (snapshot.bankRows || []).length,
+          inventoryItems: (snapshot.inventoryItems || []).length
+        }
+      })).catch(() => undefined);
+    }
+    return built;
+  }
+
+  return { resolveContext, listCapabilities, run, loaders, flags };
+}
+
+module.exports = {
+  createOrchestrator, HANDLERS, CAPABILITY_NAMES, CAPABILITY_ALIASES, resolveCapabilityName,
+  ACTOR_ROLES, actorRoleFor
+};

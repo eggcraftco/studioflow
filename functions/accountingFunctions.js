@@ -15,6 +15,7 @@ const crypto = require("crypto");
 const core = require("./accounting/core/adapter");
 const store = require("./accounting/core/store");
 const matching = require("./accounting/core/matching");
+const accountingAccess = require("./accounting/core/access");
 const qboOAuth = require("./accounting/quickbooks/oauth");
 const qboWebhook = require("./accounting/quickbooks/webhook");
 const qboNormalize = require("./accounting/quickbooks/normalize");
@@ -137,7 +138,9 @@ function createAccountingFunctions(deps) {
     const companyId = cleanText(request.data?.companyId, 120);
     if (!companyId) throw new HttpsError("invalid-argument", "companyId is required.");
     const companyData = await companyFor(companyId);
-    const allowed = uidIsCompanyOwner(companyData, uid) || companyData.memberAccess?.[uid]?.bankFeed === true;
+    // One rule, in one place: accounting/core/access.js. The assistant asks the
+    // same predicate, so it can never be the looser door into this data.
+    const allowed = accountingAccess.accountingReaderCanRead(companyData, uid, { uidIsCompanyOwner });
     if (!allowed) throw new HttpsError("permission-denied", "Accounting is visible to the owner and members with bank access.");
     return { uid, companyId, companyData };
   }

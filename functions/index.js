@@ -20434,6 +20434,23 @@ exports._nvSafeOrderForChatGPT = nvSafeOrderForChatGPT;
 exports._nvRequireOrdersArea = nvRequireOrdersArea;
 exports._nvMcpAvailableActions = nvMcpAvailableActions;
 exports._nvChatGPTDispatchAction = nvChatGPTDispatchAction;
+// The access-log row itself, so a test can assert what it CLAIMS about a read
+// instead of reading the call site and hoping. See test/qa/pii-access-log.
+exports._nvMcpPiiAccessEntry = nvMcpPiiAccessEntry;
+exports._nvMcpPiiLoggedActions = nvMcpPiiLoggedActions;
+// The scope gate, exported so a test can assert what it REFUSES without a
+// dispatch that would then go looking for Firestore.
+exports._nvMcpAssertScope = nvMcpAssertScope;
+exports._nvOAuthDefaultScope = nvOAuthDefaultScope;
+exports._nvOAuthMintDefaultScope = nvOAuthMintDefaultScope;
+exports._nvMcpChallengeScope = nvMcpChallengeScope;
+// The served discovery surface itself, so a test can snapshot exactly what
+// tools/list returns instead of re-deriving it from the source text.
+exports._nvMcpToolsWithSecuritySchemes = nvMcpToolsWithSecuritySchemes;
+// The handshake text too: it tells the model which domains exist and how to
+// treat stale data, so a flag state that serves new tools without saying so is
+// a discrepancy a test should catch.
+exports._nvMcpInitializeResult = nvMcpInitializeResult;
 
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
@@ -23297,7 +23314,15 @@ async function nvRequireChatGPTWorkspaceAccess(req, companyId = "") {
     email: String(decoded.email || "").trim().toLowerCase(),
     companyId: cleanCompanyId,
     companyRef,
-    companyData
+    companyData,
+    // Said out loud, because the scope gate asks WHO is calling rather than
+    // whether a scope string happens to be empty. This is the member's own
+    // Firebase ID token: no consent screen, no third party, no delegated grant,
+    // so no scope to check — their role and the workspace area switches are the
+    // whole gate, exactly as in the app. An auth type that does NOT name itself
+    // here is treated as a delegated token and must carry its scopes.
+    authType: "firebase_session",
+    scope: ""
   };
 }
 
@@ -24439,19 +24464,162 @@ function nvMcpAvailableActions() {
     "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview",
     "get_bank_spending_summary", "search_bank_transactions", "attach_bank_receipt"
   ];
-  if (NV_MCP_INVENTORY) actions.push("search_inventory", "create_inventory_item");
+  // ONE inventory search, whatever the flags. `search_inventory` is published
+  // by either flag — it is in the orchestrator's capability list as well as
+  // here — so with both on it must be pushed exactly once, and the orchestrator
+  // is the half that pushes it. See docs/mcp-inventory-search-decision.md.
+  if (NV_MCP_INVENTORY) {
+    if (!NV_MCP_ORCHESTRATOR) actions.push("search_inventory");
+    actions.push("create_inventory_item");
+  }
+  // The orchestrator's read capabilities. The names come from the registry, so
+  // the listing, the dispatcher and the capability table cannot disagree about
+  // which of them this deployment offers.
+  if (NV_MCP_ORCHESTRATOR) actions.push(...nvOrchestratorCapabilities());
   return actions;
 }
 
-/** The MCP actions that hand a workspace's own customer data to an assistant. */
-// Actions that put a person in front of the assistant. Stale on both sides
-// until September 2026: it listed list_customers and get_customer, which are
-// not dispatchable actions at all, and omitted the three order tools that
-// really do emit a buyer's name.
-const MCP_ACTIONS_READING_PII = new Set([
-  "search_orders", "get_order_detail",
-  "get_order_financials", "get_dashboard_summary", "get_financial_overview", "get_extra_spending_overview"
-]);
+/**
+ * The MCP actions that hand a workspace's own customer data to an assistant —
+ * from the registry, which is the only place that says so.
+ *
+ * This was a hand-written Set here and a `piiAccessLogged` field there: two
+ * lists, kept in step by a test. The list is one now (the test still checks the
+ * membership it pins, and would catch a registry edit that stops logging a
+ * tool). The registry entry also says WHICH categories the tool hands over and
+ * WHAT the subject is, which is what nvMcpPiiAccessEntry below builds the row
+ * from — the old inline row declared name/email/phone/address for every action
+ * and filed everything under `subject.kind: "order"`, so the log claimed a
+ * bank-counterparty read had exposed a phone number and a postal address.
+ *
+ * The orchestrator read that hands over people, `search_commerce_orders`, is
+ * dispatched through this switch, so this is the one place its row is written —
+ * the orchestrator itself is built WITHOUT recordPiiAccess on this surface so a
+ * single call cannot file two rows.
+ */
+function nvMcpPiiLoggedActions() {
+  return new Set(nvMcpRegistry.TOOL_REGISTRY.filter((entry) => entry.piiAccessLogged === true && nvMcpPiiLogFlagOn(entry)).map((entry) => entry.name));
+}
+
+/**
+ * Whether the flag an entry's access-log row waits on is on.
+ *
+ * `get_bank_spending_summary` and `search_bank_transactions` hand over a
+ * counterparty's name and did not record the read, while `search_commerce_orders`
+ * declares `pii: ["name", "email"]` and does. "Every PII path writes its
+ * access-log row" was false, and the argument for leaving it false was that
+ * turning a write on for a live 1.1.1 connection is an operator's decision
+ * rather than a merge's. That argument is right about the risk and wrong about
+ * the remedy: every other behaviour change on this branch ships behind
+ * NIVADESK_MCP_ORCHESTRATOR, and so does this one. The registry says the row
+ * exists (`piiAccessLogged: true`) and names the flag it waits on
+ * (`piiAccessLoggedFlag`), the operator flips one switch, and there is no
+ * second list to forget.
+ */
+function nvMcpPiiLogFlagOn(entry) {
+  const flag = entry && entry.piiAccessLoggedFlag;
+  return !flag || NV_MCP_FLAGS[flag] === true;
+}
+
+/**
+ * The access-log row for one dispatched action, or null when the action files
+ * none.
+ *
+ * Pure and exported so the row can be tested for what it CLAIMS rather than by
+ * reading the call site. The categories are declared rather than derived,
+ * because the dispatcher has not read anything yet — but they are the
+ * registry's declaration for THAT tool, not a fixed four.
+ *
+ * TWO of the fields here are behind NIVADESK_MCP_ORCHESTRATOR, and it is worth
+ * saying why a strict improvement is gated. Everything new on this branch sits
+ * behind that flag, default off, and "flags off, production behaviour is
+ * unchanged" is the operator's invariant — it is not a claim about `tools/list`
+ * only. `source` and `note` are the two fields that broke it: with every flag
+ * unset, the six actions production already logs still logged the same
+ * categories and the same subject kind, but a set read wrote
+ * `note: "action=search_orders subject=set"` where production writes
+ * `action=search_orders`, and every `chatgptWorkspaceAction` read wrote
+ * `source: "rest"` where production writes `"mcp"`. Merging and deploying with
+ * the flags off would have changed what a compliance surface records for reads
+ * that already happen today.
+ *
+ * The gating mechanism was already here and already used three lines away:
+ * `piiAccessLoggedFlag` puts `get_bank_spending_summary` and
+ * `search_bank_transactions` behind the same flag for the same reason. It was
+ * simply not applied to these two. Both improvements ship the day the operator
+ * flips 1.2.0, with everything else.
+ */
+function nvMcpPiiAccessEntry(action = "", context = {}, args = {}) {
+  const requested = String(action || "").trim();
+  const entry = nvMcpRegistry.entryFor(requested);
+  if (!entry || entry.piiAccessLogged !== true || !nvMcpPiiLogFlagOn(entry)) return null;
+  // One record, or a set of them. `search_orders` with no orderId and
+  // `search_commerce_orders` name no subject because they HAVE none — they
+  // read a set — and an empty id with
+  // nothing said reads as a row whose subject went missing. accessLog's own
+  // convention for this is the one `run()` uses for the marketplace-block rows:
+  // the id is empty on purpose, and the row says so.
+  const subjectId = String(args?.orderId || args?.customerId || "");
+  const improved = NV_MCP_FLAGS.orchestrator === true;
+  return {
+    companyId: String(context?.companyId || ""),
+    actorUid: String(context?.uid || ""),
+    actorEmail: String(context?.email || ""),
+    actorRole: "chatgpt_connection",
+    action: "assistant",
+    // Which door, not which product. `chatgptWorkspaceAction` dispatches the
+    // same actions through the same switch over a member's own Firebase ID
+    // token, and every one of those reads was filed as "mcp" — the one question
+    // a source field exists to answer. The surface is stamped by the two HTTP
+    // entry points, which are the only things that know it.
+    source: improved ? nvMcpAccessSource(context) : "mcp",
+    // What the tool is about. `requested.includes("customer") ? "customer" :
+    // "order"` guessed from the tool's NAME, which put a banking summary under
+    // "order"; the registry names it next to the categories.
+    subject: { kind: entry.piiSubject, id: subjectId },
+    categories: [...entry.pii],
+    note: (improved && !subjectId) ? `action=${requested} subject=set` : `action=${requested}`
+  };
+}
+
+/**
+ * MCP or the REST twin, from the surface its entry point stamped.
+ *
+ * Only consulted with the orchestrator flag on: see the note above
+ * `nvMcpPiiAccessEntry`. Flags off, every row says "mcp", which is what the
+ * deployed tree writes and therefore what the existing log means.
+ */
+function nvMcpAccessSource(context = {}) {
+  return String(context?.surface || "") === "rest" ? "rest" : "mcp";
+}
+
+/**
+ * The scope gate, for every tool this dispatcher offers.
+ *
+ * One rule, from orchestrator/context.js and applied over the registry's
+ * `scopes` — the same table the securitySchemes on the wire come from — so
+ * there is no "the ten are enforced and the 19 are not". The rule is about WHO
+ * is asking: a delegated token's grant is the whole of what it may do (an empty
+ * grant permits nothing), while a member signed in with their own Firebase ID
+ * token holds no delegated grant and is limited by role and area alone.
+ *
+ * Behind the submission flag, deliberately. Enforcing scope on the 19 existing
+ * tools is a behaviour change, and the 1.1.1 listing under review must be
+ * served exactly what it is being served today until the operator flips 1.2.0.
+ * Flag off, this function is not called and nothing about scope changes; the
+ * orchestrator capabilities are unreachable in that state anyway.
+ */
+function nvMcpAssertScope(context, action) {
+  const entry = nvMcpRegistry.entryFor(action);
+  if (!entry) return;
+  const caller = { authType: String(context?.authType || ""), scope: context?.scope || "" };
+  const missing = nvOrchestratorContext.missingScopes(caller, entry.scopes);
+  if (missing.length === 0) return;
+  throw new HttpsError(
+    "permission-denied",
+    nvOrchestratorContext.scopeRefusal(missing, [...nvOrchestratorContext.scopeSet(caller.scope)])
+  );
+}
 
 function nvChatGPTDispatchAction(context, action = "", args = {}) {
   const requested = String(action || "").trim();
@@ -24462,25 +24630,17 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
     );
   }
 
+  // Before the access-log row: a call refused for want of a scope read nothing,
+  // and an audit trail that records refused reads as reads is worth less than
+  // one that does not.
+  if (NV_MCP_ORCHESTRATOR) nvMcpAssertScope(context, requested);
+
   // An assistant reading a workspace's orders is a data access like any other,
   // and the one most likely to be questioned: the grant lasts thirty days and
   // the reader is not a person sitting at a screen. Logged before dispatch, so
   // the record exists whether or not the action then succeeds.
-  if (MCP_ACTIONS_READING_PII.has(requested)) {
-    recordPiiAccess({
-      companyId: String(context?.companyId || ""),
-      actorUid: String(context?.uid || ""),
-      actorEmail: String(context?.email || ""),
-      actorRole: "chatgpt_connection",
-      action: "assistant",
-      source: "mcp",
-      subject: { kind: requested.includes("customer") ? "customer" : "order", id: String(args?.orderId || args?.customerId || "") },
-      // Declared: the dispatcher has not read anything yet, and the categories
-      // are a property of the action rather than of a record it has in hand.
-      categories: ["name", "email", "phone", "address"],
-      note: `action=${requested}`
-    }).catch(() => undefined);
-  }
+  const piiEntry = nvMcpPiiAccessEntry(requested, context, args);
+  if (piiEntry) recordPiiAccess(piiEntry).catch(() => undefined);
 
   switch (requested) {
     case "create_order":
@@ -24521,10 +24681,32 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTSearchBankTransactions(context, args);
     case "attach_bank_receipt":
       return nvChatGPTAttachBankReceipt(context, args);
+    // One tool name, one answer per deployment. With the orchestrator flag on,
+    // the workspace's inventory search IS the orchestrator capability — filters,
+    // freshness block, cap warnings and all. With it off this is the 1.1.1-era
+    // handler, unchanged, because everything new on this branch ships behind
+    // that flag and nothing else may move under it.
     case "search_inventory":
-      return nvChatGPTSearchInventory(context, args);
+      return NV_MCP_ORCHESTRATOR
+        ? nvChatGPTOrchestratorRun(context, "search_inventory", args)
+        : nvChatGPTSearchInventory(context, args);
     case "create_inventory_item":
       return nvChatGPTCreateInventoryItem(context, args);
+    // The orchestrator capability, because the work is in
+    // functions/orchestrator/ where a second channel can reach it.
+    // `search_inventory_items` is deliberately absent: it is an internal alias
+    // of `search_inventory` (orchestrator/index.js CAPABILITY_ALIASES), not a
+    // published tool, and a dispatcher case for a name the listing does not
+    // carry is exactly the list-versus-dispatcher split this switch was
+    // rewritten to close.
+    //
+    // The eight cases that stood here — attention, commerce and channel money,
+    // the inventory valuation, payouts, connection health, accounting sync and
+    // banking attention — were removed with their registry rows on 6 September
+    // 2026. A case with no registry row is precisely the split above, one
+    // direction along: the tool would be unlisted and still callable.
+    case "search_commerce_orders":
+      return nvChatGPTOrchestratorRun(context, requested, args);
     default:
       throw new HttpsError(
         "invalid-argument",
@@ -25224,14 +25406,8 @@ function nvOAuthProtectedResourceMetadata(req) {
       NV_CHATGPT_PUBLIC_BASE_URL
     ],
     bearer_methods_supported: ["header"],
-    scopes_supported: [
-      "orders.read",
-      "orders.write",
-      "notes.read",
-      "notes.write",
-      "finance.read",
-      "tasks.write"
-    ],
+    // One list, the registry's. Identical bytes to the literal it replaces.
+    scopes_supported: [...nvMcpRegistry.SCOPES_SUPPORTED],
     resource_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`
   };
 }
@@ -25248,14 +25424,7 @@ function nvOAuthAuthorizationServerMetadata(req) {
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: [
-      "orders.read",
-      "orders.write",
-      "notes.read",
-      "notes.write",
-      "finance.read",
-      "tasks.write"
-    ],
+    scopes_supported: [...nvMcpRegistry.SCOPES_SUPPORTED],
     service_documentation: `${NV_CHATGPT_PUBLIC_BASE_URL}/privacy`,
     ui_locales_supported: ["en", "tr"]
   };
@@ -25284,8 +25453,73 @@ function nvOAuthExtractRedirectUri(req) {
   return nvSafeOAuthUri(req.query?.redirect_uri || req.body?.redirect_uri || "");
 }
 
+/**
+ * Every scope this server advertises: the registry's SCOPES_SUPPORTED, which is
+ * what both `.well-known` documents and the dynamic-registration response have
+ * always named. Not flag-dependent, because none of those three moved.
+ */
+function nvOAuthDefaultScope() {
+  return nvMcpRegistry.SCOPES_SUPPORTED.join(" ");
+}
+
+/**
+ * What 1.1.1 mints and challenges with. Kept verbatim, because "flag off, the
+ * wire is unmoved" has to be true of the OAuth surface too and not only of
+ * tools/list.
+ */
+const NV_OAUTH_MINT_SCOPE_1_1_1 = "orders.read orders.write";
+const NV_OAUTH_CHALLENGE_SCOPE_1_1_1 = "orders.read notes.read finance.read";
+
+/**
+ * The grant a client gets when it asks for none — and the one place that
+ * decides it.
+ *
+ * Three places used to answer this question and they did not agree: the
+ * registration response promised all six scopes, the WWW-Authenticate challenge
+ * asked for three read scopes, and the two mint sites issued
+ * "orders.read orders.write" — smaller than the tools/list every client is
+ * served, so a token minted by default could not call the finance tools the
+ * same server advertises to it. tools/list is one document served before any
+ * token exists and cannot be filtered per connection, so what the server mints
+ * by default must cover what the server advertises.
+ *
+ * BEHIND THE SUBMISSION FLAG, like the enforcement it exists for.
+ *
+ * Widening the default is not cosmetic: with the flag off nothing enforces
+ * scope (nvChatGPTDispatchAction gates nvMcpAssertScope on NV_MCP_ORCHESTRATOR),
+ * so a widened grant changes nothing a caller can DO and everything a
+ * connection RECORDS. Every connection minted after such a deploy — including
+ * the one OpenAI's reviewer creates — would store `notes.write`, `tasks.write`
+ * and `finance.read` it did not carry before, invisibly, until flip day; and
+ * because an access token lives thirty days, turning the flag back off would
+ * not take those grants back. The branch's rule is that everything new is
+ * behind the flag and default off, and this was the one place it was not.
+ *
+ * So the two halves ship on one switch: the mint default widens at the same
+ * moment `nvMcpAssertScope` starts running, which is also the moment the connect
+ * page stops sending a default of its own (§5.4's blocking web deploy). Flag
+ * off, this server mints and challenges exactly what 1.1.1 does.
+ *
+ * The consequence, stated plainly for the operator: a connection made between
+ * this deploy and the flip carries two scopes, and on flip day it is refused on
+ * the finance and notes tools until the user reconnects. That was already true
+ * of every connection minted before the deploy; this makes the population
+ * bigger rather than different, and the refusal names the missing scope and
+ * says to reconnect.
+ *
+ * A client that DOES name its scopes still gets exactly those, in both states.
+ */
+function nvOAuthMintDefaultScope() {
+  return NV_MCP_ORCHESTRATOR ? nvOAuthDefaultScope() : NV_OAUTH_MINT_SCOPE_1_1_1;
+}
+
+/** The scope list the 401 challenge asks for. Same switch, same reason. */
+function nvMcpChallengeScope() {
+  return NV_MCP_ORCHESTRATOR ? nvOAuthDefaultScope() : NV_OAUTH_CHALLENGE_SCOPE_1_1_1;
+}
+
 function nvOAuthExtractScope(req) {
-  return nvCleanString(req.query?.scope || req.body?.scope || "orders.read orders.write", 500);
+  return nvCleanString(req.query?.scope || req.body?.scope || nvOAuthMintDefaultScope(), 500);
 }
 
 function nvOAuthExtractState(req) {
@@ -25587,7 +25821,7 @@ exports.chatgptOAuthRegister = onRequest({ region: "europe-west2", cors: true },
     token_endpoint_auth_method: nvCleanString(body.token_endpoint_auth_method || "none", 60) || "none",
     grant_types: Array.isArray(body.grant_types) && body.grant_types.length ? body.grant_types : ["authorization_code"],
     response_types: Array.isArray(body.response_types) && body.response_types.length ? body.response_types : ["code"],
-    scope: nvCleanString(body.scope || "orders.read orders.write notes.read notes.write finance.read tasks.write", 500),
+    scope: nvCleanString(body.scope || nvOAuthDefaultScope(), 500),
     client_name: nvCleanString(body.client_name || "ChatGPT", 200)
   });
 });
@@ -25754,7 +25988,7 @@ exports.chatgptOAuthApprove = onRequest({ region: "europe-west2", cors: true }, 
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const clientId = nvCleanString(body.client_id || body.clientId || "", 500);
     const redirectUri = nvSafeOAuthUri(body.redirect_uri || body.redirectUri || "");
-    const scope = nvCleanString(body.scope || "orders.read orders.write", 500);
+    const scope = nvCleanString(body.scope || nvOAuthMintDefaultScope(), 500);
     const state = nvCleanString(body.state || "", 2000);
     const codeChallenge = nvCleanString(body.code_challenge || body.codeChallenge || "", 500);
     const codeChallengeMethod = nvCleanString(body.code_challenge_method || body.codeChallengeMethod || "", 50);
@@ -26053,49 +26287,42 @@ function nvMcpToolErrorResult(error = {}) {
   return result;
 }
 
+// The one table the tool list, the justification document and (later) the
+// WhatsApp channel all read. Pure module: no admin, no flags read at load.
+const nvMcpRegistry = require("./orchestrator/registry");
+const nvAccountingAccess = require("./accounting/core/access");
+
 function nvMcpOAuthScopesForTool(toolName = "") {
-  switch (String(toolName || "")) {
-    case "search_orders":
-    case "get_order_detail":
-      return ["orders.read"];
-    case "create_order":
-    case "update_order_status":
-      return ["orders.write"];
-    case "add_order_note":
-      return ["orders.write", "notes.write"];
-    case "search_notes":
-    case "get_note_detail":
-      return ["notes.read"];
-    case "create_note":
-    case "append_note":
-    case "update_note":
-    case "pin_note":
-    case "archive_note":
-      return ["notes.write"];
-    case "get_order_financials":
-    case "get_extra_spending_overview":
-    case "get_financial_overview":
-      return ["finance.read"];
-    case "get_dashboard_summary":
-      return ["orders.read", "finance.read"];
-    case "get_bank_spending_summary":
-    case "search_bank_transactions":
-      return ["finance.read"];
-    case "attach_bank_receipt":
-      return ["finance.read", "orders.write"];
-    default:
-      return ["orders.read"];
-  }
+  // The scopes were a switch here and a `scopes` field in the registry, which
+  // is two lists that have to agree by hand. They are one list now: the
+  // registry's. Verified identical for every tool that was published before
+  // this change, so nothing on the wire moved.
+  return nvMcpRegistry.scopesFor(toolName);
 }
 
-function nvMcpNormalizedAnnotations(tool = {}) {
-  const annotations = tool.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
-  return {
-    readOnlyHint: annotations.readOnlyHint === true,
-    destructiveHint: annotations.destructiveHint === true,
-    idempotentHint: annotations.idempotentHint === true,
-    openWorldHint: annotations.openWorldHint === true
-  };
+/**
+ * The four hints, straight from the registry, with no coercion left in the path.
+ *
+ * This used to be nvMcpNormalizedAnnotations, which rewrote every hint as
+ * `value === true`. That is friendly right up to the moment it matters: a null
+ * or a forgotten key became `false` on the wire and nothing said so — the exact
+ * shape of the 1.1.1 rejection ("explicitly set to true or false (not null) for
+ * every tool"). Now a hint that is not a boolean is a TypeError, and the
+ * registry has already refused to load before this can be reached.
+ */
+function nvMcpAssertAnnotations(tool = {}) {
+  const annotations = tool.annotations && typeof tool.annotations === "object" ? tool.annotations : null;
+  if (!annotations) {
+    throw new TypeError(`MCP tool "${tool.name || "?"}" has no annotations object.`);
+  }
+  const out = {};
+  for (const key of nvMcpRegistry.ANNOTATION_KEYS) {
+    if (typeof annotations[key] !== "boolean") {
+      throw new TypeError(`MCP tool "${tool.name || "?"}" annotation ${key} is not an explicit boolean.`);
+    }
+    out[key] = annotations[key];
+  }
+  return out;
 }
 
 function nvMcpToolsWithSecuritySchemes() {
@@ -26106,7 +26333,7 @@ function nvMcpToolsWithSecuritySchemes() {
 
     return {
       ...tool,
-      annotations: nvMcpNormalizedAnnotations(tool),
+      annotations: nvMcpAssertAnnotations(tool),
       securitySchemes,
       _meta: {
         ...(tool._meta || {}),
@@ -26116,17 +26343,13 @@ function nvMcpToolsWithSecuritySchemes() {
   });
 }
 
-// Tool annotations are always explicit booleans (never null) and describe what the
-// handler really does:
-//   readOnlyHint    true only for tools that just read Firestore (search_*, get_*).
-//   destructiveHint true when a call overwrites something the workspace already had
-//                   (update_order_status, update_note, attach_bank_receipt replacing
-//                   an existing receipt). Additive writes (create_*, append/add note)
-//                   and reversible flags (pin_note, archive_note) are false.
-//   idempotentHint  true when the call sets an explicit end state, so repeating it
-//                   with the same arguments leaves the workspace unchanged.
-//   openWorldHint   true only for attach_bank_receipt, which fetches the user's file
-//                   from ChatGPT's file host; every other tool stays inside NivaDesk.
+// The annotation values, the definitions behind them and the per-hint
+// justification OpenAI asked for all live in one place now:
+// orchestrator/registry.js, with the reviewer-facing table in
+// docs/mcp-tool-annotations.md. The schemas below carry
+// `nvMcpRegistry.annotationsFor(name, NV_MCP_FLAGS)` instead of literals so the
+// tool list and the justification can never drift apart.
+//
 // Flip to "1" once the version in OpenAI review is decided: it adds the
 // receiptUrl / emailReceipt inputs to attach_bank_receipt so ChatGPT can pull an
 // invoice straight out of the user's mail. The handler already accepts them.
@@ -26136,13 +26359,169 @@ const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
 // coded, tested and dispatchable; flip this to "1" and redeploy chatgptMcp once
 // the verdict lands, then tell OpenAI about the two new tools.
 const NV_MCP_INVENTORY = process.env.NIVADESK_MCP_INVENTORY === "1";
+// The 1.2.0 submission flag. Today it carries the three annotation corrections
+// the runtime audit found, across two tools: create_order and
+// update_order_status both reach the customer through
+// notifyCustomerOnStatusChange (openWorldHint false → true, on each of them),
+// and a repeated status write appends a second history entry
+// (update_order_status idempotentHint true → false). The count that matters is
+// registry.correctionsPending(), and it is three — which is what the release
+// notes have to declare. The orchestrator read tools join it later.
+// Off, tools/list is the 1.1.1 bytes the review connection is served. The
+// operator flips it as part of a submission, never as part of a merge.
+const NV_MCP_ORCHESTRATOR = process.env.NIVADESK_MCP_ORCHESTRATOR === "1";
+const NV_MCP_FLAGS = {
+  emailReceipts: NV_MCP_EMAIL_RECEIPTS,
+  inventory: NV_MCP_INVENTORY,
+  orchestrator: NV_MCP_ORCHESTRATOR
+};
+// Two sentences the model reads in the tool descriptions, behind the same flag
+// as the annotation corrections they belong to, because the reviewed listing
+// must not move under a merge. They say on the tool what the registry's
+// openWorldHint / destructiveHint justifications say about it: a create or a
+// status change can put a message in the customer's inbox through the
+// workspace's own notification rules (initialize.instructions says so too,
+// flag-on), and a receipt is OCR'd by a third party and replaces the file a
+// transaction already carried. mcp-tools-list-snapshot.test.js pins that the
+// flag appends exactly these and changes nothing else on the reviewed tools.
+const NV_MCP_CUSTOMER_MESSAGE_NOTE = NV_MCP_ORCHESTRATOR
+  ? " The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it."
+  : "";
+const NV_MCP_RECEIPT_EFFECTS_NOTE = NV_MCP_ORCHESTRATOR
+  ? " Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted."
+  : "";
+
+/* ------------------------------------------------------------------ *
+ * The Niva Orchestrator, and the thin adapters that put it on MCP.
+ *
+ * The capabilities themselves live in functions/orchestrator/ and know nothing
+ * about MCP: they take a snapshot and return an envelope. That is what lets the
+ * WhatsApp gateway (WA spec §7) answer the same questions later without a
+ * second copy of the business rules — it builds its own instance with the same
+ * deps and calls run() with channel.type "whatsapp".
+ *
+ * Every predicate below is the app's own. Nothing here re-implements a
+ * permission rule, because a second implementation is how an assistant becomes
+ * the loose door into data an owner thought was closed.
+ *
+ * recordPiiAccess is deliberately NOT injected: on this surface the dispatcher
+ * already writes exactly one access-log row per call, from the registry's
+ * `piiAccessLogged` entries, before dispatch. Injecting it here as well would
+ * file two rows for one read. The WhatsApp gateway, which has no such
+ * dispatcher, will inject it.
+ *
+ * recordPiiBlock IS injected, and it records a different fact: not "an
+ * assistant was shown people" but "a marketplace's buyer data was refused".
+ * The dispatcher cannot write that one — it runs before any read and does not
+ * know which orders the policy blocked — so without this injection a block made
+ * by the orchestrator read capabilities would leave no trace at all, while the same
+ * block made by search_orders leaves one (nvSafeOrderForChatGPT).
+ * privacy/outbound.js states the rule that would have broken: a block nobody
+ * can see is indistinguishable from a feature that quietly does not work.
+ */
+const nvOrchestratorModule = require("./orchestrator");
+// The scope rule itself, pure and shared: nvMcpAssertScope applies it to the 19
+// legacy tools and assertCapability applies it to the orchestrator ones, out of one function
+// over one table, so the two halves of the surface cannot enforce differently.
+const nvOrchestratorContext = require("./orchestrator/context");
+const nvOrchestrator = nvOrchestratorModule.createOrchestrator({
+  db: () => admin.firestore(),
+  now: () => Date.now(),
+  flags: NV_MCP_FLAGS,
+  recordPiiBlock: (entry) => recordPiiAccess(entry),
+  uidHasCompanyAccess,
+  uidIsCompanyOwner,
+  uidCanAccessWorkspaceArea,
+  // The workspace role comes from the app's resolver, which is the only code
+  // that knows a member can hold a custom role whose baseRole is workflowOnly.
+  // nvWorkflowOnlyContext is this function plus a comparison; the orchestrator
+  // does the comparison itself, over the same value.
+  workspaceMemberRole,
+  normalizeWorkspaceRole,
+  billingEntitlementsForCompany,
+  roleCanAccessFinancialInfo: nvRoleCanAccessFinancialInfo,
+  accountingReaderCanRead: (companyData, uid) => nvAccountingAccess.accountingReaderCanRead(companyData, uid, { uidIsCompanyOwner }),
+  // The MCP inventory gate, asked as a question instead of as a throw, so the
+  // orchestrator refuses with its own message rather than half-running.
+  inventoryAccessAllowed: (companyData, uid) => {
+    try { return nvRequireInventoryAccess({ companyData, uid }) === true; }
+    catch (error) { return false; }
+  }
+});
+
+// Exported for functions/test/qa/mcp-permissions.test.js: the orchestrator as
+// this deployment wires it, deps and all. With `loadCompany` overridden a test
+// can put one company document through both the app's own resolver and the
+// orchestrator's context and prove the two agree about the caller's role, which
+// is the only way to catch the orchestrator quietly becoming the looser copy.
+exports._nvOrchestrator = nvOrchestrator;
+exports._nvWorkflowOnlyContext = nvWorkflowOnlyContext;
+
+/** The names the orchestrator publishes on this deployment's flags. */
+function nvOrchestratorCapabilities() {
+  return nvOrchestrator.listCapabilities();
+}
+
+/**
+ * One MCP call → one orchestrator run.
+ *
+ * The workspace is the one the token resolved to, never the one the model
+ * asked for: `companyId` in the arguments is a lookup key at most, and this
+ * adapter does not even pass it on.
+ *
+ * The channel type comes from the SURFACE the entry point stamped, through the
+ * same `nvMcpAccessSource` the dispatcher's own access-log row is built from.
+ * It was hardcoded `"mcp"`, and `orchestrator/index.js` files both the
+ * marketplace-block row (`source: ctx.channel.type`) and the audit row
+ * (`channelType`) off it — so one `chatgptWorkspaceAction` request produced an
+ * access row correctly saying `rest` and, from that same request, a
+ * marketplace-block row saying `mcp`. That is the defect 11fdd1c8 was written
+ * about, one layer down, on the sink its own sibling commit had just added.
+ */
+async function nvChatGPTOrchestratorRun(context, capability, args = {}) {
+  const ctx = await nvOrchestrator.resolveContext(
+    {
+      uid: context.uid,
+      email: context.email,
+      companyId: context.companyId,
+      authType: context.authType,
+      scope: context.scope,
+      channel: { type: nvMcpAccessSource(context) }
+    },
+    {
+      // The company document was read moments ago, in this same request, by
+      // nvRequireChatGPTWorkspaceAccessWithOAuth. Reading it again would cost a
+      // second round trip for the same bytes; caching it ACROSS requests is
+      // what the design forbids, and this closure cannot do that.
+      loadCompany: async (companyId) => {
+        const settingsSnap = await companySettingsDocRef(companyId).get();
+        return {
+          companyData: context.companyData,
+          settings: settingsSnap.exists ? settingsSnap.data() || {} : {}
+        };
+      }
+    }
+  );
+
+  try {
+    const result = await nvOrchestrator.run({ capability, args, ctx, request: { requestId: `mcp_${Date.now()}` } });
+    // Existing MCP consumers read `action` and `ok`; the envelope already
+    // carries both, so nothing is reshaped here.
+    return result;
+  } catch (error) {
+    if (error && error.name === "OrchestratorError") {
+      throw new HttpsError(error.code === "unauthenticated" ? "unauthenticated" : error.code, error.message);
+    }
+    throw error;
+  }
+}
 
 function nvMcpOrderToolSchemas() {
   return [
     {
       name: "create_order",
       title: "Create order",
-      description: "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order.",
+      description: "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order." + NV_MCP_CUSTOMER_MESSAGE_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26210,12 +26589,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("create_order", NV_MCP_FLAGS)
     },
     {
       name: "search_orders",
@@ -26244,12 +26618,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("search_orders", NV_MCP_FLAGS)
     },
     {
       name: "get_order_detail",
@@ -26270,12 +26639,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_order_detail", NV_MCP_FLAGS)
     },
     {
       name: "add_order_note",
@@ -26300,17 +26664,12 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("add_order_note", NV_MCP_FLAGS)
     },
     {
       name: "update_order_status",
       title: "Update order status",
-      description: "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order.",
+      description: "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order." + NV_MCP_CUSTOMER_MESSAGE_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26334,12 +26693,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("update_order_status", NV_MCP_FLAGS)
     },
     {
       name: "create_note",
@@ -26359,7 +26713,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "Whether to pin the note." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("create_note", NV_MCP_FLAGS)
     },
     {
       name: "search_notes",
@@ -26377,7 +26731,7 @@ function nvMcpOrderToolSchemas() {
           limit: { type: "number", description: "Maximum number of notes to return. Default is 20." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("search_notes", NV_MCP_FLAGS)
     },
     {
       name: "get_note_detail",
@@ -26392,7 +26746,7 @@ function nvMcpOrderToolSchemas() {
           noteId: { type: "string", description: "Personal note document ID." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("get_note_detail", NV_MCP_FLAGS)
     },
     {
       name: "append_note",
@@ -26408,7 +26762,7 @@ function nvMcpOrderToolSchemas() {
           text: { type: "string", description: "Text to append to the note." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("append_note", NV_MCP_FLAGS)
     },
     {
       name: "update_note",
@@ -26428,7 +26782,7 @@ function nvMcpOrderToolSchemas() {
           colorName: { type: "string", description: "Replacement color name." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("update_note", NV_MCP_FLAGS)
     },
     {
       name: "pin_note",
@@ -26444,7 +26798,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "True to pin, false to unpin." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("pin_note", NV_MCP_FLAGS)
     },
     {
       name: "archive_note",
@@ -26460,7 +26814,7 @@ function nvMcpOrderToolSchemas() {
           isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("archive_note", NV_MCP_FLAGS)
     },
     {
       name: "get_order_financials",
@@ -26493,12 +26847,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_order_financials", NV_MCP_FLAGS)
     },
     {
       name: "get_dashboard_summary",
@@ -26519,12 +26868,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_dashboard_summary", NV_MCP_FLAGS)
     },
     {
       name: "get_extra_spending_overview",
@@ -26577,12 +26921,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_extra_spending_overview", NV_MCP_FLAGS)
     },
     {
       name: "get_financial_overview",
@@ -26603,12 +26942,7 @@ function nvMcpOrderToolSchemas() {
           }
         }
       },
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false
-      }
+      annotations: nvMcpRegistry.annotationsFor("get_financial_overview", NV_MCP_FLAGS)
     },
     {
       name: "get_bank_spending_summary",
@@ -26625,7 +26959,7 @@ function nvMcpOrderToolSchemas() {
           month: { type: "integer", minimum: 1, maximum: 12, description: "1-12. Defaults to the current month when period is month." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("get_bank_spending_summary", NV_MCP_FLAGS)
     },
     {
       name: "search_bank_transactions",
@@ -26648,14 +26982,14 @@ function nvMcpOrderToolSchemas() {
           limit: { type: "integer", minimum: 1, maximum: 50, description: "Max rows to return (default 20)." }
         }
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: nvMcpRegistry.annotationsFor("search_bank_transactions", NV_MCP_FLAGS)
     },
     {
       name: "attach_bank_receipt",
       title: "Attach receipt to a bank transaction",
       description: (NV_MCP_EMAIL_RECEIPTS
         ? "Attach an invoice/receipt to the matching bank transaction in NivaDesk. The document can come from the chat (`receipt`), from a link you found for the user — including an attachment in their email or a hosted invoice page (`receiptUrl`) — or, when the invoice is only in an email body, from the message itself (`emailReceipt`). When the user asks to file the invoices sitting in their mail, read each one, then call this tool per invoice; NivaDesk matches it to the bank transaction by amount and date."
-        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + (NV_MCP_INVENTORY ? " If the photo shows a physical item rather than a document, use create_inventory_item instead." : "") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : ""),
+        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + (NV_MCP_INVENTORY ? " If the photo shows a physical item rather than a document, use create_inventory_item instead." : "") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : "") + NV_MCP_RECEIPT_EFFECTS_NOTE,
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26697,26 +27031,55 @@ function nvMcpOrderToolSchemas() {
           merchant: { type: "string", description: "Merchant/supplier name on the document, if you can read it." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      annotations: nvMcpRegistry.annotationsFor("attach_bank_receipt", NV_MCP_FLAGS),
       _meta: { "openai/fileParams": ["receipt"] }
     },
-    ...(NV_MCP_INVENTORY ? [
+    // The workspace's ONE inventory search, published by either inventory flag.
+    //
+    // There were two tools here: this one and `search_inventory_items` down in
+    // the orchestrator block, with the same title over the same collection, so
+    // with both flags on a user was shown two "Search inventory" tools. Neither
+    // was ever public — production runs with every MCP flag unset — so the
+    // choice was made on the merits and is recorded field by field in
+    // docs/mcp-inventory-search-decision.md: this name, the orchestrator's
+    // implementation behind it.
+    //
+    // The schema grows with the flag because the handler does. With the
+    // orchestrator off, this is byte-for-byte the tool the inventory flag has
+    // always published, answered by nvChatGPTSearchInventory; with it on, the
+    // filters below are real and the orchestrator answers.
+    ...(NV_MCP_INVENTORY || NV_MCP_ORCHESTRATOR ? [
       {
         name: "search_inventory",
         title: "Search inventory",
-        description: "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
+        description: NV_MCP_ORCHESTRATOR
+          ? "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId."
+          : "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
         inputSchema: {
           type: "object",
           additionalProperties: false,
           required: [],
           properties: {
             companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
-            query: { type: "string", description: "What to look for — part of a name, SKU, serial number, brand or location." },
-            limit: { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
+            query: NV_MCP_ORCHESTRATOR
+              ? { type: "string", description: "Part of a name, SKU, serial number, brand, model, category or location." }
+              : { type: "string", description: "What to look for — part of a name, SKU, serial number, brand or location." },
+            ...(NV_MCP_ORCHESTRATOR ? {
+              status: { type: "string", enum: ["available", "partiallyReserved", "reserved", "incoming", "used", "sold", "removed", "archived"] },
+              lowStock: { type: "boolean", description: "Only items at or below their low-stock level." },
+              reserved: { type: "boolean", description: "Only items being held for an order." },
+              location: { type: "string", description: "Only items kept here." },
+              category: { type: "string", description: "Only items in this category." }
+            } : {}),
+            limit: NV_MCP_ORCHESTRATOR
+              ? { type: "integer", minimum: 1, maximum: 50, description: "Maximum items to return (default 20)." }
+              : { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
           }
         },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-      },
+        annotations: nvMcpRegistry.annotationsFor("search_inventory", NV_MCP_FLAGS)
+      }
+    ] : []),
+    ...(NV_MCP_INVENTORY ? [
       {
         name: "create_inventory_item",
         title: "Add an inventory item",
@@ -26758,8 +27121,53 @@ function nvMcpOrderToolSchemas() {
             }
           }
         },
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        annotations: nvMcpRegistry.annotationsFor("create_inventory_item", NV_MCP_FLAGS),
         _meta: { "openai/fileParams": ["photo"] }
+      }
+    ] : []),
+    // The 1.2.0 read capabilities. Off by default: the listing OpenAI is
+    // reviewing must not gain a tool because somebody merged a branch. The
+    // operator flips NIVADESK_MCP_ORCHESTRATOR as part of a submission.
+    //
+    // There is ONE entry here, and `search_inventory` above is the other half
+    // of the flagged surface. The scope reduction of 6 September 2026 took the
+    // other eight out of the release: every banking capability, marketplace
+    // payouts, the sales and channel money summaries, the inventory valuation
+    // and the accounting sync status. "Out" is not a flag left off — they have
+    // no registry row, no schema here and no dispatcher case, so no flag state
+    // can list or run them (test/qa/mcp-reduced-surface.test.js).
+    ...(NV_MCP_ORCHESTRATOR ? [
+      {
+        name: "search_commerce_orders",
+        title: "Search orders across channels",
+        // No money in this sentence, because there is none in the answer. It
+        // used to say "connection, totals and last sync all stay distinct
+        // fields" while the reduction of 7 September 2026 took every monetary
+        // field out of the capability — a listing that promises totals is a
+        // listing that asks the model to go looking for them. Amounts, what is
+        // paid and what is left are get_order_financials' answer, which is a
+        // different tool with its own grant behind it.
+        description: "Find orders from any channel and see the provider's own status separately from NivaDesk's workflow status: platform status, payment status, fulfilment status, external order id, connection and last sync all stay distinct fields. It reports no amounts at all: no order total, nothing paid or outstanding, no refund, no tax and no currency. Use it when the user names a shop, an external order number or a payment state. Buyer details are withheld for channels whose data policy restricts them. Do not ask for companyId.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: [],
+          properties: {
+            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+            query: { type: "string", description: "Order number, project number, external order id, customer name or email." },
+            source: { type: "string", enum: ["all", "manual", "shopify", "etsy", "woocommerce", "square", "amazon", "ebay", "faire"], description: "Limit to one channel." },
+            manualSource: { type: "string", description: "With source \"manual\", narrow to where it came from." },
+            workflowStatus: { type: "string", description: "NivaDesk's own status word for the order." },
+            platformStatus: { type: "string", description: "The shop's own status word, matched as the provider spells it." },
+            paymentStatus: { type: "string", enum: ["unpaid", "pending", "authorized", "paid", "partially_paid", "partially_refunded", "refunded", "voided", "unknown"] },
+            fulfillmentStatus: { type: "string", enum: ["unfulfilled", "partial", "fulfilled", "unknown"] },
+            fromDate: { type: "string", description: "First day of the range, YYYY-MM-DD." },
+            toDate: { type: "string", description: "Last day of the range, YYYY-MM-DD." },
+            needsAttention: { type: "boolean", description: "Only orders held for review or already overdue." },
+            limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum orders to return (default 20)." }
+          }
+        },
+        annotations: nvMcpRegistry.annotationsFor("search_commerce_orders", NV_MCP_FLAGS)
       }
     ] : [])
   ];
@@ -26779,7 +27187,11 @@ function nvMcpInitializeResult(requestedProtocolVersion) {
       "This MCP server connects ChatGPT to NivaDesk / StudioFlow workspace order and personal note actions.",
       "Always ask for confirmation before creating or changing important order data when user intent is ambiguous.",
       "Never reveal data from another workspace. Use the workspace selected during NivaDesk sign-in automatically; do not ask the user for companyId.",
-      "Respect workspace roles: view-only and workflow-only users cannot create or update orders. Personal note tools only affect the connected user own Notes area; collaboration is not changed automatically."
+      "Respect workspace roles: view-only and workflow-only users cannot create or update orders. Personal note tools only affect the connected user own Notes area; collaboration is not changed automatically.",
+      ...(NV_MCP_ORCHESTRATOR ? [
+        "Cross-channel reads are available for orders and inventory. Both report how fresh their data is and what they could not include: never present a row marked stale or partial as if it were live and complete, and never turn an unavailable field into a zero.",
+        "Creating or updating an order can send that customer an e-mail or SMS, because the workspace's own notification rules run on the change. Say so before you do it."
+      ] : [])
     ].join("\n")
   };
 }
@@ -26794,9 +27206,16 @@ function nvMcpProtectedResourceMetadataUrl() {
 
 function nvSendMcpOAuthChallenge(res, message = "Authentication required.") {
   const metadataUrl = nvMcpProtectedResourceMetadataUrl();
+  // Flag on: the same list everywhere else — the metadata's scopes_supported,
+  // which is what the default grant then mints and what the listing needs. The
+  // header used to name three read scopes on its own, so a client that took the
+  // challenge at its word asked for a grant that could not call create_order or
+  // add_order_note. Flag off: the 1.1.1 string, because the 401 a reviewer's
+  // client meets must not change under it either. (The web proxy in
+  // studioflow-web emits the full list when the function sets no header.)
   res.set(
     "WWW-Authenticate",
-    `Bearer resource_metadata="${metadataUrl}", scope="orders.read notes.read finance.read"`
+    `Bearer resource_metadata="${metadataUrl}", scope="${nvMcpChallengeScope()}"`
   );
   res.status(401).json(nvMcpJsonRpcError(null, -32001, message));
 }
@@ -26813,7 +27232,10 @@ async function nvHandleMcpToolCall(req, params = {}) {
   }
 
   const context = await nvRequireChatGPTWorkspaceAccessWithOAuth(req, companyId);
-  return nvChatGPTDispatchAction(context, toolName, args);
+  // The surface, for the access log. Stamped here rather than in the auth
+  // helper because the helper serves both doors: an MCP call authenticated with
+  // a member's own ID token is still an MCP call.
+  return nvChatGPTDispatchAction({ ...context, surface: "mcp" }, toolName, args);
 }
 
 async function nvHandleMcpRequest(req, body = {}) {
@@ -26941,7 +27363,9 @@ exports.chatgptWorkspaceAction = onRequest({ region: "europe-west2", cors: true 
     const action = nvCleanString(body.action || "", 120);
     const args = body.arguments && typeof body.arguments === "object" && !Array.isArray(body.arguments) ? body.arguments : {};
     const context = await nvRequireChatGPTWorkspaceAccess(req, companyId);
-    const result = await nvChatGPTDispatchAction(context, action, args);
+    // Not MCP. Same actions, same dispatcher, a different door — and the access
+    // log said "mcp" for every read that came through this one.
+    const result = await nvChatGPTDispatchAction({ ...context, surface: "rest" }, action, args);
     res.status(200).json(result);
   } catch (error) {
     const code = error?.code || "internal";

@@ -1,0 +1,196 @@
+"use strict";
+
+/**
+ * get_accounting_sync_status (§11).
+ *
+ * The single most important field here is `phase`. NivaDesk's accounting
+ * connectors are read-only today: `accountingPostings` is never written
+ * (that is QuickBooks/Xero phase 3–7). Without `phase`, "failed: 0" reads as
+ * "everything posted cleanly", which is the opposite of the truth — nothing has
+ * been posted at all. So each posting counter carries `available: false` and a
+ * reason, and the renderer says "Ledger posting is not switched on yet;
+ * NivaDesk is preparing records only".
+ *
+ * The attention rows are READ, never opened. `accounting/core/store.openAttention`
+ * is a writer — it creates or bumps a document with an occurrence counter — and
+ * calling it from a capability annotated `readOnlyHint: true` would make the
+ * annotation false in exactly the way OpenAI rejected 1.1.1 over. This module
+ * takes the rows the loader read and does nothing else with them.
+ *
+ * §39.7: the assistant is never the accountant. Nothing here is worded as a
+ * filing or a formal reconciliation.
+ */
+
+const envelope = require("./envelope");
+const freshness = require("./freshness");
+const untrusted = require("./untrusted");
+const { DEFAULT_MAPPINGS } = require("../pandle");
+
+const POSTING_PHASES = Object.freeze(["prepared", "approved", "queued", "synced", "failed", "conflict"]);
+
+const SEVERITY_FROM_STORED = Object.freeze({ error: "high", warning: "medium", info: "low" });
+
+/**
+ * Reasons a bank row is not ready to become a ledger record, measured against
+ * the workspace's own NivaDesk-category → ledger-account map.
+ *
+ * The parameter used to be the accounting CONNECTION, and the branch on
+ * `connection.mappings` could never be true. Two reasons, either one fatal: the
+ * loader projects an accountingConnections document down to
+ * `{id, provider, companyName, mode, status, writeBoundaryDate, lastSyncAtMs}`,
+ * and the mappings are not on that document in the first place. QuickBooks and
+ * Xero keep theirs in `companies/{cid}/accountingMappings/{connId}` keyed by
+ * semantic account ("product_sales", "cogs"), which is not a bank category at
+ * all; the map that resolves a bank CATEGORY is the Pandle one
+ * (`pandleConnection/main.mappings`, `[{category, nominalCode, taxCode}]`) —
+ * the same list `pandle.resolveMapping` reads.
+ *
+ * So every workspace was silently scored against the built-in map, and one that
+ * had confirmed its own was told rows are "ready to be prepared" against a map
+ * it does not use. The map is passed in now, the loader reads the document it
+ * really lives in, and the answer says which map the figure was measured
+ * against instead of implying there is only one.
+ */
+/**
+ * How many parts this transaction was split into.
+ *
+ * The loader projects `splits` to its LENGTH (loaders.projectBankRow), because
+ * the split rows carry categories and notes no capability reports. This
+ * function tested `Array.isArray(row.splits)`, which a number never satisfies —
+ * so the split branch could not fire, `notReady.split` was always 0 in
+ * production, and every split transaction was counted as ready to be prepared
+ * while render.js stated it as fact: "N bank transaction(s) are ready to be
+ * prepared, against this workspace's category map." That is the identical
+ * defect this function was rewritten to fix (a predicate scored against data it
+ * cannot see), surviving one line below the rewrite.
+ *
+ * Both shapes are accepted and the module says so, because it is pure and its
+ * input contract is the thing being fixed: the loader's count, or the raw
+ * array if a caller ever hands one over.
+ */
+function splitCount(row = {}) {
+  if (Array.isArray(row.splits)) return row.splits.length;
+  const count = Number(row.splits);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function readinessOf(rows = [], mappings = null) {
+  const custom = Array.isArray(mappings) && mappings.length > 0;
+  const mapped = new Set((custom ? mappings : DEFAULT_MAPPINGS).map((row) => String((row || {}).category || "")));
+
+  const notReady = { uncategorised: 0, unmapped: 0, split: 0, needsInfo: 0, unreviewed: 0 };
+  let ready = 0;
+  for (const row of rows) {
+    const category = String(row.category || "");
+    const reviewStatus = String(row.reviewStatus || "");
+    if (!category) { notReady.uncategorised += 1; continue; }
+    if (splitCount(row) > 0) { notReady.split += 1; continue; }
+    if (reviewStatus === "needs_info") { notReady.needsInfo += 1; continue; }
+    if (reviewStatus === "unreviewed" || row.categoryAuto === true) { notReady.unreviewed += 1; continue; }
+    if (!mapped.has(category)) { notReady.unmapped += 1; continue; }
+    ready += 1;
+  }
+  // Which map produced the figure. "ready to be prepared" is a claim about a
+  // specific map, and the reader is entitled to know which one.
+  return { ready, notReady, mappingSource: custom ? "workspace" : "default" };
+}
+
+function accountingSyncStatus(snapshot, args = {}, ctx = {}, { nowMs = Date.now() } = {}) {
+  const connections = (snapshot.connections || {}).accounting || [];
+  // Readiness is counted over the bank read, which is capped at 3000 rows — a
+  // number a workspace with the two-year PSD2 backfill reaches — and the
+  // attention rows over a read capped at 100. "N are ready to be prepared" is
+  // stated as fact, so a truncated read behind it has to be stated too.
+  const warnings = [...envelope.capWarnings(snapshot)];
+
+  const writers = connections.filter((row) => String(row.mode || "") === "primary_write");
+  const primaryWriter = writers.length > 0
+    ? { provider: untrusted.safeText(writers[0].provider, { max: 40 }), connectionId: untrusted.safeText(writers[0].id, { max: 64 }) }
+    : null;
+  const conflict = writers.length > 1;
+
+  const postings = {};
+  for (const key of POSTING_PHASES) {
+    postings[key] = { value: 0, available: false, reason: "postings_not_implemented" };
+  }
+
+  // The two fields on an attention row that QuickBooks or Xero wrote.
+  //
+  // `message` is built around the ledger's own words — accountingFunctions.js
+  // interpolates the provider's entity type, external id and change detail into
+  // it — and `entityRefs` are bare strings the same writer chose ("Invoice:123"),
+  // not `envelope.entityRef` objects, so they never met the 80-character label
+  // bound the envelope contract promises for a reference. Both land in `data`,
+  // which a model reads exactly as it reads a summary line, so both are bounded
+  // here the way every other outside string is (untrusted.js).
+  //
+  // `message` and `entityRefs` were bounded and the five fields beside them on
+  // the same objects were not: `provider`, `connectionId` and `kind` here, and
+  // `health` and `writeBoundaryDate` on the connection row below. A bound that
+  // stops at the two longest fields is a bound on the two fields somebody
+  // thought of, not on the objects.
+  const attention = (snapshot.accountingAttention || []).map((row) => ({
+    id: untrusted.safeText(row.id, { max: 200 }),
+    provider: untrusted.safeText(row.provider, { max: 40 }),
+    connectionId: untrusted.safeText(row.connectionId, { max: 64 }),
+    kind: untrusted.safeText(row.kind, { max: 60 }),
+    severity: SEVERITY_FROM_STORED[String(row.severity || "")] || "low",
+    message: untrusted.safeText(row.message, { max: 200 }),
+    entityRefs: (Array.isArray(row.entityRefs) ? row.entityRefs.slice(0, 5) : [])
+      .map((ref) => untrusted.safeText(ref, { max: 80 }))
+      .filter(Boolean)
+  }));
+
+  const readiness = readinessOf(snapshot.bankRows || [], snapshot.categoryMappings || null);
+
+  const sources = connections.map((connection) => freshness.sourceRow({
+    provider: connection.provider || "accounting",
+    connectionId: connection.id,
+    entity: "finance",
+    kind: "accounting",
+    lastSuccessAtMs: Number(connection.lastSyncAtMs || 0),
+    contributed: true,
+    nowMs
+  }));
+
+  warnings.push(envelope.warning(
+    "unsupported_metric",
+    "NivaDesk prepares accounting records but does not write them to the ledger yet, so the posting counters are reported as unavailable rather than as zero."
+  ));
+  if (conflict) {
+    warnings.push(envelope.warning("plan_limited", "More than one connection claims to be the primary writer for this company's books; one of them has to be set read-only."));
+  }
+
+  return {
+    data: {
+      phase: "read_only",
+      primaryWriter,
+      conflict,
+      // The count as a FIELD. render.js wrote "${data.connections.length}
+      // accounting connection(s)" — a numeral it computed itself and that
+      // appears nowhere in `data`. It passed the "every number in a line comes
+      // from data" check only because the one fixture exercising it has a
+      // single connection whose id is "qbo_1", so the numeral 1 happened to be
+      // in the payload.
+      connectionCount: connections.length,
+      connections: connections.map((connection) => ({
+        provider: untrusted.safeText(connection.provider, { max: 40 }),
+        connectionId: untrusted.safeText(connection.id, { max: 64 }),
+        // The company name as the LEDGER spells it, not as we do.
+        company: untrusted.safeText(connection.companyName || connection.realmName || "", { max: 80 }),
+        mode: untrusted.safeText(connection.mode, { max: 40 }) || "read_only",
+        health: untrusted.safeText(connection.status, { max: 40 }) || "unknown",
+        writeBoundaryDate: untrusted.safeText(connection.writeBoundaryDate, { max: 32 }) || null,
+        lastSyncAt: connection.lastSyncAtMs ? new Date(Number(connection.lastSyncAtMs)).toISOString() : null
+      })),
+      postings,
+      attention,
+      readiness
+    },
+    warnings,
+    sources,
+    entityRefs: attention.slice(0, 20).map((row) => envelope.entityRef("attention", row.id, row.kind))
+  };
+}
+
+module.exports = { POSTING_PHASES, SEVERITY_FROM_STORED, splitCount, readinessOf, accountingSyncStatus };

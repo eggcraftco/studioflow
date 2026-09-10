@@ -10,19 +10,19 @@ const INDEX = path.join(__dirname, "..", "..", "index.js");
 
 function pass(name) { console.log("PASS ", name); }
 
-// The schema list is read in a child process so each case gets a clean module
-// load with its own flag value (the flag is read at require time).
+// The tool list is read in a child process so each case gets a clean module
+// load with its own flag value (the flags are read at require time).
+//
+// This used to slice nvMcpOrderToolSchemas out of index.js and eval the text.
+// It stopped working the moment the annotations moved into
+// orchestrator/registry.js — the sliced body referenced a module the eval had
+// never heard of — and that is the good news: the slice was only ever testing a
+// copy of the function. The child now loads index.js and asks for the list the
+// deployment actually serves.
 function toolNames(flagValue) {
   const script = `
-    const src = require("fs").readFileSync(${JSON.stringify(INDEX)}, "utf8");
-    const start = src.indexOf("function nvMcpOrderToolSchemas()");
-    const end = src.indexOf("function nvMcpInitializeResult");
-    const body = src.slice(start, end);
-    const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
-    const NV_MCP_INVENTORY = process.env.NIVADESK_MCP_INVENTORY === "1";
-    const fn = new Function("NV_MCP_EMAIL_RECEIPTS", "NV_MCP_INVENTORY", body + "; return nvMcpOrderToolSchemas();");
-    const tools = fn(NV_MCP_EMAIL_RECEIPTS, NV_MCP_INVENTORY);
-    console.log(JSON.stringify(tools.map(t => t.name)));
+    const api = require(${JSON.stringify(INDEX)});
+    console.log(JSON.stringify(api._nvMcpToolsWithSecuritySchemes().map((tool) => tool.name)));
   `;
   const out = execFileSync(process.execPath, ["-e", script], {
     env: { ...process.env, NIVADESK_MCP_INVENTORY: flagValue }

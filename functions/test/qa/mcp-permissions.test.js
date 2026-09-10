@@ -115,6 +115,61 @@ check("an invented tool name is refused", async () => {
   await assert.rejects(async () => dispatch(ctx("member"), "delete_everything", {}), /Unknown action/);
 });
 
+// ---- what the access log claims about a read -------------------------------
+const registryModule = require("../../orchestrator/registry");
+
+check("the access-log row says what the tool actually hands over", () => {
+  // The row used to be built inline with categories name/email/phone/address
+  // for every action and a subject kind guessed from the tool's NAME, rather
+  // than from what the tool declares. The vehicle for that was the banking
+  // summary, which is out of the release; the claim is unchanged and is now
+  // made over the registry, so it covers whatever declares a row rather than
+  // the two examples that happened to be typed here.
+  const piiEntry = api._nvMcpPiiAccessEntry;
+  const context = { companyId: "acme", uid: "member-uid", email: "m@example.com" };
+
+  for (const entry of registryModule.TOOL_REGISTRY) {
+    const row = piiEntry(entry.name, context, {});
+    if (!api._nvMcpPiiLoggedActions().has(entry.name)) {
+      assert.strictEqual(row, null, `${entry.name} files a row it does not declare`);
+      continue;
+    }
+    assert.deepStrictEqual(row.categories, entry.pii,
+      `${entry.name}: the row claims ${row.categories.join(", ")} and the registry declares ${entry.pii.join(", ")}`);
+    assert.strictEqual(row.subject.kind, entry.piiSubject,
+      `${entry.name}: the row files a ${row.subject.kind} and the registry declares a ${entry.piiSubject}`);
+  }
+
+  const commerce = piiEntry("search_commerce_orders", context, {});
+  assert.deepStrictEqual(commerce.categories, ["name", "email"]);
+  assert.strictEqual(commerce.subject.kind, "order");
+
+  // The six tools that were already logging keep the row they were writing:
+  // this corrects a claim, it does not move the live surface.
+  const detail = piiEntry("get_order_detail", context, { orderId: "o1" });
+  assert.deepStrictEqual(detail.categories, ["name", "email", "phone", "address"]);
+  assert.strictEqual(detail.subject.kind, "order");
+  assert.strictEqual(detail.subject.id, "o1");
+  assert.strictEqual(detail.action, "assistant");
+  assert.strictEqual(detail.actorRole, "chatgpt_connection");
+
+  // A tool that hands over nobody files nothing.
+  assert.strictEqual(piiEntry("create_order", context, {}), null);
+  assert.strictEqual(piiEntry("not_a_tool", context, {}), null);
+});
+
+check("every row the dispatcher would write survives the access log's own rules", () => {
+  const accessLog = require("../../privacy/accessLog");
+  const context = { companyId: "acme", uid: "member-uid", email: "m@example.com" };
+  for (const action of api._nvMcpPiiLoggedActions()) {
+    const built = api._nvMcpPiiAccessEntry(action, context, {});
+    const normalised = accessLog.accessEntry({ ...built, atMs: Date.now() });
+    assert.ok(accessLog.worthLogging(normalised), `${action}: the row would be dropped`);
+    assert.deepStrictEqual(normalised.categories, built.categories, `${action}: a category was rewritten`);
+    assert.strictEqual(normalised.subject.kind, built.subject.kind, `${action}: the subject kind was rewritten`);
+  }
+});
+
 check("the advertised tools are all really dispatchable", () => {
   // The other direction of the same drift: a name on the list with no case
   // behind it would fail at the call with a confusing error.
@@ -201,6 +256,115 @@ check("the assistant's loader actually carries the two fields", () => {
   );
   assert.ok(/incomingKind: nvCleanString/.test(loader), "the loader drops incomingKind");
   assert.ok(/outgoingKind: nvCleanString/.test(loader), "the loader drops outgoingKind");
+});
+
+// ---- the orchestrator resolves the SAME role the app resolves ---------------
+//
+// A workspace can hand somebody a custom role whose baseRole is workflowOnly.
+// Only workspaceMemberRole knows that: it reads memberCustomRoles, follows the
+// id into customRoles and returns the base role. An orchestrator that re-derived
+// the role from members[uid].role saw a plain "member", so the assigned-orders
+// filter never ran and the payments/banking/payouts sections opened.
+const orchestrator = api._nvOrchestrator;
+const workflowOnlyInApp = api._nvWorkflowOnlyContext;
+
+/** A workspace where the member's role lives ONLY in a custom role. */
+function customRoleWorkspace(baseRole) {
+  return {
+    __workspaceId: "acme",
+    ownerUid: "owner-uid",
+    members: { "owner-uid": { role: "owner" }, "member-uid": { role: "member" } },
+    memberCustomRoles: { "member-uid": "custom_bench01" },
+    customRoles: { custom_bench01: { name: "Bench", baseRole } },
+    memberAccess: { "member-uid": { orders: true } }
+  };
+}
+
+const contextOver = (companyData, uid) => orchestrator.resolveContext(
+  { uid, companyId: "acme", scope: "orders.read finance.read" },
+  { loadCompany: async () => ({ companyData, settings: {} }) }
+);
+
+check("a workflow-only member on a custom role is workflow-only to the orchestrator too", async () => {
+  const companyData = customRoleWorkspace("workflowOnly");
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), true, "the app's own answer");
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.role, "workflowOnly", "the orchestrator read members[uid].role instead of the custom role");
+  assert.strictEqual(ctxOut.workflowOnly, true, "so the assigned-orders filter in loaders.js would never have run");
+
+  const contextModule = require("../../orchestrator/context");
+  const registry = require("../../orchestrator/registry");
+  const sections = contextModule.sectionAccess(ctxOut);
+
+  // Every section is the answer its own capability gives, and nothing else.
+  // This loop used to assert a flat `false` for payments/banking/payouts/
+  // accounting, which held only because sectionAccess carried an extra
+  // `&& !ctx.workflowOnly` that no capability and no app guard has. That made
+  // the summary the STRICT door: this very member is handed money by
+  // get_order_financials, because the app's nvRoleCanAccessFinancialInfo takes
+  // the custom-role branch and reads the role's own access map rather than its
+  // base role — so `ctx.financialInfo` is genuinely true here. One predicate
+  // per body of data, whichever way it falls.
+  //
+  // It read `contextModule.SECTION_OWNERS`, a table of eight section→capability
+  // rows six of which named capabilities the 6 September 2026 scope reduction
+  // removed. The owning capability is taken from the orchestrator's own dispatch
+  // set now, so this compares sections against capabilities that exist; the full
+  // cross-product of grants lives in orchestrator-context.test.js.
+  let compared = 0;
+  for (const name of require("../../orchestrator").CAPABILITY_NAMES) {
+    const entry = registry.entryFor(name);
+    const permission = entry.permission || {};
+    // Only a capability whose WHOLE gate is one workspace area can stand for
+    // that area's section. `search_inventory` is gated on the orders area AND
+    // `permission.inventory`, so it refuses a member the orders section is open
+    // to — correctly, and it owns `sections.inventory`, not `sections.orders`.
+    const extra = ["ownerOnly", "financial", "bankFeed", "accountingReader", "inventory"].filter((key) => permission[key] === true);
+    if (!permission.area || extra.length > 0) continue;
+    let allowed = true;
+    try { contextModule.assertCapability(ctxOut, entry); } catch (error) { allowed = false; }
+    assert.strictEqual(sections[permission.area], allowed,
+      `section "${permission.area}" says ${sections[permission.area]} while ${name} says ${allowed}`);
+    compared += 1;
+  }
+  assert.ok(compared > 0, "no published capability's gate is a plain workspace area; this comparison covered nothing");
+
+  // The grants this custom role does not carry stay shut — the reconciliation
+  // is "match the capability", not "open everything to workflow-only".
+  for (const section of ["banking", "payouts", "accounting", "inventory"]) {
+    assert.strictEqual(sections[section], false, `${section} was opened to a member holding no such grant`);
+  }
+  // And the narrowing that MATTERS for this role is untouched: loaders.js drops
+  // every order not assigned to them before any section is built.
+  assert.strictEqual(ctxOut.assignedOnly, true, "the assigned-orders filter stopped applying to a workflow-only member");
+});
+
+check("a member on an ordinary custom role keeps the base role that role carries", async () => {
+  const companyData = customRoleWorkspace("member");
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), false);
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.role, "member");
+  assert.strictEqual(ctxOut.workflowOnly, false, "an ordinary member must not be narrowed to their own assignments");
+});
+
+check("a member entry stored as a bare string still resolves", async () => {
+  // Older workspaces store `members: { uid: "workflowOnly" }`. The app's
+  // resolver copes with it; an inline `members[uid].role` reads undefined.
+  const companyData = {
+    __workspaceId: "acme",
+    ownerUid: "owner-uid",
+    members: { "owner-uid": "owner", "member-uid": "workflowOnly" },
+    memberAccess: { "member-uid": { orders: true } }
+  };
+  assert.strictEqual(workflowOnlyInApp({ companyData, uid: "member-uid" }), true);
+  const ctxOut = await contextOver(companyData, "member-uid");
+  assert.strictEqual(ctxOut.workflowOnly, true);
+});
+
+check("the owner is still the owner", async () => {
+  const ctxOut = await contextOver(customRoleWorkspace("workflowOnly"), "owner-uid");
+  assert.strictEqual(ctxOut.role, "owner");
+  assert.strictEqual(ctxOut.workflowOnly, false);
 });
 
 check("the assistant's totals go through the shared rule, not the sign", () => {

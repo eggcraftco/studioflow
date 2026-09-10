@@ -157,6 +157,14 @@ Quota note: the Cloud Functions API allows the parallel updates a 45-name
 batch needs; the CLI queues the rest itself. A batch that hits a quota error
 simply reports the functions it did not update — rerun the same list.
 
+## 6a. Addendum, 10 September 2026 — nodemailer 9.1.1
+
+A new high advisory, GHSA-2x7j-588g-ccc2 (nodemailer `< 9.1.0`, address-parser DoS), failed the gate on the
+OpenAI resubmission branch; fixed there as `nodemailer` `^9.0.1` → `^9.1.1` (lockfile 9.0.1 → 9.1.1, one entry,
+no transitive change) — verification and exposure in `docs/openai-resubmission-package-2026-09-10.md` §2a. The
+fix reaches production only with a deploy from that lockfile; the functions that actually send mail are listed
+there (§6), and the five outside the resubmission's own deploy need their own by-name deploy.
+
 ## 7. What this plan does not do
 
 - It does not touch the six live-only functions, `nvRevokeFileLink`,

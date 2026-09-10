@@ -37,6 +37,8 @@
 // shipping was. Purchases (a later phase) are the object that carries that, and
 // a bank transaction is matched to one rather than turned into one.
 
+const inventoryMetrics = require("./orchestrator/inventoryMetrics");
+
 const REGION = "europe-west2";
 
 const TRACKING_TYPES = ["unique", "quantity"];
@@ -547,53 +549,11 @@ function createInventoryFunctions({
     const { companyId } = await requireInventoryAccess(request);
     const snap = await itemsRef(companyId).limit(2000).get();
 
-    const summary = {
-      totalValue: 0, uniqueCount: 0, uniqueValue: 0,
-      quantityCount: 0, quantityValue: 0,
-      reservedValue: 0, reservedCount: 0,
-      incomingCount: 0, incomingValue: 0,
-      lowStockCount: 0, customerOwnedCount: 0
-    };
-
-    snap.docs.forEach((doc) => {
-      const item = doc.data() || {};
-      const status = String(item.status || "available");
-      if (status === "archived") return;
-      if (String(item.ownership) === "customer") {
-        summary.customerOwnedCount += 1;
-        return; // never an asset of this business
-      }
-      const value = Number(item.valuationCost) || 0;
-      const isUnique = String(item.trackingType) === "unique";
-      const onHand = isUnique ? 1 : Number((item.quantity || {}).onHand) || 0;
-      const lineValue = isUnique ? value : roundMoney(value * onHand);
-
-      if (["sold", "used", "removed"].includes(status)) return; // no longer on the shelf
-
-      if (status === "incoming") {
-        summary.incomingCount += 1;
-        summary.incomingValue = roundMoney(summary.incomingValue + lineValue);
-        return;
-      }
-
-      summary.totalValue = roundMoney(summary.totalValue + lineValue);
-      if (isUnique) {
-        summary.uniqueCount += 1;
-        summary.uniqueValue = roundMoney(summary.uniqueValue + lineValue);
-      } else {
-        summary.quantityCount += 1;
-        summary.quantityValue = roundMoney(summary.quantityValue + lineValue);
-        const lowAt = Number(item.lowStockAt) || 0;
-        if (lowAt > 0 && onHand <= lowAt) summary.lowStockCount += 1;
-      }
-      if (status === "reserved" || status === "partiallyReserved") {
-        summary.reservedCount += 1;
-        // Only what is actually promised counts as reserved value — 3 of 10
-        // held must not read as all 10.
-        const reservedQty = isUnique ? 1 : Number((item.quantity || {}).reserved) || 0;
-        summary.reservedValue = roundMoney(summary.reservedValue + (isUnique ? lineValue : roundMoney(value * reservedQty)));
-      }
-    });
+    // The rules here are subtle (a customer's own item is never an asset, an
+    // archived item is not on the shelf, reserved value is only what is
+    // actually promised) and the assistant has to report the same figures, so
+    // they live in one pure module both sides call rather than in this closure.
+    const summary = inventoryMetrics.summarize(snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })));
 
     // Monthly change, from the ledger: the net value that moved in the last 30
     // days against the value that was there before it. Honest by construction:

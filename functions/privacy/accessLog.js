@@ -51,8 +51,16 @@ const ACCESS_ACTIONS = Object.freeze([
   "erased"
 ]);
 
-/** Where the request came from. */
-const ACCESS_SOURCES = Object.freeze(["web", "ios", "android", "mcp", "portal", "server", "unknown"]);
+/**
+ * Where the request came from.
+ *
+ * `rest` is `chatgptWorkspaceAction`: the same assistant actions, the same
+ * dispatcher, a different door — a member's own Firebase ID token over HTTP
+ * rather than a delegated OAuth connection. Without it, every read through that
+ * door was filed as "mcp", which is the one thing a source field exists to
+ * answer.
+ */
+const ACCESS_SOURCES = Object.freeze(["web", "ios", "android", "mcp", "rest", "portal", "server", "unknown"]);
 
 const SUBJECT_KINDS = Object.freeze(["order", "customer", "estimate", "file", "bank_transaction", "amazon_order"]);
 
@@ -122,6 +130,17 @@ function accessEntry(input = {}) {
     categories,
     // How many records, for a list or an export. One access to four hundred
     // customers and one access to a single customer are not the same event.
+    //
+    // Read a 1 here carefully. The assistant surfaces write their READ row
+    // BEFORE dispatch — the row has to exist whether or not the read then
+    // succeeds — so at the moment it is written nobody knows how many records
+    // the read will return, and it defaults to 1. `search_orders` and
+    // `search_commerce_orders` can project up to a thousand orders under such a
+    // row. The rows that DO carry a real count are the ones written after the
+    // fact: the marketplace-block rows from `orchestrator/index.js`, which
+    // group by provider and reason and set `recordCount` to the orders each
+    // decision covered. A count of 1 on an assistant read means "not measured",
+    // not "one customer".
     recordCount: Math.max(1, Math.min(Number(input.recordCount) || 1, 1000000)),
     requestId: text(input.requestId, 120),
     note: text(input.note, 300)

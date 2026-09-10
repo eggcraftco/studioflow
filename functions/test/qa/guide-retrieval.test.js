@@ -365,4 +365,46 @@ function topPaths(question, limit = 4) {
   pass("sync health questions reach the store-integrations chapter, which explains stale, dead and retry");
 }
 
+// The ChatGPT app. A person deciding whether to let an assistant touch their
+// orders asks two things: what can it see, and will it message my customers.
+// The second one has a wrong answer that is easy to give — the assistant does
+// not write to a customer, but changing a status from ChatGPT fires the
+// workspace's own notification exactly as the app does. The chapter has to
+// carry that, and the retrieval has to find it.
+{
+  const section = CORPUS.find((s) => s.id === "chatgpt-app");
+  assert(section, "the guide has a chapter for the ChatGPT app");
+  assert(/emails them about the new status/.test(section.text),
+    "the chapter must say that changing a status from ChatGPT can reach the customer");
+  assert(/statuses your workspace already uses/.test(section.text),
+    "and that ChatGPT can only pick a status the workspace already uses");
+  assert(!/does not send messages to your customers/i.test(section.text),
+    "that claim is false today: the status notification goes out however the status was changed");
+  assert(/says so instead of presenting old numbers as live/.test(section.text),
+    "the freshness promise belongs in the guide too, not only in the tool output");
+  // The cross-channel reads are written up before they are published, so the
+  // chapter has to date itself: a bot that offers a tool the app does not
+  // publish sends the reader somewhere that is not there. When the flags flip,
+  // this assertion is what reminds whoever flips them to move the bullets.
+  assert(/not in the version of the NivaDesk app published in ChatGPT today/.test(section.text),
+    "the not-yet-published capabilities must be marked as not yet published");
+  for (const question of [
+    "what can ChatGPT see in my workspace?",
+    "does ChatGPT message my customers?",
+    "how do I connect NivaDesk to ChatGPT?",
+    "can I send a receipt to NivaDesk from ChatGPT?",
+    "can ChatGPT tell me what needs attention today?",
+    "can I ask ChatGPT how much came from Etsy this month?",
+    "can ChatGPT tell me if my Shopify connection is healthy?",
+    "ChatGPT'de neleri sorabilirim?"
+  ]) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /ChatGPT/i.test(p)),
+      `"${question}" should reach the ChatGPT chapter, got: ${paths.join(" | ")}`
+    );
+  }
+  pass("ChatGPT questions reach the ChatGPT chapter, which is honest about customer notifications");
+}
+
 console.log("\n✅ GUIDE RETRIEVAL GEÇTİ");

@@ -157,4 +157,4 @@ function stableStringify(value) {
   return JSON.stringify(value === undefined ? null : value);
 }
 
-module.exports = { SCHEMA_VERSION, PROVIDERS, buildEnvelope, validateEnvelope, identityKey, identityDocId, contentHash, stableStringify, safeIdPart, isoOrNull };
+module.exports = { SCHEMA_VERSION, PROVIDERS, PAYMENT_STATUSES, FULFILLMENT_STATUSES, buildEnvelope, validateEnvelope, identityKey, identityDocId, contentHash, stableStringify, safeIdPart, isoOrNull };

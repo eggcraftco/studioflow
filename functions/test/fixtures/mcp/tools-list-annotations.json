@@ -1,0 +1,1045 @@
+{
+  "recorded": "2026-09-06",
+  "note": "names + annotations + advertised scopes of tools/list, per review-flag state. 'off' is the listing the 1.1.1 review connection is served: it was recorded from index.js at commit d4399da1, before the annotations moved into orchestrator/registry.js, so a change here means the reviewed surface moved. The two orchestrator states were re-recorded when the workspace's two inventory searches were folded into one published tool (docs/mcp-inventory-search-decision.md): search_inventory replaced search_inventory_items in both. They were re-recorded again when the reduction of 6 Sep 2026 took eight capabilities out of the release, and hold 21 tools and 22 tools now. The off and inventory states were NOT touched by that change and are still the d4399da1 recording.",
+  "states": {
+    "off": {
+      "flags": {},
+      "recordedFrom": "index.js@d4399da1",
+      "tools": [
+        {
+          "name": "create_order",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_order_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "add_order_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write",
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_order_status",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "create_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "search_notes",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "get_note_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "append_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "pin_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "archive_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "get_order_financials",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_dashboard_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_extra_spending_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_financial_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_bank_spending_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_bank_transactions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "attach_bank_receipt",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "finance.read",
+            "orders.write"
+          ]
+        }
+      ]
+    },
+    "inventory": {
+      "flags": {
+        "inventory": true
+      },
+      "recordedFrom": "index.js@d4399da1",
+      "tools": [
+        {
+          "name": "create_order",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_order_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "add_order_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write",
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_order_status",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "create_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "search_notes",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "get_note_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "append_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "pin_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "archive_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "get_order_financials",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_dashboard_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_extra_spending_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_financial_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_bank_spending_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_bank_transactions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "attach_bank_receipt",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "finance.read",
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_inventory",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "create_inventory_item",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ]
+    },
+    "orchestrator": {
+      "flags": {
+        "orchestrator": true
+      },
+      "recordedFrom": "orchestrator/registry.js",
+      "tools": [
+        {
+          "name": "create_order",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_order_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "add_order_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write",
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_order_status",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "create_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "search_notes",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "get_note_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "append_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "pin_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "archive_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "get_order_financials",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_dashboard_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_extra_spending_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_financial_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_bank_spending_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_bank_transactions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "attach_bank_receipt",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "finance.read",
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_inventory",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "search_commerce_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ]
+    },
+    "inventory+orchestrator": {
+      "flags": {
+        "inventory": true,
+        "orchestrator": true
+      },
+      "recordedFrom": "orchestrator/registry.js",
+      "tools": [
+        {
+          "name": "create_order",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "get_order_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "add_order_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.write",
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_order_status",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.write"
+          ]
+        },
+        {
+          "name": "create_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "search_notes",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "get_note_detail",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.read"
+          ]
+        },
+        {
+          "name": "append_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "update_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "pin_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "archive_note",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "notes.write"
+          ]
+        },
+        {
+          "name": "get_order_financials",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_dashboard_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_extra_spending_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_financial_overview",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "get_bank_spending_summary",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "search_bank_transactions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "finance.read"
+          ]
+        },
+        {
+          "name": "attach_bank_receipt",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "finance.read",
+            "orders.write"
+          ]
+        },
+        {
+          "name": "search_inventory",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "create_inventory_item",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": true
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        },
+        {
+          "name": "search_commerce_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ]
+    }
+  }
+}
