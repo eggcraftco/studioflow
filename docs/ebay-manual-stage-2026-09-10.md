@@ -167,7 +167,7 @@ Trading `GetOrders`, **seller role**, immediately after the `CompleteSale`:
 |---|---|---|
 | `OrderStatus` | `Active` | **`Completed`** |
 | `CheckoutStatus.Status` | `Incomplete` | **`Complete`** |
-| `AmountPaid` | `0.0 GBP` | **`6.00 GBP`** (the £5.00 item plus £1.00 postage) |
+| `AmountPaid` | `0.0 GBP` | **`6.00 GBP`** — £1.00 more than the £5.00 listing price. **Open question:** the fields read (`OutputSelector` limited to status fields) do not explain the difference, and the listing page advertises free Royal Mail 2nd Class, so it is not obviously postage; a full `GetOrders` (Subtotal, ShippingServiceSelected, Total) would show it — not run |
 | `PaidTime` | — | **2026-09-10T22:16:30.208Z** |
 | `CheckoutStatus.PaymentMethod` | `None` | `None` (unchanged; the order was settled by the seller's mark, not by a payment instrument) |
 
@@ -193,8 +193,7 @@ directly, with the **seller's** token, through the API Explorer.
 **Reading.** Roughly seven minutes after the order became checkout-complete and paid, eBay's Fulfillment API returns
 an empty list for this seller — not a filtered-out order, an empty account. The Trading API shows the same order as
 completed and paid at the same moment. So the two APIs disagree, and NivaDesk is reading the one that has nothing in
-it. **Nothing in NivaDesk is at fault and nothing in NivaDesk can fix this**: the connector's only order source is
-`sell.fulfillment.readonly`.
+it. **Verified:** the Trading API's checkout and payment state; the Fulfillment API's empty list. **Not verified:** any part of NivaDesk's import against a real order. **The most likely reading is a sandbox-side gap** — an order created and settled through the Trading API not reaching the Sandbox's Fulfillment service — but that is an inference, not a proof: the connector's only order source is `sell.fulfillment.readonly`, and its import path has still **not** been exercised against a real order. The import acceptance tests (one order in; identity, amount, currency, payment and fulfilment match; no duplicate on re-import and Sync now) remain **not completed**, and a defect on NivaDesk's side of that path cannot be ruled out from tonight's evidence.
 
 **What this leaves.** The order was made with `PlaceOffer` and settled with `CompleteSale`, both Trading API calls,
 which is the only route this sandbox allowed (the buyer's web checkout pages are missing or reporting themselves down,
