@@ -13,38 +13,41 @@ characters, never printed, unset immediately) produced the **same digest**. So S
 `ebayNotifications` revision (B) hold the same token, the marker, the version and the accessor binding are all in
 place, and the migration's forced order A → B → prove B → C is satisfied up to C (the portal).
 
-## 2. The Hostinger half of the relay key — configured, but not with our value
+## 2. The Hostinger half of the relay key — absent, and the first reading of the probes was wrong
 
-The web ticket route reads `NIVADESK_EBAY_CALLBACK_KEY` inside the handler and answers **503** while the key is unset or
-shorter than 32 characters, **400** when a ticket fails verification (`app/ebay/ticket/route.ts:176-200`). Probes at
-12:56–12:58Z against `https://nivadesk.app/ebay/ticket`:
+**Corrected reading (13:05–13:10Z).** hPanel → nivadesk.app → *Ortam değişkenleri* lists nine variables, all
+`NEXT_PUBLIC_FIREBASE_*` plus `NEXT_PUBLIC_STAGING_NO_INDEX`; **`NIVADESK_EBAY_CALLBACK_KEY` is not among them.** The
+earlier probes answered 400 not because a different key was configured but because the ticket route's first gate is
+same-origin (`app/ebay/ticket/route.ts:142-146`: `Sec-Fetch-Site: same-origin`, or `Origin` equal to
+`https://nivadesk.app`) — the probes carried neither, were counted as `blocked` (Hostinger runtime log:
+`ebay ticket route window=… sealed=0 refused=0 throttled=0 blocked=3`, exactly the three probes) and never reached the
+key check. With `Origin: https://nivadesk.app` the route answers **503** for a ticket-shaped body — the designed
+"key not configured" answer. The paragraph that stood here for a few minutes ("configured, but not with our value") is
+withdrawn; nothing was acted on under it.
 
-| Request | Answer | Meaning |
-|---|---|---|
-| `{}` | 400 | body shape refused before the key is read |
-| `{"ticket":"abc"}` | **400**, not 503 | a key of ≥ 32 characters **is** configured on Hostinger |
-| a ticket minted locally under Secret Manager's `EBAY_CALLBACK_KEY` (`nv1.<state>.<nonceTag>.<expMs>.<jti>.<mac>`, shape-checked against `TICKET_PATTERN`, 5-minute window; the key read via `gcloud secrets versions access` into the node process on stdin, never printed) | **400**, no `Set-Cookie` | the route's key **differs** from Secret Manager's: a valid ticket would have been sealed with 204 + `__Host-nv_ebay_ticket_<tag>` |
+**Fix (operator, hPanel, in progress):** add `NIVADESK_EBAY_CALLBACK_KEY` = the current value of the `EBAY_CALLBACK_KEY`
+secret (no `NEXT_PUBLIC_` prefix), then *Yeniden Dağıt* so the Node process restarts with it. The value travels through
+the clipboard only (`gcloud secrets versions access latest --secret=EBAY_CALLBACK_KEY … | pbcopy`, confirmed as a
+64-character hex value on the clipboard without displaying it); the assistant typed the variable *name* into the add
+dialog and left the value field to the operator.
 
-Both sides derive the ticket key identically — `HMAC-SHA256(relayKey, "nivadesk/ebay/ticket/v1")` in
-`functions/ebayConnector.js:359` and `studioflow-web/lib/studioflow/ebayTicket.ts:43` — and the CI relay job (run
-34471692589, "eBay callback (route ↔ function): relay vectors + cited regressions", success 11:31Z) compiles the real
-routes against the real function on this tree. So the 400 has one cause: **the value in Hostinger's environment is not
-the value generated into `EBAY_CALLBACK_KEY` at 10:50:52Z today.** Round 167's evidence recorded the key as absent on
-9 Sep; whatever was set since cannot be today's secret. The deploy plan's row for this state ("set, different value — a
-half-finished rotation") applies: every seller flow would end at the ticket route with 400 until the two agree.
+**Done and verified (13:10–13:16Z).** The operator pasted the value into the *Değer* field and pressed *Ekle*
+(13:11Z, unsaved-changes badge → the variable listed, 10 variables); *Değişiklikleri uygula* (pressed by the assistant on
+the operator's word) started deployment `01a08b72-e06a-70da-b0c3-10009d61780d` automatically — same commit
+`4e3a05f7` (Round 170), branch `main`, Next.js 22.x runtime — which finished **Tamamlandı** at 14:14 local (13:14Z),
+2 m 22 s. The same-origin probe flipped from 503 to **400** at 13:15:00Z.
 
-**Fix (operator, hPanel):** set `NIVADESK_EBAY_CALLBACK_KEY` for the nivadesk.app site to the current value of the
-`EBAY_CALLBACK_KEY` secret (no `NEXT_PUBLIC_` prefix), then redeploy/restart the site so the Node process reads it.
-The value is handed over through the clipboard, never through chat:
+| Check after the redeploy | Result |
+|---|---|
+| `{"ticket":"abc"}` with `Origin: https://nivadesk.app` | **400** — key present, ticket invalid (was 503) |
+| a ticket minted locally under Secret Manager's `EBAY_CALLBACK_KEY` (5-minute window; key on stdin, never printed) | **204**, `Set-Cookie: __Host-nv_ebay_ticket_<tag>=…; Max-Age=300; Path=/; Secure; HttpOnly; SameSite=Lax` — the route derives the same ticket key as the function: **Hostinger's value equals the secret** |
+| the same ticket with its MAC's last three characters changed | **400** — verification is real |
+| deploy plan §4.3 step 7 — client bundle: the 12 chunks referenced by `/ebay/start` and the page HTML | 0 mentions of `NIVADESK_EBAY_CALLBACK_KEY` / `EBAY_CALLBACK_KEY` / `x-nivadesk-signature`; 0 occurrences of the key's value (counted, never printed) |
+| deploy plan §4.3 step 7b — the key is read at runtime, not inlined at build time | proven behaviourally: the build is the unchanged Round 170 commit, and the route's answer changed from 503 to 400/204 purely through the environment |
 
-```
-gcloud secrets versions access latest --secret=EBAY_CALLBACK_KEY --project eggcraft-studio | tr -d '\n' | pbcopy
-```
+Hostinger runtime log before the fix (read in hPanel): `ebay ticket route window=… sealed=0 refused=0 throttled=0
+blocked=3` and two `ebay ticket: refused` lines — the operator's three cross-origin probes; nothing else.
 
-**Verification after the redeploy (assistant):** the same minted-ticket probe must answer **204** with a
-`__Host-nv_ebay_ticket_…` cookie; `{"ticket":"abc"}` must still answer 400; the deploy plan's §4.3 checks 7/7b
-(no `EBAY_` names in client chunks; the literal `process.env.NIVADESK_EBAY_CALLBACK_KEY` still present in the server
-chunk) are re-run on the new build.
 
 ## 3. The portal deletion token — the endpoint is ready; the form is behind the production keyset
 
@@ -79,10 +82,11 @@ own enqueue leg (`ebayNotifications` → `driveDeletion` → the queue → the w
 | Item | State |
 |---|---|
 | Secret ↔ endpoint token | equal (proved) |
-| Hostinger `NIVADESK_EBAY_CALLBACK_KEY` | set to a **different** value than the secret → seller flows would fail at the ticket route; **operator: paste the secret's value in hPanel, redeploy**; then the assistant re-runs the minted-ticket probe (expect 204 + cookie) and the §4.3 chunk checks |
+| Hostinger `NIVADESK_EBAY_CALLBACK_KEY` | **set and verified equal to the secret** (deployment 01a08b72, 13:14Z): bad ticket 400, minted ticket 204 + `__Host-` cookie, tampered 400, no key name/value in client chunks |
 | Portal deletion registration | blocked by the production-keyset gate; endpoint proven ready; nothing entered |
 | Connector switch | off; Sandbox OAuth not started |
 | Untouched | OpenAI review functions, Stripe/checklist functions, Google case |
 
-Rollback for this step: nothing was created or changed on any system by the assistant; the only pending change is the
-operator's Hostinger variable, reversible by setting it back.
+Rollback for this step: the only change is the Hostinger variable `NIVADESK_EBAY_CALLBACK_KEY` (+ the automatic redeploy of the
+unchanged Round 170 commit); reversible by deleting the variable in hPanel and applying, after which the ticket route
+answers 503 again and no seller can start a flow. Nothing else was created or changed.
