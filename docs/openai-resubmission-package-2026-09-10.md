@@ -79,18 +79,27 @@ into a transport only by `nvMailTransport()` (`index.js:44`), which the five mai
 `emailWorkspaceInvitation`, `sendPortalStatusEmail`.
 
 **NivaDesk exposure, measured against the advisory's condition ("an address value influenced by an untrusted
-party").** Every address NivaDesk hands to `sendMail` is a single address that passed a shape check and a
-length cap before it got there: the website visitor's e-mail (the one *unauthenticated* path) goes through
-`websiteChatVisitorEmail` — 240 characters and a single-address regex, or dropped; an invitation address
-through `team/invitations.js` `isPlausibleEmail` — single-address regex, ≤ 254; a customer's e-mail on an order
-through `cleanOrderText(after.emailAddress, "", 240)` in the notification trigger and `nvCleanString(…, 240)` on
-an assistant-created order; the workspace's reply-to through `cleanOrderText(…, 240)`; the support inbox and
-the `from` are constants. A 240-character value cannot reach the quadratic cost (measured here: on 9.0.1 a
-15,000-address / 169 KB list parsed in 60 ms against 13 ms for 5,000 — super-linear, but the advisory's 25–30 s
-needs the megabyte-scale input the caps exclude; on 9.1.1 the same lists parse in 7–8 ms). The support-ticket
-reply-to is an authenticated caller's e-mail and was not separately traced to a cap. Conclusion: no reachable
-DoS path at NivaDesk's input sizes; the finding is closed for policy (a high with no allow-list entry fails the
-gate) and for hygiene, not because an exploit was found.
+party") — stated only for the paths that were traced.** Every `sendMail` call in the tree goes through one of
+the five helpers, and each address they pass was traced to its cap:
+
+| Helper | Address field | Source | Cap / check | Who can influence it |
+|---|---|---|---|---|
+| `emailNivadeskSupportForWebsiteChat` | `replyTo` | visitor's e-mail | `websiteChatVisitorEmail`: 240 chars **and** a single-address regex, else dropped | **anyone** (public site widget) |
+| `emailWebsiteChatVisitorReply` | `to` | the same stored visitor e-mail | same (validated when stored) | anyone, via the widget |
+| `emailNivadeskSupportForTicket` | `replyTo` | `supportUserEmail`: the caller's token e-mail or `data.userEmail` | `cleanSupportText(…, 240)` — capped, no regex | a signed-in user |
+| `emailWorkspaceInvitation` | `to` | the invited address | `isPlausibleEmail`: single-address regex, ≤ 254 | a workspace owner/admin |
+| `sendPortalStatusEmail` | `to`, `replyTo` | the order's `emailAddress`; the workspace's invoice reply-to | `cleanOrderText(…, 240)` on both (an assistant-created order: `nvCleanString(…, 240)`) | workspace members, connected shops |
+| all five | `from` | constant (support inbox / SMTP user) | — | nobody |
+
+So on every traced path the value that reaches the parser is at most 254 characters, single-address by
+regex on three of them and by cap alone on the other two. The advisory's cost needs megabyte-scale lists (25–30
+s at ~1.5 MB); measured here, 9.0.1 parsed a 169 KB / 15,000-address list in 60 ms against 13 ms for 5,000
+— super-linear — and 9.1.1 both in 7–8 ms. **What this supports:** at these caps the quadratic cost is not
+reachable through any of the five helpers. **What it does not claim:** anything about a `sendMail` call this
+trace did not see (none was found by `grep` over the functions tree, but the trace is static), or about the
+three moderates, which are about content resolution and recipient-domain checks rather than input size. The
+bump does not rest on this assessment: a high advisory with no allow-list entry fails the gate, and the fix
+is a same-major, dependency-free bump with no breaking change, so it is applied regardless.
 
 **The fix, as narrow as it gets:** `npm install nodemailer@^9.1.1 --package-lock-only --ignore-scripts` in
 `functions/` — manifest `^9.0.1` → `^9.1.1` (so a future install cannot resolve below the fix), lockfile
@@ -116,8 +125,10 @@ lockfile).
 
 - Release flag set: **`NIVADESK_MCP_ORCHESTRATOR=1`**, `NIVADESK_MCP_INVENTORY` unset, `NIVADESK_MCP_EMAIL_RECEIPTS` unset.
 - Candidate commit: **the head of `openai-resubmission`** — `6f7849f9` carries the code, tests, corpus, evidence and this
-  document; the nodemailer lockfile fix (§2a) and this section's updates follow it; the evidence snapshots are
-  re-stamped on the clean tree after each (same listings, same hashes). The hash is in the operator report. Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
+  document; `b74cc197` the nodemailer lockfile fix (§2a); `67713003` the two dependency checks (§5a); the
+  commits after it are documentation and evidence stamps only. Product code (`functions/` outside `test/`,
+  `studioflow-web/`) is unchanged since `6f7849f9` except `functions/package.json` and `package-lock.json`. The
+  head hash is in the operator report. Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
   (`2ee5f6c1`, every live hotfix including the Stripe fix `76c5e3c3`), `functions/index.js` (two flag-gated
   sentence constants and three description appends), `functions/orchestrator/registry.js` (the three edits in
   §1), `studioflow-web/lib/publicSite/guide.ts` + rebuilt corpus, and the connect page as it already was.
@@ -185,36 +196,71 @@ openWorldHint false→true and idempotentHint true→false; one sentence appende
 | `docs/evidence/capture-tools-list.js` (flags-off parity) | PASS on all three snapshots; BYTE-IDENTICAL |
 | `docs/evidence/release-listing-report.js` | PASS |
 | `team-invitations` / `webhook-privacy` (the mail flows' logic, transport never opened) | 21 / 12 PASS |
-| `npm test` (whole `functions/` tier) | exit 0, **1,470 PASS, 0 FAIL**, 115 suites — run twice: on the package tree and again on the final tree with the nodemailer lockfile |
+| `npm test` (whole `functions/` tier) | exit 0, **1,470 PASS, 0 FAIL**, 115 suites — run twice: on the package tree and again on the final tree with the nodemailer lockfile. **Both runs used the shared `node_modules` (nodemailer 9.0.1), not the tree a deploy installs — superseded by §5a** |
 | `scripts/audit-gate.mjs` (dependency gate, DPP 2.7) | ~~FAIL~~ → **PASS, 0 blocking** after `nodemailer` `^9.1.1` (§2a); allowed highs unchanged |
 
 The bank/receipt matching features are untouched: no handler changed on this branch; `mcp-inventory`
 (the receipt attachment path) and the bank suites in the full run are green.
 
+### 5a. Verification on the real deploy dependency tree (10 September, 00:23–00:25Z)
+
+The runs in §5 loaded the main checkout's `node_modules` through a symlink, which still held nodemailer
+9.0.1. A deploy installs from the lockfile, so the package was verified once more on exactly that tree:
+
+| Step | Result |
+|---|---|
+| Isolated checkout | `git worktree add --detach` of `67713003` (this package's head with the two new checks; product code identical to `2db5822d` — the only difference is `functions/test/qa/`) into the session scratch directory; no symlink, no shared `node_modules`, no existing worktree touched; tree clean before and after |
+| Toolchain | Node **v22.22.3** (manifest `engines.node: 22`, the Cloud Functions runtime is nodejs22), npm 10.9.8 |
+| `npm ci --no-audit --no-fund` | exit 0, **477 packages in 4 s**; `package.json` and `package-lock.json` unchanged by the install (0 dirty files); 5 deprecation warnings from transitive packages (inflight, rimraf 2, glob 7/10, node-domexception) — pre-existing, unrelated, not touched |
+| Installed nodemailer | `npm ls nodemailer` → `nodemailer@9.1.1` (root, no dependants); runtime `require.resolve("nodemailer")` → `…/verify-67713003/functions/node_modules/nodemailer/lib/nodemailer.js`, `package.json` version **9.1.1** |
+| `nodemailer-floor.test.js` (new) | 3 PASS — manifest `^9.1.1`, lockfile 9.1.1, installed 9.1.1 (on the shared 9.0.1 tree this check **fails** and says to run `npm ci`, which is its purpose) |
+| `mail-transport-json.test.js` (new) | 3 PASS — `createTransport` swapped for `jsonTransport` before `index.js` binds it, `_nvMailTransport` hands the SMTP options through, `sendMail` renders NivaDesk's message shapes on **9.1.1** with no network, a 240-character address parses as one in well under 50 ms |
+| `team-invitations` / `webhook-privacy` (the mail flows' logic) | 21 / 12 PASS |
+| `scripts/audit-gate.mjs` | **PASS**, 0 blocking |
+| `docs/evidence/capture-tools-list.js` | PASS on all three snapshots; flags-off **BYTE-IDENTICAL** to production |
+| `docs/evidence/release-listing-report.js` | PASS — 21 tools, names = registry = dispatcher, four booleans, reasons, scopes |
+| `npm test` (whole `functions/` tier) | exit 0, **1,476 PASS, 0 FAIL, 117 suites** (1,470 + the two new checks), 00:24:59–00:25:44Z, with nodemailer **9.1.1** loaded |
+
+No e-mail was sent: the only transport opened was nodemailer's `jsonTransport`. The isolated checkout was
+removed after the run; the logs are in the session's scratch directory and the numbers above are copied
+from them.
+
 ## 6. Deploy package, order, carry and rollback
 
-**Functions — the seven that read the flag, in one command, from the main checkout with
-`NIVADESK_MCP_ORCHESTRATOR=1` in `functions/.env`** (traced statically from every `exports.*` to the flag
-identifiers; `chatgptMcp` alone is not enough — the OAuth authorize/approve/register/metadata endpoints mint
-the default grant the flag widens, and the REST surface shares the dispatcher):
+**Three function groups, each deployed by name, in this order, from the main checkout after the carry.**
+No name appears twice: the three assistant functions that also send mail (`createSupportTicket`,
+`addSupportTicketReply`, `postWebsiteChatMessage`) are in group 2 only. Every group is built from the same
+lockfile, so every function in it comes up on nodemailer 9.1.1 whether or not it sends mail.
+
+| Group | Functions | Purpose | Order dependency | Rollback scope |
+|---|---|---|---|---|
+| **1 — MCP/OAuth (7)**, with `NIVADESK_MCP_ORCHESTRATOR=1` in `functions/.env` | `chatgptMcp`, `chatgptWorkspaceAction`, `chatgptOAuthAuthorize`, `chatgptOAuthApprove`, `chatgptOAuthRegister`, `chatgptOAuthAuthorizationServer`, `chatgptOAuthProtectedResource` | the 1.2.0 wire: 21 tools, the three corrections, the three description sentences, scope enforcement, and the default grant the flag widens (mint + challenge) — the seven read the flag, traced statically from every `exports.*`; `chatgptMcp` alone would enforce scopes beside an authorize endpoint still minting the narrow grant | **first.** Needs the web connect page live (below) — before or with, never after. One command, all seven: a partial deploy leaves a mint/enforce split | the seven services' previous revisions (snapshot the names before deploying) **and** the flag removed from `.env`; tokens minted in between keep the wide scope string and, with the flag off, gain nothing (§6 above) |
+| **2 — guide / assistant (7)** | `getUserGuide`, `askAppAssistant`, `createSupportTicket`, `postWebsiteChatMessage`, `createWebsiteChat`, `getAppAssistantAvailability`, `addSupportTicketReply` | the rebuilt guide corpus and tree (the two released searches under "What you can ask", the photo add still "coming"); three of these also send mail and so also pick up nodemailer 9.1.1 | **after group 1 is serving**: deployed first, the in-app and website bots would offer two tools the published app did not yet serve | the seven previous revisions; the corpus is data inside the bundle, no other state |
+| **3 — mail (5)** | `websiteChatRequestHuman`, `inviteWorkspaceMember`, `createOrderPortalLink`, `saveOrderPortalSettings`, `notifyCustomerOnStatusChange` | the remaining functions that actually send mail (`nvMailTransport` in their call graph) — the live nodemailer advisory closes only when these run 9.1.1; no flag involved | **any time after the lockfile is on the deploy branch**; independent of groups 1–2 (listed last only so the release deploy is not interleaved with it) | the five previous revisions; nothing else (a rollback re-opens the advisory on them) |
+
+Every other function bundles nodemailer without calling it and picks 9.1.1 up whenever it is next deployed
+for its own reasons. The `.env` flag set for group 1 is carried by groups 2 and 3 as well (they are deployed
+from the same checkout); only the MCP code reads it.
+
+**Web (separate, one round):** `studioflow-web/app/chatgpt/connect/ChatGPTConnectClient.tsx` and
+`page.tsx` — the connect page stops sending a two-scope default of its own and lets the server decide.
+Before or with group 1 (with the flag off the server's default is the same two scopes, so early is
+harmless; after would mint exactly the narrow token flip-day refuses). Rollback: the previous web round; it
+can also simply stay. No other web file changes: the guide reaches production through group 2.
 
 ```
+# group 1 (flag in functions/.env first)
 firebase deploy --project eggcraft-studio --only "functions:chatgptMcp,functions:chatgptWorkspaceAction,functions:chatgptOAuthAuthorize,functions:chatgptOAuthApprove,functions:chatgptOAuthRegister,functions:chatgptOAuthAuthorizationServer,functions:chatgptOAuthProtectedResource"
+# group 2
+firebase deploy --project eggcraft-studio --only "functions:getUserGuide,functions:askAppAssistant,functions:createSupportTicket,functions:postWebsiteChatMessage,functions:createWebsiteChat,functions:getAppAssistantAvailability,functions:addSupportTicketReply"
+# group 3
+firebase deploy --project eggcraft-studio --only "functions:websiteChatRequestHuman,functions:inviteWorkspaceMember,functions:createOrderPortalLink,functions:saveOrderPortalSettings,functions:notifyCustomerOnStatusChange"
 ```
-
-Then, **after** those are serving, the guide: the seven assistant functions carrying the rebuilt corpus —
-`getUserGuide`, `askAppAssistant`, `createSupportTicket`, `postWebsiteChatMessage`, `createWebsiteChat`,
-`getAppAssistantAvailability`, `addSupportTicketReply` (by name). Deploying them first would let the in-app
-bot offer two tools the published app did not yet serve.
-
-**Web** — the connect page (`studioflow-web/app/chatgpt/connect/ChatGPTConnectClient.tsx`, `page.tsx`:
-empty scope default, the server decides) — a web round, **before or with** the functions deploy, never
-after. No other web file changes; the guide reaches production through the functions above.
 
 **Order:** dependency gate green → source/ancestor pre-check (`docs/audit-deploy-checklist.md`) → web round
-→ the seven functions (flag on) → the five mail functions above (nodemailer, no flag needed) → record the deployed listing (`node docs/evidence/capture-tools-list.js`
+→ group 1 (flag on) → record the deployed listing (`node docs/evidence/capture-tools-list.js`
 against the deployed source, or the checklist's step 5) and diff it against
-`tools-list-candidate-orchestrator-on.json` → the seven assistant functions → reconnect the review
+`tools-list-candidate-orchestrator-on.json` → group 2 → group 3 → reconnect the review
 connection → re-run the test cases → platform form (§7 below): Scan Tools, verify 21 tools × 3 scanned
 hints against §4, paste justifications, Description, Release Notes, test cases → operator submits.
 
@@ -265,14 +311,8 @@ trigger; the graph also lists `chatgptMcp` and `chatgptOAuthProtectedResource` t
 mail itself). Of these, **three** are in this package's deploy — `createSupportTicket`,
 `addSupportTicketReply`, `postWebsiteChatMessage` ride with the seven assistant functions — and **five are
 not**: `websiteChatRequestHuman`, `inviteWorkspaceMember`, `createOrderPortalLink`, `saveOrderPortalSettings`,
-`notifyCustomerOnStatusChange`. Closing the live advisory therefore needs one more deploy, by name, after the
-lockfile is on the deploy branch:
-
-```
-firebase deploy --project eggcraft-studio --only "functions:websiteChatRequestHuman,functions:inviteWorkspaceMember,functions:createOrderPortalLink,functions:saveOrderPortalSettings,functions:notifyCustomerOnStatusChange"
-```
-
-Every other function loads `index.js` and so bundles nodemailer without calling it; they pick 9.1.1 up
+`notifyCustomerOnStatusChange`. Closing the live advisory therefore needs those five deployed from this lockfile — group 3 in the table
+above. Every other function loads `index.js` and so bundles nodemailer without calling it; they pick 9.1.1 up
 whenever they are next deployed for their own reasons. **This package does not claim the live advisory closed
 until those revisions exist.**
 
