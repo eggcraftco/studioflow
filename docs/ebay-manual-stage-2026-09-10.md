@@ -140,6 +140,26 @@ whether or not there is a session. Recorded rather than smoothed over.
 Signing in is not checkout. Something still has to walk the order through payment, and the page that normally offers
 that is missing here.
 
+### 2d.1 The two other buyer-side entry points, probed once each — both unusable
+
+| Page | Result (22:0xZ) |
+|---|---|
+| `www.sandbox.ebay.com/myb/PurchaseHistory` | eBay's "We looked everywhere" missing-page error, **while signed in** |
+| `www.sandbox.ebay.com/mye/myebay/purchase` | eBay's **"It's not you. It's us. Our server is down"** page; its toolbar shows `Hi! (Sign in)` |
+| `cart.sandbox.ebay.com` | renders, empty cart, toolbar also `Hi! (Sign in)` |
+
+Two things are true at once: the session exists on `www.sandbox.ebay.com` (its home and the listing page greet
+`testuser_nivadesk_buyer2`) but not on the other sandbox hosts, and eBay's own My-eBay purchase service is reporting
+itself down in this sandbox. Neither is something this project can fix or work around, and no further URLs were tried
+— three probes, no loop.
+
+**So the buyer-side web checkout is not available today.** The only remaining supported route to finish this order is
+the seller-side one in §2c: Trading `CompleteSale` with `<Paid>true</Paid>` on
+`OrderLineItemID 110590626185-10000012799510`, which needs the Explorer's user token switched back to
+`TESTUSER_nivadesk_seller1` (one operator sign-in), and which may or may not move `CheckoutStatus.Status` to
+`Complete` — the documentation promises the paid mark, not the checkout state. Awaiting the operator's decision; nothing
+was run.
+
 **Independent confirmation the purchase is real.** The listing's own page on the sandbox site
 (`www.sandbox.ebay.com/itm/110590626185`, read while signed out) renders normally and shows **"Last one · 1 sold"**,
 seller `testuser_nivadesk_seller1`, GBP 5.00, free Royal Mail 2nd Class, 30-day returns. One of the two units is gone,
