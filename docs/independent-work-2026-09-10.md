@@ -41,5 +41,5 @@ started here. Flags: none set; nothing deployed; no e-mail, no notification.
 
 ## CI
 
-The three branch pushes trigger `functions-tests` (each touches `functions/`); status at the time of writing (14:00Z): ebay-workspace-allowlist 6566f9aa completed/success 2026-09-10T13:48:11Z run 34484927936; activation-v21-cutover 1fb4d17e completed/success 2026-09-10T13:57:19Z run 34485892871; retention-wiring 55f6fa4d in_progress/ 2026-09-10T14:00:34Z run 34486240190.
+The three branch pushes trigger `functions-tests` (each touches `functions/`); status at the time of writing (14:00Z): ebay-workspace-allowlist 6566f9aa completed/success 2026-09-10T13:48:11Z run 34484927936; activation-v21-cutover 1fb4d17e completed/success 2026-09-10T13:57:19Z run 34485892871; retention-wiring 55f6fa4d completed/success 2026-09-10T14:00:34Z run 34486240190.
 Re-read with `gh run list --workflow functions-tests.yml --branch <name>`.
