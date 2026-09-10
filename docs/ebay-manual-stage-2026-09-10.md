@@ -56,6 +56,61 @@ connection has). That API covers orders whose **checkout is complete**; an order
 
 **Recommended:** option 1. It is a single seller-token call and touches nothing outside the sandbox.
 
+## 2c. The order's real state, checked against eBay's own documentation (22:0xZ, read-only)
+
+**The order, from Trading `GetOrders` (buyer role, `OutputSelector` limited to the status fields):**
+
+| Field | Value |
+|---|---|
+| `OrderID` | `110590626185-10000012799510` |
+| `OrderStatus` | `Active` |
+| `CheckoutStatus.Status` | **`Incomplete`** |
+| `CheckoutStatus.PaymentMethod` | **`None`** |
+| `CheckoutStatus.eBayPaymentStatus` | `NoPaymentFailure` (no failed payment — not a statement that one was made) |
+| `AmountPaid` | `0.0 GBP` |
+
+**Checkout complete vs payment taken — two different things, and here neither has happened.** `PlaceOffer` with
+`Action Purchase` created the order line item (the commitment to buy), but the buyer never entered checkout: no payment
+method was chosen (`PaymentMethod None`) and checkout is `Incomplete`. Payment is a separate step after that, and
+`AmountPaid` is 0.
+
+**Why NivaDesk cannot see it.** The Fulfillment API overview states the API "includes only transactions that have
+completed checkout", and adds that `getOrders` leaves out pending-payment purchases that require payment before
+shipment. Our order fails the first test — checkout itself is incomplete — so it is outside the API the connection
+reads (`sell.fulfillment.readonly`). Three previews returning 0 are the connector behaving correctly, not a defect.
+The *"Include orders that are not paid yet"* switch cannot reach it either: that filters what the API returned.
+
+**Does the Order API method complete this order? No — it makes a new one.** `placeOrder`
+(Order API v1, `/checkout_session/{checkoutSessionId}/place_order`) is documented as creating the purchase order,
+paying for it and ending the checkout session it was given; it acts on a checkout session the caller opened with
+`initiateCheckoutSession`, not on an order that already exists. So it would produce a **second, different order** and
+leave `110590626185-10000012799510` exactly as it is. It also needs the `buy.order` scope (the buyer token holds
+`buy.order.readonly` and `buy.guest.order`, not that one), is restricted by site and, per its own note, involves a
+credit card — which the assistant does not enter. **Not viable, and not the way to finish this order.**
+
+**The supported way to finish THIS order — Trading `CompleteSale`, called by the SELLER.** The call's documented
+purpose includes marking an order as paid, and its request carries a `<Paid>` boolean alongside `OrderID` /
+`OrderLineItemID`; the documentation notes it is normally used after the buyer has paid but may be called by the
+seller beforehand.
+
+* **Exact call:** `CompleteSale` with `<OrderLineItemID>110590626185-10000012799510</OrderLineItemID>` (or
+  `ItemID` + `TransactionID`) and `<Paid>true</Paid>`. Site UK, Sandbox.
+* **Effect on this order:** it marks *this* order as paid on the seller's side; no new order is created, the listing is
+  untouched, no money and no card are involved. What it does **not** do, on the documentation's own wording, is
+  promise that `CheckoutStatus.Status` flips to `Complete` — that is the property the Fulfillment API tests. So the
+  honest expectation is: run it, then re-read `GetOrders` for `CheckoutStatus.Status` and run one NivaDesk preview. If
+  checkout still reads `Incomplete`, marking paid was not enough and the remaining route is a real buyer checkout.
+* **Access needed:** the Explorer's user token switched back to `TESTUSER_nivadesk_seller1` — one operator sign-in and
+  consent. Nothing about NivaDesk's stored connection, its `sell.fulfillment.readonly` scope or `autoSync: false`
+  changes.
+
+**The sandbox web checkout (the route that would set checkout complete properly):** not usable from this browser.
+`www.sandbox.ebay.com/myb/PurchaseHistory` answers with eBay's "We looked everywhere" error page (checked again at
+22:0xZ), as `/mys/sold`, `/mys/active` and `/sh/ord` did earlier this evening; the sandbox home page returned no
+rendered content. So "the buyer presses Pay now" cannot be handed to the operator as a working step today.
+
+**Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change.
+
 ## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
 
 Twice now the "Get OAuth User Token" flow, after the operator's "Switch account → TESTUSER_nivadesk_buyer1 → password →
