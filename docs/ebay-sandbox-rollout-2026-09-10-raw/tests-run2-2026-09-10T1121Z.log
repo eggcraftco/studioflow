@@ -1,0 +1,22 @@
+=== Test A2: CreateTask caller = contact@eggcraft.co.uk (user, roles/owner); OIDC identity = ebay-connector@eggcraft-studio.iam.gserviceaccount.com; T0=2026-09-10T11:21:15Z
+  created: Created task [projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A2-112116].
+  created: projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A2-112116	2026-09-10T11:21:17.076896Z		
+  --- worker application log since 2026-09-10T11:21:15Z
+    2026-09-10T11:21:17.125859Z ERROR HTTP 500  
+    2026-09-10T11:21:17.221412Z ERROR  Unhandled error Error: connection_missing     at classedError (/workspace/ebayConnector.js:214:19)     at Obje 
+    (rows: 2 )
+  --- queue depth now: 0
+=== Test A2-compute: CreateTask caller = contact@eggcraft.co.uk (user, roles/owner); OIDC identity = 477037475099-compute@developer.gserviceaccount.com; T0=2026-09-10T11:21:44Z
+  created: Created task [projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A2-compute-112144].
+  created: projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A2-compute-112144	2026-09-10T11:21:45.012649Z		
+  --- worker application log since 2026-09-10T11:21:44Z
+    2026-09-10T11:21:45.051577Z ERROR HTTP 500  
+    2026-09-10T11:21:45.122516Z ERROR  Unhandled error Error: connection_missing     at classedError (/workspace/ebayConnector.js:214:19)     at Obje 
+    (rows: 2 )
+  --- queue depth now: 0
+=== 2026-09-10T11:22:12Z Firestore side-effect check (must be zero)
+  (read-only) ebayConnections/preflight-missing-20260910 exists? and commerceEvents rows for the preflight keys:
+  ebayConnections/preflight-missing-20260910 exists: false
+  commerceEvents for ebay|preflight|A2 exists: false
+  commerceEvents for ebay|preflight|A2-compute exists: false
+  commerceHealth rows for preflight-missing-20260910: 0

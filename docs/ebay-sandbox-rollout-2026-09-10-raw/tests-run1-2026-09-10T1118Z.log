@@ -1,0 +1,18 @@
+=== Test A: CreateTask caller = contact@eggcraft.co.uk (user, roles/owner); OIDC identity = ebay-connector@eggcraft-studio.iam.gserviceaccount.com; T0=2026-09-10T11:18:26Z
+  created: Created task [projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A-111827].
+  created: projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A-111827	2026-09-10T11:18:28.138069Z		
+  --- worker application log since 2026-09-10T11:18:26Z
+    2026-09-10T11:18:28.225048Z WARNING HTTP 403 The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization he 
+    (rows: 1 )
+  --- queue depth now: 0
+=== Test A-compute: CreateTask caller = contact@eggcraft.co.uk (user, roles/owner); OIDC identity = 477037475099-compute@developer.gserviceaccount.com; T0=2026-09-10T11:18:55Z
+  created: Created task [projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A-compute-111855].
+  created: projects/eggcraft-studio/locations/europe-west2/queues/ebayEventWorker/tasks/preflight-A-compute-111855	2026-09-10T11:18:56.362194Z		
+  --- worker application log since 2026-09-10T11:18:55Z
+    2026-09-10T11:18:56.421406Z ERROR HTTP 500  
+    2026-09-10T11:18:57.539385Z ERROR  Unhandled error Error: 3 INVALID_ARGUMENT: Resource id "__preflight__" is invalid because it is reserved.      
+    (rows: 2 )
+  --- queue depth now: 0
+=== 2026-09-10T11:19:23Z Firestore side-effect check (must be zero)
+  (read-only) ebayConnections/__preflight__ exists? and commerceEvents rows for the preflight keys:
+  check error: 3 INVALID_ARGUMENT: Resource id "__preflight__" is invalid because it is reserved.

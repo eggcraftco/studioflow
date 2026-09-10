@@ -1,0 +1,87 @@
+=== 2026-09-10T11:02:17Z EBAY_CLIENT_SECRET from clipboard
+Created version [1] of the secret [EBAY_CLIENT_SECRET].
+EBAY_CLIENT_SECRET: written from clipboard (length 36, shape ok); clipboard cleared
+=== 2026-09-10T11:02:23Z six versions
+  EBAY_CLIENT_ID: enabled version 1	2026-09-10T10:59:12
+  EBAY_CLIENT_SECRET: enabled version 1	2026-09-10T11:02:23
+  EBAY_TOKEN_KEY: enabled version 1	2026-09-10T10:50:49
+  EBAY_HASH_KEY: enabled version 1	2026-09-10T10:50:51
+  EBAY_CALLBACK_KEY: enabled version 1	2026-09-10T10:50:52
+  NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN: enabled version 1	2026-09-10T10:50:54
+=== 2026-09-10T11:02:28Z marker + env (values below are not secrets)
+  marker: functions/.ebay-secrets-ready Sep 10 12:02
+  NIVADESK_EBAY_CONNECTOR lines in .env: 0
+  NIVADESK_EBAY_ENVIRONMENT=sandbox
+  NIVADESK_EBAY_RUNAME=EGGCRAFT_LIMITE-EGGCRAFT-NivaDe-nerasfwi
+=== 2026-09-10T11:02:29Z pre-checks
+  ancestor 76c5e3c3: ok
+  tree clean: ok
+  functions/.env: present
+  functions/ == origin deploy tip: ok
+  HEAD: e7f59525
+=== 2026-09-10T11:02:29Z deploy ebayEventWorker alone (firebase 15.19.0)
+=== Deploying to 'eggcraft-studio'...
+i  deploying functions
+i  functions: preparing codebase default for deployment
+i  functions: ensuring required API cloudfunctions.googleapis.com is enabled...
+i  functions: ensuring required API cloudbuild.googleapis.com is enabled...
+i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled...
+⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory.
+⚠  functions: Please note that there will be breaking changes when you upgrade.
+i  functions: Loading and analyzing source code for codebase default to determine what to deploy
+Serving at port 8280
+i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled...
+i  functions: Loaded environment variables from .env.
+i  functions: preparing functions directory for uploading...
+i  functions: packaged /Users/gocmen/Developer/studioflow-app/functions (3.05 MB) for uploading
+i  functions: ensuring required API cloudscheduler.googleapis.com is enabled...
+i  functions: ensuring required API identitytoolkit.googleapis.com is enabled...
+i  functions: ensuring required API cloudtasks.googleapis.com is enabled...
+i  functions: ensuring required API run.googleapis.com is enabled...
+i  functions: ensuring required API eventarc.googleapis.com is enabled...
+i  functions: ensuring required API pubsub.googleapis.com is enabled...
+i  functions: ensuring required API storage.googleapis.com is enabled...
+i  functions: generating the service identity for pubsub.googleapis.com...
+i  functions: generating the service identity for eventarc.googleapis.com...
+i  functions: ensuring required API secretmanager.googleapis.com is enabled...
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret EBAY_CLIENT_ID.
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret EBAY_CLIENT_SECRET.
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret EBAY_TOKEN_KEY.
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret EBAY_HASH_KEY.
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret EBAY_CALLBACK_KEY.
+i  functions: ensuring ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to secret NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/EBAY_TOKEN_KEY to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to EBAY_TOKEN_KEY.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/EBAY_CALLBACK_KEY to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to EBAY_CALLBACK_KEY.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/EBAY_CLIENT_ID to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to EBAY_CLIENT_ID.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/EBAY_HASH_KEY to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to EBAY_HASH_KEY.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/EBAY_CLIENT_SECRET to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to EBAY_CLIENT_SECRET.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/eggcraft-studio/secrets/NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN to ebay-connector@eggcraft-studio.iam.gserviceaccount.com
+✔  functions: ensured ebay-connector@eggcraft-studio.iam.gserviceaccount.com access to NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN.
+✔  functions: functions source uploaded successfully
+i  functions: creating Node.js 22 (2nd Gen) function ebayEventWorker(europe-west2)...
+Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+For CI servers and headless environments, generate a new token with firebase login:ci
+Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+For CI servers and headless environments, generate a new token with firebase login:ci
+deploy exit 143 at 2026-09-10T11:13:20Z
+=== 2026-09-10T11:13:20Z read-back: service
+ERROR: (gcloud.run.services.describe) There was a problem refreshing your current auth tokens: Reauthentication failed. cannot prompt during non-interactive execution.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.
+STOP: service missing
+=== stopped at 2026-09-10T11:13:22Z
+(the CLI repeated the two authentication-error lines 89 times between 11:03Z and 11:13Z; kept twice here, counted in the evidence)
