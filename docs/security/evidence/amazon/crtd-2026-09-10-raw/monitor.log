@@ -1,0 +1,29 @@
+2026-09-10T09:29:46Z monitor start job=crtd-test-base64-elf-2026-09-10-09-28-57-utc exec=crtd-test-base64-elf-2026-09-10-09-28-57-utc-8fmzk pid=92397
+2026-09-10T09:29:46Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:30:47Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:31:48Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:32:49Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:33:50Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:34:51Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:35:52Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:36:53Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:37:54Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:38:55Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:39:56Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:40:57Z exec status: completion/succeeded/failed/start =  0 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:41:58Z exec status: completion/succeeded/failed/start = 2026-09-10T09:40:57.318314Z 1 0 2026-09-10T09:29:38.979057Z
+2026-09-10T09:42:00Z container log lines:        3; payload line: 1; timeout line: 0
+2026-09-10T09:42:00Z payload timestamp: 2026-09-10T09:40:44.030644Z
+2026-09-10T09:42:00Z findings window until 2026-09-10T10:22:00Z
+2026-09-10T09:42:01Z findings poll 1: total=0 categories=[] newSinceExecute=[]
+2026-09-10T09:43:27Z poll2 start pid=93907 window until 2026-09-10T10:22:00Z
+2026-09-10T09:43:28Z findings poll 2: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T09:48:33Z findings poll 3: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T09:53:35Z findings poll 4: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T09:58:36Z findings poll 5: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:03:42Z findings poll 6: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:08:43Z findings poll 7: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:13:45Z findings poll 8: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:18:49Z findings poll 9: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:23:50Z findings poll 10: HTTP 200 total=2 totalSize=2 categories=['Increasing Deny Ratio', 'OS_LOGIN_DISABLED'] newSinceExecute=[] threatLike=[]
+2026-09-10T10:23:50Z poll2 done

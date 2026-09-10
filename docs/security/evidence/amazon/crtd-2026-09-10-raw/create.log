@@ -1,0 +1,7 @@
+Creating Cloud Run job [crtd-test-base64-elf-2026-09-10-09-28-57-utc] in project [nivadesk-amazon] region [europe-west2]
+Creating job...
+Done.
+Job [crtd-test-base64-elf-2026-09-10-09-28-57-utc] has successfully been created.
+
+To execute this job, use:
+gcloud run jobs execute crtd-test-base64-elf-2026-09-10-09-28-57-utc
