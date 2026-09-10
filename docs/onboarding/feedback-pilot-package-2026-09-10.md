@@ -236,6 +236,8 @@ Web published 22:36:34Z (the feedback markers found in the served chunk). All ch
 | 7c | Not now | **Yes.** The card left the page; server: `dismissals` gained one entry and **`feedback_prompt_dismissed`** at 22:49:31Z. `submissions` still 1, `done` still empty (a dismissal is not an answer), still one `feedback` document |
 | 7d | Suppression after Not now | computed on the live documents with the same pure module: now → refused; 31 days later with the same state → allowed again (the 30-day dismissal cooldown from `messaging.js`). The fresh-session re-check follows |
 
+| 7e | Fresh session after Not now | **No card.** A third tab (new session) loaded `/orders` at ~22:50:40Z: no invitation rendered, while the account menu still offers **Send feedback** — so the server was asked in this session and answered `enabled: true, show: false` (function log: 2026-09-10T22:50:29.590121Z 2026-09-10T22:50:29.619134Z 2026-09-10T22:50:29.625413Z). Server state unchanged: `shows 1`, `dismissals 1`; local verdict `dismissed_recently`. **Manual entry is not blocked by the cooldown**, as specified |
+
 **Admin inbox (§9 steps 8–9) needs a different sign-in.** Authority is checked in two places against the same three
 addresses — `NIVADESK_ADMIN_EMAILS` in `AdminInsightsHub.tsx` (web, gates `/admin`) and `SUPPORT_ADMIN_EMAILS` in
 `functions/index.js` (server, gates the three admin callables): `nivadesk@gmail.com`, `eggcraftco@gmail.com`,
