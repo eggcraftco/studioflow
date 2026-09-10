@@ -165,7 +165,7 @@ conflicts, both mechanical and resolved: `studioflow-web/package.json` scripts (
 `buildGuideCorpus.js` from the auto-merged `guide.ts`; `guide-corpus-fresh` green). Verified on the merged tree: the
 seventeen eBay exports, `getSetupChecklist`, `chatgptOAuthAuthorize`, `chatgptMcp`, `stripeWebhook`,
 `resyncStripeWorkspaceEntitlements` and `getActivationFunnel` all present; nodemailer 9.1.1; `substantiveOrder` module
-present. Full `functions` suite on the merged tree: see the night report's Task 5 row (run at 09:21 UTC).
+present. Full `functions` suite on the merged tree (`npm test`, qa + inventory, run 09:21 UTC): **exit 0, 1,655 PASS**.
 
 **Scope that protects the live services:** the carry changes nothing that is deployed. The Stripe webhook
 (`stripewebhook-00047-por`), the nineteen OpenAI/mail functions of 1.2.0 (in review — **frozen**: no redeploy of
