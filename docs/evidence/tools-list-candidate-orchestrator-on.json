@@ -2,7 +2,7 @@
   "meta": {
     "what": "MCP tools/list with NIVADESK_MCP_ORCHESTRATOR=1 and every other MCP flag UNSET",
     "source": "openai-resubmission working tree, NIVADESK_MCP_ORCHESTRATOR=1 (the 1.2.0 release flag set)",
-    "commit": "b74cc1970811630d11413bef6c136d2d3b95f33b",
+    "commit": "d7ee79d76371fcd12417ce1202dfb1601adb4186",
     "capturedFrom": "working tree",
     "functionsTreeDirtyAtCapture": false,
     "functions/index.js sha256 (pristine, before any harness shim)": "8b80dec2158baf2c7e241e5df5efbacb5968b45a224cdf69e3d98c58f95ac927",
