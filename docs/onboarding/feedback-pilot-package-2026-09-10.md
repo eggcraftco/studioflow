@@ -320,6 +320,33 @@ older sees no card, ever — including the test workspace itself (its synthetic 
 web needs nothing). **Feedback records are never deleted by a rollback** — `feedback` and `feedbackState` documents stay
 as they are; only who may see the entry and the card changes.
 
+## 11g. Checks after the widening
+
+**Old successes do not invite (operator item 3).** Three layers of evidence, no new test needed:
+
+| Layer | Evidence |
+|---|---|
+| Unit tests (`functions/test/qa/feedback.test.js`, green on the deployed tree) | the callable answers `first_success_before_launch` when the first substantive order predates the window (line 129); the pure module does the same for `atMs = LAUNCH_MS − 1` (line 305); `invite_window_unset` and `first_success_time_unknown` are covered next to it (125, 134, 138, 303, 304) |
+| Local verdict on live documents (pure module, new instant `1789083566000`) | the test workspace's first success is 22:45:58Z → `first_success_before_launch`, both with the user's real state and with an **empty** state (a user who never saw the card). `pilotAllows("*", any id)` → `true` |
+| Live, after the redeploy | the pilot user's session asked the server at 23:45:11Z (a fresh ask, the old stamp had expired): **no invitation card**, `enabled = 1`, the account menu still Account · Send feedback · Visit website · Sign Out |
+
+The refusal order matters and is the one shipped: `first_success_before_launch` is decided **before** the answered /
+dismissed / cap rules, so a user with an old success gets no card regardless of history. No mass invitation is
+possible from this deploy.
+
+**The Round 172 cache is per user and per workspace (operator item 4).** From `FeedbackCenter.tsx`: the four session
+keys are built as `nv_feedback_<kind>_${companyId}_${uid}`, the ask effect re-runs on `[companyId, uid, pathname]`, and
+the stored answer is written only after the server's reply for that pair. Switching account or workspace in the same tab
+therefore lands on a key that does not exist yet, which is the "ask now" path — nothing is carried over. Observed
+tonight in the emulator: keys for two different uids (`…_qa-fb-owner` and `…_qa-feedback-uid`) sat side by side in one
+tab without interfering. `sessionStorage` is also per tab and gone when the tab closes.
+
+**When a user who cached a "closed" answer sees the entry.** Only sessions that asked **before 23:43:20Z** (the last
+callable update) can hold `enabled = 0`. They see the entry at their next ask: on the first page change or reload once
+their stamp is older than ten minutes — so by **23:53Z at the latest** for anyone who navigates — and immediately in a
+new tab. A tab left completely idle keeps the old answer until it navigates. Sessions opened after 23:43:20Z were never
+told "closed".
+
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | Why it exists | To remove |
