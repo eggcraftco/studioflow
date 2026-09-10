@@ -3641,6 +3641,7 @@ exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADES
 
   await ticketRef.set(payload);
   await rememberTicketForDedupe("app", companyId, uid, payload.title, ticketRef.id);
+  await nvRetentionSupportCaseSync(companyId);
   await safeSupportNotification("notifySupportAdminsForTicket(createSupportTicket)", () =>
     notifySupportAdminsForTicket(companyId, ticketRef.id, payload, "new_ticket")
   );
@@ -4973,6 +4974,7 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
 
   await ticketRef.set(payload);
   await rememberTicketForDedupe("workspace", companyId, uid, payload.title, ticketRef.id);
+  await nvRetentionSupportCaseSync(companyId);
   // The sender is always excluded from the recipient list, so a workspace with
   // no admins and no support managers notifies nobody. It used to answer
   // "sent to the workspace owner" anyway — to the owner, about themselves.
@@ -5096,6 +5098,7 @@ exports.updateSupportTicketStatus = onCall({ region: "europe-west2" }, async (re
     lastStatusChangedByUid: uid,
     lastStatusChangedByEmail: supportUserEmail(request)
   }, { merge: true });
+  await nvRetentionSupportCaseSync(String((ticketSnap.data() || {}).companyId || ""));
 
   return { ok: true, ticketId, status, message: "NivaDesk support ticket status updated." };
 });
@@ -5138,6 +5141,7 @@ exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (
     await addWorkspaceTicketSystemMessage(companyId, ticketId, `${actorName} changed status from ${oldStatus} to ${status}.`);
   }
 
+  await nvRetentionSupportCaseSync(companyId);
   return { ok: true, ticketId, status, message: "Workspace ticket status updated." };
 });
 
@@ -34514,6 +34518,28 @@ async function nvRetentionTriggerFor(db, companyId, company, nowMs) {
     activated: state.progress.activated,
     settings
   };
+}
+
+/**
+ * Keep `companies/{cid}/retention/state.supportCaseOpenAtMs` current from the two ticket queues
+ * (retention wiring gap 8): open while any app or workspace ticket of the workspace is open, in
+ * progress or waiting for the user; cleared when none is. Called after every ticket create and
+ * status change. Never throws — a ticket must not fail because a nudge stamp could not be written.
+ */
+async function nvRetentionSupportCaseSync(companyId) {
+  try {
+    if (!companyId) return null;
+    const db = admin.firestore();
+    const [appTickets, workspaceTickets] = await Promise.all([
+      db.collection("supportTickets").where("companyId", "==", companyId).limit(50).get(),
+      db.collection("companies").doc(companyId).collection("workspaceTickets").limit(50).get()
+    ]);
+    const statuses = [...appTickets.docs, ...workspaceTickets.docs].map((d) => String((d.data() || {}).status || "open"));
+    return await retentionWriter.markSupportCase(db, companyId, { open: retentionWriter.supportCaseOpenFrom(statuses), nowMs: Date.now() });
+  } catch (error) {
+    console.warn("retention support-case stamp skipped:", companyId, error?.message || error);
+    return null;
+  }
 }
 
 exports.retentionSweep = onSchedule({ schedule: "every 60 minutes", region: "europe-west2", timeoutSeconds: 540, secrets: [NIVADESK_SMTP_PASSWORD] }, async () => {

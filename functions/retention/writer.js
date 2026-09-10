@@ -230,8 +230,32 @@ async function sweepWorkspace(db, input = {}) {
   return { companyId, candidates, decisions };
 }
 
+/** A support case is open while any ticket of the workspace is open, in progress or waiting for the user. */
+const OPEN_TICKET_STATUSES = new Set(["open", "inProgress", "waitingForUser"]);
+function supportCaseOpenFrom(statuses) {
+  return (Array.isArray(statuses) ? statuses : []).some((s) => OPEN_TICKET_STATUSES.has(String(s || "")));
+}
+
+/**
+ * The support-case stamp the ticket paths keep current (`supportCaseOpenAtMs`), read back by
+ * `loadMessagingContext` as `supportCaseOpen` — the suppression that stops a nudge from landing on
+ * someone who is already talking to support. Idempotent: an open case is not re-stamped, a closed one
+ * is not re-cleared, so the ticket paths may call it after every change.
+ */
+async function markSupportCase(db, companyId, { open, nowMs = Date.now() } = {}) {
+  if (!companyId) return { ok: false, reason: "no_company" };
+  const ref = stateRef(db, companyId);
+  const snap = await ref.get();
+  const current = Number(((snap.exists && snap.data()) || {}).supportCaseOpenAtMs) || 0;
+  if (open && current > 0) return { ok: true, changed: false, supportCaseOpenAtMs: current };
+  if (!open && current === 0) return { ok: true, changed: false, supportCaseOpenAtMs: 0 };
+  const supportCaseOpenAtMs = open ? nowMs : 0;
+  await ref.set({ supportCaseOpenAtMs }, { merge: true });
+  return { ok: true, changed: true, supportCaseOpenAtMs };
+}
+
 module.exports = {
   retentionFlags, loadMessagingContext, deliver, attemptEmail, retryOutboxEntries,
-  applyInboundReply, setOptOut, dismissMessage, sweepWorkspace,
+  applyInboundReply, setOptOut, dismissMessage, sweepWorkspace, markSupportCase, supportCaseOpenFrom,
   stateRef, logRef, messagesRef, inboundRef, replyKeyRef
 };

@@ -219,6 +219,26 @@ check("one message per channel per pass: the second in-app candidate waits", asy
   assert.strictEqual(result.decisions.filter((d) => d.send).length, 1);
 });
 
+check("the support-case stamp: open sets it once, close clears it once, and the context then refuses every nudge with support_case_open", async () => {
+  assert.strictEqual(writer.supportCaseOpenFrom([]), false);
+  assert.strictEqual(writer.supportCaseOpenFrom(["resolved", "closed"]), false);
+  assert.strictEqual(writer.supportCaseOpenFrom(["closed", "waitingForUser"]), true, "waiting for the user is still an open case");
+  assert.strictEqual(writer.supportCaseOpenFrom(["open"]), true);
+  assert.strictEqual(writer.supportCaseOpenFrom(["inProgress"]), true);
+  const db = fakeDb();
+  assert.deepStrictEqual(await writer.markSupportCase(db, "", { open: true, nowMs: T0 }), { ok: false, reason: "no_company" });
+  const opened = await writer.markSupportCase(db, "c1", { open: true, nowMs: T0 });
+  assert.deepStrictEqual(opened, { ok: true, changed: true, supportCaseOpenAtMs: T0 });
+  const again = await writer.markSupportCase(db, "c1", { open: true, nowMs: T0 + HOUR });
+  assert.deepStrictEqual(again, { ok: true, changed: false, supportCaseOpenAtMs: T0 }, "an open case keeps its first stamp");
+  const context = await writer.loadMessagingContext(db, "c1");
+  assert.strictEqual(context.supportCaseOpen, true);
+  const closed = await writer.markSupportCase(db, "c1", { open: false, nowMs: T0 + 2 * HOUR });
+  assert.deepStrictEqual(closed, { ok: true, changed: true, supportCaseOpenAtMs: 0 });
+  assert.deepStrictEqual(await writer.markSupportCase(db, "c1", { open: false, nowMs: T0 + 3 * HOUR }), { ok: true, changed: false, supportCaseOpenAtMs: 0 }, "closing twice writes nothing");
+  assert.strictEqual((await writer.loadMessagingContext(db, "c1")).supportCaseOpen, false);
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }
