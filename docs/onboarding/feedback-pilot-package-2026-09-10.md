@@ -347,6 +347,29 @@ their stamp is older than ten minutes — so by **23:53Z at the latest** for any
 new tab. A tab left completely idle keeps the old answer until it navigates. Sessions opened after 23:43:20Z were never
 told "closed".
 
+## 11h. General-release check in a workspace that was outside the pilot — passed (10 Sep 23:54–23:58Z)
+
+Workspace **EGGcraft** (`iZFBJqrTJfUBVPA4BgKyvg9zV9o1`, our own company, real business data, 84 orders; never on the
+pilot list). The operator signed in as its owner `contact@eggcraft.co.uk`; the assistant entered no credentials and
+changed nothing in the workspace: no order, customer, bank, membership or settings write, no order created to provoke
+the invitation.
+
+| Step | Observed |
+|---|---|
+| Entry | the server was asked at 23:54:09Z and answered `enabled: true`; the account menu read Account · **Send feedback** · Visit website · Sign Out |
+| No invitation | no card on `/orders` — EGGcraft's first success is years old, so `first_success_before_launch` applies, as designed |
+| One manual send | *Going well*, no topic, the exact note "QA — genel yayın sonrası manuel feedback kontrolü; müşteri talebi değildir." → "Thank you". Record **`fb_HLGCNn1OHZw-`**: `companyId`/`uid` EGGcraft/owner, `userEmail contact@eggcraft.co.uk`, `workspaceName EGGcraft`, `trigger manual`, `experience easy`, `feedbackType general_feedback`, `page /orders · web · English`, created 23:55:41Z; **no unexpected fields**; `feedbackState` for EGGcraft: `submissions 1`, `feedback_submitted`, no shows, and it does not hold the note text |
+| Inbox | `/admin` → Customer Feedback listed the new row first — 11 Sept 2026 00:55 (London) · General feedback · Going well · **EGGcraft / contact@eggcraft.co.uk** · the note · New — above the test workspace's row |
+| Closed as a test | detail showed Workspace EGGcraft (id), From contact@eggcraft.co.uk, Trigger Manual; Status → **Closed** with the internal note "QA record: closed as a test after the general release check; not a customer request." → "Saved.", History New 00:55 / Closed 00:57. Server: `status closed`, note stored, `statusHistory[1]` at 23:57:29Z by the admin (here the same person who sent it), the list badge reads **Closed** |
+| No side effects | EGGcraft in-app notifications 251 → 251, mail queue 0 → 0, orders 84 → 84, before and after both the send and the close |
+
+Two feedback documents now exist in total (`fb_B4u3x39BX2m4` test/reviewing, `fb_HLGCNn1OHZw-` EGGcraft/closed);
+both kept.
+
+**Feedback v1 general-release verification: complete.** Still separate, still open, unchanged by this: native
+(Mac/iPhone/Android) feedback screens; any invitation type other than the first-success one; the retention e-mail
+wiring (flags off).
+
 ## 11d. Test records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | Why it exists | To remove |
