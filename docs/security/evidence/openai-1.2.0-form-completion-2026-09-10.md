@@ -85,3 +85,11 @@ stands (`openai-1.2.0-write-tests-2026-09-10.md`).
 - Testing → Test credentials → replace `[operator: paste the review account password here before submitting]`.
 - Submit → the seven attestation checkboxes and the "No — suitable for individuals under 18" choice.
 - The Submit for Review button.
+
+## 6. Submitted
+
+The operator entered the review-account password, ticked the seven attestations, chose "No" for mature content and
+pressed **Submit for Review** themselves. Read back from the version list at 2026-09-10T09:12Z: **1.2.0 — Review**, 1.1.1 Rejected,
+1.0.0 Published. Nothing else changed; the review outcome arrives by e-mail from openai-review@tm.openai.com (the
+1.1.0 and 1.1.1 notices did) and on the same list.
+
