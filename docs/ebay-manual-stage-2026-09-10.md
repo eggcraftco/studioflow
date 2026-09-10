@@ -118,7 +118,16 @@ open Purchase History, and complete checkout on the £5.00 order (the listing is
 sitting unpaid and awaiting exactly this). No real card: the sandbox uses test payment methods, and the assistant
 enters no payment details.
 
-**Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change.
+**Independent confirmation the purchase is real.** The listing's own page on the sandbox site
+(`www.sandbox.ebay.com/itm/110590626185`, read while signed out) renders normally and shows **"Last one · 1 sold"**,
+seller `testuser_nivadesk_seller1`, GBP 5.00, free Royal Mail 2nd Class, 30-day returns. One of the two units is gone,
+which is the `PlaceOffer` purchase.
+
+**Ready for the operator.** The sandbox sign-in page is open in the fourth tab with a return to Purchase History, and
+it already names `testuser_nivadesk_buyer2`; only the password is missing, which is the operator's to type.
+
+**Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change, no payment
+detail entered.
 
 ## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
 
