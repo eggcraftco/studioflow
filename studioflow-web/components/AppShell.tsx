@@ -48,6 +48,7 @@ import {
   type OnboardingAnswers,
 } from "@/lib/studioflow/onboardingWizard";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
+import FeedbackCenter from "@/components/FeedbackCenter";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -1125,6 +1126,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [customerOptionsLoading, setCustomerOptionsLoading] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  // Feedback v1: the account-menu entry shows only once the server says the
+  // feature is on; the form itself lives in FeedbackCenter.
+  const [feedbackManualOpen, setFeedbackManualOpen] = useState(false);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
   // No business type is preselected: a pre-filled choice was silently accepted by
@@ -2308,6 +2313,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                 )}
               </button>
+              {feedbackEnabled ? (
+                <button
+                  type="button"
+                  className="nav-pill native-nav-pill native-nav-extra"
+                  data-testid="feedback-menu-entry-mobile"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setFeedbackManualOpen(true);
+                  }}
+                >
+                  <NavIcon name="activity" />
+                  {t("Send feedback")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="nav-pill native-nav-pill native-nav-extra"
@@ -2447,6 +2466,19 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     >
                       {t("Account")}
                     </button>
+                    {feedbackEnabled ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid="feedback-menu-entry"
+                        onClick={() => {
+                          setAvatarMenuOpen(false);
+                          setFeedbackManualOpen(true);
+                        }}
+                      >
+                        {t("Send feedback")}
+                      </button>
+                    ) : null}
                     <a
                       role="menuitem"
                       href="/"
@@ -2611,6 +2643,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         />
       ) : null}
       <AppHelpAssistant workspace={workspace} language={language} t={t} />
+      <FeedbackCenter
+        workspace={workspace}
+        uid={user?.uid ?? ""}
+        language={language}
+        t={t}
+        manualOpen={feedbackManualOpen}
+        onManualClose={() => setFeedbackManualOpen(false)}
+        onAvailability={setFeedbackEnabled}
+      />
       <NotificationsDrawer
         open={notifDrawerOpen}
         workspace={workspace}

@@ -723,6 +723,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Feedback prompt state (companies/{cid}/feedbackState/{uid}): what a person
+    // was asked, when they closed it, what they sent. Server-only, and named in
+    // both wildcard deny-lists below like restrictedCustomer.
+    match /companies/{companyId}/feedbackState/{document=**} {
+      allow read, write: if false;
+    }
+
     // Stock locations and build recipes: same rule as the rest of inventory,
     // server-written so a recipe cannot quietly change what a build consumes.
     match /companies/{companyId}/inventoryLocations/{document=**} {
@@ -928,6 +935,7 @@ service cloud.firestore {
         && collectionId != 'piiAccessLog'
         && collectionId != 'restrictedCustomer'
         && collectionId != 'revealCounters'
+        && collectionId != 'feedbackState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -988,6 +996,7 @@ service cloud.firestore {
         && collectionId != 'piiAccessLog'
         && collectionId != 'restrictedCustomer'
         && collectionId != 'revealCounters'
+        && collectionId != 'feedbackState'
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
@@ -1216,6 +1225,11 @@ service cloud.firestore {
     // client that could create one could pre-register a code it had observed and
     // stop the genuine seller's landing from ever exchanging it.
     match /ebayPresentedCodes/{document=**} {
+      allow read, write: if false;
+    }
+    // Customer feedback (the in-app form): written and read only through the
+    // feedback callables; the admin inbox is a callable too.
+    match /feedback/{document=**} {
       allow read, write: if false;
     }
     // Accounting connector: OAuth state pool and the realm → workspace map are server-only.

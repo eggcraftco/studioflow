@@ -1,0 +1,15 @@
+after the card rendered: shows=1 (the confirmed showing), events=feedback_prompt_shown
+manual form opened; initial focus on: feedback-choice
+Escape closed the manual form: dialog present=0; focus now on: 
+after closing the manual form: dismissals=0 (must be 0)
+reopened: draft kept = "draft that must survive a close"
+× closed the manual form: invitation still present=1
+after sending: invitation present=0; focus on: jsx-937c903e74000e9f toolbar-avatar
+state after send: done=["first_success_feedback"], submissions=1, events=feedback_prompt_shown,feedback_submitted
+mobile dialog box: x=18 y=161 w=374 h=523 (viewport 390x844); overflow-x of document: false
+detail Save disabled before changes: true
+"Saved." hidden once the note changes again: true
+dev overlay text: :host { all: initial; /* the direction property is not reset by 'all' */ direction: ltr; } /*! * Bootstrap Reboot v4.4.1 (https://getbootstrap.com/) * Copyright 2011-2019 The Bootstrap Authors * Copyright 2011-2019 Twitter, Inc. * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE) * Forked from Normalize.css, licensed MIT (https://github.com/necolas/normalize.css/blob/master/LICENSE.md) */ *, *::before, *::after { box-sizing: border-box; } :host { font-family: sans-serif; line-height: 1.15; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); } || after click: :host { all: initial; /* the direction property is not reset by 'all' */ direction: ltr; } /*! * Bootstrap Reboot v4.4.1 (https://getbootstrap.com/) * Copyright 2011-2019 The Bootstrap Authors * Copyright 2011-2019 Twitter, Inc. * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE) * Forked from Normalize.css, licensed MIT (https://github.com/necolas/normalize.css/blob/master/LICENSE.md) */ *, *::before, *::after { box-sizing: border-box; } :host { font-family: sans-serif; line-height: 1.15; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); } article, aside, figcaption, figure, footer, header, hgroup, main, nav, section { display: block; } :host { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; font-size: 16px; font-weight: 400; line-height: 1.5; color: var(--color-font); text-align: left; } :host:not(button) { background-color: #fff; } [tabindex='-1']:focus:not(:focus-visible) { outline: 0 !important; } hr { box-sizing: content-box; height: 0; overflow: visible; } h1, h2, h
+console/page errors during the run (2): console.error: [2026-09-10T21:04:49.927Z]  @firebase/firestore: Firestore (11.10.0): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: 
+false for 'get' @ L443, false for 'get' @ L1321 | console.error: [2026-09-10T21:04:50.453Z]  @firebase/firestore: Firestore (11.10.0): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: 
+evaluation error at L865:22 for 'list' @ L865, eval
