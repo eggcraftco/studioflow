@@ -216,6 +216,28 @@ file-scoped, and dry-run `rsync -an --delete` before ever considering the wholes
 else, staged by name so no build artefact rode along, after `tsc --noEmit` passed on the patched tree. The Hostinger
 build takes it from there.
 
+## 11c. Pilot check on the live system — results so far (10 September 2026, 22:36–22:48Z)
+
+Web published 22:36:34Z (the feedback markers found in the served chunk). All checks in the "test" workspace
+`GuglEFKSEKNTq1xibFpJav3EWkY2`, signed in as its owner `contact@nivadesk.co.uk`.
+
+| # | Check (§9) | Result |
+|---|---|---|
+| 1 | Entry point visible | **Yes.** The account menu now reads Account · **Send feedback** · Visit website · Sign Out; the entry appears only after the server answers `enabled: true` |
+| 2 | No false invitation on a workspace with nothing in it | **Yes.** With 0 orders, no invitation card rendered (the server's answer is `no_first_success`; the card can only render on a `show: true`) |
+| 3 | Manual send | **Yes.** Form opened from the menu, *It's okay* + *A suggestion* + a note, Send → "Thank you" state. Server record `fb_B4u3x39BX2m4`: `companyId`/`uid` of the test workspace and its owner, `userEmail`, `workspaceName "test"`, `source in_app`, `platform web`, `trigger manual`, `campaign ""`, `stage active`, `feedbackType general_feedback`, `kind suggestion`, `experience okay`, `page /orders`, `language English`, `status new` with one `statusHistory` entry. **No unexpected fields**; no customer, order or bank data attached |
+| 4 | Events | `feedback_submitted` recorded in `feedbackState` (`submissions 1`, `shows 0`, `dismissals 0`, `done []`); the state document holds counters and stamps only, **not the note text** |
+| 5 | No side effects | 0 in-app notifications written; no e-mail path exists in this feature |
+| 6 | eBay untouched | connection still `connected`, `readOnly true`, `importState none`, `autoSync false`, 2 scopes; `appConfig/commerce.connectors` unchanged |
+| 7 | Synthetic first success | One order created through Quick Create at **22:45:58Z** (after the launch instant 22:28:04Z): named customer, project name, no money — substantive by the `named_customer` clause alone. `firstSuccess` → `substantive`, known, 22:45:58Z; `promptEligibility` computed locally on the live documents → **`show: true`, campaign `first_success_feedback`** |
+| 7a | …but no card after the reload | **Expected, and worth knowing:** the client asks the server at most once per ten minutes per browser session (a `sessionStorage` stamp; the last ask was 22:44:36Z, before the order existed), so a reload inside that window does not ask again. The server was never asked after the order existed — its log shows no call after 22:44:36Z. A fresh session (new tab) asks at once; that is the next step |
+
+**Admin inbox (§9 steps 8–9) needs a different sign-in.** Authority is checked in two places against the same three
+addresses — `NIVADESK_ADMIN_EMAILS` in `AdminInsightsHub.tsx` (web, gates `/admin`) and `SUPPORT_ADMIN_EMAILS` in
+`functions/index.js` (server, gates the three admin callables): `nivadesk@gmail.com`, `eggcraftco@gmail.com`,
+`contact@eggcraft.co.uk`. The pilot user is none of them, by design. The inbox check therefore needs the operator
+signed in as one of the three; the assistant enters no credentials.
+
 ## 11. What stays out of this package
 
 Native screens, the §36/§37 prompt types (need trustworthy activation data — the v2.1 cutover package, kept separate),
