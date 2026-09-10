@@ -39,6 +39,19 @@ Deploy sonrası: `gcloud run services describe <servis> --region europe-west2 --
 yeni revizyonu %100 ve Ready göstermeli. Stripe fonksiyonlarında ayrıca yüklenen kaynak zip'i commit'le
 dosya dosya karşılaştırılır — yöntem ve rollback: `docs/security/evidence/stripe-l1-deploy-2026-09-10.md`.
 
+## eBay connector anahtarı ortak `.env`'de AÇIK (10 Eyl 2026 18:18Z'den itibaren) — her eBay deploy'undan önce kapsamı kontrol et
+
+`functions/.env` artık `NIVADESK_EBAY_CONNECTOR=1` taşıyor. Bu satır **yalnız o an deploy edilen fonksiyona** işlenir:
+10 Eyl'de dördü (`beginEbayConnect`, `claimEbayConnectState`, `ebayOAuthCallback`, `getEbayConnections`) bu anahtarla
+gitti; diğer 12 eBay fonksiyonu (`syncEbayNow`, `previewEbayImport`, `runEbayImport`, `retryEbayImportFailures`,
+`verifyEbayConnection`, `updateEbayConnectionSettings`, `disconnectEbay`, `revealRestrictedCustomer`, `reconcileEbayConnections`,
+`reconcileEbayConnectionsNightly`, `reconcileEbayDeletions`, `ebayNotifications`) ve `ebayEventWorker` anahtarı **kapalı** olan
+eski ortamla çalışıyor. **Bunlardan herhangi birini adıyla yeniden deploy etmek anahtarı o fonksiyona da taşır** — sweep'ler
+bağlantıları senkronlamaya, worker sipariş görevlerini işlemeye, sipariş bildirimleri işlenmeye başlar. Sonraki eBay
+deploy'undan önce: (1) bunun istenip istenmediğine karar ver, (2) `appConfig/commerce` içindeki `connectors.workspaces`
+listesini ve bağlantı başına bayrakları oku, (3) kapsamı `docs/ebay-sandbox-*` kanıtlarına işle. Bağlantı başlatma yine de
+yalnız `connectors.workspaces` listesindeki workspace için mümkündür (varsayılan kapalı).
+
 ## 1) Gitmesi gerekenler (48 fonksiyon)
 
 Gövdesi ya da kullandığı yardımcı gerçekten değişenler.
