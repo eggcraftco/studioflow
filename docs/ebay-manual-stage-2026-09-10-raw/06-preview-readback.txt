@@ -1,0 +1,9 @@
+Preview (previewEbayImport, 90 days) pressed in the web UI as the owner at ~19:51:30Z; UI result at 19:51:46Z:
+  "Orders found: 0 · Duplicate orders prevented: 0 · Not paid yet: 0 · Cancelled: 0"
+Server record read at 19:53Z (read-only script):
+  connection: importState=none syncLockUntilMs=0 lastSyncAtMs=0 lastErrorCode="" settings={"includeUnpaid":false,"includeCancelled":true,"autoSync":false} updatedAt=2026-09-10T19:46:57.261Z
+  syncLog 2026-09-10T19:51:46.215Z import_preview reason="0 found"   (the auxiliary write the preview makes; the sync-lock fields were set and cleared)
+  syncLog 2026-09-10T19:01:51.465Z connected
+  ebayQuota/2026-09-10: calls 14 (was 1 before the preview → 13 getOrders calls, one per 7-day creation slice over 90 days), all for this connection, family orders
+  orders in workspace: 0 | externalEntities for connection: 0 | restrictedCustomer: 0 | ebayBuyers: 0
+Reading: the count comes from the real Sandbox Fulfillment API (13 successful windows); an API error would have surfaced as an HttpsError in the UI and a `verify_failed`/rate-limit style syncLog row, not as zeros.

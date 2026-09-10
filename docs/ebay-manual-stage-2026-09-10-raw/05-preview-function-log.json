@@ -1,0 +1,120 @@
+[
+  {
+    "insertId": "6aa30a4d000078001f9e8897",
+    "jsonPayload": {
+      "message": "Callable request verification passed",
+      "verifications": {
+        "app": "VALID",
+        "auth": "VALID"
+      }
+    },
+    "labels": {
+      "deployment-callable": "true",
+      "execution_id": "vy0yh82gsxoy",
+      "firebase-functions-hash": "8ec990e6ba0e1b9bfcff0753c84383a1f15240f1",
+      "firebase-log-type": "callable-request-verification",
+      "goog-drz-cloudfunctions-id": "previewebayimport",
+      "goog-drz-cloudfunctions-location": "europe-west2",
+      "goog-managed-by": "cloudfunctions",
+      "instanceId": "00a41e8c1ddb59918237744a43c2500ebe4ceb0fa936f502b9b247ca41129e3811486f51a4d6084ce409c0c4621fdd78682c0be5969ece95cffd3d8ae66e27f49674623ba4ab530ecc4fcc6e0d30",
+      "run.googleapis.com/base_image_versions": "us-docker.pkg.dev/serverless-runtimes/google-22-full/runtimes/nodejs22:nodejs22_20260902_22_23_2_RC00"
+    },
+    "logName": "projects/eggcraft-studio/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-09-10T19:51:41.039571944Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "previewebayimport",
+        "location": "europe-west2",
+        "project_id": "eggcraft-studio",
+        "revision_name": "previewebayimport-00002-hac",
+        "service_name": "previewebayimport"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "DEBUG",
+    "spanId": "12456910022901753847",
+    "timestamp": "2026-09-10T19:51:41.030720Z",
+    "trace": "projects/eggcraft-studio/traces/d47e10f818b5373018d39daba0ed70d5"
+  },
+  {
+    "httpRequest": {
+      "latency": "5.351388772s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://nivadesk.app/",
+      "remoteIp": "2a00:23c4:6217:ac01:70ca:b574:e534:c8e0",
+      "requestMethod": "POST",
+      "requestSize": "3021",
+      "requestUrl": "https://europe-west2-eggcraft-studio.cloudfunctions.net/previewEbayImport",
+      "responseSize": "357",
+      "serverIp": "2001:4860:4802:36::36",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+    },
+    "insertId": "6aa30a5200042241252e721a",
+    "labels": {
+      "deployment-callable": "true",
+      "firebase-functions-hash": "8ec990e6ba0e1b9bfcff0753c84383a1f15240f1",
+      "goog-drz-cloudfunctions-id": "previewebayimport",
+      "goog-drz-cloudfunctions-location": "europe-west2",
+      "goog-managed-by": "cloudfunctions",
+      "instanceId": "00a41e8c1ddb59918237744a43c2500ebe4ceb0fa936f502b9b247ca41129e3811486f51a4d6084ce409c0c4621fdd78682c0be5969ece95cffd3d8ae66e27f49674623ba4ab530ecc4fcc6e0d30"
+    },
+    "logName": "projects/eggcraft-studio/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-09-10T19:51:46.567560833Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "previewebayimport",
+        "location": "europe-west2",
+        "project_id": "eggcraft-studio",
+        "revision_name": "previewebayimport-00002-hac",
+        "service_name": "previewebayimport"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "acdfd5aa920fe7f7",
+    "timestamp": "2026-09-10T19:51:40.916576Z",
+    "trace": "projects/eggcraft-studio/traces/d47e10f818b5373018d39daba0ed70d5"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.024132642s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://nivadesk.app/",
+      "remoteIp": "2a00:23c4:6217:ac01:70ca:b574:e534:c8e0",
+      "requestMethod": "OPTIONS",
+      "requestSize": "766",
+      "requestUrl": "https://europe-west2-eggcraft-studio.cloudfunctions.net/previewEbayImport",
+      "responseSize": "304",
+      "serverIp": "2001:4860:4802:36::36",
+      "status": 204,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+    },
+    "insertId": "6aa30a4c000db50934d5e49d",
+    "labels": {
+      "deployment-callable": "true",
+      "firebase-functions-hash": "8ec990e6ba0e1b9bfcff0753c84383a1f15240f1",
+      "goog-drz-cloudfunctions-id": "previewebayimport",
+      "goog-drz-cloudfunctions-location": "europe-west2",
+      "goog-managed-by": "cloudfunctions",
+      "instanceId": "00a41e8c1ddb59918237744a43c2500ebe4ceb0fa936f502b9b247ca41129e3811486f51a4d6084ce409c0c4621fdd78682c0be5969ece95cffd3d8ae66e27f49674623ba4ab530ecc4fcc6e0d30"
+    },
+    "logName": "projects/eggcraft-studio/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-09-10T19:51:40.905469189Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "previewebayimport",
+        "location": "europe-west2",
+        "project_id": "eggcraft-studio",
+        "revision_name": "previewebayimport-00002-hac",
+        "service_name": "previewebayimport"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "b9414bcb07cec361",
+    "timestamp": "2026-09-10T19:51:40.866498Z",
+    "trace": "projects/eggcraft-studio/traces/679fdab13ab846fb18d39daba0ed75bc",
+    "traceSampled": true
+  }
+]
