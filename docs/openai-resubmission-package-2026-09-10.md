@@ -53,8 +53,8 @@ server).
 ## 3. Flags and the candidate
 
 - Release flag set: **`NIVADESK_MCP_ORCHESTRATOR=1`**, `NIVADESK_MCP_INVENTORY` unset, `NIVADESK_MCP_EMAIL_RECEIPTS` unset.
-- Candidate commit: **the head of `openai-resubmission` that carries this document** (hash in the operator
-  report). Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
+- Candidate commit: **the head of `openai-resubmission`** — `6f7849f9` carries the code, tests, corpus, evidence and this
+  document; the commit after it only re-stamps the evidence snapshots on the clean tree (same listings, same hashes). Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
   (`2ee5f6c1`, every live hotfix including the Stripe fix `76c5e3c3`), `functions/index.js` (two flag-gated
   sentence constants and three description appends), `functions/orchestrator/registry.js` (the three edits in
   §1), `studioflow-web/lib/publicSite/guide.ts` + rebuilt corpus, and the connect page as it already was.
