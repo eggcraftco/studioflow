@@ -32,6 +32,12 @@ const ok = (l, c, e = "") => { if (!c) fail++; console.log(`${c ? "PASS" : "FAIL
 const ORDER_A = "etsy_qa-workspace_88001_5001";
 const ORDER_B = "etsy_qa-workspace_88001_5002";
 
+// The workspace itself: requireWorkspaceForBilling refuses a company document
+// that does not exist before it looks at anything else, and this seed predates
+// that check — a stale seed is not a retention finding.
+await db.collection("companies").doc(companyId).set({
+  name: "Retention Test Workspace", ownerUid: auth.uid, members: [auth.uid], memberRoles: { [auth.uid]: "owner" }
+});
 await db.collection(etsy.CONNECTION_COLLECTION).doc(CONN).set({
   companyId, provider: "etsy", externalShopId: SHOP, externalShopName: "Retention Test",
   status: "connected", accessTokenEncrypted: "x", refreshTokenEncrypted: "y"

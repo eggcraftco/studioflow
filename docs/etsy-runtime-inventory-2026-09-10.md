@@ -33,7 +33,8 @@ keystring (§2).
 |---|---|
 | `commerce-etsy-adapter`, `etsy-cancellation`, `etsy-schema-drift`, `etsy-connect`, `etsy-core`, `etsy-customer-match`, `etsy-mapping`, `etsy-quota-share`, `etsy-sync`, `etsy-timeout`, `etsy-webhook` | **all PASS** |
 | `etsy-emulator`, `etsy-resync-preserves`, `etsy-relay-identity`, `commerce-etsy-shadow-emulator` (via `firebase emulators:exec --only firestore`) | **all PASS** (`E2E_EXIT 0`; "ETSY SHADOW GEÇTİ" last) |
-| `etsy-rules.test.mjs`, `etsy-retention.mjs` (emulator-bound; they hard-set `FIRESTORE_EMULATOR_HOST`) | run under the emulator after the first attempt without one refused the connection — result in the night report's Task 5 row |
+| `etsy-rules.test.mjs` (emulator-bound; hard-sets `FIRESTORE_EMULATOR_HOST`; **not in `npm test`**, whose loop only runs `*.test.js`) | **PASS** under `firebase emulators:exec` |
+| `etsy-retention.mjs` (same) | failed on its own seed — `requireWorkspaceForBilling` refuses a workspace whose `companies/{id}` document does not exist, and the seed never wrote one (a stale test, not a retention finding); with the company document seeded (`ownerUid`/members) **14/14 PASS**: the Etsy mirror is purged on disconnect, the orders, money and bench notes survive, the id mapping survives so a reconnect does not import twice, tokens gone, the purge walks past its first page |
 
 ## 4. AC-ETSY acceptance matrix (`NivaDesk_Commerce_Integration_AI_Spec.md` §AC-ETSY)
 
@@ -45,7 +46,7 @@ keystring (§2).
 | **AC-ETSY-004** Relay e-mail never produces a wrong automatic merge | **holds in code** | `etsy-relay-identity` (e2e), `etsy-customer-match` (scoring, manual resolve via `resolveEtsyCustomerMatch`) |
 | **AC-ETSY-005** The Etsy source panel is visible on every client and survives a save | **PARTIAL** | *survives a save:* Apple update path merges since 2 Sep (`FirebaseManager.swift` `writeSiparisMerging`/`mergePayload`: "every field the model does not own survives") — **in the deploy branch, not in the store builds (1.3 / build 17, 22 Aug)**; Android write path **not verified**; web writes through callables (server-side merge). *Visible:* **no client shows `etsySource`** (blueprint screen 6 absent) — the open half |
 | **AC-ETSY-006** The dashboard shows Etsy revenue under the right channel/currency | **not verified** | the Finance Engine's channel split and `orderTaxResponsibility` (Etsy = `unknown`) exist; no test names Etsy revenue on the dashboard specifically |
-| **AC-ETSY-007** Account deletion token and the PII lifecycle complete | **holds in code (disconnect path)** | `etsy-retention.mjs` (buyer mirror deleted on disconnect, orders kept); Etsy has no account-deletion notification endpoint like eBay's — the lifecycle here is disconnect-driven |
+| **AC-ETSY-007** Account deletion token and the PII lifecycle complete | **holds in code (disconnect path), verified tonight** | `etsy-retention.mjs` 14/14 under the emulator after its seed was repaired (buyer mirror deleted on disconnect, orders kept, tokens gone); Etsy has no account-deletion notification endpoint like eBay's — the lifecycle here is disconnect-driven |
 
 ## 5. Migration / parity gaps (status document §4.2), where each stands
 
