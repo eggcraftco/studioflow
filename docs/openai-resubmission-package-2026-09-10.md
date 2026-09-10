@@ -33,13 +33,11 @@ server).
 
 **Still open (blockers and follow-ups):**
 
-1. **Dependency gate — FAIL.** `node scripts/audit-gate.mjs` on this tree: `functions` has a new **high** advisory,
-   `nodemailer` GHSA-2x7j-588g-ccc2 (installed 9.0.1, range `^9.0.1`, advisory ≤ 9.1.0, **fix available
-   without a major bump**), with no allow-list entry. Not introduced by this branch and not fixed here (a
-   dependency change is outside this package's scope); it has to be resolved — `npm audit fix` in
-   `functions/` and a re-run of the gate, or an allow-list entry with a due date — before the release
-   deploy, because the same bundle ships with it. The three allowed highs (geoip-lite, postcss ×2) are
-   unchanged, due 2026-10-05.
+1. ~~**Dependency gate — FAIL.**~~ **Closed on this branch, 10 September (later the same day):**
+   `nodemailer` `^9.0.1` → `^9.1.1`, lockfile `9.0.1` → `9.1.1` (§2a). `scripts/audit-gate.mjs`: **PASS**, 0
+   blocking findings; the three allowed highs (geoip-lite, postcss ×2) are unchanged, due 2026-10-05. **The
+   fix is in the code and the lockfile only — the live functions still run 9.0.1 until they are redeployed;
+   §6 says which ones and which of them this package's deploy does not cover.**
 2. **Production `chatgptMcp` source is not in the repository.** The live revision `chatgptmcp-00072-dok`
    (7 September, the SSRF hotfix deploy) has an `index.js` that matches no commit on any ref. Its flags-off
    listing was measured from the uploaded zip and is byte-identical to the candidate's (§4), so the
@@ -50,11 +48,76 @@ server).
    notes tools).
 4. `create_inventory_item` keeps `orders.read` (deferred with the tool); `tasks.write` stays advertised.
 
+### 2a. GHSA-2x7j-588g-ccc2 — verified, and the narrowest fix
+
+**What the audit says.** `npm audit --json` in `functions/` filed one entry, `nodemailer` (direct dependency, no
+other package depends on it; `npm ls nodemailer --all` → `nodemailer@9.0.1` at the root only), carrying
+**four** advisories, of which the gate reported the first title it found (the moderate `resolveContent` one)
+beside the high that blocked:
+
+| Advisory | Severity | Affected | Fixed in |
+|---|---|---|---|
+| GHSA-2x7j-588g-ccc2 — quadratic (O(n²)) time in `addressparser`, remote DoS via a crafted address list | **high, CVSS 7.5** (AV:N/AC:L/PR:N, A:H) | `< 9.1.0` | 9.1.0 |
+| GHSA-8m3c-c648-2xjj — `resolveContent()` bypasses `disableFileAccess`/`disableUrlAccess` (legacy signature) | moderate 5.9 | `<= 9.1.0` | 9.1.1 |
+| GHSA-wmmp-3585-3rmp — IDN/Punycode domain allow-list bypass | moderate 6.5 | `< 9.1.0` | 9.1.0 |
+| GHSA-cc9r-2j5m-2m83 — recipient-domain validation bypass via RFC 5322 comment mis-parsing | moderate 6.5 | `>= 6.9.16 < 9.1.0` | 9.1.0 |
+
+**The official advisory** (github.com/advisories/GHSA-2x7j-588g-ccc2, published 1 September 2026, no CVE): the
+address parser rebuilt its accumulator with `Array.prototype.concat()` on every address, so a comma-separated
+list of *n* addresses costs 1+2+…+n copies; a ~1.5 MB crafted list holds the event loop for 25–30 s at 100 %
+CPU. Reachable through any structured address header (`to`, `cc`, `bcc`, `from`, `replyTo`) handed to
+`transport.sendMail()`, with no configuration or authentication required — "any service that runs Nodemailer
+on an address value influenced by an untrusted party". 9.1.0 makes the parser linear (changelog: "handle
+address lists in linear time", plus linear recipient dedupe and the `concat.apply` stack overflow); 9.1.1
+adds the `resolveContent` access-policy fixes. **No breaking change is listed between 9.0.1 and 9.1.1**
+(9.0.2–9.0.6 are hardening releases; 9.1.0 adds an optional `maxRecipients`).
+
+**Installed and affected:** `nodemailer@9.0.1`, `functions/package.json` `^9.0.1`, one lockfile entry
+(`node_modules/nodemailer`, no dependencies of its own), required once at `functions/index.js:11` and turned
+into a transport only by `nvMailTransport()` (`index.js:44`), which the five mail helpers call:
+`emailNivadeskSupportForTicket`, `emailNivadeskSupportForWebsiteChat`, `emailWebsiteChatVisitorReply`,
+`emailWorkspaceInvitation`, `sendPortalStatusEmail`.
+
+**NivaDesk exposure, measured against the advisory's condition ("an address value influenced by an untrusted
+party").** Every address NivaDesk hands to `sendMail` is a single address that passed a shape check and a
+length cap before it got there: the website visitor's e-mail (the one *unauthenticated* path) goes through
+`websiteChatVisitorEmail` — 240 characters and a single-address regex, or dropped; an invitation address
+through `team/invitations.js` `isPlausibleEmail` — single-address regex, ≤ 254; a customer's e-mail on an order
+through `cleanOrderText(after.emailAddress, "", 240)` in the notification trigger and `nvCleanString(…, 240)` on
+an assistant-created order; the workspace's reply-to through `cleanOrderText(…, 240)`; the support inbox and
+the `from` are constants. A 240-character value cannot reach the quadratic cost (measured here: on 9.0.1 a
+15,000-address / 169 KB list parsed in 60 ms against 13 ms for 5,000 — super-linear, but the advisory's 25–30 s
+needs the megabyte-scale input the caps exclude; on 9.1.1 the same lists parse in 7–8 ms). The support-ticket
+reply-to is an authenticated caller's e-mail and was not separately traced to a cap. Conclusion: no reachable
+DoS path at NivaDesk's input sizes; the finding is closed for policy (a high with no allow-list entry fails the
+gate) and for hygiene, not because an exploit was found.
+
+**The fix, as narrow as it gets:** `npm install nodemailer@^9.1.1 --package-lock-only --ignore-scripts` in
+`functions/` — manifest `^9.0.1` → `^9.1.1` (so a future install cannot resolve below the fix), lockfile
+`9.0.1` → `9.1.1` with the registry's integrity (`sha512-izw9mVKFix6Y…`, verified equal to `npm view
+nodemailer@9.1.1 dist.integrity`). **Nothing else moved**: the lockfile diff is the one package's three lines
+plus the range; nodemailer has no dependencies, so there is no transitive change to explain. No `npm audit
+fix`, no `--force`, no allow-list entry. A second `--package-lock-only` install changes nothing (lockfile
+stable). `npm audit` afterwards: the `nodemailer` entry is gone; `functions` high 1 = the allowed
+`ip-address` via geoip-lite.
+
+**Verification of the mail flows.** The unit suites never open a transport — the five helpers return before
+`createTransport` when `NIVADESK_SMTP_PASSWORD` is unset, which is the suites' state, and
+`no-mail-from-tests.mjs` exists precisely so that no test run ever sends mail — so what was verified is: (a)
+the flows' logic suites are green (`team-invitations` 21, `webhook-privacy` 12, and the full run below);
+(b) a scratch install of `nodemailer@9.1.1` (`dependencies: {}`) accepts the exact shapes NivaDesk uses —
+`createTransport(options)`, `sendMail({ from, to, replyTo, subject, text, html, attachments })` — on a
+`jsonTransport` that writes nothing, and its address parser is linear; (c) no breaking change in the
+changelog. No e-mail was sent to anyone. The shared `node_modules` the suites run from still holds 9.0.1
+(it is the main checkout's, symlinked; it is not what a deploy installs — Cloud Build installs from this
+lockfile).
+
 ## 3. Flags and the candidate
 
 - Release flag set: **`NIVADESK_MCP_ORCHESTRATOR=1`**, `NIVADESK_MCP_INVENTORY` unset, `NIVADESK_MCP_EMAIL_RECEIPTS` unset.
 - Candidate commit: **the head of `openai-resubmission`** — `6f7849f9` carries the code, tests, corpus, evidence and this
-  document; the commit after it only re-stamps the evidence snapshots on the clean tree (same listings, same hashes). Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
+  document; the nodemailer lockfile fix (§2a) and this section's updates follow it; the evidence snapshots are
+  re-stamped on the clean tree after each (same listings, same hashes). The hash is in the operator report. Product code on the branch since the readiness commit `9709919c`: the merge of the deploy branch
   (`2ee5f6c1`, every live hotfix including the Stripe fix `76c5e3c3`), `functions/index.js` (two flag-gated
   sentence constants and three description appends), `functions/orchestrator/registry.js` (the three edits in
   §1), `studioflow-web/lib/publicSite/guide.ts` + rebuilt corpus, and the connect page as it already was.
@@ -95,6 +158,15 @@ hints = registry, a `Because …` line per hint, scopes = registry — **PASS**)
 | 20 | `search_inventory` | true | false | true | false | orders.read |
 | 21 | `search_commerce_orders` | true | false | true | false | orders.read |
 
+**Four hints on the wire, three on the form.** Every tool above carries all four annotation keys as literal
+booleans — `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` — and the report script fails
+if any is missing or non-boolean. The platform's MCP Server section, as read on the 1.1.1 form (readiness §2),
+displays and asks a justification for **three** of them — Read Only, Open World, Destructive — and does not show
+`idempotentHint`. So "Scan Tools → 21 tools × 3 scanned hints" in §6 is the platform's field set, not a
+typo and not a claim about the wire; the fourth hint is verified in §4's table and in the release notes'
+`update_order_status` correction, and its justification lines (§7.4) are kept for the notes even though the
+form has nowhere to paste them. If the scan ever shows a fourth column, compare it too.
+
 What differs from the reviewed listing under the flag, and nothing else (pinned by `mcp-tools-list-snapshot`):
 the two new read tools at the end; `create_order` openWorldHint false→true; `update_order_status`
 openWorldHint false→true and idempotentHint true→false; one sentence appended to the descriptions of
@@ -112,8 +184,9 @@ openWorldHint false→true and idempotentHint true→false; one sentence appende
 | `guide-corpus-fresh` / `guide-retrieval` | 3 / 13 PASS |
 | `docs/evidence/capture-tools-list.js` (flags-off parity) | PASS on all three snapshots; BYTE-IDENTICAL |
 | `docs/evidence/release-listing-report.js` | PASS |
-| `npm test` (whole `functions/` tier, final tree) | exit 0, **1,470 PASS, 0 FAIL**, 115 suites |
-| `scripts/audit-gate.mjs` (dependency gate, DPP 2.7) | **FAIL — nodemailer high, no allow-list entry** (§2 item 1) |
+| `team-invitations` / `webhook-privacy` (the mail flows' logic, transport never opened) | 21 / 12 PASS |
+| `npm test` (whole `functions/` tier) | exit 0, **1,470 PASS, 0 FAIL**, 115 suites — run twice: on the package tree and again on the final tree with the nodemailer lockfile |
+| `scripts/audit-gate.mjs` (dependency gate, DPP 2.7) | ~~FAIL~~ → **PASS, 0 blocking** after `nodemailer` `^9.1.1` (§2a); allowed highs unchanged |
 
 The bank/receipt matching features are untouched: no handler changed on this branch; `mcp-inventory`
 (the receipt attachment path) and the bank suites in the full run are green.
@@ -139,7 +212,7 @@ empty scope default, the server decides) — a web round, **before or with** the
 after. No other web file changes; the guide reaches production through the functions above.
 
 **Order:** dependency gate green → source/ancestor pre-check (`docs/audit-deploy-checklist.md`) → web round
-→ the seven functions (flag on) → record the deployed listing (`node docs/evidence/capture-tools-list.js`
+→ the seven functions (flag on) → the five mail functions above (nodemailer, no flag needed) → record the deployed listing (`node docs/evidence/capture-tools-list.js`
 against the deployed source, or the checklist's step 5) and diff it against
 `tools-list-candidate-orchestrator-on.json` → the seven assistant functions → reconnect the review
 connection → re-run the test cases → platform form (§7 below): Scan Tools, verify 21 tools × 3 scanned
@@ -153,10 +226,55 @@ cleanly; `git merge-tree` clean), push, and deploy from the main checkout. The p
 
 **Rollback:** route each of the seven services back to its previous revision (`gcloud run services
 update-traffic <service> --to-revisions <previous>=100`; snapshot the seven revision names before the
-deploy) **and** remove the flag from `functions/.env` so a later deploy does not re-flip it. Tokens minted
-between flip and rollback carry the widened grant and remain valid (thirty days); with the flag off nothing
-enforces scope, so they lose nothing. The web page can stay: with the flag off the server's default is the
-same two scopes.
+deploy) **and** remove the flag from `functions/.env` so a later deploy does not re-flip it. The web page can
+stay: with the flag off the server's default is the same two scopes.
+
+*What a widened token means under a rollback — shown, not assumed.* Between the flip and a rollback, new
+connections are minted with the six-scope default (`nvOAuthMintDefaultScope`, flag on) instead of 1.1.1's
+`orders.read orders.write`; access tokens live thirty days, so those grants outlast the rollback. Whether that
+opens anything is decided by what the rolled-back (flag-off) code reads:
+
+- the OAuth resolver `nvRequireChatGPTWorkspaceAccessWithOAuth` (`index.js:25720`) turns a bearer into
+  `{uid, companyId}` and refuses unless `uidHasCompanyAccess(companyData, uid)` — workspace membership, not
+  scope;
+- every tool then runs its own gate from the registry's `permission.guard` — `nvRequireWriteAccess`,
+  `nvRequireOrdersArea`, `nvRequireFinancialAccess`, `nvRequireBankFeedAccess({ ownerOnly })`,
+  `nvRequireWorkflowAssignedOrder` — the role and area model `mcp-permissions` (25 checks) pins: a Workflow
+  Only or View Only member sees no money, a switched-off Finance area is honoured, the owner cannot lock
+  themselves out;
+- the scope string is consulted in exactly one place, `nvMcpAssertScope`, and the dispatcher calls it only
+  `if (NV_MCP_ORCHESTRATOR)` (`index.js:24636`); `mcp-scope-enforcement` pins both halves — "enforcement
+  ships with the submission flag" and "flag off, the OAuth surface mints and challenges exactly what 1.1.1
+  does".
+
+So under a rollback a six-scope token can do exactly what a two-scope token — or any 1.1.1 token — can do:
+the 19 tools, each behind the same membership, role and area checks, with the scope string never read.
+**No operation and no data access opens that the old revision did not already allow to the same user.** What
+differs is only the record: `chatgptOAuthTokens` rows minted in the window store a wider `scope` string. That
+matters in one direction — on a later re-flip those connections pass enforcement without a reconnect, which
+is the intended state. (The converse is the flip-day effect already in §5.4: a two-scope token minted before
+the flip is refused on the finance and notes tools until the user reconnects.)
+
+**nodemailer 9.1.1 — code fixed, live exposure separate.** The candidate's gate closes with the lockfile (§2a).
+The live functions keep running 9.0.1 until each is redeployed from this lockfile, and the ones that actually
+send mail are, from the static call graph (`exports.*` → `nvMailTransport`): `createSupportTicket`,
+`addSupportTicketReply`, `postWebsiteChatMessage`, `websiteChatRequestHuman`, `inviteWorkspaceMember`,
+`createOrderPortalLink`, `saveOrderPortalSettings`, `notifyCustomerOnStatusChange` (the customer e-mail/SMS
+trigger; the graph also lists `chatgptMcp` and `chatgptOAuthProtectedResource` through the name
+`sendPortalStatusEmail`, but the only call is inside the trigger at `index.js:28841` — the MCP path never sends
+mail itself). Of these, **three** are in this package's deploy — `createSupportTicket`,
+`addSupportTicketReply`, `postWebsiteChatMessage` ride with the seven assistant functions — and **five are
+not**: `websiteChatRequestHuman`, `inviteWorkspaceMember`, `createOrderPortalLink`, `saveOrderPortalSettings`,
+`notifyCustomerOnStatusChange`. Closing the live advisory therefore needs one more deploy, by name, after the
+lockfile is on the deploy branch:
+
+```
+firebase deploy --project eggcraft-studio --only "functions:websiteChatRequestHuman,functions:inviteWorkspaceMember,functions:createOrderPortalLink,functions:saveOrderPortalSettings,functions:notifyCustomerOnStatusChange"
+```
+
+Every other function loads `index.js` and so bundles nodemailer without calling it; they pick 9.1.1 up
+whenever they are next deployed for their own reasons. **This package does not claim the live advisory closed
+until those revisions exist.**
 
 ## 7. Texts to paste into the platform (after the flag-on deploy and Scan Tools)
 
