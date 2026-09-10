@@ -159,6 +159,35 @@ check("a history entry with a broken time cannot spend an allowance", () => {
   assert.strictEqual(ask({}, { history }).send, true, "a message dated in the future or not at all spent today's allowance");
 });
 
+check("a person who wrote back is talking to a person: every automated message stops", () => {
+  const decision = ask({}, { userReplied: true });
+  assert.strictEqual(decision.send, false);
+  assert.strictEqual(decision.reason, "user_replied");
+  // But not a password reset.
+  assert.strictEqual(ask({ kind: "transactional" }, { userReplied: true }).send, true);
+});
+
+check("nothing product-shaped to a cancelled workspace or one with a support case open", () => {
+  assert.strictEqual(ask({}, { workspaceCancelled: true }).reason, "workspace_cancelled");
+  assert.strictEqual(ask({}, { supportCaseOpen: true }).reason, "support_case_open");
+  assert.strictEqual(ask({ kind: "support" }, { supportCaseOpen: true }).send, true);
+});
+
+check("a setup nudge does not go to a workspace that is already activated; a founder note still may", () => {
+  assert.strictEqual(ask({ kind: "onboarding" }, { activated: true }).reason, "activated");
+  assert.strictEqual(ask({ campaign: "founder_intro", channel: "email", kind: "founder" }, { activated: true }).send, true);
+});
+
+check("opt-out is honoured under either name", () => {
+  assert.strictEqual(ask({}, { optOut: true }).reason, "unsubscribed");
+  assert.strictEqual(ask({}, { unsubscribed: true }).reason, "unsubscribed");
+});
+
+check("the shell-order campaign is cancelled by the order becoming real", () => {
+  assert.strictEqual(ask({ campaign: "complete_first_order" }, { doneEventNames: ["order_created"] }).reason, "goal_already_met");
+  assert.strictEqual(ask({ campaign: "complete_first_order" }, { doneEventNames: [] }).send, true);
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }
