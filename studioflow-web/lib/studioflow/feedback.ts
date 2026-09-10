@@ -49,6 +49,11 @@ export async function getFeedbackPrompt(companyId: string, page: string): Promis
   return (await call<{ companyId: string; page: string }, FeedbackPromptResult>("getFeedbackPrompt")({ companyId, page })).data;
 }
 
+/** The card is on screen: only this confirmed showing counts for the server's seven-day cap. Idempotent inside a minute. */
+export async function confirmFeedbackPromptShown(companyId: string, campaign: string): Promise<FeedbackPromptResult & { recorded?: boolean }> {
+  return (await call<{ companyId: string; shown: string }, FeedbackPromptResult & { recorded?: boolean }>("getFeedbackPrompt")({ companyId, shown: campaign })).data;
+}
+
 export async function dismissFeedbackPrompt(companyId: string, campaign: string) {
   return (await call<{ companyId: string; campaign: string }, { ok: boolean; campaign: string; cooldownDays: number }>("dismissFeedbackPrompt")({ companyId, campaign })).data;
 }

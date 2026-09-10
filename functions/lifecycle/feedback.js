@@ -14,13 +14,15 @@
 // approximated.
 //
 // The caps come from messaging.js so this prompt obeys the same rules as
-// every other in-app message: one feedback prompt per seven days, a closed
-// prompt stays closed for the dismissal cooldown, and an answered campaign is
-// never asked again. The manual "Send feedback" entry is not a prompt and is
+// every other in-app message: one feedback prompt per seven days (counted from
+// showings the client confirmed on screen, never from the question alone), a
+// closed prompt stays closed for the dismissal cooldown, and an answered
+// campaign is never asked again. The manual "Send feedback" entry is not a prompt and is
 // not subject to any of that — only to the abuse limits below.
 
 const crypto = require("crypto");
 const messaging = require("./messaging");
+const substantiveOrder = require("./substantiveOrder");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -86,20 +88,89 @@ function feedbackTypeFor(trigger, kind) {
 function stageFor(trigger) { return text(trigger) === "first_success" ? "onboarding" : "active"; }
 
 /**
+ * Which workspaces the feature is open to. The raw value is the env line
+ * NIVADESK_FEEDBACK_WORKSPACES: empty means nobody (the pilot is opt-in, not
+ * opt-out), "*" means every workspace, otherwise a comma-separated list of
+ * workspace ids matched exactly. The flag NIVADESK_FEEDBACK is a separate,
+ * global switch; both have to say yes.
+ */
+function pilotAllows(rawList, companyId) {
+  const raw = text(rawList);
+  if (!raw) return false;
+  const id = text(companyId);
+  if (!id) return false;
+  const entries = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+  if (entries.includes("*")) return true;
+  return entries.includes(id);
+}
+
+/** A creation stamp an order carries, in ms — or 0 when it has none that can be trusted. `paymentDate` is never used: it is the order's own date and can be typed. */
+function creationStampOf(order) {
+  const o = order && typeof order === "object" ? order : {};
+  for (const candidate of [o.createdAtMs, o.createdAt]) {
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0) return candidate;
+    if (candidate && typeof candidate.toMillis === "function") { const ms = Number(candidate.toMillis()); if (Number.isFinite(ms) && ms > 0) return ms; }
+    if (candidate && typeof candidate === "object" && Number.isFinite(Number(candidate.seconds)) && Number(candidate.seconds) > 0) return Number(candidate.seconds) * 1000;
+    if (candidate instanceof Date && Number.isFinite(candidate.getTime())) return candidate.getTime();
+    if (typeof candidate === "string" && candidate) { const ms = Date.parse(candidate); if (Number.isFinite(ms) && ms > 0) return ms; }
+  }
+  return 0;
+}
+
+/**
+ * When the workspace's first success happened, as far as the orders can say.
+ *
+ * Uses the same SUBSTANTIVE_ORDER predicate as the checklist and the funnel
+ * (lifecycle/substantiveOrder.js — not a copy). The time is the earliest
+ * creation stamp among the substantive orders; if ANY substantive order has no
+ * creation stamp the answer is "unknown", because the unstamped one may be the
+ * earliest and a guess would put an invitation in front of somebody whose
+ * success predates the launch. Unknown means no invitation — never a guess
+ * from the signup date.
+ *
+ *   { state: "none" | "shell" | "substantive", known: boolean, atMs: number, orderId }
+ */
+function firstSuccess(orders) {
+  const progress = substantiveOrder.firstOrderProgress(orders);
+  if (progress.state !== "substantive") return { state: progress.state, known: false, atMs: 0, orderId: "" };
+  let earliest = null;
+  for (const order of list(orders)) {
+    if (!order || typeof order !== "object" || order.isDeleted === true || !substantiveOrder.isSubstantiveOrder(order)) continue;
+    const stamp = creationStampOf(order);
+    if (!stamp) return { state: "substantive", known: false, atMs: 0, orderId: text(order.id || order.orderId) };
+    if (!earliest || stamp < earliest.atMs) earliest = { atMs: stamp, orderId: text(order.id || order.orderId) };
+  }
+  return earliest ? { state: "substantive", known: true, atMs: earliest.atMs, orderId: earliest.orderId } : { state: "substantive", known: false, atMs: 0, orderId: "" };
+}
+
+/**
  * May the first-success prompt be shown to this person right now?
  *
- * @param {object} input  { nowMs, enabled, firstOrder: { state }, state: { shows, dismissals, done } }
+ * Order of refusals, each with a name: the global flag, the pilot list, a
+ * first success at all, the launch window (NIVADESK_FEEDBACK_INVITE_FROM_MS —
+ * unset means no invitation to anyone, so a launch never shows the card to
+ * people whose success predates it), a first-success time that is actually
+ * known and after the window opened, "already answered", then messaging.js's
+ * rules: the dismissal cooldown (30 days) and the feedback-prompt cap (one per
+ * seven days, counted from showings the client confirmed on screen).
+ *
+ * @param {object} input  { nowMs, enabled, pilotAllowed, inviteFromMs, firstSuccess: { state, known, atMs }, state: { shows, dismissals, done } }
  * @returns {{show: boolean, campaign: string, reason: string}}  reason is "" when it may be shown
  */
 function promptEligibility(input = {}) {
   const campaign = CAMPAIGN_FIRST_SUCCESS;
   const nowMs = millis(input.nowMs);
   if (input.enabled !== true) return { show: false, campaign, reason: "feature_off" };
+  if (input.pilotAllowed !== true) return { show: false, campaign, reason: "not_in_pilot" };
   if (!nowMs) return { show: false, campaign, reason: "no_clock" };
-  const first = input.firstOrder && typeof input.firstOrder === "object" ? input.firstOrder : { state: "none" };
+  const first = input.firstSuccess && typeof input.firstSuccess === "object" ? input.firstSuccess : { state: "none", known: false, atMs: 0 };
   if (first.state !== "substantive") {
     return { show: false, campaign, reason: first.state === "shell" ? "first_order_is_shell" : "no_first_success" };
   }
+  const inviteFromMs = millis(input.inviteFromMs);
+  if (!inviteFromMs) return { show: false, campaign, reason: "invite_window_unset" };
+  if (first.known !== true || !millis(first.atMs)) return { show: false, campaign, reason: "first_success_time_unknown" };
+  if (millis(first.atMs) < inviteFromMs) return { show: false, campaign, reason: "first_success_before_launch" };
   const state = input.state && typeof input.state === "object" ? input.state : {};
   if (list(state.done).includes(campaign)) return { show: false, campaign, reason: "already_answered" };
   const history = list(state.shows)
@@ -172,5 +243,5 @@ function trimHistory(entries, keep = LIMITS.historyKeep) { return list(entries).
 
 module.exports = {
   CAMPAIGN_FIRST_SUCCESS, CAMPAIGNS, TRIGGERS, KINDS, EXPERIENCES, FEEDBACK_TYPES, CATEGORIES, IMPACTS, STATUSES, LIMITS,
-  isKnownCampaign, feedbackTypeFor, stageFor, promptEligibility, submissionShape, textHash, rateLimitVerdict, duplicateOf, trimHistory
+  isKnownCampaign, feedbackTypeFor, stageFor, pilotAllows, creationStampOf, firstSuccess, promptEligibility, submissionShape, textHash, rateLimitVerdict, duplicateOf, trimHistory
 };

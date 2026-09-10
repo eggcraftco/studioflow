@@ -2313,6 +2313,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                 )}
               </button>
+              {feedbackEnabled ? (
+                <button
+                  type="button"
+                  className="nav-pill native-nav-pill native-nav-extra"
+                  data-testid="feedback-menu-entry-mobile"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setFeedbackManualOpen(true);
+                  }}
+                >
+                  <NavIcon name="activity" />
+                  {t("Send feedback")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="nav-pill native-nav-pill native-nav-extra"

@@ -30212,7 +30212,10 @@ const feedbackExports = require("./feedback").createFeedbackFunctions({
     const email = String(request.auth?.token?.email || "").trim().toLowerCase();
     return Boolean(request.auth && request.auth.token?.email_verified === true && SUPPORT_ADMIN_EMAILS.has(email));
   },
-  featureEnabled: () => process.env.NIVADESK_FEEDBACK === "1"
+  featureEnabled: () => process.env.NIVADESK_FEEDBACK === "1",
+  // The pilot list and the launch instant (lifecycle/feedback.js `pilotAllows`, `promptEligibility`).
+  pilotWorkspaces: () => String(process.env.NIVADESK_FEEDBACK_WORKSPACES || ""),
+  inviteFromMs: () => Number(process.env.NIVADESK_FEEDBACK_INVITE_FROM_MS) || 0
 });
 exports.getFeedbackPrompt = feedbackExports.getFeedbackPrompt;
 exports.dismissFeedbackPrompt = feedbackExports.dismissFeedbackPrompt;

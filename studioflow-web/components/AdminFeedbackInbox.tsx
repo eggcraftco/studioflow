@@ -3,6 +3,9 @@
 // Feedback Inbox (spec §40, §44, §45 — the v1 slice): what people wrote from
 // inside the app, newest first, with a status the admin can move. Reads and
 // writes go through the admin callables; nothing here e-mails the person back.
+// Access is the support-admin allowlist (functions/index.js SUPPORT_ADMIN_EMAILS,
+// mirrored for the page gate in AdminInsightsHub NIVADESK_ADMIN_EMAILS) — not
+// the pilot list, which only says whose form is on.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -46,7 +49,8 @@ export function AdminFeedbackInbox() {
   const [detailStatus, setDetailStatus] = useState<FeedbackStatus>("new");
   const [detailNote, setDetailNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // "Saved." shows only after a successful save, and only while nothing has changed since.
+  const [savedAs, setSavedAs] = useState<{ status: string; note: string } | null>(null);
 
   const load = useCallback(async (append: boolean) => {
     setLoading(true); setError("");
@@ -66,7 +70,7 @@ export function AdminFeedbackInbox() {
   }, [status, type]);
 
   async function open(id: string) {
-    setOpenId(id); setDetail(null); setSaved(false); setError("");
+    setOpenId(id); setDetail(null); setSavedAs(null); setError("");
     try {
       const record = await getFeedbackDetail(id);
       setDetail(record);
@@ -79,10 +83,11 @@ export function AdminFeedbackInbox() {
 
   async function save() {
     if (!detail || saving) return;
-    setSaving(true); setSaved(false); setError("");
+    setSaving(true); setError("");
     try {
       const updated = await updateFeedbackStatus(detail.id, detailStatus, detailNote);
-      setDetail(updated); setSaved(true);
+      setDetail(updated);
+      setSavedAs({ status: updated.status, note: updated.adminNote || "" });
       setRows((current) => current.map((row) => (row.id === updated.id ? { ...row, status: updated.status, ownerUid: updated.ownerUid, updatedAtMs: updated.updatedAtMs } : row)));
     } catch (err) {
       setError(String((err as { message?: string })?.message || "The change could not be saved."));
@@ -91,55 +96,69 @@ export function AdminFeedbackInbox() {
     }
   }
 
-  const cell = { padding: "8px 6px", verticalAlign: "top" as const };
-  const head = { textAlign: "left" as const, color: "var(--muted)", fontSize: 11, fontWeight: 800 };
-  const pill = (value: string) => <span className="studio-pill" style={{ whiteSpace: "nowrap" }}>{t(STATUS_LABELS[value] || value)}</span>;
+  const dirty = Boolean(detail) && (detailStatus !== (detail?.status || "new") || detailNote !== (detail?.adminNote || ""));
+  const showSaved = Boolean(savedAs) && !dirty && savedAs?.status === detailStatus && savedAs?.note === detailNote;
+  const badge = (value: string) => <span className={`studio-pill feedback-status feedback-status-${value}`}>{t(STATUS_LABELS[value] || value)}</span>;
+  const cell = { padding: "10px 8px", verticalAlign: "top" as const };
+  const head = { textAlign: "left" as const, color: "var(--muted)", fontSize: 11, fontWeight: 800, letterSpacing: "0.02em" };
 
   if (openId) {
     return (
-      <section className="card app-card quick-reply-settings-card" data-testid="feedback-inbox-detail">
-        <button type="button" className="button secondary" onClick={() => { setOpenId(""); setDetail(null); }}>{t("Back")}</button>
+      <section className="card app-card quick-reply-settings-card feedback-detail" data-testid="feedback-inbox-detail">
+        <p className="muted-copy" style={{ margin: "0 0 10px" }}>
+          <button type="button" className="feedback-back" onClick={() => { setOpenId(""); setDetail(null); setSavedAs(null); }}>← {t("Back to feedback")}</button>
+        </p>
         {!detail ? <p className="muted-copy">{t("Working it out…")}</p> : (
-          <div style={{ display: "grid", gap: 14, marginTop: 12 }}>
+          <div style={{ display: "grid", gap: 16 }}>
             <CardTitle icon="docText" eyebrow={t("Customer Feedback")} title={`${t(TYPE_LABELS[detail.feedbackType] || detail.feedbackType)} · ${t(EXPERIENCE_LABELS[detail.experience] || detail.experience)}`} />
-            <ul className="settings-summary-list" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4, fontSize: 13 }}>
-              <li><span>{t("Received")}</span>: {when(detail.createdAtMs, locale)}</li>
-              <li><span>{t("Workspace")}</span>: {detail.workspaceName || "—"} <span className="muted-copy">({detail.companyId})</span></li>
-              <li><span>{t("From")}</span>: {detail.userEmail || detail.uid}</li>
-              <li><span>{t("Trigger")}</span>: {t(TRIGGER_LABELS[detail.trigger] || detail.trigger)}{detail.kind ? ` · ${t(KIND_LABELS[detail.kind] || detail.kind)}` : ""}</li>
-              <li><span>{t("Page")}</span>: {detail.page || "—"} · <span>{t("Platform")}</span>: {detail.platform || "—"} · <span>{t("Language")}</span>: {detail.language || "—"}</li>
-            </ul>
-            <div>
-              <strong style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.02em", color: "var(--muted)" }}>{t("Note")}</strong>
-              <p style={{ whiteSpace: "pre-wrap", margin: "6px 0 0", fontSize: 14 }}>{detail.text || <span className="muted-copy">{t("No text — a one-tap answer.")}</span>}</p>
-            </div>
-            <div className="settings-action-row" style={{ display: "grid", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+
+            <section className="feedback-detail-message" aria-label={t("Message")}>
+              <span className="feedback-detail-label">{t("Message")}</span>
+              {detail.text ? <p>{detail.text}</p> : <p className="muted-copy">{t("No text — a one-tap answer.")}</p>}
+            </section>
+
+            <dl className="feedback-meta" aria-label={t("Details")}>
+              <div><dt>{t("Received")}</dt><dd>{when(detail.createdAtMs, locale)}</dd></div>
+              <div><dt>{t("Workspace")}</dt><dd>{detail.workspaceName || "—"} <span className="muted-copy">({detail.companyId})</span></dd></div>
+              <div><dt>{t("From")}</dt><dd>{detail.userEmail || detail.uid}</dd></div>
+              <div><dt>{t("Trigger")}</dt><dd>{t(TRIGGER_LABELS[detail.trigger] || detail.trigger)}</dd></div>
+              <div><dt>{t("Topic")}</dt><dd>{detail.kind ? t(KIND_LABELS[detail.kind] || detail.kind) : "—"}</dd></div>
+              <div><dt>{t("Type")}</dt><dd>{t(TYPE_LABELS[detail.feedbackType] || detail.feedbackType)}</dd></div>
+              <div><dt>{t("Experience")}</dt><dd>{t(EXPERIENCE_LABELS[detail.experience] || detail.experience)}</dd></div>
+              <div><dt>{t("Page")}</dt><dd>{detail.page || "—"} · {detail.platform || "—"} · {detail.language || "—"}</dd></div>
+            </dl>
+
+            <div className="feedback-detail-controls">
+              <label className="feedback-field">
                 <span>{t("Status")}</span>
-                <select value={detailStatus} onChange={(event) => setDetailStatus(event.target.value as FeedbackStatus)} disabled={saving}>
+                <select className="input feedback-select" value={detailStatus} onChange={(event) => setDetailStatus(event.target.value as FeedbackStatus)} disabled={saving}>
                   {FEEDBACK_STATUSES.map((value) => <option key={value} value={value}>{t(STATUS_LABELS[value])}</option>)}
                 </select>
               </label>
-              <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              <label className="feedback-field">
                 <span>{t("Internal note")}</span>
-                <textarea rows={3} value={detailNote} maxLength={2000} onChange={(event) => setDetailNote(event.target.value)} disabled={saving} />
+                <textarea className="input feedback-note" rows={4} value={detailNote} maxLength={2000} onChange={(event) => setDetailNote(event.target.value)} disabled={saving} />
               </label>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button type="button" className="button" onClick={() => void save()} disabled={saving}>{saving ? t("Saving…") : t("Save")}</button>
-                {saved ? <span className="muted-copy">{t("Saved.")}</span> : null}
+              <div className="feedback-detail-actions">
+                <button type="button" className="button" onClick={() => void save()} disabled={saving || !dirty}>{saving ? t("Saving…") : t("Save")}</button>
+                {showSaved ? <span className="muted-copy" role="status">{t("Saved.")}</span> : null}
               </div>
+              {error ? <p className="layout-error" role="alert">{t(error)}</p> : null}
             </div>
+
             {detail.statusHistory?.length ? (
-              <div>
-                <strong style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.02em", color: "var(--muted)" }}>{t("History")}</strong>
-                <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13, display: "grid", gap: 2 }}>
-                  {detail.statusHistory.map((entry, index) => <li key={`${entry.atMs}-${index}`}>{when(entry.atMs, locale)} · {t(STATUS_LABELS[entry.status] || entry.status)}</li>)}
-                </ul>
-              </div>
+              <section aria-label={t("History")}>
+                <span className="feedback-detail-label">{t("History")}</span>
+                <ol className="feedback-history">
+                  {detail.statusHistory.map((entry, index) => (
+                    <li key={`${entry.atMs}-${index}`}><span className="muted-copy">{when(entry.atMs, locale)}</span> {badge(entry.status)}</li>
+                  ))}
+                </ol>
+              </section>
             ) : null}
-            {error ? <p className="layout-error">{t(error)}</p> : null}
           </div>
         )}
+        {!detail && error ? <p className="layout-error" role="alert">{t(error)}</p> : null}
       </section>
     );
   }
@@ -147,44 +166,51 @@ export function AdminFeedbackInbox() {
   return (
     <section className="card app-card quick-reply-settings-card" data-testid="feedback-inbox">
       <CardTitle icon="docText" eyebrow={t("Product")} title={t("Customer Feedback")} />
-      <p className="muted-copy">{t("What people wrote from inside the app. Newest first. Nothing here is sent back to them automatically.")}</p>
-      <div className="settings-action-row" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+      <p className="muted-copy">{t("Status changes and internal notes are visible only to admins.")}</p>
+      <div className="feedback-filters">
+        <label className="feedback-filter-field">
           <span className="muted-copy">{t("Status")}</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value as FeedbackStatus | "")}>
+          <select className="input feedback-select" value={status} onChange={(event) => setStatus(event.target.value as FeedbackStatus | "")}>
             <option value="">{t("All")}</option>
             {FEEDBACK_STATUSES.map((value) => <option key={value} value={value}>{t(STATUS_LABELS[value])}</option>)}
           </select>
         </label>
-        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+        <label className="feedback-filter-field">
           <span className="muted-copy">{t("Type")}</span>
-          <select value={type} onChange={(event) => setType(event.target.value)}>
+          <select className="input feedback-select" value={type} onChange={(event) => setType(event.target.value)}>
             <option value="">{t("All")}</option>
             {(types.length ? types : Object.keys(TYPE_LABELS)).map((value) => <option key={value} value={value}>{t(TYPE_LABELS[value] || value)}</option>)}
           </select>
         </label>
         <button type="button" className="button secondary" onClick={() => void load(false)} disabled={loading}>{t("Refresh")}</button>
       </div>
-      {error ? <p className="layout-error">{t(error)}</p> : null}
-      {loading && rows.length === 0 ? <p className="muted-copy">{t("Working it out…")}</p> : null}
-      {!loading && rows.length === 0 ? <p className="muted-copy">{t("Nothing yet.")}</p> : null}
+      {error ? <p className="layout-error" role="alert">{t(error)}</p> : null}
+      {loading && rows.length === 0 ? <p className="muted-copy" role="status">{t("Working it out…")}</p> : null}
+      {!loading && !error && rows.length === 0 ? <p className="muted-copy">{t("Nothing yet.")}</p> : null}
       {rows.length ? (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="feedback-table-wrap">
+          <table className="feedback-table">
             <thead><tr style={head}>
               <th style={cell}>{t("Received")}</th><th style={cell}>{t("Type")}</th><th style={cell}>{t("Experience")}</th>
-              <th style={cell}>{t("Workspace")}</th><th style={cell}>{t("From")}</th><th style={cell}>{t("Note")}</th><th style={cell}>{t("Status")}</th><th style={cell}></th>
+              <th style={cell}>{t("From")}</th><th style={cell}>{t("Note")}</th><th style={cell}>{t("Status")}</th><th style={cell}></th>
             </tr></thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <tr key={row.id}>
                   <td style={{ ...cell, whiteSpace: "nowrap" }}>{when(row.createdAtMs, locale)}</td>
-                  <td style={cell}>{t(TYPE_LABELS[row.feedbackType] || row.feedbackType)}{row.kind ? <div className="muted-copy" style={{ fontSize: 12 }}>{t(KIND_LABELS[row.kind] || row.kind)}</div> : null}</td>
+                  <td style={cell}>
+                    <div>{t(TYPE_LABELS[row.feedbackType] || row.feedbackType)}</div>
+                    {row.kind ? <div className="muted-copy feedback-cell-sub">{t(KIND_LABELS[row.kind] || row.kind)}</div> : null}
+                  </td>
                   <td style={cell}>{t(EXPERIENCE_LABELS[row.experience] || row.experience)}</td>
-                  <td style={cell}>{row.workspaceName || row.companyId}</td>
-                  <td style={cell}>{row.userEmail || "—"}</td>
-                  <td style={{ ...cell, maxWidth: 360 }}>{row.excerpt ? `${row.excerpt}${row.textLength > row.excerpt.length ? "…" : ""}` : <span className="muted-copy">{t("No text — a one-tap answer.")}</span>}</td>
-                  <td style={cell}>{pill(row.status)}</td>
+                  <td style={cell}>
+                    <div><strong>{row.workspaceName || row.companyId}</strong></div>
+                    <div className="muted-copy feedback-cell-sub">{row.userEmail || "—"}</div>
+                  </td>
+                  <td style={{ ...cell, minWidth: 220, maxWidth: 380 }}>
+                    {row.excerpt ? <div className="feedback-excerpt" title={row.textLength > row.excerpt.length ? t("Open") : undefined}>{row.excerpt}{row.textLength > row.excerpt.length ? "…" : ""}</div> : <span className="muted-copy">{t("No text — a one-tap answer.")}</span>}
+                  </td>
+                  <td style={cell}>{badge(row.status)}</td>
                   <td style={cell}><button type="button" className="button secondary" onClick={() => void open(row.id)}>{t("Open")}</button></td>
                 </tr>
               ))}

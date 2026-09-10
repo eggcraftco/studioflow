@@ -4,8 +4,9 @@
 //
 //   * getFeedbackPrompt: may the first-success prompt be shown to this member
 //     now? Answers from the workspace's own orders (the same bounded read the
-//     setup checklist makes) and this person's prompt history; when the answer
-//     is yes, the showing is written down so the seven-day cap counts it.
+//     setup checklist makes) and this person's prompt history. Asking records
+//     nothing; the client calls again with `shown` once the card is actually on
+//     screen, and only that confirmed showing counts for the seven-day cap.
 //   * dismissFeedbackPrompt: "not now" — the dismissal cooldown starts.
 //   * submitFeedback: the note itself, into the server-only `feedback`
 //     collection, with the abuse limits and the duplicate check applied and
@@ -14,9 +15,12 @@
 //     gated the way every other admin callable is (a verified address in the
 //     support-admin list). No e-mail is sent by any of these.
 //
-// Everything ships behind NIVADESK_FEEDBACK=1: off, the prompt callable says so
-// and the writes refuse. The inbox is not behind the flag — it reads what
-// exists and is admin-only regardless.
+// Everything user-facing ships behind two settings: NIVADESK_FEEDBACK=1 (the
+// global switch) and NIVADESK_FEEDBACK_WORKSPACES (the pilot list — empty means
+// nobody, "*" means everybody). The invitation additionally needs
+// NIVADESK_FEEDBACK_INVITE_FROM_MS, the launch instant: only a first success
+// after it is invited. The inbox is behind none of these — it reads what exists
+// and is admin-only regardless (SUPPORT_ADMIN_EMAILS, checked in index.js).
 
 const crypto = require("crypto");
 const feedback = require("./lifecycle/feedback");
@@ -37,7 +41,9 @@ function createFeedbackFunctions(deps) {
     requireWorkspaceMember,                       // (request) → { uid, email, companyId, companyData }
     isAdminRequest = () => false,                 // (request) → boolean
     featureEnabled = () => false,
-    firstOrderProgress = null,                    // (companyId) → { state, ... } — injectable for tests
+    pilotWorkspaces = () => "",                   // the raw NIVADESK_FEEDBACK_WORKSPACES value
+    inviteFromMs = () => 0,                       // NIVADESK_FEEDBACK_INVITE_FROM_MS, the launch instant
+    recentOrders = null,                          // (companyId) → order rows — injectable for tests
     now = () => Date.now(),
     newId = () => `fb_${crypto.randomBytes(9).toString("base64url")}`
   } = deps;
@@ -49,17 +55,34 @@ function createFeedbackFunctions(deps) {
   const readState = async (companyId, uid) => { const snap = await stateRef(companyId, uid).get(); return snap.exists ? (snap.data() || {}) : {}; };
 
   // The checklist's read, repeated rather than shared: the newest fifty orders by
-  // the date every creation path writes, handed to the substantive-order predicate.
-  async function defaultFirstOrder(companyId) {
+  // the date every creation path writes; the rows go to lifecycle/feedback.js,
+  // which applies the shared substantive-order predicate and reads the creation
+  // stamps (never paymentDate) for the first-success time.
+  async function defaultRecentOrders(companyId) {
     const snap = await db().collection("siparisler").where("companyId", "==", companyId).orderBy("paymentDate", "desc").limit(50).get()
       .catch(() => db().collection("siparisler").where("companyId", "==", companyId).limit(50).get());
-    return substantiveOrder.firstOrderProgress(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
-  const readFirstOrder = typeof firstOrderProgress === "function" ? firstOrderProgress : defaultFirstOrder;
+  const readRecentOrders = typeof recentOrders === "function" ? recentOrders : defaultRecentOrders;
 
-  function requireOn() {
+  const enabledFor = (companyId) => featureEnabled() === true && feedback.pilotAllows(pilotWorkspaces(), companyId);
+  function requireOn(companyId) {
     if (featureEnabled() !== true) throw new HttpsError("failed-precondition", "Feedback is not enabled on this server yet.");
+    if (!feedback.pilotAllows(pilotWorkspaces(), companyId)) throw new HttpsError("failed-precondition", "Feedback is not enabled for this workspace yet.");
   }
+  /** The state document, changed inside a transaction so two tabs never overwrite each other's entries. */
+  async function updateState(companyId, uid, mutate) {
+    const ref = stateRef(companyId, uid);
+    return db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists ? (snap.data() || {}) : {};
+      const patch = mutate(current);
+      if (!patch) return current;
+      tx.set(ref, { uid, companyId, ...patch, updatedAtMs: now(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { ...current, ...patch };
+    });
+  }
+  const SHOWN_DEBOUNCE_MS = 60 * 1000;
   function requireAdmin(request) {
     if (!isAdminRequest(request)) throw new HttpsError("permission-denied", "Customer feedback is restricted to NivaDesk admins.");
   }
@@ -91,50 +114,51 @@ function createFeedbackFunctions(deps) {
     const { uid, companyId } = await requireWorkspaceMember(request);
     const campaign = feedback.CAMPAIGN_FIRST_SUCCESS;
     if (featureEnabled() !== true) return { ok: true, enabled: false, show: false, campaign, reason: "feature_off" };
+    if (!feedback.pilotAllows(pilotWorkspaces(), companyId)) return { ok: true, enabled: false, show: false, campaign, reason: "not_in_pilot" };
     const nowMs = now();
-    const [firstOrder, state] = await Promise.all([readFirstOrder(companyId), readState(companyId, uid)]);
-    const verdict = feedback.promptEligibility({ nowMs, enabled: true, firstOrder, state });
-    if (verdict.show) {
-      await stateRef(companyId, uid).set({
-        uid, companyId,
-        shows: feedback.trimHistory([...list(state.shows), { campaign: verdict.campaign, atMs: nowMs }]),
-        events: feedback.trimHistory([...list(state.events), eventRow("feedback_prompt_shown", nowMs, verdict.campaign)]),
-        updatedAtMs: nowMs, updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+    // The client confirming that the card is on screen: the one moment the
+    // seven-day cap counts from. Idempotent inside a minute, so a second tab or
+    // a re-render does not count twice.
+    const shown = text(request.data?.shown);
+    if (shown) {
+      if (!feedback.isKnownCampaign(shown)) throw new HttpsError("invalid-argument", "Unknown feedback prompt.");
+      let recorded = false;
+      await updateState(companyId, uid, (current) => {
+        const last = list(current.shows).filter((entry) => entry && text(entry.campaign) === shown).map((entry) => Number(entry.atMs) || 0).sort((a, b) => b - a)[0] || 0;
+        if (nowMs - last < SHOWN_DEBOUNCE_MS) return null;
+        recorded = true;
+        return {
+          shows: feedback.trimHistory([...list(current.shows), { campaign: shown, atMs: nowMs }]),
+          events: feedback.trimHistory([...list(current.events), eventRow("feedback_prompt_shown", nowMs, shown)])
+        };
+      });
+      return { ok: true, enabled: true, show: true, campaign: shown, reason: "", recorded };
     }
+    const [orders, state] = await Promise.all([readRecentOrders(companyId), readState(companyId, uid)]);
+    const verdict = feedback.promptEligibility({ nowMs, enabled: true, pilotAllowed: true, inviteFromMs: inviteFromMs(), firstSuccess: feedback.firstSuccess(orders), state });
     return { ok: true, enabled: true, show: verdict.show, campaign: verdict.campaign, reason: verdict.reason };
   });
 
   const dismissFeedbackPrompt = onCall(REGION, async (request) => {
     const { uid, companyId } = await requireWorkspaceMember(request);
-    requireOn();
+    requireOn(companyId);
     const campaign = text(request.data?.campaign) || feedback.CAMPAIGN_FIRST_SUCCESS;
     if (!feedback.isKnownCampaign(campaign)) throw new HttpsError("invalid-argument", "Unknown feedback prompt.");
     const nowMs = now();
-    const state = await readState(companyId, uid);
-    await stateRef(companyId, uid).set({
-      uid, companyId,
-      dismissals: feedback.trimHistory([...list(state.dismissals), { campaign, atMs: nowMs }]),
-      events: feedback.trimHistory([...list(state.events), eventRow("feedback_prompt_dismissed", nowMs, campaign)]),
-      updatedAtMs: nowMs, updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    await updateState(companyId, uid, (current) => ({
+      dismissals: feedback.trimHistory([...list(current.dismissals), { campaign, atMs: nowMs }]),
+      events: feedback.trimHistory([...list(current.events), eventRow("feedback_prompt_dismissed", nowMs, campaign)])
+    }));
     return { ok: true, campaign, cooldownDays: messaging.DEFAULT_MESSAGE_CAPS.dismissalCooldownDays };
   });
 
   const submitFeedback = onCall(REGION, async (request) => {
     const { uid, email, companyId, companyData } = await requireWorkspaceMember(request);
-    requireOn();
+    requireOn(companyId);
     const shape = feedback.submissionShape(request.data || {});
     if (!shape.ok) throw new HttpsError("invalid-argument", `Feedback could not be saved: ${shape.problems.join(", ")}.`);
     const value = shape.value;
     const nowMs = now();
-    const state = await readState(companyId, uid);
-    const submissions = list(state.submissions);
-    const earlier = feedback.duplicateOf(submissions, value, nowMs);
-    if (earlier) return { ok: true, id: earlier, duplicate: true };
-    const limit = feedback.rateLimitVerdict(submissions, nowMs);
-    if (!limit.allowed) throw new HttpsError("resource-exhausted", "Too many feedback messages in a short time. Please try again later.");
-
     const id = newId();
     const record = {
       id, companyId, uid, userEmail: text(email),
@@ -146,17 +170,30 @@ function createFeedbackFunctions(deps) {
       createdAtMs: nowMs, createdAt: FieldValue.serverTimestamp(), updatedAtMs: nowMs, updatedAt: FieldValue.serverTimestamp(),
       statusHistory: [{ status: "new", atMs: nowMs, byUid: uid }]
     };
-    await feedbackRef(id).create(record);
-
-    const done = list(state.done);
-    await stateRef(companyId, uid).set({
-      uid, companyId,
-      submissions: feedback.trimHistory([...submissions, { id, atMs: nowMs, campaign: value.campaign, kind: value.kind, experience: value.experience, textHash: feedback.textHash(value.text), clientKey: value.clientKey }]),
-      done: value.campaign && !done.includes(value.campaign) ? [...done, value.campaign] : done,
-      events: feedback.trimHistory([...list(state.events), eventRow("feedback_submitted", nowMs, id)]),
-      lastSubmittedAtMs: nowMs, updatedAtMs: nowMs, updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
-    return { ok: true, id, duplicate: false };
+    // One transaction: the duplicate check, the abuse limit and the write all
+    // see the same state, so two tabs sending the same note produce one record.
+    const outcome = await db().runTransaction(async (tx) => {
+      const ref = stateRef(companyId, uid);
+      const snap = await tx.get(ref);
+      const current = snap.exists ? (snap.data() || {}) : {};
+      const submissions = list(current.submissions);
+      const earlier = feedback.duplicateOf(submissions, value, nowMs);
+      if (earlier) return { id: earlier, duplicate: true };
+      const limit = feedback.rateLimitVerdict(submissions, nowMs);
+      if (!limit.allowed) return { limited: limit.reason };
+      const done = list(current.done);
+      tx.set(feedbackRef(id), record);
+      tx.set(ref, {
+        uid, companyId,
+        submissions: feedback.trimHistory([...submissions, { id, atMs: nowMs, campaign: value.campaign, kind: value.kind, experience: value.experience, textHash: feedback.textHash(value.text), clientKey: value.clientKey }]),
+        done: value.campaign && !done.includes(value.campaign) ? [...done, value.campaign] : done,
+        events: feedback.trimHistory([...list(current.events), eventRow("feedback_submitted", nowMs, id)]),
+        lastSubmittedAtMs: nowMs, updatedAtMs: nowMs, updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return { id, duplicate: false };
+    });
+    if (outcome.limited) throw new HttpsError("resource-exhausted", "Too many feedback messages in a short time. Please try again later.");
+    return { ok: true, id: outcome.id, duplicate: outcome.duplicate };
   });
 
   // ---- the admin inbox ---------------------------------------------------------
@@ -216,7 +253,7 @@ function createFeedbackFunctions(deps) {
 
   return {
     getFeedbackPrompt, dismissFeedbackPrompt, submitFeedback, listFeedback, getFeedbackDetail, updateFeedbackStatus,
-    _internal: { FEEDBACK_COLLECTION, STATE_SUBCOLLECTION, stateRef, publicRecord, listRow }
+    _internal: { FEEDBACK_COLLECTION, STATE_SUBCOLLECTION, stateRef, publicRecord, listRow, enabledFor }
   };
 }
 
