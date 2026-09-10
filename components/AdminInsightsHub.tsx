@@ -10,6 +10,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
+import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
 
 export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 
@@ -3198,6 +3199,7 @@ type AdminHubPage =
   | "searchconsole"
   | "customorderlanding"
   | "onboarding"
+  | "feedback"
   | "activation";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
@@ -3213,7 +3215,8 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "searchconsole", label: "Google Search" },
   { id: "customorderlanding", label: "Custom Order Landing Page" },
   { id: "onboarding", label: "Setup Answers" },
-  { id: "activation", label: "Activation" }
+  { id: "activation", label: "Activation" },
+  { id: "feedback", label: "Customer Feedback" }
 ];
 
 export function AdminInsightsHub() {
@@ -3248,6 +3251,7 @@ export function AdminInsightsHub() {
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} /> : null}
         {page === "activation" ? <AdminActivationFunnelSection /> : null}
+        {page === "feedback" ? <AdminFeedbackInbox /> : null}
       </div>
     </div>
   );
