@@ -62,11 +62,14 @@ function fakeEbay() {
   return state;
 }
 
-function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") }, owner = true, connectorOn = true, providerFlag = true, environment = "sandbox", capacity = { allowed: true, limit: null, active: 0 }, oauth: oauthOverrides = {}, ebay = fakeEbay(), configured = true, memberAccess = {} } = {}) {
+function buildEbay({ nowRef = { value: Date.parse("2026-09-06T12:00:00.000Z") }, owner = true, connectorOn = true, providerFlag = true, workspaceFlag = true, environment = "sandbox", capacity = { allowed: true, limit: null, active: 0 }, oauth: oauthOverrides = {}, ebay = fakeEbay(), configured = true, memberAccess = {} } = {}) {
   const store = makeFakeFirestore(nowRef);
   const admin = store.admin;
   flagsModule.resetCommerceFlagCache();
-  store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: providerFlag }, connections: {} } });
+  // `workspaceFlag`: true lists this workspace (the production shape for a rollout), "*" opens all, "other" lists
+  // a different workspace only, false lists nobody — the default-closed case.
+  const workspaces = workspaceFlag === true ? { "ebay:c1": true } : workspaceFlag === "*" ? { "ebay:*": true } : workspaceFlag === "other" ? { "ebay:c2": true } : {};
+  store.write("appConfig/commerce", { connectors: { enabled: false, providers: { ebay: providerFlag }, connections: {}, workspaces } });
   store.write("companies/c1", { ownerUid: "u1", companyName: "Acme", memberAccess });
   store.write("companySettings/c1", { defaultDeliveryTime: 14 });
   // `codes` is every code the connector actually presented to eBay's token

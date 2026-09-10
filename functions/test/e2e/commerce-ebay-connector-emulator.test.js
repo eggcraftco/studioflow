@@ -162,7 +162,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
   await wipe();
   await db.collection("companies").doc(COMPANY).set({ companyName: "eBay Co", ownerUid: OWNER, ...PAID, members: { [MEMBER]: { role: "member" }, [WORKFLOW]: { role: "workflowOnly" } }, memberAccess: { [MEMBER]: { restrictedCustomer: false }, [WORKFLOW]: { restrictedCustomer: true } } });
   await db.collection("companySettings").doc(COMPANY).set({ defaultDeliveryTime: 14 });
-  await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: {} } });
+  await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: {}, workspaces: { [`ebay:${COMPANY}`]: true } } });
   let state = "";
 
   await check("#1 begin writes a state with a TTL twin and the nonce's hash; an UNSIGNED relay POST is 401 and burns nothing; a forged state is refused; the right state without the nonce is refused AND burned; the signed callback connects", async () => {
@@ -441,7 +441,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
   });
 
   await check("#10 the connector flag in the document pauses one connection (suspended, Sync now refused); turning it back on owes a catch-up that applies what changed meanwhile and ends at now", async () => {
-    await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: { [`ebay:${connId}`]: false } } });
+    await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: { [`ebay:${connId}`]: false }, workspaces: { [`ebay:${COMPANY}`]: true } } });
     await connRef().set({ catchUpDueFromMs: 0 }, { merge: true });
     const paused = await eb.runSweep("sweep");
     assert.strictEqual(paused.swept, 0);
@@ -453,7 +453,7 @@ const views = async (who = auth) => (await index.getEbayConnections.run({ auth: 
     await cursorRef().set({ watermarkMs: watermark - 36 * HOUR }, { merge: true });
     await connRef().set({ lastSuccessAtMs: Date.now() - 36 * HOUR }, { merge: true });
     for (let i = 0; i < 3; i += 1) ebay.orders.set(`G${i}`, order(`G${i}`, { creationDate: new Date(Date.now() - (30 - i * 6) * HOUR).toISOString(), lastModifiedDate: new Date(Date.now() - (30 - i * 6) * HOUR).toISOString() }));
-    await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: {} } });
+    await setFlags({ connectors: { enabled: false, providers: { ebay: true }, connections: {}, workspaces: { [`ebay:${COMPANY}`]: true } } });
     const resumed = await eb.runSweep("sweep");
     assert.strictEqual(resumed.swept, 1);
     for (let i = 0; i < 3; i += 1) assert.ok((await orderRef(`G${i}`).get()).exists, `G${i} applied by the catch-up`);

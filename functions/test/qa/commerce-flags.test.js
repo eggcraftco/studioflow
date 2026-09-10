@@ -28,6 +28,23 @@ function fakeDb(data) { return { collection: () => ({ doc: () => ({ get: async (
     assert.strictEqual(flags.flagEnabled(out, "connectors", "amazon", "x"), false, "another provider is not switched on by eBay's entry");
   });
 
+  await check("workspaces: exact entry beats the wildcard beats closed; the provider entry and the global switch never open a workspace", async () => {
+    flags.resetCommerceFlagCache();
+    const none = await flags.readCommerceFlags(fakeDb({ connectors: { enabled: true, providers: { ebay: true } } }), { force: true });
+    assert.strictEqual(flags.workspaceEnabled(none, "connectors", "ebay", "c1"), false, "no workspaces map: closed even with provider and global on");
+    flags.resetCommerceFlagCache();
+    const one = await flags.readCommerceFlags(fakeDb({ connectors: { providers: { ebay: true }, workspaces: { "ebay:c1": true } } }), { force: true });
+    assert.strictEqual(flags.workspaceEnabled(one, "connectors", "ebay", "c1"), true, "the listed workspace");
+    assert.strictEqual(flags.workspaceEnabled(one, "connectors", "ebay", "c2"), false, "any other workspace stays closed");
+    assert.strictEqual(flags.workspaceEnabled(one, "connectors", "amazon", "c1"), false, "another provider's list is separate");
+    assert.strictEqual(flags.workspaceEnabled(one, "connectors", "ebay", ""), false, "an empty company id never matches");
+    flags.resetCommerceFlagCache();
+    const all = await flags.readCommerceFlags(fakeDb({ connectors: { workspaces: { "ebay:*": true, "ebay:c9": false } } }), { force: true });
+    assert.strictEqual(flags.workspaceEnabled(all, "connectors", "ebay", "c1"), true, "the wildcard opens the rest");
+    assert.strictEqual(flags.workspaceEnabled(all, "connectors", "ebay", "c9"), false, "an exact false beats the wildcard");
+    assert.strictEqual(flags.workspaceEnabled(all, "connectors", "ebay", "*"), true, "the literal star is the wildcard entry itself");
+  });
+
   await check("precedence: connection > provider > global, in the connectors area", async () => {
     const doc = { connectors: { enabled: true, providers: { ebay: false }, connections: { "ebay:acme__seller": true } } };
     flags.resetCommerceFlagCache();

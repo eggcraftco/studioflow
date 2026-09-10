@@ -216,6 +216,8 @@ function createEbayConnectorFunctions(deps) {
 
   async function flagsNow() { return flagsModule.readCommerceFlags(db(), { now: now() }); }
   async function flagOn(connectionId) { return flagsModule.flagEnabled(await flagsNow(), "connectors", "ebay", connectionId); }
+  /** The narrow gate on STARTING a flow (flags.js `workspaces`): closed unless this workspace, or `*`, is listed. */
+  async function workspaceFlagOn(companyId) { return flagsModule.workspaceEnabled(await flagsNow(), "connectors", "ebay", companyId); }
   async function providerFlagOn() { const flags = await flagsNow(); const section = flags.connectors || {}; if (section.providers && Object.prototype.hasOwnProperty.call(section.providers, "ebay")) return section.providers.ebay === true; return section.enabled === true; }
 
   async function writeSyncEvent(ref, event) {
@@ -507,6 +509,8 @@ function createEbayConnectorFunctions(deps) {
     if (!connectorOn()) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
     if (!configured() || !String(ruName() || "").trim()) throw new HttpsError("failed-precondition", "eBay is not configured on this server yet.");
     if (!(await providerFlagOn())) throw new HttpsError("failed-precondition", "eBay is not enabled on this server yet.");
+    // The rollout gate: one workspace at a time, by an explicit entry, never by the provider switch alone.
+    if (!(await workspaceFlagOn(companyId))) throw new HttpsError("failed-precondition", "eBay is not enabled for this workspace yet.");
     const origin = String(request.data?.origin || "") === "native" ? "native" : "web";
     const state = crypto.randomBytes(32).toString("base64url");
     const nonce = crypto.randomBytes(24).toString("base64url");
@@ -564,10 +568,14 @@ function createEbayConnectorFunctions(deps) {
       // is reached only from the native startUrl, and a web state has an
       // authorizeUrl already.
       if (String(row.origin || "") !== "native") return { error: "claimed" };
+      // The workspace gate again (see beginEbayConnect): a delisted workspace's state is not claimed
+      // and not consumed — it simply expires.
+      if (!(await workspaceFlagOn(String(row.companyId || "")))) return { error: "workspace" };
       tx.update(ref, { claimedAtMs: now(), nonceHash: sha256hex(nonce) });
       return { row };
     });
     if (claimed.error === "permission-denied") throw new HttpsError("permission-denied", "This eBay connection was started by a different NivaDesk user.");
+    if (claimed.error === "workspace") throw new HttpsError("failed-precondition", "eBay is not enabled for this workspace yet.");
     if (claimed.error) throw new HttpsError("failed-precondition", "The eBay sign-in link has expired or was already used. Start again.");
     const row = claimed.row;
     // The ticket is minted over the FRESH nonce this claim just wrote, and over
@@ -882,6 +890,13 @@ function createEbayConnectorFunctions(deps) {
       answer(200, { ok: false, outcome: "error", reason: verdict.reason, rid }); return;
     }
     const stateData = verdict.row;
+    // The workspace gate, asked again at the end of the flow: a consent that began while the
+    // workspace was listed does not complete once the listing is gone. The state is already
+    // burned above; the code is spent like the other post-burn refusals, so nothing live remains.
+    if (!(await workspaceFlagOn(String(stateData.companyId || "")))) {
+      await spendAndDiscardCode(code, String(stateData.redirectRuName || ""));
+      answer(200, { ok: false, outcome: "error", reason: "workspace", rid }); return;
+    }
     try {
       const tokens = await oauth.exchangeCode({ environment: env(), clientId: clientId(), clientSecret: clientSecret(), code, ruName: String(stateData.redirectRuName || ruName()), fetchImpl });
       const accessToken = String(tokens?.access_token || "");
