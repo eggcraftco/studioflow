@@ -24,6 +24,9 @@ const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const promptKey = (companyId: string, uid: string) => `nv_feedback_prompt_${companyId}_${uid}`;
 const checkKey = (companyId: string, uid: string) => `nv_feedback_checked_${companyId}_${uid}`;
 const shownKey = (companyId: string, uid: string) => `nv_feedback_shown_${companyId}_${uid}`;
+// The server's last "is feedback on for this workspace" answer, so a reload inside
+// the ask window can still show the account-menu entry without asking again.
+const enabledKey = (companyId: string, uid: string) => `nv_feedback_enabled_${companyId}_${uid}`;
 
 function readSession(key: string): string {
   try { return window.sessionStorage.getItem(key) ?? ""; } catch { return ""; }
@@ -66,18 +69,23 @@ export default function FeedbackCenter({
   // Ask the server whether the invitation may be shown — once per ten minutes
   // per session, and again when the page changes after that. A "yes" is kept
   // for the session so navigating does not make the card vanish and reappear.
+  // The server's "enabled" answer is kept too: a reload inside the window must
+  // still surface the account-menu entry, otherwise it disappears until the
+  // next ask (the pilot's finding 7f).
   useEffect(() => {
     if (!companyId || !uid) return;
     const cached = readSession(promptKey(companyId, uid));
     if (cached) { setInvitation(cached); onAvailability?.(true); return; }
     const last = Number(readSession(checkKey(companyId, uid))) || 0;
-    if (Date.now() - last < CHECK_INTERVAL_MS) return;
+    const knownEnabled = readSession(enabledKey(companyId, uid));
+    if (Date.now() - last < CHECK_INTERVAL_MS && knownEnabled) { onAvailability?.(knownEnabled === "1"); return; }
     let cancelled = false;
     void (async () => {
       try {
         const result = await getFeedbackPrompt(companyId, pathname.slice(0, 200));
         if (cancelled) return;
         writeSession(checkKey(companyId, uid), String(Date.now()));
+        writeSession(enabledKey(companyId, uid), result.enabled ? "1" : "0");
         onAvailability?.(Boolean(result.enabled));
         if (result.enabled && result.show && result.campaign) {
           writeSession(promptKey(companyId, uid), result.campaign);
