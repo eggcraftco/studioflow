@@ -1,0 +1,1356 @@
+{
+  "meta": {
+    "what": "MCP tools/list as served by the LIVE chatgptMcp after the 1.2.0 flag-on deploy, fetched anonymously (discovery) from the public surface",
+    "fetchedFrom": "https://mcp.nivadesk.app/chatgptMcp",
+    "fetchedAt": "2026-09-10T00:47Z",
+    "revision": "chatgptmcp-00073-fuz",
+    "deployedFromCommit": "baa21204c4d08569fc3b1aa00c0d61bfeab88fde",
+    "flags": {
+      "NIVADESK_MCP_ORCHESTRATOR": "1"
+    },
+    "toolCount": 21,
+    "listingSha256": "10316e28601d75f03a6238945feaef27e6bfa21c6ff8ec887c5cae63fac918f5",
+    "identicalToCandidateSnapshot": true,
+    "candidateListingSha256": "10316e28601d75f03a6238945feaef27e6bfa21c6ff8ec887c5cae63fac918f5",
+    "createInventoryItemPresent": false
+  },
+  "tools": [
+    {
+      "name": "create_order",
+      "title": "Create order",
+      "description": "Create a new NivaDesk order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId. If the user provides a delivery due date, always pass it as deliveryDueDate in YYYY-MM-DD format. For an already overdue active order, also collect and pass its original created date as paymentDate so Timeline & Delivery and overdue calculations remain accurate. Use this only after the user provides enough order details or confirms creating a draft order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Workspace/company ID where the order should be created."
+          },
+          "customerName": {
+            "type": "string",
+            "description": "Customer name or project name."
+          },
+          "email": {
+            "type": "string",
+            "description": "Customer email address."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Customer phone or WhatsApp number."
+          },
+          "instagram": {
+            "type": "string",
+            "description": "Customer Instagram username."
+          },
+          "watchModel": {
+            "type": "string",
+            "description": "Watch model or reference, for example Rolex Datejust 41."
+          },
+          "designBrief": {
+            "type": "string",
+            "description": "Short design brief or customer request."
+          },
+          "designName": {
+            "type": "string",
+            "description": "Internal design/project name."
+          },
+          "price": {
+            "type": "number",
+            "description": "Total quoted price."
+          },
+          "paidAmount": {
+            "type": "number",
+            "description": "Already paid amount, for example deposit amount."
+          },
+          "paymentDate": {
+            "type": "string",
+            "description": "Order created/intake date in YYYY-MM-DD format. Required when creating an already overdue active order."
+          },
+          "deliveryDueDate": {
+            "type": "string",
+            "description": "Preferred delivery due date field in YYYY-MM-DD format. Always pass this field when the user provides a delivery date."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "Legacy alias for deliveryDueDate in YYYY-MM-DD format. Prefer deliveryDueDate."
+          },
+          "deliveryDays": {
+            "type": "number",
+            "description": "Alternative only when no calendar due date was provided: number of days from created date until due."
+          },
+          "status": {
+            "type": "string",
+            "description": "Initial order status."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "search_orders",
+      "title": "Search orders",
+      "description": "Search orders in the currently connected workspace by customer name, email, watch model, status, order ID, or keyword. Use the connected workspace automatically. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Workspace/company ID to search."
+          },
+          "query": {
+            "type": "string",
+            "description": "Search keyword, customer name, email, watch model, or order ID."
+          },
+          "status": {
+            "type": "string",
+            "description": "Optional status filter."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of orders to return. Default is 10."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_order_detail",
+      "title": "Get order detail",
+      "description": "Get full safe order details for one order in the currently connected workspace. Use the connected workspace automatically. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "orderId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Workspace/company ID."
+          },
+          "orderId": {
+            "type": "string",
+            "description": "Order document ID."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "add_order_note",
+      "title": "Add order note",
+      "description": "Append an internal note to an existing order in the currently connected workspace. This is an order note, not a personal Notes item. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "orderId",
+          "note"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Workspace/company ID."
+          },
+          "orderId": {
+            "type": "string",
+            "description": "Order document ID."
+          },
+          "note": {
+            "type": "string",
+            "description": "Note text to append."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.write",
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.write",
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "update_order_status",
+      "title": "Update order status",
+      "description": "Update an order status or design status in the currently connected workspace. Do not ask for companyId. Use only when the user clearly asks to update the order. The workspace's own notification rules run on this change: it can send the customer an e-mail or SMS. Say so before you do it.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "orderId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Workspace/company ID."
+          },
+          "orderId": {
+            "type": "string",
+            "description": "Order document ID."
+          },
+          "status": {
+            "type": "string",
+            "description": "New main order status."
+          },
+          "designStatus": {
+            "type": "string",
+            "description": "New design/workflow status."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_note",
+      "title": "Create personal note",
+      "description": "Create a new personal Notes item for the connected user in the currently connected workspace. Do not ask for companyId. This is not an order note. Collaboration is not changed automatically.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "title": {
+            "type": "string",
+            "description": "Note title."
+          },
+          "text": {
+            "type": "string",
+            "description": "Note body/content."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional labels."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional links or image URLs."
+          },
+          "colorName": {
+            "type": "string",
+            "description": "Optional color name."
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "Whether to pin the note."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "search_notes",
+      "title": "Search personal notes",
+      "description": "Search the connected user's personal Notes in the currently connected workspace. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Keyword to search in title, text, labels or note ID."
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "description": "Include archived notes."
+          },
+          "includeDeleted": {
+            "type": "boolean",
+            "description": "Include deleted notes."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of notes to return. Default is 20."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_note_detail",
+      "title": "Get personal note detail",
+      "description": "Get one personal note by note ID from the currently connected workspace. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "noteId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "noteId": {
+            "type": "string",
+            "description": "Personal note document ID."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "append_note",
+      "title": "Append to personal note",
+      "description": "Append text to an existing personal note for the connected user in the currently connected workspace. Do not ask for companyId. This is not an order note.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "noteId",
+          "text"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "noteId": {
+            "type": "string",
+            "description": "Personal note document ID."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to append to the note."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "update_note",
+      "title": "Update personal note",
+      "description": "Update the title, text, labels, links or color of a personal note in the currently connected workspace. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "noteId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "noteId": {
+            "type": "string",
+            "description": "Personal note document ID."
+          },
+          "title": {
+            "type": "string",
+            "description": "New note title."
+          },
+          "text": {
+            "type": "string",
+            "description": "New note text/body."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Replacement labels."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Replacement links."
+          },
+          "colorName": {
+            "type": "string",
+            "description": "Replacement color name."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pin_note",
+      "title": "Pin or unpin personal note",
+      "description": "Pin or unpin a personal note in the currently connected workspace. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "noteId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "noteId": {
+            "type": "string",
+            "description": "Personal note document ID."
+          },
+          "isPinned": {
+            "type": "boolean",
+            "description": "True to pin, false to unpin."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "archive_note",
+      "title": "Archive or unarchive personal note",
+      "description": "Archive or unarchive a personal note in the currently connected workspace. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "noteId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "noteId": {
+            "type": "string",
+            "description": "Personal note document ID."
+          },
+          "isArchived": {
+            "type": "boolean",
+            "description": "True to archive, false to unarchive."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "notes.write"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "notes.write"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_order_financials",
+      "title": "Get order financials",
+      "description": "Read the Financial Info card values for one order. You may provide the orderId, or provide query/orderName/customerName so NivaDesk finds the order in the connected workspace. Do not ask the user for companyId. Requires financial access.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "orderId": {
+            "type": "string",
+            "description": "Optional order document ID when already known."
+          },
+          "query": {
+            "type": "string",
+            "description": "Order name, customer name or identifying keyword when orderId is not known, for example Ocean Scene Dial."
+          },
+          "orderName": {
+            "type": "string",
+            "description": "Optional order/project name alias when orderId is not known."
+          },
+          "customerName": {
+            "type": "string",
+            "description": "Optional customer name when orderId is not known."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_dashboard_summary",
+      "title": "Get dashboard summary",
+      "description": "Read the connected workspace dashboard summary. ChatGPT App is available on every plan. Free Demo and Starter return permitted basic finance totals (Received, Base Cost and Basic Balance); Pro and Team can return advanced finance when the user role allows it.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of orders to scan. Default is 500."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read",
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read",
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_extra_spending_overview",
+      "title": "Get extra spending overview",
+      "description": "Read permitted spending summary data for the connected workspace. Free Demo and Starter return Base Cost only. Pro and Team may include Shipping, Platform Fee, VAT / Tax and custom expenses when the user role allows financial access. Supports thisMonth, thisYear, allTime and customRange.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional period: thisMonth, thisYear, allTime, or customRange. Default is thisMonth."
+          },
+          "fromDate": {
+            "type": "string",
+            "description": "Start date in YYYY-MM-DD format. Required only when scope is customRange."
+          },
+          "toDate": {
+            "type": "string",
+            "description": "End date in YYYY-MM-DD format. Required only when scope is customRange."
+          },
+          "includeBaseCost": {
+            "type": "boolean",
+            "description": "Include Base Cost / watch purchase price. Default true."
+          },
+          "includeShipping": {
+            "type": "boolean",
+            "description": "Include shipping/delivery cost. Default false."
+          },
+          "includePlatformFee": {
+            "type": "boolean",
+            "description": "Include platform/payment fee. Default false."
+          },
+          "includeTax": {
+            "type": "boolean",
+            "description": "Include VAT / tax amount. Default false."
+          },
+          "page": {
+            "type": "number",
+            "description": "Page number for entry results. Default 1."
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Entries per page. Default 20, maximum 100."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_financial_overview",
+      "title": "Get financial overview",
+      "description": "Read workspace-level financial totals, remaining payments, costs and estimated profit. Requires financial access in the connected workspace.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of orders to scan. Default is 1000."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_bank_spending_summary",
+      "title": "Bank spending summary",
+      "description": "Summarise the connected workspace's business bank feed (Open Banking) for a month or a year: total spent, incoming, change vs the previous period, spending by category, top merchants and recurring subscriptions. Use for questions like 'how much did I spend in July', 'what are my biggest costs this year', 'which subscriptions do I pay monthly'. Requires the Bank Spending permission (workspace owner or a member the owner granted). Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "month",
+              "year"
+            ],
+            "description": "month (default) or year."
+          },
+          "year": {
+            "type": "integer",
+            "description": "Four-digit year. Defaults to the current year."
+          },
+          "month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "description": "1-12. Defaults to the current month when period is month."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "search_bank_transactions",
+      "title": "Search bank transactions",
+      "description": "List individual bank transactions from the connected workspace's bank feed, filtered by keyword (merchant/description), date range, category, amount range, or missing receipt. Returns the newest first. Requires the Bank Spending permission. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Keyword matched against merchant and description, e.g. amazon, openai."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start date YYYY-MM-DD (inclusive)."
+          },
+          "to": {
+            "type": "string",
+            "description": "End date YYYY-MM-DD (inclusive)."
+          },
+          "category": {
+            "type": "string",
+            "description": "Category name as shown in NivaDesk, e.g. Materials, Software, Shipping; use Uncategorised for transactions without a category."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "out",
+              "in",
+              "all"
+            ],
+            "description": "out = spending (default), in = incoming, all = both."
+          },
+          "minAmount": {
+            "type": "number",
+            "description": "Minimum absolute amount."
+          },
+          "maxAmount": {
+            "type": "number",
+            "description": "Maximum absolute amount."
+          },
+          "withoutReceipt": {
+            "type": "boolean",
+            "description": "true = only spending that has no receipt/invoice attached yet."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Max rows to return (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "attach_bank_receipt",
+      "title": "Attach receipt to a bank transaction",
+      "description": "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId. Image receipts are read with Google Vision OCR. Attaching to a transaction that already has a receipt replaces it, and the previous file is deleted.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "receipt": {
+            "type": "object",
+            "description": "The invoice/receipt file the user attached (image or PDF).",
+            "properties": {
+              "download_url": {
+                "type": "string"
+              },
+              "file_id": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "file_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "download_url",
+              "file_id"
+            ]
+          },
+          "inboxPath": {
+            "type": "string",
+            "description": "Returned by a previous call when several candidates matched; pass it back together with transactionId instead of resending the file."
+          },
+          "transactionId": {
+            "type": "string",
+            "description": "Bank transaction to attach to, when the user has chosen one of the candidates (or named the transaction)."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Total amount printed on the document, if you can read it."
+          },
+          "date": {
+            "type": "string",
+            "description": "Document/payment date YYYY-MM-DD, if you can read it."
+          },
+          "merchant": {
+            "type": "string",
+            "description": "Merchant/supplier name on the document, if you can read it."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "_meta": {
+        "openai/fileParams": [
+          "receipt"
+        ],
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "finance.read",
+              "orders.write"
+            ]
+          }
+        ]
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "finance.read",
+            "orders.write"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search_inventory",
+      "title": "Search inventory",
+      "description": "Search stock by name, SKU, serial number, brand, model, category or location, and filter by status, low stock, reserved, location or category. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. A SKU is a search key, not an identity: two different items may share one, and both are returned. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Part of a name, SKU, serial number, brand, model, category or location."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "partiallyReserved",
+              "reserved",
+              "incoming",
+              "used",
+              "sold",
+              "removed",
+              "archived"
+            ]
+          },
+          "lowStock": {
+            "type": "boolean",
+            "description": "Only items at or below their low-stock level."
+          },
+          "reserved": {
+            "type": "boolean",
+            "description": "Only items being held for an order."
+          },
+          "location": {
+            "type": "string",
+            "description": "Only items kept here."
+          },
+          "category": {
+            "type": "string",
+            "description": "Only items in this category."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum items to return (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "search_commerce_orders",
+      "title": "Search orders across channels",
+      "description": "Find orders from any channel and see the provider's own status separately from NivaDesk's workflow status: platform status, payment status, fulfilment status, external order id, connection and last sync all stay distinct fields. It reports no amounts at all: no order total, nothing paid or outstanding, no refund, no tax and no currency. Use it when the user names a shop, an external order number or a payment state. Buyer details are withheld for channels whose data policy restricts them. Do not ask for companyId.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "description": "Optional. Usually omit this; the connected workspace is used automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Order number, project number, external order id, customer name or email."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "all",
+              "manual",
+              "shopify",
+              "etsy",
+              "woocommerce",
+              "square",
+              "amazon",
+              "ebay",
+              "faire"
+            ],
+            "description": "Limit to one channel."
+          },
+          "manualSource": {
+            "type": "string",
+            "description": "With source \"manual\", narrow to where it came from."
+          },
+          "workflowStatus": {
+            "type": "string",
+            "description": "NivaDesk's own status word for the order."
+          },
+          "platformStatus": {
+            "type": "string",
+            "description": "The shop's own status word, matched as the provider spells it."
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "pending",
+              "authorized",
+              "paid",
+              "partially_paid",
+              "partially_refunded",
+              "refunded",
+              "voided",
+              "unknown"
+            ]
+          },
+          "fulfillmentStatus": {
+            "type": "string",
+            "enum": [
+              "unfulfilled",
+              "partial",
+              "fulfilled",
+              "unknown"
+            ]
+          },
+          "fromDate": {
+            "type": "string",
+            "description": "First day of the range, YYYY-MM-DD."
+          },
+          "toDate": {
+            "type": "string",
+            "description": "Last day of the range, YYYY-MM-DD."
+          },
+          "needsAttention": {
+            "type": "boolean",
+            "description": "Only orders held for review or already overdue."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum orders to return (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "orders.read"
+          ]
+        }
+      ],
+      "_meta": {
+        "securitySchemes": [
+          {
+            "type": "oauth2",
+            "scopes": [
+              "orders.read"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

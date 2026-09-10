@@ -1,5 +1,7 @@
 # OpenAI resubmission package — NivaDesk for ChatGPT 1.2.0 (10 September 2026)
 
+> **Deployed 10 September 2026, 00:34–00:56Z** — carry `baa21204`, web Round 168, 19/19 functions, live listing identical to §4: `docs/security/evidence/openai-1.2.0-deploy-2026-09-10.md`. The review-account OAuth smoke, Scan Tools, the form and Submit remain.
+
 Branch `openai-resubmission` (worktree `/Users/gocmen/Developer/studioflow-openai-review`). This is the
 package the operator asked for after taking decisions A–C on the readiness report
 (`docs/openai-resubmission-readiness-2026-09-09.md`): what closed, what is still open, the exact flag set,
