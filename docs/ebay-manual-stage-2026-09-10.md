@@ -140,6 +140,25 @@ whether or not there is a session. Recorded rather than smoothed over.
 Signing in is not checkout. Something still has to walk the order through payment, and the page that normally offers
 that is missing here.
 
+## 2e. `CompleteSale` run with the seller's token (22:1xZ)
+
+The operator approved the attempt and signed the Explorer's user token back in as `TESTUSER_nivadesk_seller1`
+(Switch account → seller → password → consent; the assistant typed only the username). The Explorer's return address
+was set to the CompleteSale screen beforehand.
+
+| | |
+|---|---|
+| Call | `CompleteSale`, site (3) UK, Sandbox |
+| Body | `<OrderLineItemID>110590626185-10000012799510</OrderLineItemID>` and `<Paid>true</Paid>` — nothing else |
+| Result | **`Ack Success`**, no error and no warning returned |
+
+That the call succeeded also proves the token is the seller's: only the seller of an order may mark it paid. No new
+order, no listing change, no money, no card, no change to NivaDesk's stored connection or its scopes.
+
+**Still to be measured (the point of the exercise):** whether marking the order paid also moved
+`CheckoutStatus.Status` from `Incomplete` to `Complete`, which is the property the Fulfillment API tests, and whether
+NivaDesk's preview can now see the order. Both readings follow in §2f.
+
 ### 2d.1 The two other buyer-side entry points, probed once each — both unusable
 
 | Page | Result (22:0xZ) |
