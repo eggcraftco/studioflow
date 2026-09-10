@@ -173,6 +173,45 @@ waiting on anything:
 Nothing in this package depends on the eBay sandbox work, and nothing in the eBay sandbox work depends on this. They
 are separate branches of the same commit history and separate approvals.
 
+## 11b. Deployed — what actually went live (10 September 2026, 22:28Z)
+
+The operator approved the pilot and the package's §5 order was followed.
+
+| Step | Result |
+|---|---|
+| Merge | `onboarding-feedback` → deploy branch, normal merge **`8f34bbe9`**, pushed. Ancestors re-checked and intact: Stripe `76c5e3c3`, eBay allowlist `def97f49`, OpenAI `baa21204`, checklist `b9aeec70`. `functions/` and `firestore.rules` identical to the feature branch |
+| Pilot settings in `functions/.env` | `NIVADESK_FEEDBACK=1`, `NIVADESK_FEEDBACK_WORKSPACES=GuglEFKSEKNTq1xibFpJav3EWkY2`, `NIVADESK_FEEDBACK_INVITE_FROM_MS=1789079284000` (**2026-09-10T22:28:04Z**, the launch instant) |
+| Firestore rules | compiled and **released** 22:28:04–22:28:28Z (the 14-line diff of §3) |
+| The six callables | **created** 22:28:28–22:30:38Z, all first revisions, Ready, 100 % traffic, all three flags present: `getfeedbackprompt-00001-kig`, `dismissfeedbackprompt-00001-naz`, `submitfeedback-00001-wuf`, `listfeedback-00001-mad`, `getfeedbackdetail-00001-riz`, `updatefeedbackstatus-00001-hih` |
+| Blast radius | nothing else moved: `chatgptmcp-00073-fuz`, `chatgptoauthauthorize-00045-has`, `stripewebhook-00047-por`, `resyncstripeworkspaceentitlements-00032-xej`, `getsetupchecklist-00003-noh`, `beginebayconnect-00002-cod`, `previewebayimport-00002-hac` all unchanged |
+
+### The web publish took a different route than §4 described, on purpose
+
+§4 assumed the publish repo could be synced wholesale from `studioflow-web`. **It cannot, and doing so would have
+destroyed live work.** A dry run showed a blanket `rsync --delete` would delete
+`lib/studioflow/setupChecklist.ts` and `lib/studioflow/onboardingProgress.ts` — two files that exist only in the
+publish repo, added by Rounds 169 and 170, which were cherry-picked there and never merged back into
+`studioflow-app`. It would also have overwritten the published `AppShell.tsx`, whose version carries **299 lines the
+source does not have** (the whole "Continue setup" card), plus unrelated differences in `globals.css`,
+`language.ts` and about twenty other files.
+
+So the publish was done file-scoped instead:
+
+* three genuinely new files copied (`components/FeedbackCenter.tsx`, `components/AdminFeedbackInbox.tsx`,
+  `lib/studioflow/feedback.ts`) after checking none already existed;
+* `app/globals.css`, `components/AdminInsightsHub.tsx` and `lib/studioflow/language.ts` patched with
+  `git apply -p2` from a diff of the feedback commits only, which applied cleanly;
+* `components/AppShell.tsx` hand-patched against its **own** anchors (the five insertion points: the help-assistant
+  import, the avatar-menu state, the account-menu entry, the component mount, and the mobile navigation entry), each
+  verified to occur exactly once in the published file first.
+
+Afterwards `git status` in the publish repo showed exactly the seven feedback paths and nothing else, and the Round
+169/170 work was confirmed intact: both publish-only modules still present, six "Continue setup" references still in
+`AppShell.tsx`, nine `onboard-tasks` rules still in `globals.css`.
+
+**Lesson for the next round:** the publish repo is not a mirror of `studioflow-web`; it has its own history. Sync it
+file-scoped, and dry-run `rsync -an --delete` before ever considering the wholesale form.
+
 ## 11. What stays out of this package
 
 Native screens, the §36/§37 prompt types (need trustworthy activation data — the v2.1 cutover package, kept separate),
