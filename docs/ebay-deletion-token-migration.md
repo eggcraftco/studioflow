@@ -361,8 +361,8 @@ A 503 here means the marker, the secret version, or the binding is missing — f
 the portal. A 200 whose hash does not match means A and B have diverged. Either way, eBay never sees
 a failure and the destination is never half-registered.
 
-**[NEEDS LIVE VERIFICATION]** This probe cannot be run until the seventeen are deployed;
-`docs/ebay-functions-deploy-plan.md` verifies none of them exists in Cloud Run today.
+**Verified live, 10 September 2026 12:56:35Z** (`ebay-relay-key-and-deletion-token-2026-09-10.md` §1): the endpoint
+answered HTTP 200 and its `challengeResponse` equalled the digest computed locally from the Secret Manager value.
 
 ### What breaks if the order is wrong
 

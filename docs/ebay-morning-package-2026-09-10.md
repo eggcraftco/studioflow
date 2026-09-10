@@ -1,5 +1,10 @@
 # eBay — the morning package (10 September 2026, night)
 
+> **Status, 10 September 2026 — delivered.** D1/D2/D4/D9 were approved at the narrow scopes and steps 1–8 of §3 ran
+> (step 7 as tests A2/A2-compute; test B not run — `roles/owner` lacks `getAccessToken`, no grant added). Step 9's
+> registration waits for a production keyset; the challenge was proved locally (12:56Z). Evidence:
+> `ebay-sandbox-rollout-2026-09-10.md`, `ebay-sandbox-backend-2026-09-10.md`, `ebay-relay-key-and-deletion-token-2026-09-10.md`.
+
 Prepared on branch `ebay-connector` (worktree `~/Developer/studioflow-ebay`). **Nothing was created in
 GCP, nothing deployed, no credential touched, no eBay portal change.** This page collects, in one place,
 what the operator decides in the morning, what was resolved tonight because an earlier decision already

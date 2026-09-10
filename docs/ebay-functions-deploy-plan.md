@@ -1,5 +1,11 @@
 # Deploying the eBay functions — the order the operator set
 
+> **Status, 10 September 2026 — executed.** Steps 1–2 are done and recorded: secrets and the runtime service account
+> (`ebay-sandbox-rollout-2026-09-10.md`), the worker alone and then the other sixteen by name
+> (`ebay-sandbox-backend-2026-09-10.md`), the Firestore rules release (ruleset `8256326f`), the Hostinger relay key
+> (`ebay-relay-key-and-deletion-token-2026-09-10.md`). Step 7 (the first sandbox OAuth) and the portal deletion
+> registration (needs a production keyset) are open; the connector switch is off.
+
 Written 6 September 2026, verified against the live project on 7 September at 01:1x UTC, before the
 soak closed. **Nothing here has been done.** No secret exists, no service exists, the connector
 switch is off and the marker file is absent. Each step runs only after the previous one is verified,
