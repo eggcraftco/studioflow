@@ -1,0 +1,26 @@
+--- 2026-09-10T13:42:01Z poll 1 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:42:32Z poll 2 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:43:02Z poll 3 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:43:33Z poll 4 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:44:03Z poll 5 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:44:34Z poll 6 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":0,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:45:07Z poll 7 row: {"exists":true,"status":"queued","attempts":0,"leaseUntilMs":1789048204781,"reconciledAtMs":1789047904781,"lastRedeliveryAtMs":1789047904781,"finishedAtMs":0,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"sanitizedError":""}
+--- 2026-09-10T13:45:38Z poll 8 row: {"exists":true,"status":"done","attempts":1,"leaseUntilMs":0,"reconciledAtMs":1789047904781,"lastRedeliveryAtMs":1789047904781,"finishedAtMs":1789047908725,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"indexRowsDeleted":0,"sanitizedError":""}
+=== 2026-09-10T13:45:38Z sweep + worker logs since 2026-09-10T13:44:30Z
+   2026-09-10T13:45:04.685722Z reconcileebaydeletions INFO HTTP 200 Google-Cloud-Scheduler 
+   2026-09-10T13:45:05.175714Z reconcileebaydeletions None  ebay deletion reconciliation: 1 unfinished, 1 re-driven, 0 waiting, 0 stuck 
+   2026-09-10T13:45:05.195828Z ebayeventworker INFO HTTP 204 Google-Cloud-Tasks 
+   2026-09-10T13:45:05.227411Z ebayeventworker INFO  Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, e
+   2026-09-10T13:45:07.836373Z ebayeventworker INFO  Default STARTUP TCP probe succeeded after 1 attempt for container "worker" on port 8080.
+=== 2026-09-10T13:45:41Z Cloud Tasks records since 2026-09-10T13:44:30Z
+   2026-09-10T13:45:05.104794445Z | 96857506344983599201 | taskCreationLog | status: OK | target: tudio.cloudfunctions.net/ebayEventWorker
+   2026-09-10T13:45:05.110330339Z | 96857506344983599201 | attemptDispatchLog | status: - | target: tudio.cloudfunctions.net/ebayEventWorker
+   2026-09-10T13:45:08.824683157Z | 96857506344983599201 | attemptResponseLog | status: OK | target: tudio.cloudfunctions.net/ebayEventWorker
+=== 2026-09-10T13:45:42Z final row state: {"exists":true,"status":"done","attempts":1,"leaseUntilMs":0,"reconciledAtMs":1789047904781,"lastRedeliveryAtMs":1789047904781,"finishedAtMs":1789047908725,"ordersScrubbed":0,"restrictedDocsDeleted":0,"connectionsDisconnected":0,"indexRowsDeleted":0,"sanitizedError":""}
+  synthetic row deleted
+  ledger count after cleanup: 0
+=== 2026-09-10T13:45:44Z TTL policy states
+  ebayConnectStates . expireAt	ACTIVE
+  ebayDeletionRequests . expireAt	ACTIVE
+  ebayPresentedCodes . expireAt	ACTIVE
+=== 2026-09-10T13:45:45Z watch done
