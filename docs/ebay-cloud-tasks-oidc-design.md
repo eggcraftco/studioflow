@@ -478,7 +478,7 @@ gcloud tasks create-http-task \
   --url='https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayEventWorker' \
   --method=POST \
   --header='Content-Type: application/json' \
-  --body-content='{"data":{"key":"ebay|preflight|actas","provider":"ebay","connectionId":"__preflight__","companyId":"__preflight__","entityType":"order","externalId":"0","eventType":"preflight","attempt":1}}' \
+  --body-content='{"data":{"key":"ebay|preflight|actas","provider":"ebay","connectionId":"preflight-missing-20260910","companyId":"preflight-missing-20260910","entityType":"order","externalId":"0","eventType":"preflight","attempt":1}}' \
   --oidc-service-account-email=ebay-connector@eggcraft-studio.iam.gserviceaccount.com \
   --impersonate-service-account=ebay-connector@eggcraft-studio.iam.gserviceaccount.com
 ```
@@ -797,7 +797,7 @@ gcloud tasks create-http-task \
   --url='https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayEventWorker' \
   --method=POST \
   --header='Content-Type: application/json' \
-  --body-content='{"data":{"key":"ebay|preflight|A","provider":"ebay","connectionId":"__preflight__","companyId":"__preflight__","entityType":"order","externalId":"0","eventType":"preflight","attempt":1}}' \
+  --body-content='{"data":{"key":"ebay|preflight|A","provider":"ebay","connectionId":"preflight-missing-20260910","companyId":"preflight-missing-20260910","entityType":"order","externalId":"0","eventType":"preflight","attempt":1}}' \
   --oidc-service-account-email=ebay-connector@eggcraft-studio.iam.gserviceaccount.com
 ```
 
@@ -813,13 +813,20 @@ run it after and treat a pass as sufficient.
 
 ### 7.5 What the payload does, and why this exact payload
 
+> **Correction, 10 Sep 2026 (live run):** the original payload used `connectionId: "__preflight__"`. Firestore reserves
+> document ids of the form `__*__`, so `connections().doc("__preflight__").get()` throws
+> `INVALID_ARGUMENT: Resource id "__preflight__" is invalid because it is reserved` *before* the "missing connection"
+> branch — the handler still fails closed with no write, but the pass signal is not `connection_missing`. The payload
+> above now uses a plain, non-existent id (`preflight-missing-20260910`), which reaches `:1534` and throws
+> `connection_missing` as this section describes. The rest of the trace is unchanged.
+
 **Established, traced end to end.** The task carries `entityType: "order"` and
-`connectionId: "__preflight__"`.
+`connectionId: "preflight-missing-20260910"`.
 
 1. `ebayEventWorker`'s handler calls `runEbayEventTask(request.data)` (`index.js:34204-34205`).
 2. `runEbayEventTask` calls `processEbayCommerceTask` (`index.js:34182`).
 3. `processEbayCommerceTask` (`ebayConnector.js:1530-1536`): `entityType` is not `buyer_deletion`, so
-   it reads `ebayConnections/__preflight__` (`:1532`). The document does not exist, so `data` is
+   it reads `ebayConnections/preflight-missing-20260910` (`:1532`). The document does not exist, so `data` is
    `null`, and `:1534` throws
    `classedError("connection_missing", "validation", "connection")`.
 4. The throw happens **before** the health-touch block (`index.js:34183-34191`), so **nothing is
