@@ -246,6 +246,17 @@ addresses — `NIVADESK_ADMIN_EMAILS` in `AdminInsightsHub.tsx` (web, gates `/ad
 `contact@eggcraft.co.uk`. The pilot user is none of them, by design. The inbox check therefore needs the operator
 signed in as one of the three; the assistant enters no credentials.
 
+## 11d. Test records left in place — cleanup listed separately, nothing deleted
+
+| Record | Where | Why it exists | To remove |
+|---|---|---|---|
+| Order `YFFB4Xqi8zSfFgPEN48t` "Pilot Check Customer / Feedback pilot synthetic order" | `siparisler`, workspace `GuglEFKSEKNTq1xibFpJav3EWkY2` | the synthetic first success (7) | move to the order bin from the app (trashed orders no longer count as a first success), or delete the document; note it also raises the eBay acceptance baseline from 0 to 1 order |
+| Feedback `fb_B4u3x39BX2m4` | `feedback` (root) | the manual send (3) | delete the document (admin-only collection); or keep as the inbox's first row |
+| `companies/GuglEFKS…/feedbackState/GuglEFKS…` | server-only state | shows / dismissal / submission stamps (4, 7b, 7c) | delete the document to reset the user's prompt history — after that a fresh session would invite again |
+| Customer "Pilot Check Customer" | customers of the test workspace (created by Quick Create) | side effect of (7) | delete from Customers |
+
+None of these touch the eBay connection, other workspaces or the admin allowlist.
+
 ## 11. What stays out of this package
 
 Native screens, the §36/§37 prompt types (need trustworthy activation data — the v2.1 cutover package, kept separate),

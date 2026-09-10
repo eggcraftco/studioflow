@@ -242,6 +242,15 @@ it already names `testuser_nivadesk_buyer2`; only the password is missing, which
 **Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change, no payment
 detail entered.
 
+## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
+
+| Record | Where | To remove |
+|---|---|---|
+| Listing `110590626185` "NivaDesk sandbox test item 2026-09-10" (1 of 2 sold) | eBay Sandbox, seller `TESTUSER_nivadesk_seller1` | Trading `EndFixedPriceItem` with the seller token, or let it expire (GTC listings in the sandbox are periodically purged by eBay) |
+| Order `110590626185-10000012799510` (Completed, £6.00 marked paid) | eBay Sandbox | cannot be deleted; sandbox data is purged by eBay on its own schedule |
+| Test users `TESTUSER_nivadesk_buyer1`, `TESTUSER_nivadesk_buyer2` | eBay Sandbox | leave; sandbox users cannot be deleted by the developer, and buyer1's password is unknown to us |
+| NivaDesk side | workspace `GuglEFKSEKNTq1xibFpJav3EWkY2` | nothing was written by this stage: 0 imported orders, `importState none`; the `syncLog` rows (`connected`, six `import_preview 0 found`) and the daily quota counter are the only traces and expire on their own |
+
 ## 2a. Blocker — the Explorer keeps minting the SELLER's token, not the buyer's
 
 Twice now the "Get OAuth User Token" flow, after the operator's "Switch account → TESTUSER_nivadesk_buyer1 → password →
