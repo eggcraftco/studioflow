@@ -166,6 +166,11 @@ obligations do not survive an arrangement where any function in the system can
 read the key to it. eBay's functions run as `ebay-connector@eggcraft-studio` and
 its tasks ride their own Cloud Tasks queue (`ebayEventWorker`), never the shared
 `commerceEventWorker`, so no other connector's key is ever mounted beside eBay's.
+What that separation buys is **secret isolation, not data isolation**: `ebay-connector@` holds
+`roles/datastore.user` at project scope like every runtime identity here (Firestore IAM has no
+collection scope and Security Rules do not apply to the Admin SDK), so it can read and write the whole
+database; what it cannot do is read another connector's secrets, and no other identity can read its
+(`docs/ebay-sa-approval-package.md` §1.9).
 
 A check in the suite fails if Amazon or eBay code ships without that separation.
 

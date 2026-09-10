@@ -12,14 +12,15 @@ const rules = fs.readFileSync(path.join(root, "../firestore.rules"), "utf8");
 let failures = 0;
 function check(name, fn) { try { fn(); console.log("PASS ", name); } catch (error) { failures += 1; console.log("FAIL ", name, "-", String(error.message).replace(/\s+/g, " ").slice(0, 300)); } }
 
-check("the five eBay secrets are declared only behind the marker, and EBAY_RUNTIME carries the dedicated identity beside them", () => {
+check("the six eBay secrets are declared only behind the marker, and EBAY_RUNTIME carries the dedicated identity beside them", () => {
   assert.ok(index.includes('const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));'));
   // The fifth is EBAY_CALLBACK_KEY (§5.4): the key the web callback route signs
   // its relay POST with. It is a NAME here and nowhere else — no value in any
-  // file, commit or log. Deploying without the marker mounts none of the five,
+  // file, commit or log. The sixth is the account-deletion verification token
+  // (docs/ebay-deletion-token-migration.md, D6). Deploying without the marker mounts none of the six,
   // so every relay POST answers 401 and no OAuth can complete: §5.4's rollout
   // step 3 is what actually controls the mount.
-  assert.ok(/const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY\s*\?\s*\[defineSecret\("EBAY_CLIENT_ID"\), defineSecret\("EBAY_CLIENT_SECRET"\), defineSecret\("EBAY_TOKEN_KEY"\), defineSecret\("EBAY_HASH_KEY"\), defineSecret\("EBAY_CALLBACK_KEY"\)\]\s*:\s*\[\];/.test(index));
+  assert.ok(/const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY\s*\?\s*\[defineSecret\("EBAY_CLIENT_ID"\), defineSecret\("EBAY_CLIENT_SECRET"\), defineSecret\("EBAY_TOKEN_KEY"\), defineSecret\("EBAY_HASH_KEY"\), defineSecret\("EBAY_CALLBACK_KEY"\), defineSecret\("NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN"\)\]\s*:\s*\[\];/.test(index));
   assert.ok(index.includes('const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";'));
   assert.ok(index.includes("const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};"), "the fifth secret rides the dedicated identity, never the default compute account");
   assert.ok(index.includes('const ebaySecretValue = (name) => process.env[name] || "";'));

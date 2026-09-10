@@ -118,8 +118,9 @@ marker, the switch and the flag (§9); the challenge GET is always answered.
    key. When the secrets are absent (`EBAY_CLIENT_ID` blank) or the key fetch fails, `ebayNotifications`
    answers **503** `{ ok:false, error:"verification_unavailable" }` — retryable, so eBay keeps
    redelivering (`publishAttemptCount` climbs) and nothing is silently dropped — never 401. The
-   challenge GET needs no secret and is answered whenever the verification token and endpoint URL are
-   configured. "Compliance does not switch off" therefore holds from the moment the marker is committed,
+   challenge GET needs the verification token — since D6 (`ebay-deletion-token-migration.md`) a Secret
+   Manager secret mounted with the other five, so the challenge is answered only once the marker and a
+   secret version exist; the endpoint URL is plain configuration. "Compliance does not switch off" therefore holds from the moment the marker is committed,
    and *before* that moment the endpoint is honest about it (503, alert log line
    `"ebay notifications: deletion received without secrets"`). The marker is committed **before** the
    endpoint URL is registered in the portal (§15 order of owner actions).
@@ -3189,7 +3190,7 @@ logging. **No per-IP limiter**: eBay delivers from many source addresses and a l
 would throttle genuine bursts ("up to 1500 notifications on any given day", §1) and get the endpoint
 marked down. The budget is applied **after** the signature is verified (below).
 
-**GET `?challenge_code=<c>`** (challenge, always on, no secrets needed):
+**GET `?challenge_code=<c>`** (challenge, always on once the verification-token secret is mounted — D6):
 ```js
 const challengeResponse = crypto.createHash("sha256").update(challengeCode).update(verificationToken).update(endpointUrl).digest("hex");
 res.status(200).type("application/json").send(JSON.stringify({ challengeResponse }));   // JSON via a library, no BOM (eBay's warning)
@@ -3714,8 +3715,9 @@ Owner actions outside the repo (not this task), **in this order**:
    `reason=unavailable` forever (§5.4, *Rollout*). This list and §5.4's rollout are the same list; they
    must not drift.
 4. Deploy; **then** register `ebayNotifications` as the notification destination with the
-   verification token (the challenge is answered without secrets; the deletion POST needs them —
-   hence step 3 first), subscribe `MARKETPLACE_ACCOUNT_DELETION`, press *Send Test Notification*
+   verification token (the challenge needs the token secret mounted and the deletion POST needs the
+   rest — hence step 3 first, and never a new token version without updating the portal in the same
+   sitting), subscribe `MARKETPLACE_ACCOUNT_DELETION`, press *Send Test Notification*
    and confirm a ledger row `done`.
 5. TTL policies for `ebayConnectStates.expireAt`, `ebayPresentedCodes.expireAt` (§5.5),
    `deliveries.expireAt`, `ebayDeletionRequests.expireAt`.

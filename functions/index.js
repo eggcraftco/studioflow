@@ -134,7 +134,7 @@ const SQUARE_SECRETS = [SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET, SQUARE
 // Values arrive as plain environment variables either way.
 const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));
 const EBAY_SECRET_PARAMS = EBAY_SECRETS_READY
-  ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY"), defineSecret("EBAY_CALLBACK_KEY")]
+  ? [defineSecret("EBAY_CLIENT_ID"), defineSecret("EBAY_CLIENT_SECRET"), defineSecret("EBAY_TOKEN_KEY"), defineSecret("EBAY_HASH_KEY"), defineSecret("EBAY_CALLBACK_KEY"), defineSecret("NIVADESK_EBAY_DELETION_VERIFICATION_TOKEN")]
   : [];
 const EBAY_SERVICE_ACCOUNT = "ebay-connector@eggcraft-studio.iam.gserviceaccount.com";
 const EBAY_RUNTIME = EBAY_SECRETS_READY ? { secrets: EBAY_SECRET_PARAMS, serviceAccount: EBAY_SERVICE_ACCOUNT } : {};
