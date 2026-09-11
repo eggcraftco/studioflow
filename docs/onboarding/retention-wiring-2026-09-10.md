@@ -357,7 +357,7 @@ rules was shortened to bring them forward. Until then the synthetic order stays 
 | Check | Observed |
 |---|---|
 | Web live | Round 173 served at **02:23:44Z** (the `getRetentionMessage` reader found in the published chunk) |
-| Only the pilot workspace gets a card | the admin's **EGGcraft** session (on the exclude list): the reader ran (session look stamp set), the server was asked (`getretentionmessage` invocation logged at ≈02:24Z), **no card in the page** — EGGcraft is `excluded_workspace`; the sweep's own log already showed 62 `not_in_pilot` + 3 `excluded_workspace`, 1 evaluated |
+| Only the pilot workspace gets a card | the admin's **EGGcraft** session (on the exclude list): the reader ran (session look stamp set), the server was asked (the reader's session look stamp was set; the function's DEBUG log line had not been ingested when read at 02:25Z and 02:26Z), **no card in the page** — EGGcraft is `excluded_workspace`; the sweep's own log already showed 62 `not_in_pilot` + 3 `excluded_workspace`, 1 evaluated |
 | E-mail and inbound stay closed | `NIVADESK_RETENTION_EMAIL` / `_INBOUND` unset on all eight services (read back); `retentionInboundReply` and `retentionUnsubscribe` not deployed; the first sweep refused the only e-mail candidate as `flag_off` |
 | Feedback behaviour preserved | `getfeedbackprompt-00002-git` / `submitfeedback-00002-jih` untouched; after Round 173 the account menu still reads Account · **Send feedback** · Visit website · Sign Out in the EGGcraft session; no invitation there (old first success), as before |
 
