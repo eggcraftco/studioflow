@@ -60,7 +60,25 @@ records keep `platform: "web"` — proven by the web-shaped send above and by th
 Deploying this before the native apps ship is safe; deploying the native apps before it is also safe (their notes
 would be filed as `web` until the server is updated — the only loss is the label).
 
-## 3b. Release package — ready for approval, not run
+## 3c. Deployed — `submitFeedback` only (11 Sep 11:27:57Z)
+
+Approved by the operator 11 Sep ~11:15Z ("yalnız `submitFeedback`"). Merge `fd2a6648` on the deploy branch (normal
+merge of `native-feedback-screens`; `functions/` byte-identical to the tested branch `c0deb2ba`; versus the live source
+`37025406` only `feedback.js`, `lifecycle/feedback.js` and the test changed; no conflicts; the deploy branch had moved by
+docs only). Pre-checks: the eight runbook ancestors present, tree clean, `functions/.env` present (57 lines, unchanged),
+`feedback.test.js` green on the merged tree; branch pushed before the deploy.
+`firebase deploy --only functions:submitFeedback --project eggcraft-studio` → "Successful update operation", exit 0.
+Live: **`submitfeedback-00003-jez`**, 100 % traffic, created 11:27:57Z; previous **`submitfeedback-00002-jih`** (10 Sep
+23:42Z, the general-release deploy) retained = the rollback target (`gcloud run services update-traffic submitfeedback
+--to-revisions submitfeedback-00002-jih=100 --region europe-west2`). Environment variable set of the new revision
+identical to the previous one (same names, same count). Nothing else deployed: the other five feedback callables,
+rules, indexes, `.env` untouched; no store build, no native release. The **iOS** send shape is the same file as the Mac
+one (`FeedbackCenterView.swift`, `#else` branch → `platform: "ios"`); the server side of `ios` is covered by the unit
+test's accepted-values list (green, not re-run), the emulator run exercised `mac` and `android`.
+Still owed: one send from a real native session (the operator's test account on a device/simulator) → inbox row
+`platform: mac` — not a blocker for anything else.
+
+## 3b. Release package — as prepared before the deploy (kept for the record)
 
 * **Source:** branch `native-feedback-screens` (code `c0deb2ba`, records on top), from the deploy branch head `37025406`;
   the `functions/` diff against the deploy branch is the three files in §2. Merge into the deploy branch first (normal
