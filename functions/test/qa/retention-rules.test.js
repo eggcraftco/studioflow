@@ -166,7 +166,9 @@ check("who may be swept: nobody without a pilot list, everyone with \"*\", exact
   assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w0, w1 ,w2" }), { allowed: true, reason: "" });
   assert.deepStrictEqual(workspaceScope({ companyId: "w3", pilotList: "w0,w1" }), { allowed: false, reason: "not_in_pilot" });
   assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", excludeList: "w9,w1" }), { allowed: false, reason: "excluded_workspace" }, "the exclude list beats *");
-  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w1", ownerEmail: "Someone@EGGcraft.co.uk" }), { allowed: false, reason: "internal_owner" }, "our own domain, any case");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w1", ownerEmail: "Someone@EGGcraft.co.uk" }), { allowed: true, reason: "" }, "named on the list = deliberate, even our own workspace");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "Someone@EGGcraft.co.uk" }), { allowed: false, reason: "internal_owner" }, "under the wildcard our own domain is skipped, any case");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w1", excludeList: "w1", ownerEmail: "buyer@example.com" }), { allowed: false, reason: "excluded_workspace" }, "the exclude list beats an explicit id too");
   assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "contact@nivadesk.co.uk" }), { allowed: false, reason: "internal_owner" });
   assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "admin@gmail.com", adminEmails: "x@y.z, Admin@Gmail.com" }), { allowed: false, reason: "internal_owner" }, "an admin address on any domain");
   assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "buyer@example.com" }), { allowed: true, reason: "" });

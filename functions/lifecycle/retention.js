@@ -321,9 +321,10 @@ function parseList(raw) {
 /**
  * Whether the sweep may consider a workspace. The pilot list works like the
  * feedback one: unset or empty means nobody, "*" means every workspace,
- * otherwise the exact ids. The exclude list and the internal rule win over
- * "*": a test workspace or our own company never receives a nudge or a founder
- * note, even though the activation funnel counts it.
+ * otherwise the exact ids. The exclude list always wins; the internal-owner rule
+ * (our own domains and the admin addresses) wins over "*" only — a test
+ * workspace or our own company never receives a nudge or a founder note by
+ * accident, though it can be named as the pilot on purpose.
  *
  * @param {object} input { companyId, ownerEmail, pilotList, excludeList, adminEmails, internalDomains? }
  * @returns {{allowed: boolean, reason: string}}
@@ -332,15 +333,18 @@ function workspaceScope(input = {}) {
   const companyId = String(input.companyId || "").trim();
   if (!companyId) return { allowed: false, reason: "no_company" };
   if (new Set(parseList(input.excludeList)).has(companyId)) return { allowed: false, reason: "excluded_workspace" };
+  const pilot = parseList(input.pilotList);
+  if (!pilot.length) return { allowed: false, reason: "not_in_pilot" };
+  // An id named on the list is a deliberate choice — our own test workspace can be
+  // the pilot. Only the wildcard defers to the internal-owner rule.
+  if (pilot.includes(companyId)) return { allowed: true, reason: "" };
+  if (!pilot.includes("*")) return { allowed: false, reason: "not_in_pilot" };
   const email = String(input.ownerEmail || "").trim().toLowerCase();
   const domain = email.includes("@") ? email.split("@").pop() : "";
   const admins = new Set(parseList(input.adminEmails).map((item) => item.toLowerCase()));
   const domains = new Set((Array.isArray(input.internalDomains) ? input.internalDomains : INTERNAL_DOMAINS).map((item) => String(item).toLowerCase()));
   if (email && (admins.has(email) || domains.has(domain))) return { allowed: false, reason: "internal_owner" };
-  const pilot = parseList(input.pilotList);
-  if (!pilot.length) return { allowed: false, reason: "not_in_pilot" };
-  if (pilot.includes("*") || pilot.includes(companyId)) return { allowed: true, reason: "" };
-  return { allowed: false, reason: "not_in_pilot" };
+  return { allowed: true, reason: "" };
 }
 
 /**
