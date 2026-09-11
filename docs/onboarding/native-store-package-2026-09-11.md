@@ -49,7 +49,7 @@ exists live — 33 new names on iOS/Mac, 32 on Android, checked against the 446 
   `getEbayConnections` also returns `enabledForWorkspace` (the same flag `beginEbayConnect` checks) and the native hub/screen
   render "Not available for this workspace yet" when false (one function + a small client change → it would have to ride
   this release); (b) accept the refusal message for this release and note it in the review notes. **Recommended: (a) before
-  the store build** — it is the one item that presents a closed feature as usable. **Done on the candidate (11 Sep 16:0xZ):** `ebay-availability-fix` @ `333e20ae` (code `8f63e803`), field name `workspaceEnabled`, verified on the five platforms — `docs/onboarding/ebay-availability-fix-2026-09-11.md`. The store build must be cut from the deploy branch **after** that branch is merged, and `getEbayConnections` deployed from it before the store review (old clients keep working either way).
+  the store build** — it is the one item that presents a closed feature as usable. **Done on the candidate (11 Sep 15:0xZ):** `ebay-availability-fix` @ `333e20ae` (code `8f63e803`), field name `workspaceEnabled`, verified on the five platforms — `docs/onboarding/ebay-availability-fix-2026-09-11.md`. The store build must be cut from the deploy branch **after** that branch is merged, and `getEbayConnections` deployed from it before the store review (old clients keep working either way).
 * **Amazon.** Catalogue entry `kind: "planned"` on both platforms → shown as coming soon, no action. Correct.
 * **Retention e-mail / IMAP.** Server only, flags off; the native apps have no surface. Nothing to gate.
 * **Retention in-app card.** The native apps have **no** retention reader (web only); pilot unaffected by the release.
