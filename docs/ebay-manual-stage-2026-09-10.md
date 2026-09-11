@@ -360,6 +360,8 @@ agreement, no secrets, not the public forum.
 | Activation | the developer account's support was **INACTIVE**. The Profile & Contacts edit form showed all primary-contact fields already filled (name, e-mail, phone, country GB) and, next to *Activate Support*, only the three-step instruction — **no fee, price, subscription, terms or agreement text anywhere**; the newsletter and survey checkboxes were left unticked. Clicked *Activate Support* with the existing details, unchanged → "Support for this contact is activated." → tickets page now reads **ACTIVE** (~00:44Z) |
 | Note | the primary phone is stored with a `+1` country code in front of a UK number; left as it was, not corrected here |
 
+| AI-Assisted Support (the portal's required first step, ~00:47Z) | the approved text was submitted to the portal's AI assistant (the page states it "may return inaccurate or inappropriate responses"). Its *Suggested Solution*, recorded here as **eBay's assistant's non-authoritative view, not a support answer**: orders created with Trading calls and marked paid by `CompleteSale` are reported by Trading `GetOrders` but "are not guaranteed to appear" in Fulfillment `getOrders`/`getOrder`; the Fulfillment API returns orders that went through eBay's checkout flow including a payment transaction, which `CompleteSale` does not simulate; the only supported way in the Sandbox is a buyer-side checkout through the Sandbox web UI; Sandbox checkout pages returning errors "is a known limitation and may block Fulfillment API testing". It then offered *Mark as Resolved* / **Proceed to Create a Ticket** — the latter was chosen, as approved |
+
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | To remove |
