@@ -22974,8 +22974,23 @@ body[data-studio-theme="dark"] .cookie-banner-actions .cookie-link-btn { color: 
     width: min(330px, calc(100vw - 24px));
     padding: 14px 16px;
     border-radius: 26px;
-    max-height: calc(100dvh - 90px);
+    /* The drawer's own box scrolls: its height is the visible viewport below
+       the toolbar (dvh follows Safari's collapsing bars), the list never chains
+       its scroll to the page, and a drag inside it is a vertical pan. */
+    max-height: calc(100dvh - 66px - 16px);
+    overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* While the phone drawer is open the page behind it must not scroll: on
+     iPhone Safari a drag inside the drawer otherwise moves the page and the
+     drawer's own list never scrolls, so its last entries cannot be reached. */
+  body:has(.native-toolbar-nav.is-open) {
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .native-toolbar-nav .native-nav-pill {
@@ -29919,6 +29934,8 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .integration-state.is-available { background: rgba(100, 116, 139, 0.14); color: #475569; }
 .integration-state.is-webhook { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
 .integration-state.is-planned { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+.integration-state.is-checking { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+.integration-state.is-unverified { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
 
 .integration-detail { margin: 0; font-size: 12.5px; font-weight: 600; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Not a badge: the card's state is about the new connector, and this is about
@@ -31528,3 +31545,35 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .retention-nudge button:disabled { opacity: 0.6; cursor: default; }
 .retention-nudge button:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 @media (max-width: 640px) { .retention-nudge { padding: 8px 12px; } .retention-nudge-text { min-width: 0; flex-basis: 100%; } }
+
+
+/* Phones (coarse pointer): iOS Safari zooms the page into any focused field
+   whose font is under 16px, which reads as the page sliding left and clipping.
+   Fields are 16px there; pinch zoom stays available (no maximum-scale). */
+@media (max-width: 980px) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  .settings-search input,
+  .settings-content-pane .input {
+    font-size: 16px;
+  }
+}
+
+/* Phone hub layout: the integration card's category badge takes its own line
+   under the title instead of squeezing beside it, and the filter chips wrap as
+   a row instead of stacking one per line (the compact group is an inline grid
+   with fit-content width, which resolves auto-fit to a single column). */
+@media (max-width: 640px) {
+  .settings-content-pane .integration-card-head { flex-wrap: wrap; }
+  .settings-content-pane .integration-card-head > div { flex: 1 1 0; }
+  .settings-content-pane .integration-card-head strong { white-space: normal; overflow-wrap: anywhere; }
+  .settings-content-pane .integration-category { order: 3; flex: 0 0 100%; margin-left: 0; width: max-content; max-width: 100%; }
+  .settings-integrations-toolbar .settings-segmented.is-compact { display: flex; flex-wrap: wrap; width: auto; }
+  .settings-integrations-toolbar .settings-segmented.is-compact button { min-width: 0; flex: 1 1 auto; padding: 0 12px; }
+  .settings-integrations-toolbar .settings-segmented.is-compact button + button { border-left: 1px solid var(--settings-border); }
+  .workspace-load-error { display: grid; gap: 8px; }
+  .workspace-load-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+}
+.workspace-load-error { display: grid; gap: 8px; }
+.workspace-load-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
