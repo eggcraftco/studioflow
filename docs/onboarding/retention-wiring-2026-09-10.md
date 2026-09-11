@@ -351,3 +351,16 @@ runs until **11 Sep 22:48:51Z**. The hourly sweep after that (≈ **23:20Z on 11
 The live checks that need a card — it appears, Not now closes it, the CTA routes and closes it as acted, and restoring the
 synthetic order withdraws the pending card as `goal_met` — are therefore scheduled for after that sweep; nothing in the
 rules was shortened to bring them forward. Until then the synthetic order stays in the bin, marked.
+
+### 7.8 Live checks done now (11 Sep 02:23–02:25Z)
+
+| Check | Observed |
+|---|---|
+| Web live | Round 173 served at **02:23:44Z** (the `getRetentionMessage` reader found in the published chunk) |
+| Only the pilot workspace gets a card | the admin's **EGGcraft** session (on the exclude list): the reader ran (session look stamp set), the server was asked (`getretentionmessage` invocation logged at ≈02:24Z), **no card in the page** — EGGcraft is `excluded_workspace`; the sweep's own log already showed 62 `not_in_pilot` + 3 `excluded_workspace`, 1 evaluated |
+| E-mail and inbound stay closed | `NIVADESK_RETENTION_EMAIL` / `_INBOUND` unset on all eight services (read back); `retentionInboundReply` and `retentionUnsubscribe` not deployed; the first sweep refused the only e-mail candidate as `flag_off` |
+| Feedback behaviour preserved | `getfeedbackprompt-00002-git` / `submitfeedback-00002-jih` untouched; after Round 173 the account menu still reads Account · **Send feedback** · Visit website · Sign Out in the EGGcraft session; no invitation there (old first success), as before |
+
+**Still open, time-gated, nothing else changed:** the pilot workspace's first card (≈ 23:20Z sweep on 11 Sep, after the
+24-hour first-order rule and the 24-hour feedback hold both pass) → see it, Not now, CTA/acted, then restore the synthetic
+order `YFFB4Xqi8zSfFgPEN48t` (clear `isDeleted`) and confirm the next look withdraws the pending card as `goal_met`.
