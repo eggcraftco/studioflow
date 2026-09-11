@@ -6651,12 +6651,18 @@ struct AyarlarView: View {
         // attention count is the server's own specStatus: the status table
         // lives once (functions/commerce/ebay/status.js) and the clients copy
         // its words rather than each re-reading lastErrorCode their own way.
-        functions.httpsCallable("getEbayConnections").call(["companyId": companyId]) { result, _ in
+        functions.httpsCallable("getEbayConnections").call(["companyId": companyId]) { result, error in
             DispatchQueue.main.async {
                 let rows = ((result?.data as? [String: Any])?["connections"] as? [[String: Any]] ?? []).filter {
                     String(describing: $0["status"] ?? "") != "disconnected"
                 }
                 integrationSignals.ebayConnections = rows.count
+                // A read that did not come back is "could not check", never "Available".
+                if error != nil || result == nil {
+                    integrationSignals.ebayAvailability = .failed
+                } else {
+                    integrationSignals.ebayAvailability = (((result?.data as? [String: Any])?["workspaceEnabled"] as? Bool) ?? true) ? .enabled : .disabled
+                }
                 integrationSignals.ebayConnectionsNeedingAttention = rows.filter {
                     let spec = String(describing: $0["specStatus"] ?? "")
                     return spec == "reauthorization_required" || spec == "degraded" || spec == "suspended"

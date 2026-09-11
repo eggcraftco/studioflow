@@ -96,9 +96,11 @@ export async function claimEbayConnectState(state: string) {
   return (await call<{ state: string }, { ok: boolean; authorizeUrl: string; nonce: string; ticket: string }>("claimEbayConnectState")({ state })).data;
 }
 export async function getEbayConnections(companyId: string) {
-  const data = (await call<{ companyId: string }, { ok: boolean; connections: EbayConnection[]; configured: boolean; environment: string }>(
+  const data = (await call<{ companyId: string }, { ok: boolean; connections: EbayConnection[]; configured: boolean; workspaceEnabled?: boolean; environment: string }>(
     "getEbayConnections")({ companyId })).data;
-  return { connections: data.connections ?? [], configured: data.configured !== false, environment: data.environment || "sandbox" };
+  // workspaceEnabled: whether THIS workspace may connect (the server's own gate). Absent on an older
+  // server → true, so the screen behaves as it did before the field existed.
+  return { connections: data.connections ?? [], configured: data.configured !== false, workspaceEnabled: data.workspaceEnabled !== false, environment: data.environment || "sandbox" };
 }
 /** Never throws for a provider failure: an unhealthy connection is an answer. */
 export async function verifyEbayConnection(companyId: string, connectionId: string) {

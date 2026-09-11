@@ -2558,6 +2558,7 @@ private fun EbayDetail(state: StudioFlowUiState) {
 
     var loading by remember { mutableStateOf(true) }
     var configured by remember { mutableStateOf(true) }
+    var workspaceEnabled by remember { mutableStateOf(true) }
     var environment by remember { mutableStateOf("sandbox") }
     var connections by remember {
         mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EbayConnectionRow>>(emptyList())
@@ -2592,6 +2593,7 @@ private fun EbayDetail(state: StudioFlowUiState) {
             val result = repository.ebayConnections(ws.id)
             connections = result.connections
             configured = result.configured
+            workspaceEnabled = result.workspaceEnabled
             environment = result.environment
             if (!keepError) errorText = ""
         } catch (failure: Exception) {
@@ -2662,6 +2664,16 @@ private fun EbayDetail(state: StudioFlowUiState) {
             // Not a fault: this server has no eBay application wired up.
             DetailCard(title = "eBay", icon = Icons.Filled.ShoppingCart) {
                 Text(t("eBay is not set up on this server yet. Contact support and we will enable it."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            return@DetailColumn
+        }
+
+        if (!workspaceEnabled && connection == null) {
+            // The server has eBay, but this workspace is not on its rollout list yet: say so
+            // rather than offer a Connect the server would refuse.
+            DetailCard(title = t("eBay"), icon = Icons.Filled.ShoppingCart) {
+                Text(t("eBay is not available for this workspace yet."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             return@DetailColumn
@@ -3767,7 +3779,10 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
         // its words rather than each re-reading lastErrorCode their own way. A
         // workspace where the connector is switched off settles empty here,
         // which reads Available — the card the grid drew before eBay existed.
-        val ebayRows = runCatching { repository.ebayConnections(ws.id).connections }
+        // A read that did not come back is "could not check", never "Available".
+        val ebayRead = runCatching { repository.ebayConnections(ws.id) }
+        val ebayResult = ebayRead.getOrNull()
+        val ebayRows = runCatching { ebayResult?.connections ?: emptyList() }
             .getOrDefault(emptyList())
             .filter { it.status != "disconnected" }
         val ebayFirst = ebayRows.firstOrNull()
@@ -3778,6 +3793,11 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             etsyShops = etsyRows.size,
             etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
             ebayConnections = ebayRows.size,
+            ebayAvailability = when {
+                ebayRead.isFailure -> EbayAvailability.Failed
+                ebayResult?.workspaceEnabled == false -> EbayAvailability.Disabled
+                else -> EbayAvailability.Enabled
+            },
             ebayConnectionsNeedingAttention = ebayRows.count { it.needsAttention },
             ebayAccount = ebayFirst?.title.orEmpty(),
             ebaySandbox = ebayFirst?.isSandbox == true,

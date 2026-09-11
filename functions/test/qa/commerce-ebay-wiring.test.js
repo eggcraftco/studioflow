@@ -12,6 +12,16 @@ const rules = fs.readFileSync(path.join(root, "../firestore.rules"), "utf8");
 let failures = 0;
 function check(name, fn) { try { fn(); console.log("PASS ", name); } catch (error) { failures += 1; console.log("FAIL ", name, "-", String(error.message).replace(/\s+/g, " ").slice(0, 300)); } }
 
+check("getEbayConnections tells the workspace whether it may connect, by the same gates beginEbayConnect applies — and configured keeps its old meaning", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "ebayConnector.js"), "utf8");
+  const list = src.slice(src.indexOf("const getEbayConnections = onCall("), src.indexOf("const verifyEbayConnection = onCall("));
+  assert.ok(list.includes('const workspaceEnabled = connectorOn() && configured() && (await providerFlagOn()) && flagsModule.workspaceEnabled(flags, "connectors", "ebay", companyId);'), "the four gates, per workspace");
+  assert.ok(list.includes("configured: configured() && connectorOn(), workspaceEnabled, environment: env()"), "configured unchanged, workspaceEnabled beside it");
+  const begin = src.slice(src.indexOf("const beginEbayConnect = onCall("), src.indexOf("const claimEbayConnectState"));
+  assert.ok(begin.includes("if (!connectorOn())") && begin.includes("if (!configured()") && begin.includes("if (!(await providerFlagOn()))") && begin.includes("if (!(await workspaceFlagOn(companyId)))"), "beginEbayConnect still applies its own gates (server authority unchanged)");
+  assert.ok(src.includes('async function workspaceFlagOn(companyId) { return flagsModule.workspaceEnabled(await flagsNow(), "connectors", "ebay", companyId); }'), "both read the same flag helper");
+});
+
 check("the six eBay secrets are declared only behind the marker, and EBAY_RUNTIME carries the dedicated identity beside them", () => {
   assert.ok(index.includes('const EBAY_SECRETS_READY = process.env.NIVADESK_EBAY_SECRETS_READY === "1" || require("fs").existsSync(require("path").join(__dirname, ".ebay-secrets-ready"));'));
   // The fifth is EBAY_CALLBACK_KEY (§5.4): the key the web callback route signs

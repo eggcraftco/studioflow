@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -415,6 +416,14 @@ private fun StudioFlowAppContent(
                 else viewModel.failExternalSignIn("Could not start Apple Sign-In on this device.")
             }
         )
+        state.workspace == null -> WorkspaceUnresolvedScreen(
+            t = t,
+            message = state.errorMessage,
+            accessLost = state.workspaceAccessLostCompanyId != null,
+            onRetry = viewModel::retryWorkspace,
+            onUseOwnWorkspace = viewModel::useOwnWorkspaceAfterAccessLoss,
+            onSignOut = viewModel::signOut
+        )
         requireDeviceUnlock && !localUnlockSatisfied -> LocalUnlockScreen(
             message = localUnlockMessage,
             onUnlock = { requestLocalUnlock() },
@@ -609,6 +618,57 @@ private fun LocalUnlockScreen(
             }
             TextButton(onClick = onSignOut) {
                 Text("Sign Out")
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceUnresolvedScreen(
+    t: (String) -> String,
+    message: String,
+    accessLost: Boolean,
+    onRetry: () -> Unit,
+    onUseOwnWorkspace: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    // The workspace could not be resolved (a read that did not reach the server,
+    // or a server-confirmed loss of access). Nothing was switched or written;
+    // the person retries, or — only after a confirmed loss — opens their own.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            androidx.compose.material3.Text(
+                text = t("Workspace not opened"),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.Text(
+                text = message.ifBlank { t("Could not open your workspace. Check your connection and try again.") },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.height(20.dp))
+            androidx.compose.material3.Button(onClick = onRetry, modifier = Modifier.testTag("workspace-retry")) {
+                androidx.compose.material3.Text(t("Retry"))
+            }
+            if (accessLost) {
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.TextButton(onClick = onUseOwnWorkspace) {
+                    androidx.compose.material3.Text(t("Use my own workspace"))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.TextButton(onClick = onSignOut) {
+                androidx.compose.material3.Text(t("Sign Out"))
             }
         }
     }

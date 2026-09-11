@@ -17,6 +17,14 @@ import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
 import { entitlementsForPlan, normalizeBillingPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
 import { FINANCE_ENGINE_VERSION, REMAINING_PREFIX, customLineTotal, type FinanceBlock } from "@/lib/studioflow/financeEngine";
+import {
+  WorkspaceAccessLostError,
+  WorkspaceUnavailableError,
+  decideWorkspace,
+  preferredWorkspace,
+  type WorkspaceAccessOutcome,
+  type WorkspaceStoredRead,
+} from "@/lib/studioflow/workspaceResolution";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -978,21 +986,62 @@ async function readOwnUserDocument(uid: string) {
   }
 }
 
+/** The stored workspace pointer, with "did this read reach the server" kept, plus the user document itself. */
+async function readStoredWorkspace(uid: string): Promise<{ stored: WorkspaceStoredRead; userData: DocumentData }> {
+  try {
+    const snapshot = await getDoc(doc(db, "users", uid));
+    const userData = snapshot.exists() ? snapshot.data() : {};
+    const activeCompanyId = stringValue(userData.activeCompanyId, "");
+    return { stored: { kind: snapshot.metadata.fromCache ? "cache" : "server", activeCompanyId }, userData };
+  } catch (error) {
+    if (isPermissionError(error)) return { stored: { kind: "failed" }, userData: {} };
+    throw error;
+  }
+}
+
+/**
+ * Reads the workspace the account points at and answers with three outcomes:
+ * granted (server data, document present), denied (server data, document gone)
+ * or unavailable (a refused or cache-only read). The loader retries on the
+ * third instead of quietly opening the personal workspace.
+ */
+async function readActiveWorkspaceAccess(companyId: string): Promise<{ kind: WorkspaceAccessOutcome; snapshot: DocumentSnapshot<DocumentData> | null }> {
+  try {
+    const snapshot = await getDoc(doc(db, "companies", companyId));
+    if (snapshot.metadata.fromCache && !snapshot.exists()) return { kind: "unavailable", snapshot: null };
+    if (!snapshot.exists()) return { kind: "denied", snapshot: null };
+    return { kind: "granted", snapshot };
+  } catch (error) {
+    // The rules refusing the read is the server's answer, not a transient failure.
+    if (isPermissionError(error)) return { kind: "denied", snapshot: null };
+    throw error;
+  }
+}
+
 export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContext> {
   // Speed: read the user doc and the (most likely) own workspace doc in
   // parallel. Most accounts have activeCompanyId === uid, so this saves a full
-  // network round trip; members of someone else's workspace fall back to one
-  // extra read below.
-  const [userData, ownWorkspaceSnapshot] = await Promise.all([
-    readOwnUserDocument(uid),
+  // network round trip; members of someone else's workspace take one extra
+  // read below.
+  const [{ stored, userData }, ownWorkspaceSnapshot] = await Promise.all([
+    readStoredWorkspace(uid),
     readWorkspaceDocument(uid)
   ]);
-  let companyId = stringValue(userData.activeCompanyId, uid);
+  const step = preferredWorkspace(uid, stored);
+  if (step.kind === "retry") throw new WorkspaceUnavailableError(step.reason);
 
-  let companySnapshot = companyId === uid ? ownWorkspaceSnapshot : await readWorkspaceDocument(companyId);
-  if (!companySnapshot && companyId !== uid) {
-    companyId = uid;
-    companySnapshot = ownWorkspaceSnapshot;
+  let companyId = step.companyId;
+  let companySnapshot: DocumentSnapshot<DocumentData> | null = companyId === uid ? ownWorkspaceSnapshot : null;
+  if (companyId !== uid) {
+    // A read that did not reach the server is a retry, never a fallback to the
+    // personal workspace; a server-confirmed missing workspace is the person's
+    // decision, not the loader's. Nothing here writes activeCompanyId.
+    const access = await readActiveWorkspaceAccess(companyId);
+    const decision = decideWorkspace(uid, step, access.kind);
+    if (decision.kind === "retry") throw new WorkspaceUnavailableError(decision.reason);
+    if (decision.kind === "access-lost") throw new WorkspaceAccessLostError(decision.companyId);
+    companyId = decision.companyId;
+    companySnapshot = access.snapshot;
   }
 
   const companyData = companySnapshot?.data() ?? {};

@@ -1,6 +1,8 @@
 package uk.co.eggcraft.studioflow.features.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
@@ -50,6 +52,36 @@ class IntegrationsHubStateTest {
             state("a.myshopify.com" to "paused", "b.myshopify.com" to "active")
         )
     }
+    // eBay: the server's per-workspace gate decides whether a workspace with no connection may
+    // connect. Off the list, the card reads like a planned integration (no Connect); on the list,
+    // Available; with a live connection the gate is irrelevant. Mirrors NivaDeskIntegrations.swift
+    // and studioflow-web/lib/studioflow/integrations.ts — keep the three in step.
+    private val ebayProvider = INTEGRATION_PROVIDERS.first { it.id == "ebay" }
+
+    @Test
+    fun ebayOffTheRolloutListReadsPlannedNotAvailable() {
+        assertEquals(IntegrationState.Planned, ebayProvider.state(IntegrationSignals(ebayConnections = 0, ebayAvailability = EbayAvailability.Disabled)))
+        assertEquals(IntegrationState.Available, ebayProvider.state(IntegrationSignals(ebayConnections = 0, ebayAvailability = EbayAvailability.Enabled)))
+    }
+
+    @Test
+    fun ebayBeforeTheServerAnswersIsCheckingAndAFailedReadIsUnverifiedNeverAvailable() {
+        // The grid's first frame, before getEbayConnections returns.
+        assertEquals(IntegrationState.Checking, ebayProvider.state(IntegrationSignals(ebayConnections = 0)))
+        // A rejected or unreachable read.
+        assertEquals(IntegrationState.Unverified, ebayProvider.state(IntegrationSignals(ebayConnections = 0, ebayAvailability = EbayAvailability.Failed)))
+        assertTrue(IntegrationState.Checking.offersNoAction)
+        assertTrue(IntegrationState.Unverified.offersNoAction)
+        assertTrue(IntegrationState.Planned.offersNoAction)
+        assertFalse(IntegrationState.Available.offersNoAction)
+    }
+
+    @Test
+    fun ebayWithALiveConnectionIgnoresTheGate() {
+        assertEquals(IntegrationState.Connected, ebayProvider.state(IntegrationSignals(ebayConnections = 1, ebayAvailability = EbayAvailability.Disabled)))
+        assertEquals(IntegrationState.Attention, ebayProvider.state(IntegrationSignals(ebayConnections = 1, ebayConnectionsNeedingAttention = 1, ebayAvailability = EbayAvailability.Disabled)))
+        assertEquals(IntegrationState.Connected, ebayProvider.state(IntegrationSignals(ebayConnections = 1, ebayAvailability = EbayAvailability.Failed)))
+    }
 }
 
 /**
@@ -75,15 +107,17 @@ class EbayIntegrationCardTest {
         )
 
     @Test
-    fun aCardWithNoRowsIsAvailableIncludingWhenTheConnectorIsOff() {
+    fun aCardWithNoRowsIsAvailableOnlyOnceTheServerSaidSo() {
         // A planned card short-circuits before the eBay branch is ever reached,
         // so the kind is part of the claim.
         assertEquals("native", ebay.kind)
-        // The default signals object is also what a workspace whose
-        // getEbayConnections read REJECTED settles on — the connector is gated
-        // off — and that must read Available, exactly as the grid did before
-        // eBay existed, not Connected and not a crash.
-        assertEquals(IntegrationState.Available, ebay.state(IntegrationSignals()))
+        // The default signals object is the grid's first frame: the server has
+        // not answered, so the card reads Checking, not Available. A REJECTED
+        // read (the connector switched off, the network gone) reads Unverified.
+        // Only the server's own "enabled" makes it Available — and never Connected.
+        assertEquals(IntegrationState.Checking, ebay.state(IntegrationSignals()))
+        assertEquals(IntegrationState.Unverified, ebay.state(IntegrationSignals(ebayAvailability = EbayAvailability.Failed)))
+        assertEquals(IntegrationState.Available, ebay.state(IntegrationSignals(ebayAvailability = EbayAvailability.Enabled)))
         assertEquals("", ebay.detail(IntegrationSignals()))
     }
 
@@ -117,4 +151,5 @@ class EbayIntegrationCardTest {
         // eBay never named; the card still has to say there is one.
         assertEquals("1 account", ebay.detail(signals(live = 1, attention = 0)))
     }
+
 }

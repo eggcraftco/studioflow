@@ -50,7 +50,21 @@ enum class IntegrationState(val label: String) {
     // Not "Coming soon": QuickBooks and Xero connect today, on the web. A phone
     // that says they are coming sends somebody away from something they have.
     WebOnly("Set up on the web"),
+    // The server has not answered yet (Checking) or could not be reached
+    // (Unverified): neither is "Available", and neither offers Set up.
+    Checking("Checking…"),
+    Unverified("Could not check");
+
+    /** States that never offer the Set up / Manage button. */
+    val offersNoAction: Boolean get() = this == Planned || this == Checking || this == Unverified
 }
+
+/**
+ * What the server said about eBay for this workspace — or that it has not said
+ * anything yet. Unknown is the value before the read lands; Failed is a read
+ * that did not come back. Neither may render as "Available".
+ */
+enum class EbayAvailability { Unknown, Enabled, Disabled, Failed }
 
 data class IntegrationChannel(
     val lastDeliveryAtMs: Long = 0L,
@@ -73,6 +87,8 @@ data class IntegrationSignals(
     /** Live eBay seller accounts, from getEbayConnections. The attention count
      *  is the server's own specStatus — never an error code read again here. */
     val ebayConnections: Int = 0,
+    /** The server's per-workspace eBay gate; false = the card must not offer Connect. */
+    val ebayAvailability: EbayAvailability = EbayAvailability.Unknown,
     val ebayConnectionsNeedingAttention: Int = 0,
     val ebayAccount: String = "",
     val ebaySandbox: Boolean = false,
@@ -160,7 +176,12 @@ data class IntegrationProvider(
             // A disconnected row is not a connection, and the card goes amber
             // only when EVERY live account needs a look: one paused sandbox
             // account beside a working live one is not an outage.
-            if (signals.ebayConnections == 0) return IntegrationState.Available
+            if (signals.ebayConnections == 0) return when (signals.ebayAvailability) {
+                EbayAvailability.Enabled -> IntegrationState.Available
+                EbayAvailability.Disabled -> IntegrationState.Planned
+                EbayAvailability.Unknown -> IntegrationState.Checking
+                EbayAvailability.Failed -> IntegrationState.Unverified
+            }
             return if (signals.ebayConnectionsNeedingAttention == signals.ebayConnections) IntegrationState.Attention else IntegrationState.Connected
         }
         if (id == "paypal") {
@@ -235,7 +256,8 @@ fun IntegrationTile(
         IntegrationState.Connected -> Color(0xFF15803D)
         IntegrationState.Attention, IntegrationState.Webhook -> Color(0xFFC2410C)
         IntegrationState.Available, IntegrationState.WebOnly -> Color(0xFF475569)
-        IntegrationState.Planned -> MaterialTheme.colorScheme.onSurfaceVariant
+        IntegrationState.Planned, IntegrationState.Checking -> MaterialTheme.colorScheme.onSurfaceVariant
+        IntegrationState.Unverified -> Color(0xFFC2410C)
     }
     Column(
         Modifier
@@ -292,7 +314,7 @@ fun IntegrationTile(
                     }
                 }
             }
-            if (provider.manage.isNotEmpty()) {
+            if (provider.manage.isNotEmpty() && !state.offersNoAction) {
                 Spacer(Modifier.height(2.dp))
                 OutlinedButton(onClick = onManage, modifier = Modifier.fillMaxWidth()) {
                     Text(t(if (state == IntegrationState.Connected || state == IntegrationState.Attention) "Manage" else "Set up"))
