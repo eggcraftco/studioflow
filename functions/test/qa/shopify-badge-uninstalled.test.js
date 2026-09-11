@@ -160,23 +160,27 @@ check("a workspace with no store is Available", () => {
 // The card is read from rows the SERVER returns, and `needsAttention` is the
 // server's own specStatus (design §10, §11.1). These claims are the contract,
 // not the code: a disconnected row is not a connection; the card only asks for
-// attention when EVERY live account needs it; and a workspace with the
-// connector switched off — where getEbayConnections rejects and the signal
-// settles empty — reads Available, exactly as it did before eBay existed.
-check("eBay: no rows is Available, including when the connector is off", () => {
+// attention when EVERY live account needs it; and until the server has said
+// whether THIS workspace may connect, the card reads "checking" — a read that
+// did not come back reads "unverified" — never Available by default.
+check("eBay: no rows is Available only once the server said so; unread is checking, a failed read is unverified", () => {
   const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
   assert(ebay, "no ebay provider in the shipped list");
   assert.strictEqual(ebay.kind, "native", "a planned card short-circuits before the eBay branch");
-  assert.strictEqual(shipped.resolveIntegrationState(ebay, signals()).state, "available");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, signals()).state, "checking");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, { ...signals(), ebayWorkspaceEnabled: true }).state, "available");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, { ...signals(), ebayWorkspaceEnabled: false }).state, "planned");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, { ...signals(), ebayWorkspaceEnabled: null }).state, "unverified");
   // The signals object built before eBay existed must not throw here either.
   const older = signals();
   delete older.ebayConnections;
-  assert.strictEqual(shipped.resolveIntegrationState(ebay, older).state, "available");
+  assert.strictEqual(shipped.resolveIntegrationState(ebay, older).state, "checking");
+  // (no Set up for checking/unverified is pinned by ebay-availability-mirrors.test.js on the page source)
 });
 
 check("eBay: a disconnected row is not a connection", () => {
   const ebay = shipped.INTEGRATION_PROVIDERS.find((p) => p.id === "ebay");
-  const live = { ...signals(), ebayConnections: [
+  const live = { ...signals(), ebayWorkspaceEnabled: true, ebayConnections: [
     { account: "eggcraft", status: "disconnected", specStatus: "disconnected", needsAttention: false }
   ] };
   assert.strictEqual(shipped.resolveIntegrationState(ebay, live).state, "available");
