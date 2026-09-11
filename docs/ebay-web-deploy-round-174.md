@@ -1,5 +1,7 @@
 # Round 174 + `getEbayConnections` — the controlled release of the eBay availability candidate (11 Sep 2026)
 
+**Status: RELEASE COMPLETE (server 16:46Z, web 17:00Z).** Behavioural closure is tracked separately below — it stays open until the signed-in production check with a non-pilot account and the physical-phone checks are done.
+
 Approved by the operator (11 Sep ≈16:35Z) once the offline rule was pinned. Server first, then the web; nothing else.
 
 | Step | Value |
@@ -18,3 +20,11 @@ The only production session available to this session is the retention pilot acc
 ## Native
 
 The same fixes are in the merge for Mac/iPhone/Android (`b859a2fb`) but the store builds (iOS/Mac 1.3 (17), Android 0.1.8) still run the old workspace fallback and the old hub; the web release changes nothing for them. Store package: `docs/onboarding/native-store-package-2026-09-11.md` (source now `b859a2fb`). No upload, no Submit.
+
+## Behavioural closure (separate from the release)
+
+| Group | What | State |
+|---|---|---|
+| A. Signed-in production check | `contact@eggcraft.co.uk` (non-pilot, real EGGcraft workspace, read-only): workspace opens and survives a reload; eBay never reads "Available" while checking and no Connect on a non-listed workspace; "Send feedback" present (not sent); menu and Settings navigation | open — operator signs in on the Browser pane, this session reads only |
+| B. Mobile web on real phones (live site, no native build needed) | iPhone Safari + Android Chrome: drawer scrolls to Settings/Sign out; keyboard open on a safe field (settings search / login email) without horizontal overflow; hub badges/chips | open — physical phones needed; simulator/emulator evidence is not substituted |
+| C. Native `b859a2fb` on physical phones | iOS + Android device runs of the merge (workspace resolution, hub, eBay gating) | open — see the per-platform list in the hand-off; no store upload, no Submit |
