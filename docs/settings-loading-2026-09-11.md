@@ -1,6 +1,6 @@
 # "Loading your workspace" on Settings — measurements and the candidate (11 Sep 2026)
 
-Candidate commit **`e3a7a46d`** on `ebay-availability-fix` (on top of Round 175's `eb77d083`). Web only; no function, rule, env or native change. **Not released.** No business data written, no feedback sent, no integration started; the retention pilot and OpenAI connection untouched. Every physical-phone number below comes from the operator's existing signed-in Chrome session on the Xiaomi 24040RN64Y (Android 16, Chrome 152) against the **live** site — the logs kept only stage names and times.
+Candidate commits **`e3a7a46d`** + the Save gate (see §3a) on `ebay-availability-fix` (on top of Round 175's `eb77d083`). Web only; no function, rule, env or native change. **Not released.** No business data written, no feedback sent, no integration started; the retention pilot and OpenAI connection untouched. Every physical-phone number below comes from the operator's existing signed-in Chrome session on the Xiaomi 24040RN64Y (Android 16, Chrome 152) against the **live** site — the logs kept only stage names and times.
 
 ## 1. Where the time goes (live site, physical Android)
 
@@ -36,6 +36,13 @@ Rollback if released: `git revert e3a7a46d` (web files only).
 | Account change while on Settings (desktop width, Branding open) | signed in as a second QA owner on the page, sampled every 100 ms for 4 s | name field showed the new workspace from the first sample on; the old name never reappeared; strip "Loading the details…" → cleared |
 | Workspace unreadable (access lost) | QA owner's stored pointer set to a workspace it cannot read, reload; pointer restored afterwards | page-level banner with Retry / Use my own workspace, no section body (unchanged behaviour); stored pointer untouched |
 | Types | `tsc --noEmit` | clean |
+
+### 3a. The two pre-release checks the operator asked for
+
+| Check | How | Result |
+|---|---|---|
+| A Save cannot post empty/default values while the details are loading or failed | count query delayed 8 s in the page; `/settings` opened via the drawer link; DOM sampled every 500 ms | while the strip said "Loading the details for this section…": section header only — **no editor, no input, no Save button**; the list and navigation usable (Support / Team Access rows present); when the details arrived: the editor mounted with the real values ("connected"/"subtitle-…"). Implementation: the ten sections whose editors start from counts / overview / quick-reply / team data (`SETTINGS_SECTIONS_NEEDING_DETAILS`) mount only when the auxiliary state is `ready`; a failed load leaves them unmounted with the strip's Retry. Sections that load their own data (Integrations, Support, Workflow Steps, Customer SMS, Message Settings, Customer Portal Domain, About) render as before. |
+| Same user, two workspaces: the old workspace's late answer never reaches the new screen | QA owner given `workspaceAccess` to a second workspace; Team Access → Switch to it | the switch writes the pointer and then does a **full reload** (`navigation.type = reload`, new `timeOrigin`): every promise of the old document is discarded by the browser, nothing can be applied. After the reload Branding showed the second workspace's name and subtitle only. The switcher itself sits in a details-gated section, so it is reachable only once the current workspace's details have completed. (The "Use my own workspace" path in AppShell after access-lost is unchanged.) |
 
 ## 4. Before/after on the same phone — what is still open
 

@@ -162,6 +162,14 @@ type SettingsSection = {
 // Backwards-compatible deep links. Older URLs / buttons point at the previous
 // section ids; map them onto the new Account / Workspace structure so existing
 // `?section=...` links and the avatar menu keep landing on the right screen.
+// Sections whose editors start from the counts / overview / quick-reply / team
+// data. They mount only once that data has arrived, so a Save can never post
+// an empty or default draft; the list and the other sections stay usable.
+const SETTINGS_SECTIONS_NEEDING_DETAILS = new Set<SettingsSectionId>([
+  "profile-security", "preferences", "branding", "pdf", "quick-reply", "financial",
+  "safety-uploads", "data", "plan-access", "team-access"
+]);
+
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
@@ -979,7 +987,7 @@ export default function SettingsPage() {
               )}
             </div>
           ) : null}
-          {workspace ? renderSettingsSection({
+          {workspace && (auxiliaryState === "ready" || !SETTINGS_SECTIONS_NEEDING_DETAILS.has(selectedSection.id)) ? renderSettingsSection({
             sectionId: selectedSection.id,
             workspace,
             counts,
