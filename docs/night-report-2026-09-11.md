@@ -44,6 +44,8 @@ son güncelleme (sabah turu) 11:10Z.
 
 **Sabah turu 13 (17:2xZ) — canlı salt-okunur web kontrolü TAMAM (masaüstü web):** operatör Browser pane'de `contact@eggcraft.co.uk` (EGGcraft workspace, pilot değil) ile girdi; doğru workspace açılıyor ve yenilemede korunuyor; eBay kartı önce "Checking…" (düğmesiz), sonra "Coming soon" chip'i, hiçbir yerde Connect yok; menüde "Send feedback" duruyor (gönderilmedi); menü/Settings gezinmesi çalışıyor; hiçbir veri yazılmadı. Fiziksel: iPhone 16 Pro eşli ama erişilemez (kabloya takılı değil) → iPhone Safari, iOS uygulaması AÇIK; Android cihaz yok → Android Chrome, Android uygulaması AÇIK. Native kurulum öncesi kural: mağaza uygulaması varsa debug build onu yerinde değiştirir → dur, onay bekle. Kayıt `docs/ebay-web-deploy-round-174.md`.
 
+**Sabah turu 14 (19:2xZ) — Round 175 CANLI:** telefonda Settings ızgarası tek ekran yüksekliğine kilitliydi (28 Ağu `height:100%`); tek CSS kuralıyla düzeltildi (`eb77d083` → merge `7f4fa2c2` → yayın `e98f1da`, geri alma `git revert e98f1da`). Fiziksel Android'de canlı doğrulandı: liste son satıra, Integrations ChatGPT'nin altına kayıyor; masaüstü düzeni korunuyor. iPhone: operatörün normal Safari kontrolü bekleniyor. "Loading your workspace" Android'de ≈8,6 s — ayrı bulgu (Firestore zinciri 1,5→8,7 s), bu turda değişmedi.
+
 ## Sabah özeti
 
 **Canlıda değişen:** hiçbir şey. Gece boyunca deploy, rules/index yayını, secret, DNS, mağaza gönderimi yapılmadı.
