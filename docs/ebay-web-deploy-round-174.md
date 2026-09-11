@@ -43,7 +43,7 @@ The same fixes are in the merge for Mac/iPhone/Android (`b859a2fb`) but the stor
 
 ## Behavioural closure — results (11 Sep 17:1xZ)
 
-### Desktop web (Browser pane, Chrome engine, ~800 px viewport, live nivadesk.app) — DONE, read-only
+### Desktop web (Browser pane, Chrome engine, ~800 px viewport, live nivadesk.app) — CLOSED 11 Sep 17:1xZ (read-only; not to be repeated)
 Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security shows that e-mail; User ID `iZFBJq…V9o1`), workspace **EGGcraft** (Branding: "EGGcraft", subtitle "Bespoke Hand-Painted Dials"). Not the pilot workspace. Nothing was created or saved.
 
 | Check | Observed |
@@ -60,3 +60,14 @@ Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security sh
 ### Android app `b859a2fb` (physical) — OPEN (no Android device connected)
 
 **iPhone 16 Pro ("Gunes Gocmen's iPhone", iOS 26.6.1, Developer Mode on) is paired with this Mac but not reachable now** (`devicectl` connection timed out — Wi-Fi only / not plugged in), so neither the installed-app check nor an install was attempted. Before any native install on it: plug in by cable, then `xcrun devicectl device info apps` must show whether NivaDesk (`uk.co.eggcraft.studioflow`) is already installed from the App Store — a debug build with the same bundle id would **replace** that store build in place (local data is kept because bundle id and team match, but the store binary is gone until reinstalled from the App Store). Per the operator's rule that counts as touching the existing app, so the install stops there and waits for an explicit go; no app will be removed to make the test pass. Group 1 (Safari on this iPhone) needs no install and can be done by the operator on the live site now.
+
+## Physical-phone tracking (separate, updated as results arrive)
+
+| Row | How | State |
+|---|---|---|
+| iPhone Safari (live site) | operator runs it on the phone; no cable, no install; this session records the result with device/browser details when reported | OPEN |
+| Android Chrome (live site) | same | OPEN — no Android device |
+| iOS app, candidate build `b859a2fb` | only the fixed candidate counts; a check on the App Store build is not evidence. When the iPhone is connected: inspect the installed app and the effect of an install first; **an install that replaces the store app waits for the operator's approval** (no guarantee is given that data is preserved); no uninstall, no data clearing | OPEN — iPhone paired, unreachable |
+| Android app, candidate build `b859a2fb` | same rules | OPEN — no Android device |
+
+These rows do not hold anything else open. Next independent live acceptance in the hand-off: after 12 Sep 12:20 UTC, retention card → restore the synthetic order → `goal_met`; until then no new feedback or order from the pilot account; e-mail stays off.
