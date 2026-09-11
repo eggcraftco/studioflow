@@ -1,4 +1,4 @@
-# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 11 September 2026, 22:22Z)
+# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 12 September 2026, 23:37Z)
 
 Read this first after a context reset or in a new session, then compare it with the live git and cloud state before
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
@@ -21,6 +21,17 @@ At the operator's request work moved to the Sales/Products plan (`NivaDesk-Sales
 **A one-file orientation brief for another assistant:** `docs/nivadesk-system-brief-2026-09-12.md` (product, repository layout, data model, the working rules, today's live state, what was done on 11 Sep, the Sales phases, the untouchable areas). It is a summary; this hand-off and the code stay authoritative.
 
 **Sales Faz 0 is done (22:22Z).** Branch `sales-faz0` (worktree `~/Developer/studioflow-sales`) at `4b21ba99`; record `docs/sales/faz0-2026-09-11.md` carries the code map, the proposed data contract, the PR sequence, the rollout and rollback, six decisions for the operator, and the emulator prototype results at desktop and phone widths. Nothing was deployed and nothing was written to production; the emulator seed refuses to run anywhere but a local emulator. The headline findings: one order identity already exists; order lines carry no product reference and the server drops unknown line keys; the shipped iOS/Mac 1.3 (17) rewrites whole order documents, so Sales data belongs in server-written side documents; there is no product catalog; stock is not yet safe for a stocked sale, so Faz 2 waits for a hardening PR; the capability list overclaims what connectors can do.
+
+## Sales Faz 1 and the capability correction: two candidates (12 Sep 2026, 23:37Z)
+
+Both are branch work only: **nothing merged, nothing deployed, no rules or indexes published, no flag document created, no production data touched.**
+
+| Candidate | Branch and worktree | Commit | What it is |
+|---|---|---|---|
+| Sales Faz 1, server half | `sales-faz1-server`, `~/Developer/studioflow-sales-faz1` | `10074573` | `appConfig/sales` closed by default (the server switch and the workspace entry must both agree), the workspace's own visibility preference, `getSalesCapability` keeping eligibility, preference and permission apart, `listSalesRows` derived read-only and server-paged, rules and prepared indexes for the three side collections, and the link-state rule for the shipped iOS/Mac 1.3. Four unit suites plus two emulator suites; the whole functions suite passes with them (1778 checks). Record on the branch: `docs/sales/faz1-pr1-2026-09-12.md`; the Faz 2 gate: `docs/sales/stock-hardening-plan.md` |
+| Channel capability correction | `commerce-capability-truth`, `~/Developer/studioflow-capability` | `a4d65900` | The registry now says what this codebase reads (`implemented`) beside what each provider's API offers, Sync Health asks that instead, and the hub stops advertising eBay payments and refunds while naming Square's payouts. Functions suite 1748, web typecheck and build exit 0. Record: `docs/commerce-capability-truth-2026-09-12.md` |
+
+The six decisions from the Faz 0 record (§8) are still open, and the live pilot workspace is still unchosen, so the Sales allowlist ships empty on purpose.
 
 ## To-do scan (11 Sep 2026, 21:28Z)
 
