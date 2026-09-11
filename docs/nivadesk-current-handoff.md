@@ -58,6 +58,7 @@ token, OAuth code or secret value appears here.
 
 - Deploy only by name from the deploy branch after the runbook checks; never `--only functions`; never from another worktree.
 - Preserve the Stripe fix in every merge; do not redeploy OpenAI MCP/OAuth, Stripe or checklist functions.
+- **Standing test scope (11 Sep 2026):** a change that touches a user flow is evaluated on five platforms, each on its own line — macOS app, iOS app, Android app, iPhone Safari, Android Chrome — with the evidence type named (build / simulator-emulator flow / physical device / unit test / distribution package are not interchangeable), the unaffected platforms listed with a reason, and phone checks covering sign-in/workspace, navigation, form fill-and-save, keyboard-open usability and data surviving a reopen. Checklist: `docs/release-checklist-platforms.md`.
 - No secret, token, password, OAuth code or PKCE verifier in logs, evidence, chat or shell history; the assistant never types
   credentials into third-party forms (hPanel, eBay portal, Etsy, Gmail) — the operator does.
 - No production eBay keyset/OAuth; no portal deletion-token registration without the production-keyset decision.
