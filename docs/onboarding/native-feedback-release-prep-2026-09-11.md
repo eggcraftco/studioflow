@@ -35,7 +35,7 @@ feedback record §3d); this page is about the two platforms that only have build
 | Platform | Build | Contract / behaviour | Real device |
 |---|---|---|---|
 | Mac | signed Debug BUILD SUCCEEDED (11 Sep) | — | **done**: `fb_uFGXmTi0BxcX`, platform mac, closed (§3d) |
-| iOS | simulator BUILD SUCCEEDED (worktree, 03:2xZ); ad-hoc-signed simulator build from the deploy branch: see §4 | same Swift file as Mac, `#else` branch → `platform: "ios"`; server accepts `ios` (unit test) | **not done** |
+| iOS | simulator BUILD SUCCEEDED (worktree, 03:2xZ); **ad-hoc-signed simulator build from the deploy branch BUILD SUCCEEDED (12:58Z; `Signature=adhoc`, bundle `uk.co.eggcraft.studioflow`, ready to install on "iPhone 17 Pro")** | same Swift file as Mac, `#else` branch → `platform: "ios"`; server accepts `ios` (unit test) | **not done** |
 | Android | compileDebugKotlin + assembleDebug BUILD SUCCESSFUL (03:2xZ, debug APK 37.5 MB) | emulator run 11:04Z: android send → record `platform android` → inbox row | **not done** |
 
 ## 3. The remaining device checks — steps, and what is yours
