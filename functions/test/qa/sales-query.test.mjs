@@ -77,9 +77,36 @@ await check("paging reaches every order exactly once, including the ones sharing
   deepStrictEqual(seen.length, new Set(seen).size, "an order came back twice");
 });
 
+await check("a filter never skips a match: every WooCommerce order is reached across pages", async () => {
+  const { deepStrictEqual } = await import("assert");
+  // Two channel orders sit among the manual ones, far enough apart that a page
+  // boundary falls between them.
+  for (const [id, day] of [["w1", DAY], ["w2", OLDER]]) {
+    await db.collection("siparisler").doc(id).set(order(id, CID, day, { commerce: { provider: "woocommerce", externalId: id } }));
+  }
+  const seen = [];
+  let cursor = null;
+  for (let page = 0; page < 12; page += 1) {
+    const answer = await fns.listSalesRows({ auth, data: { companyId: CID, limit: 1, channel: "woocommerce", cursor } });
+    seen.push(...answer.rows.map((row) => row.orderId));
+    cursor = answer.nextCursor;
+    if (!cursor) break;
+  }
+  deepStrictEqual([...new Set(seen)].sort(), ["w1", "w2"], "a filtered page dropped a matching order");
+  deepStrictEqual(seen.length, new Set(seen).size, "a filtered page returned an order twice");
+});
+
+await check("a page that filters everything out still moves the cursor on", async () => {
+  const { ok, strictEqual } = await import("assert");
+  const answer = await fns.listSalesRows({ auth, data: { companyId: CID, limit: 1, channel: "etsy" } });
+  strictEqual(answer.rows.length, 0, "no Etsy order exists");
+  ok(answer.hasMore === true && answer.nextCursor, "an empty filtered page must hand back a cursor, or the client stops early");
+});
+
 await check("the read writes nothing: no side document, and the orders are untouched", async () => {
   const { strictEqual, deepStrictEqual } = await import("assert");
   const before = await db.collection("siparisler").doc("s1").get();
+  const rootsBefore = (await db.listCollections()).map((collection) => collection.id).sort();
   await fns.listSalesRows({ auth, data: { companyId: CID, limit: 50 } });
   await fns.getSalesCapability({ auth, data: { companyId: CID } });
   const after = await db.collection("siparisler").doc("s1").get();
@@ -88,7 +115,16 @@ await check("the read writes nothing: no side document, and the orders are untou
     const snap = await db.collection("companies").doc(CID).collection(collection).get();
     strictEqual(snap.size, 0, `the read created ${collection}`);
   }
-  deepStrictEqual((await db.collection("companies").doc(CID).collection("inventoryItems").get()).size, 0);
+  // Nothing anywhere: no stock, no payment, no notification, no activation or
+  // retention record, and no new root collection of any kind.
+  const rootsAfter = (await db.listCollections()).map((collection) => collection.id).sort();
+  deepStrictEqual(rootsAfter, rootsBefore, "the read created a root collection");
+  for (const collection of ["inventoryItems", "inventoryMovements", "notifications", "retention", "retentionMessages", "feedbackState", "deviceTokens"]) {
+    strictEqual((await db.collection("companies").doc(CID).collection(collection).get()).size, 0, `the read wrote ${collection}`);
+  }
+  for (const collection of ["commerceEvents", "commerceHealth", "feedback", "supportTickets", "retentionLog"]) {
+    strictEqual((await db.collection(collection).get()).size, 0, `the read wrote ${collection}`);
+  }
 });
 
 console.log(failures === 0 ? "\n✅ SALES QUERY GEÇTİ" : `\n❌ ${failures} failing`);

@@ -62,6 +62,26 @@ check("the line was deleted: missing; the order was trashed: orphaned", () => {
   assert.strictEqual(linkState(link, null).state, SALES_LINK_STATES.ORPHANED);
 });
 
+check("a 1.3-style full rewrite of the order leaves every link visible and frozen", () => {
+  // The shipped iOS/Mac 1.3 replaces the whole order document on paid plans, and
+  // the server mints a new id for any line that arrives without one. This is
+  // that document: the same two lines, new ids, one price edited on the way.
+  const rewritten = {
+    lineItems: [
+      { id: "swift-1", name: "Enamel dial blank 38 mm", quantity: 1, unitPrice: 90, lineTotal: 90 },
+      { id: "swift-2", name: "Hand-painted dial design", quantity: 1, unitPrice: 500, lineTotal: 500 }
+    ]
+  };
+  const dialLink = linkState(link, rewritten);
+  const paintLink = linkState({ lineId: "l-paint", fingerprint: fingerprintOf(paint) }, rewritten);
+  assert.strictEqual(dialLink.state, SALES_LINK_STATES.SUGGESTED, "the dial line survived the rewrite, so it is a proposal");
+  assert.strictEqual(paintLink.state, SALES_LINK_STATES.MISSING, "the painting line's price changed, so nothing matches it");
+  for (const out of [dialLink, paintLink]) {
+    assert.strictEqual(out.allowsStockAction, false, "a rewritten order may not move stock on a guessed link");
+    assert.ok(out.reason, "every state says why, so a person can see it");
+  }
+});
+
 check("a restored order comes back to linked only when the line is identical again", () => {
   const trashed = { lineItems: [dial], isDeleted: true };
   assert.strictEqual(linkState(link, trashed).state, SALES_LINK_STATES.ORPHANED);
