@@ -7559,6 +7559,8 @@ struct ContentView: View {
     // create happens on confirm, and the bar underneath is how the person takes
     // it back.
     @State private var quickCreateVisible = false
+    @StateObject private var feedbackCenter = FeedbackCenterModel()
+    @State private var feedbackSheetVisible = false
     @State private var quickCreateNotice: StudioUndoBarNotice?
     @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
     @AppStorage("ordersSidebarShowPreviewImages") private var showOrderPreviewImages: Bool = true
@@ -8574,6 +8576,13 @@ struct ContentView: View {
                 }
             }
 
+            if feedbackCenter.enabled {
+                phoneNavMenuRow(t("Send feedback", lang: seciliDil), "text.bubble") {
+                    phoneShowsOrderDetail = false
+                    feedbackSheetVisible = true
+                }
+            }
+
             Divider().padding(.vertical, 5)
 
             phoneNavMenuRow(t("Sign Out", lang: seciliDil), "arrow.right.square", destructive: true) {
@@ -8880,6 +8889,15 @@ struct ContentView: View {
         }
     }
 
+    /// What the note says it was written on: the platform and the open tab, like the web's page path.
+    private var feedbackPageName: String {
+        #if os(macOS)
+        return "mac/" + aktifSekme.lowercased()
+        #else
+        return "ios/" + aktifSekme.lowercased()
+        #endif
+    }
+
     @ViewBuilder
     private var topAccountAvatarIfAvailable: some View {
         Menu {
@@ -8888,6 +8906,14 @@ struct ContentView: View {
                 aktifSekme = "Settings"
             } label: {
                 Label(t("Account", lang: seciliDil), systemImage: "person.crop.circle")
+            }
+
+            if feedbackCenter.enabled {
+                Button {
+                    feedbackSheetVisible = true
+                } label: {
+                    Label(t("Send feedback", lang: seciliDil), systemImage: "text.bubble")
+                }
             }
 
             Button(role: .destructive) {
@@ -9426,6 +9452,20 @@ struct ContentView: View {
                 onCreated: { outcome in quickCreateProjectConfirmed(outcome) }
             )
             .environmentObject(firebaseManager)
+        }
+        .sheet(isPresented: $feedbackSheetVisible, onDismiss: { feedbackCenter.startNew() }) {
+            FeedbackCenterSheet(
+                model: feedbackCenter,
+                companyId: authVM.currentCompanyId ?? firebaseManager.currentCompanyId,
+                language: seciliDil,
+                page: feedbackPageName,
+                onClose: { feedbackSheetVisible = false }
+            )
+        }
+        .task(id: authVM.currentCompanyId ?? firebaseManager.currentCompanyId) {
+            // Whether "Send feedback" belongs in the account menu for this workspace; asked once
+            // per workspace per ten minutes, never more (the server decides, the client only asks).
+            feedbackCenter.refreshAvailability(companyId: authVM.currentCompanyId ?? firebaseManager.currentCompanyId)
         }
         .overlay(alignment: .trailing) {
             activityNotificationDrawerOverlay

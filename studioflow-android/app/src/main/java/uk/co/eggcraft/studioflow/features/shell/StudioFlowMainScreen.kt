@@ -43,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
@@ -389,6 +390,23 @@ fun StudioFlowMainScreen(
             section = StudioSection.Settings
         }
     }
+    // Feedback v1: the account-menu entry appears only when the server says the feature is on for
+    // this workspace (asked once per workspace per ten minutes); the dialog is the web's short form.
+    val feedbackRepository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val feedbackWorkspaceId = state.workspace?.id.orEmpty()
+    var feedbackEnabled by remember { mutableStateOf(false) }
+    var feedbackDialogOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(feedbackWorkspaceId) {
+        feedbackEnabled = uk.co.eggcraft.studioflow.features.feedback.FeedbackAvailability.enabled(feedbackRepository, feedbackWorkspaceId)
+    }
+    if (feedbackDialogOpen && feedbackWorkspaceId.isNotBlank()) {
+        uk.co.eggcraft.studioflow.features.feedback.FeedbackDialog(
+            workspaceId = feedbackWorkspaceId,
+            page = "android/" + section.name.lowercase(),
+            repository = feedbackRepository,
+            onDismiss = { feedbackDialogOpen = false }
+        )
+    }
     val showWorkspaceOnboarding = state.workspace != null &&
         !state.loading &&
         state.orders.isEmpty() &&
@@ -605,6 +623,8 @@ fun StudioFlowMainScreen(
                     onCreateOrder = onCreateOrder,
                     onOpenAccount = openAccount,
                     onSignOut = onSignOut,
+                    feedbackEnabled = feedbackEnabled,
+                    onSendFeedback = { feedbackDialogOpen = true },
                     compact = containerWidth < 1500.dp,
                     notificationUnreadCount = state.activityNotificationUnreadCount,
                     messageUnreadCount = state.messageUnreadCount,
@@ -760,6 +780,8 @@ fun StudioFlowMainScreen(
                         section = it
                     },
                     onOpenAccount = openAccount,
+                    feedbackEnabled = feedbackEnabled,
+                    onSendFeedback = { feedbackDialogOpen = true },
                     notificationUnreadCount = state.activityNotificationUnreadCount,
                     messageUnreadCount = state.messageUnreadCount,
                     notesReminderCount = state.keepNotes.count {
@@ -1762,6 +1784,8 @@ private fun StudioLargeTopBar(
     notificationUnreadCount: Int = 0,
     messageUnreadCount: Int = 0,
     onOpenNotifications: () -> Unit = {},
+    feedbackEnabled: Boolean = false,
+    onSendFeedback: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -1856,6 +1880,16 @@ private fun StudioLargeTopBar(
                             onOpenAccount()
                         }
                     )
+                    if (feedbackEnabled) {
+                        DropdownMenuItem(
+                            text = { Text(t("Send feedback"), fontWeight = FontWeight.Bold) },
+                            leadingIcon = { Icon(Icons.Filled.RateReview, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onSendFeedback()
+                            }
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                     DropdownMenuItem(
                         text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold, color = StudioRed) },
@@ -2314,7 +2348,9 @@ private fun StudioMobileHeader(
     notificationUnreadCount: Int = 0,
     messageUnreadCount: Int = 0,
     notesReminderCount: Int = 0,
-    onOpenNotifications: () -> Unit = {}
+    onOpenNotifications: () -> Unit = {},
+    feedbackEnabled: Boolean = false,
+    onSendFeedback: () -> Unit = {}
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -2454,6 +2490,16 @@ private fun StudioMobileHeader(
                             onOpenAccount()
                         }
                     )
+                    if (feedbackEnabled) {
+                        DropdownMenuItem(
+                            text = { Text(t("Send feedback"), fontWeight = FontWeight.Bold) },
+                            leadingIcon = { Icon(Icons.Filled.RateReview, contentDescription = null, tint = StudioBlue) },
+                            onClick = {
+                                menuOpen = false
+                                onSendFeedback()
+                            }
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                     DropdownMenuItem(
                         text = { Text(t("Sign Out"), fontWeight = FontWeight.Bold, color = StudioRed) },

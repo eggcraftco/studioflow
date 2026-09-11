@@ -34,6 +34,8 @@ const TRIGGERS = Object.freeze(["first_success", "manual"]);
 const KINDS = Object.freeze(["problem", "missing_feature", "suggestion"]);
 /** §34's effort rating, used as the one required answer. */
 const EXPERIENCES = Object.freeze(["easy", "okay", "difficult"]);
+/** Where the note was written; the native apps say so, the web is the default. */
+const PLATFORMS = Object.freeze(["web", "mac", "ios", "android"]);
 /** §41. */
 const FEEDBACK_TYPES = Object.freeze([
   "onboarding_effort", "activation_blocker", "missing_expectation", "feature_request", "bug_report",
@@ -202,11 +204,13 @@ function submissionShape(input = {}) {
   const clientKey = text(input.clientKey);
   if (clientKey.length > LIMITS.clientKeyMax) problems.push("client_key");
   const language = text(input.language).slice(0, LIMITS.languageMax);
+  const platform = text(input.platform).toLowerCase() || "web";
+  if (!PLATFORMS.includes(platform)) problems.push("platform");
   const campaign = trigger === "first_success" ? CAMPAIGN_FIRST_SUCCESS : "";
   return {
     ok: problems.length === 0,
     problems,
-    value: { trigger, campaign, experience, kind, text: body, page, clientKey, language, feedbackType: feedbackTypeFor(trigger, kind), stage: stageFor(trigger) }
+    value: { trigger, campaign, experience, kind, text: body, page, clientKey, language, platform, feedbackType: feedbackTypeFor(trigger, kind), stage: stageFor(trigger) }
   };
 }
 
@@ -242,6 +246,6 @@ function duplicateOf(submissions, candidate, nowMs) {
 function trimHistory(entries, keep = LIMITS.historyKeep) { return list(entries).slice(-keep); }
 
 module.exports = {
-  CAMPAIGN_FIRST_SUCCESS, CAMPAIGNS, TRIGGERS, KINDS, EXPERIENCES, FEEDBACK_TYPES, CATEGORIES, IMPACTS, STATUSES, LIMITS,
+  CAMPAIGN_FIRST_SUCCESS, CAMPAIGNS, TRIGGERS, KINDS, EXPERIENCES, PLATFORMS, FEEDBACK_TYPES, CATEGORIES, IMPACTS, STATUSES, LIMITS,
   isKnownCampaign, feedbackTypeFor, stageFor, pilotAllows, creationStampOf, firstSuccess, promptEligibility, submissionShape, textHash, rateLimitVerdict, duplicateOf, trimHistory
 };

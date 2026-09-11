@@ -171,6 +171,13 @@ const rejects = (promise, code, pattern) => assert.rejects(promise, (error) => {
     assert.strictEqual(row.trigger, "first_success"); assert.strictEqual(row.campaign, feedback.CAMPAIGN_FIRST_SUCCESS); assert.strictEqual(row.stage, "onboarding");
     assert.strictEqual(row.feedbackType, "bug_report"); assert.strictEqual(row.kind, "problem"); assert.strictEqual(row.experience, "difficult"); assert.strictEqual(row.text, "The order form lost my notes.");
     assert.strictEqual(row.status, "new"); assert.strictEqual(row.ownerUid, null); assert.strictEqual(row.platform, "web"); assert.strictEqual(row.page, "/orders"); assert.strictEqual(row.language, "Türkçe");
+    // The native apps name themselves; anything else is refused, and no platform at all still means the web.
+    for (const [platform, expected] of [["mac", "mac"], ["ios", "ios"], ["android", "android"], ["", "web"], [undefined, "web"]]) {
+      const shape = feedback.submissionShape({ experience: "easy", platform });
+      assert.deepStrictEqual([shape.ok, shape.value.platform], [true, expected], String(platform));
+    }
+    const bad = feedback.submissionShape({ experience: "easy", platform: "windows" });
+    assert.deepStrictEqual([bad.ok, bad.problems], [false, ["platform"]]);
     assert.deepStrictEqual(row.statusHistory.map((h) => h.status), ["new"]);
     // Nothing the form did not ask for: no customer, order, bank or address fields ride along.
     const allowed = new Set(["id", "companyId", "uid", "userEmail", "workspaceName", "source", "platform", "trigger", "campaign", "stage", "feedbackType", "kind", "experience", "text", "category", "impact", "status", "ownerUid", "adminNote", "page", "language", "createdAtMs", "createdAt", "updatedAtMs", "updatedAt", "statusHistory"]);
