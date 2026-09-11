@@ -49,7 +49,7 @@ exists live — 33 new names on iOS/Mac, 32 on Android, checked against the 446 
   `getEbayConnections` also returns `enabledForWorkspace` (the same flag `beginEbayConnect` checks) and the native hub/screen
   render "Not available for this workspace yet" when false (one function + a small client change → it would have to ride
   this release); (b) accept the refusal message for this release and note it in the review notes. **Recommended: (a) before
-  the store build** — it is the one item that presents a closed feature as usable.
+  the store build** — it is the one item that presents a closed feature as usable. **Done on the candidate (11 Sep 16:0xZ):** `ebay-availability-fix` @ `333e20ae` (code `8f63e803`), field name `workspaceEnabled`, verified on the five platforms — `docs/onboarding/ebay-availability-fix-2026-09-11.md`. The store build must be cut from the deploy branch **after** that branch is merged, and `getEbayConnections` deployed from it before the store review (old clients keep working either way).
 * **Amazon.** Catalogue entry `kind: "planned"` on both platforms → shown as coming soon, no action. Correct.
 * **Retention e-mail / IMAP.** Server only, flags off; the native apps have no surface. Nothing to gate.
 * **Retention in-app card.** The native apps have **no** retention reader (web only); pilot unaffected by the release.
@@ -99,7 +99,7 @@ or the §2a change); (8) one feedback send — only after 12 Sep 12:20Z if the p
 
 ### iOS + macOS (one Xcode target, one submission each)
 * **Source:** deploy branch `ff514cf8` (tag it at release time). **Scope:** §1 (231 commits, 62 files) — everything since 1.3 (17).
-* **Before the archive (recommended):** the eBay availability change (§2a) or the review-note alternative — your call.
+* **Before the archive (recommended):** merge `ebay-availability-fix` (§2, done and verified) and deploy `getEbayConnections` from it; the review-note alternative is no longer needed.
 * **Tests present / missing:** §3. **Missing and recommended before submit:** the iPhone simulator flow (sign-in as the test
   account, workspace, one order create/edit, checklist, one feedback send **after 12 Sep 12:20Z**) — the simulator build is ready to install.
 * **Version:** 1.4 (18). **Signing:** needs the Distribution identity → **your Xcode sign-in** (Xcode → Settings → Accounts → the developer Apple ID → Manage Certificates), then `xcodebuild archive` + export for iOS and for macOS, upload, ASC submission (screenshots pipeline already in place).
@@ -107,7 +107,8 @@ or the §2a change); (8) one feedback send — only after 12 Sep 12:20Z if the p
 
 ### Android
 * **Source:** `ff514cf8`. **Scope:** §1 (210 commits since the store's 0.1.8; 61 since the 0.1.9 package).
-* **Tests present / missing:** §3 + the unit suite (33 tests green, below). **Missing and recommended:** the Pixel_9 emulator flow (same list as iOS) — the debug APK is ready.
+* **Before the bundle:** merge `ebay-availability-fix` (§2) — the Android hub/screen change rides this release.
+* **Tests present / missing:** §3 + the unit suite (33 tests green, below; 35 with the two eBay hub cases on the candidate). **Missing and recommended:** the Pixel_9 emulator flow (same list as iOS) — the debug APK is ready.
 * **Version:** 0.1.9 (10) or 0.2.0 (11) — decided by what Play already holds.
 * **Signing:** `./gradlew :app:bundleRelease` signs with the local keystore — can run here on your word; the **upload** and the release track are yours in the Play Console (the developer account is not the Google identity signed in on this Mac's Chrome).
 * **Your steps:** tell me the Play state of versionCode 10, decide §2a, then upload/rollout.
