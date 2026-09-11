@@ -135,3 +135,15 @@ The pre-check for future functions deploys from any worktree is in `docs/audit-d
 - First observation (to 23:03:42Z): clean startup, no warnings, **no live traffic yet** — behaviour unobserved.
 - 24-hour check 2026-09-09T23:00:56Z → 2026-09-10T23:00:56Z, queries in §4, no alerting exists.
 - Rollback targets kept; rollback re-opens Addendum 6, the invoice drift and L1.
+
+## Read-only log check after the window (11 Sep 2026, 21:26Z)
+
+Cloud Logging, project `eggcraft-studio`, read-only:
+
+| Query | Result |
+|---|---|
+| `stripewebhook` request logs (`httpRequest.status>0`) since 9 Sep 23:00Z | **0 requests** |
+| Positive control, same query since 1 Aug | requests present on older revisions: 18 and 20 Aug (200), 27–29 Aug (400), 6 Sep (400) |
+| `severity>=ERROR` on `stripewebhook` and `resyncstripeworkspaceentitlements` since 9 Sep 23:00Z | **0** |
+
+Stripe has sent no webhook since the fix was deployed, so the fix has not yet processed a live event. Nothing here is a claim about live behaviour; there is still no alert policy.
