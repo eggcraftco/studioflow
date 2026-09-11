@@ -450,3 +450,29 @@ run (12:20Z) is the first on `-00002-maz`; the ≈23:20Z one is the pilot's expe
 **Closed:** the funnel/retention Shopify rule difference (funnel record, third pass) — both readers now run the same `derive.js`.
 **Still open, unchanged:** the ≈23:20Z (11 Sep) pilot check — the natural card → restore the synthetic order → `goal_met`;
 the pilot is not accepted until that is seen.
+
+## 10. The pilot's first natural card moved by the Mac feedback send — recomputed from the real stamps (12:39Z, read-only)
+
+**What the 24-hour hold reads** (`feedbackPromptRecent`, `lifecycle/retention.js`): the owner's `feedbackState` **`shows`** (invitation
+rendered) and **`submissions`** (any send, manual included — `campaign ""` counts) within the last 24 hours. **Dismissals do not
+count.** Both readers use it: the sweep (`holdInApp` for the owner) and `getRetentionMessage` (for the person looking).
+
+**The test account's stamps** (`companies/GuglEFKS…/feedbackState/GuglEFKS…`): submission 10 Sep 22:39:41.817Z (pilot note),
+show 10 Sep 22:48:51.994Z, dismissal 10 Sep 22:49:31.646Z, **submission 11 Sep 12:02:30.875Z (the Mac QA note `fb_uFGXmTi0BxcX`)**.
+So yes — the manual Mac send moved the hold: it now ends at **12 Sep 2026 12:02:30.875Z**.
+
+**The other conditions, from the real fields:** workspace created 10 Sep 18:30:41Z; wizard completed 18:31:18.232Z;
+`onboardingMainGoal orders_customers` → path `bespoke_studio`; the only order (`YFFB4Xqi8zSfFgPEN48t`, created 10 Sep 22:45:58Z)
+is in the bin since 11 Sep 02:20:55Z and a deleted order is no evidence (`substantiveOrder.js`), so `firstOrder.state = none`;
+`create_first_order` (in-app) is proposed once 24 h have passed since the wizard → from **11 Sep 18:31:18Z** (computed with
+`triggerCandidates` on these values: 18:20Z → founder_intro only; 18:31:19Z onward → founder_intro + create_first_order).
+The founder note stays refused `flag_off` (e-mail off). No retention dismissal, no in-app send today (cap 2/day untouched),
+no support case, not churned/silent, no retention state document yet, 0 `retentionMessages`.
+
+**First eligible natural sweep:** the schedule fires at :20 every hour; the hold is still true at 12 Sep 11:20Z and false from
+12:02:31Z → **12 September 2026, 12:20Z run** (the 11 Sep 23:20Z figure in §7/§8 and the hand-off is void — at that run the
+sweep will evaluate the workspace and hold the card, `holdReason feedback_prompt_recent`). Any new invitation show or
+feedback send from this account before then moves it again by 24 hours; nothing was changed to make it earlier.
+
+**Unchanged and still open:** no stamp, cooldown or rule was touched; the synthetic order stays in the bin; the acceptance
+chain remains the natural card (12 Sep ≈12:20Z) → restore the synthetic order → `goal_met` withdrawal.
