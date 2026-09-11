@@ -418,6 +418,46 @@ Fulfillment executions) is worth re-running.
 
 Nothing was sent, no new test, no new order, no change to the connection. `autoSync` stays off.
 
+## 2n. The reply, verbatim, and what is eBay's and what is ours (recorded 11 Sep 11:0xZ from the ticket page)
+
+**Source:** Developer Technical Support portal, ticket **260910-000068**, "Communication History" → entry **"Response via Email — September 10, 2026 at 6:32:50 PM"** (portal clock, US Pacific; = **11 Sep 2026 01:32:50Z**). Ticket "Updated September 10, 2026 at 6:33:18 PM". Our question is the entry "Customer via CSS Web — September 10, 2026 at 5:46:46 PM" (= 11 Sep 00:46:46Z), attachment `ebay-sandbox-fulfillment-ticket-details.txt` (2.79 kB).
+
+**Full text of eBay's reply:**
+
+> Hello Gunes,
+>
+> Thank you for submitting your support request regarding the Fulfillment API in Sandbox.
+>
+> We apologize for the inconvenience. The sandbox environment is currently experiencing limitations, and order creation is not operational there. Our engineering team is working to resolve this, but it may take some time.
+>
+> We understand this may be frustrating and could block your testing. If applicable, we recommend using the production environment for testing.
+>
+> When testing in production, please follow the best practices outlined in our Test Listings Policy: https://www.ebay.com/help/policies/listing-policies/test-listings-policy?id=5039
+>
+> Thank you for your cooperation and understanding.
+>
+> Best Regards,
+>
+> eBay Developer Support
+
+**What is eBay's statement and what is our inference:**
+
+| Statement | Whose |
+|---|---|
+| Sandbox order creation is not operational; engineering is working on it; no date ("may take some time") | eBay, verbatim |
+| "If applicable, we recommend using the production environment for testing", under the Test Listings Policy | eBay, verbatim |
+| That a production test would need the **production keyset/RuName wired into NivaDesk**, a production seller account, a real buyer purchase (real money or a cancelled/refunded order) and re-planned acceptance tests | **ours** (§2m option 2 — the mechanics implied by "production", not anything eBay wrote) |
+| That the empty Fulfillment result is explained by the Sandbox limitation rather than a delay or a NivaDesk filter | ours, drawn from eBay's first sentence; eBay did not address our order by number |
+
+**Our two questions — answered or open:**
+
+| Question we asked | Status |
+|---|---|
+| 1) Will the existing Sandbox order `110590626185-10000012799510` appear in Fulfillment `getOrders`/`getOrder`, and after what delay? | **Open.** Not addressed. The reply implies the order was never "created" as far as the Sandbox order pipeline is concerned, but it does not say whether it will surface after the fix. |
+| 2) What is the supported way to create a Fulfillment-visible test order in the Sandbox? | **Answered indirectly: none today.** Sandbox order creation is not operational; the supported alternative eBay names is production under the Test Listings Policy. |
+
+No new test, no production connection, no message sent (the §2m draft still stands as a draft). `autoSync` stays off; the Sandbox connection and its read-only scopes are unchanged.
+
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | To remove |
