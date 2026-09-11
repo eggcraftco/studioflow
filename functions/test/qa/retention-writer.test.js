@@ -275,6 +275,61 @@ check("while a feedback prompt is recent the in-app nudge waits and nothing is w
   assert.ok(later.decisions.some((d) => d.send), "after the hold the nudge goes out");
 });
 
+
+check("acting on a card is not completing the goal: the next sweep still sees a shell, and the campaign is simply not repeated (already_sent)", async () => {
+  const db = fakeDb();
+  const first = await writer.sweepWorkspace(db, { companyId: "c11", nowMs: T0, flags: ON, trigger: shellTrigger });
+  const id = first.decisions.find((d) => d.send).id;
+  await writer.dismissMessage(db, "c11", id, { nowMs: T0 + HOUR, outcome: "acted" });
+  // Nothing about the workspace changed: the same shell trigger is proposed again a day later...
+  const again = await writer.sweepWorkspace(db, { companyId: "c11", nowMs: T0 + DAY, flags: ON, trigger: { ...shellTrigger, nowMs: T0 + DAY } });
+  assert.deepStrictEqual(again.candidates.map((c) => c.campaign), ["complete_first_order"], "the shell is still a shell; the click proved nothing");
+  // ...and refused, because one card per campaign is the rule — not because anything was completed.
+  assert.deepStrictEqual(again.decisions.map((d) => [d.campaign, d.send, d.reason]), [["complete_first_order", false, "already_sent"]]);
+  assert.strictEqual(db.writes().filter((k) => k.includes("/retentionMessages/")).length, 1, "no second card");
+  assert.ok(!db.writes().some((k) => k.startsWith("siparisler")), "the writer never touches orders");
+  const state = db.store.get("companies/c11/retention/state") || {};
+  assert.deepStrictEqual(state.dismissals || [], [], "acted is not a dismissal either");
+});
+
+check("review at the moment of looking: goal met, opt-out, cancelled and activated withdraw the card for good; support case and a recent feedback prompt only hold it", async () => {
+  const mk = async (companyId, campaign) => { const db = fakeDb(); const ref = await db.collection("companies").doc(companyId).collection("retentionMessages").add({ campaign, kind: "onboarding", title: "t", body: "b", action: "open_order", target: null, createdAtMs: T0 - HOUR, status: "open" }); return { db, id: ref.id }; };
+  const base = { history: [], dismissals: [], unsubscribed: false, userReplied: false, supportCaseOpen: false, activated: false, workspaceCancelled: false };
+  // goal met: the shell became a real project → order_created is among today's events
+  let { db, id } = await mk("r1", "complete_first_order");
+  let r = await writer.reviewOpenMessages(db, "r1", { nowMs: T0, messages: [{ id, campaign: "complete_first_order", kind: "onboarding", createdAtMs: T0 - HOUR, status: "open" }], doneEventNames: ["order_created"], context: base, feedbackRecent: false });
+  assert.strictEqual(r.message, null); assert.deepStrictEqual(r.withdrawn, [{ id, reason: "goal_met" }]);
+  let doc = db.store.get(`companies/r1/retentionMessages/${id}`); assert.strictEqual(doc.status, "withdrawn"); assert.strictEqual(doc.withdrawReason, "goal_met"); assert.strictEqual(doc.withdrawnAtMs, T0);
+  // opt-out
+  ({ db, id } = await mk("r2", "create_first_order"));
+  r = await writer.reviewOpenMessages(db, "r2", { nowMs: T0, messages: [{ id, campaign: "create_first_order", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: { ...base, unsubscribed: true } });
+  assert.deepStrictEqual(r.withdrawn, [{ id, reason: "opt_out" }]);
+  // cancelled
+  ({ db, id } = await mk("r3", "create_first_order"));
+  r = await writer.reviewOpenMessages(db, "r3", { nowMs: T0, messages: [{ id, campaign: "create_first_order", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: { ...base, workspaceCancelled: true } });
+  assert.deepStrictEqual(r.withdrawn, [{ id, reason: "workspace_cancelled" }]);
+  // activated: an onboarding card is noise now
+  ({ db, id } = await mk("r4", "connect_bank"));
+  r = await writer.reviewOpenMessages(db, "r4", { nowMs: T0, messages: [{ id, campaign: "connect_bank", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: { ...base, activated: true } });
+  assert.deepStrictEqual(r.withdrawn, [{ id, reason: "activated" }]);
+  // support case open: held, not written
+  ({ db, id } = await mk("r5", "connect_bank"));
+  const before = db.writes().length;
+  r = await writer.reviewOpenMessages(db, "r5", { nowMs: T0, messages: [{ id, campaign: "connect_bank", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: { ...base, supportCaseOpen: true } });
+  assert.strictEqual(r.message, null); assert.strictEqual(r.held, "support_case_open"); assert.deepStrictEqual(r.withdrawn, []);
+  assert.strictEqual(db.writes().length, before, "a hold writes nothing"); assert.strictEqual(db.store.get(`companies/r5/retentionMessages/${id}`).status, "open");
+  // recent feedback prompt: held the same way, and the card is still there afterwards
+  r = await writer.reviewOpenMessages(db, "r5", { nowMs: T0, messages: [{ id, campaign: "connect_bank", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: base, feedbackRecent: true });
+  assert.strictEqual(r.held, "feedback_prompt_recent"); assert.strictEqual(r.message, null);
+  // nothing in the way: the newest open card is returned, older ones untouched
+  r = await writer.reviewOpenMessages(db, "r5", { nowMs: T0, messages: [{ id: "old", campaign: "connect_bank", kind: "onboarding", createdAtMs: T0 - DAY, status: "open" }, { id, campaign: "connect_bank", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: [], context: base, feedbackRecent: false });
+  assert.strictEqual(r.message && r.message.id, id); assert.strictEqual(r.held, ""); assert.deepStrictEqual(r.withdrawn, []);
+  // withdrawal beats a hold: a met goal is withdrawn even while a feedback prompt is recent
+  ({ db, id } = await mk("r6", "create_first_order"));
+  r = await writer.reviewOpenMessages(db, "r6", { nowMs: T0, messages: [{ id, campaign: "create_first_order", kind: "onboarding", createdAtMs: T0, status: "open" }], doneEventNames: ["order_created"], context: base, feedbackRecent: true });
+  assert.deepStrictEqual(r.withdrawn, [{ id, reason: "goal_met" }]); assert.strictEqual(r.held, "");
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }

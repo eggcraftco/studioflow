@@ -35333,6 +35333,46 @@ exports.setRetentionOptOut = onCall({ region: "europe-west2" }, async (request) 
   return retentionWriter.setOptOut(admin.firestore(), companyId, optOut, { nowMs: Date.now(), source: "settings" });
 });
 
+/**
+ * The card a person may see right now, judged at the moment of looking (retention
+ * wiring §6, item 3): the sweep decides what is written, this decides what is
+ * shown. Off, or outside the pilot, it says so and reads nothing else.
+ */
+exports.getRetentionMessage = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const uid = String((request.auth && request.auth.uid) || "");
+  const flags = retentionWriter.retentionFlags();
+  if (!flags.inApp) return { ok: true, enabled: false, message: null, reason: "flag_off" };
+  const db = admin.firestore();
+  const nowMs = Date.now();
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const company = companySnap.exists ? companySnap.data() || {} : {};
+  const scope = retentionRules.workspaceScope({
+    companyId, ownerEmail: String(company.ownerEmail || company.email || ""),
+    pilotList: process.env.NIVADESK_RETENTION_WORKSPACES, excludeList: process.env.NIVADESK_RETENTION_EXCLUDE_WORKSPACES,
+    adminEmails: [...SUPPORT_ADMIN_EMAILS].join(",")
+  });
+  if (!scope.allowed) return { ok: true, enabled: false, message: null, reason: scope.reason };
+  const open = await retentionWriter.messagesRef(db, companyId).where("status", "==", "open").get();
+  if (open.empty) return { ok: true, enabled: true, message: null, reason: "none_open", withdrawn: 0 };
+  const { trigger, activated } = await nvRetentionTriggerFor(db, companyId, company, nowMs);
+  const context = await retentionWriter.loadMessagingContext(db, companyId);
+  context.activated = activated;
+  context.workspaceCancelled = String(company.billingStatus || "") === "canceled";
+  const feedbackStateSnap = uid ? await db.collection("companies").doc(companyId).collection("feedbackState").doc(uid).get().catch(() => null) : null;
+  const feedbackRecent = retentionRules.feedbackPromptRecent(feedbackStateSnap && feedbackStateSnap.exists ? feedbackStateSnap.data() : null, nowMs);
+  const review = await retentionWriter.reviewOpenMessages(db, companyId, {
+    nowMs, messages: open.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    doneEventNames: (trigger.events || []).map((event) => event && event.name), activated, context, feedbackRecent
+  });
+  const m = review.message;
+  return {
+    ok: true, enabled: true, withdrawn: review.withdrawn.length,
+    reason: m ? "" : (review.held || "none_open"),
+    message: m ? { id: m.id, campaign: String(m.campaign || ""), kind: String(m.kind || ""), title: String(m.title || ""), body: String(m.body || ""), action: String(m.action || ""), target: m.target || null, createdAtMs: Number(m.createdAtMs) || 0 } : null
+  };
+});
+
 exports.dismissRetentionMessage = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, false);
   const messageId = nvCleanString(request.data && request.data.messageId, 80);

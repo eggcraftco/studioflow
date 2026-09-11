@@ -1,9 +1,9 @@
-// The retention nudge's client side: read the workspace's open in-app messages
-// (written only by the server's sweep) and close one through the callable. The
-// rules let any member read `retentionMessages`; nothing here writes Firestore.
-import { collection, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+// The retention nudge's client side. The server decides what a person may see
+// at the moment of looking (getRetentionMessage judges the open cards against the
+// workspace's data, an open support case and a recent feedback prompt), and closes
+// a card through dismissRetentionMessage. Nothing here reads or writes Firestore.
 import { httpsCallable } from "firebase/functions";
-import { db, functions } from "@/lib/firebase/client";
+import { functions } from "@/lib/firebase/client";
 
 export type RetentionMessage = {
   id: string;
@@ -14,40 +14,28 @@ export type RetentionMessage = {
   action: string;
   target: { orderId?: string } | null;
   createdAtMs: number;
-  status: string;
 };
 
+export type RetentionLookup = { ok: boolean; enabled: boolean; message: RetentionMessage | null; reason?: string; withdrawn?: number };
 export type RetentionCloseOutcome = "dismissed" | "acted";
 
-/** Newest first; only messages the server still considers open. */
-export function subscribeOpenRetentionMessages(
-  companyId: string,
-  onChange: (messages: RetentionMessage[]) => void,
-  onError?: (error: unknown) => void
-): Unsubscribe {
-  const open = query(collection(db, "companies", companyId, "retentionMessages"), where("status", "==", "open"));
-  return onSnapshot(
-    open,
-    (snapshot) => {
-      const rows = snapshot.docs.map((doc) => {
-        const data = doc.data() as Partial<RetentionMessage>;
-        return {
-          id: doc.id,
-          campaign: String(data.campaign ?? ""),
-          kind: String(data.kind ?? ""),
-          title: String(data.title ?? ""),
-          body: String(data.body ?? ""),
-          action: String(data.action ?? ""),
-          target: data.target && typeof data.target === "object" ? { orderId: String((data.target as { orderId?: string }).orderId ?? "") || undefined } : null,
-          createdAtMs: Number(data.createdAtMs) || 0,
-          status: String(data.status ?? "")
-        };
-      });
-      rows.sort((a, b) => b.createdAtMs - a.createdAtMs);
-      onChange(rows);
-    },
-    (error) => onError?.(error)
-  );
+/** Ask the server which card, if any, may be shown right now. */
+export async function fetchRetentionMessage(companyId: string): Promise<RetentionLookup> {
+  const call = httpsCallable<{ companyId: string }, RetentionLookup>(functions, "getRetentionMessage");
+  const result = await call({ companyId });
+  const data = result.data || ({} as RetentionLookup);
+  const m = data.message;
+  return {
+    ok: Boolean(data.ok),
+    enabled: Boolean(data.enabled),
+    reason: data.reason ? String(data.reason) : "",
+    withdrawn: Number(data.withdrawn) || 0,
+    message: m && m.id ? {
+      id: String(m.id), campaign: String(m.campaign ?? ""), kind: String(m.kind ?? ""), title: String(m.title ?? ""), body: String(m.body ?? ""),
+      action: String(m.action ?? ""), target: m.target && typeof m.target === "object" ? { orderId: String(m.target.orderId ?? "") || undefined } : null,
+      createdAtMs: Number(m.createdAtMs) || 0
+    } : null
+  };
 }
 
 /** "acted" when the person followed the card; anything else counts as a dismissal (30-day cooldown for that campaign). */

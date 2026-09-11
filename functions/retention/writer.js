@@ -21,7 +21,7 @@
 // `db` is injected everywhere so the tests can hand in a fake; the shape used is
 // deliberately small (doc get/set/update, collection get/add, runTransaction).
 
-const { messageDecision } = require("../lifecycle/messaging");
+const { messageDecision, CAMPAIGN_GOALS } = require("../lifecycle/messaging");
 const retention = require("../lifecycle/retention");
 
 function retentionFlags(env = process.env) {
@@ -241,6 +241,49 @@ async function sweepWorkspace(db, input = {}) {
   return { companyId, candidates, decisions };
 }
 
+
+/**
+ * Re-judge the workspace's open cards at the moment someone would see them.
+ * A card written yesterday is not owed to the person today: if its goal has
+ * been met since (the shell became a real project, the store got connected),
+ * the workspace opted out, cancelled or activated, the card is **withdrawn** —
+ * persisted, final, and never a dismissal. If a support case is open or a
+ * feedback prompt was shown or answered in the last day, the card is **held**:
+ * nothing is written, nothing is shown, the next look decides again.
+ *
+ * Clicking a card ("acted") changes none of this — activation and completion
+ * are read from the workspace's data, never from a click.
+ *
+ * @returns {{ message: object|null, held: string, withdrawn: {id: string, reason: string}[] }}
+ */
+async function reviewOpenMessages(db, companyId, input = {}) {
+  const nowMs = Number(input.nowMs) || Date.now();
+  const context = input.context || {};
+  const done = new Set(Array.isArray(input.doneEventNames) ? input.doneEventNames.map((name) => String(name || "")) : []);
+  const messages = (Array.isArray(input.messages) ? input.messages : []).filter((m) => m && m.id && String(m.status || "open") === "open")
+    .sort((a, b) => (Number(b.createdAtMs) || 0) - (Number(a.createdAtMs) || 0));
+  const withdrawn = [];
+  const withdraw = async (message, reason) => {
+    await messagesRef(db, companyId).doc(String(message.id)).update({ status: "withdrawn", closedAtMs: nowMs, withdrawnAtMs: nowMs, withdrawReason: reason });
+    withdrawn.push({ id: String(message.id), reason });
+  };
+  let held = "";
+  let chosen = null;
+  for (const message of messages) {
+    const campaign = String(message.campaign || "");
+    const goals = CAMPAIGN_GOALS[campaign] || [];
+    if (context.unsubscribed === true || context.optOut === true) { await withdraw(message, "opt_out"); continue; }
+    if (context.workspaceCancelled === true) { await withdraw(message, "workspace_cancelled"); continue; }
+    if (goals.some((name) => done.has(name))) { await withdraw(message, "goal_met"); continue; }
+    if (context.activated === true && String(message.kind || "") === "onboarding") { await withdraw(message, "activated"); continue; }
+    if (chosen) continue;   // only the newest surviving card is shown; older ones stay open for a later look
+    if (context.supportCaseOpen === true) { held = held || "support_case_open"; continue; }
+    if (input.feedbackRecent === true) { held = held || "feedback_prompt_recent"; continue; }
+    chosen = message;
+  }
+  return { message: chosen, held: chosen ? "" : held, withdrawn };
+}
+
 /** A support case is open while any ticket of the workspace is open, in progress or waiting for the user. */
 const OPEN_TICKET_STATUSES = new Set(["open", "inProgress", "waitingForUser"]);
 function supportCaseOpenFrom(statuses) {
@@ -267,6 +310,6 @@ async function markSupportCase(db, companyId, { open, nowMs = Date.now() } = {})
 
 module.exports = {
   retentionFlags, loadMessagingContext, deliver, attemptEmail, retryOutboxEntries,
-  applyInboundReply, setOptOut, dismissMessage, sweepWorkspace, markSupportCase, supportCaseOpenFrom,
+  applyInboundReply, setOptOut, dismissMessage, sweepWorkspace, markSupportCase, supportCaseOpenFrom, reviewOpenMessages,
   stateRef, logRef, messagesRef, inboundRef, replyKeyRef
 };

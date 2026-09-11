@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { setupStepHref } from "@/lib/studioflow/setupChecklist";
-import { closeRetentionMessage, subscribeOpenRetentionMessages, type RetentionMessage } from "@/lib/studioflow/retention";
+import { closeRetentionMessage, fetchRetentionMessage, type RetentionMessage } from "@/lib/studioflow/retention";
+
+// The server is asked at most this often per session unless something changed
+// (a card was closed, the feedback invitation went away) — the same rhythm the
+// feedback prompt keeps, so one page does not fan out into calls.
+const LOOK_INTERVAL_MS = 10 * 60 * 1000;
+const lookKey = (companyId: string, uid: string) => `nv_retention_looked_${companyId}_${uid}`;
+function readSession(key: string): string { try { return window.sessionStorage.getItem(key) ?? ""; } catch { return ""; } }
+function writeSession(key: string, value: string) { try { window.sessionStorage.setItem(key, value); } catch { /* private mode */ } }
 
 // The words for each campaign, keyed by the same English the server writes, so
 // the translation tables apply and a card written before a copy change still
@@ -22,11 +31,14 @@ function hrefFor(message: RetentionMessage): string {
 }
 
 /**
- * One card, the next step, above the page. It shows only while the server keeps
- * a message open, waits (`hold`) while the feedback invitation is on screen so two
- * cards never stack, and closes through the server: "acted" when the person
- * follows it, "dismissed" on Not now or the × — the dismissal is what starts the
- * campaign's cooldown.
+ * One card, the next step, above the page. The server is asked what may be shown
+ * at the moment of looking (a met goal, an opt-out, a cancelled or activated
+ * workspace withdraw a card; an open support case or a feedback prompt in the last
+ * day hold it), again when the feedback invitation closes and after a card is
+ * closed. While the invitation is on screen (`hold`) nothing is rendered, so two
+ * cards never stack. Closing goes through the server: "acted" when the person
+ * follows the card, "dismissed" on Not now or the × — the dismissal is what starts
+ * the campaign's cooldown; a click never counts as completing the goal.
  */
 export default function RetentionNudge({
   companyId, uid, t, hold, onOpen
@@ -37,17 +49,37 @@ export default function RetentionNudge({
   hold: boolean;
   onOpen: (href: string) => void;
 }) {
-  const [messages, setMessages] = useState<RetentionMessage[]>([]);
+  const pathname = usePathname() || "";
+  const [message, setMessage] = useState<RetentionMessage | null>(null);
   const [busy, setBusy] = useState(false);
-  const [closedId, setClosedId] = useState("");   // hidden locally until the snapshot catches up
+  const inFlight = useRef(false);
+  const heldBefore = useRef(hold);
 
-  useEffect(() => {
-    if (!companyId || !uid) return;
-    setMessages([]);
-    return subscribeOpenRetentionMessages(companyId, setMessages, () => setMessages([]));
+  const look = useCallback(async (force: boolean) => {
+    if (!companyId || !uid || inFlight.current) return;
+    const last = Number(readSession(lookKey(companyId, uid))) || 0;
+    if (!force && Date.now() - last < LOOK_INTERVAL_MS) return;
+    inFlight.current = true;
+    try {
+      const result = await fetchRetentionMessage(companyId);
+      writeSession(lookKey(companyId, uid), String(Date.now()));
+      setMessage(result.enabled ? result.message : null);
+    } catch {
+      setMessage(null);   // not knowing is the same as "nothing to show"
+    } finally {
+      inFlight.current = false;
+    }
   }, [companyId, uid]);
 
-  const message = useMemo(() => messages.find((row) => row.id !== closedId) ?? null, [messages, closedId]);
+  // On mount and when the page changes, at the session rhythm.
+  useEffect(() => { setMessage(null); void look(false); }, [look, pathname]);
+  // The feedback invitation just closed: ask again right away rather than showing
+  // whatever was fetched before it — the server applies the day-long hold.
+  useEffect(() => {
+    if (heldBefore.current && !hold) void look(true);
+    heldBefore.current = hold;
+  }, [hold, look]);
+
   if (!message || hold) return null;
 
   const copy = COPY[message.campaign];
@@ -59,13 +91,15 @@ export default function RetentionNudge({
   const close = async (outcome: "dismissed" | "acted") => {
     if (busy) return;
     setBusy(true);
-    setClosedId(message.id);
+    const closing = message.id;
+    setMessage(null);
     try {
-      await closeRetentionMessage(companyId, message.id, outcome);
+      await closeRetentionMessage(companyId, closing, outcome);
     } catch {
-      // The card is already hidden here; the next server snapshot decides whether it comes back.
+      // The card is already hidden here; the next look decides whether anything comes back.
     } finally {
       setBusy(false);
+      void look(true);   // the next card, if the server has one and nothing holds it
     }
   };
 

@@ -38,6 +38,16 @@ const block = index.slice(index.indexOf("async function nvRetentionTriggerFor(")
     assert.ok(block.includes("retentionRules.feedbackPromptRecent("));
     assert.ok(block.includes('holdInApp, holdReason: "feedback_prompt_recent"'));
   });
+  await check("the read-time callable judges the open cards again before anyone sees one", () => {
+    const callable = index.slice(index.indexOf("exports.getRetentionMessage"), index.indexOf("exports.dismissRetentionMessage"));
+    assert.ok(callable.includes("if (!flags.inApp) return { ok: true, enabled: false, message: null, reason: \"flag_off\" };"), "off means nothing is read");
+    assert.ok(callable.includes("retentionRules.workspaceScope({"), "the pilot gate applies to reading too");
+    assert.ok(callable.includes('.where("status", "==", "open").get()'));
+    assert.ok(callable.includes("await nvRetentionTriggerFor(db, companyId, company, nowMs)"), "the goal check reads the same snapshot the sweep reads");
+    assert.ok(callable.includes('collection("feedbackState").doc(uid).get()'), "the feedback hold is judged for the person looking");
+    assert.ok(callable.includes("retentionWriter.reviewOpenMessages(db, companyId, {"));
+    assert.ok(callable.includes("doneEventNames: (trigger.events || []).map((event) => event && event.name)"));
+  });
   await check("the dismiss callable accepts acted and treats everything else as a dismissal", () => {
     const callable = index.slice(index.indexOf("exports.dismissRetentionMessage"));
     assert.ok(callable.includes('request.data.outcome === "acted" ? "acted" : "dismissed"'));
