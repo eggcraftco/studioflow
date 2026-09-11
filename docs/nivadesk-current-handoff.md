@@ -1,8 +1,22 @@
-# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 11 September 2026, 21:28Z)
+# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 11 September 2026, 21:45Z)
 
 Read this first after a context reset or in a new session, then compare it with the live git and cloud state before
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
 token, OAuth code or secret value appears here.
+
+## Pause point (11 Sep 2026, 21:45Z): ops work paused, the Sales/Products plan starts
+
+At the operator's request work moved to the Sales/Products plan (`NivaDesk-Sales-Products-Plan-2026-09-11`), which followed the operator's question about a Sales menu for marketplace products. Nothing runs in the background and nothing is half-deployed.
+
+| | State at the pause |
+|---|---|
+| Deploy branch | `macbook-save-before-macstudio-2026-06-01` @ `876391b1`, clean, pushed |
+| Web publish repo | `8bf514e ` = Round 176, live |
+| Candidate branches not merged | `dependency-highs-2026-09-11` (worktree `~/Developer/studioflow-deps`, CI green), `retention-email-candidate` |
+| New decisions for the operator | the `/f/` fix web Round; the dependency merge plus its web Round; whether to build "Inventory linking is included in Pro." |
+| Carried-over decisions | eBay manual stage; retention e-mail test after the pilot; native store packages; admin funnel excluding internal workspaces; the iPhone items that were not itemized |
+| Time-based | retention pilot acceptance after 12 Sep ≈12:20Z (card, then restore the synthetic order, then `goal_met`; no pilot feedback or orders until then; e-mail stays off); Google case update by 15 Sep 17:00Z |
+| To resume ops | read the to-do scan table below, then `git status` and the live revisions before acting |
 
 ## To-do scan (11 Sep 2026, 21:28Z)
 
