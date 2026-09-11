@@ -233,3 +233,121 @@ for a provider later). Alternative, not recommended now: SendGrid / Mailgun / Po
 * **Rollback:** set the flags back to unset and redeploy the same functions by name — with every flag off the sweep
   evaluates nothing and writes nothing; cards already written stay readable until the person closes them; no data is
   deleted; the web reader shows nothing when no card is open.
+
+## 7. The one-workspace in-app pilot — pre-checks, deploy, verification (11 September 2026)
+
+Operator approval: in-app only, pilot workspace `GuglEFKSEKNTq1xibFpJav3EWkY2`, e-mail and inbound off, no re-approval
+once the five pre-checks pass. OpenAI, Stripe, eBay, Google untouched; the funnel's store collections left for a separate
+change; the e-mail/IMAP note stays a proposal (no mailbox access, no secret created).
+
+### 7.1 Pre-check 1 — the tested tree is the deployed tree
+
+| | |
+|---|---|
+| Final product commit on the branch | **`dd9fc6e9`** (`retention-live-base`): read-time review, `getRetentionMessage`, the reader change |
+| CI on it | run for `dd9fc6e9`: **success** (unit on the fake Firestore; rules + e2e on the Firestore emulator); earlier commits `bfa4bfc9`, `d3d40de1`, `8158e7f8` also green |
+| Merge into the deploy branch | normal `--no-ff` merge → **`9aacbe5b`**; `functions/` tree, `firestore.rules` and `firestore.indexes.json` **byte-identical** to `dd9fc6e9`; ancestors intact (Stripe, allowlist, OpenAI, checklist, feedback, activation) |
+
+### 7.2 Pre-check 2 — `acted` is not completion
+
+`acted` is a status on the card only (`retentionMessages/{id}.status`, `actedAtMs`); activation and the goal are read from
+the workspace's data (`lifecycleState`, `firstOrderProgress`, the derived events) and never from a click. What happens to
+a half-finished project afterwards, by the existing rules: the next sweep still sees a shell and proposes
+`complete_first_order` again, and the writer refuses it with **`already_sent`** — one card per campaign per workspace is the
+rule (`retentionLog` claim + `messaging.js`), not "the click completed it". Pinned by `retention-writer.test.js` ("acting on a
+card is not completing the goal…"): the shell trigger is proposed again a day later, refused `already_sent`, no second card,
+no dismissal recorded, and the writer never touches `siparisler`.
+
+### 7.3 Pre-check 3 — a pending card is judged again at the moment of looking
+
+New `reviewOpenMessages` (writer) behind the new callable **`getRetentionMessage`**: before anything is shown the open cards
+are re-judged against today's data. **Withdrawn for good** (persisted, `status withdrawn`, `withdrawReason`): goal met
+(`CAMPAIGN_GOALS` ∩ derived events — the shell became a real project, the store or bank got connected), opt-out, workspace
+cancelled, workspace activated (onboarding-kind cards). **Held** (nothing written, nothing shown, the next look decides):
+an open support case, a feedback prompt shown or answered in the last 24 hours — judged for the person looking (their own
+`feedbackState`). Withdrawal is evaluated before a hold, so a met goal is withdrawn even during a hold. The web reader asks
+the server on mount and page change (at most every ten minutes per session), **again when the feedback invitation closes**
+and after a card is closed — so a card written before the invitation cannot pop up the moment the invitation goes away.
+Tests: `retention-writer.test.js` (review: goal met / opt-out / cancelled / activated withdraw; support case / feedback hold
+write nothing; newest surviving card; withdrawal beats hold), `retention-sweep-wiring.test.js` (the callable's gate, query,
+snapshot and hold inputs). Emulator, final code, all through the real callable (`getRetentionMessage` over HTTP with the
+owner's emulator token):
+
+| Rule | Observed |
+|---|---|
+| goal met | a `connect_bank` card returned → a bank connection added → next look: `withdrawn 1`, card `withdrawn (goal_met)` |
+| feedback prompt recent | a `connect_first_store` card returned → the owner's `feedbackState.shows` stamped now → next look: `message null, reason feedback_prompt_recent`, card still `open` → stamp moved two days back → card returned again |
+| support case open | `markSupportCase(open)` → `reason support_case_open` → closed → card returned |
+| opt-out | `setOptOut(true)` → `withdrawn 1`, card `withdrawn (opt_out)` |
+| UI, Not now | card rendered ("Complete your first project"), Not now → gone; server `dismissed`, `dismissals` +1, next look `none_open` |
+| UI, CTA | fresh look, "Create your first project" → CTA → stayed on `/orders`, server `acted`, `actedAtMs`, dismissals unchanged, next look `none_open` |
+
+### 7.4 Pre-check 4 — only the pilot workspace
+
+`NIVADESK_RETENTION_WORKSPACES=GuglEFKSEKNTq1xibFpJav3EWkY2` (an explicit id: allowed even though its owner is one of us),
+`NIVADESK_RETENTION_EXCLUDE_WORKSPACES=KSQidetb3oOSItE9amLISf9Lh6h2,FvnnEcQAFVQnin5GOe88YkDaBxf1,iZFBJqrTJfUBVPA4BgKyvg9zV9o1`
+(our internal workspace, the "test"-named workspace owned by a Shopify app-review tester, and EGGcraft — kept for the general
+launch), the internal-owner rule under `*`. Verified: unit (`workspaceScope`, 12 assertions); emulator — a card written for a
+second workspace `qa-other-co`, its owner's `getRetentionMessage` → `enabled false, reason not_in_pilot`; that owner asking
+for the pilot workspace → `PERMISSION_DENIED`. The sweep applies the same gate before any read and counts skips.
+
+### 7.5 Pre-check 5 — rules, indexes, the four ticket callables, the deploy list, rollback
+
+* **Rules diff vs live** (deploy tip `firestore.rules` = the ruleset released on 10 Sep): four `companies/{cid}/retention*`
+  blocks (state, log, inbound server-only; `retentionMessages` member-readable, server-written), the two deny-list entries
+  ×4 names, `retentionReplyKeys` server-only. Nothing else.
+* **Index diff vs live:** one composite index, collection group `retentionLog` (`status ASC, nextAttemptAtMs ASC`); not
+  present before. Used only by the e-mail outbox retry (`flags.email`), so the in-app pilot never queries it — deployed and
+  waited for anyway, as instructed, before the sweep flag was set.
+* **The four ticket callables** (`createSupportTicket`, `createWorkspaceTicket`, `updateSupportTicketStatus`,
+  `updateWorkspaceTicketStatus`): the only change in each is the added `await nvRetentionSupportCaseSync(…)` after the
+  ticket write / status update, plus the helper itself; nothing else in `index.js` changes for them.
+* **Before the deploy:** `createsupportticket-00067-juw`, `createworkspaceticket-00048-ruk`, `updatesupportticketstatus-00036-loj`,
+  `updateworkspaceticketstatus-00040-rip`; `retentionsweep`, `getretentionmessage`, `dismissretentionmessage`,
+  `setretentionoptout` did not exist; `functions/.env` had no `NIVADESK_RETENTION_*` line (a copy kept beside the chain log).
+* **Deploy list, by name:** `retentionSweep` (new, hourly schedule), `getRetentionMessage` (new), `dismissRetentionMessage`
+  (new), `setRetentionOptOut` (new), and the four ticket callables. Not `retentionInboundReply`, not `retentionUnsubscribe`.
+* **Rollback:** the four ticket callables → route traffic back to the revisions above (their own image and env). The four new
+  services → **shutdown path:** set the four `NIVADESK_RETENTION_*` lines back to unset and redeploy the same names (with every
+  flag off the sweep evaluates nothing and the callable answers `flag_off` and reads nothing), or pause the scheduler job
+  (`gcloud scheduler jobs pause firebase-schedule-retentionSweep-europe-west2`), or delete the four functions
+  (`firebase functions:delete …`). Rules and the index can stay: they only make server-only collections explicit. No data is
+  deleted by any rollback; open cards simply stop being shown.
+
+**Why eight functions, not seven.** The §6.7 list had seven. The eighth is **`getRetentionMessage`**, added for pre-check 3:
+the card shown to a person has to be judged at the moment of looking (goal met, opt-out, cancelled, activated → withdrawn;
+open support case or a feedback prompt in the last 24 hours → held), and a client-side listener on `retentionMessages`
+cannot know any of that. The reader now asks this callable instead of reading Firestore. Same pilot gate, same scope.
+
+### 7.6 Deployed (11 September 2026, 02:10–02:20Z)
+
+| Step | Record |
+|---|---|
+| Rules + indexes | released 02:10:24–02:10:38Z; the `retentionLog` composite index was `CREATING` at 02:13Z and **`READY`** before 02:16:01Z (JSON listing). The chain's text-format check never saw it, so the chain was stopped at 02:16:50Z while it was only polling — the index was **not deleted or recreated** — and continued from the flags step after re-reading every pre-check |
+| Flags (`functions/.env`, the copy from before kept beside the chain log) | `NIVADESK_RETENTION_SWEEP=1`, `NIVADESK_RETENTION_IN_APP=1`, `NIVADESK_RETENTION_WORKSPACES=GuglEFKSEKNTq1xibFpJav3EWkY2`, `NIVADESK_RETENTION_EXCLUDE_WORKSPACES=KSQidetb3oOSItE9amLISf9Lh6h2,FvnnEcQAFVQnin5GOe88YkDaBxf1,iZFBJqrTJfUBVPA4BgKyvg9zV9o1`; `EMAIL` and `INBOUND` unset |
+| Functions, 02:16:52–02:19:50Z | created `retentionsweep-00001-cob`, `getretentionmessage-00001-yoy`, `dismissretentionmessage-00001-jej`, `setretentionoptout-00001-jat`; updated `createsupportticket-00068-lot`, `createworkspaceticket-00049-dux`, `updatesupportticketstatus-00037-dup`, `updateworkspaceticketstatus-00041-feb` — all Ready, 100 % traffic, the four flags read back on each, `EMAIL`/`INBOUND` unset |
+| Scheduler | `firebase-schedule-retentionSweep-europe-west2`, every 60 minutes, ENABLED |
+| Untouched | `chatgptmcp-00073-fuz`, `stripewebhook-00047-por`, `getsetupchecklist-00003-noh`, `getactivationfunnel-00003-cuv`, `getfeedbackprompt-00002-git`, `submitfeedback-00002-jih`, `beginebayconnect-00002-cod`, `previewebayimport-00002-hac` |
+| Web | publish repo **Round 173** `3edb0b0` (the six files, file-scoped; Rounds 169–172 intact), pushed 02:20:47Z |
+
+### 7.7 The pilot in production — first sweep and the timeline
+
+**The synthetic order** `YFFB4Xqi8zSfFgPEN48t` in the pilot workspace (created by the feedback pilot check on 10 Sep 22:45:58Z:
+customer "Pilot Check Customer", design "Feedback pilot synthetic order", project number 1, status "Not Yet", paid 0,
+`createdByEmail contact@nivadesk.co.uk`) — verified synthetic, then moved to the bin the way the app does it
+(`isDeleted true`, `deletedAt`, `updatedAt`) with a `retentionPilotNote` saying why and how to restore. With it in the bin the
+workspace has no live order, so a first-project card can become due; the bin is reversible and the order is not deleted.
+
+**First sweep, triggered once by hand at 02:20:56Z** (`gcloud scheduler jobs run`), summary line at 02:20:59Z:
+`{"evaluated":1,"sent":0,"refused":{"flag_off":1},"skipped":{"not_in_pilot":62,"excluded_workspace":3}}` — exactly one
+workspace evaluated (the pilot), sixty-two skipped as not on the list, three skipped by the exclude list, nothing sent. The
+one refusal is `flag_off`: the only candidate due for the pilot workspace right now is `founder_intro` (signed up on 10 Sep,
+inside the 14-day window) — an **e-mail**, and the e-mail flag is off, so it was refused before anything could leave. That
+is the live proof that e-mail stays closed.
+
+**When the first card can appear.** `create_first_order` needs 24 hours since the wizard was finished (10 Sep 18:31:18Z →
+due from **11 Sep 18:31Z**), and the pilot owner's last feedback prompt was shown at 10 Sep 22:48:51Z, so the 24-hour hold
+runs until **11 Sep 22:48:51Z**. The hourly sweep after that (≈ **23:20Z on 11 Sep**) is the first that can write the card.
+The live checks that need a card — it appears, Not now closes it, the CTA routes and closes it as acted, and restoring the
+synthetic order withdraws the pending card as `goal_met` — are therefore scheduled for after that sweep; nothing in the
+rules was shortened to bring them forward. Until then the synthetic order stays in the bin, marked.
