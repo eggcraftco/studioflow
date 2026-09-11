@@ -58,6 +58,8 @@ struct NivaDeskIntegrationSignals {
     /// Live eBay seller accounts, from getEbayConnections. The attention count
     /// is the server's own specStatus — never an error code read again here.
     var ebayConnections = 0
+    /// The server's per-workspace eBay gate; false = the card must not offer Connect.
+    var ebayWorkspaceEnabled = true
     var ebayConnectionsNeedingAttention = 0
     var ebayAccount = ""
     var ebaySandbox = false
@@ -211,7 +213,7 @@ struct NivaDeskIntegration: Identifiable {
             // A disconnected row is not a connection, and the card goes amber
             // only when EVERY live account needs a look: one paused sandbox
             // account beside a working live one is not an outage.
-            if signals.ebayConnections == 0 { return .available }
+            if signals.ebayConnections == 0 { return signals.ebayWorkspaceEnabled ? .available : .planned }
             return signals.ebayConnectionsNeedingAttention == signals.ebayConnections ? .attention : .connected
         }
         if id == "paypal" {

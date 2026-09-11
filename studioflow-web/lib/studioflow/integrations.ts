@@ -253,6 +253,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // needsAttention is the SERVER's word (specStatus), never re-derived from
     // an error code here: the status table lives in one place and the three
     // clients copy it rather than each inventing their own reading of it.
+    ebayWorkspaceEnabled: ebay.status === "fulfilled" ? ebay.value.workspaceEnabled !== false : true,
     ebayConnections: ebay.status === "fulfilled"
       ? ebay.value.connections.map((row) => ({
           account: row.displayName || row.sellerUsername || row.sellerUserId,
@@ -311,6 +312,7 @@ export type IntegrationSignals = {
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
   /** Connected eBay seller accounts, carrying the server's own specStatus. */
   ebayConnections: { account: string; status: string; specStatus: string; needsAttention: boolean; environment?: string }[];
+  ebayWorkspaceEnabled?: boolean;
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
@@ -417,7 +419,9 @@ function resolveProviderState(
   // working live one is not an outage.
   if (provider.id === "ebay") {
     const live = (signals.ebayConnections || []).filter((row) => row.status !== "disconnected");
-    if (live.length === 0) return { state: "available" };
+    // No connection and the workspace is not on the server's rollout list: the card reads like a
+    // planned integration (no Connect), not like something one click away.
+    if (live.length === 0) return { state: signals.ebayWorkspaceEnabled === false ? "planned" : "available" };
     const broken = live.filter((row) => row.needsAttention).length;
     const sandbox = live[0].environment === "sandbox" ? " · Sandbox" : "";
     return {

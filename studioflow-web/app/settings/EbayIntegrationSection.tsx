@@ -42,6 +42,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
   const [loading, setLoading] = useState(true);
   const [connections, setConnections] = useState<EbayConnection[]>([]);
   const [configured, setConfigured] = useState(true);
+  const [workspaceEnabled, setWorkspaceEnabled] = useState(true);
   const [environment, setEnvironment] = useState("sandbox");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -64,6 +65,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
       const result = await getEbayConnections(companyId);
       setConnections(result.connections);
       setConfigured(result.configured);
+      setWorkspaceEnabled(result.workspaceEnabled);
       setEnvironment(result.environment);
       if (!keepError) setError("");
     } catch (err) {
@@ -135,7 +137,17 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
         <p className="muted-copy">{t("eBay is not set up on this server yet. Contact support and we will enable it.")}</p>
       </section>
     );
+  }  if (!workspaceEnabled && !connection) {
+    // The server has eBay, but this workspace is not on its rollout list yet: say so instead of
+    // offering a Connect button the server would refuse.
+    return (
+      <section className="settings-card" aria-label="eBay">
+        <h3 className="settings-card__title">eBay</h3>
+        <p className="muted-copy">{t("eBay is not available for this workspace yet.")}</p>
+      </section>
+    );
   }
+
 
   if (!connection) {
     return stack(

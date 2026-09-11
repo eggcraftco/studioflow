@@ -6657,6 +6657,7 @@ struct AyarlarView: View {
                     String(describing: $0["status"] ?? "") != "disconnected"
                 }
                 integrationSignals.ebayConnections = rows.count
+                integrationSignals.ebayWorkspaceEnabled = ((result?.data as? [String: Any])?["workspaceEnabled"] as? Bool) ?? true
                 integrationSignals.ebayConnectionsNeedingAttention = rows.filter {
                     let spec = String(describing: $0["specStatus"] ?? "")
                     return spec == "reauthorization_required" || spec == "degraded" || spec == "suspended"

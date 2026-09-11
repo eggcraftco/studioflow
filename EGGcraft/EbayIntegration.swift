@@ -237,13 +237,15 @@ extension FirebaseManager {
     /// companyId and talks to europe-west2. Sending companyId explicitly also
     /// stops the server falling back to users/{uid}.activeCompanyId, which is
     /// not necessarily the workspace this screen is showing.
-    func ebayConnections() async throws -> (connections: [EbayConnectionInfo], configured: Bool, environment: String) {
+    func ebayConnections() async throws -> (connections: [EbayConnectionInfo], configured: Bool, workspaceEnabled: Bool, environment: String) {
         let data = try await etsyCall("getEbayConnections")
         let rows = (data["connections"] as? [[String: Any]] ?? []).map(EbayConnectionInfo.init)
         // configured:false is "this server has no eBay application wired up",
         // which is a card, not an error. Default true so a server that answers
-        // without the field is not reported as switched off.
-        return (rows, (data["configured"] as? Bool) ?? true, (data["environment"] as? String) ?? "sandbox")
+        // without the field is not reported as switched off. workspaceEnabled is
+        // the server's own per-workspace gate (the one beginEbayConnect applies);
+        // absent on an older server → true, the behaviour before the field existed.
+        return (rows, (data["configured"] as? Bool) ?? true, (data["workspaceEnabled"] as? Bool) ?? true, (data["environment"] as? String) ?? "sandbox")
     }
 
     /// Owner only, server-side. Returns the page to open in the browser — never

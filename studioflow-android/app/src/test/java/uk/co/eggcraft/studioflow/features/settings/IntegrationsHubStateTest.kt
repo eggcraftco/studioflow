@@ -50,6 +50,24 @@ class IntegrationsHubStateTest {
             state("a.myshopify.com" to "paused", "b.myshopify.com" to "active")
         )
     }
+    // eBay: the server's per-workspace gate decides whether a workspace with no connection may
+    // connect. Off the list, the card reads like a planned integration (no Connect); on the list,
+    // Available; with a live connection the gate is irrelevant. Mirrors NivaDeskIntegrations.swift
+    // and studioflow-web/lib/studioflow/integrations.ts — keep the three in step.
+    private val ebayProvider = INTEGRATION_PROVIDERS.first { it.id == "ebay" }
+
+    @Test
+    fun ebayOffTheRolloutListReadsPlannedNotAvailable() {
+        assertEquals(IntegrationState.Planned, ebayProvider.state(IntegrationSignals(ebayConnections = 0, ebayWorkspaceEnabled = false)))
+        assertEquals(IntegrationState.Available, ebayProvider.state(IntegrationSignals(ebayConnections = 0, ebayWorkspaceEnabled = true)))
+        assertEquals(IntegrationState.Available, ebayProvider.state(IntegrationSignals(ebayConnections = 0)))   // an older server: no field → unchanged behaviour
+    }
+
+    @Test
+    fun ebayWithALiveConnectionIgnoresTheGate() {
+        assertEquals(IntegrationState.Connected, ebayProvider.state(IntegrationSignals(ebayConnections = 1, ebayWorkspaceEnabled = false)))
+        assertEquals(IntegrationState.Attention, ebayProvider.state(IntegrationSignals(ebayConnections = 1, ebayConnectionsNeedingAttention = 1, ebayWorkspaceEnabled = false)))
+    }
 }
 
 /**
@@ -117,4 +135,5 @@ class EbayIntegrationCardTest {
         // eBay never named; the card still has to say there is one.
         assertEquals("1 account", ebay.detail(signals(live = 1, attention = 0)))
     }
+
 }

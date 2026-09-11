@@ -73,6 +73,8 @@ data class IntegrationSignals(
     /** Live eBay seller accounts, from getEbayConnections. The attention count
      *  is the server's own specStatus — never an error code read again here. */
     val ebayConnections: Int = 0,
+    /** The server's per-workspace eBay gate; false = the card must not offer Connect. */
+    val ebayWorkspaceEnabled: Boolean = true,
     val ebayConnectionsNeedingAttention: Int = 0,
     val ebayAccount: String = "",
     val ebaySandbox: Boolean = false,
@@ -160,7 +162,7 @@ data class IntegrationProvider(
             // A disconnected row is not a connection, and the card goes amber
             // only when EVERY live account needs a look: one paused sandbox
             // account beside a working live one is not an outage.
-            if (signals.ebayConnections == 0) return IntegrationState.Available
+            if (signals.ebayConnections == 0) return if (signals.ebayWorkspaceEnabled) IntegrationState.Available else IntegrationState.Planned
             return if (signals.ebayConnectionsNeedingAttention == signals.ebayConnections) IntegrationState.Attention else IntegrationState.Connected
         }
         if (id == "paypal") {

@@ -4403,6 +4403,8 @@ class StudioFlowRepository(
         val connections: List<EbayConnectionRow>,
         /** false is "this server has no eBay application wired up" — a card, not an error. */
         val configured: Boolean,
+        /** The server's per-workspace gate (the one beginEbayConnect applies); false = no Connect offered. Absent on an older server → true. */
+        val workspaceEnabled: Boolean = true,
         val environment: String,
     )
 
@@ -4510,6 +4512,7 @@ class StudioFlowRepository(
         return EbayConnectionsResult(
             connections = rows,
             configured = raw["configured"] as? Boolean ?: true,
+            workspaceEnabled = raw["workspaceEnabled"] as? Boolean ?: true,
             environment = raw["environment"]?.toString().orEmpty().ifBlank { "sandbox" },
         )
     }

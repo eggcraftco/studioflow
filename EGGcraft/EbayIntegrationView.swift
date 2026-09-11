@@ -28,6 +28,7 @@ struct EbayIntegrationView: View {
 
     @State private var loading = true
     @State private var configured = true
+    @State private var workspaceEnabled = true
     @State private var environment = "sandbox"
     @State private var connections: [EbayConnectionInfo] = []
     @State private var busy = ""
@@ -74,6 +75,14 @@ struct EbayIntegrationView: View {
                 }
             } else if let live = connection {
                 connectedBody(live)
+            } else if !workspaceEnabled {
+                // The server has eBay, but this workspace is not on its rollout list yet:
+                // say so rather than show a Connect the server would refuse.
+                SettingsCard(title: "eBay", iconName: "cart.fill") {
+                    Text(tr("eBay is not available for this workspace yet."))
+                        .font(.system(size: 13)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 EbayConnectCard(
                     language: language,
@@ -159,6 +168,7 @@ struct EbayIntegrationView: View {
             let result = try await firebaseManager.ebayConnections()
             connections = result.connections
             configured = result.configured
+            workspaceEnabled = result.workspaceEnabled
             environment = result.environment
             if !keepError { errorText = "" }
         } catch {

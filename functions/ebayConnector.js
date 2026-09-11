@@ -997,7 +997,12 @@ function createEbayConnectorFunctions(deps) {
       const on = connectorOn() && flagsModule.flagEnabled(flags, "connectors", "ebay", doc.id);
       rows.push(publicView(doc.id, data, { flagOn: on, quotaDoc, recentEvents }));
     }
-    return { ok: true, connections: rows, configured: configured() && connectorOn(), environment: env() };
+    // Whether THIS workspace may connect: the same four gates beginEbayConnect applies (connector switch,
+    // application configured, provider flag, per-workspace flag) — minus the owner check, which is about the
+    // person, not the workspace. `configured` keeps its meaning ("this server has an eBay application"); a
+    // client that reads only `configured` behaves exactly as before.
+    const workspaceEnabled = connectorOn() && configured() && (await providerFlagOn()) && flagsModule.workspaceEnabled(flags, "connectors", "ebay", companyId);
+    return { ok: true, connections: rows, configured: configured() && connectorOn(), workspaceEnabled, environment: env() };
   });
 
   const verifyEbayConnection = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
