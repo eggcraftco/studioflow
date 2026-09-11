@@ -125,3 +125,22 @@ decision; this package does not change the funnel's scope.
 * **Rollback:** redeploy `getActivationFunnel` from `8bd71b57` (the deploy tip before the merge — the old `derive.js` is
   there); no data to restore. Not touched by this package: OpenAI review surface, Stripe, the live feedback behaviour,
   retention flags (unset), any user-facing message.
+
+
+## 5. Deployed (11 September 2026, 01:12–01:15Z) — operator-approved, `getActivationFunnel` only
+
+| Step | Record |
+|---|---|
+| Merge | `activation-v21-cutover-candidate` (tip `1fe6270b`, code candidate `21d13bb4`) merged into the deploy branch with a normal `--no-ff` merge → **`088c673e`**, pushed. The deploy branch's own hand-off commits (`7cf96060`) kept. Product check: the `functions/` tree of `088c673e` is **identical** to the tested candidate `21d13bb4` (the only functions change is `derive.js` + its test) |
+| Before the deploy | serving **`getactivationfunnel-00002-ret`** (created 2026-09-06T02:33:29Z, 100 % traffic, Ready), `firebase-functions-hash 60331c45…`, image the shared `gcf-artifacts` tag; env var names of that revision = the 6 Sep `.env` (no `NIVADESK_EBAY_*`, no `NIVADESK_FEEDBACK*`). Retained revisions for a traffic rollback: `-00002-ret` (6 Sep) and `-00001-muv` (4 Sep) |
+| Rollback plan, stated before deploying | **Preferred: route traffic back to `getactivationfunnel-00002-ret`** — it keeps its own image and env exactly as they were. Redeploying the old source (`8bd71b57`, old `derive.js`) is only a code rollback: it would carry today's shared `functions/.env` (33 vars, including the eBay and feedback flags the 6 Sep revision never had), so it is not by itself a full return to the previous state |
+| Pre-checks | ancestors Stripe `76c5e3c3`, allowlist `def97f49`, OpenAI `baa21204`, checklist `b9aeec70`, feedback `8f34bbe9`, candidate `21d13bb4` all present; tree clean; HEAD = origin tip; `functions/.env` present (33 vars, 3 feedback flags); gcloud token ok |
+| Deploy | `npx firebase deploy --project eggcraft-studio --only functions:getActivationFunnel` — "Successful update operation", exit 0, 01:12:07–01:15:01Z. Nothing else deployed |
+| Read-back | serving **`getactivationfunnel-00003-cuv`** (created 01:14:40Z), 100 % traffic, Ready, latestReady the same; `firebase-functions-hash 38551fde…` (changed from `60331c45…`); env var names now include today's `.env` additions (`NIVADESK_EBAY_*`, `NIVADESK_FEEDBACK*`, `NIVADESK_MCP_ORCHESTRATOR`) — expected, harmless for this function |
+| Untouched, verified after the deploy | `chatgptmcp-00073-fuz`, `chatgptoauthauthorize-00045-has`, `stripewebhook-00047-por`, `getsetupchecklist-00003-noh`, `getfeedbackprompt-00002-git`, `submitfeedback-00002-jih`, `beginebayconnect-00002-cod`, `previewebayimport-00002-hac`, `runebayimport-00002-caw`, `syncebaynow-00002-buq` |
+| Same-minute dry run (01:15:15–01:15:20Z, read-only) | unchanged from 01:00Z: 66 workspaces, 65 external; activated OLD 24 → NEW 10 (all 66: 25 → 11); 14 active→inactive, 0 inactive→active, 9 relabels |
+
+Scope note, unchanged by this deploy: the funnel counts every company document, so the test/internal workspaces
+(`FvnnEcQA…` "test", our `GuglEFKS…` test workspace, EGGcraft `iZFBJqrT…`, and `KSQidetb…`) are inside its totals.
+Feedback v1 is live and generally available (all workspaces) and was not touched.
+
