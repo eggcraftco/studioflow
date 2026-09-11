@@ -98,16 +98,16 @@ or the §2a change); (8) one feedback send — only after 12 Sep 12:20Z if the p
 ## 5. The package per platform
 
 ### iOS + macOS (one Xcode target, one submission each)
-* **Source:** deploy branch `ff514cf8` (tag it at release time). **Scope:** §1 (231 commits, 62 files) — everything since 1.3 (17).
-* **Before the archive (recommended):** merge `ebay-availability-fix` (§2, done and verified) and deploy `getEbayConnections` from it; the review-note alternative is no longer needed.
+* **Source:** deploy branch **`b859a2fb`** (merge of `ebay-availability-fix` @ `6e4c164e`; tag it at release time). **Scope:** §1 plus the 11 Sep candidate: eBay availability gating (`workspaceEnabled`), workspace resolution (no personal-workspace fallback on a failed read, offline reopen bound to the account's last confirmed workspace), hub Checking…/Could not check — see `docs/onboarding/ebay-availability-fix-2026-09-11.md` and `docs/onboarding/workspace-and-phone-fixes-2026-09-11.md`. Server side already live (`getebayconnections-00003-xec`, web Round 174).
+* **Before the archive:** done — merged (`b859a2fb`) and `getEbayConnections` deployed 11 Sep 16:46Z.
 * **Tests present / missing:** §3. **Missing and recommended before submit:** the iPhone simulator flow (sign-in as the test
   account, workspace, one order create/edit, checklist, one feedback send **after 12 Sep 12:20Z**) — the simulator build is ready to install.
 * **Version:** 1.4 (18). **Signing:** needs the Distribution identity → **your Xcode sign-in** (Xcode → Settings → Accounts → the developer Apple ID → Manage Certificates), then `xcodebuild archive` + export for iOS and for macOS, upload, ASC submission (screenshots pipeline already in place).
 * **Your steps:** confirm 1.4 (18) in ASC (no build 18 exists yet), sign in to Xcode/ASC, decide §2a, press Submit.
 
 ### Android
-* **Source:** `ff514cf8`. **Scope:** §1 (210 commits since the store's 0.1.8; 61 since the 0.1.9 package).
-* **Before the bundle:** merge `ebay-availability-fix` (§2) — the Android hub/screen change rides this release.
+* **Source:** **`b859a2fb`**. **Scope:** §1 plus the 11 Sep candidate (eBay gating, workspace resolution, hub tri-state, unit suite 44 green).
+* **Before the bundle:** done (`b859a2fb`).
 * **Tests present / missing:** §3 + the unit suite (33 tests green, below; 35 with the two eBay hub cases on the candidate). **Missing and recommended:** the Pixel_9 emulator flow (same list as iOS) — the debug APK is ready.
 * **Version:** 0.1.9 (10) or 0.2.0 (11) — decided by what Play already holds.
 * **Signing:** `./gradlew :app:bundleRelease` signs with the local keystore — can run here on your word; the **upload** and the release track are yours in the Play Console (the developer account is not the Google identity signed in on this Mac's Chrome).
