@@ -367,6 +367,8 @@ agreement, no secrets, not the public forum.
 | Confirmation | "Thank you for submitting your support request — Use this reference number for follow up: **260910-000068** — A member of our support team will get back to you within 1-2 business days. If you need to update your incident, click the My Tickets tab and select the subject to open and update it." |
 | What was sent, kept in the repo | `docs/ebay-support/ticket-260910-000068-question.txt` (the Question as typed) and `docs/ebay-support/ticket-260910-000068-attachment.txt` (the attachment, byte-identical to what was uploaded). No token, Authorization header, client secret or password anywhere in either; nothing posted to the public forum |
 
+| Ticket link and portal record | **`https://developer.ebay.com/my/support/tickets/c9be2e40-7aad-f111-aaac-6045bdff416d`** (opens only for the signed-in `nivadesk` developer account; the portal appends its own `contactId` parameter). *My Tickets* lists it as Subject "Sandbox - order completed via the Trading API is not returned by the Sell Fulfillment API", Reference 260910-000068, Platform APIs, Status **Updated**, Date Created "September 10, 2026 at 5:46:43 PM" (the portal's display time zone; = 2026-09-11 00:46:43 UTC) |
+
 **Stage status from here: awaiting eBay Developer Technical Support's reply on ticket 260910-000068.** No new
 Sandbox tests, no deploy, `autoSync: false`, all test records kept.
 
