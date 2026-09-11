@@ -3381,6 +3381,73 @@ class StudioFlowRepository(
             .await()
     }
 
+    /** One step of the workspace's own setup, as the server named it. */
+    data class StudioSetupStep(
+        val key: String,
+        val title: String,
+        val detail: String,
+        /** What the step opens, in the server's words ("bank", "inventory", …).
+         *  Empty means the step is a statement rather than somewhere to go. */
+        val action: String,
+        val done: Boolean,
+    )
+
+    /**
+     * The whole answer, not only the part the Home card draws today: a client
+     * model that keeps half a payload is a client model the next reader has to
+     * go and check. The card reads [steps]; [path], [complete] and [headline]
+     * are the server's own words about where this workspace is.
+     */
+    data class StudioSetupChecklist(
+        val path: String,
+        /** The workspace has been served — §115's "and then it finishes". */
+        val complete: Boolean,
+        val steps: List<StudioSetupStep>,
+        val headline: String,
+    )
+
+    /**
+     * The steps between signing up and NivaDesk being useful, for THIS workspace.
+     *
+     * The card used to draw a fixed six-step list of its own, which showed a
+     * jeweller doing bespoke commissions a step about connecting an online shop
+     * they do not have — and ticked "Set up business profile" for everybody,
+     * done or not. The server builds this list from the same requirements table
+     * activation is measured against, so the list and the measurement cannot
+     * drift apart.
+     *
+     * Any member may ask: it is the workspace's own progress, not billing.
+     * Region europe-west2, like every other callable here.
+     */
+    suspend fun setupChecklist(workspaceId: String): StudioSetupChecklist? {
+        val result = functions.getHttpsCallable("getSetupChecklist")
+            .call(mapOf("companyId" to workspaceId))
+            .await()
+        val raw = result.data as? Map<*, *> ?: return null
+        val steps = (raw["steps"] as? List<*> ?: emptyList<Any?>()).mapNotNull { entry ->
+            val step = entry as? Map<*, *> ?: return@mapNotNull null
+            // A step with no words is not a step somebody can follow.
+            val title = (step["title"] as? String)?.trim().orEmpty()
+            if (title.isEmpty()) return@mapNotNull null
+            StudioSetupStep(
+                key = (step["key"] as? String)?.trim().orEmpty().ifEmpty { title },
+                title = title,
+                detail = (step["detail"] as? String).orEmpty(),
+                action = (step["action"] as? String).orEmpty(),
+                done = step["done"] as? Boolean ?: false,
+            )
+        }
+        // An empty list is not an answer — the card keeps its own steps rather
+        // than showing a checklist with nothing on it.
+        if (steps.isEmpty()) return null
+        return StudioSetupChecklist(
+            path = (raw["path"] as? String).orEmpty(),
+            complete = raw["complete"] as? Boolean ?: false,
+            steps = steps,
+            headline = (raw["headline"] as? String).orEmpty(),
+        )
+    }
+
     suspend fun inventorySummary(workspaceId: String): StudioInventorySummary {
         val raw = inventoryCall("getInventorySummary", workspaceId)
         return StudioInventorySummary.from(raw["summary"] as? Map<*, *> ?: emptyMap<String, Any?>())
@@ -4703,8 +4770,15 @@ private fun workspaceSettings(
         quickReplyRules = jsonQuickReplyTemplateItems(data["customRulesJSON"], fallback.quickReplyRules),
         businessType = stringValue(data["businessType"], fallback.businessType),
         businessDescriptionPrompt = stringValue(data["businessDescriptionPrompt"], fallback.businessDescriptionPrompt),
+        // Two questions, and they have different answers for the 22 workspaces
+        // that pressed Skip: setup is OVER for them (the stamp is on the
+        // document), and the wizard was never FINISHED (the boolean was
+        // deliberately not written). The tolerant read decides whether to open
+        // the wizard; the strict one is what a checklist may tick.
         businessOnboardingCompleted = data.containsKey("businessOnboardingCompletedAt") ||
             boolValue(data["businessOnboardingCompleted"], fallback.businessOnboardingCompleted),
+        businessOnboardingWizardCompleted =
+            boolValue(data["businessOnboardingCompleted"], fallback.businessOnboardingWizardCompleted),
         activeStatuses = jsonStringList(data["activeStatusesJSON"], fallback.activeStatuses),
         customSteps = jsonTitleList(data["customStepsJSON"], fallback.customSteps),
         customToggles = jsonTitleList(data["customTogglesJSON"], fallback.customToggles),

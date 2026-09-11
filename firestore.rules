@@ -655,6 +655,24 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Retention (the lifecycle nudges): the state, the per-campaign log and the
+    // inbound replies hold the sweep's bookkeeping and the owner's own words —
+    // server-only, both directions. The messages are what a Home screen shows:
+    // readable with the workspace, written and dismissed only through the server.
+    match /companies/{companyId}/retention/{document=**} {
+      allow read, write: if false;
+    }
+    match /companies/{companyId}/retentionLog/{document=**} {
+      allow read, write: if false;
+    }
+    match /companies/{companyId}/retentionInbound/{document=**} {
+      allow read, write: if false;
+    }
+    match /companies/{companyId}/retentionMessages/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     match /companies/{companyId}/deviceTokens/{tokenId} {
       allow read: if false;
       allow create: if signedIn()
@@ -947,6 +965,10 @@ service cloud.firestore {
         && collectionId != 'paypalPayouts'
         && collectionId != 'squarePayouts'
         && collectionId != 'trackingResults'
+        && collectionId != 'retention'
+        && collectionId != 'retentionLog'
+        && collectionId != 'retentionMessages'
+        && collectionId != 'retentionInbound'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -1008,6 +1030,10 @@ service cloud.firestore {
         && collectionId != 'paypalPayouts'
         && collectionId != 'squarePayouts'
         && collectionId != 'trackingResults'
+        && collectionId != 'retention'
+        && collectionId != 'retentionLog'
+        && collectionId != 'retentionMessages'
+        && collectionId != 'retentionInbound'
         && canWriteCompanyData(companyId);
     }
 
@@ -1180,6 +1206,11 @@ service cloud.firestore {
     // workspace member reaches all of it through callables, which is what
     // lets us check their role first.
     match /etsyConnections/{document=**} {
+      allow read, write: if false;
+    }
+    // Retention reply keys: reply key → workspace, written by the e-mail writer and
+    // read by the inbound route; nothing a client should ever see.
+    match /retentionReplyKeys/{document=**} {
       allow read, write: if false;
     }
     match /etsyOAuthStates/{document=**} {

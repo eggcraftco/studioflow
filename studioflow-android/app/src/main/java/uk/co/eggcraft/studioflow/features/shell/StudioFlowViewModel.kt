@@ -458,7 +458,12 @@ class StudioFlowViewModel @JvmOverloads constructor(
             "studioflow_header",
             "trial_banner",
             "demo_plan_banner",
-            "email_verify_banner"
+            "email_verify_banner",
+            // A half-finished setup wizard belongs to the account that was
+            // answering it. Its keys are scoped to that person and workspace
+            // already, so nobody else could have resumed it — but it is theirs,
+            // and it leaves with them.
+            uk.co.eggcraft.studioflow.features.onboarding.OnboardingProgressPrefsName
         )
         // NOT "studioflow_android_local_security": it holds App Lock and the
         // auto-lock delay, which are settings for this DEVICE rather than data

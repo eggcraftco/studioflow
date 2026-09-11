@@ -3669,6 +3669,7 @@ exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADES
 
   await ticketRef.set(payload);
   await rememberTicketForDedupe("app", companyId, uid, payload.title, ticketRef.id);
+  await nvRetentionSupportCaseSync(companyId);
   await safeSupportNotification("notifySupportAdminsForTicket(createSupportTicket)", () =>
     notifySupportAdminsForTicket(companyId, ticketRef.id, payload, "new_ticket")
   );
@@ -5001,6 +5002,7 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
 
   await ticketRef.set(payload);
   await rememberTicketForDedupe("workspace", companyId, uid, payload.title, ticketRef.id);
+  await nvRetentionSupportCaseSync(companyId);
   // The sender is always excluded from the recipient list, so a workspace with
   // no admins and no support managers notifies nobody. It used to answer
   // "sent to the workspace owner" anyway — to the owner, about themselves.
@@ -5124,6 +5126,7 @@ exports.updateSupportTicketStatus = onCall({ region: "europe-west2" }, async (re
     lastStatusChangedByUid: uid,
     lastStatusChangedByEmail: supportUserEmail(request)
   }, { merge: true });
+  await nvRetentionSupportCaseSync(String((ticketSnap.data() || {}).companyId || ""));
 
   return { ok: true, ticketId, status, message: "NivaDesk support ticket status updated." };
 });
@@ -5166,6 +5169,7 @@ exports.updateWorkspaceTicketStatus = onCall({ region: "europe-west2" }, async (
     await addWorkspaceTicketSystemMessage(companyId, ticketId, `${actorName} changed status from ${oldStatus} to ${status}.`);
   }
 
+  await nvRetentionSupportCaseSync(companyId);
   return { ok: true, ticketId, status, message: "Workspace ticket status updated." };
 });
 
@@ -35144,3 +35148,236 @@ if (process.env.NIVADESK_E2E === "1") {
     commerceContextForShopify
   };
 }
+
+// ---------------------------------------------------------------------------
+// Retention wiring (10 Sep 2026) — every function below is behind a flag that
+// is OFF, and none of them is deployed: retention/writer.js and
+// lifecycle/retention.js carry the behaviour and the tests; this is the
+// thin edge that gives them a schedule, an inbound door and two callables.
+// docs/onboarding/retention-wiring-2026-09-10.md says what turning each flag on means.
+// ---------------------------------------------------------------------------
+
+const retentionRules = require("./lifecycle/retention");
+const retentionWriter = require("./retention/writer");
+
+/** The SMTP transport the founder note leaves through — the same account the support mail uses. */
+function nvRetentionMailTransport() {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  if (!password) return null;
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+  const transporter = nvMailTransport({ host, port, secure: port === 465, auth: { user, pass: password } });
+  return {
+    fromAddress: user,
+    // Replies come back to the mailbox the reply-key parser watches; without an
+    // inbound route configured they land in the plain reply-to instead.
+    replyDomain: String(process.env.NIVADESK_RETENTION_REPLY_DOMAIN || "").trim(),
+    sendMail: (message) => transporter.sendMail(message)
+  };
+}
+
+function nvRetentionUnsubscribeUrl(companyId) {
+  const secret = String(process.env.NIVADESK_RETENTION_TOKEN_SECRET || "").trim();
+  const token = retentionRules.retentionToken(secret, companyId);
+  if (!token) return "";
+  return `https://mcp.nivadesk.app/retentionUnsubscribe?c=${encodeURIComponent(companyId)}&t=${encodeURIComponent(token)}`;
+}
+
+/** The lifecycle inputs for one workspace, the way the funnel reads them. */
+async function nvRetentionTriggerFor(db, companyId, company, nowMs) {
+  const lifecycle = { derive: require("./lifecycle/derive"), activation: require("./lifecycle/activation") };
+  const substantiveOrder = require("./lifecycle/substantiveOrder");
+  // The same snapshot the funnel reads, plus the five store connections derive.js
+  // knows: a nudge to "connect your first store" or "connect your bank" must see
+  // the connection that would cancel it (§24), so nothing here may be left out.
+  const rows = (snap) => ((snap && snap.docs) || []).map((doc) => ({ id: doc.id, ...doc.data() }));
+  const none = () => ({ docs: [] });
+  const [settingsSnap, orders, customers, banks, accounting, inventory, shopify, etsy, woo, square, ebay] = await Promise.all([
+    db.collection("companySettings").doc(companyId).get(),
+    db.collection("siparisler").where("companyId", "==", companyId).limit(400).get(),
+    db.collection("musteriler").where("companyId", "==", companyId).limit(400).get(),
+    db.collection("companies").doc(companyId).collection("bankConnections").limit(20).get().catch(none),
+    db.collection("companies").doc(companyId).collection("accountingConnections").limit(20).get().catch(none),
+    db.collection("companies").doc(companyId).collection("inventoryItems").limit(400).get().catch(none),
+    db.collection("shopifyStores").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("etsyConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("wooConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("squareConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("ebayConnections").where("companyId", "==", companyId).limit(20).get().catch(none)
+  ]);
+  const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
+  const orderRows = rows(orders);
+  const { events } = lifecycle.derive.deriveEvents({
+    settings, orders: orderRows, customers: rows(customers),
+    bankConnections: rows(banks), accountingConnections: rows(accounting), inventoryItems: rows(inventory),
+    shopifyStores: rows(shopify), etsyConnections: rows(etsy), wooConnections: rows(woo), squareConnections: rows(square), ebayConnections: rows(ebay)
+  });
+  const path = lifecycle.activation.activationPathFor(settings);
+  const state = lifecycle.activation.lifecycleState({ events, path, nowMs });
+  const firstOrder = substantiveOrder.firstOrderProgress(orderRows);
+  if (firstOrder.state === "shell") {
+    const shell = orderRows.find((row) => row.id === firstOrder.shellId);
+    firstOrder.shellAtMs = shell ? lifecycle.derive.firstTime(shell.createdAtMs, shell.createdAt, shell.paymentDate) : 0;
+  }
+  return {
+    trigger: { nowMs, signedUpAtMs: lifecycle.derive.firstTime(company.createdAt, company.createdAtMs, settings.businessOnboardingCompletedAt), path, state: state.state, events, firstOrder },
+    activated: state.progress.activated,
+    settings
+  };
+}
+
+/**
+ * Keep `companies/{cid}/retention/state.supportCaseOpenAtMs` current from the two ticket queues
+ * (retention wiring gap 8): open while any app or workspace ticket of the workspace is open, in
+ * progress or waiting for the user; cleared when none is. Called after every ticket create and
+ * status change. Never throws — a ticket must not fail because a nudge stamp could not be written.
+ */
+async function nvRetentionSupportCaseSync(companyId) {
+  try {
+    if (!companyId) return null;
+    const db = admin.firestore();
+    const [appTickets, workspaceTickets] = await Promise.all([
+      db.collection("supportTickets").where("companyId", "==", companyId).limit(50).get(),
+      db.collection("companies").doc(companyId).collection("workspaceTickets").limit(50).get()
+    ]);
+    const statuses = [...appTickets.docs, ...workspaceTickets.docs].map((d) => String((d.data() || {}).status || "open"));
+    return await retentionWriter.markSupportCase(db, companyId, { open: retentionWriter.supportCaseOpenFrom(statuses), nowMs: Date.now() });
+  } catch (error) {
+    console.warn("retention support-case stamp skipped:", companyId, error?.message || error);
+    return null;
+  }
+}
+
+exports.retentionSweep = onSchedule({ schedule: "every 60 minutes", region: "europe-west2", timeoutSeconds: 540, secrets: [NIVADESK_SMTP_PASSWORD] }, async () => {
+  const flags = retentionWriter.retentionFlags();
+  if (!flags.sweep) { console.log("retentionSweep: NIVADESK_RETENTION_SWEEP is off; nothing evaluated."); return; }
+  const db = admin.firestore();
+  const nowMs = Date.now();
+  const transport = flags.email ? nvRetentionMailTransport() : null;
+  const companies = await db.collection("companies").limit(200).get();
+  const summary = { evaluated: 0, sent: 0, refused: {}, skipped: {} };
+  for (const companyDoc of companies.docs) {
+    const companyId = companyDoc.id;
+    const company = companyDoc.data() || {};
+    // Who may be swept: the pilot list (NIVADESK_RETENTION_WORKSPACES — empty is nobody,
+    // "*" is everyone), minus the exclude list and any workspace owned by one of us. The
+    // activation funnel counts test and internal workspaces; the sweep never messages them.
+    const scope = retentionRules.workspaceScope({
+      companyId, ownerEmail: String(company.ownerEmail || company.email || ""),
+      pilotList: process.env.NIVADESK_RETENTION_WORKSPACES, excludeList: process.env.NIVADESK_RETENTION_EXCLUDE_WORKSPACES,
+      adminEmails: [...SUPPORT_ADMIN_EMAILS].join(",")
+    });
+    if (!scope.allowed) { summary.skipped[scope.reason] = (summary.skipped[scope.reason] || 0) + 1; continue; }
+    try {
+      const { trigger, activated, settings } = await nvRetentionTriggerFor(db, companyId, company, nowMs);
+      const context = await retentionWriter.loadMessagingContext(db, companyId);
+      context.activated = activated;
+      context.workspaceCancelled = String(company.billingStatus || "") === "canceled";
+      // The owner saw or answered a feedback prompt today: the in-app nudge waits.
+      const ownerUid = String(company.ownerUid || "");
+      const feedbackStateSnap = ownerUid ? await db.collection("companies").doc(companyId).collection("feedbackState").doc(ownerUid).get().catch(() => null) : null;
+      const holdInApp = retentionRules.feedbackPromptRecent(feedbackStateSnap && feedbackStateSnap.exists ? feedbackStateSnap.data() : null, nowMs);
+      const result = await retentionWriter.sweepWorkspace(db, {
+        companyId, nowMs, flags, trigger, contextLoader: async () => context, transport, holdInApp, holdReason: "feedback_prompt_recent",
+        templateContext: { workspaceName: String(company.name || settings.companyName || ""), firstName: "", appUrl: "https://nivadesk.app" },
+        to: String(company.ownerEmail || company.email || ""), unsubscribeUrl: nvRetentionUnsubscribeUrl(companyId)
+      });
+      summary.evaluated += 1;
+      for (const decision of result.decisions) {
+        if (decision.send) summary.sent += 1;
+        else summary.refused[decision.reason] = (summary.refused[decision.reason] || 0) + 1;
+      }
+    } catch (error) {
+      console.warn("retentionSweep: workspace skipped:", companyId, error?.message || error);
+    }
+  }
+  // The outbox: failed e-mails whose next attempt is due.
+  if (flags.email && transport) {
+    const due = await db.collectionGroup("retentionLog").where("status", "==", "failed").where("nextAttemptAtMs", "<=", nowMs).limit(50).get().catch(() => ({ docs: [] }));
+    const retried = await retentionWriter.retryOutboxEntries(db, due.docs.map((doc) => doc.ref), { nowMs, flags, transport });
+    summary.outbox = retried;
+  }
+  console.log("retentionSweep:", JSON.stringify(summary));
+});
+
+exports.retentionInboundReply = onRequest({ region: "europe-west2" }, async (req, res) => {
+  if (req.method !== "POST") { res.status(405).json({ ok: false, error: "method_not_allowed" }); return; }
+  const flags = retentionWriter.retentionFlags();
+  if (!flags.inbound) { res.status(503).json({ ok: false, error: "inbound_disabled" }); return; }
+  const secret = String(process.env.NIVADESK_RETENTION_INBOUND_SECRET || "").trim();
+  const given = String(req.get("x-nivadesk-retention-secret") || "").trim();
+  if (!secret || given.length !== secret.length || !require("crypto").timingSafeEqual(Buffer.from(secret), Buffer.from(given))) {
+    res.status(401).json({ ok: false, error: "unauthorized" }); return;
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const parsed = retentionRules.parseInboundReply({ from: body.from, to: body.to, subject: body.subject, text: body.text, headers: body.headers });
+  const result = await retentionWriter.applyInboundReply(admin.firestore(), parsed, { nowMs: Date.now() });
+  res.status(result.ok ? 200 : 202).json({ ok: result.ok, kind: parsed.kind, reason: result.reason || "" });
+});
+
+exports.retentionUnsubscribe = onRequest({ region: "europe-west2" }, async (req, res) => {
+  const companyId = nvCleanString(req.query.c || "", 80);
+  const token = nvCleanString(req.query.t || "", 64);
+  const secret = String(process.env.NIVADESK_RETENTION_TOKEN_SECRET || "").trim();
+  if (!companyId || !retentionRules.verifyRetentionToken(secret, companyId, token)) {
+    res.status(400).set("Content-Type", "text/plain; charset=utf-8").send("This link is not valid."); return;
+  }
+  await retentionWriter.setOptOut(admin.firestore(), companyId, true, { nowMs: Date.now(), source: "unsubscribe_link" });
+  res.status(200).set("Content-Type", "text/plain; charset=utf-8").send("Done — NivaDesk will not send you these notes again. Order, billing and support e-mails are unaffected.");
+});
+
+exports.setRetentionOptOut = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const optOut = request.data && request.data.optOut === true;
+  return retentionWriter.setOptOut(admin.firestore(), companyId, optOut, { nowMs: Date.now(), source: "settings" });
+});
+
+/**
+ * The card a person may see right now, judged at the moment of looking (retention
+ * wiring §6, item 3): the sweep decides what is written, this decides what is
+ * shown. Off, or outside the pilot, it says so and reads nothing else.
+ */
+exports.getRetentionMessage = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const uid = String((request.auth && request.auth.uid) || "");
+  const flags = retentionWriter.retentionFlags();
+  if (!flags.inApp) return { ok: true, enabled: false, message: null, reason: "flag_off" };
+  const db = admin.firestore();
+  const nowMs = Date.now();
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const company = companySnap.exists ? companySnap.data() || {} : {};
+  const scope = retentionRules.workspaceScope({
+    companyId, ownerEmail: String(company.ownerEmail || company.email || ""),
+    pilotList: process.env.NIVADESK_RETENTION_WORKSPACES, excludeList: process.env.NIVADESK_RETENTION_EXCLUDE_WORKSPACES,
+    adminEmails: [...SUPPORT_ADMIN_EMAILS].join(",")
+  });
+  if (!scope.allowed) return { ok: true, enabled: false, message: null, reason: scope.reason };
+  const open = await retentionWriter.messagesRef(db, companyId).where("status", "==", "open").get();
+  if (open.empty) return { ok: true, enabled: true, message: null, reason: "none_open", withdrawn: 0 };
+  const { trigger, activated } = await nvRetentionTriggerFor(db, companyId, company, nowMs);
+  const context = await retentionWriter.loadMessagingContext(db, companyId);
+  context.activated = activated;
+  context.workspaceCancelled = String(company.billingStatus || "") === "canceled";
+  const feedbackStateSnap = uid ? await db.collection("companies").doc(companyId).collection("feedbackState").doc(uid).get().catch(() => null) : null;
+  const feedbackRecent = retentionRules.feedbackPromptRecent(feedbackStateSnap && feedbackStateSnap.exists ? feedbackStateSnap.data() : null, nowMs);
+  const review = await retentionWriter.reviewOpenMessages(db, companyId, {
+    nowMs, messages: open.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    doneEventNames: (trigger.events || []).map((event) => event && event.name), activated, context, feedbackRecent
+  });
+  const m = review.message;
+  return {
+    ok: true, enabled: true, withdrawn: review.withdrawn.length,
+    reason: m ? "" : (review.held || "none_open"),
+    message: m ? { id: m.id, campaign: String(m.campaign || ""), kind: String(m.kind || ""), title: String(m.title || ""), body: String(m.body || ""), action: String(m.action || ""), target: m.target || null, createdAtMs: Number(m.createdAtMs) || 0 } : null
+  };
+});
+
+exports.dismissRetentionMessage = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const messageId = nvCleanString(request.data && request.data.messageId, 80);
+  if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
+  // "acted" = the person did what the card asked (no cooldown); anything else is a dismissal.
+  const outcome = request.data && request.data.outcome === "acted" ? "acted" : "dismissed";
+  return retentionWriter.dismissMessage(admin.firestore(), companyId, messageId, { nowMs: Date.now(), outcome });
+});

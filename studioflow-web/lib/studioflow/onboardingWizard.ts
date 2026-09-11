@@ -283,19 +283,78 @@ export const ONBOARDING_STARTS: { id: OnboardingStart; label: string; detail: st
   { id: "later", label: "I'll set this up later", detail: "Go straight to your workspace." },
 ];
 
-/** The starting tasks each goal turns into. The report's point: the answers have
- *  to visibly change the product, or the question was just a survey. */
-export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, string[]> = {
-  orders_customers: ["Create your first order", "Add a customer", "Customise your order cards"],
-  production_deadlines: ["Choose your production stages", "Add a start and delivery date", "Open Schedule"],
-  repairs_service: ["Open a repair intake", "Record what the customer brought in", "Set a promised date"],
-  estimates: ["Send your first estimate", "Turn an approval into an order", "Set your estimate wording"],
-  inventory: ["Add your first inventory item", "Create a location", "Reserve an item for an order"],
-  files_notes: ["Upload a file to an order", "Write your first note", "Open the Files library"],
-  finance: ["Record a payment", "Set your tax rule", "Open the finance dashboard"],
-  connect_store: ["Connect your store", "Review imported orders", "Confirm customer matching"],
-  team: ["Invite a team member", "Set their permissions", "Assign the first task"],
-  other: ["Create your first order", "Add a customer", "Open your dashboard"],
+/**
+ * The starting tasks each goal turns into. The report's point: the answers have
+ * to visibly change the product, or the question was just a survey.
+ *
+ * Each task now carries where it GOES. They were plain strings rendered as dead
+ * text: the product worked out the right next step for this workspace and then
+ * asked the person to go and find it themselves. `href` is the page where the
+ * task is actually done — the list you pick or create the order from, the
+ * settings section that holds the setting — never a page that only talks about
+ * it. The first task in each row is also the one the "Open my workspace" button
+ * lands on, so keep the most valuable step first.
+ */
+export type OnboardingGoalTask = { label: string; href: string };
+
+/** Where the store-connection tiles and steps send somebody. Kept as one
+ *  constant because the dashboard checklist uses the same deep link. */
+const CONNECT_STORE_HREF = "/settings?section=integrations&category=commerce&intent=connect-shop";
+
+export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, OnboardingGoalTask[]> = {
+  orders_customers: [
+    { label: "Create your first order", href: "/orders" },
+    { label: "Add a customer", href: "/customers" },
+    // Order steps and custom fields — what the card shows and what it is called.
+    { label: "Customise your order cards", href: "/settings?section=workflow" },
+  ],
+  production_deadlines: [
+    { label: "Choose your production stages", href: "/settings?section=workflow" },
+    { label: "Add a start and delivery date", href: "/orders" },
+    { label: "Open Schedule", href: "/schedule" },
+  ],
+  repairs_service: [
+    { label: "Open a repair intake", href: "/orders" },
+    { label: "Record what the customer brought in", href: "/orders" },
+    { label: "Set a promised date", href: "/orders" },
+  ],
+  estimates: [
+    { label: "Send your first estimate", href: "/orders" },
+    { label: "Turn an approval into an order", href: "/orders" },
+    // The Estimate document preset lives in PDF Export Settings.
+    { label: "Set your estimate wording", href: "/settings?section=pdf" },
+  ],
+  inventory: [
+    { label: "Add your first inventory item", href: "/inventory" },
+    { label: "Create a location", href: "/inventory" },
+    { label: "Reserve an item for an order", href: "/inventory" },
+  ],
+  files_notes: [
+    { label: "Upload a file to an order", href: "/orders" },
+    { label: "Write your first note", href: "/notes" },
+    { label: "Open the Files library", href: "/files" },
+  ],
+  finance: [
+    { label: "Record a payment", href: "/orders" },
+    { label: "Set your tax rule", href: "/settings?section=financial" },
+    { label: "Open the finance dashboard", href: "/dashboard" },
+  ],
+  connect_store: [
+    { label: "Connect your store", href: CONNECT_STORE_HREF },
+    { label: "Review imported orders", href: "/orders" },
+    { label: "Confirm customer matching", href: "/customers" },
+  ],
+  team: [
+    { label: "Invite a team member", href: "/team" },
+    { label: "Set their permissions", href: "/settings?section=team-access" },
+    // Orders carry the assignee, so the first task is assigned from the list.
+    { label: "Assign the first task", href: "/orders" },
+  ],
+  other: [
+    { label: "Create your first order", href: "/orders" },
+    { label: "Add a customer", href: "/customers" },
+    { label: "Open your dashboard", href: "/dashboard" },
+  ],
 };
 
 /**

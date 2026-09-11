@@ -15,7 +15,7 @@ import SwiftUI
 /// is a real choice, not an escape hatch, so nobody is trapped and nobody is
 /// nagged. Back moves between steps.
 
-enum OnboardingWorkKind: String, CaseIterable {
+enum OnboardingWorkKind: String, CaseIterable, Codable {
     case watchesJewellery = "watches_jewellery"
     case repairs
     case leather
@@ -80,7 +80,7 @@ func onboardingCardLabels(for kinds: [OnboardingWorkKind]) -> [String: String] {
     return merged
 }
 
-enum OnboardingWorkflow: String, CaseIterable {
+enum OnboardingWorkflow: String, CaseIterable, Codable {
     case madeToOrder = "made_to_order"
     case repairs
     case batch
@@ -134,7 +134,7 @@ enum OnboardingWorkflow: String, CaseIterable {
 
 /// The plans the sign-up wizard may put a trial on. Mirrors the web list and
 /// the server's TRIAL_SELECTABLE_PLANS.
-enum OnboardingTrialPlan: String, CaseIterable {
+enum OnboardingTrialPlan: String, CaseIterable, Codable {
     case starter = "lifetime_lite"
     case pro = "pro_monthly"
     case team = "team_monthly"
@@ -166,7 +166,7 @@ enum OnboardingTrialPlan: String, CaseIterable {
     }
 }
 
-enum OnboardingTeamSize: String, CaseIterable {
+enum OnboardingTeamSize: String, CaseIterable, Codable {
     case solo
     case twoToFive = "2_5"
     case sixToTen = "6_10"
@@ -192,7 +192,7 @@ enum OnboardingTeamSize: String, CaseIterable {
     }
 }
 
-enum OnboardingVolume: String, CaseIterable {
+enum OnboardingVolume: String, CaseIterable, Codable {
     case underTen = "under_10"
     case tenToThirty = "10_30"
     case thirtyOneToHundred = "31_100"
@@ -212,7 +212,7 @@ enum OnboardingVolume: String, CaseIterable {
 
 /// Raw values are the ids the web wizard writes, and they have to stay
 /// identical: the same workspace is read back by four platforms.
-enum OnboardingBusinessAge: String, CaseIterable {
+enum OnboardingBusinessAge: String, CaseIterable, Codable {
     case starting
     case underOneYear = "under_1"
     case oneToThreeYears = "1_3"
@@ -230,7 +230,7 @@ enum OnboardingBusinessAge: String, CaseIterable {
     }
 }
 
-enum OnboardingInventoryExperience: String, CaseIterable {
+enum OnboardingInventoryExperience: String, CaseIterable, Codable {
     case noStock = "no_stock"
     // Not `case none`: an enum case of that name shadows `Optional.none` at
     // every use site, and this one is held in an Optional.
@@ -248,7 +248,7 @@ enum OnboardingInventoryExperience: String, CaseIterable {
     }
 }
 
-enum OnboardingGoal: String, CaseIterable {
+enum OnboardingGoal: String, CaseIterable, Codable {
     case ordersCustomers = "orders_customers"
     case productionDeadlines = "production_deadlines"
     case repairsService = "repairs_service"
@@ -309,7 +309,7 @@ enum OnboardingGoal: String, CaseIterable {
 /// by none, so "Create my first order" created no order, "Explore a sample
 /// workspace" had no sample data to explore, and "Import a spreadsheet" had no
 /// importer to open. Four promises the product could not keep.
-enum OnboardingStart: String, CaseIterable {
+enum OnboardingStart: String, CaseIterable, Codable {
     case firstOrder = "first_order"
     case sample
     case spreadsheet
@@ -388,7 +388,10 @@ let onboardingIntegrations: [OnboardingIntegration] = [
     )
 ]
 
-struct OnboardingAnswers {
+/// `Codable` and `Equatable` so a half-answered wizard can be written to the
+/// device and compared for change — see `OnboardingWizardDraftStore`. Neither
+/// conformance changes what is asked or what is saved to the workspace.
+struct OnboardingAnswers: Codable, Equatable {
     var country: String = "GB"
     var currency: String = "GBP"
     /// The workspace's language, guessed from the device and changed right here.
@@ -1036,10 +1039,121 @@ enum OnboardingStepKey: String, CaseIterable {
 
 let onboardingStepOrder: [OnboardingStepKey] = [.basics, .bringWork, .goal, .work, .plan]
 
+// MARK: - Picking the wizard up where it was left
+
+/// What an unfinished wizard remembers between launches.
+///
+/// The step and the answers lived in `@State` and nowhere else, so closing the
+/// window — or quitting, or the app being terminated behind you — threw both
+/// away, and the next launch opened at step 1 with the questions blank. Anybody
+/// interrupted three questions in came back to a wizard that had never met
+/// them.
+///
+/// Deliberately device-local: `UserDefaults`, the same store `@AppStorage`
+/// writes to. This is an unfinished draft on one device, not a fact about the
+/// workspace — it is not a Firestore field, nothing here is sent anywhere, and
+/// it is deleted the moment setup completes, is skipped, or is re-entered.
+///
+/// It is NOT a record that somebody abandoned the wizard, and it must never
+/// become one: a draft is resumed silently, and a workspace that pressed the
+/// refusal path has nothing stored to resume.
+struct OnboardingWizardDraft: Codable {
+    /// Bumped whenever the shape of `answers` changes. A draft written by an
+    /// older build then decodes into nothing rather than into wrong answers.
+    static let currentVersion = 1
+
+    var version: Int
+    /// "<uid>|<companyId>". A draft is only ever handed back to the person and
+    /// the workspace that wrote it — switching account or workspace has to
+    /// start its own wizard, never walk into somebody else's half-answered one.
+    var owner: String
+    /// The step by NAME, never by number. `onboardingStepOrder` exists to be
+    /// reordered, and a stored "4" would quietly resume into a different
+    /// question the first time somebody moved one.
+    var stepKey: String
+    var answers: OnboardingAnswers
+}
+
+enum OnboardingWizardDraftStore {
+    /// One draft at a time, stamped with whose it is. A key per workspace would
+    /// grow without a bound and leave answers behind on a device long after the
+    /// account that typed them signed out; a single stamped record cannot be
+    /// read by the wrong workspace and cannot pile up.
+    static let storageKey = "onboardingWizardDraftJSON"
+
+    /// Free text is kept to the same 200 characters the workspace save keeps, so
+    /// a draft can never hold more of what somebody typed than the product does.
+    private static let textLimit = 200
+
+    /// Who a draft belongs to, or "" when there is nobody to scope it to.
+    ///
+    /// An unscoped draft is exactly the one that could be resumed by the wrong
+    /// person, so no owner means no persistence at all — the wizard then behaves
+    /// exactly as it did before any of this.
+    static func owner(uid: String, companyId: String) -> String {
+        let user = uid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let workspace = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty, !workspace.isEmpty else { return "" }
+        return "\(user)|\(workspace)"
+    }
+
+    /// The draft for this owner, if there is one that this build understands.
+    ///
+    /// Every failure here — no storage, unreadable storage, a draft from another
+    /// account, a shape this build no longer reads — is the same answer: nil,
+    /// and a wizard that starts at the beginning. Storage is a convenience, and
+    /// nothing about the wizard may depend on it.
+    static func load(owner: String) -> OnboardingWizardDraft? {
+        guard !owner.isEmpty else { return nil }
+        guard let raw = UserDefaults.standard.string(forKey: storageKey), !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let draft = try? JSONDecoder().decode(OnboardingWizardDraft.self, from: data),
+              draft.version == OnboardingWizardDraft.currentVersion,
+              draft.owner == owner
+        else { return nil }
+        return draft
+    }
+
+    /// Where a draft resumes, 1-based — or nil when the step it names is gone.
+    ///
+    /// A step can be renamed or dropped between the save and the read, and a
+    /// stored name that no longer appears in `onboardingStepOrder` must not
+    /// resume into nothing. The caller keeps the answers and starts at the top.
+    static func resumeStep(_ draft: OnboardingWizardDraft) -> Int? {
+        guard let key = OnboardingStepKey(rawValue: draft.stepKey),
+              let index = onboardingStepOrder.firstIndex(of: key) else { return nil }
+        return index + 1
+    }
+
+    static func save(owner: String, stepKey: OnboardingStepKey, answers: OnboardingAnswers) {
+        guard !owner.isEmpty else { return }
+        var stored = answers
+        stored.heardFrom = String(stored.heardFrom.prefix(textLimit))
+        stored.otherGoal = String(stored.otherGoal.prefix(textLimit))
+        let draft = OnboardingWizardDraft(version: OnboardingWizardDraft.currentVersion,
+                                          owner: owner,
+                                          stepKey: stepKey.rawValue,
+                                          answers: stored)
+        guard let data = try? JSONEncoder().encode(draft),
+              let encoded = String(data: data, encoding: .utf8) else { return }
+        UserDefaults.standard.set(encoded, forKey: storageKey)
+    }
+
+    /// Setup is over — finished, skipped, or being started again from scratch.
+    /// The draft has no reason to outlive any of those.
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+}
+
 struct OnboardingWizardView: View {
     let lang: String
     let saving: Bool
     let errorText: String
+    /// Whose unfinished wizard this is — "<uid>|<companyId>", from
+    /// `OnboardingWizardDraftStore.owner`. Empty means nothing is remembered
+    /// and the wizard behaves exactly as it did before.
+    var draftOwner: String = ""
     let onFinish: (OnboardingAnswers) -> Void
     /// Saves what has been answered so far, then opens the integration. The
     /// answers have to be on disk before we navigate away, or a person who
@@ -1048,6 +1162,10 @@ struct OnboardingWizardView: View {
 
     @State private var step: Int = 1
     @State private var answers = OnboardingAnswers()
+    /// The draft is read once, and before anything may be written back: a fresh
+    /// view holds default answers, and letting those save first would be the
+    /// wizard erasing its own draft on the way in.
+    @State private var restoredDraft = false
 
     private var totalSteps: Int { onboardingStepOrder.count }
 
@@ -1113,6 +1231,35 @@ struct OnboardingWizardView: View {
         }
     }
 
+    /// Pick up where this person left off.
+    ///
+    /// A stored step whose name is no longer in `onboardingStepOrder` falls back
+    /// to the first step rather than to nothing: the answers are still worth
+    /// keeping, and the alternative is a wizard opening on a step that is not
+    /// there. The number is clamped as well, so a draft that survived a shorter
+    /// wizard cannot land past the end.
+    ///
+    /// The draft is deleted by completion, by the skip path and by setup
+    /// re-entry (`ContentView`), so what is resumed here is only ever a wizard
+    /// somebody walked away from — never one they refused.
+    private func restoreDraft() {
+        guard !restoredDraft else { return }
+        restoredDraft = true
+        guard let draft = OnboardingWizardDraftStore.load(owner: draftOwner) else { return }
+        answers = draft.answers
+        let resumed = OnboardingWizardDraftStore.resumeStep(draft) ?? 1
+        step = min(max(resumed, 1), totalSteps)
+    }
+
+    /// The step somebody is ON and the answers they have given, after every
+    /// change. Never on appearance: `onChange` does not fire for a view that has
+    /// only just been built, so opening the wizard and closing it again without
+    /// touching anything leaves nothing behind to resume.
+    private func saveDraft() {
+        guard restoredDraft else { return }
+        OnboardingWizardDraftStore.save(owner: draftOwner, stepKey: stepKey, answers: answers)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -1155,6 +1302,9 @@ struct OnboardingWizardView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
+        .onAppear { restoreDraft() }
+        .onChange(of: step) { _, _ in saveDraft() }
+        .onChange(of: answers) { _, _ in saveDraft() }
     }
 }
 

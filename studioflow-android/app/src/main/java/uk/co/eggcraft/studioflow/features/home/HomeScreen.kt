@@ -197,6 +197,18 @@ fun HomeScreen(
         repository.setupSkippedFlow(workspaceId, userId).collect { setupSkipped = it }
     }
 
+    // The steps this workspace actually came for, rather than the six the card
+    // used to invent. Asked for only when the card is on the grid — a workspace
+    // that hid it should not pay for the call — and silent on failure: the card
+    // has a local list to fall back on, and somebody opening Home should not be
+    // shown an error about a checklist.
+    var setupChecklist by remember { mutableStateOf<StudioFlowRepository.StudioSetupChecklist?>(null) }
+    val showsGettingStarted = layout.cards.any { it.id == HomeCardId.GettingStarted }
+    LaunchedEffect(workspaceId, showsGettingStarted, reloadKey) {
+        if (workspaceId.isBlank() || !showsGettingStarted) return@LaunchedEffect
+        setupChecklist = runCatching { repository.setupChecklist(workspaceId) }.getOrNull()
+    }
+
     LaunchedEffect(workspaceId, reloadKey) {
         if (workspaceId.isBlank()) return@LaunchedEffect
         inventory = runCatching { repository.inventorySummary(workspaceId) }
@@ -549,7 +561,8 @@ fun HomeScreen(
                             onOpenSection = onOpenSection,
                             setupSkipped = setupSkipped,
                             onSkipSetupStep = { skipSetupStep(it) },
-                            onRestoreSetupSkipped = { restoreSkippedSetupSteps() }
+                            onRestoreSetupSkipped = { restoreSkippedSetupSteps() },
+                            setupChecklist = setupChecklist
                         )
                     }
                 }

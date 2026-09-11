@@ -8280,9 +8280,20 @@ struct ContentView: View {
         return Set(decoded)
     }
 
+    /// Business setup is the owner's screen, and Apple was the only client that
+    /// did not say so: a member invited into somebody else's empty workspace got
+    /// the whole wizard, answered it, and was refused by the server at the last
+    /// step (`setTrialPlan` returns `not_owner`). Android has always guarded
+    /// this the same way — role plus settings access — and this matches it.
+    private var canRunBusinessOnboarding: Bool {
+        guard canAccessSettings else { return false }
+        return authVM.isCompanyOwner || ["owner", "admin"].contains(currentWorkspaceRoleNormalized)
+    }
+
     private var shouldShowBusinessOnboarding: Bool {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard authVM.isLoggedIn, !companyId.isEmpty, businessOnboardingGateOpen else { return false }
+        guard canRunBusinessOnboarding else { return false }
         guard !businessOnboardingCompletedInCloud else { return false }
         guard firebaseManager.siparisler.isEmpty else { return false }
         return !completedBusinessOnboardingCompanyIds.contains(companyId)
@@ -10383,7 +10394,11 @@ struct ContentView: View {
                     .font(.system(size: 24, weight: .bold))
                     .multilineTextAlignment(.center)
 
-                Text(t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you.", lang: seciliDil))
+                // The second half of this sentence names a button only an
+                // owner or admin gets, so it is only said to them.
+                Text(canRunBusinessOnboarding
+                     ? t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you.", lang: seciliDil)
+                     : t("Create your first order", lang: seciliDil))
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -10391,18 +10406,25 @@ struct ContentView: View {
             }
 
             HStack(spacing: 10) {
-                Button {
-                    resetBusinessOnboardingForCurrentCompany()
-                } label: {
-                    Label(t("Run Business Setup", lang: seciliDil), systemImage: "wand.and.stars")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(Color.blue.opacity(0.10))
-                        .clipShape(Capsule())
+                // Members saw this too. Pressing it wiped the workspace's
+                // onboarding record — a write the rules allow any member to make
+                // — and then handed them nothing, because the wizard itself is
+                // the owner's screen. Same gate as the wizard, so the button and
+                // what it opens agree.
+                if canRunBusinessOnboarding {
+                    Button {
+                        resetBusinessOnboardingForCurrentCompany()
+                    } label: {
+                        Label(t("Run Business Setup", lang: seciliDil), systemImage: "wand.and.stars")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Color.blue.opacity(0.10))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 Button {
                     yeniSiparisEkle()
@@ -10444,6 +10466,13 @@ struct ContentView: View {
                         lang: seciliDil,
                         saving: onboardingWizardSaving,
                         errorText: onboardingWizardError,
+                        // Scoped to this person in this workspace, so a second
+                        // account or a second workspace on the same Mac cannot
+                        // walk into somebody else's half-answered wizard.
+                        draftOwner: OnboardingWizardDraftStore.owner(
+                            uid: authVM.currentUserId ?? "",
+                            companyId: firebaseManager.currentCompanyId
+                        ),
                         onFinish: { answers in
                             applyOnboardingWizardAnswers(answers)
                         },
@@ -10688,14 +10717,34 @@ struct ContentView: View {
         }
 
         businessOnboardingCompletedInCloud = true
+        var payload: [String: Any] = [
+            "businessOnboardingCompletedAt": FieldValue.serverTimestamp(),
+            "businessOnboardingCompletedAction": action,
+            "businessOnboardingCompletedBy": authVM.currentUserId ?? ""
+        ]
+        // The boolean the rest of the product reads — `getSetupChecklist` marks
+        // `onboarding_completed` from `businessOnboardingCompleted === true`, and
+        // Apple wrote only the timestamp, so a workspace that finished the wizard
+        // here was still counted as never having started.
+        //
+        // Only a real completion writes it. Skipping is not completing: a
+        // production backfill was deliberately withheld from the people who
+        // skipped, and a client that claims completion for them would undo that
+        // decision one workspace at a time. Skip keeps the timestamp and the
+        // action, which is exactly what it did before.
+        if action != "skip" {
+            payload["businessOnboardingCompleted"] = true
+        }
+
+        // Setup is over for this workspace either way, so the unfinished draft
+        // goes. Skipping is not completing, but it is a refusal — and a refusal
+        // is the one thing that must never be resumed or asked about again.
+        OnboardingWizardDraftStore.clear()
+
         Firestore.firestore()
             .collection("companySettings")
             .document(companyId)
-            .setData([
-                "businessOnboardingCompletedAt": FieldValue.serverTimestamp(),
-                "businessOnboardingCompletedAction": action,
-                "businessOnboardingCompletedBy": authVM.currentUserId ?? ""
-            ], merge: true)
+            .setData(payload, merge: true)
     }
 
     private func resetBusinessOnboardingForCurrentCompany() {
@@ -10711,13 +10760,23 @@ struct ContentView: View {
         }
 
         businessOnboardingCompletedInCloud = false
+
+        // Running setup again means starting it again: a draft left from the
+        // last attempt would drop somebody back into the middle of a wizard
+        // they just asked to re-run from the top.
+        OnboardingWizardDraftStore.clear()
+
         Firestore.firestore()
             .collection("companySettings")
             .document(companyId)
             .setData([
                 "businessOnboardingCompletedAt": FieldValue.delete(),
                 "businessOnboardingCompletedAction": FieldValue.delete(),
-                "businessOnboardingCompletedBy": FieldValue.delete()
+                "businessOnboardingCompletedBy": FieldValue.delete(),
+                // Deleted, not set to false: leaving the boolean behind would
+                // reopen the wizard while every checklist still read the
+                // workspace as done.
+                "businessOnboardingCompleted": FieldValue.delete()
             ], merge: true)
     }
 

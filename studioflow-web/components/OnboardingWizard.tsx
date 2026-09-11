@@ -11,8 +11,13 @@
 // one offers "Start empty" and "I'll set this up later" as real choices, so
 // nobody is trapped and nobody is nagged into connecting a store they have not
 // decided about yet. Back is always there from step two on.
+//
+// And it is picked up where it was left. The step and the answers lived in
+// useState and nowhere else, so closing the tab threw the lot away and the
+// person came back to question one — see lib/studioflow/onboardingProgress.ts
+// for why the draft is kept in this browser and not on the workspace.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ONBOARDING_GOALS,
   ONBOARDING_GOAL_TASKS,
@@ -40,6 +45,11 @@ import {
   studioLanguageForLocaleTag,
   studioLocaleTag,
 } from "@/lib/studioflow/language";
+import {
+  readOnboardingProgress,
+  resumeStepNumber,
+  writeOnboardingProgress,
+} from "@/lib/studioflow/onboardingProgress";
 
 const CURRENCIES = [
   ["£", "GBP (£)"], ["$", "USD ($)"], ["€", "EUR (€)"], ["₺", "TRY (₺)"],
@@ -116,36 +126,9 @@ const STEP_LEDE: Record<OnboardingStepKey, string> = {
   plan: "Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.",
 };
 
-export function OnboardingWizard({
-  t,
-  language,
-  saving,
-  error,
-  onFinish,
-  onLanguageChange,
-  onConnect,
-  connected,
-}: {
-  t: (text: string) => string;
-  /** The workspace language, so the trial's end date is written in it rather
-   *  than in whatever locale the browser happens to run. */
-  language: string;
-  saving: boolean;
-  error: string;
-  onFinish: (answers: OnboardingAnswers) => void;
-  /** Applied the moment it changes, so the wizard itself switches over. */
-  onLanguageChange?: (language: string) => void;
-  /** Opens the integration in a tab of its own and leaves the wizard where it
-   *  is. It used to finish the setup and navigate away, which meant the first
-   *  Connect you pressed was the last one you could press. */
-  onConnect: (answers: OnboardingAnswers, href: string) => void;
-  /** Which accounts the workspace can already see, refreshed while the wizard
-   *  is open — so connecting one in the other tab shows up here. */
-  connected?: Partial<Record<OnboardingIntegration["id"], boolean>>;
-}) {
-  const suggested = useMemo(suggestedSettings, []);
-  const [step, setStep] = useState(1);
-  const [answers, setAnswers] = useState<OnboardingAnswers>(() => ({
+/** The answers a wizard opens with when there is nothing to restore. */
+function blankAnswers(suggested: ReturnType<typeof suggestedSettings>): OnboardingAnswers {
+  return {
     country: suggested.country,
     currency: suggested.currency,
     language: suggested.language,
@@ -164,23 +147,188 @@ export function OnboardingWizard({
     // there is before Continue will let them through is a ritual, not a question.
     start: "later",
     plan: "",
-  }));
+  };
+}
 
-  const set = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) =>
+/**
+ * Whether a step has been answered.
+ *
+ * One definition, because two readers need it: the Continue button, and the
+ * resume, which must never reopen past a question this person has not answered.
+ * When it was written inline in the render the resume could not see it.
+ */
+function stepIsAnswered(key: OnboardingStepKey, answers: OnboardingAnswers): boolean {
+  switch (key) {
+    case "basics":
+      return Boolean(answers.country && answers.currency && answers.language && answers.timeZone);
+    case "bringWork": return Boolean(answers.start);
+    case "goal": return Boolean(answers.mainGoal);
+    case "work": return answers.workKinds.length > 0;
+    // The plan step arrives with a recommendation already chosen, so it is
+    // answerable the moment it opens — the reader confirms it or picks another.
+    case "plan": return Boolean(answers.plan || recommendedTrialPlan(answers));
+    default: return true;
+  }
+}
+
+const optionIds = (list: readonly { id: string }[]) => list.map(entry => entry.id);
+
+function oneOf<T extends string>(value: unknown, allowed: readonly string[], fallback: T): T {
+  const clean = typeof value === "string" ? value.trim() : "";
+  return (clean && allowed.includes(clean) ? clean : fallback) as T;
+}
+
+/** Their own words, capped where the input that collected them is capped. */
+function ownWords(value: unknown, fallback: string) {
+  return typeof value === "string" ? value.slice(0, 200) : fallback;
+}
+
+/**
+ * A restored draft, field by field.
+ *
+ * What comes back out of localStorage is not what the wizard put in: it can be
+ * from an older build, hand-edited, or written over by something else on this
+ * origin. Spreading it into the answers would then put a value into
+ * `saveOnboardingAnswers` that no question on screen could have produced, and
+ * one wrong shape — `workKinds` as a string rather than a list — takes the
+ * render down with it.
+ *
+ * So every field is checked against the same options the questions offer, and
+ * anything that fails simply is not restored. The worst case is that somebody
+ * re-answers one question.
+ */
+function restoreAnswers(
+  defaults: OnboardingAnswers,
+  stored: Partial<OnboardingAnswers> | undefined | null,
+): OnboardingAnswers {
+  if (!stored || typeof stored !== "object") return defaults;
+  const goalIds = optionIds(ONBOARDING_GOALS);
+  const kindIds = optionIds(ONBOARDING_WORK_KINDS);
+  const rawKinds = Array.isArray(stored.workKinds) ? stored.workKinds : [];
+  const rawExtras = Array.isArray(stored.extraGoals) ? stored.extraGoals : [];
+  return {
+    country: oneOf(stored.country, COUNTRIES.map(entry => entry[0]), defaults.country),
+    currency: oneOf(stored.currency, CURRENCIES.map(entry => entry[0]), defaults.currency),
+    language: oneOf(stored.language, SUPPORTED_STUDIO_LANGUAGES, defaults.language),
+    // Only the zones the picker can offer: its option list is TIME_ZONES plus
+    // whatever the browser suggested, and nothing else is reachable by hand.
+    timeZone: oneOf(stored.timeZone, [defaults.timeZone, ...TIME_ZONES], defaults.timeZone),
+    workKinds: rawKinds
+      .filter((kind): kind is OnboardingWorkKind => typeof kind === "string" && kindIds.includes(kind))
+      .slice(0, kindIds.length),
+    workflow: oneOf(stored.workflow, optionIds(ONBOARDING_WORKFLOWS), defaults.workflow),
+    teamSize: oneOf(stored.teamSize, optionIds(ONBOARDING_TEAM_SIZES), defaults.teamSize),
+    volume: oneOf(stored.volume, optionIds(ONBOARDING_VOLUMES), defaults.volume),
+    businessAge: oneOf(stored.businessAge, optionIds(ONBOARDING_BUSINESS_AGES), defaults.businessAge),
+    inventoryExperience: oneOf(
+      stored.inventoryExperience,
+      optionIds(ONBOARDING_INVENTORY_EXPERIENCE),
+      defaults.inventoryExperience,
+    ),
+    heardFrom: ownWords(stored.heardFrom, defaults.heardFrom),
+    mainGoal: oneOf(stored.mainGoal, goalIds, defaults.mainGoal),
+    otherGoal: ownWords(stored.otherGoal, defaults.otherGoal),
+    extraGoals: rawExtras
+      .filter((goal): goal is OnboardingGoal => typeof goal === "string" && goalIds.includes(goal))
+      .slice(0, goalIds.length),
+    start: oneOf(stored.start, optionIds(ONBOARDING_STARTS), defaults.start),
+    plan: oneOf(stored.plan, optionIds(ONBOARDING_TRIAL_PLANS), defaults.plan),
+  };
+}
+
+export function OnboardingWizard({
+  t,
+  language,
+  saving,
+  error,
+  companyId,
+  userId,
+  onFinish,
+  onLanguageChange,
+  onConnect,
+  onExit,
+  connected,
+}: {
+  t: (text: string) => string;
+  /** The workspace language, so the trial's end date is written in it rather
+   *  than in whatever locale the browser happens to run. */
+  language: string;
+  saving: boolean;
+  error: string;
+  /** The two halves of the draft's scope. One browser signs in to more than one
+   *  workspace and more than one account; a draft keyed on neither would resume
+   *  somebody else's half-finished setup. Both empty means no draft is kept —
+   *  the wizard simply behaves as it did before it could be resumed. */
+  companyId: string;
+  userId: string;
+  onFinish: (answers: OnboardingAnswers) => void;
+  /** Applied the moment it changes, so the wizard itself switches over. */
+  onLanguageChange?: (language: string) => void;
+  /** Opens the integration in a tab of its own and leaves the wizard where it
+   *  is. It used to finish the setup and navigate away, which meant the first
+   *  Connect you pressed was the last one you could press. */
+  onConnect: (answers: OnboardingAnswers, href: string) => void;
+  /** The way out, for a wizard somebody chose to REOPEN.
+   *
+   *  Only then: at onboarding start the wizard IS the screen and interrupts no
+   *  work (§110), but a person who pressed "Continue setup" on a card in their
+   *  own workspace has to be able to change their mind, and one click on a
+   *  dismissible card must never become a lock on the app (§113).
+   *
+   *  Leaving is not Skip and is not Finish. It writes NOTHING — no completion
+   *  stamp, no `skip` action — and it leaves the draft alone, so the next
+   *  "Continue setup" opens on this very step. */
+  onExit?: () => void;
+  /** Which accounts the workspace can already see, refreshed while the wizard
+   *  is open — so connecting one in the other tab shows up here. */
+  connected?: Partial<Record<OnboardingIntegration["id"], boolean>>;
+}) {
+  const suggested = useMemo(suggestedSettings, []);
+  // One read, at mount, and never on the server: this component only ever
+  // renders once auth and the workspace have resolved in the browser, so there
+  // is no server-rendered step 1 for a restored step to disagree with.
+  const [restored] = useState(() => {
+    const defaults = blankAnswers(suggested);
+    const saved = readOnboardingProgress(companyId, userId);
+    const answers = restoreAnswers(defaults, saved?.answers);
+    return {
+      answers,
+      resumed: Boolean(saved),
+      step: saved
+        ? resumeStepNumber(saved.step, STEP_ORDER, key =>
+            stepIsAnswered(key as OnboardingStepKey, answers))
+        : 1,
+    };
+  });
+  const [step, setStep] = useState(restored.step);
+  const [answers, setAnswers] = useState<OnboardingAnswers>(restored.answers);
+  // A draft has to mean somebody STARTED, not that the wizard was opened. The
+  // basics step arrives pre-filled from the browser's locale and timezone, so
+  // "this step is answerable" is already true at mount and cannot be the test;
+  // the test is that the reader changed something. Resuming an existing draft
+  // counts as touched, because they started on an earlier visit.
+  const [touched, setTouched] = useState(restored.resumed);
+  const goToStep = (next: number) => { setTouched(true); setStep(next); };
+
+  const set = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) => {
+    setTouched(true);
     setAnswers(current => ({ ...current, [key]: value }));
+  };
 
   // The plan step arrives with a recommendation already chosen, so it is
   // answerable the moment it opens — the reader confirms it or picks another.
   const chosenPlan = answers.plan || recommendedTrialPlan(answers);
-  const stepKey = STEP_ORDER[step - 1];
-  const answered: Record<OnboardingStepKey, boolean> = {
-    basics: Boolean(answers.country && answers.currency && answers.language && answers.timeZone),
-    bringWork: Boolean(answers.start),
-    goal: Boolean(answers.mainGoal),
-    work: answers.workKinds.length > 0,
-    plan: Boolean(chosenPlan),
-  };
-  const canContinue = answered[stepKey];
+  const stepKey = STEP_ORDER[step - 1] ?? STEP_ORDER[0];
+  const canContinue = stepIsAnswered(stepKey, answers);
+
+  // Kept up to date as they go, so the answer to "what happens if I close this
+  // tab" is "nothing". Cheap enough to run on every keystroke — one small
+  // object, one origin's localStorage — and silent when there is no storage to
+  // write to.
+  useEffect(() => {
+    if (!touched) return;
+    writeOnboardingProgress(companyId, userId, { step: stepKey, answers });
+  }, [companyId, userId, stepKey, answers, touched]);
 
   // Fourteen days from now, which is what sign-up wrote. Shown so the price has
   // a date attached rather than being an abstract "later".
@@ -512,8 +660,16 @@ export function OnboardingWizard({
         <footer className="onboard-foot">
           <span className="onboard-saved">{t("You can change all of this later in Settings.")}</span>
           <div className="onboard-actions">
+            {/* Only on a wizard that was reopened on purpose, and only ever a
+                way OUT: the answers stay where they are and setup stays
+                unfinished, so this is not the Skip that declines setup. */}
+            {onExit ? (
+              <button type="button" className="onboard-btn" onClick={onExit} disabled={saving}>
+                {t("Not now")}
+              </button>
+            ) : null}
             {step > 1 ? (
-              <button type="button" className="onboard-btn" onClick={() => setStep(step - 1)} disabled={saving}>
+              <button type="button" className="onboard-btn" onClick={() => goToStep(step - 1)} disabled={saving}>
                 {t("Back")}
               </button>
             ) : null}
@@ -522,7 +678,7 @@ export function OnboardingWizard({
               className="onboard-btn onboard-btn-primary"
               disabled={!canContinue || saving}
               onClick={() => {
-                if (step < TOTAL_STEPS) { setStep(step + 1); return; }
+                if (step < TOTAL_STEPS) { goToStep(step + 1); return; }
                 onFinish(answers);
               }}
             >
@@ -536,7 +692,14 @@ export function OnboardingWizard({
 }
 
 /** Shown once the answers are saved: what we prepared, and the three things
- *  worth doing first — drawn from the goal they picked, not a generic list. */
+ *  worth doing first — drawn from the goal they picked, not a generic list.
+ *
+ *  Each of the three goes somewhere now, and so does the main button. They were
+ *  dead text: the product had already worked out the right next step and then
+ *  made the person go and find it. `onOpen` takes the destination so the shell can
+ *  finish the setup state and route in one go — pressing any of them means the
+ *  same thing ("I am done here, take me there"), and leaving the wizard by two
+ *  different code paths is how the finish state drifts. */
 export function OnboardingReady({
   answers,
   t,
@@ -544,7 +707,7 @@ export function OnboardingReady({
 }: {
   answers: OnboardingAnswers;
   t: (text: string) => string;
-  onOpen: () => void;
+  onOpen: (href?: string) => void;
 }) {
   const workflowLabel = ONBOARDING_WORKFLOWS.find(entry => entry.id === answers.workflow)?.label ?? "";
   const rawKindLabel = ONBOARDING_WORK_KINDS.find(entry => entry.id === answers.workKinds[0])?.label ?? "";
@@ -571,16 +734,26 @@ export function OnboardingReady({
         </header>
         <ol className="onboard-tasks">
           {tasks.map((task, index) => (
-            <li key={task}>
-              <span aria-hidden="true">{index + 1}</span>
-              {t(task)}
+            <li key={task.label}>
+              <button type="button" onClick={() => onOpen(task.href)}>
+                <span className="onboard-task-index" aria-hidden="true">{index + 1}</span>
+                <span className="onboard-task-label">{t(task.label)}</span>
+                <span className="onboard-task-arrow" aria-hidden="true">›</span>
+              </button>
             </li>
           ))}
         </ol>
         <footer className="onboard-foot">
           <span className="onboard-saved">{t("You can change all of this later in Settings.")}</span>
           <div className="onboard-actions">
-            <button type="button" className="onboard-btn onboard-btn-primary" onClick={onOpen}>
+            {/* Lands on the first task rather than wherever the tab happened to
+                be. The old button dropped everybody on the dashboard, which is
+                a wall of empty KPIs on day one. */}
+            <button
+              type="button"
+              className="onboard-btn onboard-btn-primary"
+              onClick={() => onOpen(tasks[0]?.href)}
+            >
               {t("Open my workspace")}
             </button>
           </div>
