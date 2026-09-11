@@ -28,3 +28,15 @@ The same fixes are in the merge for Mac/iPhone/Android (`b859a2fb`) but the stor
 | A. Signed-in production check | `contact@eggcraft.co.uk` (non-pilot, real EGGcraft workspace, read-only): workspace opens and survives a reload; eBay never reads "Available" while checking and no Connect on a non-listed workspace; "Send feedback" present (not sent); menu and Settings navigation | open — operator signs in on the Browser pane, this session reads only |
 | B. Mobile web on real phones (live site, no native build needed) | iPhone Safari + Android Chrome: drawer scrolls to Settings/Sign out; keyboard open on a safe field (settings search / login email) without horizontal overflow; hub badges/chips | open — physical phones needed; simulator/emulator evidence is not substituted |
 | C. Native `b859a2fb` on physical phones | iOS + Android device runs of the merge (workspace resolution, hub, eBay gating) | open — see the per-platform list in the hand-off; no store upload, no Submit |
+
+## Physical-phone steps (two groups, kept apart)
+
+**Group 1 — mobile web on the live site (no native build, no signing):**
+1. iPhone Safari: open nivadesk.app, sign in with a non-pilot owned account; open the hamburger drawer and scroll it to Settings and Sign Out; focus the settings search (safe field) — the page must not shift/clip horizontally with the keyboard up; open Settings → Integrations and look at the badges and filter chips; open the eBay card.
+2. Android Chrome: the same four steps.
+3. Send screenshots (or say what you saw); this session records them as *physical-device* evidence, separate from the simulator rows.
+
+**Group 2 — native `b859a2fb` on physical phones (no store upload, no Submit):**
+- iPhone: Xcode signed in with the developer Apple ID (Team 5QG48AF86V) — the Apple Development identity on this Mac suffices for a device build; phone connected by cable, Developer Mode on, trusted; scheme EGGcraft → Run on the device; sign in with a non-pilot owned account; flows: workspace opens and survives relaunch, Settings → Integrations hub (eBay Checking… → Available / Coming soon, no Connect on a non-listed workspace), Send feedback present (not sent), keyboard open in Quick Create.
+- Android: `./gradlew :app:assembleDebug` from `b859a2fb` (debug signing; the upload keystore is only for the store bundle); phone with USB debugging, `adb install -r`; same flows.
+- Store gate afterwards: Apple Distribution identity (Xcode → Accounts → Manage Certificates), ASC 1.4 (18), Play versionCode decision — operator steps, not started.
