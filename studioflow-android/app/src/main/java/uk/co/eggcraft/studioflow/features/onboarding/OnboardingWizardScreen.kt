@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -262,59 +263,41 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
 // OnboardingAnswers is a data class of enums and lists, none of which a Bundle
 // accepts. Saved as flat strings (enum names, lists joined on a separator no
 // enum name can contain) so the wizard can be restored field for field.
-private const val OnboardingSaverSeparator = "\u001f"
-
-private inline fun <reified T : Enum<T>> onboardingEnum(name: String): T? =
-    if (name.isEmpty()) null else enumValues<T>().firstOrNull { it.name == name }
-
-private inline fun <reified T : Enum<T>> onboardingEnums(joined: String): List<T> =
-    if (joined.isEmpty()) emptyList()
-    else joined.split(OnboardingSaverSeparator).mapNotNull { onboardingEnum<T>(it) }
-
+// The flattening itself lives in OnboardingProgress.kt, because the record kept
+// on this device needs exactly the same one. Two copies of a sixteen-field
+// mapping is two places to add the seventeenth field, and whichever copy gets
+// forgotten loses somebody's answer.
 private val OnboardingAnswersSaver = listSaver<OnboardingAnswers, String>(
-    save = { answers ->
-        listOf(
-            answers.country,
-            answers.currency,
-            answers.language,
-            answers.timeZone,
-            answers.workKinds.joinToString(OnboardingSaverSeparator) { it.name },
-            answers.workflow.name,
-            answers.teamSize.name,
-            answers.volume?.name.orEmpty(),
-            answers.businessAge?.name.orEmpty(),
-            answers.inventoryExperience?.name.orEmpty(),
-            answers.heardFrom,
-            answers.mainGoal?.name.orEmpty(),
-            answers.otherGoal,
-            answers.extraGoals.joinToString(OnboardingSaverSeparator) { it.name },
-            answers.start?.name.orEmpty(),
-            answers.plan?.name.orEmpty()
-        )
-    },
-    restore = { values ->
-        val fallback = OnboardingAnswers()
-        fun at(index: Int): String = values.getOrNull(index).orEmpty()
-        OnboardingAnswers(
-            country = at(0).ifEmpty { fallback.country },
-            currency = at(1).ifEmpty { fallback.currency },
-            language = at(2).ifEmpty { fallback.language },
-            timeZone = at(3).ifEmpty { fallback.timeZone },
-            workKinds = onboardingEnums<OnboardingWorkKind>(at(4)),
-            workflow = onboardingEnum<OnboardingWorkflow>(at(5)) ?: fallback.workflow,
-            teamSize = onboardingEnum<OnboardingTeamSize>(at(6)) ?: fallback.teamSize,
-            volume = onboardingEnum<OnboardingVolume>(at(7)),
-            businessAge = onboardingEnum<OnboardingBusinessAge>(at(8)),
-            inventoryExperience = onboardingEnum<OnboardingInventoryExperience>(at(9)),
-            heardFrom = at(10),
-            mainGoal = onboardingEnum<OnboardingGoal>(at(11)),
-            otherGoal = at(12),
-            extraGoals = onboardingEnums<OnboardingGoal>(at(13)),
-            start = onboardingEnum<OnboardingStart>(at(14)),
-            plan = onboardingEnum<OnboardingTrialPlan>(at(15))
-        )
-    }
+    save = { answers -> onboardingAnswerFields(answers) },
+    restore = { values -> onboardingAnswersFromFields(values) }
 )
+
+/**
+ * Whether this step's question has been answered — the same test the Continue
+ * button applies, named so that resuming can ask it of a step nobody is
+ * standing on.
+ */
+private fun WizardStep.isAnswered(answers: OnboardingAnswers): Boolean = when (this) {
+    WizardStep.BASICS ->
+        answers.country.isNotBlank() && answers.currency.isNotBlank() && answers.language.isNotBlank()
+    WizardStep.BRING_WORK -> answers.start != null
+    WizardStep.GOAL -> answers.mainGoal != null
+    WizardStep.WORK -> answers.workKinds.isNotEmpty()
+    // The plan step arrives with a recommendation already chosen.
+    WizardStep.PLAN -> true
+}
+
+/**
+ * The furthest step these answers reach, 1-based: the first question still
+ * unanswered, or the last step once they are all answered. Nobody is resumed
+ * past it whatever the saved record says — a step whose questions were never
+ * reached is a step with nothing on it.
+ */
+private fun furthestReachableStep(answers: OnboardingAnswers): Int {
+    var index = 0
+    while (index < wizardSteps.size - 1 && wizardSteps[index].isAnswered(answers)) index += 1
+    return index + 1
+}
 
 @Composable
 fun OnboardingWizardScreen(
@@ -325,13 +308,39 @@ fun OnboardingWizardScreen(
      *  answers must be on disk before we navigate away, or a person who connects
      *  Shopify comes back to an empty workspace and the wizard again. */
     onConnect: (OnboardingAnswers, OnboardingIntegration) -> Unit,
+    /** This device's memory of a run that was left half-finished. Everything it
+     *  holds is local; see OnboardingProgress.kt. */
+    progress: OnboardingProgressStore,
     /** Applied the moment it changes, so the wizard itself switches over. */
     onLanguageChange: (String) -> Unit = {}
 ) {
+    // What this device remembers of a run that was closed rather than finished.
+    // Read once, before the first frame: rememberSaveable below covers a
+    // rotation and the process being reclaimed, both of which restore this same
+    // activity from its bundle and win over this. Nothing but the record on
+    // disk survives the app being swiped away, and that is the case somebody
+    // who answers four screens and comes back tomorrow is in.
+    val resumed = remember(progress) { progress.load() }
     // A rotation, or Android reclaiming the process behind a bank app, must not
     // throw away four screens of answers: both survive as saved instance state.
-    var step by rememberSaveable { mutableStateOf(1) }
-    var answers by rememberSaveable(stateSaver = OnboardingAnswersSaver) { mutableStateOf(OnboardingAnswers()) }
+    var answers by rememberSaveable(stateSaver = OnboardingAnswersSaver) {
+        mutableStateOf(resumed?.answers ?: OnboardingAnswers())
+    }
+    var step by rememberSaveable {
+        mutableStateOf(
+            onboardingResumeStep(
+                savedStepKey = resumed?.stepKey.orEmpty(),
+                stepKeys = wizardSteps.map { it.name },
+                furthestReachable = furthestReachableStep(resumed?.answers ?: OnboardingAnswers())
+            )
+        )
+    }
+    // Written on every change rather than on the way out: there is no way out
+    // to hook. The app can be closed, killed or crash at any point in the five
+    // screens, and none of those ask the wizard first.
+    LaunchedEffect(step, answers, progress) {
+        progress.save(OnboardingProgress(wizardSteps[step - 1].name, answers))
+    }
     val scrollState = rememberScrollState()
     val total = wizardSteps.size
     val stepKey = wizardSteps[step - 1]
@@ -350,14 +359,7 @@ fun OnboardingWizardScreen(
         WizardStep.WORK -> t("This sets up your order cards, production stages and labels.")
         WizardStep.PLAN -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
     }
-    val canContinue = when (stepKey) {
-        WizardStep.BASICS -> answers.country.isNotBlank() && answers.currency.isNotBlank() && answers.language.isNotBlank()
-        WizardStep.BRING_WORK -> answers.start != null
-        WizardStep.GOAL -> answers.mainGoal != null
-        WizardStep.WORK -> answers.workKinds.isNotEmpty()
-        // The plan step arrives with a recommendation already chosen.
-        WizardStep.PLAN -> true
-    }
+    val canContinue = stepKey.isAnswered(answers)
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(ScreenBackground).verticalScroll(scrollState),

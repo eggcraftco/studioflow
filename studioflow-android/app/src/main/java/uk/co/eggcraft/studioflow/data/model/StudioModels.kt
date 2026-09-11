@@ -611,7 +611,18 @@ data class StudioWorkspaceSettings(
     ),
     val businessType: String = "Photography Studio",
     val businessDescriptionPrompt: String = "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up.",
+    /** Setup is OVER: the wizard was finished, or it was refused with Skip.
+     *  Deliberately tolerant — the completed-at stamp alone is enough — because
+     *  this is the gate that decides whether to open the wizard, and neither
+     *  ending should be asked again. */
     val businessOnboardingCompleted: Boolean = false,
+    /** The wizard was actually FINISHED. A Skip stamps the workspace but never
+     *  sets this boolean, which is the whole difference between the two, and
+     *  the difference the checklist has to see: the server marks its own
+     *  onboarding step done on `businessOnboardingCompleted === true` and
+     *  nothing else, so a card that ticks it for a skipper is telling somebody
+     *  a step is done that their workspace does not count as done. */
+    val businessOnboardingWizardCompleted: Boolean = false,
     // Same default as the server (functions/index.js defaultHeadingSettings) and
     // the web/Mac clients, so a workspace that never edited its statuses sees the
     // same five everywhere.

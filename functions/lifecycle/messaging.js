@@ -54,7 +54,9 @@ const CAMPAIGN_GOALS = Object.freeze({
   add_first_inventory_item: ["inventory_item_created"],
   try_the_assistant: ["grounded_ai_answer"],
   finish_onboarding: ["onboarding_completed"],
-  first_bank_match: ["bank_match_completed"]
+  first_bank_match: ["bank_match_completed"],
+  // The v2.1 handoff: a shell order becoming real is the same goal as a first order.
+  complete_first_order: ["order_created", "external_order_imported"]
 });
 
 function isTransactional(kind) {
@@ -105,7 +107,19 @@ function messageDecision(request = {}, context = {}) {
   // be held back because somebody has already had two onboarding tips today.
   if (isTransactional(request.kind)) return { send: true, reason: "" };
 
-  if (context.unsubscribed === true) return { send: false, reason: "unsubscribed" };
+  if (context.unsubscribed === true || context.optOut === true) return { send: false, reason: "unsubscribed" };
+
+  // A person who wrote back is talking to a person now; every automated
+  // sequence stops (status document §9.6: `user_replied` suppresses recovery).
+  if (context.userReplied === true) return { send: false, reason: "user_replied" };
+  // Nothing product-shaped to a workspace that cancelled, or one that has a
+  // support case open — the conversation is happening somewhere else (§9.4).
+  if (context.workspaceCancelled === true) return { send: false, reason: "workspace_cancelled" };
+  if (context.supportCaseOpen === true) return { send: false, reason: "support_case_open" };
+  // A setup nudge to a workspace that is already activated is noise (§9.4).
+  if (context.activated === true && String(request.kind || "").trim().toLowerCase() === "onboarding") {
+    return { send: false, reason: "activated" };
+  }
 
   // §24, and the whole point of the file.
   if (goalAlreadyMet(campaign, context.doneEventNames)) {

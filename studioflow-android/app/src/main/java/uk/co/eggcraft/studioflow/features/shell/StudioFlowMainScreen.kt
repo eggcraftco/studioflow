@@ -85,8 +85,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.activity.compose.BackHandler
 import uk.co.eggcraft.studioflow.features.onboarding.OnboardingAnswers
+import uk.co.eggcraft.studioflow.features.onboarding.OnboardingProgressStore
 import uk.co.eggcraft.studioflow.features.onboarding.OnboardingReadyScreen
 import uk.co.eggcraft.studioflow.features.onboarding.OnboardingWizardScreen
+import uk.co.eggcraft.studioflow.features.onboarding.onboardingProgressStore
 import uk.co.eggcraft.studioflow.features.onboarding.onboardingWizardUpdates
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -394,6 +396,26 @@ fun StudioFlowMainScreen(
         state.workspace.memberAccess.settings &&
         state.workspace.role.trim().lowercase(Locale.UK) in setOf("owner", "admin")
 
+    // Where this person got to in the setup wizard, on this device. Made here
+    // rather than inside the wizard because it outlives it: the wizard only
+    // exists while the gate above is open, and the record has to be emptied
+    // once it closes.
+    val onboardingProgress = remember(context, state.user?.uid, state.workspace?.id) {
+        onboardingProgressStore(
+            context,
+            state.user?.uid.orEmpty(),
+            state.workspace?.id.orEmpty()
+        )
+    }
+    // Setup being over ends the record, however it ended: finished here,
+    // finished on another device, or refused with Skip on the web. That flag is
+    // deliberately the tolerant one — a Skip stamps the workspace without ever
+    // setting the boolean — because a refusal is not something to resume. There
+    // is nothing to come back to and nobody should be asked again.
+    LaunchedEffect(state.workspaceSettings.businessOnboardingCompleted, onboardingProgress) {
+        if (state.workspaceSettings.businessOnboardingCompleted) onboardingProgress.clear()
+    }
+
     LaunchedEffect(availableSections, section) {
         if (section !in availableSections && availableSections.isNotEmpty()) {
             section = availableSections.first()
@@ -478,6 +500,7 @@ fun StudioFlowMainScreen(
         if (showWorkspaceOnboarding) {
             WorkspaceOnboardingScreen(
                 state = state,
+                progress = onboardingProgress,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
                 onOpenIntegration = { destination ->
                     // Bank has its own section; the rest live in Settings, which
@@ -1129,6 +1152,9 @@ private fun DemoPlanUpgradeBanner(
 @Composable
 private fun WorkspaceOnboardingScreen(
     state: StudioFlowUiState,
+    /** This device's memory of a run left half-finished, scoped to this person
+     *  in this workspace. Made by the caller, which also empties it. */
+    progress: OnboardingProgressStore,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
     onOpenIntegration: (String) -> Unit
 ) {
@@ -1169,6 +1195,7 @@ private fun WorkspaceOnboardingScreen(
     OnboardingWizardScreen(
         saving = state.settingsSaving,
         t = t,
+        progress = progress,
         onFinish = { answers ->
             savedAnswers = answers
             finished = true

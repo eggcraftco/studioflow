@@ -39,7 +39,8 @@ struct HomeCardBody: View {
         case .gettingStarted:
             HomeGettingStartedBody(size: size, lang: lang, data: data, compact: compact,
                                    skipped: setupSkipped, onSkip: onSkipSetupStep,
-                                   onRestoreSkipped: onRestoreSetupSkipped)
+                                   onRestoreSkipped: onRestoreSetupSkipped,
+                                   onOpen: onOpen)
         case .quickActions:
             HomeQuickActionsBody(size: size, lang: lang, access: access, onNewOrder: onNewOrder, onOpen: onOpen)
         case .recentActivity:
@@ -295,18 +296,57 @@ struct HomeGettingStartedBody: View {
     var onSkip: ((String) -> Void)? = nil
     /// "Skip for now" is only true if a skipped step can come back.
     var onRestoreSkipped: (() -> Void)? = nil
+    /// Where a step goes. Without it the card computes the right next thing to
+    /// do and then renders it as text nobody can act on.
+    var onOpen: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
 
-    private var steps: [HomeSetupStep] {
+    /// The workspace's own steps, from `getSetupChecklist`.
+    ///
+    /// The server list is built from the same requirements table activation is
+    /// measured against, so it cannot drift from the measurement and it is
+    /// personal to the goal this workspace chose (§114). The generic list below
+    /// is only what to show when the server has not answered.
+    private var serverSteps: [HomeSetupStep]? {
+        guard let checklist = data.setupChecklist, !checklist.steps.isEmpty else { return nil }
+        return checklist.steps.map { step in
+            HomeSetupStep(id: step.key,
+                          label: step.title,
+                          blurb: step.detail,
+                          destination: homeSetupDestination(forAction: step.action),
+                          cta: HomeGettingStartedBody.cta(forAction: step.action),
+                          done: step.done)
+        }
+    }
+
+    /// The words on the button for a server step. The step's own title says what
+    /// to do; these only have to name the move, and each one is already carried
+    /// in the translation tables by the generic list below.
+    static func cta(forAction action: String) -> String {
+        switch action {
+        case "integrations": return "Open settings"
+        case "new_order": return "Create order"
+        case "new_customer": return "Add customer"
+        case "bank": return "Connect bank"
+        case "inventory": return "Add item"
+        default: return "Continue"
+        }
+    }
+
+    /// The same five or six steps for everybody — the fallback, not the list.
+    private var fallbackSteps: [HomeSetupStep] {
         let inventoryCount = (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0)
-        let hasFiles = firebaseManager.siparisler.contains { !($0.clientFiles ?? []).isEmpty }
         let fromStore = firebaseManager.siparisler.contains {
             !(($0.customFields?["Shopify Status"] ?? "").isEmpty) || !(($0.customFields?["WooCommerce Status"] ?? "").isEmpty)
         }
         return [
+            // Was an unconditional `true`: the card opened by congratulating a
+            // workspace that had never been through business setup, which is the
+            // one tick that makes every other tick untrustworthy. It now reads
+            // the field the server checklist is itself built from.
             HomeSetupStep(id: "profile", label: "Set up business profile",
                           blurb: "Name, currency and tax so every document reads right.",
-                          destination: "Settings", cta: "Open settings", done: true),
+                          destination: "Settings", cta: "Open settings", done: data.setupProfileDone),
             HomeSetupStep(id: "customer", label: "Add your first customer",
                           blurb: "Orders, notes and files all hang off a customer.",
                           destination: "Customers", cta: "Add customer", done: !firebaseManager.musteriler.isEmpty),
@@ -319,16 +359,48 @@ struct HomeGettingStartedBody: View {
             HomeSetupStep(id: "inventory", label: "Add an inventory item",
                           blurb: "Track what you own, what is reserved and what is low.",
                           destination: "Inventory", cta: "Add item", done: inventoryCount > 0),
+            // A photo attached to an order is not a bank connection. `hasFiles`
+            // ticked this step for anybody who had ever added a picture, and a
+            // ticked step is one nobody goes back to.
             HomeSetupStep(id: "bank", label: "Connect your bank",
                           blurb: "Read-only. Spending arrives and you categorise it.",
-                          destination: "BankSpending", cta: "Connect bank", done: hasFiles || !firebaseManager.bankTransactions.isEmpty),
+                          destination: "BankSpending", cta: "Connect bank",
+                          done: !firebaseManager.bankTransactions.isEmpty),
         ]
+    }
+
+    private var steps: [HomeSetupStep] { serverSteps ?? fallbackSteps }
+
+    /// §115: once the workspace has been served, the card says so and stops
+    /// being a list — served, not "every box on our list ticked".
+    private var served: Bool { data.setupChecklist?.complete == true }
+
+    /// A step opens where it points, or nowhere. A server step whose action has
+    /// no tab of its own on Apple keeps its place in the list and simply cannot
+    /// be tapped, rather than being sent somewhere approximate.
+    private func open(_ step: HomeSetupStep) -> (() -> Void)? {
+        guard let onOpen, !step.destination.isEmpty else { return nil }
+        return { onOpen(step.destination) }
     }
 
     var body: some View {
         let all = steps.filter { !skipped.contains($0.id) }
         let done = all.filter { $0.done }
-        let next = all.first { !$0.done }
+        // Nothing is "next" for a workspace the server says has been served —
+        // the general path activates on any one piece of real work, so a card
+        // that kept pointing at the rest would be asking for work already done.
+        //
+        // And the recommendation has to be somewhere somebody can GO. The
+        // server's first line ("Tell us what you'd like help with") carries no
+        // action, so it maps to no destination — and it is not-done for every
+        // workspace that has not been through setup, which is precisely the
+        // population this card exists for. Taken first it filled the square with
+        // a disabled capsule and an inert panel, and on a 1×1 that panel is the
+        // whole card. It is passed over unless it is all that is left, which is
+        // the rule Android already follows.
+        let next = served
+            ? nil
+            : (all.first { !$0.done && !$0.destination.isEmpty } ?? all.first { !$0.done })
         let todo = all.filter { !$0.done && $0.id != next?.id }
 
         VStack(alignment: .leading, spacing: 9) {
@@ -346,7 +418,7 @@ struct HomeGettingStartedBody: View {
                     // The square spends itself on the one thing to do next and
                     // the way past it, not on a list of what is still open —
                     // that list is the wall §15 says never to put here.
-                    HomeNextPanel(step: step, lang: lang, style: .compact)
+                    HomeNextPanel(step: step, lang: lang, style: .compact, onOpen: open(step))
                     if let onSkip {
                         HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                     }
@@ -373,7 +445,7 @@ struct HomeGettingStartedBody: View {
                 if let step = next {
                     HStack(alignment: .top, spacing: compact ? 10 : 16) {
                         VStack(alignment: .leading, spacing: 4) {
-                            HomeNextPanel(step: step, lang: lang, style: .inline, compact: compact)
+                            HomeNextPanel(step: step, lang: lang, style: .inline, compact: compact, onOpen: open(step))
                             if let onSkip {
                                 HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                             }
@@ -383,7 +455,7 @@ struct HomeGettingStartedBody: View {
                         Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(todo.prefix(3), id: \.id) { step in
-                                HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
+                                HomeCheckRow(label: t(step.label, lang: lang), state: .todo, onOpen: open(step))
                             }
                             Spacer(minLength: 0)
                         }
@@ -426,12 +498,13 @@ struct HomeGettingStartedBody: View {
                         HomeCheckRow(
                             label: t(step.label, lang: lang),
                             state: step.done ? .done : (step.id == next?.id ? .current : .todo),
-                            boxed: true
+                            boxed: true,
+                            onOpen: step.done ? nil : open(step)
                         )
                     }
                 }
                 if let step = next {
-                    HomeNextPanel(step: step, lang: lang, style: .large, compact: compact)
+                    HomeNextPanel(step: step, lang: lang, style: .large, compact: compact, onOpen: open(step))
                     if let onSkip {
                         HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                             .frame(maxWidth: .infinity)
@@ -458,6 +531,9 @@ struct HomeCheckRow: View {
     /// A receipt of what was done, once there is nothing left to do: tighter
     /// than a list you were meant to tick here, and its tick smaller.
     var recap: Bool = false
+    /// Where this step goes, when it has somewhere to go. A row with no
+    /// destination stays exactly as it was — unhighlighted and inert.
+    var onOpen: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: recap ? 6 : 9) {
@@ -482,6 +558,18 @@ struct HomeCheckRow: View {
                 .opacity(boxed ? 1 : 0)
         )
         .opacity(state == .done ? 0.65 : 1)
+        // A gesture, not a wrapping Button: this app has overflowed the SwiftUI
+        // stack guard on real hardware, and a modifier costs no view depth.
+        //
+        // Masked rather than always attached: an unconditional tap gesture is
+        // RECOGNISED even when it calls nothing, so a row with no destination
+        // ate the tap that belongs to the card. On a phone the card itself opens
+        // the screen it summarises (`HomeCardShell`), and a checklist of inert
+        // rows laid over it turned the card into a dead patch. `.subviews`
+        // leaves this tap unrecognised, so it reaches the card underneath.
+        .contentShape(Rectangle())
+        .gesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .subviews : .all)
+        .accessibilityAddTraits(onOpen != nil ? AccessibilityTraits.isButton : AccessibilityTraits())
     }
 
     @ViewBuilder private var mark: some View {
@@ -538,6 +626,10 @@ struct HomeNextPanel: View {
     let lang: String
     let style: Style
     var compact: Bool = false
+    /// Where the recommendation goes. The panel drew a filled blue capsule that
+    /// said "Create order" and did nothing when you pressed it — the card knew
+    /// the right next step and then refused to take you there.
+    var onOpen: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: style == .compact ? 5 : 7) {
@@ -553,6 +645,17 @@ struct HomeNextPanel: View {
         .padding(.vertical, style == .compact ? 7 : 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.accent.opacity(0.07)))
+        // The whole panel is the target, not just the capsule: on a phone the
+        // capsule is the smallest thing on the card. A gesture rather than a
+        // wrapping Button — a modifier costs no view depth, and this app has
+        // overflowed the SwiftUI stack guard on real hardware.
+        //
+        // And masked when there is nowhere to go, for the same reason as the
+        // rows above: a panel that recognises the tap and then does nothing
+        // takes it away from the card, which on a phone is the way into the
+        // screen this card is about.
+        .contentShape(Rectangle())
+        .gesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .subviews : .all)
     }
 
     private func eyebrow(_ text: String) -> some View {
@@ -586,7 +689,22 @@ struct HomeNextPanel: View {
         }
     }
 
+    /// A real Button, so the capsule is reachable from the keyboard and reads as
+    /// a control to VoiceOver — §110 asks for both. Its label is exactly the
+    /// styled text it always drew.
     private var button: some View {
+        Button { onOpen?() } label: { buttonLabel }
+            .buttonStyle(.plain)
+            .disabled(onOpen == nil)
+            // A step with nowhere to go keeps its words and loses its promise.
+            .opacity(onOpen == nil ? 0.55 : 1)
+            // And loses its claim on the tap. A disabled control is still the
+            // thing under your finger, and on a phone that finger was aimed at
+            // the card, which opens the screen this card is about.
+            .allowsHitTesting(onOpen != nil)
+    }
+
+    private var buttonLabel: some View {
         // The square has no width for "Connect your shop" twice — the panel's
         // heading already named the step, so the button just moves.
         Text(t(style == .large ? step.cta : "Continue", lang: lang))

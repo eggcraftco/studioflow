@@ -27219,13 +27219,26 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .onboard-error { margin: 0; padding: 10px 13px; border-radius: 10px; background: var(--danger-soft); color: var(--danger); font-size: 13px; }
 
+/* The three first tasks. Each row is a button now — the step it names is one
+   click away instead of an instruction to go and find the page yourself. */
 .onboard-tasks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
-.onboard-tasks li { display: flex; align-items: center; gap: 11px; font-size: 14px; }
-.onboard-tasks li span {
+.onboard-tasks li { display: flex; font-size: 14px; }
+.onboard-tasks li button {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: start;
+  padding: 9px 12px; border-radius: 11px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer;
+}
+.onboard-tasks li button:hover { border-color: var(--accent); }
+.onboard-tasks li button:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.onboard-tasks .onboard-task-index {
   display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px;
   border-radius: 999px; background: var(--accent-soft); color: var(--accent);
   font-size: 12px; font-weight: 700;
 }
+.onboard-tasks .onboard-task-label { flex: 1 1 auto; min-width: 0; }
+.onboard-tasks .onboard-task-arrow { flex: 0 0 auto; color: var(--muted); font-size: 16px; }
+[dir="rtl"] .onboard-tasks .onboard-task-arrow { transform: scaleX(-1); }
 
 .onboard-foot {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;

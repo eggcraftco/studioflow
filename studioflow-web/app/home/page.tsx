@@ -59,6 +59,7 @@ import {
 import { saveHomeLayout, saveSetupSkipped, subscribeHomeLayout, subscribeSetupSkipped } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
+import { loadSetupChecklist, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 
 /** Which shared domain each card reads, so a card shows its own domain's state. */
 const CARD_DOMAIN: Record<HomeCardId, HomeDomain> = {
@@ -206,6 +207,31 @@ export default function HomePage() {
   const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "", wantsInventoryItems);
 
   /**
+   * This workspace's own setup steps.
+   *
+   * The card used to invent six of its own, the same for everybody, with the
+   * first one hardcoded ticked. Asked for only when the card is actually on the
+   * grid — a workspace that has hidden it should not be paying for the call —
+   * and it fails silently: somebody opening Home should not be shown an error
+   * about a checklist, and the card's own six steps are a better answer than
+   * one.
+   */
+  const wantsSetupChecklist = useMemo(
+    () => layout.cards.some((card) => card.id === "gettingStarted")
+      && !layout.hidden.includes("gettingStarted"),
+    [layout],
+  );
+  const [setupChecklist, setSetupChecklist] = useState<SetupChecklist | null>(null);
+  useEffect(() => {
+    if (!workspace?.id || !wantsSetupChecklist) return;
+    let cancelled = false;
+    void loadSetupChecklist(workspace.id).then((next) => {
+      if (!cancelled && next) setSetupChecklist(next);
+    });
+    return () => { cancelled = true; };
+  }, [workspace?.id, wantsSetupChecklist]);
+
+  /**
    * Optimistic layout (§19): the grid moves under the hand immediately and the
    * write follows. If the write fails the previous layout comes back, because a
    * card that appears to move and silently does not is worse than one that
@@ -346,6 +372,11 @@ export default function HomePage() {
             skipped={setupSkipped}
             onSkip={handleSkipStep}
             onRestoreSkipped={handleRestoreSkipped}
+            checklist={setupChecklist}
+            // Strictly the boolean, so the fallback's first step does not tick
+            // for somebody who pressed Skip. Only read when the call did not
+            // answer; the server's own list carries its own doneness.
+            setupFinished={settings?.businessOnboardingFinished ?? false}
           />
         );
       default: return null;
