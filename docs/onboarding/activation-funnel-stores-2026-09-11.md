@@ -149,3 +149,5 @@ away. It returns when that order is restored (the pilot's own next step). The wo
 `!== "disconnected"`). Today no row is affected. **Before the retention pilot is widened beyond the one workspace, the
 retention set must be redeployed from a tree that carries this `derive.js`** so the two readers agree (the e-mail stage
 deploy is the natural moment; a by-name deploy of the retention functions from the deploy branch is enough).
+
+**Closed 12:12Z:** `retentionSweep` (`-00002-maz`) and `getRetentionMessage` (`-00002-woz`) redeployed from the same tree (`docs/onboarding/retention-wiring-2026-09-10.md` §9); the two readers of `derive.js` agree again.

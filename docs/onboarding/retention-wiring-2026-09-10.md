@@ -413,3 +413,40 @@ The web needs nothing either way. Rules and the index stay in both directions.
 due, `skipped.not_in_pilot` + `skipped.excluded_workspace` = every other company, and `refused.flag_off` is the e-mail
 candidate being turned away. The 02:20Z run reads exactly that; the 03:20Z and later runs are to be read the same way
 (one `gcloud logging read`, no new queries against the workspaces).
+
+## 9. The Shopify connection rule brought to the retention readers — `retentionSweep` + `getRetentionMessage` redeployed (11 Sep 12:10Z)
+
+**Why:** `getactivationfunnel-00004-tot` (11:41Z) judges store connections by each connector's own status words
+(`docs/onboarding/activation-funnel-stores-2026-09-11.md`); the two retention readers of the same `derive.js` were still on
+the earlier rule (an uninstalled Shopify store counted as connected → `connect_first_store` never proposed, an open
+`connect_first_store` card withdrawn `goal_met`). Operator approval 11 Sep ~12:07Z: only these two functions.
+
+**No new code, no re-merge.** The fix was already on the deploy branch (`ff514cf8`). Product diff between the live retention
+source (merge `9aacbe5b`, functions tree `dd9fc6e9`) and HEAD: `lifecycle/derive.js` (the rule), `index.js` (two hunks, both
+inside `getActivationFunnel` — the funnel's snapshot reads; nothing in the retention wiring), `feedback.js` +
+`lifecycle/feedback.js` (already live through `submitfeedback-00003-jez`; not on these two functions' paths).
+`retention/writer.js`, `lifecycle/retention.js`, `lifecycle/messaging.js`: byte-identical to the live source. So the only
+behaviour difference these two functions gain is the derive rule; no out-of-scope change to separate.
+
+**Evidence reused, not re-run:** `lifecycle-derive-consumers.test.js` (4 — campaign selection and the pending-card review
+under both rules) and `retention-sweep-wiring.test.js` (5) passed on the merged tree at 11:3xZ; `functions/` is unchanged
+since (`git diff --quiet ff514cf8 HEAD -- functions/`).
+
+| | Before | After |
+|---|---|---|
+| `retentionsweep` | `retentionsweep-00001-cob` (02:19Z, Ready, retained) | **`retentionsweep-00002-maz`** (12:10:42Z, 100 %) |
+| `getretentionmessage` | `getretentionmessage-00001-yoy` (02:19Z, Ready, retained) | **`getretentionmessage-00002-woz`** (12:10:54Z, 100 %) |
+| Flags on the new revision (read back) | — | `SWEEP=1`, `IN_APP=1`, `WORKSPACES=GuglEFKSEKNTq1xibFpJav3EWkY2`, `EXCLUDE=KSQidetb…,FvnnEcQA…,iZFBJqrT…`; `EMAIL`, `INBOUND`, `INBOUND_MODE` absent — identical to the pilot's |
+| Scheduler | `every 60 minutes`, ENABLED, UTC, last attempt 11:20:02Z | unchanged; **not triggered by hand** |
+| Timings / caps / rules | unchanged (no code change in the retention modules) | unchanged |
+
+Deploy: `firebase deploy --only functions:retentionSweep,functions:getRetentionMessage` → both "Successful update operation",
+exit 0 (raw log kept in the session scratchpad). Nothing else deployed. Rollback: traffic back to `-00001-cob` / `-00001-yoy`.
+
+Natural sweeps today (08:20–11:20Z, all on the old revision): `evaluated 1, sent 0, refused flag_off 1, skipped not_in_pilot 62 /
+excluded_workspace 3` — the founder e-mail candidate refused because e-mail is off; no card yet (none due). The next natural
+run (12:20Z) is the first on `-00002-maz`; the ≈23:20Z one is the pilot's expected first card.
+
+**Closed:** the funnel/retention Shopify rule difference (funnel record, third pass) — both readers now run the same `derive.js`.
+**Still open, unchanged:** the ≈23:20Z (11 Sep) pilot check — the natural card → restore the synthetic order → `goal_met`;
+the pilot is not accepted until that is seen.
