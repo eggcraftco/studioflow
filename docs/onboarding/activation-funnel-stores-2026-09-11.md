@@ -96,7 +96,7 @@ as a literal copy of `status !== "unlinked"` so both sides are computed from the
 `activation-funnel-2026-09-11-raw/`):** 66 workspaces, 5 with store rows; status words present on the store rows today:
 `shopify:active` 1, `etsy:connected` 1, `ebay:connected` 1, `woo:connected` 1, `square:connected` 1, `woo:disconnected` 1,
 `square:disconnected` 1 — **no `uninstalled`, `pending`, `unlinked`, `reconnect_required` or status-less row exists today**.
-Result: integration_connected workspaces 3 / 3, connected events 4 / 4, activated 0 / 0, **workspaces that differ: 0**.
+Result: integration_connected workspaces 3 / 3, connected events 4 / 4, **workspaces that differ: 0** (state and connection count compared per workspace). *Correction 11:4xZ:* that script printed "activated 0 / 0" because it read `state.activated` instead of `state.progress.activated` — the activation comparison in that run was void, not a finding; the totals run at deploy time (below, `funnel-totals-dryrun.mjs`) reads the right field.
 So on today's data the two rules agree everywhere; the difference is a rule difference that shows the first time a
 merchant uninstalls the Shopify app (the scenario the tests pin), not a change to any current number.
 
@@ -112,3 +112,40 @@ to widen this one.
 **Package, ready for approval, not run:** merge `funnel-store-connections` into the deploy branch (normal merge), pre-checks,
 `firebase deploy --only functions:getActivationFunnel --project eggcraft-studio`; verify the admin funnel reads the same
 counts as the fresh dry run (66 / 3 connected / activated unchanged); rollback = traffic back to `getactivationfunnel-00003-cuv`.
+
+## Deployed — `getActivationFunnel` only (11 Sep 11:41:35Z; recorded 11:44Z)
+
+| Step | Result |
+|---|---|
+| Approval | operator, 11 Sep ~11:35Z: "yalnız `getActivationFunnel`" |
+| Merge | `ff514cf8` on the deploy branch = normal merge of `funnel-store-connections` @ `988e740c` (base `37025406`, no conflicts). Product diff of the merge = the five funnel files only (`index.js` snapshot reads, `lifecycle/derive.js`, three tests); the live native-feedback change (`feedback.js`, `lifecycle/feedback.js`, its test) and the retention code are carried unchanged. `derive.js` + `index.js` byte-identical to the tested candidate. |
+| Test/CI evidence of the final tree | on the merged tree: derive-connections 8, derive-consumers 4, lifecycle-derive 18, funnel-wiring 8, lifecycle-activation 24, feedback 16, retention-sweep-wiring 5 — all PASS; branch pushed before the deploy; CI on `988e740c` success, CI on the merge run started at push (see the hand-off for its result). |
+| Before | live `getactivationfunnel-00003-cuv`, 100 % traffic, Ready=True (created 11 Sep 01:14:40Z); `-00002-ret` (6 Sep) and `-00001-muv` (4 Sep) retained. |
+| Pre-checks | ten ancestors present (the eight runbook ones + `fd2a6648` + `988e740c`), tree clean, HEAD == origin, `functions/.env` present (57 lines, unchanged), credentials verified read-only (owner, ADC read OK). |
+| Deploy | `firebase deploy --only functions:getActivationFunnel --project eggcraft-studio` → "Successful update operation", exit 0 (raw log in `activation-funnel-2026-09-11-raw/`). |
+| After | **`getactivationfunnel-00004-tot`**, 100 % traffic, created 11:41:35Z; `-00003-cuv` retained = **rollback target** (`gcloud run services update-traffic getactivationfunnel --to-revisions getactivationfunnel-00003-cuv=100 --region europe-west2`). |
+| Source match | the revision was built from the working tree at `ff514cf8` (functions/ == `988e740c` for the funnel files); nothing else deployed — the retention functions, the other feedback callables, rules, indexes, `.env`, secrets untouched. |
+
+**Live call versus the same-minute dry run.** The authorised admin (`contact@eggcraft.co.uk`, signed in on nivadesk.app,
+`/admin` → Activation, rendered by the new revision at ~11:43Z) and `funnel-totals-dryrun.mjs` on the deployed tree at
+11:42:32Z (read-only, same snapshot reads and engines):
+
+| | Live admin page | Dry run 11:42:32Z |
+|---|---|---|
+| Workspaces | 66 | 66 |
+| Got value (activated) | 10 | 10 |
+| Have a customer | 10 | 10 |
+| Have an order | 28 | 28 |
+| Stages: Signed up / In onboarding / Set something up / Got value / Using it regularly / Slowing down / Gone quiet | 34 / 18 / 4 / 1 / 1 / 6 / 2 | new 34 / onboarding 18 / setup_started 4 / activated 1 / engaged 1 / at_risk 6 / dormant 2 |
+
+Identical. Against the 01:16Z read (66 / 11; 34/18/3/1/2/6/2) one workspace moved: activated 11 → 10, "Set something up" 3 → 4,
+"Using it regularly" 2 → 1. That is not the connection rule (the live-vs-candidate run found 0 differing workspaces and
+today's store rows carry no uninstalled/pending/unlinked status); it is our pilot workspace `GuglEFKS…`, whose only
+substantive order — the synthetic one — was moved to the bin at 02:20Z for the retention pilot, so its activation fell
+away. It returns when that order is restored (the pilot's own next step). The workspace count did not change.
+
+**Not deployed, on purpose (recorded for the retention pilot):** `retentionSweep` (`retentionsweep-00001-cob`) and
+`getRetentionMessage` (`getretentionmessage-00001-yoy`) still run the earlier `derive.js` rule (`status !== "unlinked"` /
+`!== "disconnected"`). Today no row is affected. **Before the retention pilot is widened beyond the one workspace, the
+retention set must be redeployed from a tree that carries this `derive.js`** so the two readers agree (the e-mail stage
+deploy is the natural moment; a by-name deploy of the retention functions from the deploy branch is enough).

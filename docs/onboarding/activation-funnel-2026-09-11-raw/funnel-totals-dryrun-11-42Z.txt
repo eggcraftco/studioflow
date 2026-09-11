@@ -1,0 +1,2 @@
+at 2026-09-11T11:42:32.333Z | workspaces: 66 | activated: 10 | withCustomers: 10 | withOrders: 28 | integration_connected: 3
+byState: {"onboarding":18,"new":34,"at_risk":6,"setup_started":4,"activated":1,"dormant":2,"engaged":1}
