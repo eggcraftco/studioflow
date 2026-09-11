@@ -3,7 +3,22 @@
 Yetki: 11 Eyl gece mesajı (6 madde; mevcut pilot dışında yeni production deploy ve genel açılış onayı YOK; OpenAI inceleme
 yüzeyi, review hesabı, Stripe ve eBay bağlantı ayarları korunur; gerçek posta kutusuna erişim, mesaj gönderme, sağlayıcı hesabı,
 DNS/secret değişikliği yok; test kayıtları silinmez; token/secret/parola kayda girmez). Bu dosya vardiya boyunca güncellendi;
-son güncelleme 03:08Z.
+son güncelleme (sabah turu) 11:10Z.
+
+## Sabah turu (11:10Z) — eBay yanıtının anlamı ve onaya hazır yayın paketleri
+
+**Engel (önce bu):** bu Mac'te `gcloud`, Firebase CLI ve application-default kimlik bilgileri süresi dolmuş (`invalid_rapt`). Deploy, Secret Manager okuma ve script'le production Firestore okuma yapılamıyor. Gerekli: `gcloud auth login`, `gcloud auth application-default login`, `firebase login --reauth` (senin oturumun). Emülatörler çalışıyor.
+
+**eBay yanıtının anlamı** (`docs/ebay-manual-stage-2026-09-10.md` §2n, yanıt birebir): eBay'in sözleri — Sandbox'ta sipariş oluşturma çalışmıyor, mühendislik üzerinde, tarih yok; "uygunsa" Test Listings Policy altında production'da test. **"Production keyset" ve mekanikleri (RuName, gerçek alıcı, ücret) bizim çıkarımımız**, eBay yazmadı. Sorularımız: (1) mevcut sipariş düzeltme sonrası görünür olacak mı — **cevapsız**; (2) Sandbox'ta desteklenen yol — dolaylı cevap: bugün yok. Yeni test/bağlantı/mesaj yok; yanıt taslağı hazır.
+
+**Onaya hazır yayın paketleri (hepsi CI yeşil, deploy edilmedi):**
+1. **Native feedback → `submitFeedback` (tek fonksiyon):** dal `native-feedback-screens` (kod `c0deb2ba`, kayıt `23803da8`). Emülatörde uçtan uca: Mac/Android/web-biçimli gönderim → doğru workspace ve `platform` ile kayıt (platform'suz eski web istemcisi `web` kalıyor) → admin inbox satırları + detay; `windows` 400; admin olmayan 403. Paket §3b: merge → `firebase deploy --only functions:submitFeedback`; rollback önceki `submitfeedback` revizyonu. Gerçek cihaz oturumuyla gönderim senin oturumunla.
+2. **Funnel → `getActivationFunnel` (tek fonksiyon):** dal `funnel-store-connections` (kod `22dedd67`). derive.js artık her bağlayıcının kendi durum kelimesini okuyor (Shopify yalnız `active`; uninstalled sayılmıyor — canlıdaki okuyucu sayıyordu); bağlayıcı başına bağlı/bağlı-değil senaryo testi (8). **Deploy öncesi dry run yeniden koşulmalı** (kimlik bilgileri yenilenince); rollback `getactivationfunnel-00003-cuv`.
+3. **Retention e-posta:** dal `retention-email-candidate` (`3d02ef73`). Teknik bilgiler doğrulandı (Hostinger IMAP `imap.hostinger.com:993`, SMTP `smtp.hostinger.com:465`; `.env`'de SMTP satırı yok, kod varsayılanları bunlar). Rutin seçimler gerekçeli yapıldı (saatlik poll, founder notu aktivasyonla durmaz, imap modu). Token secret'ını CLI oturumu açılınca **ben oluştururum** (`firebase functions:secrets:set`, yerelde üretilen 32 bayt; yetki: proje Owner/Secret Manager Admin — senin hesabın). **Senin üç kararın:** gönderen/yanıt kimliği (contact@nivadesk.co.uk, önerilen), poller'ın posta kutusu erişimi (pilotta mevcut SMTP secret'ı), pilotta gönderim izni (EMAIL+INBOUND açılsın mı).
+
+**Canlı retention testi:** ≈23:20Z (11 Eyl) korunuyor; hand-off'ta üç AYRI kanıt olarak yazıldı (kart açılır; o kart üzerinde ya `goal_met` — sipariş geri yüklenerek, önerilen — ya Not now; `acted`/Not now için ayrı kartlar). Sentetik sipariş **hâlâ çöpte**, geri yükleme bekliyor.
+
+**Google 75151719:** ilettiğin yazışma kaydedildi (PS ekibi, güncelleme en geç 15 Eyl 17:00 UTC); Control 3 açık.
 
 ## Sabah özeti
 
