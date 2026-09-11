@@ -10,7 +10,7 @@ import SwiftUI
 /// statuses in the design sheet are sample data; a card that says "Connected"
 /// when nothing has ever arrived is worse than no card at all.
 enum NivaDeskIntegrationState {
-    case connected, attention, available, webhook, planned, webOnly
+    case connected, attention, available, webhook, planned, webOnly, checking, unverified
 
     var label: String {
         switch self {
@@ -19,6 +19,10 @@ enum NivaDeskIntegrationState {
         case .available: return "Available"
         case .webhook: return "Via webhook"
         case .planned: return "Coming soon"
+        // The server has not answered yet (checking) or could not be reached
+        // (unverified): neither is "Available", and neither offers Set up.
+        case .checking: return "Checking…"
+        case .unverified: return "Could not check"
         // Not "Coming soon": QuickBooks and Xero connect today, on the web. A
         // phone that says they are coming sends somebody away from something
         // they already have.
@@ -33,8 +37,20 @@ enum NivaDeskIntegrationState {
         case .available: return HomeTone.slate
         case .planned: return .secondary
         case .webOnly: return HomeTone.slate
+        case .checking: return .secondary
+        case .unverified: return HomeTone.orange
         }
     }
+
+    /// States that never offer the Set up / Manage button.
+    var offersNoAction: Bool { self == .planned || self == .checking || self == .unverified }
+}
+
+/// What the server said about eBay for this workspace — or that it has not
+/// said anything yet. `unknown` is the value before the read lands; `failed`
+/// is a read that did not come back. Neither may render as "Available".
+enum NivaDeskEbayAvailability {
+    case unknown, enabled, disabled, failed
 }
 
 struct NivaDeskIntegrationChannel {
@@ -58,8 +74,9 @@ struct NivaDeskIntegrationSignals {
     /// Live eBay seller accounts, from getEbayConnections. The attention count
     /// is the server's own specStatus — never an error code read again here.
     var ebayConnections = 0
-    /// The server's per-workspace eBay gate; false = the card must not offer Connect.
-    var ebayWorkspaceEnabled = true
+    /// The server's per-workspace eBay gate, kept as a tri-state: nothing is
+    /// "Available" until the server has said so.
+    var ebayAvailability: NivaDeskEbayAvailability = .unknown
     var ebayConnectionsNeedingAttention = 0
     var ebayAccount = ""
     var ebaySandbox = false
@@ -213,7 +230,14 @@ struct NivaDeskIntegration: Identifiable {
             // A disconnected row is not a connection, and the card goes amber
             // only when EVERY live account needs a look: one paused sandbox
             // account beside a working live one is not an outage.
-            if signals.ebayConnections == 0 { return signals.ebayWorkspaceEnabled ? .available : .planned }
+            if signals.ebayConnections == 0 {
+                switch signals.ebayAvailability {
+                case .enabled: return .available
+                case .disabled: return .planned
+                case .unknown: return .checking
+                case .failed: return .unverified
+                }
+            }
             return signals.ebayConnectionsNeedingAttention == signals.ebayConnections ? .attention : .connected
         }
         if id == "paypal" {
@@ -288,7 +312,7 @@ struct IntegrationTile: View {
                     }
                 }
                 Spacer(minLength: 0)
-                if !provider.manage.isEmpty {
+                if !provider.manage.isEmpty && !state.offersNoAction {
                     Button(t(state == .connected || state == .attention ? "Manage" : "Set up", lang: lang),
                            action: onManage)
                         .buttonStyle(.bordered)

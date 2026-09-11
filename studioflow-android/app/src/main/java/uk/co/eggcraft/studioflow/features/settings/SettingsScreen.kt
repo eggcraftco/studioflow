@@ -3779,7 +3779,9 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
         // its words rather than each re-reading lastErrorCode their own way. A
         // workspace where the connector is switched off settles empty here,
         // which reads Available — the card the grid drew before eBay existed.
-        val ebayResult = runCatching { repository.ebayConnections(ws.id) }.getOrNull()
+        // A read that did not come back is "could not check", never "Available".
+        val ebayRead = runCatching { repository.ebayConnections(ws.id) }
+        val ebayResult = ebayRead.getOrNull()
         val ebayRows = runCatching { ebayResult?.connections ?: emptyList() }
             .getOrDefault(emptyList())
             .filter { it.status != "disconnected" }
@@ -3791,7 +3793,11 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             etsyShops = etsyRows.size,
             etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
             ebayConnections = ebayRows.size,
-            ebayWorkspaceEnabled = ebayResult?.workspaceEnabled ?: true,
+            ebayAvailability = when {
+                ebayRead.isFailure -> EbayAvailability.Failed
+                ebayResult?.workspaceEnabled == false -> EbayAvailability.Disabled
+                else -> EbayAvailability.Enabled
+            },
             ebayConnectionsNeedingAttention = ebayRows.count { it.needsAttention },
             ebayAccount = ebayFirst?.title.orEmpty(),
             ebaySandbox = ebayFirst?.isSandbox == true,

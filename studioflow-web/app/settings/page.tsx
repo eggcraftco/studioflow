@@ -23,6 +23,7 @@ import {
   INTEGRATION_CATEGORIES,
   INTEGRATION_PROVIDERS,
   INTEGRATION_STATE_LABELS,
+  integrationStateOffersNoAction,
   resolveIntegrationState,
   type IntegrationLiveState,
   type IntegrationManageTarget,
@@ -5365,7 +5366,7 @@ function IntegrationsSection({
   const matches = (row: (typeof resolved)[number]) => {
     if (needle && !row.provider.name.toLowerCase().includes(needle)) return false;
     if (filter === "connected") return row.live.state === "connected" || row.live.state === "attention";
-    if (filter === "available") return row.live.state === "available" || row.live.state === "webhook";
+    if (filter === "available") return row.live.state === "available" || row.live.state === "webhook" || row.live.state === "checking" || row.live.state === "unverified";
     if (filter === "planned") return row.live.state === "planned";
     return true;
   };
@@ -5381,7 +5382,9 @@ function IntegrationsSection({
   const inCategory = (row: (typeof resolved)[number]) => !category || shopFirst || row.provider.category === category;
   const groups = [
     { id: "connected", title: "Connected", rows: shown.filter(row => inCategory(row) && (row.live.state === "connected" || row.live.state === "attention")) },
-    { id: "available", title: "Ready to connect", rows: shown.filter(row => inCategory(row) && (row.live.state === "available" || row.live.state === "webhook")) }
+    // A card still being checked, or whose check failed, sits with the ones it
+    // may turn out to be — without the Set up button until the server has said so.
+    { id: "available", title: "Ready to connect", rows: shown.filter(row => inCategory(row) && (row.live.state === "available" || row.live.state === "webhook" || row.live.state === "checking" || row.live.state === "unverified")) }
   ];
   const planned = shown.filter(row => inCategory(row) && row.live.state === "planned");
   const categoryTitle = (id: string) => INTEGRATION_CATEGORIES.find(group => group.id === id)?.title ?? "";
@@ -5514,7 +5517,7 @@ function IntegrationCard({
               {provider.capabilities.map((cap) => <li key={cap}>{t(cap)}</li>)}
             </ul>
           ) : null}
-          {provider.manage ? (
+          {provider.manage && !integrationStateOffersNoAction(live.state) ? (
             <button type="button" className="button secondary" onClick={onManage}>
               {t(live.state === "connected" || live.state === "attention" ? "Manage" : "Set up")}
             </button>
