@@ -12,6 +12,8 @@ Live verification: the new settings chunk `page-6509f2b43137e257.js` carries the
 | First open after a Chrome restart, run 2 | 0.16 s | 2.55 s | **2.57 s** | 3.89 s | — |
 | Reopen, same tab | 0.00 s (t₀) | 2.27 s | **2.34 s** | 3.56 s | list at 3.24 s |
 
+**How to read the times.** The two first-open rows count from navigation start. The reopen row counts from the moment the loading screen appeared, the same reference as the Round 175 reopen row; from navigation start the same run reads loading 0.90 s, workspace 3.17 s, list 3.24 s, details 4.46 s. The raw probe files carry two events that do **not** mark the list becoming visible: `listOnScreen` (first-open run 1) fires when the list text is in the DOM underneath the loading overlay, and `loadingScreenGone_listVisible` (the other two runs) fires in the short gap between the sign-in loading screen and the page's own loading screen (the Branding sampling shows the overlay gone at 0.95 s and back at 1.32 s). The list-visible moment is `detailsStripShown`, which renders in the same React commit that removes the overlay.
+
 "List on screen" is the moment the details strip renders (the list and the strip are in the same commit, right after the workspace mark). The workspace-validation part is unchanged; the list no longer waits for the details. The variance between the two first opens (4.9 s vs 2.6 s) is in the validation part (auth restore + Firestore channel), not in the change.
 
 Branding reopen sampled every 100 ms: loading overlay → strip "Loading the details…" with **no Save button** (2.15 s) → editor with Save (3.27 s). Raw probe outputs: `settings-loading-2026-09-11-raw/probe176-*.json`.

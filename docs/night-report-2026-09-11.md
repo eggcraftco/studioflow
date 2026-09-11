@@ -46,6 +46,8 @@ son güncelleme (sabah turu) 11:10Z.
 
 **Sabah turu 14 (19:2xZ) — Round 175 CANLI:** telefonda Settings ızgarası tek ekran yüksekliğine kilitliydi (28 Ağu `height:100%`); tek CSS kuralıyla düzeltildi (`eb77d083` → merge `7f4fa2c2` → yayın `e98f1da`, geri alma `git revert e98f1da`). Fiziksel Android'de canlı doğrulandı: liste son satıra, Integrations ChatGPT'nin altına kayıyor; masaüstü düzeni korunuyor. iPhone: operatörün normal Safari kontrolü bekleniyor. "Loading your workspace" Android'de ≈8,6 s — ayrı bulgu (Firestore zinciri 1,5→8,7 s), bu turda değişmedi.
 
+**Sabah turu 15 (20:1xZ) — Round 176 CANLI:** Settings'teki "Loading your workspace" beklemesi ölçüldü: ekranı tutan, workspace ve erişim doğrulandıktan *sonra* çalışan yardımcı zincirdi (destek özeti callable'ı + sayım sorguları), Firestore'un tamamı değil. Aday `e3a7a46d` listeyi doğrulamadan hemen sonra gösteriyor, detayları şeritle (yükleniyor / yüklenemedi + Retry) sonra yüklüyor; ön kontrol üzerine eklenen `496247e4` detaya bağlı on bölümün editörünü veri gelene kadar açmıyor, boş taslak kaydedilemiyor. Workspace değiştirme işaretçiyi yazıp sayfayı yeniden yüklüyor; eski workspace'in geç yanıtı uygulanamıyor (emülatörde doğrulandı). Merge `e60999ed` → yayın `8bf514e` (20:12Z push, 20:14:51Z canlı; geri alma `git revert 8bf514e`). Aynı fiziksel Android'de liste: ilk açılış 8,21 s → 4,94 s / 2,57 s, tekrar açılış 3,24 s → 2,34 s; detaylar 7,83 / 3,89 / 3,56 s'de tamam. Liste sonu ve Integrations alt kartları kayıyor. iPhone: operatörün Safari kontrolü bekleniyor. Kayıt `docs/ebay-web-deploy-round-176.md`.
+
 ## Sabah özeti
 
 **Canlıda değişen:** hiçbir şey. Gece boyunca deploy, rules/index yayını, secret, DNS, mağaza gönderimi yapılmadı.
