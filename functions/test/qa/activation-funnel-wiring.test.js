@@ -91,6 +91,20 @@ check("the modules it names really export what it calls", () => {
   assert.ok(Array.isArray(derive.UNDERIVABLE_EVENTS));
 });
 
+
+check("its snapshot carries the five store connections derive.js derives integration_connected from, beside bank, accounting and inventory", () => {
+  const body = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const block = body.slice(body.indexOf("exports.getActivationFunnel"), body.indexOf("exports.getActivationFunnel") + 6000);
+  for (const read of [
+    'db.collection("shopifyStores").where("companyId", "==", companyId).limit(20).get()',
+    'db.collection("etsyConnections").where("companyId", "==", companyId).limit(20).get()',
+    'db.collection("wooConnections").where("companyId", "==", companyId).limit(20).get()',
+    'db.collection("squareConnections").where("companyId", "==", companyId).limit(20).get()',
+    'db.collection("ebayConnections").where("companyId", "==", companyId).limit(20).get()'
+  ]) assert.ok(block.includes(read), "missing read: " + read);
+  for (const key of ["shopifyStores:", "etsyConnections:", "wooConnections:", "squareConnections:", "ebayConnections:", "bankConnections:", "accountingConnections:", "inventoryItems:"]) assert.ok(block.includes(key), "snapshot key not passed: " + key);
+});
+
 (async () => {
   for (const { name, run } of checks) {
     try { await run(); console.log("PASS ", name); }
