@@ -4,6 +4,10 @@ Read this first after a context reset or in a new session, then compare it with 
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
 token, OAuth code or secret value appears here.
 
+## Settings "Loading your workspace" — candidate ready, not released (11 Sep, 16:5xZ)
+
+Record: `docs/settings-loading-2026-09-11.md`. Candidate **`e3a7a46d`** (+ record `b1d67896`) on `ebay-availability-fix`, web only (`app/settings/page.tsx`, `globals.css`, `language.ts`); `tsc` clean, `npm run build` exit 0. Physical Android (live site, existing session): first open list at 8.21 s of which 3.5 s were the auxiliary chain after the workspace was already confirmed; reopen 3.24 s / 1.2 s. The candidate shows the list once the workspace is confirmed and loads counts/overview/quick-reply/team/support afterwards with a loading / could-not-load + Retry strip. Emulator checks: auxiliary error → list + strip, no numbers; account change → old name never reappears; access-lost → page-level banner, no body. Open: the after-measurement on the same phone needs a release or a one-time sign-in on a dev origin (operator's call). `functions-tests` CI does not run for web-only commits (last run on `d92ca028`). Rollback if released: `git revert e3a7a46d`.
+
 ## 0. Repository state at hand-off
 
 | | |
