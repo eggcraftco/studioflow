@@ -364,3 +364,52 @@ rules was shortened to bring them forward. Until then the synthetic order stays 
 **Still open, time-gated, nothing else changed:** the pilot workspace's first card (≈ 23:20Z sweep on 11 Sep, after the
 24-hour first-order rule and the 24-hour feedback hold both pass) → see it, Not now, CTA/acted, then restore the synthetic
 order `YFFB4Xqi8zSfFgPEN48t` (clear `isDeleted`) and confirm the next look withdraws the pending card as `goal_met`.
+
+## 8. Operating the pilot, and the two kinds of rollback (written 11 Sep 02:3xZ, nothing applied)
+
+**The real schedule.** Cloud Scheduler job `firebase-schedule-retentionSweep-europe-west2`: `every 60 minutes`, time zone UTC,
+ENABLED; last attempt 02:20:58Z (the run triggered by hand), next scheduled **03:20:01Z**, then every hour at **:20**. So the
+natural sweeps tonight are 03:20, 04:20 … and the first that can write the pilot's card is the **23:20Z** run (after the
+24-hour first-order rule at 18:31Z and the 24-hour feedback hold at 22:48:51Z). No persistent watcher exists in this
+session: the evening's check has to be run by hand — the sweep summary line in Cloud Logging, then the pilot workspace
+in a browser session — or the operator asks for it in the morning.
+
+**What each switch does — from the code, not from memory.**
+
+| Action | Effect on new cards | Effect on cards already written (`status open`) |
+|---|---|---|
+| Pause the scheduler (`gcloud scheduler jobs pause firebase-schedule-retentionSweep-europe-west2 --location=europe-west2`) | no sweep runs → nothing new is evaluated or written | **unchanged and still shown**: `getRetentionMessage` reads `retentionMessages` where `status == open` and answers whenever `NIVADESK_RETENTION_IN_APP=1` and the workspace passes the pilot gate (index.js: `if (!flags.inApp) return … flag_off` is the only client-side kill switch) |
+| `NIVADESK_RETENTION_SWEEP` unset + redeploy `retentionSweep` | the function exits at once ("nothing evaluated") | unchanged and still shown (same reason) |
+| `NIVADESK_RETENTION_IN_APP` unset + redeploy `getRetentionMessage` (and `retentionSweep`, whose writer refuses in-app with `flag_off` — writer.js line 83) | nothing written | **hidden everywhere at once**: the callable answers `enabled false, reason flag_off` and reads nothing; the documents stay `open` in Firestore, untouched, and would show again if the flag came back |
+| `NIVADESK_RETENTION_WORKSPACES` emptied + redeploy the two | nothing written (`not_in_pilot`) | hidden (`not_in_pilot` on read) |
+| Delete the four new functions (`firebase functions:delete retentionSweep getRetentionMessage dismissRetentionMessage setRetentionOptOut`) | nothing | hidden (the web reader's call fails and it shows nothing); the web keeps calling a missing function until a Round removes the reader |
+
+So "pausing the scheduler" is a **freeze**, not a rollback: it stops the pilot from growing but leaves whatever is on screen.
+Closing the cards' display is the in-app flag. Nothing in any of these deletes a document; `dismiss`/`acted`/`withdrawn`
+statuses written so far stay as history.
+
+**Full shutdown, ready to run (in this order):**
+
+```bash
+# 1. freeze the sweep
+gcloud scheduler jobs pause firebase-schedule-retentionSweep-europe-west2 --location=europe-west2 --project=eggcraft-studio
+# 2. turn the display off and the writer off: remove the four lines from functions/.env …
+sed -i '' '/^NIVADESK_RETENTION_/d' functions/.env
+# … and redeploy the four retention services by name (the ticket callables keep the stamp; it is harmless with everything off)
+npx firebase deploy --project eggcraft-studio --only functions:retentionSweep,functions:getRetentionMessage,functions:dismissRetentionMessage,functions:setRetentionOptOut
+# 3. (optional) the ticket callables back to their pre-pilot revisions — only if the stamp itself must go
+gcloud run services update-traffic createsupportticket --region=europe-west2 --to-revisions=createsupportticket-00067-juw=100
+gcloud run services update-traffic createworkspaceticket --region=europe-west2 --to-revisions=createworkspaceticket-00048-ruk=100
+gcloud run services update-traffic updatesupportticketstatus --region=europe-west2 --to-revisions=updatesupportticketstatus-00036-loj=100
+gcloud run services update-traffic updateworkspaceticketstatus --region=europe-west2 --to-revisions=updateworkspaceticketstatus-00040-rip=100
+```
+
+**Reopen:** restore the four `.env` lines (the pilot values are in §7.6), redeploy the same four names, then
+`gcloud scheduler jobs resume firebase-schedule-retentionSweep-europe-west2 --location=europe-west2 --project=eggcraft-studio`.
+The web needs nothing either way. Rules and the index stay in both directions.
+
+**Check that the natural sweeps stay inside the pilot.** The summary line every sweep logs is the record
+(`retentionSweep: {"evaluated":…,"sent":…,"refused":…,"skipped":…}`): `evaluated` must stay 1, `sent` 0 until the card is
+due, `skipped.not_in_pilot` + `skipped.excluded_workspace` = every other company, and `refused.flag_off` is the e-mail
+candidate being turned away. The 02:20Z run reads exactly that; the 03:20Z and later runs are to be read the same way
+(one `gcloud logging read`, no new queries against the workspaces).
