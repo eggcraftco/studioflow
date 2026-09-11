@@ -3419,6 +3419,50 @@ class StudioFlowRepository(
      * Any member may ask: it is the workspace's own progress, not billing.
      * Region europe-west2, like every other callable here.
      */
+    // --- Feedback v1 (features/feedback/FeedbackDialog.kt): the same callables the web uses ---
+    data class FeedbackSubmitResult(val id: String, val duplicate: Boolean)
+
+    /** Whether "Send feedback" belongs in the account menu: the server decides; off is an answer, not an error. */
+    suspend fun feedbackAvailable(workspaceId: String): Boolean {
+        val result = functions.getHttpsCallable("getFeedbackPrompt")
+            .call(mapOf("companyId" to workspaceId))
+            .await()
+        val raw = result.data as? Map<*, *> ?: return false
+        return raw["enabled"] as? Boolean ?: false
+    }
+
+    /** The manual note. The server validates every field and files the platform as android. */
+    suspend fun submitFeedback(
+        workspaceId: String,
+        experience: String,
+        kind: String,
+        text: String,
+        page: String,
+        clientKey: String,
+        language: String
+    ): FeedbackSubmitResult {
+        val result = functions.getHttpsCallable("submitFeedback")
+            .call(
+                mapOf(
+                    "companyId" to workspaceId,
+                    "trigger" to "manual",
+                    "experience" to experience,
+                    "kind" to kind,
+                    "text" to text.take(2000),
+                    "page" to page.take(200),
+                    "clientKey" to clientKey,
+                    "language" to language,
+                    "platform" to "android"
+                )
+            )
+            .await()
+        val raw = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        return FeedbackSubmitResult(
+            id = (raw["id"] as? String).orEmpty(),
+            duplicate = raw["duplicate"] as? Boolean ?: false
+        )
+    }
+
     suspend fun setupChecklist(workspaceId: String): StudioSetupChecklist? {
         val result = functions.getHttpsCallable("getSetupChecklist")
             .call(mapOf("companyId" to workspaceId))

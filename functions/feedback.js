@@ -163,7 +163,7 @@ function createFeedbackFunctions(deps) {
     const record = {
       id, companyId, uid, userEmail: text(email),
       workspaceName: text(companyData && (companyData.name || companyData.companyName)),
-      source: "in_app", platform: "web", trigger: value.trigger, campaign: value.campaign, stage: value.stage,
+      source: "in_app", platform: value.platform, trigger: value.trigger, campaign: value.campaign, stage: value.stage,
       feedbackType: value.feedbackType, kind: value.kind, experience: value.experience, text: value.text,
       category: "other", impact: null, status: "new", ownerUid: null, adminNote: "",
       page: value.page, language: value.language,
