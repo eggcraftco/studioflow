@@ -30228,6 +30228,27 @@ exports.listFeedback = feedbackExports.listFeedback;
 exports.getFeedbackDetail = feedbackExports.getFeedbackDetail;
 exports.updateFeedbackStatus = feedbackExports.updateFeedbackStatus;
 
+// Sales (Faz 1, read-only). The pilot flag lives in `appConfig/sales` and is
+// closed until a workspace is named there, so this deploy opens nothing. The
+// only write is the workspace's own menu preference; the list is derived from
+// the orders that already exist, so no order is rewritten and no side document
+// is created here.
+const salesExports = require("./sales").createSalesFunctions({
+  admin, HttpsError, onCall,
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  memberAccessFor: (companyData, uid) => workspaceMemberAccess(companyData, uid),
+  roleFor: (companyData, uid) => (
+    uidIsCompanyOwner(companyData, uid)
+      ? "owner"
+      : normalizeWorkspaceRole(workspaceMemberRoleValue(companyData, uid, "member"), "member")
+  ),
+  assignedOnlyFor: (companyData, uid) => workspaceMemberAccess(companyData, uid).assignedProjectsOnly === true,
+  engineVersion: financeEngine.ENGINE_VERSION
+});
+exports.getSalesCapability = salesExports.getSalesCapability;
+exports.setSalesVisibility = salesExports.setSalesVisibility;
+exports.listSalesRows = salesExports.listSalesRows;
+
 /**
  * Record that somebody was handed personal data by the server.
  *

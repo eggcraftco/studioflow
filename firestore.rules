@@ -904,6 +904,32 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Sales (Faz 1). The classification, the catalog and the workspace's menu
+    // preference live in side documents rather than on the order, because the
+    // shipped iOS/Mac 1.3 replaces a whole order document on paid plans and
+    // would erase anything new on it. Written only by the Sales callables:
+    // a client that could write these could invent a sale, a product or a stock
+    // link. They are also excluded from the wildcard below, which would
+    // otherwise open them to every writing member.
+    match /companies/{companyId}/salesOrders/{orderId} {
+      allow read: if canReadCompany(companyId)
+        && !usesWorkflowSafeView(companyId)
+        && !requiresAssignedToSelfFilter(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/salesProducts/{productId} {
+      allow read: if canReadCompany(companyId) && !usesWorkflowSafeView(companyId);
+      allow write: if false;
+    }
+
+    // The menu preference is not money and not business data: anyone who can
+    // read the workspace may see whether Sales is switched on for it.
+    match /companies/{companyId}/salesSettings/{settingId} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     match /companies/{companyId}/{collectionId}/{document=**} {
       allow read: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -969,6 +995,9 @@ service cloud.firestore {
         && collectionId != 'retentionLog'
         && collectionId != 'retentionMessages'
         && collectionId != 'retentionInbound'
+        && collectionId != 'salesOrders'
+        && collectionId != 'salesProducts'
+        && collectionId != 'salesSettings'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -1034,6 +1063,9 @@ service cloud.firestore {
         && collectionId != 'retentionLog'
         && collectionId != 'retentionMessages'
         && collectionId != 'retentionInbound'
+        && collectionId != 'salesOrders'
+        && collectionId != 'salesProducts'
+        && collectionId != 'salesSettings'
         && canWriteCompanyData(companyId);
     }
 
