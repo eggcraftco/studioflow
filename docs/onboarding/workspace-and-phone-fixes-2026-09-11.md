@@ -61,7 +61,7 @@ Keyboard-open usability: iPhone Safari sign-in with the soft keyboard (09, Done 
 | Platform | Evidence type | What was run | Result |
 |---|---|---|---|
 | macOS app | Debug build of `dd0c5283`+ on this Mac against the emulators (background UI automation) | allowed owner with an unreadable stored workspace → Retry after restore; Settings → Integrations first frame | access-lost screen, stored id untouched, Retry opened the allowed workspace; hub "Checking…" → "Available" |
-| iOS app | iPhone 17 Pro simulator (ad-hoc simulator build), soft keyboard now enabled on the simulator | same access-lost/Retry flow; allowed owner hub eBay Available/Set up; **member** (`qa-ebay-allowed-member`) launched into the workspace | access-lost screen + Retry ✓; hub ✓; member hub reached (Set up → section shows the owner-only sentence on Android; on iOS the member run ended at the hub — see §5) |
+| iOS app | iPhone 17 Pro simulator (ad-hoc simulator build), soft keyboard now enabled on the simulator | same access-lost/Retry flow; allowed owner hub eBay Available/Set up; **member** (`qa-ebay-allowed-member`) launched into the workspace | access-lost screen + Retry ✓; hub ✓; member: hub eBay Available → Set up → "Only the workspace owner can connect or disconnect an eBay account." (no Connect) (18); soft keyboard up in the settings search (19) |
 | Android app | Pixel_9 emulator, `assembleDebug` of the final commit | access-lost/Retry flow; allowed owner hub; **member**: hub eBay Available → Set up → "Only the workspace owner can connect or disconnect an eBay account." (no Connect) | all ✓ (05, 06, 16, 17) |
 | iPhone Safari | Simulator Safari on the worktree dev server | access-lost banner + Retry; keyboard-open sign-in without zoom; drawer to Sign Out; **connected owner** hub "1 connected · Connected · qa_seller · Sandbox" | ✓ (07, 09, 10, 15) |
 | Android Chrome | Pixel_9 Chrome via adb reverse | hub chips/badge; keyboard-open sign-in; **connected owner** hub Connected → Manage → `qa_seller` panel | ✓ (11, 12, 13, 14) |
@@ -72,7 +72,7 @@ Mobile-web connected/Manage and the member role on phones are now UI-verified (n
 
 | Finding | Remaining blocker |
 |---|---|
-| Workspace resolution | Ships only with the next store builds (iOS/Mac 1.3 (17) and Android 0.1.8 carry the old fallback) and the next web deploy; physical-device run not done. The member flow on iOS ended at the hub (a mis-tap opened the feedback sheet, cancelled without sending) — the section text is shared Swift code with the Mac and is pinned by the mirror test, but the iOS member screenshot of the section is missing. |
+| Workspace resolution | Ships only with the next store builds (iOS/Mac 1.3 (17) and Android 0.1.8 carry the old fallback) and the next web deploy; physical-device run not done. (During the iOS member run a mis-tap opened the feedback sheet; it was cancelled, nothing was sent.) |
 | Hub flash | Same store/web release gate. |
 | Phone web | Web deploy of the candidate; a real iPhone/Android check of the 16px rule and the drawer is still owed. |
 | eBay availability (earlier commit) | Unchanged: merge, deploy `getEbayConnections`, then the store package. |
