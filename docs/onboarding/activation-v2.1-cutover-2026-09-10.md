@@ -140,6 +140,8 @@ decision; this package does not change the funnel's scope.
 | Untouched, verified after the deploy | `chatgptmcp-00073-fuz`, `chatgptoauthauthorize-00045-has`, `stripewebhook-00047-por`, `getsetupchecklist-00003-noh`, `getfeedbackprompt-00002-git`, `submitfeedback-00002-jih`, `beginebayconnect-00002-cod`, `previewebayimport-00002-hac`, `runebayimport-00002-caw`, `syncebaynow-00002-buq` |
 | Same-minute dry run (01:15:15–01:15:20Z, read-only) | unchanged from 01:00Z: 66 workspaces, 65 external; activated OLD 24 → NEW 10 (all 66: 25 → 11); 14 active→inactive, 0 inactive→active, 9 relabels |
 
+| **Live call, authorised admin** (`contact@eggcraft.co.uk`, `/admin` → Activation, 01:16:01Z, one minute after the same-minute dry run) | **Workspaces 66 · Got value (activated) 11** · Have a customer 10 · Have an order 28. Funnel stages: Signed up **34**, In onboarding **18**, Set something up **3**, Got value **1**, Using it regularly **2**, Slowing down **6**, Gone quiet **2** (sum 66). Dry-run NEW at 01:15Z, all 66: activated 11; states new 34 / onboarding 18 / setup_started 3 / activated 1 (the `OUR` workspace) / engaged 2 / at_risk 6 / dormant 2 — **identical, figure for figure**; no data changed between the two readings. The "In onboarding" stage exists only in the v2.1 `derive.js`, so the serving revision is running the merged source. The page's "Honest limits" list (underivable events, including feedback submitted / dismissed) is unchanged |
+
 Scope note, unchanged by this deploy: the funnel counts every company document, so the test/internal workspaces
 (`FvnnEcQA…` "test", our `GuglEFKS…` test workspace, EGGcraft `iZFBJqrT…`, and `KSQidetb…`) are inside its totals.
 Feedback v1 is live and generally available (all workspaces) and was not touched.
