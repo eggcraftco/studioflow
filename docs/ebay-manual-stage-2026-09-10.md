@@ -334,9 +334,19 @@ Fulfillment-visible order, the acceptance tests resume from the preview step wit
 >
 > Thank you.
 
-**Official channel, checked on the portal on 11 Sep:** eBay Developers Program → Support → *Contact Technical
-Support* (developer.ebay.com/support), signed in as the developer account `nivadesk`, category API / Sandbox, with
-the application and the order id above. The Developer Community forum is the public alternative. **Not sent.**
+**Official channel, read on the portal on 11 Sep (nothing submitted):** eBay Developers Program → Support →
+**Developer Technical Support** (`developer.ebay.com/support/developer-technical-support`), tickets at
+**`developer.ebay.com/my/support/tickets`**, signed in as the developer account `nivadesk`. Prerequisites stated on
+that page: the developer account must have **support activated** — Profile & Contacts → Primary Contact complete
+(name, e-mail, phone, country) → Edit → *Activate Support*; then the **AI-Assisted Support** tab is where a ticket is
+created. eBay asks for: the application ID, the API calls used, error logs, the HTTP response header values and any
+error messages — the draft carries the first two and the messages; the Trading call's reference headers are below,
+the Fulfillment call's headers were not saved (capture them when submitting, the Explorer shows them next to the
+response). Public alternative: the Developer Community forum (`/support/developer-community-forum`). **Not sent.**
+
+References from the Trading `GetOrders` execution of 2026-09-11 00:17:36 UTC (not secrets): `rlogid`
+`t6lwbbq%60%7Espse3%60jhs9%3Fiug%60tb%7Bquq%601ehmq%2B050eee03d%3A%28rbpv1%3E.k3e7u-1a08dd3b396-0x232f`,
+`x-ebay-soa-request-id` `1a08dd3b-3970-a244-4e26-3232fff37874`, `x-ebay-pop-id` `UFES2-LVSAZ01-apisandbox`.
 
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
