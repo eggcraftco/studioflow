@@ -241,6 +241,24 @@ it already names `testuser_nivadesk_buyer2`; only the password is missing, which
 **Nothing was run against the order.** No second order was created, no `CompleteSale`, no listing change, no payment
 detail entered.
 
+## 2i. Re-check ~2.5 hours later: one raw Fulfillment query (11 Sep ~00:12Z, seller token, Sandbox)
+
+Run in eBay's API Explorer against the **NivaDesk sandbox keyset** (`EGGCRAFT-NivaDesk-SBX-…`, the same application
+NivaDesk's stored connection uses) with a user token consented minutes earlier by **`testuser_nivadesk_seller1`** (the
+sign-in page named that account; the previous, expired token had answered `401 Invalid access token`). Environment
+radio **Sandbox**; request host `api.sandbox.ebay.com`. No token or customer field is reproduced here.
+
+| | |
+|---|---|
+| Request | `GET /sell/fulfillment/v1/order?filter=creationdate:[2026-09-10T21:00:00.000Z..2026-09-11T00:05:00.000Z]&limit=50&offset=0` — the window contains the order's creation (21:42:09Z) and its settlement (22:16:30Z) |
+| First attempt | `400 Bad Request`, error 30850 "The start and end dates can't be in the future" — the end I had typed (00:30Z) was ahead of eBay's clock; corrected once to 00:05Z, not retried further |
+| Result | **`200 OK`**, `total: 0`, `limit: 50`, `offset: 0`, `orders: []`, the `href` echoing the filter, **no `next` link** — a single, empty page, so nothing is hiding behind pagination |
+
+**Reading, raw vs NivaDesk.** This is eBay's own answer to the same call NivaDesk's connector makes: the Fulfillment
+API holds **no order at all** for this seller in that window. NivaDesk's six previews returning `0` were therefore
+faithful reports of an empty upstream, not a filter on NivaDesk's side dropping an order it had received — there was
+nothing to filter. What remains unproven is NivaDesk's import path itself, which has still not seen a real order.
+
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | To remove |
