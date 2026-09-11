@@ -79,6 +79,40 @@ test's accepted-values list (green, not re-run), the emulator run exercised `mac
 Still owed: one send from a real native session (the operator's test account on a device/simulator) → inbox row
 `platform: mac` — not a blocker for anything else.
 
+## 3d. Real-device check — the Mac app (11 Sep 12:02Z), one message, kept
+
+* **Build:** signed Debug build from the deploy branch at `ff514cf8` (native feedback merged), `xcodebuild … -destination 'platform=macOS'`
+  with the normal automatic signing ("Apple Development: Gunes Gocmen", Mac Team Provisioning Profile `uk.co.eggcraft.studioflow`),
+  BUILD SUCCEEDED; bundle `uk.co.eggcraft.studioflow` 1.3; launched from the scratch DerivedData (not installed, not a store build).
+* **Account and workspace, verified before the send:** the app first opened on the operator's own session (a workspace with
+  18 customers / 8 active orders — not the test one); the operator signed out and signed in as **`contact@nivadesk.co.uk`**
+  (display name `test_account`); the Home screen then showed the test workspace's content (1 customer "Pilot Check Customer",
+  £0 inventory, "Create your first project"), and a read-only Firestore check confirmed `users/GuglEFKS….activeCompanyId =
+  GuglEFKSEKNTq1xibFpJav3EWkY2` ("test") and that this workspace's only customer is "Pilot Check Customer". No workspace
+  picker appeared (the account owns one workspace).
+* **The send:** account (avatar) menu read **Account · Send feedback · Sign Out** — the entry is live in the Mac app. Form:
+  Overall = Going well, topic = A suggestion, note exactly `[NATIVE-FEEDBACK-QA] Mac uygulamasından manuel feedback doğrulaması.`
+  (zoomed and checked before sending), Send → "Sending…" → thank-you ("Thank you / We read every note …") → Close.
+* **Server (read-only):** exactly one record carries the marker across all workspaces — **`fb_uFGXmTi0BxcX`**: `companyId
+  GuglEFKSEKNTq1xibFpJav3EWkY2`, `workspaceName test`, `uid GuglEFKS…`, `userEmail contact@nivadesk.co.uk`, **`source in_app`,
+  `platform mac`, `trigger manual`**, `campaign ""`, `stage active`, `kind suggestion`, `experience easy`,
+  `feedbackType general_feedback`, `page mac/home`, `language English`, `status new`, `createdAtMs 12:02:30.875Z`.
+  `feedbackState` of the account: `lastSubmittedAtMs` 12:02:30.875Z, submissions 2 (this one and the 10 Sep pilot note).
+  Function log: `submitfeedback` request 200 at 12:02:28Z (a cold start); one **warning** "Failed to validate AppCheck token"
+  — the Debug build's App Check token is not a production one, the callable does not enforce App Check, the request succeeded;
+  noted, not a defect of the form.
+* **Admin inbox (contact@eggcraft.co.uk, /admin → Customer Feedback):** the record is the first row (11 Sept 2026, 13:02 local,
+  test, contact@nivadesk.co.uk, the marker text, New). Detail page shows **PAGE `mac/home · mac · English`**, WORKSPACE
+  `test (GuglEFKS…)`, TRIGGER Manual. Status set to **Closed** with the internal note "Test tamamlandı — native Mac QA
+  (NATIVE-FEEDBACK-QA), 11 Eyl 2026 12:02Z; müşteri talebi değildir, kayıt korunur." → "Saved.", history New 13:02 → Closed
+  13:04. Server: `status closed`, `adminNote` as typed, `statusHistory` [new 12:02:30Z by GuglEFKS…, closed 12:04:48Z by the
+  admin uid]. **The record is kept.**
+* **No side effects:** `submitFeedback` contains no mail or push call (code check: 0 matches for sendMail/messaging/push);
+  no new document in any other subcollection of the workspace after 12:02Z; orders 1 / customers 1 before and after; the
+  synthetic order `YFFB4Xqi8zSfFgPEN48t` still in the bin (`isDeleted: true`). No store build, no deploy, no store release.
+* **Not covered by this check:** iOS and Android. Their evidence stays what §3 says — iOS simulator build + the shared Swift
+  code path (`platform: "ios"`), Android compile/assemble + the emulator contract run — no real-device send on either.
+
 ## 3b. Release package — as prepared before the deploy (kept for the record)
 
 * **Source:** branch `native-feedback-screens` (code `c0deb2ba`, records on top), from the deploy branch head `37025406`;
