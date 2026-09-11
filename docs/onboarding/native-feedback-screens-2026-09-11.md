@@ -34,16 +34,16 @@ design and translation systems, one platform built and tested first, no automati
 | | `features/shell/StudioFlowMainScreen.kt` | state + `LaunchedEffect(workspaceId)` + the dialog mount; `feedbackEnabled`/`onSendFeedback` on `StudioLargeTopBar` and `StudioMobileHeader` (defaults keep other callers unchanged); the menu item in both menus (`Icons.Filled.RateReview`). |
 | | `language/StudioTranslations.kt` | `TR_FEEDBACK` (the same 22 keys) added to the `TRANSLATIONS` sum. |
 
-## 3. Builds and tests (filled in as they ran)
+## 3. Builds and tests
 
 | Check | Command / file | Result |
 |---|---|---|
 | Server contract test | `functions/test/qa/feedback.test.js` (worktree, node_modules linked from the main tree) | PASS 16 (the `platform` check inside "the record carries nothing the form did not ask for") |
 | Server rules test | `functions/test/qa/feedback-rules.test.mjs` | not run — needs the Firestore emulator (`firebase emulators:exec`); the rules did not change |
 | macOS build | `xcodebuild build -project EGGcraft.xcodeproj -scheme EGGcraft -destination 'platform=macOS' -derivedDataPath <scratch>/dd-ios CODE_SIGNING_ALLOWED=NO` | first run **BUILD FAILED** — `@Published` needs `import Combine` in the new file (member-import visibility); fixed; second run **BUILD SUCCEEDED**, exit 0, no warning from `FeedbackCenterView.swift` (log `xcodebuild-mac-feedback-2.log`, 03:11Z) |
-| iOS simulator build (the phone branches of the same file) | `… -destination 'generic/platform=iOS Simulator' …` | IOS_RESULT_PLACEHOLDER |
+| iOS simulator build (the phone branches of the same file) | `… -destination 'generic/platform=iOS Simulator' …` | **BUILD SUCCEEDED**, exit 0 (log `xcodebuild-ios-feedback.log`, 03:14Z) — the `#else` (phone) branches compile too |
 | Android Kotlin compile | `JAVA_HOME=<Android Studio JBR> ./gradlew :app:compileDebugKotlin` (worktree needed `local.properties` and `app/google-services.json` copied from the main tree — both git-ignored) | **BUILD SUCCESSFUL** in 3m 22s, exit 0; the only warnings are the pre-existing `Locale` deprecations at `StudioTranslations.kt:23-24` |
-| Android debug APK | `./gradlew :app:assembleDebug` | ANDROID_ASSEMBLE_PLACEHOLDER |
+| Android debug APK | `./gradlew :app:assembleDebug` | **BUILD SUCCESSFUL** in 1m 22s, exit 0; `app/build/outputs/apk/debug/app-debug.apk` 37.5 MB (03:14Z) — a debug APK, not a release build, not uploaded anywhere |
 | DilMotoru duplicate-key scan | python over every `_make_studioFlowFeatureTranslations_N` literal | 0 duplicates (a duplicate aborts the app at launch, not at build) |
 | Runtime send from a native app | — | **not done tonight**: a send needs a signed-in session (an unsigned Debug build has no keychain session; the simulator has none); first thing in the morning with the operator's session — see §4/§5 |
 
