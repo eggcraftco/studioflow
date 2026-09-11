@@ -251,8 +251,8 @@ radio **Sandbox**; request host `api.sandbox.ebay.com`. No token or customer fie
 | | |
 |---|---|
 | Request | `GET /sell/fulfillment/v1/order?filter=creationdate:[2026-09-10T21:00:00.000Z..2026-09-11T00:05:00.000Z]&limit=50&offset=0` — the window contains the order's creation (21:42:09Z) and its settlement (22:16:30Z) |
-| First attempt | `400 Bad Request`, error 30850 "The start and end dates can't be in the future" — the end I had typed (00:30Z) was ahead of eBay's clock; corrected once to 00:05Z, not retried further |
-| Result | **`200 OK`**, `total: 0`, `limit: 50`, `offset: 0`, `orders: []`, the `href` echoing the filter, **no `next` link** — a single, empty page, so nothing is hiding behind pagination |
+| Attempts, counted honestly | **three executions of the Fulfillment call tonight:** (1) `401 Unauthorized`, error 1001 "Invalid access token" — the Explorer's earlier seller token had expired; the operator signed the seller in again; (2) `400 Bad Request`, error 30850 "The start and end dates can't be in the future" — the end I had typed (00:30Z) was ahead of eBay's clock; (3) the corrected call below. No further retries |
+| Result (third execution) | **`200 OK`**, `total: 0`, `limit: 50`, `offset: 0`, `orders: []`, the `href` echoing the filter, **no `next` link** — a single, empty page, so nothing is hiding behind pagination |
 
 **Reading, raw vs NivaDesk.** This is eBay's own answer to the same call NivaDesk's connector makes: the Fulfillment
 API holds **no order at all** for this seller in that window. NivaDesk's six previews returning `0` were therefore
@@ -278,8 +278,10 @@ same fresh seller token as §2i. `Ack Success`, `TotalNumberOfEntries 1`, `HasMo
 | `AmountPaid` | **6.0 GBP** |
 
 **5.00 + 1.00 + 0.00 = 6.00.** The difference is the flat second-class postage the listing carried; nothing is
-unexplained. `CompleteSale` (§2e) sent no amount at all — only `OrderLineItemID` and `Paid true` — so `AmountPaid`
-was set by eBay to the order's own `Total`, with `PaymentMethod None` recording that no instrument was used.
+unexplained. `CompleteSale` (§2e) sent no amount at all — only `OrderLineItemID` and `Paid true` — and eBay reports `AmountPaid`
+equal to the order's `Total`. `PaymentMethod` reads `None`; we have found no documentation that states why, so the
+reason is left open (the seller's paid mark is not a payment transaction, and no payment instrument was ever used in
+this test). The Trading `GetOrders` above was **one execution**.
 
 ## 2k. Where this leaves the stage, and a support draft (not sent)
 
@@ -292,34 +294,49 @@ developer forum), and in parallel try, once, a buyer checkout through the sandbo
 My eBay pages are up — that is the one route that creates an order the way real buyers do. If either produces a
 Fulfillment-visible order, the acceptance tests resume from the preview step with the pilot user.
 
-### Draft for eBay Developer Technical Support — English, not sent
+### Draft for eBay Developer Technical Support — English, not sent (revised 11 Sep after the operator's review)
 
-> **Subject:** Sandbox: order completed via Trading API is not returned by the Sell Fulfillment API
+> **Subject:** Sandbox — order completed via the Trading API is not returned by the Sell Fulfillment API
 >
-> Environment: **Sandbox**. Application: `EGGCRAFT-NivaDesk-SBX-05fd51f72-0f019961`. Seller test user:
-> `testuser_nivadesk_seller1` (site UK). Buyer test user: `TESTUSER_nivadesk_buyer2`.
+> **Environment:** Sandbox. **Application (client ID):** `EGGCRAFT-NivaDesk-SBX-05fd51f72-0f019961`.
+> **Seller test user:** `testuser_nivadesk_seller1` (site UK, site ID 3). **Buyer test user:** `TESTUSER_nivadesk_buyer2`.
 >
-> Steps: (1) `AddFixedPriceItem` created listing **110590626185** (£5.00, quantity 2, `AutoPay false`, flat Royal Mail
-> 2nd Class £1.00) at 2026-09-10 21:17 UTC. (2) The buyer purchased one unit with `PlaceOffer` (`Action Purchase`) at
-> 21:42:09 UTC → order **110590626185-10000012799510**, transaction 10000012799510. (3) The seller called
-> `CompleteSale` with `Paid = true` at 22:16:30 UTC.
+> **What we did**
+> 1. `AddFixedPriceItem` (seller) created listing **110590626185** — £5.00, quantity 2, `AutoPay false`, flat postage
+>    Royal Mail 2nd Class £1.00 — on 2026-09-10 at 21:17 UTC.
+> 2. `PlaceOffer` (buyer, `Action Purchase`, quantity 1) at 21:42:09 UTC created order **110590626185-10000012799510**
+>    (transaction 10000012799510).
+> 3. `CompleteSale` (seller) with `Paid = true` at 22:16:30 UTC. Please note: this is the seller marking the order as
+>    paid; **no payment transaction took place** and no payment instrument was used at any point in this test.
 >
-> Verified with Trading `GetOrders` (seller role, `DetailLevel ReturnAll`) at 2026-09-11 00:17 UTC: `OrderStatus
-> Completed`, `CheckoutStatus.Status Complete`, `eBayPaymentStatus NoPaymentFailure`, `PaymentMethod None`, `Subtotal
-> 5.00 GBP`, `ShippingServiceCost 1.00 GBP`, `Total 6.00 GBP`, `AmountPaid 6.00 GBP`, `PaidTime 2026-09-10T22:16:30Z`.
+> **What the Trading API reports** — `GetOrders`, seller role, `DetailLevel ReturnAll`, 2026-09-11 00:17 UTC:
+> `OrderStatus Completed`, `CheckoutStatus.Status Complete`, `eBayPaymentStatus NoPaymentFailure`,
+> `PaymentMethod None`, `Subtotal 5.00 GBP`, `ShippingServiceCost 1.00 GBP` (`UK_RoyalMailSecondClassStandard`),
+> `TotalTaxAmount 0.00 GBP`, `Total 6.00 GBP`, `AmountPaid 6.00 GBP`, `PaidTime 2026-09-10T22:16:30Z`.
+> The amounts reconcile (item £5.00 + postage £1.00 = £6.00); there is no amount discrepancy.
 >
-> Fulfillment API call, seller user token with `sell.fulfillment.readonly`, at 2026-09-11 ~00:12 UTC:
+> **What the Fulfillment API reports** — seller user token (`sell.fulfillment.readonly`), 2026-09-11 ~00:12 UTC:
 > `GET https://api.sandbox.ebay.com/sell/fulfillment/v1/order?filter=creationdate:[2026-09-10T21:00:00.000Z..2026-09-11T00:05:00.000Z]&limit=50&offset=0`
-> → `200 OK`, `{"total": 0, "limit": 50, "offset": 0, "orders": []}`, no `next` link. The same call without a date
-> filter was also empty earlier (22:23 UTC).
+> → **HTTP 200**, `{"total": 0, "limit": 50, "offset": 0, "orders": []}`, no `next` link. The window covers both the
+> order's creation (21:42 UTC) and its completion (22:16 UTC). An unfiltered `getOrders` for the same seller was also
+> empty at 22:23 UTC, about seven minutes after completion.
 >
-> Expected: the checkout-complete, paid order to be returned by `getOrders` (the Fulfillment API documentation says
-> it includes transactions that have completed checkout). Actual: no orders at all for this seller.
+> **Impact:** our integration reads orders only through the Fulfillment API, so our import acceptance tests against
+> this order could not be completed.
 >
-> Question: is an order created through `PlaceOffer` and settled through `CompleteSale` expected to appear in the
-> Sandbox Fulfillment API, and if so after what delay? If not, which sandbox flow produces a Fulfillment-visible
-> order for integration testing? Sandbox web checkout pages (Purchase History / My eBay purchases) returned error
-> pages for the buyer during this test.
+> **Questions**
+> 1. Is this existing Sandbox order expected to appear in the Fulfillment API `getOrders` / `getOrder` responses?
+>    If yes, after what delay, or is something missing on our side?
+> 2. If an order created with `PlaceOffer` and marked paid with `CompleteSale` is **not** expected to appear there,
+>    what is the supported way in the Sandbox to create a test order that the Fulfillment API returns? (During this
+>    test the Sandbox web checkout pages — Purchase History and My eBay purchases — returned error pages for the
+>    buyer, so we could not complete a buyer-side checkout in the UI.)
+>
+> Thank you.
+
+**Official channel, checked on the portal on 11 Sep:** eBay Developers Program → Support → *Contact Technical
+Support* (developer.ebay.com/support), signed in as the developer account `nivadesk`, category API / Sandbox, with
+the application and the order id above. The Developer Community forum is the public alternative. **Not sent.**
 
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
