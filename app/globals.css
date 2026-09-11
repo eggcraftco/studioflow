@@ -12210,10 +12210,13 @@ body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-c
   .settings-workspace {
     grid-template-columns: 1fr;
     /* Phones scroll the page itself — release the fixed height and inner
-       scrollers so there is exactly one scrollbar. */
+       scrollers so there is exactly one scrollbar. The base rule pins the
+       grid to the container height with overflow hidden (desktop: only the
+       pane scrolls); on a phone that clipped the list and the hub at one
+       viewport height with nothing scrollable. */
     height: auto;
     min-height: 0;
-  height: 100%;
+    overflow: visible;
   }
 
   .settings-sidebar,
