@@ -72,7 +72,7 @@ Live: **`submitfeedback-00003-jez`**, 100 % traffic, created 11:27:57Z; previous
 23:42Z, the general-release deploy) retained = the rollback target (`gcloud run services update-traffic submitfeedback
 --to-revisions submitfeedback-00002-jih=100 --region europe-west2`). Environment of the new revision: the same names as the previous one plus the lines
 added to the shared `functions/.env` since 10 Sep 23:42Z — `NIVADESK_RETENTION_EXCLUDE_WORKSPACES NIVADESK_RETENTION_IN_APP NIVADESK_RETENTION_SWEEP NIVADESK_RETENTION_WORKSPACES` — which are the retention pilot flags
-(read only by the retention functions; `submitFeedback` does not read them); no name removed, no value changed by this deploy. Nothing else deployed: the other five feedback callables,
+(read only by the retention functions; `submitFeedback` does not read them); the only name present on the old revision and not the new one is `FUNCTION_SIGNATURE_TYPE`, a variable the deploy tooling injects (not in `.env`, not read by our code); no value of ours changed by this deploy. Nothing else deployed: the other five feedback callables,
 rules, indexes, `.env` untouched; no store build, no native release. The **iOS** send shape is the same file as the Mac
 one (`FeedbackCenterView.swift`, `#else` branch → `platform: "ios"`); the server side of `ios` is covered by the unit
 test's accepted-values list (green, not re-run), the emulator run exercised `mac` and `android`.
