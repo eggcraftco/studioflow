@@ -70,8 +70,9 @@ docs only). Pre-checks: the eight runbook ancestors present, tree clean, `functi
 `firebase deploy --only functions:submitFeedback --project eggcraft-studio` → "Successful update operation", exit 0.
 Live: **`submitfeedback-00003-jez`**, 100 % traffic, created 11:27:57Z; previous **`submitfeedback-00002-jih`** (10 Sep
 23:42Z, the general-release deploy) retained = the rollback target (`gcloud run services update-traffic submitfeedback
---to-revisions submitfeedback-00002-jih=100 --region europe-west2`). Environment variable set of the new revision
-identical to the previous one (same names, same count). Nothing else deployed: the other five feedback callables,
+--to-revisions submitfeedback-00002-jih=100 --region europe-west2`). Environment of the new revision: the same names as the previous one plus the lines
+added to the shared `functions/.env` since 10 Sep 23:42Z — `NIVADESK_RETENTION_EXCLUDE_WORKSPACES NIVADESK_RETENTION_IN_APP NIVADESK_RETENTION_SWEEP NIVADESK_RETENTION_WORKSPACES` — which are the retention pilot flags
+(read only by the retention functions; `submitFeedback` does not read them); no name removed, no value changed by this deploy. Nothing else deployed: the other five feedback callables,
 rules, indexes, `.env` untouched; no store build, no native release. The **iOS** send shape is the same file as the Mac
 one (`FeedbackCenterView.swift`, `#else` branch → `platform: "ios"`); the server side of `ios` is covered by the unit
 test's accepted-values list (green, not re-run), the emulator run exercised `mac` and `android`.
