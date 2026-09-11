@@ -73,3 +73,42 @@ writes nothing, so a wrong count is a wrong number on the admin page and nothing
 
 **Rollback:** route traffic back to **`getactivationfunnel-00003-cuv`** (the revision live since 11 Sep 01:15Z, retained),
 or redeploy the function from `088c673e`.
+
+## Third pass — every production reader of derive.js, the fresh dry run, the exact scope (11 Sep 11:28Z)
+
+**Readers of `lifecycle/derive.js` in production code (grep, and pinned by the test below):** exactly two call sites in
+`functions/index.js` — `getActivationFunnel` (the admin funnel) and `nvRetentionTriggerFor`, which serves the hourly
+**`retentionSweep`** and the read-time **`getRetentionMessage`**. `getSetupChecklist` does not call `deriveEvents`
+(its own reads; `substantiveOrder.js` only mentions derive in a comment). No other module requires it.
+
+**What the candidate's connection rule changes, per reader** (`functions/test/qa/lifecycle-derive-consumers.test.js`,
+4 checks, on the one row that flips — a Shopify store the merchant uninstalled; the live rule is written into the test
+as a literal copy of `status !== "unlinked"` so both sides are computed from the same rows):
+
+| Reader | Live derive (today) | Candidate derive |
+|---|---|---|
+| Funnel stage of that workspace | the uninstalled store is a connection → the workspace sits one stage further | not a connection → one stage back; **activation verdict identical** (activation needs an imported order, not a connection) |
+| Campaign selection (`retentionSweep`) | `connect_first_store` is never proposed (a connection "exists") | proposed after the setup-reminder delay (commerce path, wizard done, no imported order) |
+| Pending-card review (`getRetentionMessage`, the sweep's review) | an open `connect_first_store` card is withdrawn `goal_met` by the uninstalled store | the card stays open |
+| `getSetupChecklist` | untouched | untouched |
+
+**Fresh dry run, live derive vs candidate derive on every workspace (11 Sep 11:2xZ, credentials renewed, read-only,
+`activation-funnel-2026-09-11-raw/`):** 66 workspaces, 5 with store rows; status words present on the store rows today:
+`shopify:active` 1, `etsy:connected` 1, `ebay:connected` 1, `woo:connected` 1, `square:connected` 1, `woo:disconnected` 1,
+`square:disconnected` 1 — **no `uninstalled`, `pending`, `unlinked`, `reconnect_required` or status-less row exists today**.
+Result: integration_connected workspaces 3 / 3, connected events 4 / 4, activated 0 / 0, **workspaces that differ: 0**.
+So on today's data the two rules agree everywhere; the difference is a rule difference that shows the first time a
+merchant uninstalls the Shopify app (the scenario the tests pin), not a change to any current number.
+
+**Exact scope if only the funnel is deployed (the ask):** `getActivationFunnel` runs the candidate rule; `retentionSweep`
+and `getRetentionMessage` keep the live rule (their own revisions `retentionsweep-00001-cob`, `getretentionmessage-00001-yoy`
+are untouched by a by-name deploy of the funnel). The **behaviour difference that would remain** is the table above,
+confined to workspaces that hold an uninstalled/pending/unlinked Shopify row — none today. The retention functions are
+**not** made a mandatory part of this deploy: the pilot is one workspace (ours) with no Shopify row, so the split rule
+cannot produce a visible inconsistency there. When the retention set is next deployed for its own reason (the e-mail stage),
+it picks up the same `derive.js` and the two readers agree again — worth noting in that deploy's record, not a reason
+to widen this one.
+
+**Package, ready for approval, not run:** merge `funnel-store-connections` into the deploy branch (normal merge), pre-checks,
+`firebase deploy --only functions:getActivationFunnel --project eggcraft-studio`; verify the admin funnel reads the same
+counts as the fresh dry run (66 / 3 connected / activated unchanged); rollback = traffic back to `getactivationfunnel-00003-cuv`.
