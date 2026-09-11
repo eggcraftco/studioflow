@@ -348,6 +348,18 @@ References from the Trading `GetOrders` execution of 2026-09-11 00:17:36 UTC (no
 `t6lwbbq%60%7Espse3%60jhs9%3Fiug%60tb%7Bquq%601ehmq%2B050eee03d%3A%28rbpv1%3E.k3e7u-1a08dd3b396-0x232f`,
 `x-ebay-soa-request-id` `1a08dd3b-3970-a244-4e26-3232fff37874`, `x-ebay-pop-id` `UFES2-LVSAZ01-apisandbox`.
 
+## 2l. Sending the ticket — operator-approved (11 Sep 2026)
+
+The operator approved sending the §2k draft as one ticket through Developer Technical Support with the `nivadesk`
+developer account, on conditions: no duplicate ticket, activation only if it carries no fee / subscription / new
+agreement, no secrets, not the public forum.
+
+| Step | Observed |
+|---|---|
+| Existing tickets | `My Tickets` → "No support history available" — nothing open on this or any topic |
+| Activation | the developer account's support was **INACTIVE**. The Profile & Contacts edit form showed all primary-contact fields already filled (name, e-mail, phone, country GB) and, next to *Activate Support*, only the three-step instruction — **no fee, price, subscription, terms or agreement text anywhere**; the newsletter and survey checkboxes were left unticked. Clicked *Activate Support* with the existing details, unchanged → "Support for this contact is activated." → tickets page now reads **ACTIVE** (~00:44Z) |
+| Note | the primary phone is stored with a `+1` country code in front of a UK number; left as it was, not corrected here |
+
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | To remove |
