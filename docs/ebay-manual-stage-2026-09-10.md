@@ -167,7 +167,7 @@ Trading `GetOrders`, **seller role**, immediately after the `CompleteSale`:
 |---|---|---|
 | `OrderStatus` | `Active` | **`Completed`** |
 | `CheckoutStatus.Status` | `Incomplete` | **`Complete`** |
-| `AmountPaid` | `0.0 GBP` | **`6.00 GBP`** — £1.00 more than the £5.00 listing price. **Open question:** the fields read (`OutputSelector` limited to status fields) do not explain the difference, and the listing page advertises free Royal Mail 2nd Class, so it is not obviously postage; a full `GetOrders` (Subtotal, ShippingServiceSelected, Total) would show it — not run |
+| `AmountPaid` | `0.0 GBP` | **`6.00 GBP`** — £1.00 more than the £5.00 listing price. **Resolved in §2j** from the full order: £5.00 item + £1.00 Royal Mail 2nd Class postage, no tax (my earlier note that the listing page advertised free postage was a misreading) |
 | `PaidTime` | — | **2026-09-10T22:16:30.208Z** |
 | `CheckoutStatus.PaymentMethod` | `None` | `None` (unchanged; the order was settled by the seller's mark, not by a payment instrument) |
 
@@ -258,6 +258,68 @@ radio **Sandbox**; request host `api.sandbox.ebay.com`. No token or customer fie
 API holds **no order at all** for this seller in that window. NivaDesk's six previews returning `0` were therefore
 faithful reports of an empty upstream, not a filter on NivaDesk's side dropping an order it had received — there was
 nothing to filter. What remains unproven is NivaDesk's import path itself, which has still not seen a real order.
+
+## 2j. The £6.00 reconciled from the real order, and the seller identity confirmed (11 Sep 00:17Z)
+
+One full Trading `GetOrders` (seller role, `DetailLevel ReturnAll`, window 21:00Z–00:05Z, no `OutputSelector`), the
+same fresh seller token as §2i. `Ack Success`, `TotalNumberOfEntries 1`, `HasMoreOrders false`.
+
+| Field (from the order, not from the listing request) | Value |
+|---|---|
+| `SellerUserID` | `testuser_nivadesk_seller1` — the token and the order belong to the right sandbox seller |
+| `CreatedTime` / `PaidTime` | 2026-09-10T21:42:09Z / 2026-09-10T22:16:30.208Z |
+| `OrderStatus` / `CheckoutStatus.Status` / `eBayPaymentStatus` / `PaymentMethod` | `Completed` / `Complete` / `NoPaymentFailure` / `None` |
+| `TransactionPrice` × `QuantityPurchased` | 5.0 GBP × 1 |
+| `Subtotal` | **5.0 GBP** |
+| `ShippingServiceSelected`: `ShippingService` / `ShippingServiceCost` | `UK_RoyalMailSecondClassStandard` / **1.0 GBP** |
+| `TotalTaxAmount` | 0.0 GBP (no `SalesTaxAmount`) |
+| `AdjustmentAmount` / `AmountSaved` | 0.0 GBP / 0.0 GBP |
+| `Total` | **6.0 GBP** |
+| `AmountPaid` | **6.0 GBP** |
+
+**5.00 + 1.00 + 0.00 = 6.00.** The difference is the flat second-class postage the listing carried; nothing is
+unexplained. `CompleteSale` (§2e) sent no amount at all — only `OrderLineItemID` and `Paid true` — so `AmountPaid`
+was set by eBay to the order's own `Total`, with `PaymentMethod None` recording that no instrument was used.
+
+## 2k. Where this leaves the stage, and a support draft (not sent)
+
+The Fulfillment API is still empty for the seller ~2.5 hours after checkout completed (§2i), so the approved
+preview → import → re-import → sync acceptance tests **stay blocked**: there is no order for NivaDesk to read. No
+further queries were made, no new order or seller created, `autoSync` stays `false`, nothing deployed.
+
+**Concrete next step:** decide whether to send the draft below to eBay Developer Technical Support (or post it on the
+developer forum), and in parallel try, once, a buyer checkout through the sandbox web UI on a day the sandbox's
+My eBay pages are up — that is the one route that creates an order the way real buyers do. If either produces a
+Fulfillment-visible order, the acceptance tests resume from the preview step with the pilot user.
+
+### Draft for eBay Developer Technical Support — English, not sent
+
+> **Subject:** Sandbox: order completed via Trading API is not returned by the Sell Fulfillment API
+>
+> Environment: **Sandbox**. Application: `EGGCRAFT-NivaDesk-SBX-05fd51f72-0f019961`. Seller test user:
+> `testuser_nivadesk_seller1` (site UK). Buyer test user: `TESTUSER_nivadesk_buyer2`.
+>
+> Steps: (1) `AddFixedPriceItem` created listing **110590626185** (£5.00, quantity 2, `AutoPay false`, flat Royal Mail
+> 2nd Class £1.00) at 2026-09-10 21:17 UTC. (2) The buyer purchased one unit with `PlaceOffer` (`Action Purchase`) at
+> 21:42:09 UTC → order **110590626185-10000012799510**, transaction 10000012799510. (3) The seller called
+> `CompleteSale` with `Paid = true` at 22:16:30 UTC.
+>
+> Verified with Trading `GetOrders` (seller role, `DetailLevel ReturnAll`) at 2026-09-11 00:17 UTC: `OrderStatus
+> Completed`, `CheckoutStatus.Status Complete`, `eBayPaymentStatus NoPaymentFailure`, `PaymentMethod None`, `Subtotal
+> 5.00 GBP`, `ShippingServiceCost 1.00 GBP`, `Total 6.00 GBP`, `AmountPaid 6.00 GBP`, `PaidTime 2026-09-10T22:16:30Z`.
+>
+> Fulfillment API call, seller user token with `sell.fulfillment.readonly`, at 2026-09-11 ~00:12 UTC:
+> `GET https://api.sandbox.ebay.com/sell/fulfillment/v1/order?filter=creationdate:[2026-09-10T21:00:00.000Z..2026-09-11T00:05:00.000Z]&limit=50&offset=0`
+> → `200 OK`, `{"total": 0, "limit": 50, "offset": 0, "orders": []}`, no `next` link. The same call without a date
+> filter was also empty earlier (22:23 UTC).
+>
+> Expected: the checkout-complete, paid order to be returned by `getOrders` (the Fulfillment API documentation says
+> it includes transactions that have completed checkout). Actual: no orders at all for this seller.
+>
+> Question: is an order created through `PlaceOffer` and settled through `CompleteSale` expected to appear in the
+> Sandbox Fulfillment API, and if so after what delay? If not, which sandbox flow produces a Fulfillment-visible
+> order for integration testing? Sandbox web checkout pages (Purchase History / My eBay purchases) returned error
+> pages for the buyer during this test.
 
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
