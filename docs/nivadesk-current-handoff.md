@@ -1,4 +1,4 @@
-# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 11 September 2026, 21:45Z)
+# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 11 September 2026, 22:22Z)
 
 Read this first after a context reset or in a new session, then compare it with the live git and cloud state before
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
@@ -17,6 +17,8 @@ At the operator's request work moved to the Sales/Products plan (`NivaDesk-Sales
 | Carried-over decisions | eBay manual stage; retention e-mail test after the pilot; native store packages; admin funnel excluding internal workspaces; the iPhone items that were not itemized |
 | Time-based | retention pilot acceptance after 12 Sep ≈12:20Z (card, then restore the synthetic order, then `goal_met`; no pilot feedback or orders until then; e-mail stays off); Google case update by 15 Sep 17:00Z |
 | To resume ops | read the to-do scan table below, then `git status` and the live revisions before acting |
+
+**Sales Faz 0 is done (22:22Z).** Branch `sales-faz0` (worktree `~/Developer/studioflow-sales`) at `4b21ba99`; record `docs/sales/faz0-2026-09-11.md` carries the code map, the proposed data contract, the PR sequence, the rollout and rollback, six decisions for the operator, and the emulator prototype results at desktop and phone widths. Nothing was deployed and nothing was written to production; the emulator seed refuses to run anywhere but a local emulator. The headline findings: one order identity already exists; order lines carry no product reference and the server drops unknown line keys; the shipped iOS/Mac 1.3 (17) rewrites whole order documents, so Sales data belongs in server-written side documents; there is no product catalog; stock is not yet safe for a stocked sale, so Faz 2 waits for a hardening PR; the capability list overclaims what connectors can do.
 
 ## To-do scan (11 Sep 2026, 21:28Z)
 
