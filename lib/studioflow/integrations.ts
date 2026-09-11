@@ -165,7 +165,14 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
  * workspace has not used it yet; "available" is the same thing for a provider
  * NivaDesk talks to directly.
  */
-export type IntegrationState = "connected" | "attention" | "available" | "webhook" | "planned";
+// "checking" is the server not having answered yet and "unverified" a read that
+// did not come back: neither is "Available", and neither offers Set up.
+export type IntegrationState = "connected" | "attention" | "available" | "webhook" | "planned" | "checking" | "unverified";
+
+/** States that never offer the Set up / Manage button. */
+export function integrationStateOffersNoAction(state: IntegrationState): boolean {
+  return state === "planned" || state === "checking" || state === "unverified";
+}
 
 export type IntegrationLiveState = {
   state: IntegrationState;
@@ -253,6 +260,8 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // needsAttention is the SERVER's word (specStatus), never re-derived from
     // an error code here: the status table lives in one place and the three
     // clients copy it rather than each inventing their own reading of it.
+    // A read that did not come back is null ("could not check"), never "enabled".
+    ebayWorkspaceEnabled: ebay.status === "fulfilled" ? ebay.value.workspaceEnabled !== false : null,
     ebayConnections: ebay.status === "fulfilled"
       ? ebay.value.connections.map((row) => ({
           account: row.displayName || row.sellerUsername || row.sellerUserId,
@@ -311,6 +320,8 @@ export type IntegrationSignals = {
   squareConnections: { merchant: string; status: string; needsAttention: boolean }[];
   /** Connected eBay seller accounts, carrying the server's own specStatus. */
   ebayConnections: { account: string; status: string; specStatus: string; needsAttention: boolean; environment?: string }[];
+  /** true/false = the server's answer; null = the read failed; undefined = not read yet. */
+  ebayWorkspaceEnabled?: boolean | null;
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
@@ -417,7 +428,13 @@ function resolveProviderState(
   // working live one is not an outage.
   if (provider.id === "ebay") {
     const live = (signals.ebayConnections || []).filter((row) => row.status !== "disconnected");
-    if (live.length === 0) return { state: "available" };
+    // No connection and the workspace is not on the server's rollout list: the card reads like a
+    // planned integration (no Connect), not like something one click away.
+    if (live.length === 0) {
+      if (signals.ebayWorkspaceEnabled === false) return { state: "planned" };
+      if (signals.ebayWorkspaceEnabled === true) return { state: "available" };
+      return { state: signals.ebayWorkspaceEnabled === null ? "unverified" : "checking" };
+    }
     const broken = live.filter((row) => row.needsAttention).length;
     const sandbox = live[0].environment === "sandbox" ? " · Sandbox" : "";
     return {
@@ -473,4 +490,6 @@ export const INTEGRATION_STATE_LABELS: Record<IntegrationState, string> = {
   available: "Available",
   webhook: "Via webhook",
   planned: "Coming soon",
+  checking: "Checking…",
+  unverified: "Could not check",
 };

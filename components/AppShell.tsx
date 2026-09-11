@@ -28,6 +28,7 @@ import {
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  switchActiveWorkspace,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
   type CustomerPickerOption,
@@ -37,6 +38,7 @@ import {
   type WorkspaceSettingsOverview,
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
+import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
@@ -1163,6 +1165,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(() =>
     cachedShellMatchesUser ? cachedWorkspace : null,
   );
+  // Set when the workspace could not be resolved and no cached copy stood in:
+  // the shell shows the message with a Retry instead of a silent loading state.
+  const [workspaceLoadError, setWorkspaceLoadError] = useState("");
+  const [workspaceAccessLost, setWorkspaceAccessLost] = useState(false);
+  const [workspaceLoadAttempt, setWorkspaceLoadAttempt] = useState(0);
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(
     () => (cachedShellMatchesUser ? cachedSettings : null),
   );
@@ -1311,6 +1318,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       try {
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
         if (cancelled) return;
+        setWorkspaceLoadError("");
+        setWorkspaceAccessLost(false);
         setWorkspace(loadedWorkspace);
         rememberAppShellSnapshot(currentUser.uid, {
           workspace: loadedWorkspace,
@@ -1338,10 +1347,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           settings: resolvedSettings,
           financeOrders: loadedOrders,
         });
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           setFinanceOrdersTrusted(false);
-          if (hasCachedShellForUser(currentUser.uid) && cachedWorkspace) {
+          const accessLost = error instanceof WorkspaceAccessLostError;
+          if (!accessLost && hasCachedShellForUser(currentUser.uid) && cachedWorkspace) {
             setWorkspace(cachedWorkspace);
             setSettings(cachedSettings);
             setFinanceOrders(cachedFinanceOrders);
@@ -1351,6 +1361,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             setSettings(null);
             setFinanceOrders([]);
             setFinanceOrdersLoaded(false);
+            setWorkspaceAccessLost(accessLost);
+            setWorkspaceLoadError(
+              accessLost
+                ? "Your access to this workspace has changed. Try again, or open your own workspace."
+                : "Could not open your workspace. Check your connection and try again.",
+            );
           }
         }
       }
@@ -1360,7 +1376,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, workspaceLoadAttempt]);
 
   useEffect(() => {
     try {
@@ -2919,6 +2935,29 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             />
           ) : null}
           <div className="app-shell-scroll-area">
+            {workspaceLoadError && !workspace ? (
+              <div className="layout-error toolbar-action-message workspace-load-error" role="status">
+                <strong>{t("Workspace not opened")}</strong>
+                <span>{t(workspaceLoadError)}</span>
+                <span className="workspace-load-error-actions">
+                  <button type="button" className="button" onClick={() => setWorkspaceLoadAttempt((n) => n + 1)}>
+                    {t("Retry")}
+                  </button>
+                  {workspaceAccessLost && user ? (
+                    <button
+                      type="button"
+                      className="button is-ghost"
+                      onClick={async () => {
+                        await switchActiveWorkspace(user.uid, user.uid);
+                        setWorkspaceLoadAttempt((n) => n + 1);
+                      }}
+                    >
+                      {t("Use my own workspace")}
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
             {orderCreateError ? (
               <p className="layout-error toolbar-action-message">
                 {t(orderCreateError)}
