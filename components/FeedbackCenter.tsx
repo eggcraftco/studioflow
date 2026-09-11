@@ -41,7 +41,7 @@ const KIND_LABELS: Record<FeedbackKind, string> = { problem: "Something isn't wo
 type DialogState = { trigger: FeedbackTrigger; campaign: string };
 
 export default function FeedbackCenter({
-  workspace, uid, language, t, manualOpen, onManualClose, onAvailability
+  workspace, uid, language, t, manualOpen, onManualClose, onAvailability, onInviteVisible
 }: {
   workspace: WorkspaceContext | null;
   uid: string;
@@ -50,6 +50,8 @@ export default function FeedbackCenter({
   manualOpen: boolean;
   onManualClose: () => void;
   onAvailability?: (enabled: boolean) => void;
+  /** True while the invitation card is on screen — other cards (the retention nudge) wait. */
+  onInviteVisible?: (visible: boolean) => void;
 }) {
   const pathname = usePathname() || "";
   const [invitation, setInvitation] = useState<string>("");   // the open invitation's campaign, "" when none
@@ -65,6 +67,8 @@ export default function FeedbackCenter({
   const openerRef = useRef<HTMLElement | null>(null);
   const firstControlRef = useRef<HTMLButtonElement | null>(null);
   const companyId = workspace?.id ?? "";
+
+  useEffect(() => { onInviteVisible?.(Boolean(invitation) && !dialog); }, [invitation, dialog, onInviteVisible]);
 
   // Ask the server whether the invitation may be shown — once per ten minutes
   // per session, and again when the page changes after that. A "yes" is kept

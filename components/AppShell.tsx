@@ -50,6 +50,7 @@ import {
 import { clearOnboardingProgress } from "@/lib/studioflow/onboardingProgress";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import FeedbackCenter from "@/components/FeedbackCenter";
+import RetentionNudge from "@/components/RetentionNudge";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -1248,6 +1249,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // feature is on; the form itself lives in FeedbackCenter.
   const [feedbackManualOpen, setFeedbackManualOpen] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  const [feedbackInviteVisible, setFeedbackInviteVisible] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
   // No business type is preselected: a pre-filled choice was silently accepted by
@@ -2448,6 +2450,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             }}
           />
         ) : null}
+        {workspace && user?.uid ? (
+          <RetentionNudge
+            companyId={workspace.id}
+            uid={user.uid}
+            t={t}
+            hold={feedbackInviteVisible}
+            onOpen={(href) => router.push(href)}
+          />
+        ) : null}
         <div
           className={
             wideWorkspace
@@ -2945,6 +2956,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         manualOpen={feedbackManualOpen}
         onManualClose={() => setFeedbackManualOpen(false)}
         onAvailability={setFeedbackEnabled}
+        onInviteVisible={setFeedbackInviteVisible}
       />
       <NotificationsDrawer
         open={notifDrawerOpen}
