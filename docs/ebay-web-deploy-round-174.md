@@ -40,3 +40,23 @@ The same fixes are in the merge for Mac/iPhone/Android (`b859a2fb`) but the stor
 - iPhone: Xcode signed in with the developer Apple ID (Team 5QG48AF86V) — the Apple Development identity on this Mac suffices for a device build; phone connected by cable, Developer Mode on, trusted; scheme EGGcraft → Run on the device; sign in with a non-pilot owned account; flows: workspace opens and survives relaunch, Settings → Integrations hub (eBay Checking… → Available / Coming soon, no Connect on a non-listed workspace), Send feedback present (not sent), keyboard open in Quick Create.
 - Android: `./gradlew :app:assembleDebug` from `b859a2fb` (debug signing; the upload keystore is only for the store bundle); phone with USB debugging, `adb install -r`; same flows.
 - Store gate afterwards: Apple Distribution identity (Xcode → Accounts → Manage Certificates), ASC 1.4 (18), Play versionCode decision — operator steps, not started.
+
+## Behavioural closure — results (11 Sep 17:1xZ)
+
+### Desktop web (Browser pane, Chrome engine, ~800 px viewport, live nivadesk.app) — DONE, read-only
+Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security shows that e-mail; User ID `iZFBJq…V9o1`), workspace **EGGcraft** (Branding: "EGGcraft", subtitle "Bespoke Hand-Painted Dials"). Not the pilot workspace. Nothing was created or saved.
+
+| Check | Observed |
+|---|---|
+| Correct workspace opens and survives a reload | `/home` shows the EGGcraft brand and this workspace's data (2 of 6 getting-started, recent activity); after `location.reload()` the same workspace, same greeting/progress. |
+| eBay while checking | On opening Settings → Integrations the eBay card read **"Checking…" with no button** (t≈4.5 s after navigation), then settled into the **"Coming soon" chip row** (EGGcraft is not on the eBay list). |
+| Connect not offered on a non-listed workspace | 0 "Connect eBay" buttons anywhere on the hub; the "7 connected" count is the other integrations. (The section deep link `?ebay=1` does not open the section on this narrow layout, so the in-section sentence was not observed here — it was observed on the emulator.) |
+| "Send feedback" present | Drawer items: Home … Settings, Insights, Activity, **Send feedback**, Account, Sign Out. Not tapped. |
+| Menu and Settings navigation | Drawer opens/closes (Escape), Settings list → Profile & Security and Branding open and render. |
+
+### iPhone Safari (physical) — OPEN
+### Android Chrome (physical) — OPEN (no Android device connected)
+### iOS app `b859a2fb` (physical iPhone) — OPEN, see below
+### Android app `b859a2fb` (physical) — OPEN (no Android device connected)
+
+**iPhone 16 Pro ("Gunes Gocmen's iPhone", iOS 26.6.1, Developer Mode on) is paired with this Mac but not reachable now** (`devicectl` connection timed out — Wi-Fi only / not plugged in), so neither the installed-app check nor an install was attempted. Before any native install on it: plug in by cable, then `xcrun devicectl device info apps` must show whether NivaDesk (`uk.co.eggcraft.studioflow`) is already installed from the App Store — a debug build with the same bundle id would **replace** that store build in place (local data is kept because bundle id and team match, but the store binary is gone until reinstalled from the App Store). Per the operator's rule that counts as touching the existing app, so the install stops there and waits for an explicit go; no app will be removed to make the test pass. Group 1 (Safari on this iPhone) needs no install and can be done by the operator on the live site now.

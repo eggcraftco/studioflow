@@ -42,6 +42,8 @@ son güncelleme (sabah turu) 11:10Z.
 
 **Sabah turu 12 (17:0xZ) — kontrollü yayın TAMAM (yalnız `getEbayConnections` + web Round 174):** ön koşul: çevrimdışı kural pinlendi (`6e4c164e`; önbellekten açma yalnız aynı uid'in son sunucu-onaylı workspace'i, 18 kontrol). Merge `b859a2fb` (dört ürün ağacı adayla aynı; Stripe/feedback/funnel merge'leri korunuyor). Deploy 16:46Z → `getebayconnections-00003-xec` (geri dönüş `-00002-jur`). Web: yayın deposu `599a6f0` Round 174, 9 dosya, build önce yeşil; canlı chunk/CSS işaretleri 17:00Z'de doğrulandı (`docs/ebay-web-deploy-round-174.md`). **Oturum açık canlı UI kontrolü YAPILAMADI:** elimdeki tek production oturumu pilot hesabı (dışlandı); pilot dışı sahip olduğumuz hesap kimliği yok. Mobil tarayıcı kontrolleri simülatör/emülatör. Native mağaza sürümleri eski kodda; paket `b859a2fb`'ye taşındı, yükleme/Submit yok.
 
+**Sabah turu 13 (17:2xZ) — canlı salt-okunur web kontrolü TAMAM (masaüstü web):** operatör Browser pane'de `contact@eggcraft.co.uk` (EGGcraft workspace, pilot değil) ile girdi; doğru workspace açılıyor ve yenilemede korunuyor; eBay kartı önce "Checking…" (düğmesiz), sonra "Coming soon" chip'i, hiçbir yerde Connect yok; menüde "Send feedback" duruyor (gönderilmedi); menü/Settings gezinmesi çalışıyor; hiçbir veri yazılmadı. Fiziksel: iPhone 16 Pro eşli ama erişilemez (kabloya takılı değil) → iPhone Safari, iOS uygulaması AÇIK; Android cihaz yok → Android Chrome, Android uygulaması AÇIK. Native kurulum öncesi kural: mağaza uygulaması varsa debug build onu yerinde değiştirir → dur, onay bekle. Kayıt `docs/ebay-web-deploy-round-174.md`.
+
 ## Sabah özeti
 
 **Canlıda değişen:** hiçbir şey. Gece boyunca deploy, rules/index yayını, secret, DNS, mağaza gönderimi yapılmadı.
