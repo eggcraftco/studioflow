@@ -31580,3 +31580,31 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 }
 .workspace-load-error { display: grid; gap: 8px; }
 .workspace-load-error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Settings: the section list shows as soon as the workspace is known; the
+   counts / overview / team data arrive afterwards and this strip says so. */
+.settings-auxiliary-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+  color: var(--text-muted, #6b7280);
+  font-size: 13px;
+}
+.settings-auxiliary-state.is-error {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.08));
+  color: var(--danger, #b91c1c);
+}
+.settings-auxiliary-retry {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}

@@ -162,6 +162,14 @@ type SettingsSection = {
 // Backwards-compatible deep links. Older URLs / buttons point at the previous
 // section ids; map them onto the new Account / Workspace structure so existing
 // `?section=...` links and the avatar menu keep landing on the right screen.
+// Sections whose editors start from the counts / overview / quick-reply / team
+// data. They mount only once that data has arrived, so a Save can never post
+// an empty or default draft; the list and the other sections stay usable.
+const SETTINGS_SECTIONS_NEEDING_DETAILS = new Set<SettingsSectionId>([
+  "profile-security", "preferences", "branding", "pdf", "quick-reply", "financial",
+  "safety-uploads", "data", "plan-access", "team-access"
+]);
+
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
@@ -513,6 +521,12 @@ export default function SettingsPage() {
   const [savingBeforeExit, setSavingBeforeExit] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
+  // The section list shows as soon as the workspace is known; the counts,
+  // overview, quick-reply, team and support data arrive afterwards and the
+  // open section shows this state until they do.
+  const [auxiliaryState, setAuxiliaryState] = useState<"loading" | "ready" | "error">("loading");
+  const [auxiliaryAttempt, setAuxiliaryAttempt] = useState(0);
+  const workspaceLoadedRef = useRef(false);
   // Mobile drill-in: show the section list first, then the selected section's
   // content full-screen with a Back button (like the Mac/iPhone settings).
   const [isPhone, setIsPhone] = useState(false);
@@ -595,10 +609,34 @@ export default function SettingsPage() {
     let cancelled = false;
 
     async function run() {
+      // A new account or a retried load: nothing from the previous one may show.
+      workspaceLoadedRef.current = false;
+      setWorkspace(null);
+      setCounts(null);
+      setSettings(null);
+      setQuickReplySettings(null);
+      setTeamData(null);
+      setTeamDataLoadFailed(false);
       setLoadingSettings(true);
+      setAuxiliaryState("loading");
       setError("");
+      const mark = (name: string) => { try { performance.mark(`nv:settings:${name}`); } catch { /* not in this runtime */ } };
+      mark("start");
       try {
+        // Step 1 — the workspace and the person's access to it. This is the
+        // only thing the whole-page loading screen waits for: once it is
+        // known, the section list can be shown. Nothing below writes.
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
+        mark("workspace");
+        if (cancelled) return;
+        workspaceLoadedRef.current = true;
+        setWorkspace(loadedWorkspace);
+        setLoadingSettings(false);
+
+        // Step 2 — counts, the settings overview, quick-reply settings, team
+        // data and the support summary. They arrive on their own; the open
+        // section shows its own loading / error state until then, and the
+        // list never waits for them.
         let teamLoadFailed = false;
         const teamDataPromise = loadedWorkspace.entitlements.features.team_access
           && workspaceAccessAllows(loadedWorkspace.memberAccess, "teamAccess")
@@ -618,25 +656,36 @@ export default function SettingsPage() {
             })()
           : Promise.resolve(null);
         const isWorkflowOnly = normalizeWorkspaceRole(loadedWorkspace.role) === "workflow";
+        const timed = <T,>(name: string, promise: Promise<T>) => promise.then(value => { mark(name); return value; });
         const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData, loadedSupportUnreadSummary] = await Promise.all([
-          isWorkflowOnly ? Promise.resolve(null) : loadDashboardCounts(loadedWorkspace.id),
-          loadWorkspaceSettingsOverview(loadedWorkspace.id),
-          loadQuickReplySettings(loadedWorkspace.id),
-          teamDataPromise,
-          getSupportTicketUnreadSummary(loadedWorkspace).catch(() => null)
+          isWorkflowOnly ? Promise.resolve(null) : timed("counts", loadDashboardCounts(loadedWorkspace.id)),
+          timed("overview", loadWorkspaceSettingsOverview(loadedWorkspace.id)),
+          timed("quickReply", loadQuickReplySettings(loadedWorkspace.id)),
+          timed("team", teamDataPromise),
+          timed("support", getSupportTicketUnreadSummary(loadedWorkspace).catch(() => null))
         ]);
+        mark("auxiliary");
+        // A result belongs to the account and workspace it was started for.
         if (cancelled) return;
-        setWorkspace(loadedWorkspace);
         setCounts(loadedCounts);
         setSettings(loadedSettings);
         setQuickReplySettings(loadedQuickReplySettings);
         setTeamData(loadedTeamData);
         setTeamDataLoadFailed(teamLoadFailed);
         setSupportUnreadCount(supportUnreadTotal(loadedSupportUnreadSummary));
+        setAuxiliaryState("ready");
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load settings.");
-      } finally {
-        if (!cancelled) setLoadingSettings(false);
+        if (cancelled) return;
+        if (!workspaceLoadedRef.current) {
+          // The workspace itself could not be resolved: the page-level error, no list.
+          setError(loadError instanceof Error ? loadError.message : "Could not load settings.");
+          setLoadingSettings(false);
+        } else {
+          // The list stays; the details strip offers a retry. The cause goes
+          // to the console, not to the screen.
+          console.warn("Settings details could not be loaded:", loadError);
+          setAuxiliaryState("error");
+        }
       }
     }
 
@@ -644,7 +693,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, auxiliaryAttempt]);
 
   // Branding and Profile & Security both show the workspace name. Renaming in
   // one used to leave the other holding the name it read at mount, so its next
@@ -926,7 +975,19 @@ export default function SettingsPage() {
               actions={headerActions}
             />
           ) : null}
-          {workspace ? renderSettingsSection({
+          {workspace && auxiliaryState !== "ready" ? (
+            <div className={`settings-auxiliary-state${auxiliaryState === "error" ? " is-error" : ""}`} role="status" aria-live="polite">
+              {auxiliaryState === "loading" ? (
+                <span>{t("Loading the details for this section...")}</span>
+              ) : (
+                <>
+                  <span>{t("Some settings could not be loaded.")}</span>
+                  <button type="button" className="settings-auxiliary-retry" onClick={() => setAuxiliaryAttempt(value => value + 1)}>{t("Retry")}</button>
+                </>
+              )}
+            </div>
+          ) : null}
+          {workspace && (auxiliaryState === "ready" || !SETTINGS_SECTIONS_NEEDING_DETAILS.has(selectedSection.id)) ? renderSettingsSection({
             sectionId: selectedSection.id,
             workspace,
             counts,
