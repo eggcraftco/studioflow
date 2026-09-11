@@ -90,7 +90,7 @@ check("a message the person dismissed stays dismissed for the cooldown", async (
   const db = fakeDb();
   const first = await writer.sweepWorkspace(db, { companyId: "ws1", nowMs: T0, flags: ON, trigger: shellTrigger, templateContext: {} });
   const messageId = first.decisions[0].id;
-  assert.deepStrictEqual(await writer.dismissMessage(db, "ws1", messageId, { nowMs: T0 + MIN }), { ok: true });
+  assert.deepStrictEqual(await writer.dismissMessage(db, "ws1", messageId, { nowMs: T0 + MIN }), { ok: true, status: "dismissed" });
   // Pretend the log row expired (a new campaign of the same name) — the dismissal alone must hold it.
   db.store.delete("companies/ws1/retentionLog/complete_first_order__in_app");
   const again = await writer.sweepWorkspace(db, { companyId: "ws1", nowMs: T0 + 10 * DAY, flags: ON, trigger: { ...shellTrigger, nowMs: T0 + 10 * DAY }, templateContext: {} });
@@ -237,6 +237,42 @@ check("the support-case stamp: open sets it once, close clears it once, and the 
   assert.deepStrictEqual(closed, { ok: true, changed: true, supportCaseOpenAtMs: 0 });
   assert.deepStrictEqual(await writer.markSupportCase(db, "c1", { open: false, nowMs: T0 + 3 * HOUR }), { ok: true, changed: false, supportCaseOpenAtMs: 0 }, "closing twice writes nothing");
   assert.strictEqual((await writer.loadMessagingContext(db, "c1")).supportCaseOpen, false);
+});
+
+
+check("closing a card as acted removes it without a dismissal; Not now records the dismissal that starts the cooldown", async () => {
+  const db = fakeDb();
+  const first = await writer.sweepWorkspace(db, { companyId: "c9", nowMs: T0, flags: ON, trigger: shellTrigger });
+  const sent = first.decisions.find((d) => d.send);
+  assert.ok(sent && sent.id, "an in-app card was written");
+  const acted = await writer.dismissMessage(db, "c9", sent.id, { nowMs: T0 + HOUR, outcome: "acted" });
+  assert.deepStrictEqual(acted, { ok: true, status: "acted" });
+  const doc = db.store.get(`companies/c9/retentionMessages/${sent.id}`);
+  assert.strictEqual(doc.status, "acted");
+  assert.strictEqual(doc.actedAtMs, T0 + HOUR);
+  assert.strictEqual(doc.closedAtMs, T0 + HOUR);
+  const state = db.store.get("companies/c9/retention/state") || {};
+  assert.deepStrictEqual(state.dismissals || [], [], "acting on a card is not a dismissal");
+  // A second card, closed with Not now, does record the dismissal.
+  const db2 = fakeDb();
+  const again = await writer.sweepWorkspace(db2, { companyId: "c9", nowMs: T0, flags: ON, trigger: shellTrigger });
+  const id2 = again.decisions.find((d) => d.send).id;
+  const dismissed = await writer.dismissMessage(db2, "c9", id2, { nowMs: T0 + HOUR });
+  assert.deepStrictEqual(dismissed, { ok: true, status: "dismissed" });
+  assert.strictEqual(db2.store.get(`companies/c9/retentionMessages/${id2}`).status, "dismissed");
+  assert.strictEqual((db2.store.get("companies/c9/retention/state").dismissals || []).length, 1);
+});
+
+check("while a feedback prompt is recent the in-app nudge waits and nothing is written; e-mail candidates are not held", async () => {
+  const db = fakeDb();
+  const held = await writer.sweepWorkspace(db, { companyId: "c10", nowMs: T0, flags: ON, trigger: shellTrigger, holdInApp: true, holdReason: "feedback_prompt_recent" });
+  assert.ok(held.candidates.length >= 1, "the shell trigger proposes at least one in-app nudge");
+  assert.ok(held.decisions.every((d) => d.channel !== "in_app" || (d.send === false && d.reason === "feedback_prompt_recent")), JSON.stringify(held.decisions));
+  assert.strictEqual(db.writes().filter((k) => k.includes("/retentionMessages/")).length, 0, "no card was written while held");
+  assert.strictEqual(db.writes().filter((k) => k.includes("/retentionLog/")).length, 0, "no log row was claimed while held");
+  // The next sweep, once the hold is gone, writes the card as usual.
+  const later = await writer.sweepWorkspace(db, { companyId: "c10", nowMs: T0 + DAY, flags: ON, trigger: { ...shellTrigger, nowMs: T0 + DAY } });
+  assert.ok(later.decisions.some((d) => d.send), "after the hold the nudge goes out");
 });
 
 (async () => {

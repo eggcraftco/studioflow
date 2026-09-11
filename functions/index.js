@@ -35188,14 +35188,31 @@ function nvRetentionUnsubscribeUrl(companyId) {
 async function nvRetentionTriggerFor(db, companyId, company, nowMs) {
   const lifecycle = { derive: require("./lifecycle/derive"), activation: require("./lifecycle/activation") };
   const substantiveOrder = require("./lifecycle/substantiveOrder");
-  const [settingsSnap, orders, customers] = await Promise.all([
+  // The same snapshot the funnel reads, plus the five store connections derive.js
+  // knows: a nudge to "connect your first store" or "connect your bank" must see
+  // the connection that would cancel it (§24), so nothing here may be left out.
+  const rows = (snap) => ((snap && snap.docs) || []).map((doc) => ({ id: doc.id, ...doc.data() }));
+  const none = () => ({ docs: [] });
+  const [settingsSnap, orders, customers, banks, accounting, inventory, shopify, etsy, woo, square, ebay] = await Promise.all([
     db.collection("companySettings").doc(companyId).get(),
     db.collection("siparisler").where("companyId", "==", companyId).limit(400).get(),
-    db.collection("musteriler").where("companyId", "==", companyId).limit(400).get()
+    db.collection("musteriler").where("companyId", "==", companyId).limit(400).get(),
+    db.collection("companies").doc(companyId).collection("bankConnections").limit(20).get().catch(none),
+    db.collection("companies").doc(companyId).collection("accountingConnections").limit(20).get().catch(none),
+    db.collection("companies").doc(companyId).collection("inventoryItems").limit(400).get().catch(none),
+    db.collection("shopifyStores").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("etsyConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("wooConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("squareConnections").where("companyId", "==", companyId).limit(20).get().catch(none),
+    db.collection("ebayConnections").where("companyId", "==", companyId).limit(20).get().catch(none)
   ]);
   const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
-  const orderRows = orders.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  const { events } = lifecycle.derive.deriveEvents({ settings, orders: orderRows, customers: customers.docs.map((doc) => ({ id: doc.id, ...doc.data() })) });
+  const orderRows = rows(orders);
+  const { events } = lifecycle.derive.deriveEvents({
+    settings, orders: orderRows, customers: rows(customers),
+    bankConnections: rows(banks), accountingConnections: rows(accounting), inventoryItems: rows(inventory),
+    shopifyStores: rows(shopify), etsyConnections: rows(etsy), wooConnections: rows(woo), squareConnections: rows(square), ebayConnections: rows(ebay)
+  });
   const path = lifecycle.activation.activationPathFor(settings);
   const state = lifecycle.activation.lifecycleState({ events, path, nowMs });
   const firstOrder = substantiveOrder.firstOrderProgress(orderRows);
@@ -35239,17 +35256,30 @@ exports.retentionSweep = onSchedule({ schedule: "every 60 minutes", region: "eur
   const nowMs = Date.now();
   const transport = flags.email ? nvRetentionMailTransport() : null;
   const companies = await db.collection("companies").limit(200).get();
-  const summary = { evaluated: 0, sent: 0, refused: {} };
+  const summary = { evaluated: 0, sent: 0, refused: {}, skipped: {} };
   for (const companyDoc of companies.docs) {
     const companyId = companyDoc.id;
     const company = companyDoc.data() || {};
+    // Who may be swept: the pilot list (NIVADESK_RETENTION_WORKSPACES — empty is nobody,
+    // "*" is everyone), minus the exclude list and any workspace owned by one of us. The
+    // activation funnel counts test and internal workspaces; the sweep never messages them.
+    const scope = retentionRules.workspaceScope({
+      companyId, ownerEmail: String(company.ownerEmail || company.email || ""),
+      pilotList: process.env.NIVADESK_RETENTION_WORKSPACES, excludeList: process.env.NIVADESK_RETENTION_EXCLUDE_WORKSPACES,
+      adminEmails: [...SUPPORT_ADMIN_EMAILS].join(",")
+    });
+    if (!scope.allowed) { summary.skipped[scope.reason] = (summary.skipped[scope.reason] || 0) + 1; continue; }
     try {
       const { trigger, activated, settings } = await nvRetentionTriggerFor(db, companyId, company, nowMs);
       const context = await retentionWriter.loadMessagingContext(db, companyId);
       context.activated = activated;
       context.workspaceCancelled = String(company.billingStatus || "") === "canceled";
+      // The owner saw or answered a feedback prompt today: the in-app nudge waits.
+      const ownerUid = String(company.ownerUid || "");
+      const feedbackStateSnap = ownerUid ? await db.collection("companies").doc(companyId).collection("feedbackState").doc(ownerUid).get().catch(() => null) : null;
+      const holdInApp = retentionRules.feedbackPromptRecent(feedbackStateSnap && feedbackStateSnap.exists ? feedbackStateSnap.data() : null, nowMs);
       const result = await retentionWriter.sweepWorkspace(db, {
-        companyId, nowMs, flags, trigger, contextLoader: async () => context, transport,
+        companyId, nowMs, flags, trigger, contextLoader: async () => context, transport, holdInApp, holdReason: "feedback_prompt_recent",
         templateContext: { workspaceName: String(company.name || settings.companyName || ""), firstName: "", appUrl: "https://nivadesk.app" },
         to: String(company.ownerEmail || company.email || ""), unsubscribeUrl: nvRetentionUnsubscribeUrl(companyId)
       });
@@ -35307,5 +35337,7 @@ exports.dismissRetentionMessage = onCall({ region: "europe-west2" }, async (requ
   const { companyId } = await requireWorkspaceForBilling(request, false);
   const messageId = nvCleanString(request.data && request.data.messageId, 80);
   if (!messageId) throw new HttpsError("invalid-argument", "messageId is required.");
-  return retentionWriter.dismissMessage(admin.firestore(), companyId, messageId, { nowMs: Date.now() });
+  // "acted" = the person did what the card asked (no cooldown); anything else is a dismissal.
+  const outcome = request.data && request.data.outcome === "acted" ? "acted" : "dismissed";
+  return retentionWriter.dismissMessage(admin.firestore(), companyId, messageId, { nowMs: Date.now(), outcome });
 });

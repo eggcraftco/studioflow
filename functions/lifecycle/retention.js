@@ -310,7 +310,57 @@ function newReplyKey(randomBytes = crypto.randomBytes) {
   return randomBytes(12).toString("base64url").replace(/[^a-z0-9]/gi, "").toLowerCase().padEnd(16, "0").slice(0, 16);
 }
 
+// ---- who may be swept at all ------------------------------------------------
+
+const INTERNAL_DOMAINS = Object.freeze(["nivadesk.co.uk", "eggcraft.co.uk"]);
+
+function parseList(raw) {
+  return String(raw == null ? "" : raw).split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * Whether the sweep may consider a workspace. The pilot list works like the
+ * feedback one: unset or empty means nobody, "*" means every workspace,
+ * otherwise the exact ids. The exclude list and the internal rule win over
+ * "*": a test workspace or our own company never receives a nudge or a founder
+ * note, even though the activation funnel counts it.
+ *
+ * @param {object} input { companyId, ownerEmail, pilotList, excludeList, adminEmails, internalDomains? }
+ * @returns {{allowed: boolean, reason: string}}
+ */
+function workspaceScope(input = {}) {
+  const companyId = String(input.companyId || "").trim();
+  if (!companyId) return { allowed: false, reason: "no_company" };
+  if (new Set(parseList(input.excludeList)).has(companyId)) return { allowed: false, reason: "excluded_workspace" };
+  const email = String(input.ownerEmail || "").trim().toLowerCase();
+  const domain = email.includes("@") ? email.split("@").pop() : "";
+  const admins = new Set(parseList(input.adminEmails).map((item) => item.toLowerCase()));
+  const domains = new Set((Array.isArray(input.internalDomains) ? input.internalDomains : INTERNAL_DOMAINS).map((item) => String(item).toLowerCase()));
+  if (email && (admins.has(email) || domains.has(domain))) return { allowed: false, reason: "internal_owner" };
+  const pilot = parseList(input.pilotList);
+  if (!pilot.length) return { allowed: false, reason: "not_in_pilot" };
+  if (pilot.includes("*") || pilot.includes(companyId)) return { allowed: true, reason: "" };
+  return { allowed: false, reason: "not_in_pilot" };
+}
+
+/**
+ * True when the workspace owner saw or answered a feedback prompt inside the
+ * window (a day by default): the in-app nudge then waits for the next sweep,
+ * so two cards from two systems never stack on one screen.
+ */
+function feedbackPromptRecent(state, nowMs, windowMs = DAY_MS) {
+  const now = num(nowMs);
+  if (!now) return false;
+  const shows = Array.isArray(state && state.shows) ? state.shows : [];
+  const submissions = Array.isArray(state && state.submissions) ? state.submissions : [];
+  return [...shows, ...submissions].some((entry) => {
+    const at = num(entry && entry.atMs);
+    return at > 0 && now - at >= 0 && now - at < windowMs;
+  });
+}
+
 module.exports = {
+  workspaceScope, feedbackPromptRecent, INTERNAL_DOMAINS,
   DEFAULT_RETENTION_TIMINGS: DEFAULT_TIMINGS, RETENTION_CAMPAIGNS: CAMPAIGNS, DEFAULT_BACKOFF_MS,
   triggerCandidates, renderTemplate, parseInboundReply, strippedReplyText, replyKeyOf,
   outboxSchedule, retentionToken, verifyRetentionToken, newReplyKey

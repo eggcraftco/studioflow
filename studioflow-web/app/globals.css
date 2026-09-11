@@ -31514,3 +31514,17 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .feedback-detail-actions { display: flex; gap: 12px; align-items: center; }
 .feedback-history { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
 .feedback-history li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* Retention nudge: one card with the next step, in the same band the
+   "Continue setup" banner uses; never shown while the feedback invitation is. */
+.retention-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 14px; background: var(--surface, #fff); border-bottom: 1px solid var(--border, rgba(120, 120, 140, 0.18)); font-size: 13px; }
+.retention-nudge-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(37, 99, 235, 0.12); color: var(--accent, #2563eb); font-size: 14px; font-weight: 700; }
+.retention-nudge-text { flex: 1; min-width: 220px; }
+.retention-nudge-text strong { display: block; font-size: 12.5px; }
+.retention-nudge-text span { font-size: 11px; opacity: 0.7; }
+.retention-nudge-primary { border: 0; background: var(--accent, #2563eb); color: #fff; border-radius: 8px; padding: 7px 12px; font-weight: 700; font-size: 12px; cursor: pointer; }
+.retention-nudge-secondary { border: 0; background: rgba(120, 120, 140, 0.12); color: inherit; border-radius: 8px; padding: 7px 10px; font-weight: 600; font-size: 12px; cursor: pointer; }
+.retention-nudge-close { border: 0; background: rgba(120, 120, 140, 0.12); color: inherit; border-radius: 999px; width: 26px; height: 26px; font-weight: 700; font-size: 12px; cursor: pointer; }
+.retention-nudge button:disabled { opacity: 0.6; cursor: default; }
+.retention-nudge button:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+@media (max-width: 640px) { .retention-nudge { padding: 8px 12px; } .retention-nudge-text { min-width: 0; flex-basis: 100%; } }

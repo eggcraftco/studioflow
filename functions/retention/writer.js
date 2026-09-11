@@ -190,19 +190,27 @@ async function setOptOut(db, companyId, value, { nowMs, source } = {}) {
   return { ok: true, optOut: value === true };
 }
 
-async function dismissMessage(db, companyId, messageId, { nowMs } = {}) {
+/**
+ * Close an open message. `outcome` "dismissed" (the default) records a
+ * dismissal, which messaging.js turns into the 30-day cooldown for that
+ * campaign; "acted" means the person did what the card asked — the card goes
+ * away, and nothing is held against the campaign.
+ */
+async function dismissMessage(db, companyId, messageId, { nowMs, outcome } = {}) {
   const ref = messagesRef(db, companyId).doc(clean(messageId, 80));
   const snap = await ref.get();
   if (!snap.exists) return { ok: false, reason: "not_found" };
   const message = snap.data() || {};
-  await ref.update({ status: "dismissed", dismissedAtMs: nowMs });
+  const closed = outcome === "acted" ? "acted" : "dismissed";
+  await ref.update(closed === "acted" ? { status: "acted", closedAtMs: nowMs, actedAtMs: nowMs } : { status: "dismissed", closedAtMs: nowMs, dismissedAtMs: nowMs });
+  if (closed === "acted") return { ok: true, status: "acted" };
   const state = stateRef(db, companyId);
   const current = await state.get();
   const data = current.exists ? current.data() || {} : {};
   const dismissals = (Array.isArray(data.dismissals) ? data.dismissals : []).filter((d) => d && d.campaign).slice(-50);
   dismissals.push({ campaign: String(message.campaign || ""), atMs: nowMs });
   await state.set({ ...data, dismissals }, { merge: true });
-  return { ok: true };
+  return { ok: true, status: "dismissed" };
 }
 
 /**
@@ -211,13 +219,16 @@ async function dismissMessage(db, companyId, messageId, { nowMs } = {}) {
  * which is exactly what the operator reads before turning anything on.
  */
 async function sweepWorkspace(db, input = {}) {
-  const { companyId, nowMs, flags, trigger, contextLoader, templateContext, transport, unsubscribeUrl, to } = input;
+  const { companyId, nowMs, flags, trigger, contextLoader, templateContext, transport, unsubscribeUrl, to, holdInApp, holdReason } = input;
   const candidates = retention.triggerCandidates(trigger || {});
   if (!candidates.length) return { companyId, candidates: [], decisions: [] };
   const context = contextLoader ? await contextLoader(companyId) : await loadMessagingContext(db, companyId);
   const decisions = [];
   const taken = new Set();
   for (const candidate of candidates) {
+    // Another system's card is on the person's screen (a feedback prompt, say):
+    // the nudge waits for the next sweep rather than stacking on top of it.
+    if (holdInApp && candidate.channel === "in_app") { decisions.push({ campaign: candidate.campaign, channel: candidate.channel, send: false, reason: String(holdReason || "held") }); continue; }
     if (taken.has(candidate.channel)) { decisions.push({ campaign: candidate.campaign, channel: candidate.channel, send: false, reason: "channel_taken_this_pass" }); continue; }
     const template = retention.renderTemplate(candidate.campaign, { ...(templateContext || {}), target: (trigger && trigger.firstOrder && trigger.firstOrder.shellId) ? { orderId: trigger.firstOrder.shellId } : null, unsubscribeUrl });
     const result = await deliver(db, { companyId, candidate, context, nowMs, flags, template, transport, unsubscribeUrl, to });

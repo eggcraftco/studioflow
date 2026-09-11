@@ -4,7 +4,8 @@
 const assert = require("assert");
 const {
   triggerCandidates, renderTemplate, parseInboundReply, outboxSchedule,
-  retentionToken, verifyRetentionToken, newReplyKey, DEFAULT_RETENTION_TIMINGS, RETENTION_CAMPAIGNS
+  retentionToken, verifyRetentionToken, newReplyKey, DEFAULT_RETENTION_TIMINGS, RETENTION_CAMPAIGNS,
+  workspaceScope, feedbackPromptRecent, INTERNAL_DOMAINS
 } = require("../../lifecycle/retention");
 const { messageDecision, CAMPAIGN_GOALS } = require("../../lifecycle/messaging");
 
@@ -155,6 +156,33 @@ check("an unsubscribe token binds the secret to the workspace and nothing else v
 check("the defaults are the spec's numbers", () => {
   assert.strictEqual(DEFAULT_RETENTION_TIMINGS.setupReminderAfterMs, 12 * HOUR);
   assert.strictEqual(DEFAULT_RETENTION_TIMINGS.founderIntroAfterMs, 10 * MIN);
+});
+
+
+check("who may be swept: nobody without a pilot list, everyone with \"*\", exact ids otherwise; excludes and our own people always win", () => {
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1" }), { allowed: false, reason: "not_in_pilot" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "" }), { allowed: false, reason: "not_in_pilot" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*" }), { allowed: true, reason: "" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w0, w1 ,w2" }), { allowed: true, reason: "" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w3", pilotList: "w0,w1" }), { allowed: false, reason: "not_in_pilot" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", excludeList: "w9,w1" }), { allowed: false, reason: "excluded_workspace" }, "the exclude list beats *");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "w1", ownerEmail: "Someone@EGGcraft.co.uk" }), { allowed: false, reason: "internal_owner" }, "our own domain, any case");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "contact@nivadesk.co.uk" }), { allowed: false, reason: "internal_owner" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "admin@gmail.com", adminEmails: "x@y.z, Admin@Gmail.com" }), { allowed: false, reason: "internal_owner" }, "an admin address on any domain");
+  assert.deepStrictEqual(workspaceScope({ companyId: "w1", pilotList: "*", ownerEmail: "buyer@example.com" }), { allowed: true, reason: "" });
+  assert.deepStrictEqual(workspaceScope({ companyId: "", pilotList: "*" }), { allowed: false, reason: "no_company" });
+  assert.deepStrictEqual([...INTERNAL_DOMAINS], ["nivadesk.co.uk", "eggcraft.co.uk"]);
+});
+
+check("a feedback prompt shown or answered within a day holds the nudge; older ones and empty state do not", () => {
+  assert.strictEqual(feedbackPromptRecent(null, T0), false);
+  assert.strictEqual(feedbackPromptRecent({}, T0), false);
+  assert.strictEqual(feedbackPromptRecent({ shows: [{ campaign: "first_success_feedback", atMs: T0 - HOUR }] }, T0), true);
+  assert.strictEqual(feedbackPromptRecent({ submissions: [{ atMs: T0 - 23 * HOUR }] }, T0), true, "an answer counts as much as a show");
+  assert.strictEqual(feedbackPromptRecent({ shows: [{ atMs: T0 - 2 * DAY }] }, T0), false);
+  assert.strictEqual(feedbackPromptRecent({ shows: [{ atMs: T0 + HOUR }] }, T0), false, "a stamp in the future is ignored");
+  assert.strictEqual(feedbackPromptRecent({ shows: [{ atMs: T0 - 2 * HOUR }] }, T0, HOUR), false, "the window is a parameter");
+  assert.strictEqual(feedbackPromptRecent({ shows: [{ atMs: T0 - HOUR }] }, 0), false, "no clock, no hold");
 });
 
 (async () => {
