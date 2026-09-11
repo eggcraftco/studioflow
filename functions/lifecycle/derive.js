@@ -145,13 +145,27 @@ function deriveEvents(snapshot = {}) {
     push("customer_created", firstTime(customer.createdAtMs, customer.createdAt), customer.id || "");
   }
 
-  // ---- integrations: one connected event per live connection
+  // ---- integrations: one connected event per live connection.
+  // Each connector writes its own status word on the connection document, so "live" is read
+  // per connector from what the writers actually store, not from "anything but disconnected":
+  //   shopifyStores        "active" once linked; "uninstalled" after app/uninstalled; "pending" before the link
+  //                        and again after a workspace deletion unlinks it (companyId cleared).
+  //   etsy/woo/square/ebay "connected" once OAuth completes; "reconnect_required" / "needs_reconnect" when the
+  //                        token later fails (the shop is still connected, the person has to re-authorise);
+  //                        "disconnected" when the owner or the platform ends it.
+  // A connection with no status word at all (older rows) counts only if it carries a connect time.
+  const CONNECTED_STATES = new Set(["connected", "reconnect_required", "needs_reconnect"]);
+  const connectedByStatus = (row) => {
+    const status = String((row && row.status) || "").trim().toLowerCase();
+    if (status) return CONNECTED_STATES.has(status);
+    return millisOf(row && row.connectedAtMs) !== null;
+  };
   const connectionGroups = [
-    { rows: snapshot.shopifyStores, at: (row) => firstTime(row.linkedAt, row.createdAt, row.updatedAt), live: (row) => row.status !== "unlinked" },
-    { rows: snapshot.etsyConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
-    { rows: snapshot.wooConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
-    { rows: snapshot.squareConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" },
-    { rows: snapshot.ebayConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: (row) => row.status !== "disconnected" }
+    { rows: snapshot.shopifyStores, at: (row) => firstTime(row.linkedAt, row.createdAt, row.updatedAt), live: (row) => String((row && row.status) || "").trim().toLowerCase() === "active" },
+    { rows: snapshot.etsyConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: connectedByStatus },
+    { rows: snapshot.wooConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: connectedByStatus },
+    { rows: snapshot.squareConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: connectedByStatus },
+    { rows: snapshot.ebayConnections, at: (row) => firstTime(row.connectedAtMs, row.createdAt), live: connectedByStatus }
   ];
   for (const group of connectionGroups) {
     for (const row of list(group.rows)) {

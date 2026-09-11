@@ -30295,13 +30295,21 @@ exports.getActivationFunnel = onCall({ region: "europe-west2", timeoutSeconds: 3
     // Each workspace is read on its own rather than through collection-group
     // queries, because the counts have to be attributable to a workspace and a
     // cross-tenant scan that mixed them up would be worse than no number.
-    const [settingsSnap, orders, customers, banks, accounting, inventory] = await Promise.all([
+    const [settingsSnap, orders, customers, banks, accounting, inventory, shopify, etsy, woo, square, ebay] = await Promise.all([
       db.collection("companySettings").doc(companyId).get(),
       db.collection("siparisler").where("companyId", "==", companyId).limit(400).get(),
       db.collection("musteriler").where("companyId", "==", companyId).limit(400).get(),
       db.collection("companies").doc(companyId).collection("bankConnections").limit(20).get(),
       db.collection("companies").doc(companyId).collection("accountingConnections").limit(20).get(),
-      db.collection("companies").doc(companyId).collection("inventoryItems").limit(400).get().catch(() => ({ docs: [] }))
+      db.collection("companies").doc(companyId).collection("inventoryItems").limit(400).get().catch(() => ({ docs: [] })),
+      // The five store connections derive.js derives `integration_connected` from — the
+      // retention sweep reads them; the funnel had left them out, so a connected store
+      // never counted as a setup step here.
+      db.collection("shopifyStores").where("companyId", "==", companyId).limit(20).get().catch(() => ({ docs: [] })),
+      db.collection("etsyConnections").where("companyId", "==", companyId).limit(20).get().catch(() => ({ docs: [] })),
+      db.collection("wooConnections").where("companyId", "==", companyId).limit(20).get().catch(() => ({ docs: [] })),
+      db.collection("squareConnections").where("companyId", "==", companyId).limit(20).get().catch(() => ({ docs: [] })),
+      db.collection("ebayConnections").where("companyId", "==", companyId).limit(20).get().catch(() => ({ docs: [] }))
     ]);
 
     const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
@@ -30311,7 +30319,12 @@ exports.getActivationFunnel = onCall({ region: "europe-west2", timeoutSeconds: 3
       customers: customers.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       bankConnections: banks.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       accountingConnections: accounting.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-      inventoryItems: (inventory.docs || []).map((doc) => ({ id: doc.id, ...doc.data() }))
+      inventoryItems: (inventory.docs || []).map((doc) => ({ id: doc.id, ...doc.data() })),
+      shopifyStores: (shopify.docs || []).map((doc) => ({ id: doc.id, ...doc.data() })),
+      etsyConnections: (etsy.docs || []).map((doc) => ({ id: doc.id, ...doc.data() })),
+      wooConnections: (woo.docs || []).map((doc) => ({ id: doc.id, ...doc.data() })),
+      squareConnections: (square.docs || []).map((doc) => ({ id: doc.id, ...doc.data() })),
+      ebayConnections: (ebay.docs || []).map((doc) => ({ id: doc.id, ...doc.data() }))
     };
 
     const { events, missing } = lifecycle.derive.deriveEvents(snapshot);

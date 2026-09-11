@@ -1,0 +1,5 @@
+workspaces: 66 | with store rows: 5
+status words seen on store rows: {"etsy:connected":1,"ebay:connected":1,"shopify:active":1,"woo:disconnected":1,"square:disconnected":1,"woo:connected":1,"square:connected":1}
+integration_connected workspaces live/candidate: 3 / 3 | connected events total live/candidate: 4 / 4
+activated live/candidate: 0 / 0
+workspaces that differ: 0
