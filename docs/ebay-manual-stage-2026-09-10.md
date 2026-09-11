@@ -374,6 +374,50 @@ agreement, no secrets, not the public forum.
 **Stage status from here: awaiting eBay Developer Technical Support's reply on ticket 260910-000068.** No new
 Sandbox tests, no deploy, `autoSync: false`, all test records kept.
 
+## 2m. eBay's reply on ticket 260910-000068 — received, evaluated (portal "Response via Email", 10 Sep 6:32:50 PM portal time = 11 Sep 01:32:50Z)
+
+**What eBay Developer Support wrote (summary, not verbatim):** the Sandbox environment "is currently experiencing
+limitations, and order creation is not operational there"; their engineering team is working on it and "it may take some
+time"; they recommend testing in **production** where applicable, following the Test Listings Policy
+(`ebay.com/help/policies/listing-policies/test-listings-policy?id=5039`).
+
+**Does it explain our result?** Yes, and it closes the open question of §2g/§2i: the order we created and settled through
+the Trading API was never going to reach the Fulfillment API, because Sandbox order creation itself is not operational —
+not a propagation delay, not a NivaDesk filter, and not something a different Sandbox flow would fix today. It is also
+consistent with what we saw on the buyer side (Purchase History and My eBay purchases returning error pages) and with the
+portal assistant's earlier non-authoritative answer. The reply gives **no ETA** and does not say whether the existing order
+will surface once the Sandbox is repaired.
+
+**The recommended method, compared with what we did.** eBay's suggestion is a real production test: a genuine listing on the
+production site marked per the Test Listings Policy, bought and paid for by a real buyer account, then read through the
+Fulfillment API with a production token. We did not do this and it is not started: NivaDesk's connection is a Sandbox
+connection (`NIVADESK_EBAY_ENVIRONMENT`, sandbox keyset, sandbox RuName), the policy requires a listing that is clearly a
+test and priced/handled so that no real sale occurs, and a purchase would still move real money or fees unless cancelled.
+It needs a decision, not a repeat: nothing from tonight's Sandbox steps (listing, PlaceOffer, CompleteSale, the three
+Fulfillment executions) is worth re-running.
+
+**Options for the morning (decision 1 in the hand-off):**
+1. **Wait for the Sandbox fix** — no cost, no risk, no date; ask eBay (draft below) to notify us and to confirm whether
+   `110590626185-10000012799510` will appear once fixed. *Recommended as the default.*
+2. **Production test under the Test Listings Policy** — the only route that produces a Fulfillment-visible order now.
+   Requires: the production keyset and RuName wired into NivaDesk (or a separate production connection in the test
+   workspace), a production seller account (EGGcraft's), a test listing per the policy, a buyer account to purchase and pay
+   (real money or a cancelled/refunded order), and the acceptance tests re-planned for production data. Cost: eBay fees on
+   the listing/sale unless cancelled, plus the operational care the policy demands.
+3. **Leave the import acceptance blocked** until (1) resolves, keep `autoSync` off, and ship nothing eBay-facing that
+   depends on it — the state we are in.
+
+**Reply draft (not sent):**
+
+> Thank you for the explanation — it matches what we observed (the order created and settled through the Trading API
+> never appeared in the Fulfillment API, and the Sandbox buyer pages returned errors). Two follow-ups, if you can:
+> (1) Will the existing Sandbox order `110590626185-10000012799510` (seller `testuser_nivadesk_seller1`) become visible in
+> `getOrders` once Sandbox order creation is operational again, or will we need to create a new one? (2) Is there a way to be
+> notified when the Sandbox fix ships, or a reference we can watch (API status page item, ticket)? We will hold our
+> Sandbox testing until then; we have not started production testing.
+
+Nothing was sent, no new test, no new order, no change to the connection. `autoSync` stays off.
+
 ## 2h. Sandbox records left in place — cleanup listed separately, nothing deleted
 
 | Record | Where | To remove |
