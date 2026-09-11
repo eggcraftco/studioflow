@@ -29,5 +29,5 @@ Branding reopen sampled every 100 ms: loading overlay → strip "Loading the det
 Nothing saved, no feedback sent, no integration started. The INTEGRATIONS group was collapsed on this phone; the row was reached via the search filter as before.
 
 ## Open
-* iPhone Safari: the operator's own check (list end, hub below ChatGPT, drawer to Sign Out, loading time, device/iOS/Safari version).
+* iPhone Safari: operator report 11 Sep 21:0xZ — the Settings screen looks good on their own iPhone (normal Safari, live site). Not itemized: loading time, list end, hub below ChatGPT, drawer to Sign Out, device/iOS/Safari version.
 * Native store builds unchanged.

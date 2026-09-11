@@ -54,7 +54,7 @@ Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security sh
 | "Send feedback" present | Drawer items: Home … Settings, Insights, Activity, **Send feedback**, Account, Sign Out. Not tapped. |
 | Menu and Settings navigation | Drawer opens/closes (Escape), Settings list → Profile & Security and Branding open and render. |
 
-### iPhone Safari (physical) — OPEN
+### iPhone Safari (physical) — Settings reported good by the operator (21:0xZ); drawer and keyboard items open
 ### Android Chrome (physical) — OPEN (no Android device connected)
 ### iOS app `b859a2fb` (physical iPhone) — OPEN, see below
 ### Android app `b859a2fb` (physical) — OPEN (no Android device connected)
@@ -65,7 +65,7 @@ Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security sh
 
 | Row | How | State |
 |---|---|---|
-| iPhone Safari (live site) | operator runs it on the phone; no cable, no install; this session records the result with device/browser details when reported | OPEN |
+| iPhone Safari (live site) | operator runs it on the phone; no cable, no install; this session records the result with device/browser details when reported | Settings: operator reported good (11 Sep 21:0xZ, own iPhone, normal Safari; not itemized). Drawer to Sign Out, keyboard focus, hub chips: not stated, OPEN |
 | Android Chrome (live site) | same | OPEN — no Android device |
 | iOS app, candidate build `b859a2fb` | only the fixed candidate counts; a check on the App Store build is not evidence. When the iPhone is connected: inspect the installed app and the effect of an install first; **an install that replaces the store app waits for the operator's approval** (no guarantee is given that data is preserved); no uninstall, no data clearing | OPEN — iPhone paired, unreachable |
 | Android app, candidate build `b859a2fb` | same rules | OPEN — no Android device |
@@ -88,3 +88,5 @@ These rows do not hold anything else open. Next independent live acceptance in t
 safaridriver session works (Remote Automation on), but the automation window is a separate, signed-out Safari context; the operator's own signed-in Safari cannot be driven. Waiting for a sign-in inside the automation window (or the operator's own observations with device details). The clipping above is pure CSS on the ≤980 px breakpoint, so it is expected on the iPhone too — **not claimed until observed**.
 
 The safaridriver automation window is an isolated Safari context: it never receives the operator's session, and the operator cannot tap inside it. Two fresh sessions confirmed `cookies: 0`, `/settings` → signed out. Automation closed. The iPhone rows are therefore the operator's own observations: on 11 Sep ≈18:5xZ the operator reported on this iPhone (live site, signed in) — Settings held "Loading your workspace" for a long time, the drawer's entries after "AI Replies" were not visible, search reached Integrations, and the hub could not be scrolled below ChatGPT. The last two match the clipping reproduced on the Android phone (same ≤980 px CSS); the drawer and load-time observations remain unexplained on iPhone until re-checked after the fix. Re-check on the iPhone after Round 175: Settings list scrolls to the bottom, hub scrolls below ChatGPT, drawer reaches Sign Out, and how long "Loading your workspace" lasts.
+
+**Operator report, 11 Sep 21:0xZ:** on their own iPhone, in normal Safari on the live site (after Rounds 175 and 176), the operator reported that the Settings screen looks good (their words: "o setting kısmı güzelmiş"). The report does not itemize the list end, the hub below ChatGPT, the drawer to Sign Out, the load time, or the device/iOS/Safari version; those stay open until stated.

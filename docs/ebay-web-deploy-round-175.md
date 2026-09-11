@@ -10,7 +10,7 @@
 | Desktop check (Browser pane 1280×800, live) | grid `275px 971px`, height 615 px, `overflow: hidden`, sidebar and pane still scroll inside (1313/613, 1141/613) — desktop layout preserved. |
 | **Physical Android (Xiaomi 24040RN64Y, Android 16, Chrome 152, DevTools over USB, no override)** | `.settings-workspace` now 1307 px / `overflow: visible`; the shell's scroll area scrolls to the **last row "Support / Tickets"** (screenshot `phone-android-pa-175-list-bottom`); Integrations opens (13 cards, 4502 px) and scrolls **below ChatGPT** to Square, Open Banking, QuickBooks (`phone-android-pa-175-hub-below-gpt`); eBay stays a "Coming soon" chip, 0 Connect buttons. |
 | Status | **Android + desktop verification CLOSED (11 Sep 19:4xZ).** |
-| iPhone Safari (physical 16 Pro) | **OPEN — operator verifies in normal Safari** (list to the bottom, hub below ChatGPT, drawer to Sign Out, load time). No automation re-attempt. |
+| iPhone Safari (physical 16 Pro) | **Operator report 11 Sep 21:0xZ: the Settings screen looks good** on their own iPhone in normal Safari (live site, after Round 176). Not itemized: list to the bottom, hub below ChatGPT, drawer to Sign Out, load time; these stay open until stated. No automation re-attempt. |
 
 ## "Loading your workspace" — tracked separately, not fixed by this round
 
