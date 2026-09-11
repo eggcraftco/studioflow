@@ -58,8 +58,19 @@ async function wipe() { await cursors.cursorRef(db, "shopify", SHOP).delete(); a
     assert.strictEqual(view.orders.state, "fresh"); assert.strictEqual(view.orders.pendingRetries, 1); assert.strictEqual(view.orders.deadLetters, 1);
     assert.strictEqual(view.orders.lastWebhookAtMs, T0); assert.strictEqual(view.orders.lastSuccessAtMs, T0 + 1000);
     assert.strictEqual(health.healthView(doc, "shopify", { now: T0 + 7 * HOUR }).orders.state, "stale", "six hours without a success is stale");
-    assert.strictEqual(view.inventory.state, "never", "Shopify can read inventory; nothing has synced it yet");
-    assert.strictEqual(doc.supported.finance, true);
+    // Changed 12 Sep 2026 with the capability correction. "Supported" is what
+    // NivaDesk syncs, not what the provider's API offers: no connector reads a
+    // product or a stock level, so "never synced" promised a sync that does not
+    // exist. The registry still says Shopify's API can read inventory
+    // (capabilities.js products/inventory blocks); `implemented` is the other
+    // half, and health asks that one. The orchestrator already said the same
+    // thing (test/qa/orchestrator-envelope.test.js: "inventory is unsupported,
+    // never stale: there is no inventory sync to be behind").
+    assert.strictEqual(view.inventory.state, "unsupported", "NivaDesk has no Shopify stock sync, so it can never be fresh");
+    // Only Square records a finance entity (squareConnector.js:400, 427, 785).
+    assert.strictEqual(doc.supported.finance, false, "Shopify has no finance feed in this codebase");
+    assert.strictEqual(health.supportedEntities("square").finance, true, "Square's payouts are the one money feed");
+    assert.strictEqual(health.supportedEntities("shopify").orders, true, "orders do sync, so an empty row stays never-synced");
   });
   await wipe();
   console.log(failures === 0 ? "\n✅ FAZ 2 CURSORS + HEALTH GEÇTİ" : `\n❌ ${failures} BAŞARISIZ`);

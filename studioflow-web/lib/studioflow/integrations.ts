@@ -79,7 +79,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
   {
     id: "square", name: "Square", category: "commerce", kind: "native", mark: "S",
     blurb: "Connect your Square account once; POS, Online and Invoice sales, payments and refunds arrive on their own.",
-    capabilities: ["Orders", "Payments", "Customers"], manage: "square",
+    capabilities: ["Orders", "Payments", "Payouts", "Customers"], manage: "square",
   },
   {
     id: "etsy", name: "Etsy", category: "commerce", kind: "native", mark: "E",
@@ -107,7 +107,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     // so the tile keeps its initial the way Square's does.
     id: "ebay", name: "eBay", category: "commerce", kind: "native", mark: "E",
     blurb: "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
-    capabilities: ["Orders", "Payments", "Refunds"], manage: "ebay",
+    capabilities: ["Orders"], manage: "ebay",
   },
   {
     id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
