@@ -94,19 +94,24 @@ IMAP for automation — neither applies today.
   the poller reads nothing (its own flag check refuses even if the schedule fires), outbox rows keep their state, no data
   is deleted. Pausing the `retentionInboundPoll` scheduler alone stops reads without a deploy.
 
-## 5. Decisions for the morning (recommended choice first)
+## 5. What is settled, and the three real decisions (rewritten 11 Sep 11:1xZ)
 
-1. **Sender identity:** keep "Gunes from NivaDesk <contact@nivadesk.co.uk>" — *recommended*; exists, authenticated
-   (SPF/DKIM for the support mail), no new identity to warm up. Alternative: a dedicated founder mailbox.
-2. **Reply address:** the same mailbox — *recommended*; replies land where support already reads.
-3. **Mailbox access for the poller:** reuse the existing `NIVADESK_SMTP_PASSWORD` for IMAP in the pilot — *recommended
-   for the one-workspace pilot only*; before general launch, a dedicated mailbox + its own secret (cost: one mailbox seat,
-   to be checked in the Hostinger panel).
-4. **Should activation stop the founder note?** Today it does not (only setup-kind notes stop; the founder note is a
-   personal question, not a setup nudge) — *recommended: keep*, the note reads fine to an activated founder.
-5. **Token secret:** create `NIVADESK_RETENTION_TOKEN_SECRET` (operator action) — required for any e-mail send.
-6. **Poll cadence:** hourly — *recommended* (matches the sweep, one login per hour); the §6.5 proposal said 15 min.
-7. **Confirm the IMAP host/port** in the Hostinger panel before the deploy (two minutes, operator).
+**Verified technical facts (no decision needed):**
+* Hostinger's own e-mail service: **IMAP `imap.hostinger.com` port 993 (TLS/SSL)**, POP3 `pop.hostinger.com` 995, **SMTP `smtp.hostinger.com` 465 (TLS/SSL)** — Hostinger documentation (docs.hostinger.com/emails/setup-devices; the support article 1575756 says the same). The code's defaults are exactly these; nothing to configure for host/port.
+* Current sending configuration: `functions/.env` carries **no** `NIVADESK_SMTP_*` line, so the code defaults apply (host `smtp.hostinger.com`, port 465, user = `contact@nivadesk.co.uk`); the password is the secret `NIVADESK_SMTP_PASSWORD`, already used by the support/ticket/invitation mails. The retention note would leave through the same transport.
+* Hostinger's documentation does not mention plus-addressing; it is not needed — the subject tag and `In-Reply-To` carry the key, `NIVADESK_RETENTION_REPLY_DOMAIN` stays unset.
+* Secret Manager metadata could not be read this morning: gcloud and the Firebase CLI both report expired credentials (`gcloud auth login` / `firebase login --reauth` — the operator's sign-in). The last known state (10 Sep records): `NIVADESK_SMTP_PASSWORD` exists; `NIVADESK_RETENTION_TOKEN_SECRET` and `NIVADESK_RETENTION_INBOUND_SECRET` do not.
+
+**Routine choices, made with a reason (say so if you want them otherwise):**
+* Poll cadence **hourly** (one IMAP login per hour, matches the sweep; the 15-minute figure in the earlier proposal buys nothing for a founder note).
+* Activation **does not** stop the founder note (it is a personal question, not a setup nudge; only setup-kind mails stop — the rule `messaging.js` already applies).
+* Inbound mode `imap` on the existing HTTP route's flag; the HTTP route stays for a provider later.
+* The unsubscribe token secret: **I create it** once the CLI is signed in — `firebase functions:secrets:set NIVADESK_RETENTION_TOKEN_SECRET` fed with 32 random bytes (hex) generated locally; nobody types it, nothing is written to a file or a record. Required permission on `eggcraft-studio`: Secret Manager Admin (`roles/secretmanager.admin`) or Owner on the signed-in account — the operator's account is the project owner, so the sign-in is the only prerequisite. It becomes readable to the functions when they are deployed with `secrets: [NIVADESK_RETENTION_TOKEN_SECRET]` (already declared in code).
+
+**The three decisions that are yours:**
+1. **Sender and reply identity:** the notes go out as "Gunes from NivaDesk <contact@nivadesk.co.uk>" and replies come back to the same mailbox — *recommended* (authenticated, already in use, replies land where support reads). Alternative: a dedicated mailbox (one Hostinger mailbox seat; price to check in the panel; a new sending identity to warm up).
+2. **Mailbox access for the poller:** read the shared `contact@nivadesk.co.uk` inbox over IMAP with the existing `NIVADESK_SMTP_PASSWORD` for the **one-workspace pilot** — *recommended for the pilot*; before a general launch, a dedicated mailbox and its own secret (decision 1's alternative solves both).
+3. **Permission to send in the pilot:** turn `EMAIL=1` + `INBOUND=1` + `INBOUND_MODE=imap` on for the single pilot workspace (our test account is the recipient), deploy the retention set by name per §4 — yes/no. Nothing is sent until this is a yes and the token secret exists.
 
 ## 6. Evidence and pointers
 
