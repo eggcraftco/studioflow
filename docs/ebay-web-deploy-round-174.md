@@ -71,3 +71,18 @@ Signed in by the operator as **`contact@eggcraft.co.uk`** (Profile & Security sh
 | Android app, candidate build `b859a2fb` | same rules | OPEN — no Android device |
 
 These rows do not hold anything else open. Next independent live acceptance in the hand-off: after 12 Sep 12:20 UTC, retention card → restore the synthetic order → `goal_met`; until then no new feedback or order from the pilot account; e-mail stays off.
+
+## Physical-phone results (11 Sep 19:0x–19:3xZ)
+
+### Android Chrome — physical Xiaomi 24040RN64Y, Android 16, Chrome 152 (driven through Chrome's DevTools channel over USB; no adb input injection) — account `contact@eggcraft.co.uk`, workspace EGGcraft (signed in by the operator)
+| Check | Observed |
+|---|---|
+| Settings load | `/settings` reload: "Loading your workspace… Checking your account access." from 0.4 s to **6.3 s**, then the list. (`domContentLoaded` 0.46 s, `load` 1.8 s — the wait is the settings page's own data chain, not the page load.) A first visit on this phone before sign-in showed the same screen ~30 s and then `/login` — that was a missing session, not the workspace. |
+| Drawer | Opens; 957 px of items in a 664 px box, scrolls (scrollTop moved), body locked while open; after scrolling, Settings → Insights → Activity → Send feedback → Account → Sign Out are all reachable (screenshot `phone-android-pa-drawer-scrolled`). |
+| Settings list / Integrations scroll — **the reported defect, reproduced** | **No scrollable element on `/settings` at all**: `main` 747 px = viewport, `.app-shell-scroll-area` 674/674, and `.settings-workspace` **673 px tall, `overflow: hidden`, content 1306 px** — the section list is cut after Customer SMS and the Integrations hub (4502 px of cards) cannot be scrolled below the first card. Cause: `app/globals.css` phone rule for `.settings-workspace` (`@media (max-width: 980px)`) ends with `height: 100%` (commit `61465d75d`, 28 Aug) after the intended `height: auto`, and the base rule keeps `overflow: hidden`. **Pre-existing since 28 Aug; not introduced by Round 174.** |
+| Fix verified on this phone | Injecting `height:auto; min-height:0; overflow:visible` for `.settings-workspace` ≤980px: the list scrolls to its last row ("Support / Tickets"), the hub scrolls (4502 px) and cards below ChatGPT — Square, Open Banking, QuickBooks — come into view; removing the override brings the clip back (674/674, scrollTop stays 0). Candidate commit **`eb77d083`** carries exactly this rule. |
+| Hub layout (Round 174) | Filter chips on one row (same top for all four); category badge below the title; eBay shown as a "Coming soon" chip; 0 "Connect eBay" buttons. |
+| Not observed | Keyboard-open behaviour on this phone (input injection refused by MIUI; no typing done). |
+
+### iPhone Safari — physical iPhone 16 Pro, iOS 26.6.1 — NOT YET
+safaridriver session works (Remote Automation on), but the automation window is a separate, signed-out Safari context; the operator's own signed-in Safari cannot be driven. Waiting for a sign-in inside the automation window (or the operator's own observations with device details). The clipping above is pure CSS on the ≤980 px breakpoint, so it is expected on the iPhone too — **not claimed until observed**.
