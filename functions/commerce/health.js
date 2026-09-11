@@ -15,9 +15,25 @@ function healthDocId(provider, connectionId) {
 }
 function healthRef(db, provider, connectionId) { return db.collection(COLLECTION).doc(healthDocId(provider, connectionId)); }
 
-/** Which entities this provider can even be fresh about. */
+/**
+ * Which entities this provider can even be fresh about — what THIS codebase
+ * reads, not what the provider's API offers. The two were the same test until
+ * now, so an entity nobody syncs reported "never", which reads as a sync that
+ * has not run yet rather than one that does not exist. `implemented` in the
+ * registry is the answer; the protocol blocks remain the fallback for an entry
+ * that predates it.
+ */
 function supportedEntities(provider) {
   const caps = getCapabilities(provider) || {};
+  const implemented = caps.implemented && typeof caps.implemented === "object" ? caps.implemented : null;
+  if (implemented) {
+    return {
+      orders: implemented.orders === true,
+      products: implemented.products === true,
+      inventory: implemented.inventory === true,
+      finance: implemented.finance === true
+    };
+  }
   return {
     orders: Boolean(caps.orders && caps.orders.read),
     products: Boolean(caps.products && caps.products.read),
