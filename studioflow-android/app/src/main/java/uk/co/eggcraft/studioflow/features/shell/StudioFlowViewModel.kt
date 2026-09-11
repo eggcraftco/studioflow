@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uk.co.eggcraft.studioflow.data.firebase.WorkspaceAccessLostException
+import uk.co.eggcraft.studioflow.data.firebase.WorkspaceUnavailableException
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
 import uk.co.eggcraft.studioflow.data.model.StudioKeepCollaborationInvite
@@ -112,6 +114,8 @@ data class StudioFlowUiState(
     val settingsSaving: Boolean = false,
     val user: FirebaseUser? = null,
     val workspace: StudioWorkspace? = null,
+    /** Set when the server confirmed the stored workspace no longer admits this person; the person decides. */
+    val workspaceAccessLostCompanyId: String? = null,
     val availableWorkspaces: List<StudioWorkspaceOption> = emptyList(),
     val workspaceSettings: StudioWorkspaceSettings = StudioWorkspaceSettings(),
     val orders: List<StudioOrder> = emptyList(),
@@ -1443,12 +1447,27 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun retryWorkspace() {
+        val user = mutableState.value.user ?: return
+        mutableState.update { it.copy(errorMessage = "", workspaceAccessLostCompanyId = null) }
+        loadWorkspace(user)
+    }
+
+    /** The person's explicit choice after the server confirmed their access is gone. */
+    fun useOwnWorkspaceAfterAccessLoss() {
+        val user = mutableState.value.user ?: return
+        mutableState.update { it.copy(workspaceAccessLostCompanyId = null) }
+        switchWorkspace(user.uid)
+    }
+
     private fun loadWorkspace(user: FirebaseUser) {
         workspaceJob = viewModelScope.launch {
             runCatching { repository.loadWorkspace(user) }
                 .onSuccess { workspace ->
+                    // A result belongs to the account it was started for.
+                    if (mutableState.value.user?.uid != user.uid) return@onSuccess
                     mutableState.update {
-                        it.copy(loading = false, workspace = workspace, errorMessage = "")
+                        it.copy(loading = false, workspace = workspace, errorMessage = "", workspaceAccessLostCompanyId = null)
                     }
                     viewModelScope.launch {
                         runCatching { repository.loadWorkspaceOptions(user, workspace.id) }
@@ -1460,15 +1479,24 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     startLiveWorkspaceListener(user, workspace.id)
                 }
                 .onFailure { error ->
+                    if (mutableState.value.user?.uid != user.uid) return@onFailure
+                    val accessLost = (error as? WorkspaceAccessLostException)?.companyId
+                    // The resolver's own sentences are shown as they are; other
+                    // failures keep the generic wording.
+                    val message = when (error) {
+                        is WorkspaceAccessLostException, is WorkspaceUnavailableException -> t(error.message.orEmpty())
+                        else -> friendlyErrorMessage(error, "Could not load workspace.", ::t)
+                    }
                     mutableState.update {
-                        it.copy(loading = false, errorMessage = friendlyErrorMessage(error, "Could not load workspace.", ::t))
+                        it.copy(loading = false, workspaceAccessLostCompanyId = accessLost, errorMessage = message)
                     }
                     // Offline or flaky network at launch: retry quietly so the app
-                    // recovers by itself instead of sitting on a blank screen.
-                    viewModelScope.launch {
+                    // recovers by itself instead of sitting on a blank screen. A
+                    // confirmed loss of access waits for the person's choice.
+                    if (accessLost == null) viewModelScope.launch {
                         kotlinx.coroutines.delay(8000)
                         val currentUser = mutableState.value.user
-                        if (currentUser != null && mutableState.value.workspace == null) {
+                        if (currentUser?.uid == user.uid && mutableState.value.workspace == null && mutableState.value.workspaceAccessLostCompanyId == null) {
                             loadWorkspace(currentUser)
                         }
                     }

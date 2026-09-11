@@ -296,14 +296,47 @@ class StudioFlowRepository(
     suspend fun loadWorkspace(user: FirebaseUser): StudioWorkspace {
         ensureWorkspaceForUser(user)
         val userDoc = db.collection("users").document(user.uid).get().await()
-        var companyId = userDoc.getString("activeCompanyId").orEmpty().ifEmpty { user.uid }
-        var companyDoc = db.collection("companies").document(companyId).get().await()
-        if (!companyDoc.exists() && companyId != user.uid) {
-            companyId = user.uid
-            companyDoc = db.collection("companies").document(companyId).get().await()
+        val storedActive = userDoc.getString("activeCompanyId")
+        // A cache-only answer is not the account's stored workspace; the decision
+        // (WorkspaceResolver) treats it as "unknown", never as a first setup.
+        val stored: WorkspaceStoredRead =
+            if (userDoc.metadata.isFromCache) WorkspaceStoredRead.Cache(storedActive)
+            else WorkspaceStoredRead.Server(storedActive)
+        val step = WorkspaceResolver.preferred(user.uid, stored)
+
+        var companyDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+        val decision = when (step) {
+            is WorkspacePreferredStep.Retry -> WorkspaceResolver.decide(user.uid, step, WorkspaceAccessOutcome.Unavailable)
+            is WorkspacePreferredStep.Check -> {
+                val read = runCatching { db.collection("companies").document(step.companyId).get().await() }
+                companyDoc = read.getOrNull()
+                val access = when {
+                    // The rules refusing the read is the server's answer, not a transient failure.
+                    (read.exceptionOrNull() as? com.google.firebase.firestore.FirebaseFirestoreException)?.code ==
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED -> WorkspaceAccessOutcome.Denied
+                    read.isFailure -> WorkspaceAccessOutcome.Unavailable
+                    companyDoc?.metadata?.isFromCache == true && companyDoc?.exists() != true -> WorkspaceAccessOutcome.Unavailable
+                    companyDoc?.exists() == true -> WorkspaceAccessOutcome.Granted
+                    else -> WorkspaceAccessOutcome.Denied
+                }
+                WorkspaceResolver.decide(user.uid, step, access)
+            }
         }
-        val userData = userDoc.data.orEmpty()
-        return buildWorkspace(companyId, companyDoc.data.orEmpty(), userData, user)
+
+        return when (decision) {
+            is WorkspaceDecision.Retry -> throw WorkspaceUnavailableException(decision.reason)
+            is WorkspaceDecision.AccessLost -> throw WorkspaceAccessLostException(decision.companyId)
+            is WorkspaceDecision.Activate -> {
+                val doc = if (companyDoc != null && companyDoc?.id == decision.companyId) companyDoc!!
+                    else db.collection("companies").document(decision.companyId).get().await()
+                if (decision.persist) {
+                    // First setup, confirmed by the server: record the personal workspace.
+                    db.collection("users").document(user.uid)
+                        .set(mapOf("activeCompanyId" to decision.companyId, "updatedAt" to FieldValue.serverTimestamp()), SetOptions.merge())
+                }
+                buildWorkspace(decision.companyId, doc.data.orEmpty(), userDoc.data.orEmpty(), user)
+            }
+        }
     }
 
     private fun buildWorkspace(
@@ -448,7 +481,10 @@ class StudioFlowRepository(
         if (photoUrl.isNotBlank() && userDoc.getString("photoURL").isNullOrBlank()) {
             userPayload["photoURL"] = photoUrl
         }
-        if (userDoc.getString("activeCompanyId").isNullOrBlank()) {
+        // Only a server-confirmed empty value is a first setup. A cache-only
+        // read (offline, fresh install before the first sync) proves nothing and
+        // must not point the account at the personal workspace.
+        if (!userDoc.metadata.isFromCache && userDoc.getString("activeCompanyId").isNullOrBlank()) {
             userPayload["activeCompanyId"] = uid
         }
         // Fire-and-forget: Firestore queues this write while offline; awaiting it

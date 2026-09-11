@@ -300,26 +300,61 @@ struct WorkspaceLoadingView: View {
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("seciliDil") private var seciliDil: String = "English"
 
+    private var accessLost: Bool { authVM.workspaceAccessLostCompanyId != nil }
+    private var unresolved: Bool { accessLost || !authVM.workspaceResolutionMessage.isEmpty }
+
     var body: some View {
         ZStack {
             (colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.94))
                 .ignoresSafeArea()
 
             VStack(spacing: 18) {
-                ProgressView()
-                    .controlSize(.large)
+                if unresolved {
+                    Image(systemName: accessLost ? "person.crop.circle.badge.exclamationmark" : "wifi.exclamationmark")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundColor(.secondary)
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
 
-                Text(t("Opening NivaDesk", lang: seciliDil))
+                Text(t(unresolved ? "Workspace not opened" : "Opening NivaDesk", lang: seciliDil))
                     .font(.system(size: 24, weight: .bold))
 
-                Text(t("Preparing your workspace...", lang: seciliDil))
+                Text(t(accessLost
+                       ? "Your access to this workspace has changed. Try again, or open your own workspace."
+                       : (authVM.workspaceResolutionMessage.isEmpty ? "Preparing your workspace..." : authVM.workspaceResolutionMessage),
+                       lang: seciliDil))
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                if unresolved {
+                    Button {
+                        authVM.retryWorkspaceResolution()
+                    } label: {
+                        Text(t("Retry", lang: seciliDil))
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("workspace-retry")
+
+                    if accessLost {
+                        Button {
+                            authVM.useOwnWorkspaceAfterAccessLoss()
+                        } label: {
+                            Text(t("Use my own workspace", lang: seciliDil))
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
                 Button(role: .destructive) {
                     authVM.logout()
                 } label: {
-                    Text("Sign Out")
+                    Text(t("Sign Out", lang: seciliDil))
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .buttonStyle(.plain)

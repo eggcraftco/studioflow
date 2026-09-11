@@ -891,6 +891,18 @@ class AuthViewModel: ObservableObject {
     @Published var isLocalUnlockSatisfied: Bool = true
     @Published var localUnlockMessage: String = ""
 
+    /// Set when the workspace could not be resolved (a read that did not reach
+    /// the server): the loading screen shows it with a Retry. Nothing is
+    /// activated and nothing is written until a read succeeds.
+    @Published var workspaceResolutionMessage: String = ""
+    /// Set when the server confirmed the stored workspace no longer admits this
+    /// person. The app does not switch on its own; the person retries or picks
+    /// their own workspace.
+    @Published var workspaceAccessLostCompanyId: String? = nil
+    /// Bumped on every sign-in, sign-out and account change; a resolution result
+    /// started under an older generation is dropped (WorkspaceResolver.resultApplies).
+    private var resolutionGeneration: Int = 0
+
     private let localUnlockDefaultsKey = "studioflow_require_local_unlock"
     private let autoLockMinutesDefaultsKey = "studioflow_auto_lock_minutes"
     private var bypassNextLocalUnlockAfterInteractiveSignIn = false
@@ -1016,6 +1028,9 @@ class AuthViewModel: ObservableObject {
                     if self.isLoggedIn || self.currentUserId != nil {
                         self.interfaceSessionId = UUID()
                     }
+                    self.resolutionGeneration += 1
+                    self.workspaceResolutionMessage = ""
+                    self.workspaceAccessLostCompanyId = nil
                     self.stopRealtimeWorkspaceListeners()
                     self.currentUserId = nil
                     self.currentCompanyId = nil
@@ -1030,6 +1045,10 @@ class AuthViewModel: ObservableObject {
                 let isSameResolvedUser = self.currentUserId == user.uid && self.isWorkspaceReady && self.currentCompanyId != nil
                 if self.currentUserId != user.uid {
                     self.interfaceSessionId = UUID()
+                    self.resolutionGeneration += 1
+                    self.workspaceResolutionMessage = ""
+                    self.workspaceAccessLostCompanyId = nil
+                    self.stopRealtimeWorkspaceListeners()
                     self.currentCompanyId = nil
                     self.isWorkspaceReady = false
                 }
@@ -1331,13 +1350,13 @@ class AuthViewModel: ObservableObject {
 
                 guard let data = snapshot?.data() else {
                     if companyId != user.uid {
-                        self.handleActiveWorkspaceAccessLost(for: user, message: "This workspace is no longer available. Switched to your own workspace.")
+                        self.handleActiveWorkspaceAccessLost(for: user, companyId: companyId)
                     }
                     return
                 }
 
                 guard self.accessibleWorkspaceRole(from: data, companyId: companyId, currentUid: user.uid) != nil else {
-                    self.handleActiveWorkspaceAccessLost(for: user, message: "Your access to this workspace has been removed. Switched to your own workspace.")
+                    self.handleActiveWorkspaceAccessLost(for: user, companyId: companyId)
                     return
                 }
 
@@ -2720,36 +2739,112 @@ class AuthViewModel: ObservableObject {
     }
 
     private func resolveActiveCompany(for user: User) {
-        db.collection("users").document(user.uid).getDocument { [weak self] snapshot, _ in
-            let activeCompanyId = (snapshot?.data()?["activeCompanyId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let preferredCompanyId = activeCompanyId?.isEmpty == false ? activeCompanyId! : user.uid
-
-            self?.validateCompanyAccess(companyId: preferredCompanyId, user: user) { [weak self] hasAccess in
-                Task { @MainActor in
-                    guard let self else { return }
-                    let finalCompanyId = hasAccess ? preferredCompanyId : user.uid
-                    self.activateCompany(finalCompanyId, user: user, message: nil)
+        let generation = resolutionGeneration
+        db.collection("users").document(user.uid).getDocument { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self else { return }
+                guard WorkspaceResolver.resultApplies(startedForUid: user.uid, startedGeneration: generation,
+                                                      currentUid: self.currentUserId, currentGeneration: self.resolutionGeneration) else { return }
+                let stored: WorkspaceStoredRead
+                if error != nil {
+                    stored = .failed
+                } else {
+                    let active = (snapshot?.data()?["activeCompanyId"] as? String)
+                    stored = (snapshot?.metadata.isFromCache ?? false) ? .cache(activeCompanyId: active) : .server(activeCompanyId: active)
+                }
+                let step = WorkspaceResolver.preferred(uid: user.uid, stored: stored)
+                switch step {
+                case .retry:
+                    self.apply(decision: WorkspaceResolver.decide(uid: user.uid, step: step, access: .unavailable), user: user)
+                case .check(let companyId, _):
+                    if companyId == user.uid {
+                        self.apply(decision: WorkspaceResolver.decide(uid: user.uid, step: step, access: .granted), user: user)
+                        return
+                    }
+                    self.checkWorkspaceAccess(companyId: companyId, user: user) { [weak self] access in
+                        Task { @MainActor in
+                            guard let self else { return }
+                            guard WorkspaceResolver.resultApplies(startedForUid: user.uid, startedGeneration: generation,
+                                                                  currentUid: self.currentUserId, currentGeneration: self.resolutionGeneration) else { return }
+                            self.apply(decision: WorkspaceResolver.decide(uid: user.uid, step: step, access: access), user: user)
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Offline safety-net resolver: reads ONLY the local cache (never waits on the
-    // network) to find the active workspace, falling back to the personal workspace,
-    // then activates it. Runs if the normal bootstrap hasn't completed in time.
-    private func proceedWithCachedWorkspaceIfStalled(for user: User) {
-        guard isLoggedIn, currentUserId == user.uid, !isWorkspaceReady else { return }
-        db.collection("users").document(user.uid).getDocument(source: .cache) { [weak self] snapshot, _ in
+    private func apply(decision: WorkspaceDecision, user: User) {
+        switch decision {
+        case .activate(let companyId, let persist):
+            workspaceResolutionMessage = ""
+            workspaceAccessLostCompanyId = nil
+            activateCompany(companyId, user: user, message: nil, persist: persist)
+        case .retry:
+            // Nothing is activated and nothing is written. The loading screen
+            // shows the message with a Retry; the offline safety net may still
+            // open a cached workspace without writing it.
+            workspaceResolutionMessage = "Could not open your workspace. Check your connection and try again."
+        case .accessLost(let companyId):
+            workspaceResolutionMessage = ""
+            workspaceAccessLostCompanyId = companyId
+            isWorkspaceReady = false
+        }
+    }
+
+    /// Retry after a failed resolution (the button on the loading screen).
+    func retryWorkspaceResolution() {
+        guard let user = Auth.auth().currentUser else { return }
+        workspaceResolutionMessage = ""
+        workspaceAccessLostCompanyId = nil
+        ensureCompanyDocument(for: user) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.isLoggedIn, self.currentUserId == user.uid, !self.isWorkspaceReady else { return }
-                let cachedActive = (snapshot?.data()?["activeCompanyId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let companyId = (cachedActive?.isEmpty == false) ? cachedActive! : user.uid
-                self.activateCompany(companyId, user: user, message: nil)
+                self?.resolveActiveCompany(for: user)
             }
         }
     }
 
-    private func activateCompany(_ companyId: String, user: User, message: String?) {
+    /// The person's explicit choice after the server confirmed their access to
+    /// the stored workspace is gone. This is the one path that records the
+    /// personal workspace on their behalf.
+    func useOwnWorkspaceAfterAccessLoss() {
+        workspaceAccessLostCompanyId = nil
+        usePersonalCompany()
+    }
+
+    // Offline safety-net resolver: reads ONLY the local cache (never waits on the
+    // network) to find the active workspace, then opens it WITHOUT writing it
+    // back. An empty cache is not proof of anything, so it never falls back to
+    // the personal workspace; the loading screen keeps its Retry instead.
+    // Runs if the normal bootstrap hasn't completed in time.
+    private func proceedWithCachedWorkspaceIfStalled(for user: User) {
+        // Only while the bootstrap is still silent: once the server has answered
+        // (retry shown, or access lost) the cache must not override that answer.
+        guard isLoggedIn, currentUserId == user.uid, !isWorkspaceReady,
+              workspaceAccessLostCompanyId == nil, workspaceResolutionMessage.isEmpty else { return }
+        let generation = resolutionGeneration
+        db.collection("users").document(user.uid).getDocument(source: .cache) { [weak self] snapshot, _ in
+            Task { @MainActor in
+                guard let self, self.isLoggedIn, !self.isWorkspaceReady,
+                      self.workspaceAccessLostCompanyId == nil, self.workspaceResolutionMessage.isEmpty else { return }
+                guard WorkspaceResolver.resultApplies(startedForUid: user.uid, startedGeneration: generation,
+                                                      currentUid: self.currentUserId, currentGeneration: self.resolutionGeneration) else { return }
+                let cachedActive = snapshot?.data()?["activeCompanyId"] as? String
+                guard let decision = WorkspaceResolver.stalledDecision(uid: user.uid, cachedActiveCompanyId: cachedActive) else {
+                    if self.workspaceResolutionMessage.isEmpty {
+                        self.workspaceResolutionMessage = "Could not open your workspace. Check your connection and try again."
+                    }
+                    return
+                }
+                self.apply(decision: decision, user: user)
+            }
+        }
+    }
+
+    /// `persist` records the workspace in `users/{uid}.activeCompanyId`. It is true
+    /// for explicit choices (switch, join, own workspace, first setup) and false
+    /// when the app is merely reopening what the account already points at.
+    private func activateCompany(_ companyId: String, user: User, message: String?, persist: Bool = true) {
         // Idempotent: the normal bootstrap path and the offline safety-net can both
         // reach here. If we're already activated for this exact user + workspace, skip
         // re-attaching listeners.
@@ -2767,15 +2862,18 @@ class AuthViewModel: ObservableObject {
         accountDisplayName = user.displayName ?? ""
         accountPhotoURL = user.photoURL?.absoluteString ?? googleProfilePhotoURL
         isLoggedIn = true
+        workspaceResolutionMessage = ""
+        workspaceAccessLostCompanyId = nil
 
-        let payload: [String: Any] = [
-            "uid": user.uid,
-            "email": user.email ?? "",
-            "activeCompanyId": companyId,
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-
-        db.collection("users").document(user.uid).setData(payload, merge: true)
+        if persist {
+            let payload: [String: Any] = [
+                "uid": user.uid,
+                "email": user.email ?? "",
+                "activeCompanyId": companyId,
+                "updatedAt": FieldValue.serverTimestamp()
+            ]
+            db.collection("users").document(user.uid).setData(payload, merge: true)
+        }
 
         startRealtimeWorkspaceListeners(for: user, companyId: companyId)
 
@@ -2849,9 +2947,10 @@ class AuthViewModel: ObservableObject {
                 guard self.currentCompanyId == cleanCompanyId else { return }
 
                 if let error = error {
-                    if cleanCompanyId != user.uid {
-                        self.handleActiveWorkspaceAccessLost(for: user, message: "Your access to this workspace changed. Switched to your own workspace.")
-                    } else if self.profileErrorMessage.isEmpty {
+                    // A listener error is not a verdict on access (network, token
+                    // refresh, a rules deploy). Keep the workspace; the listener
+                    // reconnects on its own and a confirmed removal arrives as data.
+                    if self.profileErrorMessage.isEmpty {
                         self.profileErrorMessage = error.localizedDescription
                     }
                     return
@@ -2864,14 +2963,14 @@ class AuthViewModel: ObservableObject {
 
                 guard let data = snapshot?.data(), snapshot?.exists == true else {
                     if cleanCompanyId != user.uid && !isFromCache {
-                        self.handleActiveWorkspaceAccessLost(for: user, message: "This workspace is no longer available. Switched to your own workspace.")
+                        self.handleActiveWorkspaceAccessLost(for: user, companyId: cleanCompanyId)
                     }
                     return
                 }
 
                 if self.accessibleWorkspaceRole(from: data, companyId: cleanCompanyId, currentUid: user.uid) == nil {
                     if !isFromCache {
-                        self.handleActiveWorkspaceAccessLost(for: user, message: "Your access to this workspace has been removed. Switched to your own workspace.")
+                        self.handleActiveWorkspaceAccessLost(for: user, companyId: cleanCompanyId)
                     }
                     return
                 }
@@ -2936,10 +3035,12 @@ class AuthViewModel: ObservableObject {
             }
     }
 
-    private func handleActiveWorkspaceAccessLost(for user: User, message: String) {
-        guard currentCompanyId != user.uid else { return }
-        profileMessage = message
-        activateCompany(user.uid, user: user, message: message)
+    /// The server confirmed the person no longer holds a role in the workspace
+    /// they had open. Nothing is switched or written on its own: the app shows
+    /// the loading screen with the choice (retry / use own workspace).
+    private func handleActiveWorkspaceAccessLost(for user: User, companyId: String) {
+        guard currentCompanyId != user.uid, currentUserId == user.uid else { return }
+        apply(decision: .accessLost(companyId: companyId), user: user)
     }
 
     private func applyCompanyProfile(data: [String: Any], companyId: String, user: User, shouldSyncMemberIndex: Bool) {
@@ -3279,21 +3380,46 @@ class AuthViewModel: ObservableObject {
         return "member"
     }
 
+    /// Explicit actions (switch, join, a remote activeCompanyId change) keep the
+    /// yes/no shape; "unavailable" counts as no there because the person can
+    /// simply try again.
     private func validateCompanyAccess(companyId: String, user: User, completion: @escaping (Bool) -> Void) {
+        checkWorkspaceAccess(companyId: companyId, user: user) { completion($0 == .granted) }
+    }
+
+    /// Reads `companies/{id}` and answers with three outcomes: granted / denied
+    /// (server data) or unavailable (an error or a cache-only snapshot). The
+    /// bootstrap uses the third to retry instead of switching workspaces.
+    private func checkWorkspaceAccess(companyId: String, user: User, completion: @escaping (WorkspaceAccessOutcome) -> Void) {
         if companyId == user.uid {
-            completion(true)
+            completion(.granted)
             return
         }
 
         db.collection("companies").document(companyId).getDocument { snapshot, error in
-            guard error == nil, let data = snapshot?.data() else {
-                completion(false)
+            if let error {
+                // The rules refusing the read is the server's answer ("you may
+                // not read this workspace"), not a transient failure.
+                let code = FirestoreErrorCode.Code(rawValue: (error as NSError).code)
+                completion(code == .permissionDenied ? .denied : .unavailable)
+                return
+            }
+            guard let snapshot else {
+                completion(.unavailable)
+                return
+            }
+            if snapshot.metadata.isFromCache {
+                completion(.unavailable)
+                return
+            }
+            guard let data = snapshot.data(), snapshot.exists else {
+                completion(.denied)
                 return
             }
 
             let ownerUid = (data["ownerUid"] as? String) ?? companyId
             if ownerUid == user.uid {
-                completion(true)
+                completion(.granted)
                 return
             }
 
@@ -3302,14 +3428,14 @@ class AuthViewModel: ObservableObject {
                let customRoleId = memberCustomRoles[user.uid] as? String,
                customRoles[customRoleId] != nil,
                ["owner", "admin", "member", "viewer", "workflow"].contains(self.effectiveTeamRole(customRoleId, customRoles: customRoles)) {
-                completion(true)
+                completion(.granted)
                 return
             }
             if let members = data["members"] as? [String: Any],
                let raw = members[user.uid] as? [String: Any] {
                 let role = (raw["customRoleId"] as? String) ?? (raw["role"] as? String) ?? "member"
                 if ["owner", "admin", "member", "viewer", "workflow"].contains(self.effectiveTeamRole(role, customRoles: customRoles)) {
-                    completion(true)
+                    completion(.granted)
                     return
                 }
             }
@@ -3317,11 +3443,11 @@ class AuthViewModel: ObservableObject {
             if let memberRoles = data["memberRoles"] as? [String: Any],
                let role = memberRoles[user.uid] as? String,
                ["owner", "admin", "member", "viewer", "workflow"].contains(self.effectiveTeamRole(role, customRoles: customRoles)) {
-                completion(true)
+                completion(.granted)
                 return
             }
 
-            completion(false)
+            completion(.denied)
         }
     }
 

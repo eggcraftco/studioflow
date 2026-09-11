@@ -15,7 +15,8 @@
     "test:finance": "node scripts/check-finance-vectors.mjs",
     "test:file-proxy": "node scripts/check-file-proxy-guards.mjs",
     "test:relay": "node scripts/check-ebay-relay-vectors.mjs",
-    "test:ebay-regressions": "node scripts/check-ebay-callback-regressions.mjs"
+    "test:ebay-regressions": "node scripts/check-ebay-callback-regressions.mjs",
+    "test:workspace": "node scripts/check-workspace-resolution.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
