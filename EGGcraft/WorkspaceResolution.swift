@@ -95,11 +95,15 @@ enum WorkspaceResolver {
     }
 
     /// The offline safety net after the bootstrap stalls: open what the cache
-    /// remembers, never write it back, and never invent the personal workspace.
-    static func stalledDecision(uid: String, cachedActiveCompanyId: String?) -> WorkspaceDecision? {
-        let clean = (cachedActiveCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return nil }
-        return .activate(companyId: clean, persist: false)
+    /// remembers ONLY when it is the workspace this same account last opened
+    /// after a server-confirmed check (recorded per uid at that time). Never
+    /// write it back, never invent the personal workspace, and never trust a
+    /// cached pointer the account has not been confirmed in.
+    static func stalledDecision(uid: String, cachedActiveCompanyId: String?, lastValidatedCompanyId: String?) -> WorkspaceDecision? {
+        let cached = (cachedActiveCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let validated = (lastValidatedCompanyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cached.isEmpty, !validated.isEmpty, cached == validated else { return nil }
+        return .activate(companyId: cached, persist: false)
     }
 
     /// A result may only be applied to the account and bootstrap it was started

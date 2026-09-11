@@ -41,11 +41,17 @@ expect("stored personal id (server) → personal, not re-written",
 expect("access denied by the server → accessLost (no automatic switch)",
        WorkspaceResolver.decide(uid: uid, step: .check(companyId: team, persistIfPersonal: false), access: .denied) == .accessLost(companyId: team))
 
-// 6. Offline safety net: cached id opens without writing; empty cache does nothing.
-expect("stalled with cached team id → activate, no write",
-       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: team) == .activate(companyId: team, persist: false))
+// 6. Offline safety net: the cached id opens only when it is the one this account
+//    last opened after a server-confirmed check; nothing is written; an empty or
+//    unconfirmed cache does nothing (no personal fallback, no unverified workspace).
+expect("stalled, cached id == last validated for this uid → activate, no write",
+       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: team, lastValidatedCompanyId: team) == .activate(companyId: team, persist: false))
 expect("stalled with empty cache → nothing (no personal fallback)",
-       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: "  ") == nil)
+       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: "  ", lastValidatedCompanyId: team) == nil)
+expect("stalled, cached id never confirmed for this account → nothing",
+       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: team, lastValidatedCompanyId: nil) == nil)
+expect("stalled, cached id differs from the last confirmed one (changed while offline / other account's value) → nothing",
+       WorkspaceResolver.stalledDecision(uid: uid, cachedActiveCompanyId: "team-2", lastValidatedCompanyId: team) == nil)
 
 // 7. A late result from a previous account or bootstrap is not applied.
 expect("same account, same generation → applies",

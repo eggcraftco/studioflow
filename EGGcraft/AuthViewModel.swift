@@ -2774,11 +2774,22 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /// The workspace this account last opened after a server-confirmed check,
+    /// per uid. The offline safety net may reopen exactly this one and nothing else.
+    private func lastValidatedWorkspaceKey(_ uid: String) -> String { "studioflow_last_validated_workspace_\(uid)" }
+    private func lastValidatedWorkspace(for uid: String) -> String? {
+        UserDefaults.standard.string(forKey: lastValidatedWorkspaceKey(uid))
+    }
+    private func recordValidatedWorkspace(_ companyId: String, for uid: String) {
+        UserDefaults.standard.set(companyId, forKey: lastValidatedWorkspaceKey(uid))
+    }
+
     private func apply(decision: WorkspaceDecision, user: User) {
         switch decision {
         case .activate(let companyId, let persist):
             workspaceResolutionMessage = ""
             workspaceAccessLostCompanyId = nil
+            recordValidatedWorkspace(companyId, for: user.uid)
             activateCompany(companyId, user: user, message: nil, persist: persist)
         case .retry:
             // Nothing is activated and nothing is written. The loading screen
@@ -2830,13 +2841,18 @@ class AuthViewModel: ObservableObject {
                 guard WorkspaceResolver.resultApplies(startedForUid: user.uid, startedGeneration: generation,
                                                       currentUid: self.currentUserId, currentGeneration: self.resolutionGeneration) else { return }
                 let cachedActive = snapshot?.data()?["activeCompanyId"] as? String
-                guard let decision = WorkspaceResolver.stalledDecision(uid: user.uid, cachedActiveCompanyId: cachedActive) else {
+                guard let decision = WorkspaceResolver.stalledDecision(uid: user.uid, cachedActiveCompanyId: cachedActive,
+                                                                       lastValidatedCompanyId: self.lastValidatedWorkspace(for: user.uid)) else {
                     if self.workspaceResolutionMessage.isEmpty {
                         self.workspaceResolutionMessage = "Could not open your workspace. Check your connection and try again."
                     }
                     return
                 }
-                self.apply(decision: decision, user: user)
+                // Reopened from cache: not a fresh confirmation, so nothing is recorded.
+                if case .activate(let companyId, _) = decision {
+                    self.workspaceResolutionMessage = ""
+                    self.activateCompany(companyId, user: user, message: nil, persist: false)
+                }
             }
         }
     }
@@ -2866,6 +2882,9 @@ class AuthViewModel: ObservableObject {
         workspaceAccessLostCompanyId = nil
 
         if persist {
+            // An explicit, server-validated choice (switch, join, own workspace,
+            // first setup): this is the workspace the offline net may reopen.
+            recordValidatedWorkspace(companyId, for: user.uid)
             let payload: [String: Any] = [
                 "uid": user.uid,
                 "email": user.email ?? "",
