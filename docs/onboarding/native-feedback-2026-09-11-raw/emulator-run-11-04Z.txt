@@ -1,0 +1,11 @@
+1. availability (what the native menu asks): {"status":200,"result":{"ok":true,"enabled":true,"show":false,"campaign":"first_success_feedback","reason":"no_first_success"}}
+2. submitFeedback [mac] → {"status":200,"result":{"ok":true,"id":"fb_Tv-0CwP6IBPf","duplicate":false}}
+   record fb_Tv-0CwP6IBPf: {"companyId":"qa-fb-native","uid":"qa-fb-native-owner","platform":"mac","source":"in_app","trigger":"manual","kind":"suggestion","experience":"easy","page":"mac/orders","language":"Türkçe","status":"new"}
+2. submitFeedback [android] → {"status":200,"result":{"ok":true,"id":"fb_Hra_H6OfIx1t","duplicate":false}}
+   record fb_Hra_H6OfIx1t: {"companyId":"qa-fb-native","uid":"qa-fb-native-owner","platform":"android","source":"in_app","trigger":"manual","kind":"problem","experience":"difficult","page":"android/orders","language":"English","status":"new"}
+2. submitFeedback [web-shaped (no platform, today's web client)] → {"status":200,"result":{"ok":true,"id":"fb_MTrqe2-txAEz","duplicate":false}}
+   record fb_MTrqe2-txAEz: {"companyId":"qa-fb-native","uid":"qa-fb-native-owner","platform":"web","source":"in_app","trigger":"manual","kind":"","experience":"okay","page":"/orders","language":"English","status":"new"}
+2. submitFeedback [refused platform] → {"status":400,"error":{"status":"INVALID_ARGUMENT","message":"Feedback could not be saved: platform."}}
+3. listFeedback as admin (the inbox): {"status":200,"rows":[{"id":"fb_MTrqe2-txAEz","platform":"web","workspaceName":"Native QA Studio","kind":"","experience":"okay","page":"/orders","status":"new"},{"id":"fb_Hra_H6OfIx1t","platform":"android","workspaceName":"Native QA Studio","kind":"problem","experience":"difficult","page":"android/orders","status":"new"},{"id":"fb_Tv-0CwP6IBPf","platform":"mac","workspaceName":"Native QA Studio","kind":"suggestion","experience":"easy","page":"mac/orders","status":"new"}]}
+4. getFeedbackDetail (inbox detail) platform: mac workspace: Native QA Studio
+5. listFeedback as the owner (not an admin) → 403 Customer feedback is restricted to NivaDesk admins.
