@@ -305,9 +305,9 @@ export default function SalesPage() {
             <p className="muted-copy">{t("Loading…")}</p>
           ) : products.length === 0 ? (
             <>
-              <p className="muted-copy">{t("There is no product catalogue yet.")}</p>
+              <p className="muted-copy">{t("No products yet.")}</p>
               <p className="muted-copy" style={{ marginTop: 6 }}>
-                {t("Sales reads the orders you already have, and those carry item lines rather than catalogue products. A catalogue is a later step; nothing is hidden from you here.")}
+                {t("Your sales are listed from the orders you have taken. Products will appear here once your workspace has them.")}
               </p>
             </>
           ) : (
@@ -338,6 +338,9 @@ export default function SalesPage() {
           ) : (
             <>
               <p className="muted-copy">{t("Where your sales come from. Connect or disconnect a channel in Settings → Integrations.")}</p>
+              <p className="muted-copy" style={{ marginTop: 4, fontSize: 12.5 }}>
+                {t("Connected means the channel is linked to this workspace. It does not mean orders have arrived from it, and products and stock are not synced from any channel yet.")}
+              </p>
               <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
                 {channels.map((channel) => (
                   <div key={channel.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px" }}>

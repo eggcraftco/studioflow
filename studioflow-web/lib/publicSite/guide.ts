@@ -590,6 +590,31 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
+    id: "sales",
+    title: "Sales",
+    blocks: [
+      { kind: "para", text: "Sales shows everything you have sold, built from the orders you already have. It is a read-only view: nothing on it creates or changes an order, a product, a stock level or a payment. It appears in the menu only when your workspace has it switched on and your account includes orders." },
+      { kind: "sub", text: "The Sales tab" },
+      { kind: "bullets", items: [
+        "One row per order, newest first, with the customer, what was sold, the channel it came from, the payment and delivery state and the revenue.",
+        "Opening a row opens that same order in Orders — it is the same order, not a copy.",
+        "Filters: one channel or every channel, only what needs attention, and whether to include bespoke work. Show more brings the next page from the server.",
+        "Revenue appears only if your account includes financial information; otherwise the column shows a dash and the rest of the row is unchanged. An order whose figures have not been worked out yet, or are out of date, says so instead of showing a number.",
+        "If your account is limited to the work assigned to you, Sales shows exactly the orders Orders shows you, and says so above the list.",
+        "A marketplace that keeps the buyer's details, such as eBay or Amazon, shows \"Held by the marketplace\" in place of a name.",
+        "An order with no usable date says \"Date unknown\" rather than guessing one."
+      ] },
+      { kind: "sub", text: "Products" },
+      { kind: "para", text: "Products lists the product catalogue for your workspace. Until your workspace has products, it says so plainly — your sales are still listed from the orders you have taken." },
+      { kind: "sub", text: "Channels" },
+      { kind: "bullets", items: [
+        "One row per sales channel, saying whether it is connected to this workspace. Connect or disconnect a channel in Settings → Integrations.",
+        "Connected means the channel is linked. It does not mean orders have arrived from it, and products and stock are not synced from any channel yet.",
+        "Amazon is not listed: its connection is held outside this project, so the screen cannot check it without guessing."
+      ] }
+    ]
+  },
+  {
     id: "schedule",
     title: "Schedule",
     blocks: [
@@ -1867,6 +1892,31 @@ const TREE_TR: GuideNode[] = [
           ] }
         ]
       }
+    ]
+  },
+  {
+    id: "sales",
+    title: "Satışlar (Sales)",
+    blocks: [
+      { kind: "para", text: "Sales, sattığınız her şeyi hâlihazırdaki siparişlerinizden derleyerek gösterir. Salt-okunur bir ekrandır: üzerinde hiçbir sipariş, ürün, stok ya da ödeme oluşturulmaz veya değiştirilmez. Menüde yalnızca çalışma alanınızda açıksa ve hesabınız siparişleri kapsıyorsa görünür." },
+      { kind: "sub", text: "Sales sekmesi" },
+      { kind: "bullets", items: [
+        "Her sipariş için bir satır, en yeniden eskiye; müşteri, satılan şey, geldiği kanal, ödeme ve teslimat durumu ve gelir.",
+        "Bir satırı açmak aynı siparişi Siparişler'de açar — kopyası değil, aynısıdır.",
+        "Filtreler: tek kanal veya tüm kanallar, yalnız ilgi bekleyenler, ve özel işlerin dahil edilip edilmeyeceği. Daha fazla göster, sonraki sayfayı sunucudan getirir.",
+        "Gelir yalnızca hesabınız finansal bilgileri kapsıyorsa görünür; kapsamıyorsa sütunda çizgi olur ve satırın geri kalanı değişmez. Rakamları henüz hesaplanmamış ya da güncelliğini yitirmiş bir sipariş, sayı göstermek yerine bunu söyler.",
+        "Hesabınız yalnız size atanan işlerle sınırlıysa Sales, Siparişler'in gösterdiği siparişlerin aynısını gösterir ve bunu listenin üstünde yazar.",
+        "Alıcı bilgisini kendinde tutan bir pazaryeri — eBay veya Amazon gibi — isim yerine \"Pazaryeri tarafından saklanıyor\" gösterir.",
+        "Kullanılabilir tarihi olmayan sipariş, tarih uydurmak yerine \"Tarih bilinmiyor\" der."
+      ] },
+      { kind: "sub", text: "Ürünler (Products)" },
+      { kind: "para", text: "Products, çalışma alanınızın ürün kataloğunu listeler. Çalışma alanınızda ürün olana kadar bunu açıkça söyler — satışlarınız yine aldığınız siparişlerden listelenir." },
+      { kind: "sub", text: "Kanallar (Channels)" },
+      { kind: "bullets", items: [
+        "Her satış kanalı için bir satır; bu çalışma alanına bağlı olup olmadığını söyler. Bağlama ve kaldırma Ayarlar → Entegrasyonlar'da yapılır.",
+        "Bağlı, kanalın bağlandığı anlamına gelir. Oradan sipariş geldiği anlamına gelmez; ürün ve stok hiçbir kanaldan senkronlanmıyor.",
+        "Amazon listelenmez: bağlantısı bu projenin dışında tutulur, bu yüzden ekran tahmin etmeden kontrol edemez."
+      ] }
     ]
   },
   {
