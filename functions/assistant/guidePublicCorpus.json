@@ -242,6 +242,14 @@
    "search": "History / Log card An automatic audit trail of the order, what changed and when, so you can always see how it reached its current state. History / Log kartı Siparişin otomatik bir değişiklik kaydı, neyin ne zaman değiştiği, böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz."
   },
   {
+   "id": "sales",
+   "title": "Sales",
+   "path": "Sales",
+   "headings": "",
+   "text": "Sales shows everything you have sold, built from the orders you already have. It is a read-only view: nothing on it creates or changes an order, a product, a stock level or a payment. It appears in the menu only when your workspace has it switched on and your account includes orders.\nProducts lists the product catalogue for your workspace. Until your workspace has products, it says so plainly — your sales are still listed from the orders you have taken.",
+   "search": "Sales Sales shows everything you have sold, built from the orders you already have. It is a read-only view: nothing on it creates or changes an order, a product, a stock level or a payment. It appears in the menu only when your workspace has it switched on and your account includes orders.\nProducts lists the product catalogue for your workspace. Until your workspace has products, it says so plainly — your sales are still listed from the orders you have taken. Satışlar (Sales) Sales, sattığınız her şeyi hâlihazırdaki siparişlerinizden derleyerek gösterir. Salt-okunur bir ekrandır: üzerinde hiçbir sipariş, ürün, stok ya da ödeme oluşturulmaz veya değiştirilmez. Menüde yalnızca çalışma alanınızda açıksa ve hesabınız siparişleri kapsıyorsa görünür.\nProducts, çalışma alanınızın ürün kataloğunu listeler. Çalışma alanınızda ürün olana kadar bunu açıkça söyler — satışlarınız yine aldığınız siparişlerden listelenir."
+  },
+  {
    "id": "schedule",
    "title": "Schedule",
    "path": "Schedule",

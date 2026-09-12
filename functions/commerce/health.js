@@ -15,9 +15,25 @@ function healthDocId(provider, connectionId) {
 }
 function healthRef(db, provider, connectionId) { return db.collection(COLLECTION).doc(healthDocId(provider, connectionId)); }
 
-/** Which entities this provider can even be fresh about. */
+/**
+ * Which entities this provider can even be fresh about — what THIS codebase
+ * reads, not what the provider's API offers. The two were the same test until
+ * now, so an entity nobody syncs reported "never", which reads as a sync that
+ * has not run yet rather than one that does not exist. `implemented` in the
+ * registry is the answer; the protocol blocks remain the fallback for an entry
+ * that predates it.
+ */
 function supportedEntities(provider) {
   const caps = getCapabilities(provider) || {};
+  const implemented = caps.implemented && typeof caps.implemented === "object" ? caps.implemented : null;
+  if (implemented) {
+    return {
+      orders: implemented.orders === true,
+      products: implemented.products === true,
+      inventory: implemented.inventory === true,
+      finance: implemented.finance === true
+    };
+  }
   return {
     orders: Boolean(caps.orders && caps.orders.read),
     products: Boolean(caps.products && caps.products.read),
@@ -74,4 +90,36 @@ function healthView(doc, provider, { now = Date.now(), staleAfterMs = 6 * 60 * 6
   return view;
 }
 
-module.exports = { COLLECTION, ENTITIES, healthDocId, healthRef, supportedEntities, touchHealth, healthView };
+/**
+ * Does anything in this codebase record sync health for the provider? A third
+ * question, separate from what the API offers and from `implemented`: Etsy and
+ * Amazon read orders and apply them, but no code calls touchHealth for them, so
+ * no health document is ever written. Pinned against the source by
+ * functions/test/qa/commerce-capability-truth.test.js.
+ */
+function recordsHealth(provider) {
+  const caps = getCapabilities(provider) || {};
+  return caps.healthInstrumented === true;
+}
+
+/**
+ * CARD-001 — the one state the Sync health card renders, decided here so that
+ * capability, health and the web cannot answer differently:
+ *
+ *   not_connected  no connection with this provider in this workspace
+ *   not_supported  connected, but nothing here records health for it, so there
+ *                  is nothing this card can ever report — the honest answer for
+ *                  Etsy and Amazon, whose orders do sync
+ *   never_synced   connected and instrumented, but no health row exists yet
+ *   rows           health rows exist; the per-entity view answers instead
+ *
+ * The empty card was the bug: with no row and no state, it drew nothing, and a
+ * blank card reads as "all quiet" rather than "not measured here".
+ */
+function healthCardState({ provider, connected, rows = 0 }) {
+  if (connected !== true) return "not_connected";
+  if (Number(rows) > 0) return "rows";
+  return recordsHealth(provider) ? "never_synced" : "not_supported";
+}
+
+module.exports = { COLLECTION, ENTITIES, healthDocId, healthRef, supportedEntities, touchHealth, healthView, recordsHealth, healthCardState };

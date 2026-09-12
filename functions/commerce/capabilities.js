@@ -2,9 +2,31 @@
 // and the engine instead of scattered `if (provider === "shopify")` branches.
 // "coverage" on webhooks is the honest word for a provider that only tells us
 // some of what changed (Etsy), which is why reconciliation is not optional.
+// Two different questions live here, and confusing them is what made Sync Health
+// claim products and stock were merely "never synced" for every provider:
+//
+//   * the entity blocks below say what the PROVIDER'S API offers — a protocol
+//     fact the design documents rely on, true whether or not we use it;
+//   * `implemented` says what THIS CODEBASE reads today. Nothing syncs a product
+//     or a stock level for any provider (functions/orchestrator/inventory.js:6-17
+//     says the same), so those entities are unsupported, not merely stale;
+//   * `healthInstrumented` says whether any code calls touchHealth for it. Etsy
+//     and Amazon read orders and apply them, but record no health, so no health
+//     document is ever created and the Sync health card had nothing to draw —
+//     it rendered empty, which read as "nothing to report" rather than "not
+//     reported here". The three answers must stay apart: a provider can be
+//     implemented and uninstrumented at the same time, which is exactly Etsy.
+//
+// Whether a connector is switched on (functions/commerce/flags.js), whether the
+// seller granted the scope (connectionCapabilities.js, proven per connection)
+// and whether the connection is healthy (health.js) stay separate questions.
 const REGISTRY = Object.freeze({
   shopify: {
     display_name: "Shopify",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: true,
     connection_model: "official_app",
     orders: { read: true, write: false, reconcile: true },
     products: { read: true, write: false },
@@ -18,6 +40,10 @@ const REGISTRY = Object.freeze({
   },
   etsy: {
     display_name: "Etsy",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: false,
     connection_model: "oauth",
     orders: { read: true, write: false, reconcile: true },
     products: { read: true, write: false },
@@ -31,6 +57,10 @@ const REGISTRY = Object.freeze({
   },
   woocommerce: {
     display_name: "WooCommerce",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: true,
     connection_model: "wc_auth",
     orders: { read: true, write: false, reconcile: true },
     products: { read: true, write: false },
@@ -44,6 +74,10 @@ const REGISTRY = Object.freeze({
   },
   square: {
     display_name: "Square",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: true }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: true,
     connection_model: "oauth",
     orders: { read: true, write: false, reconcile: true },
     products: { read: true, write: false },
@@ -65,6 +99,10 @@ const REGISTRY = Object.freeze({
   // some of the stock is not on the seller's own shelf.
   amazon: {
     display_name: "Amazon",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: false,
     connection_model: "sp_api_oauth",
     marketplace: true,
     orders: { read: true, write: false, reconcile: true },
@@ -85,6 +123,10 @@ const REGISTRY = Object.freeze({
   },
   ebay: {
     display_name: "eBay",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: true,
     connection_model: "oauth",
     marketplace: true,
     orders: { read: true, write: false, reconcile: true },
@@ -103,6 +145,10 @@ const REGISTRY = Object.freeze({
   },
   inbound: {
     display_name: "Website",
+    // What this codebase reads today (see the note above the registry).
+    implemented: Object.freeze({ orders: true, products: false, inventory: false, finance: false }),
+    // Does anything here record sync health for it? See the note above the registry.
+    healthInstrumented: false,
     connection_model: "token",
     orders: { read: true, write: false, reconcile: false },
     products: { read: false, write: false },
