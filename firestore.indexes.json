@@ -43,62 +43,6 @@
       ]
     },
     {
-      "collectionGroup": "salesOrders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "kind",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "orderDateMs",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "salesOrders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "channel",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "orderDateMs",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "salesOrders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "paymentState",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "orderDateMs",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "salesOrders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "needsAttention",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "orderDateMs",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "siparisler",
       "queryScope": "COLLECTION",
       "fields": [
