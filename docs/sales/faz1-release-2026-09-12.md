@@ -1,6 +1,8 @@
 # Sales Faz 1 — the read-only pilot release, 12 September 2026
 
-**Released.** Candidate `sales-faz1-verify` @ `55ed8a6b`, merged to the deploy branch as `9bf32b9a`. PR 3 (projection, backfill, tombstone cleanup) is not in it.
+**Status: release complete, awaiting identified pilot acceptance.** Candidate `sales-faz1-verify` @ `55ed8a6b`, merged to the deploy branch as `9bf32b9a`. PR 3 (projection, backfill, tombstone cleanup) is not in it.
+
+The 401 responses and the chunk check below prove that the **deployment** landed and that the endpoints are gated. **They are not evidence that a user flow works.** Nobody has yet opened Sales as a signed-in member of the pilot workspace, and until somebody has, no screen on it is verified.
 
 ## What went out
 
@@ -63,7 +65,23 @@ One entry, **no wildcard**, `enabled: true`. Every other workspace is closed.
 | Assigned-scope index, proof A (field and direction match the real query) | **passed** — live shape equals the query recorded from source |
 | Assigned-scope index, proof B (machine-read READY) | **passed** |
 | Assigned-scope index, proof C (an authorised assigned-scope request runs the indexed path) | **not done.** The pilot workspace has one member and no assigned orders, so it cannot prove this without assigning an order, which is a business write |
-| In-app pilot acceptance | **left to the operator** — it needs an authorised testwork session |
+| In-app pilot acceptance | **not started, and currently blocked** — see below |
+
+## The pilot account, and what blocks the acceptance
+
+| | |
+|---|---|
+| Workspace | `aiVY7UKjbfP5Dkhy5lamTTltkex2` — "testwork", team_monthly active, 1 member |
+| Owner | `contact@nivadesk.app` (uid is the same as the workspace id) |
+| Email verified | **no** |
+| Account age | 20 days |
+| Last sign-in | 10 September 2026 |
+
+**This blocks the acceptance.** `emailVerificationRequired` is true once an unverified account is older than `VERIFICATION_GRACE_DAYS`, which is 3 (`studioflow-web/components/VerifyEmailGate.tsx:17,27-32`), and `AppShell` returns the verify-email screen instead of the app. Signing in as `contact@nivadesk.app` therefore reaches the verification gate, not Sales.
+
+The second candidate is blocked the same way: "My Studio" / `roletest123@nivadesk.app`, unverified, 105 days old.
+
+The way through is to verify the address — the app's own resend button does it, and it is an email action rather than something to change in the database. Nothing here was altered to work around it.
 
 ## Rollback
 
