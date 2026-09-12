@@ -1,89 +1,121 @@
 # PR 3 — the `salesOrders` projection and its backfill: design only
 
-**Design, not code. Nothing here is implemented, nothing has been deployed, and no document has been written to production.** PR 3 is the first Sales PR that writes anything, which is why it is being designed on paper before it is built.
+**Design, not code. Nothing here is implemented, no backfill has been run, and no document has been written to production.** PR 3 is the first Sales PR that writes anything, which is why it is being designed on paper first.
 
 ## 1. Why a side document exists at all
 
-The shipped iOS and Mac 1.3 (build 17, `ad79d3da`) replaces the **whole** order document on a paid plan — `setData(from:)`, not a merge. Anything the server adds to `siparisler/{orderId}` is therefore erased the next time one of those clients saves that order, silently and without conflict. Android 0.1.8 (`0563fc9c`) sends line items with no ids, so the server mints new UUIDs for them on every such save.
+The shipped iOS and Mac 1.3 (build 17, `ad79d3da`) replaces the **whole** order document on a paid plan — `setData(from:)`, not a merge. Anything the server adds to `siparisler/{orderId}` is erased the next time one of those clients saves that order, silently. Android 0.1.8 (`0563fc9c`) sends line items with no ids, so the server mints new UUIDs on every such save.
 
-So the projection cannot live on the order. It lives at:
+So the projection lives at `companies/{companyId}/salesOrders/{orderId}`, written only by the server, with `allow write: if false` in the rules from PR 1 and the collection in both company wildcard deny lists. The order document is untouched; the projection is derived and always rebuildable.
 
-```
-companies/{companyId}/salesOrders/{orderId}
-```
+## 2. The date fields, by evidence
 
-written only by the server, never readable-writable by a client (the rules block from PR 1 already says `allow write: if false`, and the collection is in both company wildcard deny lists). The order document stays exactly as it is; the projection is derived from it and is always rebuildable.
+**`paymentDate` is the field the existing list sorts by. It is not the order's creation date, and PR 3 must not relabel it as one.** The code says so in both directions:
 
-## 2. The date the projection stamps, and where it comes from
-
-From the production census of 452 orders (read-only, counts only):
-
-| Field | Orders carrying it |
+| Evidence | What it shows |
 |---|---|
-| `paymentDate` | 448 (99.1 %) |
-| `createdAt` | 66 |
-| `createdAtMs` | **12 (2.65 %)** |
+| `functions/index.js:10931`, `:15288` — `paymentDate: admin.firestore.Timestamp.fromDate(paymentDate)` | some paths store a date a person chose |
+| `functions/index.js:19949`, `:21088`, `:21523` — `paymentDate: createdAt` | other paths seed it with the creation time, so the same field means different things by route |
+| `functions/finance/engine.js:197-201` | the finance engine reads it as a *payment* date, for the VAT milestone |
 
-`createdAtMs` is unusable as a sort key — it is absent on 97 % of orders, so an index on it would sort almost nothing. The projection therefore stamps **its own** `orderDateMs`, resolved in this order, with the source recorded beside it:
+So the honest name for what the projection stamps is **"the date this workspace's Orders list has always sorted this order by"** — neither "created" nor "paid". `orderDateMs` keeps Sales ordering identical to Orders, which is the only property that matters for the list; anything that needs a true creation time must read `createdAt` and handle its absence.
 
-| `orderDateSource` | Value |
+| Field | Type | Present (of 452, census 12 Sep 2026) | Notes |
+|---|---|---|---|
+| `paymentDate` | Firestore `Timestamp` | 448 (99.1 %) | meaning varies by path, per the table above |
+| `createdAt` | Firestore `Timestamp` (`FieldValue.serverTimestamp()`, e.g. `functions/index.js:614`) | 66 | a real creation stamp where present |
+| `createdAtMs` | plain `number` (`Date.now()`, e.g. `functions/index.js:11299`) | **12 — missing on 440 of 452 (97.35 %)** | unusable as a sort key; an index on it would sort almost nothing |
+
+**Resolution order, with the source recorded beside the value:**
+
+| `orderDateSource` | `orderDateMs` |
 |---|---|
 | `paymentDate` | `paymentDate.toMillis()` |
-| `createdAt` | `createdAt.toMillis()`, when `paymentDate` is absent |
-| `createdAtMs` | the raw number, when neither timestamp exists |
-| `none` | `orderDateMs: 0` — the row sorts last and is marked for review; it is never guessed at and never silently dropped |
+| `createdAt` | `createdAt.toMillis()` when `paymentDate` is absent |
+| `createdAtMs` | the raw number when neither timestamp exists |
+| `none` | **`0`** — sorts last, `needsAttention: true`, shown as review-required |
 
-This is the one field the later Sales queries sort by, and it is why the four `salesOrders` indexes belong to this PR and not to PR 1: they index a field only this PR creates. They are held verbatim in `docs/sales/faz1-pr1-2026-09-12.md` under "PR 3". **When they come back, `functions/test/qa/sales-index-match.test.js` must be updated in the same commit** — it currently asserts that no `salesOrders` index exists, precisely so this cannot be forgotten.
+**An unknown date is never filled with today's date**, nor with the backfill's run time, nor with any other stand-in. A row whose date is unknown says so.
 
-## 3. Idempotency
+The four `salesOrders` indexes held in `faz1-pr1-2026-09-12.md` come back with this PR, because they index a field only this PR creates. **`functions/test/qa/sales-index-match.test.js` must be updated in the same commit** — it currently asserts that no `salesOrders` index exists, precisely so this cannot be forgotten.
 
-Modelled on `stampOrderFinance`, which solved the same problem and whose loop protection is the reason it is safe (`functions/finance/stamp.js:76-107`).
+## 3. One projection contract, two callers
 
-* A trigger on `onDocumentWritten("siparisler/{orderId}")` computes the projection and compares it field by field with what is already stored — `sameProjection(stored, computed)` over a fixed `PROJECTED` list, the shape `sameFinance` already uses.
-* **`projectedAtMs` is excluded from the comparison.** Including the stamp would make every computed document differ from the stored one, and the trigger would write on every pass for ever — the exact trap the finance stamp documents.
-* If nothing in `PROJECTED` changed, **the trigger returns without writing.** A no-op order save costs one read and no write.
-* `projectionVersion` is inside `PROJECTED`. Bumping it forces exactly one rewrite per order and then settles.
-* The trigger **never writes to the order document.** Not only would that loop; a 1.3 client would erase it anyway.
-* The document id is the order id, so the projection is a pure upsert. Replaying the same event any number of times converges on the same document — there is no counter, no append, no array push anywhere in it.
+The live trigger and the backfill **compute the projection with the same function**. Neither has a private path, and the contract is:
 
-## 4. What the projection does with old and broken orders
+* it reads the order and the workspace's settings, and writes **one** document: `companies/{cid}/salesOrders/{orderId}`;
+* it writes **nothing else**. No order document, no stock movement, no payment, no notification, no activation or retention event, no catalog record. The projection is derived data and emits no business event of its own;
+* it never re-enters itself: the trigger listens on `siparisler/{orderId}` and writes to a different collection, so a projection write cannot fire the projection.
 
-| Case | Count today | Behaviour |
-|---|---|---|
-| No `companyId` | 4 (all four also lack `createdAt` and `status` — empty documents attached to no workspace) | **skip, write nothing.** There is no workspace to write under. They are invisible to every workspace query already |
-| No date field at all | 0 today | `orderDateMs: 0`, `orderDateSource: "none"`, `needsAttention: true`. Shown as review-required, never hidden |
-| Line items with no ids (Android 0.1.8) | unknown | link state `needs_review`. The projection records what it cannot match; it never matches by array position, name or SKU alone, and it **never moves stock** |
-| Whole-document rewrite by a 1.3 client | ongoing | the write fires the trigger, the projection is recomputed from the new document. The side document is the durable home; the order is the source of truth |
-| `isDeleted` / trashed | — | the side document is deleted, not left behind. A ghost row in Sales for an order the merchant has binned is worse than no row |
-| Cancelled | 13 across 4 workspaces | projected normally, flagged cancelled. Sales must not change the active-order counter, which stays the billing engine's business |
+## 4. Idempotency, ordering and concurrency
 
-## 5. The backfill
+Modelled on `stampOrderFinance`, whose loop protection is why it is safe (`functions/finance/stamp.js:76-107`).
 
-An owner-run callable, never a deploy-time migration, never automatic.
+1. **Field-by-field comparison.** `sameProjection(stored, computed)` over a fixed `PROJECTED` list. If nothing in it changed, **no write happens** — a no-op order save costs one read.
+2. **The stamp is excluded from the comparison.** Including `projectedAtMs` would make every computed document differ from the stored one and the trigger would write for ever. This is the documented trap in the finance stamp.
+3. **Monotonic source stamp.** Every projection carries `sourceUpdatedAtMs`, taken from the order's `updatedAt`. The write happens in a transaction that **refuses to apply a stamp older than the one already stored.** This is what makes the three dangerous cases safe:
+   * a **late trigger event** arriving after a newer one cannot overwrite the newer projection;
+   * a **backfill** running while somebody edits the order cannot write its older snapshot over the live trigger's newer result;
+   * a **re-run** of an old backfill cannot resurrect anything, because its stamps are all older.
+4. Upsert by order id. Replaying any event any number of times converges on the same document — no counter, no append, no array push anywhere in it.
 
-1. **Dry run first, and dry run is the default.** It returns counts only — would-create, would-update, unchanged, skipped-with-reason — and **no customer data of any kind**, not even to check whether a field looks like a placeholder.
-2. Paged with the same ordering the list uses, `(companyId, paymentDate, __name__)`, so a page can never step over an order sharing a date with its neighbour.
-3. The cursor is persisted in `companies/{cid}/salesSettings/main` so an interrupted run resumes instead of restarting, and a second invocation cannot double-process a page.
-4. Bounded per invocation, and it writes only where `sameProjection` says the stored document differs — a re-run over already-projected orders writes nothing.
-5. One workspace at a time, by explicit id. There is no "all workspaces" mode.
-6. It writes nothing but `salesOrders` documents: no stock movement, no payment, no notification, no activation or retention event, no catalog record, no touch of the order itself.
+## 5. The bin, permanent deletion and restore — three different things
 
-## 6. Rollback
+Evidence: binning sets `isDeleted: true` with `deletedAt: serverTimestamp()` (`functions/index.js:9605-9606`, the same shape used when one order is merged into another); restoring sets `isDeleted: false` and `deletedAt: FieldValue.delete()` (`:15736-15737`); permanent purge is a separate sweep, 30 days after binning.
 
-Easier than most, because the projection holds no information that does not exist elsewhere:
+| Event | Projection |
+|---|---|
+| **Binned** | the side document is **kept and marked** `binned: true` with the same `sourceUpdatedAtMs` rule, and **excluded from the normal Sales list**. It is not deleted, so a later event cannot "recreate" it from nothing and a restore does not have to rebuild it |
+| **Restored** | the trigger fires on the restore write and clears `binned`. The row returns to the list |
+| **Permanently purged** | the side document is **deleted**, and a small tombstone keeps the order id with its last `sourceUpdatedAtMs`. Any later write carrying an older stamp — a late event, an old backfill page — is refused by rule 4.3 and the row cannot reappear |
+| **Merged into another order** | the source order is binned by the same code path, so it follows the binned row above |
+
+A binned order must never appear in the normal Sales list, and a deleted one must never come back. The tombstone exists for exactly the second half of that sentence.
+
+## 6. The feature flag: off is not "delete everything"
+
+* **The trigger projects only for workspaces explicitly enabled** in `appConfig/sales`. A workspace nobody opened gets no writes at all, which keeps the blast radius at zero until somebody decides otherwise.
+* **Switching the feature off stops writing. It does not delete anything.** Existing projections are kept. Bulk-deleting a workspace's rows because a flag moved would turn a reversible switch into a destructive one, and the rows hold nothing that is not derivable anyway.
+* **While off**, nothing reads them: `listSalesRows` already answers `enabled: false` before it reads a row.
+* **On re-enable, the projections are stale by exactly the orders that changed while it was off**, and there is no way to know which without looking. So re-enabling is **not instant**: it requires a catch-up backfill pass before the list is trusted. That pass is cheap, because unchanged documents are skipped by rule 4.1, and safe, because older snapshots are refused by rule 4.3.
+
+## 7. The backfill
+
+An owner-run operation, never a deploy-time migration, never automatic.
+
+1. **Dry run is the default**, and it returns counts only — would-create, would-update, unchanged, skipped-with-reason — and **no customer data of any kind**.
+2. Paged with the same ordering the list uses, `(companyId, paymentDate, __name__)`, so a page cannot step over an order sharing a date with its neighbour.
+3. **Two limits, both enforced:** a per-workspace ceiling and a global ceiling across all concurrent runs, so one large workspace cannot consume the project's write budget.
+4. **Pause and resume.** The cursor and the run's state live in `companies/{cid}/salesSettings/main`; a paused run stops at a page boundary and resumes from the cursor. An interrupted run never restarts from the beginning, and a second invocation cannot double-process a page.
+5. One workspace at a time, by explicit id. **There is no "all workspaces" mode.**
+6. It writes only `salesOrders` documents, through the same contract as the live trigger (§3), so a backfilled row and a triggered row are identical and neither emits a second order, finance, activation or retention event.
+
+## 8. `projectionVersion`
+
+`projectionVersion` is part of the stored document and of `PROJECTED`, so an order written after a bump carries the new version — **on its own next write, one order at a time.**
+
+**A version bump never starts a bulk rebuild.** Rebuilding every existing row is a separate, explicitly invoked operation with the same dry run, the same two limits and the same pause/resume as the backfill. Readers must therefore tolerate a mixed population of versions, which is the price of not having a deploy silently rewrite every row in the project.
+
+## 9. Rollback
 
 | Step | Way back |
 |---|---|
-| Trigger deployed | redeploy the previous version of the name. New orders stop being projected; existing documents are stale but harmless — nothing reads them unless Sales is open for that workspace |
-| Backfill run | there is nothing to unwind. Every document is derivable from its order, so the fix for a bad projection is a corrected rebuild, not a restore |
-| Documents unwanted | a separate purge callable, per workspace, itself dry-runnable. Not part of the trigger and not automatic |
-| Indexes | delete the composite indexes; no query outside Sales uses them |
+| Trigger deployed | redeploy the previous version of the name. New orders stop being projected; existing rows go stale but are read by nothing while Sales is closed |
+| Backfill run | nothing to unwind. Every row is derivable from its order, so the fix for a bad projection is a corrected rebuild, not a restore |
+| Rows unwanted | a separate purge operation, per workspace, itself dry-runnable. Not part of the trigger, not automatic, and not triggered by the flag |
+| Indexes | delete the composite indexes **by name**. Never by republishing an older `firestore.indexes.json`, which would drop indexes other features depend on |
 
-**No point in this PR requires a data migration**, and no order, stock level, payment or notification is written at any point. That is the property to preserve when it is built.
+**No point in this PR requires a data migration**, and no order, stock level, payment or notification is written at any point.
 
-## 7. Decisions still open — for a person, not for me
+## 10. The cancelled-order observation, as at 12 September 2026
 
-1. **Does the trigger project for every workspace, or only for workspaces where Sales is open?** Recommended: **only where the flag is on**, with the backfill run as part of opening a workspace. It keeps writes at exactly zero until somebody decides to open one, which matches how the rest of Faz 1 was built. The cost is that opening a workspace is no longer instant — it needs a backfill pass first.
-2. **Does a projected row survive its order being deleted for audit?** Recommended: no. Deleting keeps Sales honest with the Orders screen.
-3. **Does the backfill get a per-workspace rate limit, or a global one?** 452 orders across 51 workspaces makes this theoretical today; it stops being theoretical at the first large import.
-4. **`projectionVersion` bump policy** — who may bump it, and does a bump trigger a rebuild automatically or wait for an owner-run backfill? Recommended: never automatic.
+A read-only census that day found **13 cancelled orders still counted as active, across 4 workspaces**, and **no demo user was blocked by it** — two workspaces sat at or over the demo limit, and none was pushed over solely by cancellations.
+
+This is a **dated observation, not a standing fact**: it moves with every new order, cancellation and plan change. It belongs to the **limit engine**, not to Sales. PR 3 changes no counter behaviour, and the projection's `countsAsActiveOrder` continues to state the intended rule beside today's counter without altering it.
+
+## 11. Decisions still open — for a person
+
+1. Does a purged order's **tombstone** expire, and after how long? Keeping them for ever is small but unbounded; expiring them reopens the resurrection window for an event older than the expiry.
+2. Does the catch-up backfill on re-enable run **automatically when a workspace is opened**, or does opening a workspace simply refuse until somebody has run it?
+3. The global backfill ceiling's actual number. 452 orders across 51 workspaces makes it theoretical today; it stops being theoretical at the first large import.
+4. Who may bump `projectionVersion`, and does a bump require the rebuild to be scheduled before it is allowed?
