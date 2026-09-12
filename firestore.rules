@@ -912,14 +912,35 @@ service cloud.firestore {
     // link. They are also excluded from the wildcard below, which would
     // otherwise open them to every writing member.
     match /companies/{companyId}/salesOrders/{orderId} {
-      // The same scope Orders gives: an assigned-only member reads the rows of
-      // the orders assigned to them, and nothing else. The row carries
-      // assignedToUid for exactly this test, the way workflowOrders does.
+      // Permission comes from the ORDER, never from this row.
+      //
+      // This collection is written asynchronously by the server, so its copy of
+      // a workspace or an assignee can be a second or a day behind. Authorising
+      // against `resource.data` would make the stale copy the permission:
+      // reassign an order and the previous assignee keeps reading; move or
+      // delete an order and a leftover row still answers. So every read is
+      // checked against the canonical document in `siparisler`, whose id is this
+      // row's id.
+      //
+      // Three things are asked of it, and all three matter:
+      //   * it still exists       — a deleted order's leftover row is not readable
+      //   * its companyId matches — a row filed under the wrong workspace is not
+      //                             readable by that workspace's members
+      //   * its assignedToUid     — for a member whose Orders scope is their own work
+      //
+      // Cost: one document read per evaluation (the three get() calls are the
+      // same path, so they count once). Consequence, accepted deliberately: this
+      // collection cannot be LISTED from a client at all, because a query would
+      // need one get() per returned row and rules allow only a few per request.
+      // The list is `listSalesRows`, which reads `siparisler` itself and is never
+      // behind. A single row still opens by id, which is what a deep link needs.
       allow read: if canReadCompany(companyId)
         && !usesWorkflowSafeView(companyId)
+        && exists(/databases/$(database)/documents/siparisler/$(orderId))
+        && get(/databases/$(database)/documents/siparisler/$(orderId)).data.companyId == companyId
         && (
           !requiresAssignedToSelfFilter(companyId)
-          || resource.data.assignedToUid == request.auth.uid
+          || get(/databases/$(database)/documents/siparisler/$(orderId)).data.assignedToUid == request.auth.uid
         );
       allow write: if false;
     }
@@ -932,7 +953,14 @@ service cloud.firestore {
     // The menu preference is not money and not business data: anyone who can
     // read the workspace may see whether Sales is switched on for it.
     match /companies/{companyId}/salesSettings/{settingId} {
-      allow read: if canReadCompany(companyId);
+      // The menu preference is not money and not business data, so anyone who
+      // can read the workspace may see whether Sales is switched on.
+      //
+      // `projection` is the exception and is server-only: it holds the
+      // projection's operational state, and its backfill cursor is an order's
+      // document id. A workflow-only member may read this collection and has no
+      // business learning order ids from a progress record.
+      allow read: if canReadCompany(companyId) && settingId != 'projection';
       allow write: if false;
     }
 
