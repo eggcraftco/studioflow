@@ -34789,6 +34789,18 @@ exports.retryCommerceEvent = onCall({ region: "europe-west2", secrets: [SHOPIFY_
 
 // OBS-003/004 — what the clients render on Sync Health: freshness per entity
 // per connection, with the numbers behind it, plus the provider's capabilities.
+// CARD-001 — where a workspace's connections live, for the one question the
+// Sync health card needs answered before it can say anything: is there a
+// connection at all? Amazon is deliberately not here — its connection lives in
+// the hardened project behind a service-account call, and it has no web section
+// (docs/commerce/sync-health-contract-2026-09-12.md says so in full).
+const HEALTH_CARD_CONNECTIONS = Object.freeze({
+  shopify: "shopifyStores", etsy: "etsyConnections", woocommerce: "wooConnections",
+  square: "squareConnections", ebay: "ebayConnections"
+});
+// A row that says it is gone does not count as a connection.
+const HEALTH_CARD_DEAD_STATUS = new Set(["disconnected", "uninstalled", "revoked", "deleted", "removed"]);
+
 exports.getCommerceHealth = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, false);
   const db = admin.firestore();
@@ -34802,7 +34814,25 @@ exports.getCommerceHealth = onCall({ region: "europe-west2" }, async (request) =
       capabilities: commerce.capabilities.getCapabilities(data.provider)
     };
   });
-  return { ok: true, connections };
+
+  // The card asks about one provider. Deciding its state here keeps the rule in
+  // one place: the browser renders the answer, it does not work it out again.
+  const provider = String(request.data?.provider || "").trim();
+  let card = null;
+  if (provider) {
+    const collection = HEALTH_CARD_CONNECTIONS[provider] || "";
+    let connected = false;
+    if (collection) {
+      const rows = await db.collection(collection).where("companyId", "==", companyId).limit(10).get();
+      connected = rows.docs.some((doc) => !HEALTH_CARD_DEAD_STATUS.has(String((doc.data() || {}).status || "").toLowerCase()));
+    }
+    card = {
+      provider, connected,
+      healthInstrumented: commerce.health.recordsHealth(provider),
+      state: commerce.health.healthCardState({ provider, connected, rows: connections.filter((row) => row.provider === provider).length })
+    };
+  }
+  return { ok: true, connections, card };
 });
 
 // The activity behind the health: the latest events for the workspace, dead ones first when asked.
