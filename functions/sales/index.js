@@ -90,23 +90,40 @@ function createSalesFunctions(deps) {
     return { uid, companyId, companyData, capability, currency: settings.currency };
   }
 
-  async function defaultListOrdersPage({ companyId, limit, cursor }) {
+  async function defaultListOrdersPage({ companyId, limit, cursor, assignedToUid = "" }) {
     // The document id is ordered explicitly, not left implicit: paymentDate is a
     // day, so several orders share the exact value, and a cursor of the date
     // alone would step over every one of them. Firestore also refuses a cursor
     // with more values than the query orders by, which is what an implicit
     // __name__ would have been. The live index (companyId ASC, paymentDate DESC)
     // already covers __name__ in the same direction, so this needs no new index.
-    let query = db().collection("siparisler")
-      .where("companyId", "==", companyId)
-      .orderBy("paymentDate", "desc")
-      .orderBy(admin.firestore.FieldPath.documentId(), "desc");
-    if (cursor && Number.isFinite(cursor.ms)) {
-      const at = admin.firestore.Timestamp.fromMillis(cursor.ms);
-      query = cursor.id ? query.startAfter(at, cursor.id) : query.startAfter(at);
+    const build = (withAssignee) => {
+      let query = db().collection("siparisler").where("companyId", "==", companyId);
+      if (withAssignee && assignedToUid) query = query.where("assignedToUid", "==", assignedToUid);
+      query = query.orderBy("paymentDate", "desc").orderBy(admin.firestore.FieldPath.documentId(), "desc");
+      if (cursor && Number.isFinite(cursor.ms)) {
+        const at = admin.firestore.Timestamp.fromMillis(cursor.ms);
+        query = cursor.id ? query.startAfter(at, cursor.id) : query.startAfter(at);
+      }
+      return query.limit(limit);
+    };
+    const read = async (withAssignee) => {
+      const snap = await build(withAssignee).get();
+      return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+    };
+    if (!assignedToUid) return { orders: await read(false) };
+    try {
+      return { orders: await read(true) };
+    } catch (error) {
+      // The composite index for (companyId, assignedToUid, paymentDate) may not
+      // exist yet. Falling back to the workspace query and filtering here keeps
+      // the answer correct — the filter is still the server's — at the cost of
+      // reading rows this member may not see. It never returns them.
+      if (String(error?.code || "") !== "9" && !/index/i.test(String(error?.message || ""))) throw error;
+      console.warn("sales: assigned-scope index missing, filtering on the server instead");
+      const orders = await read(false);
+      return { orders: orders.filter((order) => String(order.assignedToUid || "") === assignedToUid), indexMissing: true };
     }
-    const snap = await query.limit(limit).get();
-    return { orders: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })) };
   }
   const pager = typeof listOrdersPage === "function" ? listOrdersPage : defaultListOrdersPage;
 
@@ -134,17 +151,12 @@ function createSalesFunctions(deps) {
   });
 
   const listSalesRows = onCall(REGION, async (request) => {
-    const { companyId, capability, currency } = await resolve(request);
+    const { uid, companyId, capability, currency } = await resolve(request);
     if (!capability.pilotEnabled) {
-      return { ok: true, companyId, enabled: false, reason: "flag_off", rows: [], nextCursor: null, financeVisible: false, scanned: 0, hasMore: false };
+      return { ok: true, companyId, enabled: false, reason: "flag_off", rows: [], nextCursor: null, financeVisible: false, scanned: 0, hasMore: false, scope: capability.scope };
     }
     if (!capability.canOpenSales) {
-      throw new HttpsError(
-        "permission-denied",
-        capability.reason === "assigned_scope_unsupported"
-          ? "Sales does not support assigned-only access yet."
-          : "Your workspace account does not include orders."
-      );
+      throw new HttpsError("permission-denied", "Your workspace account does not include orders.");
     }
 
     const limit = clamp(Math.floor(Number(request.data?.limit) || DEFAULT_PAGE), 1, MAX_PAGE);
@@ -156,7 +168,9 @@ function createSalesFunctions(deps) {
     // Scanned a little wider than the page: trashed orders and the filters drop
     // rows, and a page that returns fewer rows must still move the cursor on.
     const scanSize = clamp(limit * 2, limit, MAX_SCAN);
-    const page = await pager({ companyId, limit: scanSize, cursor });
+    // An assigned-only member sees exactly the orders Orders shows them.
+    const assignedToUid = capability.scope === "assigned" ? uid : "";
+    const page = await pager({ companyId, limit: scanSize, cursor, assignedToUid });
     const orders = Array.isArray(page?.orders) ? page.orders : [];
 
     // The cursor is the last order this page actually looked at, never the end
@@ -185,6 +199,7 @@ function createSalesFunctions(deps) {
       ok: true, companyId, enabled: true, reason: "ok",
       rows, nextCursor, hasMore,
       financeVisible: capability.canSeeMoney,
+      scope: capability.scope,
       scanned: orders.length
     };
   });

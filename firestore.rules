@@ -912,9 +912,15 @@ service cloud.firestore {
     // link. They are also excluded from the wildcard below, which would
     // otherwise open them to every writing member.
     match /companies/{companyId}/salesOrders/{orderId} {
+      // The same scope Orders gives: an assigned-only member reads the rows of
+      // the orders assigned to them, and nothing else. The row carries
+      // assignedToUid for exactly this test, the way workflowOrders does.
       allow read: if canReadCompany(companyId)
         && !usesWorkflowSafeView(companyId)
-        && !requiresAssignedToSelfFilter(companyId);
+        && (
+          !requiresAssignedToSelfFilter(companyId)
+          || resource.data.assignedToUid == request.auth.uid
+        );
       allow write: if false;
     }
 

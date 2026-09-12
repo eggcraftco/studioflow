@@ -103,6 +103,23 @@ await check("a page that filters everything out still moves the cursor on", asyn
   ok(answer.hasMore === true && answer.nextCursor, "an empty filtered page must hand back a cursor, or the client stops early");
 });
 
+await check("an assigned-only member's list is their own orders, filtered by the query itself", async () => {
+  const { deepStrictEqual, strictEqual } = await import("assert");
+  await db.collection("siparisler").doc("a1").set(order("a1", CID, DAY, { assignedToUid: "u-assigned" }));
+  await db.collection("siparisler").doc("a2").set(order("a2", CID, DAY, { assignedToUid: "u-other" }));
+  const assignedFns = createSalesFunctions({
+    admin, HttpsError: class extends Error { constructor(code, message) { super(message); this.code = code; } }, onCall: (_options, handler) => handler,
+    requireWorkspaceMember: async ({ data }) => ({ uid: "u-assigned", companyId: String(data?.companyId || ""), companyData: { ownerUid: "u1" } }),
+    memberAccessFor: () => ({ orders: true, financialInfo: true, assignedProjectsOnly: true }),
+    roleFor: () => "member",
+    assignedOnlyFor: () => true,
+    engineVersion: ENGINE_VERSION
+  });
+  const list = await assignedFns.listSalesRows({ auth: { uid: "u-assigned", token: {} }, data: { companyId: CID, limit: 50 } });
+  strictEqual(list.scope, "assigned");
+  deepStrictEqual(list.rows.map((row) => row.orderId), ["a1"], "an assigned-only list must hold only that member's orders");
+});
+
 await check("the read writes nothing: no side document, and the orders are untouched", async () => {
   const { strictEqual, deepStrictEqual } = await import("assert");
   const before = await db.collection("siparisler").doc("s1").get();
