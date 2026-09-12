@@ -65,6 +65,49 @@ check("the regression it fixes: a protocol-level read no longer makes Health cla
   assert.strictEqual(health.supportedEntities("shopify").products, false);
 });
 
+check("Etsy and Amazon: products, stock and finance read as not supported, never as 'never synced'", () => {
+  for (const provider of ["etsy", "amazon"]) {
+    const caps = getCapabilities(provider);
+    for (const entity of ["products", "inventory", "finance"]) {
+      assert.strictEqual(caps.implemented[entity], false, `${provider}.${entity} claims an implementation`);
+      assert.strictEqual(health.supportedEntities(provider)[entity], false, `${provider}.${entity} is still marked supported`);
+      const cell = health.healthView(null, provider, { now: Date.now() })[entity];
+      assert.strictEqual(cell.state, "unsupported", `${provider}.${entity} shows ${cell.state} instead of unsupported`);
+    }
+  }
+});
+
+check("a recorded sync does not turn an unimplemented entity back into 'never'", () => {
+  // A health document exists for the connection because orders sync; the other
+  // entities must still read unsupported rather than never-synced.
+  const doc = { orders: { lastSuccessAtMs: Date.now() - 1000 }, products: {}, inventory: {} };
+  const view = health.healthView(doc, "etsy", { now: Date.now() });
+  assert.strictEqual(view.orders.state, "fresh");
+  assert.strictEqual(view.products.state, "unsupported");
+  assert.strictEqual(view.inventory.state, "unsupported");
+});
+
+check("the web card turns that state into 'Not supported' for the person reading it", () => {
+  const file = path.join(__dirname, "..", "..", "..", "studioflow-web", "lib", "..", "app", "settings", "CommerceSyncHealthCard.tsx");
+  const source = fs.readFileSync(file, "utf8");
+  assert.match(source, /unsupported:\s*"Not supported"/, "the card no longer labels unsupported");
+  assert.match(source, /never:\s*"Never synced"/, "the card no longer labels never-synced");
+  // An unknown state must fall back to the cautious label, never to "Never synced".
+  assert.match(source, /stateLabel\[cell\.state\] \|\| "Not supported"/, "the card's fallback label changed");
+});
+
+check("the gap this does not close: Etsy and Amazon record no sync health at all", () => {
+  // Their orders do sync, but no code calls touchHealth for them, so no row
+  // appears in Sync Health for a workspace whose only connector is one of these.
+  // Pinned so the day somebody adds the call, this test says so.
+  const root = path.join(__dirname, "..", "..");
+  const sources = ["etsy.js", "etsySync.js", "commerce/amazon/ingest.js"].map((file) => fs.readFileSync(path.join(root, file), "utf8"));
+  for (const source of sources) assert.ok(!/touchHealth\(/.test(source), "a connector started recording health: update this pin and the record");
+  for (const source of [fs.readFileSync(path.join(root, "wooConnector.js"), "utf8"), fs.readFileSync(path.join(root, "squareConnector.js"), "utf8")]) {
+    assert.ok(/touchHealth\(/.test(source), "the control: Woo and Square do record health");
+  }
+});
+
 check("the hub card no longer offers eBay payments and refunds, and Square's payouts are named", () => {
   const file = path.join(__dirname, "..", "..", "..", "studioflow-web", "lib", "studioflow", "integrations.ts");
   const source = fs.readFileSync(file, "utf8");

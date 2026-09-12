@@ -42,6 +42,18 @@ The web hub now lists eBay as "Orders" and Square as "Orders, Payments, Payouts,
 
 Whole functions suite and the web typecheck and production build: see the release record below.
 
+## Proof for Etsy and Amazon
+
+The operator asked for evidence that a person is shown "not supported" rather than "never synced" for these two. Three layers, each with its own check:
+
+| Layer | What it says |
+|---|---|
+| Capability | `implemented.products`, `implemented.inventory` and `implemented.finance` are `false` for both providers |
+| Health | `healthView(null, "etsy"/"amazon")` returns `state: "unsupported"` for those entities, and a connection that does record an order sync still reads `unsupported` for them rather than falling back to "never" |
+| Web | `CommerceSyncHealthCard.tsx` maps `unsupported` to "Not supported", keeps "Never synced" for `never`, and falls back to "Not supported" for any state it does not know |
+
+**The gap this does not close, pinned by its own check:** neither Etsy nor Amazon calls `touchHealth` anywhere, so no health row exists for them at all, and a workspace whose only connector is one of those two sees "No sync activity recorded yet" instead of a row. Their orders do sync. That is a recording gap in those two connectors, not a capability claim, and it belongs to its own small PR; the test fails the day somebody adds the call, so the record cannot go stale quietly. Woo and Square are the control: they do record health.
+
 ## Release scope
 
 1. Merge, then deploy by name the functions that read the registry or report health: `getCommerceCapabilities`, `getCommerceHealth`. Nothing else reads `implemented`.
