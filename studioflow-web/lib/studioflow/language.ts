@@ -7062,6 +7062,16 @@ const ONBOARDING_WIZARD_TRANSLATIONS: TranslationTable = {
   "You started setting up your workspace but never finished.": { "Türkçe": "Çalışma alanını kurmaya başladın ama tamamlamadın.", "Deutsch": "Sie haben die Einrichtung Ihres Arbeitsbereichs begonnen, aber nicht abgeschlossen.", "Français": "Vous avez commencé à configurer votre espace de travail sans le terminer.", "Italiano": "Hai iniziato a configurare il tuo spazio di lavoro ma non hai finito.", "Español (Spanish)": "Empezaste a configurar tu espacio de trabajo pero no lo terminaste.", "Português": "Começou a configurar o seu espaço de trabalho, mas não concluiu.", "Русский (Russian)": "Вы начали настройку рабочего пространства, но не завершили её.", "日本語 (Japanese)": "ワークスペースの設定を始めましたが、完了していません。", "中文 (Chinese)": "你开始设置工作区，但没有完成。", "العربية (Arabic)": "لقد بدأت إعداد مساحة العمل ولم تُكملها.", "हिन्दी (Hindi)": "आपने अपना वर्कस्पेस सेट करना शुरू किया था लेकिन पूरा नहीं किया।" },
 };
 
+// CARD-001 — the two sentences under the Sync health card's empty state. The
+// pill labels (Not connected / Not supported / Never synced) are translated
+// elsewhere; these explain them, and without entries here they rendered as
+// English in the other ten languages while everything around them was
+// translated. See docs/commerce/sync-health-contract-2026-09-12.md.
+const COMMERCE_HEALTH_TRANSLATIONS: TranslationTable = {
+  "Connect this channel to see how fresh its data is.": { "Türkçe": "Verilerinin ne kadar güncel olduğunu görmek için bu kanalı bağlayın.", "Deutsch": "Verbinden Sie diesen Kanal, um zu sehen, wie aktuell seine Daten sind.", "Français": "Connectez ce canal pour voir à quel point ses données sont récentes.", "Italiano": "Collega questo canale per vedere quanto sono aggiornati i suoi dati.", "Español (Spanish)": "Conecta este canal para ver qué tan actualizados están sus datos.", "Português": "Ligue este canal para ver até que ponto os dados estão atualizados.", "Русский (Russian)": "Подключите этот канал, чтобы видеть, насколько свежие у него данные.", "日本語 (Japanese)": "このチャネルを接続すると、データの新しさを確認できます。", "中文 (Chinese)": "连接此渠道后即可查看其数据的更新情况。", "العربية (Arabic)": "اربط هذه القناة لمعرفة مدى حداثة بياناتها.", "हिन्दी (Hindi)": "इस चैनल को कनेक्ट करें ताकि उसके डेटा की ताज़गी दिख सके।" },
+  "Orders from this channel do reach your workspace. Their freshness is not recorded yet, so this card has nothing to measure.": { "Türkçe": "Bu kanaldan gelen siparişler çalışma alanınıza ulaşıyor. Tazelikleri henüz kaydedilmediği için bu kartın ölçebileceği bir şey yok.", "Deutsch": "Bestellungen aus diesem Kanal erreichen Ihren Arbeitsbereich. Ihre Aktualität wird noch nicht erfasst, daher kann diese Karte nichts messen.", "Français": "Les commandes de ce canal parviennent bien à votre espace de travail. Leur fraîcheur n'est pas encore enregistrée, donc cette carte n'a rien à mesurer.", "Italiano": "Gli ordini di questo canale arrivano al tuo spazio di lavoro. La loro freschezza non viene ancora registrata, quindi questa scheda non ha nulla da misurare.", "Español (Spanish)": "Los pedidos de este canal sí llegan a tu espacio de trabajo. Su actualidad aún no se registra, así que esta tarjeta no tiene nada que medir.", "Português": "As encomendas deste canal chegam ao seu espaço de trabalho. A atualidade delas ainda não é registada, por isso este cartão não tem nada para medir.", "Русский (Russian)": "Заказы из этого канала поступают в вашу рабочую область. Их свежесть пока не записывается, поэтому этой карточке нечего измерять.", "日本語 (Japanese)": "このチャネルの注文はワークスペースに届いています。ただし鮮度が記録されていないため、このカードが測定できるものはありません。", "中文 (Chinese)": "该渠道的订单确实会进入你的工作区。但其更新时间尚未记录，因此此卡片无法测量。", "العربية (Arabic)": "طلبات هذه القناة تصل بالفعل إلى مساحة عملك. لكن حداثتها غير مسجَّلة بعد، لذا لا تملك هذه البطاقة ما تقيسه.", "हिन्दी (Hindi)": "इस चैनल के ऑर्डर आपके वर्कस्पेस तक पहुँचते हैं। लेकिन उनकी ताज़गी अभी दर्ज नहीं होती, इसलिए यह कार्ड कुछ माप नहीं सकता।" },
+};
+
 const TRANSLATIONS: TranslationTable = mergeTranslationTables(
   WEB_TRANSLATIONS,
   SESSION_LOCK_TRANSLATIONS,
@@ -7078,6 +7088,7 @@ const TRANSLATIONS: TranslationTable = mergeTranslationTables(
   SETTINGS_CONTENT_TRANSLATIONS as TranslationTable,
   INVENTORY_TRANSLATIONS,
   ONBOARDING_WIZARD_TRANSLATIONS,
+  COMMERCE_HEALTH_TRANSLATIONS,
   {
 
     // Store orders parked because the plan is full.
