@@ -34,7 +34,7 @@ const order = (id, extra = {}) => ({
   finance: { engineVersion: ENGINE_VERSION, revenue: 1200 }, ...extra
 });
 
-function build({ flag = null, orders = [] } = {}) {
+function build({ flag = null, orders = [], indexMissing = false } = {}) {
   resetSalesFlagCache();
   const nowRef = { value: Date.parse("2026-09-12T09:00:00.000Z") };
   const store = makeFakeFirestore(nowRef);
@@ -60,7 +60,9 @@ function build({ flag = null, orders = [] } = {}) {
     listOrdersPage: async ({ companyId, limit, cursor, assignedToUid = "" }) => {
       pages.push({ companyId, limit, cursor, assignedToUid });
       const scoped = assignedToUid ? orders.filter((row) => String(row.assignedToUid || "") === assignedToUid) : orders;
-      return { orders: scoped.slice(0, limit) };
+      // `indexMissing` is what the real pager reports when the composite index
+      // for the assigned scope does not exist and it filtered here instead.
+      return { orders: scoped.slice(0, limit), ...(indexMissing && assignedToUid ? { indexMissing: true } : {}) };
     },
     now: () => nowRef.value
   });
@@ -191,6 +193,32 @@ const OPEN = { enabled: true, workspaces: { c1: true } };
     const list = await fns.listSalesRows({ auth: owner, data: { companyId: "c1" } });
     const set = await fns.setSalesVisibility({ auth: owner, data: { companyId: "c1", visible: false } });
     for (const answer of [capability, list, set]) assert.strictEqual(answer.companyId, "c1");
+  });
+
+  await check("the answer says which query served it, so the index can be accepted on evidence", async () => {
+    // Verifying the assigned-scope index in production cannot rest on "rows came
+    // back" — the fallback returns the same rows — nor on a silent log, which
+    // proves only that nothing spoke. So the path is named in the answer.
+    const assigned = { uid: "u_assigned", token: { email: "assigned@example.invalid" } };
+    const mine = order("o1", { assignedToUid: "u_assigned" });
+
+    const { fns: indexed } = build({ flag: OPEN, orders: [mine] });
+    const a = await indexed.listSalesRows({ auth: assigned, data: { companyId: "c1" } });
+    assert.strictEqual(a.scope, "assigned");
+    assert.strictEqual(a.queryPath, "assigned_indexed", "the indexed query is not reported");
+
+    const { fns: fellBack } = build({ flag: OPEN, orders: [mine], indexMissing: true });
+    const b = await fellBack.listSalesRows({ auth: assigned, data: { companyId: "c1" } });
+    assert.strictEqual(b.queryPath, "assigned_fallback", "the fallback is not reported");
+    assert.deepStrictEqual(b.rows.map((row) => row.orderId), a.rows.map((row) => row.orderId), "the two paths must return the same rows — which is why the path has to be named");
+
+    const { fns: whole } = build({ flag: OPEN, orders: [order("o1")] });
+    const c = await whole.listSalesRows({ auth: owner, data: { companyId: "c1" } });
+    assert.strictEqual(c.queryPath, "workspace", "a member who sees the whole workspace runs neither assigned path");
+
+    const { fns: closed } = build({ orders: [order("o1")] });
+    const d = await closed.listSalesRows({ auth: owner, data: { companyId: "c1" } });
+    assert.strictEqual(d.queryPath, "none", "a closed workspace ran no query at all");
   });
 
   console.log(failures === 0 ? "\n✅ SALES CALLABLES GEÇTİ" : `\n❌ ${failures} failing`);
