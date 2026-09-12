@@ -51,7 +51,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAtMs",
+          "fieldPath": "orderDateMs",
           "order": "DESCENDING"
         }
       ]
@@ -65,7 +65,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAtMs",
+          "fieldPath": "orderDateMs",
           "order": "DESCENDING"
         }
       ]
@@ -79,7 +79,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAtMs",
+          "fieldPath": "orderDateMs",
           "order": "DESCENDING"
         }
       ]
@@ -93,7 +93,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAtMs",
+          "fieldPath": "orderDateMs",
           "order": "DESCENDING"
         }
       ]
