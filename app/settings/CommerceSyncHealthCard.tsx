@@ -19,6 +19,14 @@ type CommerceHealthConnection = {
   provider: string; connectionId: string;
   health: Record<"orders" | "products" | "inventory" | "finance", CommerceHealthEntity>;
 };
+// CARD-001 — the state the server decided for this provider. The browser
+// renders it; it does not work the rule out again, because the same rule living
+// in two places is how "Never synced" ended up on a connector that never
+// records health at all.
+type CommerceHealthCard = {
+  provider: string; connected: boolean; healthInstrumented: boolean;
+  state: "not_connected" | "not_supported" | "never_synced" | "rows";
+};
 type CommerceEventRow = {
   key: string; provider: string; connectionId: string; externalId: string; eventType: string; source: string; status: string;
   attempt: number; errorClass: string | null; message: string | null; orderId: string | null; startedAt: string | null; finishedAt: string | null; nextRetryAt: string | null;
@@ -35,6 +43,21 @@ const COMMERCE_STATUS_LABELS: Record<string, string> = {
   applied: "Applied", retrying: "Retrying", dead: "Dead", skipped: "Skipped", duplicate: "Duplicate", stale: "Stale", noop: "No change",
   held: "Held", queued: "Queued", processing: "Processing", received: "Received", failed: "Dead"
 };
+// CARD-001 — one contract, three states, and never an empty card:
+//   Not connected  no connection with this provider in this workspace
+//   Not supported  connected, but nothing here records health for it
+//   Never synced   connected and instrumented, but nothing recorded yet
+// functions/commerce/health.js decides which; these are only its words.
+const EMPTY_STATE_LABEL: Record<string, string> = {
+  not_connected: "Not connected", not_supported: "Not supported", never_synced: "Never synced", rows: "Never synced"
+};
+const EMPTY_STATE_DETAIL: Record<string, string> = {
+  not_connected: "Connect this channel to see how fresh its data is.",
+  not_supported: "Orders from this channel do reach your workspace. Their freshness is not recorded yet, so this card has nothing to measure.",
+  never_synced: "No sync activity recorded yet.",
+  rows: "No sync activity recorded yet."
+};
+
 function commerceAgoText(ms: number | null | undefined, t: (text: string) => string): string {
   if (!ms) return "—";
   const diff = Math.max(0, Date.now() - ms);
@@ -49,6 +72,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
   const companyId = workspace.id.trim();
   const isOwner = workspace.role === "owner";
   const [connections, setConnections] = useState<CommerceHealthConnection[] | null>(null);
+  const [card, setCard] = useState<CommerceHealthCard | null>(null);
   const [events, setEvents] = useState<CommerceEventRow[]>([]);
   const [review, setReview] = useState<CommerceReviewRow[]>([]);
   const [error, setError] = useState("");
@@ -59,11 +83,12 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
     if (!companyId) return;
     try {
       const [health, activity, queue] = await Promise.all([
-        httpsCallable<{ companyId: string }, { connections: CommerceHealthConnection[] }>(functions, "getCommerceHealth")({ companyId }),
+        httpsCallable<{ companyId: string; provider: string }, { connections: CommerceHealthConnection[]; card: CommerceHealthCard | null }>(functions, "getCommerceHealth")({ companyId, provider }),
         httpsCallable<{ companyId: string; limit: number }, { events: CommerceEventRow[] }>(functions, "listCommerceEvents")({ companyId, limit: 40 }),
         httpsCallable<{ companyId: string }, { items: CommerceReviewRow[] }>(functions, "listCommerceReviewQueue")({ companyId }).catch(() => ({ data: { items: [] as CommerceReviewRow[] } }))
       ]);
       setConnections((health.data?.connections ?? []).filter((row) => row.provider === provider));
+      setCard(health.data?.card ?? null);
       setEvents((activity.data?.events ?? []).filter((row) => row.provider === provider).slice(0, 20));
       setReview((queue.data?.items ?? []).filter((row) => row.provider === provider));
       setError("");
@@ -113,7 +138,12 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
       {connections === null ? (
         <p className="muted-copy">{t("Loading…")}</p>
       ) : connections.length === 0 ? (
-        <p className="muted-copy">{t("No sync activity recorded yet.")}</p>
+        <div>
+          <span className="due-pill">{t(EMPTY_STATE_LABEL[card?.state ?? "never_synced"] ?? "Never synced")}</span>
+          <p className="muted-copy" style={{ fontSize: 12.5, margin: "8px 0 0" }}>
+            {t(EMPTY_STATE_DETAIL[card?.state ?? "never_synced"] ?? "No sync activity recorded yet.")}
+          </p>
+        </div>
       ) : (
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           {connections.map((row) => (

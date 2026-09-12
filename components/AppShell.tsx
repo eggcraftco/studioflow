@@ -39,6 +39,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
+import { fetchSalesCapability } from "@/lib/studioflow/sales";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
@@ -117,6 +118,7 @@ const NAV_ITEMS: Array<
   // people should land on rather than an order list.
   { href: "/home", label: "Home", icon: "dashboard" },
   { href: "/orders", label: "Orders", icon: "orders" },
+  { href: "/sales", label: "Sales", icon: "orders" },
   { href: "/production", label: "Production", icon: "schedule" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/bank", label: "Banking", icon: "bank" },
@@ -157,6 +159,15 @@ let cachedAppShellUserId = "";
 let cachedWorkspace: WorkspaceContext | null = null;
 let cachedSettings: WorkspaceSettingsOverview | null = null;
 let cachedFinanceOrders: DashboardFinanceOrder[] = [];
+// Sales, Faz 1 — whether the menu entry belongs to THIS workspace. The answer is
+// the server's (getSalesCapability): eligibility, the workspace's own visibility
+// preference and the member's read permission, decided in one place. The flag
+// document itself is server-only and is never read from a browser.
+//
+// It is cached beside the workspace it answered for, and the id travels with it,
+// so switching account or workspace cannot leave the previous workspace's menu
+// on screen while the new one loads.
+let cachedSalesMenu: { companyId: string; showInMenu: boolean } | null = null;
 
 function hasCachedShellForUser(userId?: string | null) {
   return Boolean(userId && cachedAppShellUserId === userId);
@@ -182,6 +193,7 @@ function clearAppShellSnapshot() {
   cachedWorkspace = null;
   cachedSettings = null;
   cachedFinanceOrders = [];
+  cachedSalesMenu = null;
 }
 
 function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
@@ -1165,6 +1177,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(() =>
     cachedShellMatchesUser ? cachedWorkspace : null,
   );
+  const [salesMenu, setSalesMenu] = useState<{ companyId: string; showInMenu: boolean } | null>(() =>
+    cachedShellMatchesUser ? cachedSalesMenu : null,
+  );
   // Set when the workspace could not be resolved and no cached copy stood in:
   // the shell shows the message with a Retry instead of a silent loading state.
   const [workspaceLoadError, setWorkspaceLoadError] = useState("");
@@ -1901,6 +1916,43 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }, [workspace?.id, user?.uid, settings?.businessOnboardingCompleted]);
 
   /**
+   * Should Sales be in the menu for this workspace and this member?
+   *
+   * The server answers, in one call: is the workspace eligible at all, has it
+   * asked to see Sales, and may this member read orders. The browser decides
+   * none of it and never reads the flag document — `appConfig` has no client
+   * rule, and it should stay that way.
+   *
+   * The answer is stamped with the workspace it was computed for, and the state
+   * is cleared before the request goes out, so switching workspace or account
+   * cannot leave the previous one's menu entry on screen while the new answer is
+   * in flight. A failure hides the entry rather than guessing: a menu item that
+   * leads to a refusal is worse than no menu item.
+   */
+  useEffect(() => {
+    const companyId = workspace?.id ?? "";
+    const uid = user?.uid ?? "";
+    setSalesMenu(null);
+    cachedSalesMenu = null;
+    if (!companyId || !uid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const capability = await fetchSalesCapability(companyId);
+        if (cancelled) return;
+        const answer = { companyId, showInMenu: capability.showInMenu === true };
+        cachedSalesMenu = answer;
+        setSalesMenu(answer);
+      } catch {
+        if (cancelled) return;
+        cachedSalesMenu = null;
+        setSalesMenu({ companyId, showInMenu: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace?.id, user?.uid]);
+
+  /**
    * When the wizard takes over the whole screen.
    *
    * Automatically only for a workspace with no orders in it — a brand-new one,
@@ -2561,6 +2613,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   item.href === "/admin" &&
                   !isNivaDeskAdminEmail(user?.email)
                 )
+                  return null;
+                if (
+                  "href" in item &&
+                  item.href === "/sales" &&
+                  !(
+                    salesMenu?.companyId === workspace?.id &&
+                    salesMenu?.showInMenu === true
+                  )
+                )
+                  // Hidden until the server says this workspace is eligible, has
+                  // asked for it, and this member may read orders — and only
+                  // when the answer belongs to the workspace on screen now.
                   return null;
                 if (
                   "href" in item &&

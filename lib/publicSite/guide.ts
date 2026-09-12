@@ -590,6 +590,31 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
+    id: "sales",
+    title: "Sales",
+    blocks: [
+      { kind: "para", text: "Sales shows everything you have sold, built from the orders you already have. It is a read-only view: nothing on it creates or changes an order, a product, a stock level or a payment. It appears in the menu only when your workspace has it switched on and your account includes orders." },
+      { kind: "sub", text: "The Sales tab" },
+      { kind: "bullets", items: [
+        "One row per order, newest first, with the customer, what was sold, the channel it came from, the payment and delivery state and the revenue.",
+        "Opening a row opens that same order in Orders — it is the same order, not a copy.",
+        "Filters: one channel or every channel, only what needs attention, and whether to include bespoke work. Show more brings the next page from the server.",
+        "Revenue appears only if your account includes financial information; otherwise the column shows a dash and the rest of the row is unchanged. An order whose figures have not been worked out yet, or are out of date, says so instead of showing a number.",
+        "If your account is limited to the work assigned to you, Sales shows exactly the orders Orders shows you, and says so above the list.",
+        "A marketplace that keeps the buyer's details, such as eBay or Amazon, shows \"Held by the marketplace\" in place of a name.",
+        "An order with no usable date says \"Date unknown\" rather than guessing one."
+      ] },
+      { kind: "sub", text: "Products" },
+      { kind: "para", text: "Products lists the product catalogue for your workspace. Until your workspace has products, it says so plainly — your sales are still listed from the orders you have taken." },
+      { kind: "sub", text: "Channels" },
+      { kind: "bullets", items: [
+        "One row per sales channel, saying whether it is connected to this workspace. Connect or disconnect a channel in Settings → Integrations.",
+        "Connected means the channel is linked. It does not mean orders have arrived from it, and products and stock are not synced from any channel yet.",
+        "Amazon is not listed: its connection is held outside this project, so the screen cannot check it without guessing."
+      ] }
+    ]
+  },
+  {
     id: "schedule",
     title: "Schedule",
     blocks: [
@@ -1195,16 +1220,64 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "The NivaDesk app for ChatGPT" },
           { kind: "bullets", items: [
-            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language: what is overdue, what a customer has ordered before, how much stock is left of something.",
-            "Connect it from ChatGPT: find NivaDesk in its apps list and sign in with the NivaDesk account you already use. ChatGPT never sees your password — you approve the connection in NivaDesk, and you can withdraw it later the same way.",
-            "It reads the workspace you approved and answers from it. It cannot see other workspaces, and what your role cannot see in the app it cannot see there either.",
-            "You can also send a receipt or an invoice photo to it. If the payment is already in your bank feed the receipt is matched to it; if the payment has not arrived yet the receipt waits in Banking under Receipts until it does, rather than being lost."
+            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language. It has its own section: see NivaDesk in ChatGPT."
           ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
             "The \"Powered by NivaDesk\" line on customer pages can be switched off on the Pro and Team plans.",
             "Your logo, business name and footer note already come from your workspace branding settings."
+          ] }
+        ]
+      },
+      {
+        id: "chatgpt-app",
+        title: "NivaDesk in ChatGPT",
+        blocks: [
+          { kind: "para", text: "NivaDesk has an app inside ChatGPT. Once you connect your workspace you can ask about it in plain language — what is overdue, what a customer ordered before, how a month went — and ChatGPT answers from your own records, in the role you have in NivaDesk." },
+          { kind: "para", text: "It works on the same orders, notes, finance and banking data you see in the app. It cannot see another workspace, and it never talks to your shops or your bank directly: everything comes through NivaDesk." },
+          { kind: "sub", text: "Connecting" },
+          { kind: "bullets", items: [
+            "In ChatGPT open the apps list, choose NivaDesk and sign in with the NivaDesk account you already use. You pick the workspace on the NivaDesk consent page; ChatGPT never sees your password.",
+            "Owners can see and end ChatGPT connections under Settings ▸ Account; connecting again from the same account replaces the earlier connection."
+          ] },
+          { kind: "sub", text: "What you can ask" },
+          { kind: "bullets", items: [
+            "Orders: find orders by customer, reference, design name or status; open one; add a note; change its status or design status; create a new order. Workflow-only members see only the orders assigned to them, and money fields are hidden from roles without the Financial permission.",
+            "Notes: create, search, open, append to, edit, pin and archive your own personal notes. Team notes are not changed from ChatGPT.",
+            "Finance and dashboard: an order's financials, the dashboard summary, the financial overview and extra spending for a month, year or date range — on the Starter plan in the basic shape, on Pro and Team with profit and remaining balances.",
+            "Banking: monthly spending by category and merchant, recurring costs, search of bank transactions, and receipts — send a receipt or invoice photo and NivaDesk matches it to the bank line; if several lines could fit it asks which; if the payment has not arrived yet the receipt waits under Banking ▸ Receipts and is matched when it does. Attaching receipts is for the workspace owner.",
+            "Across your channels: find an order from any channel — Shopify, Etsy, WooCommerce, Square, Amazon, eBay or one you took yourself — by order number, the shop's own order number, customer, date, or payment or fulfilment state. The shop's own status stays a separate field from your NivaDesk status, so you can see where the two disagree, and the answer says when each channel that contributed last synced, or says it cannot tell. It reports no amounts at all: it tells you where an order is and whether it is paid, never what it was worth, and it names no currency. For the figures, ask about that order's financials — a different tool, with your Financial permission in front of it. Buyer details are withheld for channels whose own data policy restricts them.",
+            "Inventory: search your stock by name, SKU, serial number, brand, model, category or location, and narrow it to low stock, reserved items, a status or a place."
+          ] },
+          // Version 1.2.0 of the ChatGPT app (operator decision, 10 September
+          // 2026) publishes the two cross-channel reads behind
+          // NIVADESK_MCP_ORCHESTRATOR alone, so the channel search and the
+          // stock search sit under "What you can ask" above. The photo add
+          // (create_inventory_item) is behind NIVADESK_MCP_INVENTORY, which is
+          // not part of that release, so it is the one capability left here.
+          // This heading is what keeps the guide honest: a bot that offers a
+          // tool the app does not publish sends the reader somewhere that is
+          // not there. Anything named here must have a registry row —
+          // functions/test/qa/mcp-reduced-surface.test.js reads this chapter
+          // out of the built corpus and checks each block against the registry
+          // and the release flag. Deploy order matters too: this text goes
+          // live with the assistant functions only AFTER chatgptMcp has been
+          // deployed with the flag set (docs/openai-resubmission-package-2026-09-10.md).
+          { kind: "sub", text: "Coming in the next version of the app" },
+          { kind: "bullets", items: [
+            "The one below is built and tested but is not in the version of the NivaDesk app published in ChatGPT today, so asking for it now gets you the answers above instead. It arrives with a later release, and nothing on your side has to change for it.",
+            "Inventory from a photo: add an item from a photo — NivaDesk reads the photo, says what it thinks the item is, and only adds it once you confirm."
+          ] },
+          { kind: "sub", text: "When your customer hears about it" },
+          { kind: "bullets", items: [
+            "Changing an order's status from ChatGPT is the same action as changing it in the app, and it can reach your customer the same way: if the order has automatic updates on — which is the default for orders that carry an email address — NivaDesk emails them about the new status, and sends an SMS too where you have SMS switched on. ChatGPT can only choose from the statuses your workspace already uses, and it should tell you before it changes one.",
+            "You control this per order with the customer updates switch, and for the whole workspace under Settings ▸ Notifications. Turning automatic updates off for an order means no message goes out however the status is changed."
+          ] },
+          { kind: "sub", text: "What it will not do" },
+          { kind: "bullets", items: [
+            "It does not change anything in Shopify, Etsy, WooCommerce, Square, Amazon or eBay, and it does not write to your bank or your accounting software. It cannot write a message of its own to a customer either — the only thing that reaches them is your workspace's own status update, in your workspace's own words.",
+            "When a figure depends on a shop or bank sync that is behind, the answer says so instead of presenting old numbers as live."
           ] }
         ]
       },
@@ -1822,6 +1895,31 @@ const TREE_TR: GuideNode[] = [
     ]
   },
   {
+    id: "sales",
+    title: "Satışlar (Sales)",
+    blocks: [
+      { kind: "para", text: "Sales, sattığınız her şeyi hâlihazırdaki siparişlerinizden derleyerek gösterir. Salt-okunur bir ekrandır: üzerinde hiçbir sipariş, ürün, stok ya da ödeme oluşturulmaz veya değiştirilmez. Menüde yalnızca çalışma alanınızda açıksa ve hesabınız siparişleri kapsıyorsa görünür." },
+      { kind: "sub", text: "Sales sekmesi" },
+      { kind: "bullets", items: [
+        "Her sipariş için bir satır, en yeniden eskiye; müşteri, satılan şey, geldiği kanal, ödeme ve teslimat durumu ve gelir.",
+        "Bir satırı açmak aynı siparişi Siparişler'de açar — kopyası değil, aynısıdır.",
+        "Filtreler: tek kanal veya tüm kanallar, yalnız ilgi bekleyenler, ve özel işlerin dahil edilip edilmeyeceği. Daha fazla göster, sonraki sayfayı sunucudan getirir.",
+        "Gelir yalnızca hesabınız finansal bilgileri kapsıyorsa görünür; kapsamıyorsa sütunda çizgi olur ve satırın geri kalanı değişmez. Rakamları henüz hesaplanmamış ya da güncelliğini yitirmiş bir sipariş, sayı göstermek yerine bunu söyler.",
+        "Hesabınız yalnız size atanan işlerle sınırlıysa Sales, Siparişler'in gösterdiği siparişlerin aynısını gösterir ve bunu listenin üstünde yazar.",
+        "Alıcı bilgisini kendinde tutan bir pazaryeri — eBay veya Amazon gibi — isim yerine \"Pazaryeri tarafından saklanıyor\" gösterir.",
+        "Kullanılabilir tarihi olmayan sipariş, tarih uydurmak yerine \"Tarih bilinmiyor\" der."
+      ] },
+      { kind: "sub", text: "Ürünler (Products)" },
+      { kind: "para", text: "Products, çalışma alanınızın ürün kataloğunu listeler. Çalışma alanınızda ürün olana kadar bunu açıkça söyler — satışlarınız yine aldığınız siparişlerden listelenir." },
+      { kind: "sub", text: "Kanallar (Channels)" },
+      { kind: "bullets", items: [
+        "Her satış kanalı için bir satır; bu çalışma alanına bağlı olup olmadığını söyler. Bağlama ve kaldırma Ayarlar → Entegrasyonlar'da yapılır.",
+        "Bağlı, kanalın bağlandığı anlamına gelir. Oradan sipariş geldiği anlamına gelmez; ürün ve stok hiçbir kanaldan senkronlanmıyor.",
+        "Amazon listelenmez: bağlantısı bu projenin dışında tutulur, bu yüzden ekran tahmin etmeden kontrol edemez."
+      ] }
+    ]
+  },
+  {
     id: "schedule",
     title: "Schedule (Takvim)",
     blocks: [
@@ -2414,16 +2512,58 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "ChatGPT için NivaDesk uygulaması" },
           { kind: "bullets", items: [
-            "NivaDesk'in ChatGPT içinde bir uygulaması var; kendi çalışma alanınızı gündelik dille sorabilirsiniz: neyin gecikmiş olduğunu, bir müşterinin daha önce ne sipariş ettiğini, bir üründen ne kadar stok kaldığını.",
-            "ChatGPT'den bağlayın: uygulama listesinde NivaDesk'i bulun ve zaten kullandığınız NivaDesk hesabınızla giriş yapın. ChatGPT parolanızı asla görmez — bağlantıyı NivaDesk'te onaylarsınız ve daha sonra aynı yerden geri alabilirsiniz.",
-            "Onayladığınız çalışma alanını okur ve oradan yanıtlar. Başka çalışma alanlarını göremez; uygulamada rolünüzün göremediği şeyi orada da göremez.",
-            "Ona bir fiş ya da fatura fotoğrafı da gönderebilirsiniz. Ödeme banka akışınızda zaten varsa fiş onunla eşleştirilir; ödeme henüz gelmediyse fiş kaybolmak yerine Banking'de Receipts altında ödeme gelene kadar bekler."
+            "NivaDesk'in ChatGPT içinde bir uygulaması var; çalışma alanınızı gündelik dille sorabilirsiniz. Kendi bölümü var: ChatGPT'de NivaDesk."
           ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
             "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
             "Müşteri sayfalarındaki \"Powered by NivaDesk\" satırı Pro ve Team planlarında kapatılabilir.",
             "Logonuz, işletme adınız ve alt not zaten çalışma alanı markalama ayarlarınızdan gelir."
+          ] }
+        ]
+      },
+      {
+        id: "chatgpt-app",
+        title: "ChatGPT'de NivaDesk",
+        blocks: [
+          { kind: "para", text: "NivaDesk'in ChatGPT içinde bir uygulaması var. Çalışma alanınızı bağladıktan sonra onu gündelik dille sorabilirsiniz — ne gecikmiş, bir müşteri daha önce ne sipariş etmiş, bir ay nasıl geçmiş — ve ChatGPT NivaDesk'teki rolünüzle kendi kayıtlarınızdan yanıtlar." },
+          { kind: "para", text: "Uygulamada gördüğünüz sipariş, not, finans ve banka verisinin aynısı üzerinde çalışır. Başka bir çalışma alanını göremez; mağazalarınızla ya da bankanızla doğrudan konuşmaz, her şey NivaDesk üzerinden gelir." },
+          { kind: "sub", text: "Bağlama" },
+          { kind: "bullets", items: [
+            "ChatGPT'de uygulama listesini açın, NivaDesk'i seçin ve zaten kullandığınız NivaDesk hesabıyla giriş yapın. Çalışma alanını NivaDesk onay sayfasında siz seçersiniz; ChatGPT parolanızı asla görmez.",
+            "Sahipler ChatGPT bağlantılarını Settings ▸ Account altında görüp sonlandırabilir; aynı hesaptan yeniden bağlanmak önceki bağlantının yerine geçer."
+          ] },
+          { kind: "sub", text: "Neler sorabilirsiniz" },
+          { kind: "bullets", items: [
+            "Siparişler: müşteri, referans, tasarım adı ya da duruma göre sipariş bulma; birini açma; not ekleme; durumunu veya tasarım durumunu değiştirme; yeni sipariş oluşturma. Yalnızca iş akışı üyeleri sadece kendilerine atanan siparişleri görür; Financial izni olmayan rollerden para alanları gizlenir.",
+            "Notlar: kendi kişisel notlarınızı oluşturma, arama, açma, sonuna ekleme, düzenleme, sabitleme ve arşivleme. Ekip notları ChatGPT'den değiştirilmez.",
+            "Finans ve pano: bir siparişin finansı, pano özeti, finansal genel bakış ve bir ay, yıl ya da tarih aralığı için ek harcamalar — Starter planda temel biçimde, Pro ve Team'de kâr ve kalan bakiyelerle.",
+            "Banka: kategori ve satıcıya göre aylık harcama, tekrarlayan giderler, banka hareketlerinde arama ve fişler — bir fiş ya da fatura fotoğrafı gönderin, NivaDesk onu banka satırıyla eşleştirir; birden fazla satır uyuyorsa hangisi olduğunu sorar; ödeme henüz gelmediyse fiş Banking ▸ Receipts altında bekler ve geldiğinde eşlenir. Fiş ekleme çalışma alanı sahibine özeldir.",
+            "Kanallarınız genelinde: herhangi bir kanaldaki siparişi bulma — Shopify, Etsy, WooCommerce, Square, Amazon, eBay ya da kendi aldığınız siparişler — sipariş numarası, mağazanın kendi sipariş numarası, müşteri, tarih ya da ödeme ve gönderim durumuna göre. Mağazanın kendi durumu sizin NivaDesk durumunuzdan ayrı bir alan olarak durur, böylece ikisinin çeliştiği yeri görürsünüz; yanıt, katkı veren her kanalın en son ne zaman senkronlandığını söyler, söyleyemiyorsa bunu söyler. Hiçbir tutar döndürmez: siparişin nerede olduğunu ve ödenip ödenmediğini söyler, ne kadar olduğunu değil; para birimi de vermez. Rakamlar için o siparişin finansını sorun — o ayrı bir araçtır ve önünde Financial izniniz durur. Kendi veri politikası kısıtlayan kanallarda alıcı bilgileri gösterilmez.",
+            "Envanter: stoğunuzu ad, SKU, seri numarası, marka, model, kategori ya da konuma göre arama; düşük stok, rezerve ürünler, bir durum ya da bir yere göre daraltma."
+          ] },
+          // İngilizcesindeki gibi: 1.2.0 (operatör kararı, 10 Eylül 2026) yalnız
+          // NIVADESK_MCP_ORCHESTRATOR bayrağını açar; kanal araması ve stok
+          // araması bu yüzden yukarıda "Neler sorabilirsiniz" altında. Fotoğraftan
+          // ürün ekleme NIVADESK_MCP_INVENTORY arkasında ve o sürümde yok; burada
+          // kalan tek madde o. Burada adı geçen her şeyin registry satırı olmak
+          // zorunda; mcp-reduced-surface testi bu bölümü derlenmiş corpus'tan
+          // okuyup registry ve sürüm bayrağıyla karşılaştırır. Bu metin, chatgptMcp
+          // bayrakla deploy edildikten SONRA asistan fonksiyonlarıyla yayına alınır.
+          { kind: "sub", text: "Uygulamanın sonraki sürümünde geliyor" },
+          { kind: "bullets", items: [
+            "Aşağıdaki tek madde hazır ve testli ama bugün ChatGPT'de yayında olan NivaDesk sürümünde yok; şimdi sorarsanız yukarıdaki yanıtları alırsınız. Daha sonraki bir sürümle gelir ve bunun için sizin tarafınızda bir şey değişmesi gerekmez.",
+            "Fotoğraftan envanter: fotoğraftan ürün ekleyebilirsiniz — NivaDesk fotoğrafı okur, ürünün ne olduğunu düşündüğünü söyler ve yalnızca siz onayladıktan sonra ekler."
+          ] },
+          { kind: "sub", text: "Müşteriniz ne zaman haber alır" },
+          { kind: "bullets", items: [
+            "Bir siparişin durumunu ChatGPT'den değiştirmek, uygulamadan değiştirmekle aynı işlemdir ve müşterinize aynı şekilde ulaşabilir: siparişte otomatik güncellemeler açıksa — e-posta adresi olan siparişlerde varsayılan olarak açıktır — NivaDesk yeni durumu e-postayla bildirir, SMS'i açtıysanız SMS de gönderir. ChatGPT yalnızca çalışma alanınızın hâlihazırda kullandığı durumlardan birini seçebilir ve bir durumu değiştirmeden önce size söylemelidir.",
+            "Bunu sipariş bazında müşteri güncellemeleri anahtarından, çalışma alanı genelinde Settings ▸ Notifications altından yönetirsiniz. Bir siparişte otomatik güncellemeleri kapatmak, durum nasıl değiştirilirse değiştirilsin mesaj gitmemesi demektir."
+          ] },
+          { kind: "sub", text: "Yapmayacakları" },
+          { kind: "bullets", items: [
+            "Shopify, Etsy, WooCommerce, Square, Amazon ya da eBay'de hiçbir şeyi değiştirmez; bankanıza veya muhasebe yazılımınıza yazmaz. Müşterinize kendi cümlesiyle bir mesaj da yazamaz — müşteriye ulaşan tek şey çalışma alanınızın kendi durum bildirimidir, kendi kelimelerinizle.",
+            "Bir rakam geride kalmış bir mağaza ya da banka senkronuna bağlıysa yanıt bunu söyler; eski sayıları canlıymış gibi sunmaz."
           ] }
         ]
       },
