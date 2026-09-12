@@ -1,4 +1,4 @@
-# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 12 September 2026, 00:02Z)
+# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 12 September 2026, 00:18Z)
 
 Read this first after a context reset or in a new session, then compare it with the live git and cloud state before
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
@@ -21,6 +21,17 @@ At the operator's request work moved to the Sales/Products plan (`NivaDesk-Sales
 **A one-file orientation brief for another assistant:** `docs/nivadesk-system-brief-2026-09-12.md` (product, repository layout, data model, the working rules, today's live state, what was done on 11 Sep, the Sales phases, the untouchable areas). It is a summary; this hand-off and the code stay authoritative.
 
 **Sales Faz 0 is done (22:22Z).** Branch `sales-faz0` (worktree `~/Developer/studioflow-sales`) at `4b21ba99`; record `docs/sales/faz0-2026-09-11.md` carries the code map, the proposed data contract, the PR sequence, the rollout and rollback, six decisions for the operator, and the emulator prototype results at desktop and phone widths. Nothing was deployed and nothing was written to production; the emulator seed refuses to run anywhere but a local emulator. The headline findings: one order identity already exists; order lines carry no product reference and the server drops unknown line keys; the shipped iOS/Mac 1.3 (17) rewrites whole order documents, so Sales data belongs in server-written side documents; there is no product catalog; stock is not yet safe for a stocked sale, so Faz 2 waits for a hardening PR; the capability list overclaims what connectors can do.
+
+## Two policy decisions applied on the candidates (00:18Z)
+
+Still branch work: nothing merged into this branch, nothing deployed, no rules or indexes published, no flag document, allowlist empty.
+
+1. **An assigned-scope member sees the same orders in Sales as in Orders.** The capability reports a scope (`workspace` or `assigned`) instead of refusing; the list scopes the query by `assignedToUid`; the rules give such a member their own rows only, so the projection carries `assignedToUid`; the composite index is prepared, and without it the server reads the workspace page and filters before answering. Money still follows the existing finance flag. PR 1 commits `305f33f2`, `3739a585`, `cbf12324`.
+2. **Etsy and Amazon read "Not supported", never "Never synced"**, proved on all three layers (capability, health, web card), with a fourth check pinning what stays open: neither connector records health at all, so no row appears for them. PR 2 commit `e6d11ab3`.
+
+A census of production also moved the projection off the order's creation stamp: `paymentDate` exists on 448 of 452 orders, `createdAtMs` on 12, so the projection stamps its own `orderDateMs` and the prepared indexes were re-cut on it. Of the 412 orders that count as active today, 13 are cancelled across 4 workspaces, and **no** demo-like workspace is over its limit because of them.
+
+Release candidate `sales-faz1-release-candidate` @ `43b95d8b`: `npm test` 1796, rules and e2e 360, web typecheck and build all exit 0; record `docs/sales/faz1-verification-2026-09-12.md` (commit `c3c7bdde`).
 
 ## Verification of the two candidates (00:02Z): one was not ready, and now is
 
