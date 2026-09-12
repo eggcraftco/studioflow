@@ -160,3 +160,55 @@ Faz 1 needs none: no client changes, no field is added to an order, and the side
 3. **The pilot is per workspace**, so a workspace whose devices are behind simply does not get the write phase.
 4. **When an old client rewrites an order that has a projection**, the trigger re-derives the row and the link states move to `changed`, `suggested`, `ambiguous` or `missing`. Nothing moves stock, nothing is re-matched by name or SKU, and a person resolves it. The 1.3-style rewrite is covered by its own test.
 5. **Ids the server writes into order arrays stay UUIDs**, because the shipped 1.3 decodes them as UUID and would otherwise fail to read the order at all.
+
+---
+
+# Round 2 — the two inconsistencies, resolved
+
+Release candidate `sales-faz1-release-candidate` @ `3e1fe71d` (merge of `sales-faz1-server` @ `a8ffa6e9` and `commerce-capability-truth` @ `40f1c5d9`). **Not merged into the deploy branch. No function, rule or index deployed.**
+
+## 1. The real query against the index file
+
+Settled by reading the code, not the prose. `functions/test/qa/sales-index-match.test.js` runs the real `defaultListOrdersPage` against a recording client and uses what it asks Firestore for as the input to the comparison:
+
+```
+collection siparisler
+where      companyId ==
+where      assignedToUid ==        # assigned scope only
+orderBy    paymentDate desc
+orderBy    __name__ desc
+```
+
+* **`paymentDate` is the field.** `orderDateMs` in the response row is that same `paymentDate` rendered as milliseconds (`functions/sales/rows.js:148`) — not a stored field, and not the separate stamp PR 3 will write on the side document. Both names now sit in the record with that sentence beside them, and the record's contract block is parsed by the test, so prose and code cannot drift again.
+* **Four `salesOrders` indexes removed.** They indexed a collection nothing writes on a field nothing sorts by. Kept verbatim in `docs/sales/faz1-pr1-2026-09-12.md` under PR 3.
+* **Production, read-only:** the live index is `siparisler (companyId ASC, paymentDate DESC, __name__ DESC)`, state READY — an exact match for the workspace query, explicit `__name__ DESC` included. The assigned-scope index is **not live**. Three composite indexes exist in production; the file declares four, and the one extra is the one this PR adds.
+* **Emulator, measured not assumed:** an undeclared composite query succeeds in the emulator, so the emulator does **not** enforce indexes. What the emulator proves is the query's behaviour — ordering, cursor arity, paging over shared dates, filtered paging, assigned scope (5 checks in `sales-query.test.mjs`). What proves the index match is the mechanical comparison above plus the production listing.
+
+## 2. One Sync health contract
+
+`docs/commerce/sync-health-contract-2026-09-12.md` carries it in full. Three states, decided once in `functions/commerce/health.js → healthCardState`:
+
+| State | When |
+|---|---|
+| **Not connected** | no live connection with this provider in the workspace |
+| **Not supported** | connected, but nothing here records health for it |
+| **Never synced** | connected and instrumented, nothing recorded yet |
+
+Etsy connected reads **Not supported**, with a sentence saying its orders do arrive and only their freshness is unmeasured — because "Not supported" alone would read as "Etsy orders do not sync", which is false. **Amazon has no card at all, deliberately:** it is `kind: "planned"` on the web so it has no Manage screen, and its connections live in the hardened project behind a service-account call rather than in Firestore. Written down rather than left as a gap.
+
+The bug this closes: with no health document the card drew an empty box under *"No sync activity recorded yet."* — the same box for "no connection" and for "connected but never measured".
+
+## Verification on `3e1fe71d`
+
+| Check | Result |
+|---|---|
+| `npm test` | exit 0 — 1802 passed, 0 failed |
+| `npm run test:rules` + `test/run-e2e.sh` (emulator) | exit 0 — 357 passed, 0 failed |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run build` | exit 0 |
+| `firestore.indexes.json` parse | 4 indexes, 0 `salesOrders`, no `orderDateMs` |
+| GitHub CI `3e1fe71d` (run 34663048605) | success — all three jobs, **including rules + e2e**, ran and passed |
+| GitHub CI `a8ffa6e9` (34663048918), `40f1c5d9` (34663048548) | success |
+| `appConfig/sales` in production | **does not exist** — allowlist empty, no workspace can be opened |
+
+`446cdb30` → `43b95d8b` was 1 `.md` + 1 `.json`, no code file, which is why the path-filtered CI did not re-run then. This round touches `functions/**` and the web, so CI ran in full.
