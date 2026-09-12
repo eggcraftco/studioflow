@@ -221,6 +221,55 @@ const OPEN = { enabled: true, workspaces: { c1: true } };
     assert.strictEqual(d.queryPath, "none", "a closed workspace ran no query at all");
   });
 
+  await check("the catalog is empty because there is no catalog, and it says so rather than inventing one", async () => {
+    // build() resets the module-level flag cache, so the closed case runs first
+    // and the open one rebuilds after it — otherwise the second call reads the
+    // first store's cached answer.
+    const closed = build({ orders: [order("o1")] });
+    const off = await closed.fns.listSalesProducts({ auth: owner, data: { companyId: "c1" } });
+    assert.strictEqual(off.enabled, false);
+    assert.strictEqual(off.reason, "flag_off");
+    assert.deepStrictEqual(off.products, []);
+
+    const { fns } = build({ flag: OPEN, orders: [order("o1")] });
+    const open = await fns.listSalesProducts({ auth: owner, data: { companyId: "c1" } });
+    assert.strictEqual(open.enabled, true);
+    assert.deepStrictEqual(open.products, [], "a product appeared from nowhere");
+    assert.strictEqual(open.catalogExists, false, "an empty catalog claims to exist");
+  });
+
+  await check("a product that does exist is returned with no invented fields", async () => {
+    const { fns, store } = build({ flag: OPEN, orders: [order("o1")] });
+    store.write("companies/c1/salesProducts/p1", { name: "Seamaster 300", sku: "SM-300", channel: "SHOPIFY" });
+    const result = await fns.listSalesProducts({ auth: owner, data: { companyId: "c1" } });
+    assert.strictEqual(result.catalogExists, true);
+    assert.deepStrictEqual(result.products, [{ productId: "p1", name: "Seamaster 300", sku: "SM-300", linkedItemId: "", channel: "shopify" }]);
+  });
+
+  await check("channels report what is connected, as counts, and never a shop name", async () => {
+    const { fns, store } = build({ flag: OPEN, orders: [order("o1")] });
+    store.write("etsyConnections/e1", { companyId: "c1", status: "connected", shopName: "Should never be returned" });
+    store.write("etsyConnections/e2", { companyId: "c1", status: "disconnected", shopName: "Also never" });
+    store.write("wooConnections/w1", { companyId: "other", status: "connected" });
+    const result = await fns.listSalesChannels({ auth: owner, data: { companyId: "c1" } });
+    const byId = Object.fromEntries(result.channels.map((row) => [row.id, row]));
+    assert.strictEqual(byId.etsy.connected, true, "a live Etsy shop is not reported");
+    assert.strictEqual(byId.etsy.connectionCount, 1, "the disconnected shop was counted");
+    assert.strictEqual(byId.woocommerce.connected, false, "another workspace's connection leaked in");
+    assert.ok(!("amazon" in byId), "Amazon is listed, but its connections are not in Firestore to read");
+    const text = JSON.stringify(result);
+    for (const leak of ["Should never", "Also never", "shopName"]) assert.ok(!text.includes(leak), `the answer carries ${leak}`);
+  });
+
+  await check("both new reads refuse a member without orders access, and a workflow-only member", async () => {
+    const { fns } = build({ flag: OPEN, orders: [order("o1")] });
+    for (const uid of ["u_noorders", "u_workflow"]) {
+      const auth = { uid, token: { email: `${uid}@example.invalid` } };
+      await rejects(fns.listSalesProducts({ auth, data: { companyId: "c1" } }), "permission-denied");
+      await rejects(fns.listSalesChannels({ auth, data: { companyId: "c1" } }), "permission-denied");
+    }
+  });
+
   console.log(failures === 0 ? "\n✅ SALES CALLABLES GEÇTİ" : `\n❌ ${failures} failing`);
   process.exit(failures === 0 ? 0 : 1);
 })();

@@ -30248,6 +30248,8 @@ const salesExports = require("./sales").createSalesFunctions({
 exports.getSalesCapability = salesExports.getSalesCapability;
 exports.setSalesVisibility = salesExports.setSalesVisibility;
 exports.listSalesRows = salesExports.listSalesRows;
+exports.listSalesProducts = salesExports.listSalesProducts;
+exports.listSalesChannels = salesExports.listSalesChannels;
 
 /**
  * Record that somebody was handed personal data by the server.

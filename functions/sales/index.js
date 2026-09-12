@@ -18,6 +18,16 @@ const DEFAULT_PAGE = 25;
 const MAX_PAGE = 50;
 const MAX_SCAN = 200;
 
+// Where a connected sales channel lives. Amazon is deliberately absent: its
+// connections are held in the hardened project behind a service-account call,
+// not in a Firestore collection, and guessing at them would be worse than
+// saying nothing. Same list, same reason, as the Sync health card.
+const CHANNEL_CONNECTIONS = Object.freeze({
+  shopify: "shopifyStores", etsy: "etsyConnections", woocommerce: "wooConnections",
+  square: "squareConnections", ebay: "ebayConnections"
+});
+const DEAD_CONNECTION_STATUS = new Set(["disconnected", "uninstalled", "revoked", "deleted", "removed"]);
+
 const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
 const text = (value, max = 200) => String(value == null ? "" : value).trim().slice(0, max);
 
@@ -215,7 +225,58 @@ function createSalesFunctions(deps) {
     };
   });
 
-  return { getSalesCapability, setSalesVisibility, listSalesRows };
+  // ── Products ──────────────────────────────────────────────────────────────
+  // There is no catalog yet: nothing in this codebase writes salesProducts, so
+  // this reads the collection and reports honestly that it is empty. It invents
+  // no sample rows — a screen that shows made-up products beside real orders is
+  // worse than a screen that says there is nothing here.
+  const listSalesProducts = onCall(REGION, async (request) => {
+    const { companyId, capability } = await resolve(request);
+    if (!capability.pilotEnabled) {
+      return { ok: true, companyId, enabled: false, reason: "flag_off", products: [], catalogExists: false };
+    }
+    if (!capability.canOpenSales) throw new HttpsError("permission-denied", "Your workspace account does not include orders.");
+    const limit = clamp(Math.floor(Number(request.data?.limit) || DEFAULT_PAGE), 1, MAX_PAGE);
+    const snap = await db().collection("companies").doc(companyId).collection("salesProducts").limit(limit).get();
+    const products = snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        productId: doc.id,
+        name: text(data.name, 120),
+        sku: text(data.sku, 64),
+        linkedItemId: text(data.linkedItemId, 128),
+        channel: text(data.channel, 40).toLowerCase()
+      };
+    });
+    return { ok: true, companyId, enabled: true, reason: "ok", products, catalogExists: products.length > 0 };
+  });
+
+  // ── Channels ──────────────────────────────────────────────────────────────
+  // Which sales channels this workspace has actually connected. Counts only:
+  // no shop name, no external id, no token, nothing a screen could leak. A
+  // collection that cannot be read is reported as unavailable rather than as
+  // "not connected", because those are different answers.
+  const listSalesChannels = onCall(REGION, async (request) => {
+    const { companyId, capability } = await resolve(request);
+    if (!capability.pilotEnabled) {
+      return { ok: true, companyId, enabled: false, reason: "flag_off", channels: [] };
+    }
+    if (!capability.canOpenSales) throw new HttpsError("permission-denied", "Your workspace account does not include orders.");
+    const channels = await Promise.all(Object.entries(CHANNEL_CONNECTIONS).map(async ([id, collection]) => {
+      try {
+        const snap = await db().collection(collection).where("companyId", "==", companyId).limit(10).get();
+        const live = snap.docs.filter((doc) => !DEAD_CONNECTION_STATUS.has(text((doc.data() || {}).status, 40).toLowerCase()));
+        return { id, connected: live.length > 0, connectionCount: live.length, unavailable: false };
+      } catch (error) {
+        console.warn("sales channels: could not read", collection, error?.message || error);
+        return { id, connected: false, connectionCount: 0, unavailable: true };
+      }
+    }));
+    return { ok: true, companyId, enabled: true, reason: "ok", channels };
+  });
+
+
+  return { getSalesCapability, setSalesVisibility, listSalesRows, listSalesProducts, listSalesChannels };
 }
 
 module.exports = { createSalesFunctions };
