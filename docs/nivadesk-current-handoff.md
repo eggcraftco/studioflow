@@ -1,4 +1,4 @@
-# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 12 September 2026, 23:37Z)
+# NivaDesk — current hand-off record (written 10 September 2026, 19:10Z; last updated 12 September 2026, 00:02Z)
 
 Read this first after a context reset or in a new session, then compare it with the live git and cloud state before
 acting. Do not repeat work listed as done; do not treat candidates in older summaries as the current state. No password,
@@ -21,6 +21,20 @@ At the operator's request work moved to the Sales/Products plan (`NivaDesk-Sales
 **A one-file orientation brief for another assistant:** `docs/nivadesk-system-brief-2026-09-12.md` (product, repository layout, data model, the working rules, today's live state, what was done on 11 Sep, the Sales phases, the untouchable areas). It is a summary; this hand-off and the code stay authoritative.
 
 **Sales Faz 0 is done (22:22Z).** Branch `sales-faz0` (worktree `~/Developer/studioflow-sales`) at `4b21ba99`; record `docs/sales/faz0-2026-09-11.md` carries the code map, the proposed data contract, the PR sequence, the rollout and rollback, six decisions for the operator, and the emulator prototype results at desktop and phone widths. Nothing was deployed and nothing was written to production; the emulator seed refuses to run anywhere but a local emulator. The headline findings: one order identity already exists; order lines carry no product reference and the server drops unknown line keys; the shipped iOS/Mac 1.3 (17) rewrites whole order documents, so Sales data belongs in server-written side documents; there is no product catalog; stock is not yet safe for a stocked sale, so Faz 2 waits for a hardening PR; the capability list overclaims what connectors can do.
+
+## Verification of the two candidates (00:02Z): one was not ready, and now is
+
+The operator asked for a read-only verification before any merge, and it found a real contradiction. My "1748 checks passed" for the capability branch came from `npm test`, which runs the unit suites only; GitHub CI also runs the rules and end-to-end suites, and that job **failed** on `a4d65900`. An existing end-to-end test pinned the older meaning of "supported" in Sync Health. The fix is `eaf90230`, which updates that assertion with its reason and keeps its neighbours; CI passes on it.
+
+| Branch | Commit | CI | Local |
+|---|---|---|---|
+| `sales-faz1-server` | `ef7585e2` | success | unit suites, plus rules and query under the emulator |
+| `commerce-capability-truth` | `eaf90230` | success | the exact CI command, 338 checks |
+| `sales-faz1-release-candidate` (both merged, integration only) | `5206515f` | success | `npm test` 1786, rules and e2e 355, web typecheck and build |
+
+Read-only census over production orders, counts only: 452 orders in 51 workspaces; 4 lack `paymentDate` and all four also lack `companyId`, so no workspace query can return them; **`createdAtMs` is missing on 440 of 452**, which the projection PR must account for; 412 orders count as active today and 13 of those are cancelled, which is the demo-plan difference the Sales rule would remove. Full record on the candidate branch: `docs/sales/faz1-verification-2026-09-12.md`.
+
+Still true: nothing merged into this branch, nothing deployed, no rules or indexes published, no flag document, allowlist empty, Faz 2 closed.
 
 ## Sales Faz 1 and the capability correction: two candidates (12 Sep 2026, 23:37Z)
 
