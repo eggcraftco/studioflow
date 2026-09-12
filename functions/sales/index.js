@@ -153,7 +153,7 @@ function createSalesFunctions(deps) {
   const listSalesRows = onCall(REGION, async (request) => {
     const { uid, companyId, capability, currency } = await resolve(request);
     if (!capability.pilotEnabled) {
-      return { ok: true, companyId, enabled: false, reason: "flag_off", rows: [], nextCursor: null, financeVisible: false, scanned: 0, hasMore: false, scope: capability.scope };
+      return { ok: true, companyId, enabled: false, reason: "flag_off", rows: [], nextCursor: null, financeVisible: false, scanned: 0, hasMore: false, scope: capability.scope, queryPath: "none" };
     }
     if (!capability.canOpenSales) {
       throw new HttpsError("permission-denied", "Your workspace account does not include orders.");
@@ -172,6 +172,16 @@ function createSalesFunctions(deps) {
     const assignedToUid = capability.scope === "assigned" ? uid : "";
     const page = await pager({ companyId, limit: scanSize, cursor, assignedToUid });
     const orders = Array.isArray(page?.orders) ? page.orders : [];
+
+    // Which query actually ran. The acceptance test for the assigned-scope index
+    // needs a positive signal, not the absence of a warning: the rows come back
+    // identical either way, and a quiet log only proves that nothing spoke. This
+    // says the path in the answer itself, so a person verifying the index after
+    // it is published can see that the indexed query served the request rather
+    // than the fallback that reads the workspace page and filters here.
+    const queryPath = !assignedToUid
+      ? "workspace"
+      : (page?.indexMissing === true ? "assigned_fallback" : "assigned_indexed");
 
     // The cursor is the last order this page actually looked at, never the end
     // of the scan window: stopping early with the window's last order as the
@@ -200,7 +210,8 @@ function createSalesFunctions(deps) {
       rows, nextCursor, hasMore,
       financeVisible: capability.canSeeMoney,
       scope: capability.scope,
-      scanned: orders.length
+      scanned: orders.length,
+      queryPath
     };
   });
 
