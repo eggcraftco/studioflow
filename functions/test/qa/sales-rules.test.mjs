@@ -7,7 +7,7 @@
 // Run: firebase emulators:exec --only firestore "node functions/test/qa/sales-rules.test.mjs"
 import fs from "fs";
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, collection, setLogLevel } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, collection, query, where, setLogLevel } from "firebase/firestore";
 
 setLogLevel("error");
 const RULES = fs.readFileSync(new URL("../../../firestore.rules", import.meta.url), "utf8");
@@ -22,19 +22,25 @@ const check = async (name, promise) => {
   catch (error) { failures += 1; console.log("FAIL ", name, "-", String(error.message).slice(0, 160)); }
 };
 
-const OWNER = "owner-uid", ADMIN = "admin-uid", MEMBER = "member-uid", WORKFLOW = "workflow-uid", STRANGER = "stranger-uid";
+const OWNER = "owner-uid", ADMIN = "admin-uid", MEMBER = "member-uid", WORKFLOW = "workflow-uid", STRANGER = "stranger-uid", ASSIGNED = "assigned-uid";
 const CID = OWNER;
 
 await env.withSecurityRulesDisabled(async (ctx) => {
   const db = ctx.firestore();
   await setDoc(doc(db, "companies", CID), {
     companyId: CID, ownerUid: OWNER, name: "Sales Co", billingPlan: "team_monthly", billingStatus: "active",
-    memberUids: [OWNER, ADMIN, MEMBER, WORKFLOW],
-    memberRoles: { [OWNER]: "owner", [ADMIN]: "admin", [MEMBER]: "member", [WORKFLOW]: "workflowOnly" },
-    members: { [OWNER]: { role: "owner" }, [ADMIN]: { role: "admin" }, [MEMBER]: { role: "member" }, [WORKFLOW]: { role: "workflowOnly" } },
-    memberAccess: { [MEMBER]: { orders: true, financialInfo: true }, [WORKFLOW]: { orders: true } }
+    memberUids: [OWNER, ADMIN, MEMBER, WORKFLOW, ASSIGNED],
+    memberRoles: { [OWNER]: "owner", [ADMIN]: "admin", [MEMBER]: "member", [WORKFLOW]: "workflowOnly", [ASSIGNED]: "member" },
+    members: { [OWNER]: { role: "owner" }, [ADMIN]: { role: "admin" }, [MEMBER]: { role: "member" }, [WORKFLOW]: { role: "workflowOnly" }, [ASSIGNED]: { role: "member" } },
+    memberAccess: {
+      [MEMBER]: { orders: true, financialInfo: true },
+      [WORKFLOW]: { orders: true },
+      // The Orders scope this member already has: their own work only.
+      [ASSIGNED]: { orders: true, financialInfo: true, assignedProjectsOnly: true }
+    }
   });
-  await setDoc(doc(db, "companies", CID, "salesOrders", "o-1"), { orderId: "o-1", kind: "product_sale", revenue: 1200 });
+  await setDoc(doc(db, "companies", CID, "salesOrders", "o-1"), { orderId: "o-1", kind: "product_sale", revenue: 1200, assignedToUid: ASSIGNED });
+  await setDoc(doc(db, "companies", CID, "salesOrders", "o-2"), { orderId: "o-2", kind: "product_sale", revenue: 800, assignedToUid: "someone-else" });
   await setDoc(doc(db, "companies", CID, "salesProducts", "p-1"), { name: "Seamaster 300", defaultPrice: 3200 });
   await setDoc(doc(db, "companies", CID, "salesSettings", "main"), { visibility: "on" });
 });
@@ -62,6 +68,18 @@ await check("…and the catalog",
 
 await check("…but may read the workspace's menu preference, which is not money",
   assertSucceeds(getDoc(doc(as(WORKFLOW), "companies", CID, "salesSettings", "main"))));
+
+await check("an assigned-only member reads the row of an order assigned to them",
+  assertSucceeds(getDoc(doc(as(ASSIGNED), "companies", CID, "salesOrders", "o-1"))));
+
+await check("…and not the row of somebody else's order",
+  assertFails(getDoc(doc(as(ASSIGNED), "companies", CID, "salesOrders", "o-2"))));
+
+await check("an assigned-only member may list their own rows when the query says so",
+  assertSucceeds(getDocs(query(collection(as(ASSIGNED), "companies", CID, "salesOrders"), where("assignedToUid", "==", ASSIGNED)))));
+
+await check("…but not the whole workspace's rows",
+  assertFails(getDocs(collection(as(ASSIGNED), "companies", CID, "salesOrders"))));
 
 await check("a stranger reads nothing",
   assertFails(Promise.all([

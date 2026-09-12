@@ -45,9 +45,16 @@ check("a member without orders access is refused, and a workflow-only member too
   assert.deepStrictEqual({ open: workflow.canOpenSales, reason: workflow.reason }, { open: false, reason: "no_access" });
 });
 
-check("assigned-only members are refused for now, with their own reason", () => {
+check("an assigned-only member opens Sales with the scope Orders already gives them", () => {
   const out = salesCapability({ pilotEnabled: true, visibility: "on", canOpenOrders: true, role: "member", assignedOnly: true });
-  assert.deepStrictEqual({ open: out.canOpenSales, reason: out.reason }, { open: false, reason: "assigned_scope_unsupported" });
+  assert.deepStrictEqual({ open: out.canOpenSales, reason: out.reason, scope: out.scope }, { open: true, reason: "ok", scope: "assigned" });
+  const whole = salesCapability({ pilotEnabled: true, visibility: "on", canOpenOrders: true, role: "member" });
+  assert.strictEqual(whole.scope, "workspace");
+});
+
+check("the scope says nothing about money: that stays with the finance flag", () => {
+  const out = salesCapability({ pilotEnabled: true, visibility: "on", canOpenOrders: true, role: "member", assignedOnly: true, canSeeFinance: false });
+  assert.deepStrictEqual({ scope: out.scope, money: out.canSeeMoney }, { scope: "assigned", money: false });
 });
 
 check("money follows the existing finance flag, never the Sales flag", () => {

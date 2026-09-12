@@ -57,7 +57,11 @@ function build({ flag = null, orders = [] } = {}) {
     roleFor: (_companyData, uid) => ROLE[uid] || "member",
     assignedOnlyFor: (_companyData, uid) => (ACCESS[uid] || {}).assignedProjectsOnly === true,
     engineVersion: ENGINE_VERSION,
-    listOrdersPage: async ({ companyId, limit, cursor }) => { pages.push({ companyId, limit, cursor }); return { orders: orders.slice(0, limit) }; },
+    listOrdersPage: async ({ companyId, limit, cursor, assignedToUid = "" }) => {
+      pages.push({ companyId, limit, cursor, assignedToUid });
+      const scoped = assignedToUid ? orders.filter((row) => String(row.assignedToUid || "") === assignedToUid) : orders;
+      return { orders: scoped.slice(0, limit) };
+    },
     now: () => nowRef.value
   });
   return { fns, store, pages, nowRef };
@@ -112,14 +116,33 @@ const OPEN = { enabled: true, workspaces: { c1: true } };
     await rejects(fns.listSalesRows({ auth: null, data: { companyId: "c1" } }), "unauthenticated");
   });
 
-  await check("orders access is the gate: no orders, no Sales; workflow-only and assigned-only are refused", async () => {
+  await check("orders access is the gate: no orders and workflow-only are refused", async () => {
     const { fns } = build({ flag: OPEN, orders: [order("o1")] });
-    for (const uid of ["u_noorders", "u_workflow", "u_assigned"]) {
+    for (const uid of ["u_noorders", "u_workflow"]) {
       const auth = { uid, token: { email: `${uid}@example.invalid` } };
       const capability = await fns.getSalesCapability({ auth, data: { companyId: "c1" } });
       assert.strictEqual(capability.canOpenSales, false, `${uid} must not open Sales`);
       await rejects(fns.listSalesRows({ auth, data: { companyId: "c1" } }), "permission-denied");
     }
+  });
+
+  await check("an assigned-only member sees their own orders, and the query asks for exactly those", async () => {
+    const mine = order("mine", { assignedToUid: "u_assigned" });
+    const theirs = order("theirs", { assignedToUid: "someone-else" });
+    const { fns, pages } = build({ flag: OPEN, orders: [mine, theirs] });
+    const auth = { uid: "u_assigned", token: { email: "assigned@example.invalid" } };
+    const capability = await fns.getSalesCapability({ auth, data: { companyId: "c1" } });
+    assert.deepStrictEqual({ open: capability.canOpenSales, scope: capability.scope }, { open: true, scope: "assigned" });
+    const list = await fns.listSalesRows({ auth, data: { companyId: "c1" } });
+    assert.strictEqual(list.scope, "assigned");
+    assert.strictEqual(pages[pages.length - 1].assignedToUid, "u_assigned", "the scope must reach the query, not only the row filter");
+    assert.deepStrictEqual(list.rows.map((row) => row.orderId), ["mine"], "another member's order reached an assigned-only list");
+  });
+
+  await check("a member who may not see money gets rows without it, whatever the scope", async () => {
+    const { fns } = build({ flag: OPEN, orders: [order("o1")] });
+    const list = await fns.listSalesRows({ auth: { uid: "u_nomoney", token: {} }, data: { companyId: "c1" } });
+    assert.deepStrictEqual({ money: list.financeVisible, revenue: list.rows[0].revenue, scope: list.scope }, { money: false, revenue: null, scope: "workspace" });
   });
 
   await check("the list is a read: rows come back and nothing is written", async () => {

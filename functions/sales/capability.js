@@ -3,7 +3,8 @@
 // Three separate facts, kept apart on purpose (plan §4.1):
 //   1. eligibility — the pilot flag for this workspace;
 //   2. menu preference — what the workspace chose to see;
-//   3. permission — whether this member may open the area at all.
+//   3. permission — whether this member may open the area at all, and with which
+//      scope: the whole workspace, or only the orders assigned to them.
 //
 // Hiding a menu is not authorisation. Every server path checks (3) again, and
 // this module never decides money visibility on its own: it reports what the
@@ -49,12 +50,11 @@ function salesCapability({
   const preference = normalizeVisibility(visibility);
   const workflowOnly = role === "workflowOnly";
   const canManageVisibility = role === "owner" || role === "admin";
-  const permitted = canOpenOrders === true && !workflowOnly && assignedOnly !== true;
+  const permitted = canOpenOrders === true && !workflowOnly;
 
   let reason = "ok";
   if (pilotEnabled !== true) reason = "flag_off";
   else if (workflowOnly || canOpenOrders !== true) reason = "no_access";
-  else if (assignedOnly === true) reason = "assigned_scope_unsupported";
   else if (preference !== VISIBILITY.ON) reason = "workspace_off";
 
   const canOpenSales = pilotEnabled === true && permitted;
@@ -64,6 +64,10 @@ function salesCapability({
     canOpenSales,
     showInMenu: canOpenSales && preference === VISIBILITY.ON,
     canManageVisibility,
+    // The same scope Orders gives this member: the whole workspace, or only the
+    // orders assigned to them. Hiding Sales from an assigned-only member would
+    // contradict the Orders screen, where they already see their own work.
+    scope: assignedOnly === true ? "assigned" : "workspace",
     canSeeMoney: canOpenSales && canSeeFinance === true,
     suggested: pilotEnabled === true && salesSuggested(onboarding),
     reason
