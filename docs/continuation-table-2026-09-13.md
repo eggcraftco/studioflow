@@ -87,3 +87,78 @@ index.
 R1/R2's gates, the Sales Faz 1 gates, the dependency branch's audit and the
 retention candidate's checks all passed on commits that have not changed since.
 They were not re-run today, and their evidence stands where it was recorded.
+
+---
+
+# Update — later on 13 September 2026
+
+## Live / candidate / awaiting acceptance, separated per package
+
+The three are different things and the earlier table blurred two of them. Below,
+**live** means running in production now; **candidate** means a commit with its
+gates passing and nothing deployed; **awaiting acceptance** means the work is
+finished and somebody has to look at it before it can be called done.
+
+| Package | Live | Candidate | Awaiting acceptance |
+| --- | --- | --- | --- |
+| Note image Storage rule | **yes** — ruleset `5bd58dce`, 15:00:19Z | `notes-image-rules-fix @ 46246236` | the end-to-end user flow: nobody has attached an image in production yet |
+| Stripe Connect (P0–P2) | no | `stripe-connect-faz1 @ 83a3d863` | the whole browser acceptance, and a live Stripe connection |
+| Storage service (S0, S1, S1a) | no | `storage-own-cloud-faz1 @ 0bd2e805` | nothing — it is wired to one flow and emulator-verified |
+| Tracking stub fix | no | `tracking-stub-orders-fix @ a530f325` | nothing; the four existing stubs are a separate decision |
+| Combined verification | no, **and never will be** | `combined-verify-2026-09-13 @ 0f38f2be` | it is a check, not a package |
+| R1 — existing UX | no | `faz1-combined-verify @ f2a0dc88` | its user flows, unchanged since 13 Sep morning |
+| R2 — integration health truth | no | same branch | same |
+| **Sales Faz 1** | **no — nothing Sales is live, on any platform** | `sales-faz1-release-candidate @ 05040bf3`, from 12 Sep | its native acceptance |
+| Dependency highs | no | `dependency-highs-2026-09-11 @ bbb16ec4` | a merge decision |
+| Retention e-mail | no | `retention-email-candidate @ ca530686` | the pilot's restore step |
+
+**On the Sales row specifically.** `05040bf3` is a candidate from 12 September
+and says nothing about what is live. Nothing Sales-related has been deployed:
+no function, no web round, no store build. The live native apps are the store
+builds that predate all of it — iOS/macOS 1.3 (build 17) and Android 0.1.8 —
+and they contain no Sales screens at all. The last live web round is Round 176
+per the 12 September hand-off, which was not re-verified today.
+
+## Deferred — needs a browser, and Chrome is in use by other work
+
+None of these has been run. They are listed as **not done**, not as passed:
+
+| Flow | Where |
+| --- | --- |
+| Banking → Payment Links: empty list, loading, error and retry | web, `/bank?tab=payment-links` |
+| Create a payment request from an order and see it appear in the list | web |
+| Deposit, partial payment, remaining balance, expired and cancelled links | web, against the fake provider |
+| Payment and refund states updating on screen | web |
+| A member with no finance permission; another workspace; switching account or workspace | web |
+| Phone: touch, scroll, keyboard, copying a link | web at mobile width |
+| The note-image attach flow end to end in production | web and Android |
+
+Everything those flows exercise is covered at the server and unit level —
+14 request-flow checks, 10 race checks, 13 ledger checks, 7 panel checks
+including every status-to-tab mapping — but none of that is a browser, and a
+fake Checkout screen is not evidence about Stripe.
+
+## New since the first table
+
+| Item | Branch @ commit | Evidence |
+| --- | --- | --- |
+| Release blocker: the live storage rule is on one branch only | `notes-image-rules-fix @ 46246236` | 5 coverage checks, proven to fail on the deploy base |
+| Payment races: concurrent links, post-provider write failure, hostile rewrite, refund accounting | `stripe-connect-faz1 @ 83a3d863` | 10 checks; found and fixed a skipped overpayment verdict |
+| Storage PR-S1a: note images through the common service | `storage-own-cloud-faz1 @ 0bd2e805` | 12 emulator checks; found a content-addressing bug |
+| Reference scan in the repo, with a regression test | same | 8 checks |
+| Tracking stubs: a deleted order resurrected every hour | `tracking-stub-orders-fix @ a530f325` | 6 emulator checks |
+| Combined verification of all four | `combined-verify-2026-09-13 @ 0f38f2be` | one conflict, resolved; every gate green |
+
+## Decisions that are yours, not tasks
+
+1. **Carry the 31-line storage rule to the deploy branch.** Until then any
+   storage deploy reverts a live fix. It must travel alone.
+2. **The four resurrected order stubs** — leave, recover, or delete. The fix
+   that stops new ones is a candidate; deleting before it lands achieves
+   nothing.
+3. **The 31 orphaned files** — a finding, not a delete list.
+4. **Storage access logs are still not enabled**, and they are the input for
+   both the orphan grace period and the token transition's last stage.
+5. **A workspace on `$` or `¥`** cannot take a card payment until it states an
+   ISO currency code.
+
