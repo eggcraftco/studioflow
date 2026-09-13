@@ -711,6 +711,24 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Provider-verified payment evidence: one immutable row per external
+    // payment identity, written only by a signature-verified webhook.
+    //
+    // Closed to clients in both directions, and the WRITE half is the point.
+    // The order's payments[] array is a display surface a client can rewrite —
+    // firestore.rules never names it, the order's update rule admits any member
+    // with write access, and the Apple apps replace the whole document on save.
+    // This collection is what still knows what the customer actually paid after
+    // such a write, and it is worth nothing if the same client can edit it.
+    //
+    // Read is closed too: the amounts reach clients through the order document
+    // the server repairs from this, so there is no screen that needs it, and a
+    // readable ledger would hand every member the connected account id and the
+    // provider's own payment ids.
+    match /companies/{companyId}/paymentLedger/{document=**} {
+      allow read, write: if false;
+    }
+
     // The connection trail. Every sibling bank collection was already excluded
     // from the wildcard above; this one was missed, which left an audit log any
     // member could rewrite. Android reads it in the Banking screen, so it stays
@@ -1026,6 +1044,7 @@ service cloud.firestore {
         && collectionId != 'integrationSecrets'
         && collectionId != 'paymentConnections'
         && collectionId != 'paymentRequests'
+        && collectionId != 'paymentLedger'
         && collectionId != 'financeBulkRuns'
         && collectionId != 'fileRecords'
         && collectionId != 'customerMergeLog'
@@ -1096,6 +1115,7 @@ service cloud.firestore {
         && collectionId != 'integrationSecrets'
         && collectionId != 'paymentConnections'
         && collectionId != 'paymentRequests'
+        && collectionId != 'paymentLedger'
         && collectionId != 'financeBulkRuns'
         && collectionId != 'fileRecords'
         && collectionId != 'customerMergeLog'

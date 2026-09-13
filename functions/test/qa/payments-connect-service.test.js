@@ -335,7 +335,7 @@ const webhookRequest = (event, signature = "valid") => ({
     const fs = require("fs");
     const path = require("path");
     const rules = fs.readFileSync(path.join(__dirname, "..", "..", "..", "firestore.rules"), "utf8");
-    for (const name of ["paymentConnections", "paymentRequests"]) {
+    for (const name of ["paymentConnections", "paymentRequests", "paymentLedger"]) {
       const denials = (rules.match(new RegExp(`collectionId != '${name}'`, "g")) || []).length;
       assert.strictEqual(denials, 2, `${name} must be in BOTH the read and the write deny list, saw ${denials}`);
       assert(rules.includes(`match /companies/{companyId}/${name}/{document=**}`), `${name} needs its own block too`);

@@ -61,6 +61,7 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   // Seed real rows, so the read denials below are denials and not "not found".
   await setDoc(doc(db, "companies", CO, "paymentConnections", "stripe"), { provider: "stripe", stripeAccountId: "acct_secret", status: "ready" });
   await setDoc(doc(db, "companies", CO, "paymentRequests", "pr_1"), { orderId: "o1", amountMinor: 1999, providerSessionId: "cs_secret" });
+  await setDoc(doc(db, "companies", CO, "paymentLedger", "stripe:pi:pi_secret"), { orderId: "o1", type: "payment", amountMinor: 100000, externalPaymentId: "pi:pi_secret" });
   await setDoc(doc(db, "paymentConnectionIndex", "stripe:acct_secret"), { provider: "stripe", companyId: CO });
   await setDoc(doc(db, "paymentProviderEvents", "stripe:acct_secret:evt_1"), { provider: "stripe", processedAt: 1 });
 });
@@ -74,6 +75,10 @@ const check = async (name, run) => {
 const CLOSED = [
   ["the workspace's Stripe connection", (db) => doc(db, "companies", CO, "paymentConnections", "stripe"), { status: "ready" }],
   ["a payment request", (db) => doc(db, "companies", CO, "paymentRequests", "pr_1"), { amountMinor: 1 }],
+  // The write half is the point: this row is what still knows what the customer
+  // paid after a client rewrites the order document, and it is worth nothing if
+  // the same client can edit it.
+  ["the provider payment ledger", (db) => doc(db, "companies", CO, "paymentLedger", "stripe:pi:pi_secret"), { amountMinor: 1 }],
   ["the connected-account index", (db) => doc(db, "paymentConnectionIndex", "stripe:acct_secret"), { companyId: "somewhere-else" }],
   ["the provider event ledger", (db) => doc(db, "paymentProviderEvents", "stripe:acct_secret:evt_1"), { processedAt: 2 }]
 ];
@@ -102,6 +107,7 @@ await check("a member cannot create a NEW document in either workspace collectio
   const db = env.authenticatedContext(MEMBER).firestore();
   await assertFails(setDoc(doc(db, "companies", CO, "paymentConnections", "planted"), { provider: "stripe" }));
   await assertFails(setDoc(doc(db, "companies", CO, "paymentRequests", "planted"), { amountMinor: 1 }));
+  await assertFails(setDoc(doc(db, "companies", CO, "paymentLedger", "stripe:pi:planted"), { amountMinor: 999999 }));
 });
 
 await check("CONTROL: the same member CAN write an ordinary workspace subcollection", async () => {
