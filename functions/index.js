@@ -104,6 +104,11 @@ const ETSY_WEBHOOK_SECRET = defineSecret("ETSY_WEBHOOK_SECRET");
 // x-api-key. Both are needed.
 const ETSY_SHARED_SECRET = defineSecret("ETSY_SHARED_SECRET");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+// The CONNECT webhook signs with its own secret, deliberately not the one
+// above. Two endpoints with two secrets is what makes a connected-account
+// event arriving on the subscription endpoint fail verification instead of
+// reaching a handler written for NivaDesk's own subscriptions.
+const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret("STRIPE_CONNECT_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
 // Shopify App Store app: webhook HMAC secret (the app's client secret) and the
@@ -5866,6 +5871,55 @@ const { _internal: stripeBillingInternal, ...stripeBillingExports } = createStri
   workspaceRoleLabel
 });
 Object.assign(exports, stripeBillingExports);
+
+// ---------------------------------------------------------------------------
+// The workspace's OWN Stripe account (Connect), which is not this file's
+// subscription billing and must never be confused with it. Separate endpoint,
+// separate signing secret, separate collections, and a boundary that refuses
+// any event whose connected account does not resolve to exactly one workspace
+// (functions/payments/eventBoundary.js).
+//
+// Inert until STRIPE_CONNECT_WEBHOOK_SECRET is populated, the same way the
+// Apple rail stayed inert until its root certificates were added.
+// ---------------------------------------------------------------------------
+const { createPaymentConnectFunctions } = require("./paymentConnect");
+const { createStripeConnectTransport } = require("./payments/connectTransport");
+const { _internal: paymentConnectInternal, ...paymentConnectExports } = createPaymentConnectFunctions({
+  admin,
+  onCall,
+  onRequest,
+  HttpsError,
+  region: "europe-west2",
+  secrets: [STRIPE_SECRET_KEY, STRIPE_CONNECT_WEBHOOK_SECRET],
+  mode: String(process.env.STRIPE_ALLOW_LIVE_BILLING || "").trim().toLowerCase() === "true" ? "live" : "test",
+  requireWorkspace: (request) => requireWorkspaceForBilling(request, false),
+  workspaceActor: (context) => {
+    const access = workspaceMemberAccess(context.companyData, context.uid);
+    return {
+      uid: context.uid,
+      role: workspaceOrderRole(context.companyData, context.uid),
+      financialInfo: access.financialInfo === true,
+      assignedProjectsOnly: access.assignedProjectsOnly === true
+    };
+  },
+  transport: () => {
+    const Stripe = require("stripe");
+    const secretKey = String(STRIPE_SECRET_KEY.value() || "").trim();
+    if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured for this environment.");
+    // The same live-key gate configStatus() applies to subscription billing.
+    // A connect rail that quietly accepted a live key would open real accounts
+    // and take real money from a scaffold, which is the one failure mode the
+    // flag exists to prevent.
+    const allowLive = String(process.env.STRIPE_ALLOW_LIVE_BILLING || "").trim().toLowerCase() === "true";
+    if (!secretKey.startsWith("sk_test_") && !allowLive) {
+      throw new HttpsError("failed-precondition", "Use a Stripe test secret key for this environment.");
+    }
+    return createStripeConnectTransport(new Stripe(secretKey));
+  },
+  onboardingReturnUrl: () => "https://nivadesk.app/settings?stripe=connected",
+  onboardingRefreshUrl: () => "https://nivadesk.app/settings?stripe=retry"
+});
+Object.assign(exports, paymentConnectExports);
 const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 
 // Bank spending feed (TrueLayer Open Banking data API, read-only).

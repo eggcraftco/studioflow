@@ -691,6 +691,26 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid;
     }
 
+    // The workspace's own Stripe (or later PayPal/LiqPay) connection, and the
+    // payment requests made through it. Both are server-only in BOTH
+    // directions, and the reason read is closed too is the connected account
+    // id: it is the credential that identifies where a workspace's money
+    // lands, and a client that could read it could quote it at a provider.
+    // Clients get connectionState.publicSummary() from a callable instead,
+    // which has no field for it.
+    //
+    // These two names are also in the companies wildcard's read AND write deny
+    // lists above. That is not belt-and-braces — the wildcard is a deny list,
+    // so a block here alone would be OR'd with a permission the wildcard had
+    // already granted and would change nothing.
+    match /companies/{companyId}/paymentConnections/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/paymentRequests/{document=**} {
+      allow read, write: if false;
+    }
+
     // The connection trail. Every sibling bank collection was already excluded
     // from the wildcard above; this one was missed, which left an audit log any
     // member could rewrite. Android reads it in the Banking screen, so it stays
@@ -1004,6 +1024,8 @@ service cloud.firestore {
         && collectionId != 'inventoryMovements'
         && collectionId != 'stocktakes'
         && collectionId != 'integrationSecrets'
+        && collectionId != 'paymentConnections'
+        && collectionId != 'paymentRequests'
         && collectionId != 'financeBulkRuns'
         && collectionId != 'fileRecords'
         && collectionId != 'customerMergeLog'
@@ -1072,6 +1094,8 @@ service cloud.firestore {
         && collectionId != 'inventoryMovements'
         && collectionId != 'stocktakes'
         && collectionId != 'integrationSecrets'
+        && collectionId != 'paymentConnections'
+        && collectionId != 'paymentRequests'
         && collectionId != 'financeBulkRuns'
         && collectionId != 'fileRecords'
         && collectionId != 'customerMergeLog'
@@ -1401,6 +1425,21 @@ service cloud.firestore {
     // and reach a file that has not been cleared, which is the whole thing the
     // scan exists to prevent. Server-only, both directions.
     match /fileScans/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connected account id -> workspace. The webhook's only way to learn whose
+    // money an event is about, and a map of every workspace's provider account
+    // if it could be read. The catch-all below already denies it; saying so
+    // here means a rule written later for some other reason cannot widen it.
+    match /paymentConnectionIndex/{document=**} {
+      allow read, write: if false;
+    }
+
+    // The provider event ledger: what arrived, when, and whether it was
+    // processed. It is the idempotency record, so a client that could write it
+    // could make a real payment event look already-handled.
+    match /paymentProviderEvents/{document=**} {
       allow read, write: if false;
     }
 
