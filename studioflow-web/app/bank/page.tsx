@@ -672,14 +672,20 @@ function BankPageContent() {
   // ---- Link a spending transaction to an order's expenses -----------------
 
   useEffect(() => {
-    if (!isOwner || !workspace || orderOptions !== null || transactions.length === 0) return;
+    // Loaded for the expense-linking picker AND for the Payment Links tab's
+    // order picker. The transaction count used to gate it, which was right
+    // while orders were only ever linked to a bank line: a workspace with no
+    // bank feed can still take card payments, and on that workspace the picker
+    // would have stayed empty for ever.
+    if (!isOwner || !workspace || orderOptions !== null) return;
+    if (transactions.length === 0 && tab !== "payment-links") return;
     let cancelled = false;
     loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? "")
       .then(options => { if (!cancelled) setOrderOptions(options); })
       .catch(() => { if (!cancelled) setOrderOptions([]); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOwner, workspace, companyId, transactions.length]);
+  }, [isOwner, workspace, companyId, transactions.length, tab]);
 
   async function linkToOrder(transaction: BankTransaction, orderId: string) {
     setBusy(`link-${transaction.id}`);
@@ -2835,6 +2841,7 @@ function BankPageContent() {
               <PaymentLinksPanel
                 companyId={companyId}
                 t={t}
+                orders={orderOptions}
                 onOpenOrder={(orderId) => router.push(`/orders?order=${encodeURIComponent(orderId)}`)}
               />
             ) : null}

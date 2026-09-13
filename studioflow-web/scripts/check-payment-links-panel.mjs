@@ -62,6 +62,7 @@ try {
     "export const useEffect = () => {};",
     "export const useMemo = (fn) => fn();",
     "export const useState = (initial) => [typeof initial === 'function' ? initial() : initial, () => {}];",
+    "export const useRef = (initial) => ({ current: initial });",
     "export const jsx = () => null;",
     "export const jsxs = () => null;",
     "export const Fragment = null;",

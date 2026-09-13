@@ -5900,7 +5900,8 @@ const { _internal: paymentConnectInternal, ...paymentConnectExports } = createPa
   // answer "is this switched on" would widen the secret for no gain. Turning
   // the flag on without the secrets fails at the connect callables, which are
   // owner-only and do bind them.
-  railConfigured: () => String(process.env.STRIPE_CONNECT_ENABLED || "").trim().toLowerCase() === "true",
+  railConfigured: () => String(process.env.STRIPE_CONNECT_ENABLED || "").trim().toLowerCase() === "true"
+    || process.env.NIVADESK_E2E === "1",
   workspaceActor: (context) => {
     const access = workspaceMemberAccess(context.companyData, context.uid);
     return {
@@ -5911,6 +5912,24 @@ const { _internal: paymentConnectInternal, ...paymentConnectExports } = createPa
     };
   },
   transport: () => {
+    // The emulator's fake Stripe, the same shape squareConnector uses for the
+    // same reason. NIVADESK_E2E is set by test/run-e2e.sh and by the local
+    // emulator stack and by nothing else — a deployed function has no path to
+    // it — and the fake is held on a global so one browser session's account
+    // and its Checkout sessions survive across calls, as a real provider's
+    // would. Without that, every page load would open a new account.
+    if (process.env.NIVADESK_E2E === "1") {
+      const { createFakeConnectTransport } = require("./payments/connectTransport");
+      if (!global.__nivadeskStripeConnectFake) {
+        // File-backed, because the emulator gives each function its own process
+        // and a provider that is not shared is not a provider.
+        global.__nivadeskStripeConnectFake = createFakeConnectTransport({
+          statePath: String(process.env.NIVADESK_FAKE_STRIPE_STATE || "").trim()
+            || require("path").join(require("os").tmpdir(), "nivadesk-fake-stripe.json")
+        });
+      }
+      return global.__nivadeskStripeConnectFake;
+    }
     const Stripe = require("stripe");
     const secretKey = String(STRIPE_SECRET_KEY.value() || "").trim();
     if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured for this environment.");

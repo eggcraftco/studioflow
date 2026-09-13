@@ -120,6 +120,44 @@ function createFakeConnectTransport(options = {}) {
   const byId = new Map();       // session id -> session
   const calls = [];
   let sequence = 0;
+
+  // Optional file backing, for the local emulator ONLY.
+  //
+  // The functions emulator runs each function in its own runtime process, so an
+  // in-memory fake is a DIFFERENT provider for every callable: onboarding
+  // creates an account in one process and the refresh in another cannot find
+  // it. A real provider is shared by definition, so a fake that is not shared
+  // is not simulating one. A JSON file is the smallest thing that fixes it,
+  // and it is only ever used when a path is handed in.
+  const statePath = String(options.statePath || "");
+  const fs = statePath ? require("fs") : null;
+
+  function load() {
+    if (!fs) return;
+    let raw = "";
+    try { raw = fs.readFileSync(statePath, "utf8"); } catch { return; }
+    let saved = null;
+    try { saved = JSON.parse(raw); } catch { return; }
+    accounts.clear(); sessions.clear(); byId.clear();
+    for (const [k, v] of Object.entries((saved && saved.accounts) || {})) accounts.set(k, v);
+    for (const [k, v] of Object.entries((saved && saved.sessions) || {})) sessions.set(k, v);
+    for (const [k, v] of Object.entries((saved && saved.byId) || {})) byId.set(k, v);
+    sequence = Number((saved && saved.sequence) || 0);
+  }
+
+  function save() {
+    if (!fs) return;
+    try {
+      fs.writeFileSync(statePath, JSON.stringify({
+        accounts: Object.fromEntries(accounts),
+        sessions: Object.fromEntries(sessions),
+        byId: Object.fromEntries(byId),
+        sequence
+      }));
+    } catch { /* a fake that cannot persist still works in-process */ }
+  }
+
+  load();
   const nextId = () => `acct_fake${String(++sequence).padStart(4, "0")}`;
 
   const shape = (row) => ({
@@ -141,6 +179,7 @@ function createFakeConnectTransport(options = {}) {
     calls,
     accounts,
     async createAccount({ country, email, workspaceId }) {
+      load();
       if (options.failCreate) throw new Error(String(options.failCreate));
       const accountId = nextId();
       accounts.set(accountId, {
@@ -157,15 +196,18 @@ function createFakeConnectTransport(options = {}) {
         pastDue: []
       });
       calls.push({ method: "createAccount", accountId, workspaceId });
+      save();
       return shape(accounts.get(accountId));
     },
     async retrieveAccount(accountId) {
+      load();
       const row = accounts.get(String(accountId));
       calls.push({ method: "retrieveAccount", accountId: String(accountId), found: Boolean(row) });
       if (!row) { const error = new Error("No such account"); error.code = "resource_missing"; throw error; }
       return shape(row);
     },
     async createAccountLink({ accountId, refreshUrl, returnUrl }) {
+      load();
       if (!accounts.has(String(accountId))) { const e = new Error("No such account"); e.code = "resource_missing"; throw e; }
       calls.push({ method: "createAccountLink", accountId: String(accountId), refreshUrl, returnUrl });
       return { url: `https://connect.stripe.test/setup/${accountId}`, expiresAt: 0 };
@@ -176,6 +218,7 @@ function createFakeConnectTransport(options = {}) {
       return JSON.parse(String(rawBody));
     },
     async createCheckoutSession({ accountId, idempotencyKey, amountMinor, currency, metadata }) {
+      load();
       if (!accounts.has(String(accountId))) { const e = new Error("No such account"); e.code = "resource_missing"; throw e; }
       const key = String(idempotencyKey || "");
       calls.push({ method: "createCheckoutSession", accountId: String(accountId), idempotencyKey: key, amountMinor });
@@ -195,28 +238,35 @@ function createFakeConnectTransport(options = {}) {
       };
       if (key) sessions.set(key, session);
       byId.set(sessionId, session);
+      save();
       return session;
     },
     async expireCheckoutSession({ accountId, sessionId }) {
+      load();
       calls.push({ method: "expireCheckoutSession", accountId: String(accountId), sessionId: String(sessionId) });
       const session = byId.get(String(sessionId));
       if (!session) { const e = new Error("No such session"); e.code = "resource_missing"; throw e; }
       session.status = "expired";
+      save();
       return { sessionId: String(sessionId), status: "expired" };
     },
     sessions,
     sessionsById: byId,
     // Test-only controls. Not part of the transport interface the service uses.
     completeOnboarding(accountId) {
+      load();
       const row = accounts.get(String(accountId));
       if (!row) throw new Error(`fake: no account ${accountId}`);
       row.detailsSubmitted = true; row.chargesEnabled = true; row.payoutsEnabled = true;
       row.currentlyDue = []; row.pastDue = []; row.disabledReason = "";
+      save();
     },
     restrict(accountId, { pastDue = [], disabledReason = "" } = {}) {
+      load();
       const row = accounts.get(String(accountId));
       if (!row) throw new Error(`fake: no account ${accountId}`);
       row.pastDue = pastDue.slice(); row.disabledReason = disabledReason;
+      save();
     }
   };
 }
