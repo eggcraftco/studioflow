@@ -64,6 +64,44 @@ function createStripeConnectTransport(stripe) {
       });
       return { url: String(link.url || ""), expiresAt: Number(link.expires_at || 0) };
     },
+    /**
+     * Create a Checkout Session ON THE CONNECTED ACCOUNT (direct charges: the
+     * money lands in the workspace's own Stripe balance, never ours).
+     *
+     * `idempotencyKey` is not optional and not decoration. A Stripe call and a
+     * Firestore write are two systems and cannot be one transaction: crash
+     * between them and a retry would open a SECOND link for the same money.
+     * With the key, Stripe returns the session it already made.
+     */
+    async createCheckoutSession({ accountId, idempotencyKey, amountMinor, currency, productName, successUrl, cancelUrl, expiresAtSeconds, metadata }) {
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: String(currency || "").toLowerCase(),
+            unit_amount: amountMinor,
+            product_data: { name: String(productName || "Payment") }
+          }
+        }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        ...(expiresAtSeconds ? { expires_at: expiresAtSeconds } : {}),
+        metadata: metadata || {},
+        payment_intent_data: { metadata: metadata || {} }
+      }, { stripeAccount: String(accountId), idempotencyKey: String(idempotencyKey) });
+      return {
+        sessionId: String(session.id || ""),
+        url: String(session.url || ""),
+        paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : "",
+        expiresAt: Number(session.expires_at || 0),
+        status: String(session.status || "")
+      };
+    },
+    async expireCheckoutSession({ accountId, sessionId }) {
+      const session = await stripe.checkout.sessions.expire(String(sessionId), { stripeAccount: String(accountId) });
+      return { sessionId: String(session.id || ""), status: String(session.status || "") };
+    },
     verifyWebhook(rawBody, signature, secret) {
       return stripe.webhooks.constructEvent(rawBody, signature, secret);
     }
@@ -78,6 +116,8 @@ function createStripeConnectTransport(stripe) {
  */
 function createFakeConnectTransport(options = {}) {
   const accounts = new Map();
+  const sessions = new Map();   // idempotency key -> session
+  const byId = new Map();       // session id -> session
   const calls = [];
   let sequence = 0;
   const nextId = () => `acct_fake${String(++sequence).padStart(4, "0")}`;
@@ -135,6 +175,37 @@ function createFakeConnectTransport(options = {}) {
       if (String(signature || "") !== "valid") { const e = new Error("Webhook signature verification failed."); e.type = "StripeSignatureVerificationError"; throw e; }
       return JSON.parse(String(rawBody));
     },
+    async createCheckoutSession({ accountId, idempotencyKey, amountMinor, currency, metadata }) {
+      if (!accounts.has(String(accountId))) { const e = new Error("No such account"); e.code = "resource_missing"; throw e; }
+      const key = String(idempotencyKey || "");
+      calls.push({ method: "createCheckoutSession", accountId: String(accountId), idempotencyKey: key, amountMinor });
+      // The behaviour that matters: the same key returns the SAME session, as
+      // Stripe does. A fake that minted a new id per call would let the
+      // crash-after-Stripe test pass while production opened two links.
+      if (key && sessions.has(key)) return { ...sessions.get(key), replayed: true };
+      if (options.failCheckout) throw new Error(String(options.failCheckout));
+      const sessionId = `cs_fake${String(++sequence).padStart(4, "0")}`;
+      const session = {
+        sessionId,
+        url: `https://checkout.stripe.test/pay/${sessionId}`,
+        paymentIntentId: `pi_fake${String(sequence).padStart(4, "0")}`,
+        expiresAt: 0,
+        status: "open",
+        amountMinor, metadata: metadata || {}, accountId: String(accountId)
+      };
+      if (key) sessions.set(key, session);
+      byId.set(sessionId, session);
+      return session;
+    },
+    async expireCheckoutSession({ accountId, sessionId }) {
+      calls.push({ method: "expireCheckoutSession", accountId: String(accountId), sessionId: String(sessionId) });
+      const session = byId.get(String(sessionId));
+      if (!session) { const e = new Error("No such session"); e.code = "resource_missing"; throw e; }
+      session.status = "expired";
+      return { sessionId: String(sessionId), status: "expired" };
+    },
+    sessions,
+    sessionsById: byId,
     // Test-only controls. Not part of the transport interface the service uses.
     completeOnboarding(accountId) {
       const row = accounts.get(String(accountId));

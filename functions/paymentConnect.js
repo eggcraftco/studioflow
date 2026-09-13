@@ -20,9 +20,14 @@
 //      the workspace, not to NivaDesk — it holds their money and their payout
 //      history. Disconnecting removes OUR link to it and nothing else.
 
+const crypto = require("crypto");
 const connectionState = require("./payments/connectionState");
 const eventBoundary = require("./payments/eventBoundary");
 const permissions = require("./payments/permissions");
+const requestState = require("./payments/paymentRequestState");
+const planner = require("./payments/requestPlanner");
+const orderLedger = require("./payments/orderLedger");
+const money = require("./payments/money");
 
 const PROVIDER = "stripe";
 const CONNECTION_DOC = "stripe";
@@ -335,7 +340,15 @@ function createPaymentConnectFunctions({
 
     try {
       let result = { skipped: true, reason: "unhandled_event" };
-      if (event.type === "account.updated") {
+      const PAYMENT_EVENTS = [
+        "checkout.session.completed", "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed", "checkout.session.expired",
+        "payment_intent.processing", "payment_intent.succeeded", "payment_intent.payment_failed",
+        "charge.refunded", "charge.dispute.created"
+      ];
+      if (PAYMENT_EVENTS.includes(event.type)) {
+        result = await applyProviderPayment(companyId, event, decided);
+      } else if (event.type === "account.updated") {
         // The body is used to identify the account, never to describe it: the
         // status is re-derived from a fresh read, the same discipline
         // applySubscription already uses on the subscription rail.
@@ -356,13 +369,505 @@ function createPaymentConnectFunctions({
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Payment requests (PR-P2)
+  // ---------------------------------------------------------------------------
+
+  const requestRef = (companyId, id) =>
+    db().collection("companies").doc(String(companyId)).collection("paymentRequests").doc(String(id));
+  const requestsRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("paymentRequests");
+  const ledgerRef = (companyId, id) =>
+    db().collection("companies").doc(String(companyId)).collection("paymentLedger").doc(String(id));
+  const orderRef = (orderId) => db().collection("siparisler").doc(String(orderId));
+
+  async function readOrder(companyId, orderId) {
+    const snapshot = await orderRef(orderId).get();
+    if (!snapshot.exists) throw new HttpsError("not-found", "That order no longer exists.");
+    const data = snapshot.data() || {};
+    if (String(data.companyId || "") !== String(companyId)) {
+      throw new HttpsError("permission-denied", "That order belongs to another workspace.");
+    }
+    return data;
+  }
+
+  async function readRequests(companyId, orderId) {
+    const snapshot = await requestsRef(companyId).where("orderId", "==", String(orderId)).get();
+    return snapshot.docs.map((doc) => ({ paymentRequestId: doc.id, ...(doc.data() || {}) }));
+  }
+
+  /**
+   * The public shape of a payment request. No provider session id, no account.
+   * The URL is Stripe's own hosted page and is the one provider value a client
+   * is meant to have — it is what gets sent to the customer.
+   */
+  function requestSummary(row) {
+    const data = row && typeof row === "object" ? row : {};
+    return {
+      paymentRequestId: String(data.paymentRequestId || ""),
+      orderId: String(data.orderId || ""),
+      purpose: String(data.purpose || ""),
+      amountMinor: Number(data.amountMinor || 0),
+      currency: String(data.currency || ""),
+      publicStatus: String(data.publicStatus || "draft"),
+      url: String(data.url || ""),
+      createdAtMs: Number(data.createdAtMs || 0),
+      paidAtMs: Number(data.paidAtMs || 0),
+      expiresAtMs: Number(data.expiresAtMs || 0),
+      paidAmountMinor: Number(data.paidAmountMinor || 0),
+      refundedAmountMinor: Number(data.refundedAmountMinor || 0),
+      createdByUid: String(data.createdByUid || ""),
+      stale: data.stale === true,
+      staleReason: String(data.staleReason || "")
+    };
+  }
+
+  /**
+   * Create (or finish) a payment link.
+   *
+   * The order of operations is the whole design, because a Stripe call and a
+   * Firestore write are two systems and cannot be one transaction:
+   *
+   *   1. reserve, in a TRANSACTION: re-read the order and every open request,
+   *      run the planner, and create the request document in `draft`. Two
+   *      clicks racing each other both read the same headroom otherwise, and
+   *      both get a link.
+   *   2. call Stripe with the request's own document id as the idempotency key.
+   *   3. write the session id and the URL, and move to `open`.
+   *
+   * Crash between 2 and 3 and the document is left in `draft`. Calling again
+   * with the same clientRequestId finds it, sends Stripe the SAME key, and
+   * Stripe returns the SAME session — one link, not two. That is why step 1
+   * writes before the provider call rather than after it.
+   */
+  const createOrderPaymentRequest = onCall({ region, secrets }, async (request) => {
+    const context = await requireWorkspace(request);
+    const data = (request && request.data) || {};
+    const orderId = String(data.orderId || "").trim();
+    if (!orderId) throw new HttpsError("invalid-argument", "An order is required.");
+
+    const order = await readOrder(context.companyId, orderId);
+    requireAction("createRequest", context, order);
+
+    const connection = await readConnection(context.companyId);
+    const capability = connectionState.capabilitiesFor(String(connection.status || "disconnected"));
+    if (!capability.canCreatePaymentRequest) {
+      throw new HttpsError("failed-precondition", "Connect Stripe before asking a customer to pay.", {
+        reason: "connection_not_ready", status: capability.status
+      });
+    }
+    const accountId = String(connection.stripeAccountId || "").trim();
+    if (!accountId) throw new HttpsError("failed-precondition", "This workspace has no Stripe account yet.");
+
+    // The currency is the workspace's, resolved from its symbol — and refused
+    // rather than guessed when the symbol names more than one code.
+    const currency = resolveWorkspaceCurrency(data, context);
+    const amountMinor = Number(data.amountMinor);
+    const chargeable = money.isChargeableAmount(amountMinor, currency);
+    if (!chargeable.ok) throw new HttpsError("invalid-argument", "That amount cannot be charged.", { reason: chargeable.reason });
+
+    const purpose = String(data.purpose || "remaining_balance");
+    const clientRequestId = String(data.clientRequestId || "").trim();
+
+    // Resume an unfinished attempt before making a new one.
+    if (clientRequestId) {
+      const existing = await requestsRef(context.companyId).where("clientRequestId", "==", clientRequestId).limit(1).get();
+      if (!existing.empty) {
+        const row = { paymentRequestId: existing.docs[0].id, ...(existing.docs[0].data() || {}) };
+        if (String(row.publicStatus) !== "draft") return { ok: true, resumed: true, request: requestSummary(row) };
+        const finished = await finishDraftRequest(context.companyId, accountId, row);
+        return { ok: true, resumed: true, request: requestSummary(finished) };
+      }
+    }
+
+    const created = await db().runTransaction(async (transaction) => {
+      const orderSnapshot = await transaction.get(orderRef(orderId));
+      const live = orderSnapshot.exists ? (orderSnapshot.data() || {}) : {};
+      const openSnapshot = await transaction.get(requestsRef(context.companyId).where("orderId", "==", orderId));
+      const open = openSnapshot.docs.map((doc) => ({ paymentRequestId: doc.id, ...(doc.data() || {}) }));
+      const decision = planner.canCreate(live, open, amountMinor, { purpose });
+      if (!decision.allowed) {
+        throw new HttpsError("failed-precondition", messageForPlanner(decision.reason), {
+          reason: decision.reason,
+          headroomMinor: decision.headroomMinor,
+          claimedMinor: decision.claimedMinor,
+          outstandingMinor: decision.outstandingMinor
+        });
+      }
+      const ref = requestsRef(context.companyId).doc();
+      transaction.set(ref, {
+        orderId,
+        customerId: String(live.customerId || ""),
+        purpose,
+        amountMinor,
+        currency,
+        provider: PROVIDER,
+        publicStatus: "draft",
+        clientRequestId,
+        createdByUid: String(context.uid || ""),
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+        schemaVersion: 1,
+        // What the order looked like when the link was made. A link that asks
+        // for money against a version of the order nobody would recognise is
+        // exactly what staleRequests() has to be able to notice.
+        sourceOrderRemaining: Number(live.remainingAmount || 0)
+      });
+      return { paymentRequestId: ref.id, orderId, amountMinor, currency, purpose, publicStatus: "draft" };
+    });
+
+    const finished = await finishDraftRequest(context.companyId, accountId, created);
+    return { ok: true, request: requestSummary(finished) };
+  });
+
+  /** Steps 2 and 3: the provider call, then the write, keyed so a retry is safe. */
+  async function finishDraftRequest(companyId, accountId, row) {
+    const session = await transport().createCheckoutSession({
+      accountId,
+      // The document id IS the idempotency key. Deterministic, unique per
+      // request, and already written down before the call went out.
+      idempotencyKey: `pr_${companyId}_${row.paymentRequestId}`,
+      amountMinor: Number(row.amountMinor),
+      currency: String(row.currency),
+      productName: `Order ${row.orderId}`,
+      successUrl: `${checkoutReturnUrl(companyId)}?pr=${row.paymentRequestId}&status=paid`,
+      cancelUrl: `${checkoutReturnUrl(companyId)}?pr=${row.paymentRequestId}&status=cancelled`,
+      metadata: { companyId: String(companyId), paymentRequestId: String(row.paymentRequestId), orderId: String(row.orderId) }
+    });
+    const patch = {
+      providerSessionId: String(session.sessionId || ""),
+      providerPaymentIntentId: String(session.paymentIntentId || ""),
+      url: String(session.url || ""),
+      publicStatus: "open",
+      expiresAtMs: Number(session.expiresAt || 0) * 1000,
+      updatedAtMs: Date.now()
+    };
+    await requestRef(companyId, row.paymentRequestId).set(patch, { merge: true });
+    return { ...row, ...patch };
+  }
+
+  function checkoutReturnUrl(companyId) {
+    return onboardingReturnUrl(companyId).split("?")[0];
+  }
+
+  function messageForPlanner(reason) {
+    if (reason === "exceeds_headroom_open_links") return "Another payment link is already open for this order. Cancel it, or ask for less.";
+    if (reason === "exceeds_outstanding") return "That is more than this order still owes.";
+    if (reason === "nothing_outstanding") return "This order has nothing left to pay.";
+    if (reason === "amount_not_positive") return "Enter an amount above zero.";
+    return "That payment link cannot be created.";
+  }
+
+  function resolveWorkspaceCurrency(data, context) {
+    const explicit = money.normalizeCurrency(data && data.currency);
+    if (explicit) {
+      if (!money.isSupportedCurrency(explicit)) {
+        throw new HttpsError("failed-precondition", "That currency cannot be charged yet.", { reason: "unsupported_currency" });
+      }
+      return explicit;
+    }
+    const symbol = String((context.companyData && context.companyData.seciliParaBirimi) || "").trim();
+    const resolved = money.symbolToCurrency(symbol);
+    if (!resolved.ok) {
+      // "¥" is JPY or CNY and the two differ by a factor of a hundred. Refusing
+      // is the only safe answer; the workspace states a code once and is done.
+      throw new HttpsError("failed-precondition", "Choose your currency before taking card payments.", {
+        reason: resolved.reason, candidates: resolved.candidates
+      });
+    }
+    return resolved.currency;
+  }
+
+  /** Everyone who may see the money may see the links. */
+  const listOrderPaymentRequests = onCall({ region }, async (request) => {
+    const context = await requireWorkspace(request);
+    const orderId = String(((request && request.data) || {}).orderId || "").trim();
+    if (!orderId) throw new HttpsError("invalid-argument", "An order is required.");
+    const order = await readOrder(context.companyId, orderId);
+    requireAction("viewAmounts", context, order);
+
+    const rows = await readRequests(context.companyId, orderId);
+    const stale = planner.staleRequests(order, rows);
+    const staleById = new Map(stale.map((row) => [row.paymentRequestId, row]));
+    return {
+      ok: true,
+      outstandingMinor: planner.outstandingMinor(order),
+      headroomMinor: planner.headroomMinor(order, rows),
+      requests: rows.map((row) => {
+        const summary = requestSummary(row);
+        const problem = staleById.get(summary.paymentRequestId);
+        return problem
+          ? { ...summary, stale: true, staleReason: problem.reason, excessMinor: problem.excessMinor }
+          : summary;
+      })
+    };
+  });
+
+  /**
+   * Every payment link in the workspace, for the Banking screen.
+   *
+   * Ordered newest first and capped, because this is a screen and not an export
+   * — a workspace with ten thousand links must not be able to time the function
+   * out by opening a tab. The cap is reported so the screen can say so rather
+   * than silently showing a slice.
+   *
+   * The customer's name is NOT joined in here. It lives on the order, the
+   * caller's finance visibility has already been checked, and a list endpoint
+   * that fans out to one order read per row is how a screen becomes a bill.
+   * The row carries the orderId; the screen already has the orders it shows.
+   */
+  const listWorkspacePaymentRequests = onCall({ region }, async (request) => {
+    const context = await requireWorkspace(request);
+    // Workspace-wide, so there is no single order to scope an assigned-only
+    // member against. They get their own orders' links and nothing else.
+    const actor = workspaceActor(context);
+    const view = permissions.can("viewAmounts", actor, {});
+    if (!view.allowed) {
+      throw new HttpsError("permission-denied", messageFor("viewAmounts", view.reason), { reason: view.reason });
+    }
+    const limit = Math.min(Math.max(Number(((request && request.data) || {}).limit) || 200, 1), 500);
+    const snapshot = await requestsRef(context.companyId).orderBy("createdAtMs", "desc").limit(limit + 1).get();
+    const rows = snapshot.docs.map((doc) => ({ paymentRequestId: doc.id, ...(doc.data() || {}) }));
+    const truncated = rows.length > limit;
+    const page = truncated ? rows.slice(0, limit) : rows;
+
+    const assignedOnly = actor.assignedProjectsOnly === true;
+    const visible = [];
+    for (const row of page) {
+      if (!assignedOnly) { visible.push(row); continue; }
+      const order = await orderRef(row.orderId).get();
+      const data = order.exists ? (order.data() || {}) : {};
+      if (String(data.assignedToUid || "") === String(context.uid || "")) visible.push(row);
+    }
+    return {
+      ok: true,
+      truncated,
+      requests: visible.map((row) => requestSummary(row))
+    };
+  });
+
+  /**
+   * Cancel a link. Expires the session at Stripe FIRST, then records it.
+   *
+   * That order is deliberate and it is the opposite of the create path. There,
+   * writing first is safe because an unfinished draft can be finished. Here,
+   * recording "cancelled" before Stripe has actually stopped the session would
+   * tell the workspace the link is dead while the customer's page still takes
+   * their card.
+   */
+  const cancelOrderPaymentRequest = onCall({ region, secrets }, async (request) => {
+    const context = await requireWorkspace(request);
+    const id = String(((request && request.data) || {}).paymentRequestId || "").trim();
+    if (!id) throw new HttpsError("invalid-argument", "A payment request is required.");
+    const snapshot = await requestRef(context.companyId, id).get();
+    if (!snapshot.exists) throw new HttpsError("not-found", "That payment link no longer exists.");
+    const row = { paymentRequestId: id, ...(snapshot.data() || {}) };
+
+    const order = await readOrder(context.companyId, row.orderId);
+    requireAction("cancelRequest", context, order);
+
+    if (["paid", "refunded", "partially_refunded", "disputed"].includes(String(row.publicStatus))) {
+      throw new HttpsError("failed-precondition", "That payment has already been made.", { reason: "already_paid" });
+    }
+    if (String(row.publicStatus) === "cancelled") return { ok: true, request: requestSummary(row), already: true };
+
+    const connection = await readConnection(context.companyId);
+    const accountId = String(connection.stripeAccountId || "").trim();
+    if (accountId && row.providerSessionId) {
+      try {
+        await transport().expireCheckoutSession({ accountId, sessionId: row.providerSessionId });
+      } catch (error) {
+        // Already expired or already paid at Stripe. Re-reading the truth is
+        // the webhook's job; refusing here would leave a link nobody can close.
+        if (String(error && error.code) !== "resource_missing") {
+          throw new HttpsError("unavailable", "Stripe could not close that link. Try again in a moment.");
+        }
+      }
+    }
+    const patch = { publicStatus: "cancelled", cancelledAtMs: Date.now(), cancelledByUid: String(context.uid || ""), updatedAtMs: Date.now() };
+    await requestRef(context.companyId, id).set(patch, { merge: true });
+    return { ok: true, request: requestSummary({ ...row, ...patch }) };
+  });
+
+  /**
+   * A provider payment event, applied exactly once.
+   *
+   * Four writes, in an order chosen so that a crash anywhere leaves something
+   * recoverable and nothing double-counted:
+   *
+   *   1. the LEDGER row, with `create()` on a deterministic id. This is the
+   *      idempotency point for the money. A second delivery throws
+   *      already-exists and the rest is skipped.
+   *   2. the request's own status, through the pure reducer.
+   *   3. the order's money fields, repaired from the whole ledger rather than
+   *      incremented — so a repair that runs twice, or after a client wiped the
+   *      document, converges on the same numbers.
+   *   4. the over-collection verdict, recorded on the request.
+   *
+   * If we crash after 1, the reconcile path rebuilds 2-4 from the ledger. If we
+   * crash before 1, Stripe redelivers. Neither leaves money counted twice.
+   */
+  async function applyProviderPayment(companyId, event, decided) {
+    const object = (event.data && event.data.object) || {};
+    const externalPaymentId = eventBoundary.externalPaymentId(event);
+    if (!externalPaymentId) return { skipped: true, reason: "no_payment_identity" };
+
+    const paymentRequestId = String((object.metadata && object.metadata.paymentRequestId) || "").trim();
+    if (!paymentRequestId) return { skipped: true, reason: "no_payment_request_on_event" };
+    const snapshot = await requestRef(companyId, paymentRequestId).get();
+    if (!snapshot.exists) return { skipped: true, reason: "payment_request_not_found" };
+    const row = { paymentRequestId, ...(snapshot.data() || {}) };
+
+    const match = eventBoundary.matchesRequest(event, {
+      paymentRequestId, companyId, currency: row.currency,
+      amountMinor: row.amountMinor, connectedAccountId: String(event.account || "")
+    });
+    if (!match.ok) {
+      // A mismatch is never applied and never retried into oblivion: it is the
+      // operator's to look at, because the alternative is guessing which of the
+      // two amounts is real.
+      await requestRef(companyId, paymentRequestId).set({
+        mismatchProblems: match.problems, mismatchAtMs: Date.now(), updatedAtMs: Date.now()
+      }, { merge: true });
+      return { skipped: true, reason: "event_does_not_match_request", problems: match.problems };
+    }
+
+    const before = requestState.emptyState({
+      publicStatus: row.publicStatus, amountMinor: Number(row.amountMinor || 0),
+      paidAmountMinor: Number(row.paidAmountMinor || 0),
+      refundedAmountMinor: Number(row.refundedAmountMinor || 0),
+      lastEventSequence: Number(row.lastEventSequence || 0),
+      appliedEventIds: Array.isArray(row.appliedEventIds) ? row.appliedEventIds : []
+    });
+    const reduced = requestState.apply(before, {
+      id: String(event.id || ""),
+      type: String(event.type || ""),
+      sequence: Number(event.created || 0) * 1000,
+      amountMinor: Number(object.amount_total === undefined ? object.amount : object.amount_total) || 0,
+      refundedTotalMinor: Number(object.amount_refunded || 0),
+      fullyRefunded: object.refunded === true
+    });
+    const ledgerRow = requestState.ledgerRowFor(before, reduced.state, event);
+
+    // (1) The money, once.
+    let ledgerWritten = false;
+    if (ledgerRow) {
+      const entry = orderLedger.entryFrom({
+        externalPaymentId, type: ledgerRow.type, amountMinor: ledgerRow.amountMinor,
+        currency: row.currency, orderId: row.orderId, paymentRequestId,
+        connectedAccountId: String(event.account || ""), provider: PROVIDER,
+        receivedAtMs: Number(event.created || 0) * 1000
+      });
+      if (entry) {
+        const entryId = orderLedger.ledgerEntryId(PROVIDER, externalPaymentId);
+        try {
+          await ledgerRef(companyId, entryId).create(entry);
+          ledgerWritten = true;
+        } catch (error) {
+          // already-exists: this money is already in the ledger. Everything
+          // below still runs, because it is all derived from the ledger and
+          // converges rather than accumulating.
+          ledgerWritten = false;
+        }
+      }
+    }
+
+    // (2) The request's own status.
+    await requestRef(companyId, paymentRequestId).set({
+      publicStatus: reduced.state.publicStatus,
+      paidAmountMinor: reduced.state.paidAmountMinor,
+      refundedAmountMinor: reduced.state.refundedAmountMinor,
+      lastEventSequence: reduced.state.lastEventSequence,
+      appliedEventIds: reduced.state.appliedEventIds,
+      ...(reduced.state.publicStatus === "paid" && !row.paidAtMs ? { paidAtMs: Number(event.created || 0) * 1000 } : {}),
+      updatedAtMs: Date.now()
+    }, { merge: true });
+
+    // (3) The order, repaired from the whole ledger.
+    //
+    // The BEFORE snapshot is taken first, and the overpayment is judged against
+    // it. Judging after the repair asks "is the order still owed anything now
+    // that this payment has been applied?", whose answer is always no — every
+    // payment would read as a full overpayment. The question is what the order
+    // was owed when the money arrived.
+    const orderBefore = (await orderRef(row.orderId).get()).data() || {};
+    const repaired = await repairOrderFromLedger(companyId, row.orderId);
+
+    // (4) The over-collection verdict, only on the delivery that recorded the
+    // money. A redelivery has nothing to classify, and classifying it against
+    // an order this payment has already settled would invent an overpayment.
+    let overpaid = null;
+    if (ledgerWritten && ledgerRow && ledgerRow.type === "payment") {
+      const siblings = await readRequests(companyId, row.orderId);
+      overpaid = planner.classifyPayment(orderBefore, siblings, { paymentRequestId, amountMinor: ledgerRow.amountMinor });
+      const orderAfter = (await orderRef(row.orderId).get()).data() || orderBefore;
+      await markStaleRequests(companyId, row.orderId, orderAfter, siblings);
+      if (overpaid.overpaid) {
+        await requestRef(companyId, paymentRequestId).set({
+          overpaidMinor: overpaid.overpaidMinor, overpaidAtMs: Date.now(), updatedAtMs: Date.now()
+        }, { merge: true });
+      }
+    }
+
+    return {
+      skipped: false,
+      paymentRequestId,
+      publicStatus: reduced.state.publicStatus,
+      ledgerWritten,
+      externalPaymentId,
+      repaired: Boolean(repaired),
+      overpaidMinor: overpaid ? overpaid.overpaidMinor : 0
+    };
+  }
+
+  /** Rebuild the order's money fields from the ledger. Converges; never adds. */
+  async function repairOrderFromLedger(companyId, orderId) {
+    const snapshot = await orderRef(orderId).get();
+    if (!snapshot.exists) return null;
+    const order = snapshot.data() || {};
+    const entries = (await db().collection("companies").doc(String(companyId)).collection("paymentLedger")
+      .where("orderId", "==", String(orderId)).get()).docs.map((doc) => doc.data() || {});
+    const patch = orderLedger.repairPatch(order, entries);
+    if (!patch) return null;
+    await orderRef(orderId).set(patch, { merge: true });
+    return patch;
+  }
+
+  /** Flag links the order can no longer justify. Named, never cancelled. */
+  async function markStaleRequests(companyId, orderId, order, rows) {
+    const stale = planner.staleRequests(order, rows);
+    const staleIds = new Set(stale.map((row) => row.paymentRequestId));
+    const writes = [];
+    for (const row of rows) {
+      const id = String(row.paymentRequestId || "");
+      if (!id || !planner.OPEN_STATUSES.includes(String(row.publicStatus || ""))) continue;
+      const problem = stale.find((entry) => entry.paymentRequestId === id);
+      if (problem && row.stale !== true) {
+        writes.push(requestRef(companyId, id).set({
+          stale: true, staleReason: problem.reason, staleExcessMinor: problem.excessMinor, updatedAtMs: Date.now()
+        }, { merge: true }));
+      } else if (!staleIds.has(id) && row.stale === true) {
+        writes.push(requestRef(companyId, id).set({ stale: false, staleReason: "", staleExcessMinor: 0, updatedAtMs: Date.now() }, { merge: true }));
+      }
+    }
+    await Promise.all(writes);
+    return stale;
+  }
+
   return {
     getStripePaymentConnection,
     beginStripeConnectOnboarding,
+    createOrderPaymentRequest,
+    listOrderPaymentRequests,
+    listWorkspacePaymentRequests,
+    cancelOrderPaymentRequest,
     refreshStripePaymentConnection,
     disconnectStripePaymentConnection,
     stripeConnectWebhook,
-    _internal: { applyAccountSnapshot, readConnection, resolveAccountCompany, claimEvent, connectionRef, indexRef }
+    _internal: {
+      applyAccountSnapshot, readConnection, resolveAccountCompany, claimEvent, connectionRef, indexRef,
+      applyProviderPayment, repairOrderFromLedger, markStaleRequests, finishDraftRequest, requestSummary
+    }
   };
 }
 

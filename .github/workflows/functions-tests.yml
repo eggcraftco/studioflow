@@ -136,6 +136,8 @@ jobs:
         working-directory: studioflow-web
       - run: npm run test:integrations
         working-directory: studioflow-web
+      - run: npm run test:payment-links
+        working-directory: studioflow-web
 
   emulator:
     name: rules + e2e (Firestore emulator)
