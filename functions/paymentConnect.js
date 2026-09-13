@@ -589,8 +589,18 @@ function createPaymentConnectFunctions({
     const rows = await readRequests(context.companyId, orderId);
     const stale = planner.staleRequests(order, rows);
     const staleById = new Map(stale.map((row) => [row.paymentRequestId, row]));
+
+    // The currency the workspace would actually be charged in, resolved by the
+    // server and never by the screen. A client mapping its own symbol would be
+    // a second answer, and for "$" and "¥" it would be a guess — which is the
+    // one this rail refuses to make. `currency` is empty when the workspace has
+    // not settled that question, and the screen shows the plain number.
+    let currency = "";
+    try { currency = resolveWorkspaceCurrency({}, context); } catch { currency = ""; }
+
     return {
       ok: true,
+      currency,
       outstandingMinor: planner.outstandingMinor(order),
       headroomMinor: planner.headroomMinor(order, rows),
       requests: rows.map((row) => {

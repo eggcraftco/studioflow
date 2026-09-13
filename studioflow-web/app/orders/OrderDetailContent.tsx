@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import OrderPaymentLinks from "@/components/OrderPaymentLinks";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
@@ -7109,6 +7110,17 @@ export function OrderDetailContent({
                   </>
                   )}
                 </div>
+                {/* Asking this order's customer to pay, from the order.
+                    Inside canSeeFinance, so somebody who cannot see the money
+                    cannot see the links either — and the server checks again.
+                    The same callables and the same records as Banking →
+                    Payment Links: a link made here is that screen's row. */}
+                <OrderPaymentLinks
+                  companyId={workspace.id}
+                  orderId={order.id}
+                  t={t}
+                  canCreate={canInlineEditFinance}
+                />
               </>
             ) : (
               <LockedInline title={t("Financial info hidden")} note={t("Workflow Only users cannot view price and finance details.")} />
