@@ -102,6 +102,58 @@ function routeEvent(event, resolveAccount) {
 }
 
 /**
+ * May the SUBSCRIPTION handler act on this event at all?
+ *
+ * routeEvent() decides which rail an event belongs to, at the door. This is the
+ * subscription rail's OWN refusal, taken inside its handler, and the two are
+ * deliberately not the same check in the same place. Two endpoints with two
+ * signing secrets should already make a connected-account event impossible
+ * here; so should the routing. "Should" is three assumptions deep — a secret
+ * pasted into the wrong Stripe endpoint configuration undoes all of it in one
+ * click, and the failure it produces is a workspace customer's payment read as
+ * a NivaDesk plan purchase. So the handler refuses on its own account.
+ *
+ * Four refusals, in the order a wrong event would trip them:
+ *
+ *   1. `event.account` set at all. The subscription rail is NivaDesk's own
+ *      Stripe account; an event stamped with somebody else's account is not
+ *      ours to apply, whatever its type says.
+ *   2. a type this rail does not handle. Nothing downstream is written for
+ *      those objects, so there is no handler that could do something sensible.
+ *   3. livemode disagreeing with the key this deployment runs on. A test-mode
+ *      deployment handed a live event (or the reverse) is looking at another
+ *      environment's money; the ids would not resolve, but a refusal says so
+ *      rather than leaving it to a lookup miss.
+ *   4. Connect markers on the object itself — on_behalf_of, transfer_data,
+ *      application_fee_amount, or a `transfer_data.destination`. A platform
+ *      event carrying these is a connected charge routed through the platform
+ *      account, which is money belonging to a workspace and not a subscription.
+ *
+ * Returns { admissible, reason }.
+ */
+function platformEventAdmissible(event, { expectLivemode = false } = {}) {
+  const type = text(event && event.type);
+  if (!type) return { admissible: false, reason: "malformed_event" };
+  if (text(event && event.account)) return { admissible: false, reason: "connected_account_event" };
+  if (!PLATFORM_EVENT_TYPES.includes(type)) return { admissible: false, reason: "unhandled_platform_event" };
+
+  const livemode = event && typeof event.livemode === "boolean" ? event.livemode : null;
+  if (livemode !== null && livemode !== Boolean(expectLivemode)) {
+    return { admissible: false, reason: "livemode_mismatch" };
+  }
+
+  const object = (event && event.data && event.data.object) || {};
+  const connectMarkers = ["on_behalf_of", "application_fee_amount", "application_fee", "transfer_data"];
+  for (const marker of connectMarkers) {
+    const value = object[marker];
+    if (value !== undefined && value !== null && value !== "") {
+      return { admissible: false, reason: `connect_marker_${marker}` };
+    }
+  }
+  return { admissible: true, reason: "" };
+}
+
+/**
  * The provider event ledger key (plan §6.3):
  *   paymentProviderEvents/{provider}:{account}:{eventId}
  *
@@ -182,6 +234,7 @@ module.exports = {
   CONNECTED_EVENT_TYPES,
   PLATFORM_EVENT_TYPES,
   routeEvent,
+  platformEventAdmissible,
   eventLedgerId,
   externalPaymentId,
   matchesRequest

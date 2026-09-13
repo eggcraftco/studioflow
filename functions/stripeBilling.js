@@ -1,4 +1,9 @@
 const crypto = require("crypto");
+// The rail boundary. Two endpoints and two signing secrets should make a
+// connected-account event impossible on this one; this handler refuses on its
+// own account anyway, because "should" there is three assumptions deep and a
+// secret pasted into the wrong Stripe endpoint undoes all three in one click.
+const eventBoundary = require("./payments/eventBoundary");
 
 const STRIPE_BILLING_REGION = "europe-west2";
 const APPLE_BILLING_REGION = STRIPE_BILLING_REGION;
@@ -498,6 +503,10 @@ function createStripeBillingFunctions({
     return {
       id: event.id,
       type: event.type,
+      // Recorded because this rail now DEPENDS on it being empty. A row that
+      // does not carry the field cannot answer "was this a platform event?"
+      // after the fact, which is exactly the question an incident would ask.
+      connectedAccountId: String(event.account || ""),
       livemode: Boolean(event.livemode),
       apiVersion: event.api_version || "",
       created: event.created || null
@@ -1756,6 +1765,28 @@ function createStripeBillingFunctions({
       receivedAt: admin.firestore.FieldValue.serverTimestamp(),
       processingStatus: "received"
     }, { merge: true });
+
+    // The rail check, BEFORE any applier and before any Stripe call. An event
+    // refused here is filed as refused and processed, so Stripe stops retrying
+    // something this endpoint will never accept — and, more to the point, no
+    // plan, entitlement, trial stamp or ledger row is touched on the way past.
+    //
+    // expectLivemode comes from the key this deployment actually runs on, not
+    // from a flag: the key is what decides which Stripe environment these ids
+    // belong to.
+    const admissible = eventBoundary.platformEventAdmissible(event, {
+      expectLivemode: String(configStatus().secretKey || "").startsWith("sk_live_")
+    });
+    if (!admissible.admissible) {
+      const refused = { skipped: true, reason: admissible.reason, rail: "subscription", refused: true };
+      await eventRef.set({
+        processingStatus: "refused",
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        connectedAccountId: String(event.account || ""),
+        result: refused
+      }, { merge: true });
+      return refused;
+    }
 
     let result = { skipped: true, reason: "unhandled_event" };
     const object = event.data?.object || {};

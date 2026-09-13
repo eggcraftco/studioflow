@@ -311,17 +311,26 @@ function pass(name) { checks += 1; console.log("PASS ", name); }
 }
 
 {
-  // The live subscription webhook does not read event.account today. That is
-  // fine while every event is a platform event, and it is exactly what stops
-  // being fine the day a workspace connects — recorded here so PR-P1 cannot
-  // ship the connected rail onto the same endpoint by accident.
+  // The subscription rail refuses connected-account events ITSELF, and does so
+  // before any applier runs. Two endpoints and two signing secrets should make
+  // such an event impossible here; this is the third layer, because the first
+  // two are configuration and configuration is what gets pasted wrong.
   const source = fs.readFileSync(path.join(__dirname, "..", "..", "stripeBilling.js"), "utf8");
-  const readsAccount = /event\.account/.test(source);
-  assert.strictEqual(
-    readsAccount, false,
-    "stripeBilling.js now reads event.account — the two rails must be re-examined before this check is relaxed"
-  );
-  pass("the subscription webhook is platform-only, and is pinned that way");
+  const start = source.indexOf("async function processStripeEvent(");
+  assert(start > 0, "processStripeEvent still exists");
+  const block = source.slice(start, source.indexOf("const resyncStripeWorkspaceEntitlements", start));
+
+  const guardAt = block.indexOf("platformEventAdmissible");
+  assert(guardAt > 0, "processStripeEvent calls the rail guard");
+  // Before every applier, not merely somewhere in the function.
+  for (const applier of ["applyCompletedSubscriptionCheckout(", "applySubscription(", "applyInvoicePaid(", "applyInvoicePaymentFailed("]) {
+    const at = block.indexOf(applier);
+    assert(at > guardAt, `the rail guard must run before ${applier}`);
+  }
+  // And the account is recorded, so a row can answer "was this a platform
+  // event?" after the fact — the question an incident would ask.
+  assert(/connectedAccountId: String\(event\.account/.test(source), "eventSummary records the connected account id");
+  pass("the subscription rail refuses connected-account events before any applier");
 }
 
 {
