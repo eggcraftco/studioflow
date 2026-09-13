@@ -56,6 +56,21 @@ on:
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
       - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
       - "studioflow-web/package.json"
+      # The four web checks the relay job also runs. Listed for exactly the
+      # reason the eBay routes above are: before a path is here, a change to
+      # the file it guards fires NO workflow at all, and the check that would
+      # have caught it runs only when something unrelated happens to change.
+      - "studioflow-web/components/PaymentLinksPanel.tsx"
+      - "studioflow-web/lib/studioflow/integrations.ts"
+      - "studioflow-web/lib/studioflow/workspaceResolution.ts"
+      - "studioflow-web/lib/studioflow/fileProxyGuards.ts"
+      - "studioflow-web/lib/studioflow/financeEngine.ts"
+      - "studioflow-web/app/f/**"
+      - "studioflow-web/scripts/check-integration-states.mjs"
+      - "studioflow-web/scripts/check-payment-links-panel.mjs"
+      - "studioflow-web/scripts/check-finance-vectors.mjs"
+      - "studioflow-web/scripts/check-workspace-resolution.mjs"
+      - "studioflow-web/scripts/check-file-proxy-guards.mjs"
   pull_request:
     paths:
       - "functions/**"
@@ -73,6 +88,21 @@ on:
       - "studioflow-web/scripts/check-ebay-relay-vectors.mjs"
       - "studioflow-web/scripts/check-ebay-callback-regressions.mjs"
       - "studioflow-web/package.json"
+      # The four web checks the relay job also runs. Listed for exactly the
+      # reason the eBay routes above are: before a path is here, a change to
+      # the file it guards fires NO workflow at all, and the check that would
+      # have caught it runs only when something unrelated happens to change.
+      - "studioflow-web/components/PaymentLinksPanel.tsx"
+      - "studioflow-web/lib/studioflow/integrations.ts"
+      - "studioflow-web/lib/studioflow/workspaceResolution.ts"
+      - "studioflow-web/lib/studioflow/fileProxyGuards.ts"
+      - "studioflow-web/lib/studioflow/financeEngine.ts"
+      - "studioflow-web/app/f/**"
+      - "studioflow-web/scripts/check-integration-states.mjs"
+      - "studioflow-web/scripts/check-payment-links-panel.mjs"
+      - "studioflow-web/scripts/check-finance-vectors.mjs"
+      - "studioflow-web/scripts/check-workspace-resolution.mjs"
+      - "studioflow-web/scripts/check-file-proxy-guards.mjs"
   workflow_dispatch:
 
 concurrency:
