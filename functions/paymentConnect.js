@@ -793,20 +793,42 @@ function createPaymentConnectFunctions({
     const orderBefore = (await orderRef(row.orderId).get()).data() || {};
     const repaired = await repairOrderFromLedger(companyId, row.orderId);
 
-    // (4) The over-collection verdict, only on the delivery that recorded the
-    // money. A redelivery has nothing to classify, and classifying it against
-    // an order this payment has already settled would invent an overpayment.
+    // (4) The over-collection verdict, exactly once per payment.
+    //
+    // Gated on the REQUEST not having been classified yet, not on "this
+    // delivery wrote the ledger row". The difference is a real window: if the
+    // row was written and everything after it failed, the retry finds
+    // already-exists — and gating on the write would skip the verdict forever,
+    // leaving a customer £600 overpaid with nothing anywhere saying so.
+    //
+    // The balance it is judged against is the one the payment MET, which on a
+    // retry is not the order as it now stands: a previous attempt may already
+    // have applied this payment. Adding this payment's own amount back when the
+    // order already reflects it recovers the pre-payment balance exactly,
+    // because the balance moves by the gross amount taken.
+    //
+    // It also cannot depend on `ledgerRow`, and that was the first version's
+    // bug: a retry whose step 2 already succeeded reduces to a duplicate, so
+    // the reducer reports no status change and ledgerRowFor returns null. The
+    // condition is the REQUEST's own state — paid, and not yet classified —
+    // which is true on every attempt until one of them finishes.
     let overpaid = null;
-    if (ledgerWritten && ledgerRow && ledgerRow.type === "payment") {
+    const paidMinor = Number(reduced.state.paidAmountMinor || 0);
+    if (reduced.state.publicStatus === "paid" && paidMinor > 0 && !Number(row.overpaymentCheckedAtMs || 0)) {
       const siblings = await readRequests(companyId, row.orderId);
-      overpaid = planner.classifyPayment(orderBefore, siblings, { paymentRequestId, amountMinor: ledgerRow.amountMinor });
+      const alreadyReflected = Array.isArray(orderBefore.payments)
+        && orderBefore.payments.some((entry) => entry && String(entry.externalPaymentId || "") === externalPaymentId);
+      const metOrder = alreadyReflected
+        ? { ...orderBefore, remainingAmount: Number(orderBefore.remainingAmount || 0) + (paidMinor / 100) }
+        : orderBefore;
+      overpaid = planner.classifyPayment(metOrder, siblings, { paymentRequestId, amountMinor: paidMinor });
       const orderAfter = (await orderRef(row.orderId).get()).data() || orderBefore;
       await markStaleRequests(companyId, row.orderId, orderAfter, siblings);
-      if (overpaid.overpaid) {
-        await requestRef(companyId, paymentRequestId).set({
-          overpaidMinor: overpaid.overpaidMinor, overpaidAtMs: Date.now(), updatedAtMs: Date.now()
-        }, { merge: true });
-      }
+      await requestRef(companyId, paymentRequestId).set({
+        overpaymentCheckedAtMs: Date.now(),
+        ...(overpaid.overpaid ? { overpaidMinor: overpaid.overpaidMinor, overpaidAtMs: Date.now() } : {}),
+        updatedAtMs: Date.now()
+      }, { merge: true });
     }
 
     return {

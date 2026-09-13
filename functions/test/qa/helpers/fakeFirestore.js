@@ -154,7 +154,10 @@ function makeFakeFirestore(nowRef = { value: Date.now() }) {
     write: (path, data) => { docs.set(path, clone(data)); },
     paths: (prefix) => [...docs.keys()].filter((p) => p.startsWith(prefix)).sort(),
     /** Make every write under a matching path throw the way Firestore does. */
-    refuseWrites: (match, message, code = 3) => { refusals.push({ match, message, code }); }
+    refuseWrites: (match, message, code = 3) => { refusals.push({ match, message, code }); },
+    /** Let the writes through again — for testing the retry after a failure,
+     *  which is the half of a partial-failure test that actually matters. */
+    allowWrites: () => { refusals.length = 0; }
   };
 }
 
