@@ -162,3 +162,65 @@ fake Checkout screen is not evidence about Stripe.
 5. **A workspace on `$` or `¥`** cannot take a card payment until it states an
    ISO currency code.
 
+---
+
+# Correction — the Sales row was wrong
+
+The previous update said *"nothing Sales is live, on any platform"*. **That is
+false.** Sales Faz 1's read-only pilot was released on 12 September and is
+running now. Verified read-only today, against production rather than against a
+branch:
+
+| Check | Live now |
+| --- | --- |
+| `getCommerceCapabilities` | `getcommercecapabilities-00005-gis` ACTIVE |
+| `getCommerceHealth` | `getcommercehealth-00006-wuv` ACTIVE |
+| `getSalesCapability` | `getsalescapability-00001-rez` ACTIVE |
+| `setSalesVisibility` | `setsalesvisibility-00001-med` ACTIVE |
+| `listSalesRows` | `listsalesrows-00001-xus` ACTIVE |
+| `listSalesProducts` | `listsalesproducts-00001-cix` ACTIVE |
+| `listSalesChannels` | `listsaleschannels-00001-loz` ACTIVE |
+
+All seven at exactly the revisions `docs/sales/faz1-release-2026-09-12.md`
+names, all stamped 2026-09-12T11:28Z. **Nothing was lost.**
+
+| | |
+| --- | --- |
+| Firestore ruleset | `b0f013d3-f5c9-4519-9376-ee7f658445cc`, created 12 Sep 11:25:59Z, carries `salesOrders`, `salesSettings` and the projection exception |
+| Live rules vs deploy source `72634e62` | **byte-identical** |
+| Sales index | `siparisler (companyId ASC, assignedToUid ASC, paymentDate DESC, __name__ DESC)` — **READY** |
+| Web | `https://nivadesk.app/sales` → 200; the Round 177 chunk `page-9ae920b4ab0e4895.js` → 200, still carrying "Everything you have sold", "No products yet", "Connected means the channel", "Held by the marketplace" |
+| Pilot flag | `appConfig/sales` = `{ enabled: true, workspaces: { aiVY7UKjbfP5Dkhy5lamTTltkex2: true } }` — one entry, no wildcard |
+| That workspace | **testwork**, Team plan, `salesSettings/main` = `{ visibility: "on" }` |
+
+## How I got it wrong
+
+I checked which branches carried the *later* Sales candidate — PR 3's projection
+work on `sales-faz1-release-candidate @ 05040bf3`, still unmerged — and reasoned
+from its absence that no Sales work was live. I never opened the deploy branch's
+own history. `72634e62`, which I used as the base for every candidate all day,
+**is** the Round 177 record sitting directly on top of the Sales Faz 1 merge
+`9bf32b9a` and its release record `9900f224`.
+
+Two lessons, and the second is the one that matters:
+
+1. "Which branch carries this?" answers a question about *source*. What is live
+   is a question about *production*, and only production can answer it.
+2. The evidence was in the tree I was standing in. The deploy branch's last
+   three commits are the merge, the release record and the round record. Reading
+   `git log` on the base I had checked out would have prevented it.
+
+## What was right in the previous row
+
+Only this: the shipped **native** apps — iOS/macOS 1.3 (build 17) and Android
+0.1.8 — contain no Sales screens, because they predate the work. That is a
+statement about the store builds and it is not a statement about the server or
+the web, which is precisely the conflation the correction above undoes.
+
+So the Sales row reads:
+
+| Package | Live | Candidate | Awaiting acceptance |
+| --- | --- | --- | --- |
+| Sales Faz 1 (read-only pilot) | **yes** — 7 functions, Round 177, rules, index, flag on `testwork` alone | `sales-faz1-release-candidate @ 05040bf3` carries **PR 3** (projection, backfill, tombstone cleanup), which is **not** in the release | in-app pilot acceptance by an authorised `testwork` session; and index proof C, which needs an assigned order |
+| Sales — native | **no**, and not claimed | — | the store builds predate the work |
+
