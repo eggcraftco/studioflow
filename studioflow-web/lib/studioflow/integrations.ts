@@ -140,8 +140,14 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Automation"], manage: "inbound",
   },
   {
-    id: "stripe", name: "Stripe", category: "automation", kind: "planned", mark: "S",
-    blurb: "", capabilities: [], manage: "",
+    // The workspace's OWN Stripe account (Connect), not NivaDesk's subscription
+    // billing — that is the plan, and it is a different Stripe account
+    // entirely. `manage` is deliberately still empty: this card tells the truth
+    // about the connection, and the screen that creates payment links arrives
+    // with that feature rather than as a button that opens nothing.
+    id: "stripe", name: "Stripe", category: "automation", kind: "native", mark: "S",
+    blurb: "Take card payments for an order straight into your own Stripe account.",
+    capabilities: ["Deposits and balances", "Apple Pay and Google Pay", "Paid into your account"], manage: "",
   },
   {
     id: "paypal", name: "PayPal", category: "banking", kind: "native", mark: "P",
@@ -204,7 +210,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, ebay, accounting, chatgpt, retired] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, stripe, ebay, accounting, chatgpt, retired] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -212,6 +218,12 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     getEtsyConnections(companyId),
     getWooConnections(companyId),
     getSquareConnections(companyId),
+    // The workspace's own Stripe connection. Owner-only data lives server-side;
+    // this returns the summary every member may see, and `configured` says
+    // whether this environment offers the rail at all. Rejected on a server
+    // where the rail is off, which is the ordinary case today.
+    httpsCallable<{ companyId: string }, { configured: boolean; connection: StripeConnectionSummary }>(
+      functions, "getStripePaymentConnection")({ companyId }),
     // Gated off on most servers, so a rejection here is the ordinary case and
     // settles as an empty list — the card then reads "Available", which is
     // what it said before this connector existed.
@@ -276,6 +288,12 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
       ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production"), lastWebhookAtMs: Number(d.lastWebhookAtMs) || 0, linkedAtMs: Number(d.linkedAtMs) || 0 }; })
       : [],
     chatgptConnections: chatgpt.status === "fulfilled" ? (chatgpt.value.data?.connections ?? []) : [],
+    // A refused read is "we could not check", never "not configured": the card
+    // has a state for not knowing and it is not the same as the feature being
+    // absent.
+    stripePayments: stripe.status === "fulfilled"
+      ? { configured: stripe.value.data?.configured === true, connection: stripe.value.data?.connection ?? null }
+      : null,
     retiredHolds: retired.status === "fulfilled"
       ? (retired.value.data?.holds ?? []).map((row) => (row.kind === "shopify" ? "shopify" : row.kind))
       : [],
@@ -302,8 +320,20 @@ export async function revokeChatGPTConnection(companyId: string, tokenHash = "")
   return response.data.message;
 }
 
+/** What the server lets any workspace member see about the Stripe connection.
+ *  The connected account id is not in it and has no field here — the callable
+ *  returns connectionState.publicSummary(), which does not carry one. */
+export type StripeConnectionSummary = {
+  status: "disconnected" | "onboarding" | "restricted" | "ready" | "error";
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  requirementsSummary?: { pastDueCount: number; currentlyDueCount: number };
+  canCreatePaymentRequest?: boolean;
+  needsAttention?: boolean;
+};
+
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], ebayConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], ebayConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [], stripePayments: undefined,
 };
 
 export type IntegrationSignals = {
@@ -330,6 +360,9 @@ export type IntegrationSignals = {
   chatgptConnections: ChatGPTConnection[];
   /** Provider ids whose retired pasted-URL webhook token this workspace still holds. */
   retiredHolds: string[];
+  /** The workspace's own Stripe connection. null = the read failed ("could not
+   *  check"); undefined = not read yet. Neither means "not configured". */
+  stripePayments?: { configured: boolean; connection: StripeConnectionSummary | null } | null;
 };
 
 /**
@@ -353,6 +386,39 @@ function resolveProviderState(
   signals: IntegrationSignals,
 ): IntegrationLiveState {
   if (provider.kind === "planned") return { state: "planned" };
+
+  if (provider.id === "stripe") {
+    const rail = signals.stripePayments;
+    // Not read yet, and a read that came back refused or failed. The card has
+    // words for both, and neither is "Available": offering Set up for a rail
+    // this server does not run would be a button that throws.
+    if (rail === undefined) return { state: "checking" };
+    if (rail === null) return { state: "unverified" };
+    if (!rail.configured) return { state: "planned" };
+
+    const connection = rail.connection;
+    if (!connection || connection.status === "disconnected") return { state: "available" };
+    switch (connection.status) {
+      // Started but not finished. Amber, because the workspace has work to do
+      // and nothing is arriving until it is done.
+      case "onboarding": return { state: "attention", detail: "Finish Stripe setup" };
+      // Stripe is holding the account back. Links already with customers keep
+      // working, which is why this is attention and not a plain failure.
+      case "restricted": return {
+        state: "attention",
+        detail: (connection.requirementsSummary?.pastDueCount ?? 0) > 0 ? "Stripe needs documents" : "Stripe is reviewing",
+      };
+      case "error": return { state: "attention", detail: "Stripe could not be reached" };
+      case "ready": return {
+        state: "connected",
+        // Charges work, payouts do not: the customer's payment still succeeds
+        // and the money is safe in the connected account, so the card stays
+        // green and says what is missing rather than claiming a break.
+        detail: connection.payoutsEnabled ? undefined : "Payouts not set up yet",
+      };
+      default: return { state: "available" };
+    }
+  }
 
   if (provider.id === "shopify") {
     const live = signals.shopifyStores.filter((store) => store.status !== "unlinked");

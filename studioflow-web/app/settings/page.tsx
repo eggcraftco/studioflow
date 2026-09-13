@@ -5566,7 +5566,10 @@ function IntegrationCard({
           the same sentence three times. */}
       {live.state === "planned" ? null : (
         <>
-          {live.detail ? <p className="integration-detail">{live.detail}</p> : null}
+          {/* Most details are a store or shop name, which studioT returns
+              unchanged; the Stripe card's are sentences, and those have
+              entries. One render path, both kinds. */}
+          {live.detail ? <p className="integration-detail">{t(live.detail)}</p> : null}
           {live.legacyAddress ? (
             <p className="integration-legacy-address">
               {t("The old webhook address for this shop was retired and no longer accepts orders. Anything still posting to it is being turned away.")}

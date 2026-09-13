@@ -35,6 +35,11 @@ function createPaymentConnectFunctions({
   requireWorkspace,
   workspaceActor,
   transport,
+  // Whether this environment can talk to Stripe at all. The rail is inert until
+  // its secrets exist, and a client that could not tell the difference would
+  // show a Set up button that throws failed-precondition — worse than a card
+  // that says the feature is not here yet.
+  railConfigured = () => false,
   secrets = [],
   region = "europe-west2",
   mode = "test",
@@ -128,7 +133,9 @@ function createPaymentConnectFunctions({
     const context = await requireWorkspace(request);
     requireAction("viewConnection", context);
     const connection = await readConnection(context.companyId);
-    return { ok: true, connection: connectionState.publicSummary(connection) };
+    let configured = false;
+    try { configured = railConfigured() === true; } catch { configured = false; }
+    return { ok: true, configured, connection: connectionState.publicSummary(connection) };
   });
 
   /**

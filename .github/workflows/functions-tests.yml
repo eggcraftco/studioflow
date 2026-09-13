@@ -124,6 +124,18 @@ jobs:
       # the job log without the relay's output in front of it.
       - run: npm run test:ebay-regressions
         working-directory: studioflow-web
+      # Four deterministic web checks that existed and ran nowhere. Three were
+      # written, passing, and gating nothing since the day they were added:
+      # a gate that is not in CI protects exactly nobody. Each is its own step
+      # so a failure names itself in the job log.
+      - run: npm run test:finance
+        working-directory: studioflow-web
+      - run: npm run test:workspace
+        working-directory: studioflow-web
+      - run: npm run test:file-proxy
+        working-directory: studioflow-web
+      - run: npm run test:integrations
+        working-directory: studioflow-web
 
   emulator:
     name: rules + e2e (Firestore emulator)

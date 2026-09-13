@@ -5893,6 +5893,14 @@ const { _internal: paymentConnectInternal, ...paymentConnectExports } = createPa
   secrets: [STRIPE_SECRET_KEY, STRIPE_CONNECT_WEBHOOK_SECRET],
   mode: String(process.env.STRIPE_ALLOW_LIVE_BILLING || "").trim().toLowerCase() === "true" ? "live" : "test",
   requireWorkspace: (request) => requireWorkspaceForBilling(request, false),
+  // Whether this environment offers the rail at all, read the same way
+  // billingEnabled() reads its flag. Deliberately an env flag and not a
+  // secret probe: getStripePaymentConnection is callable by every workspace
+  // member, and binding a payment secret into that function's environment to
+  // answer "is this switched on" would widen the secret for no gain. Turning
+  // the flag on without the secrets fails at the connect callables, which are
+  // owner-only and do bind them.
+  railConfigured: () => String(process.env.STRIPE_CONNECT_ENABLED || "").trim().toLowerCase() === "true",
   workspaceActor: (context) => {
     const access = workspaceMemberAccess(context.companyData, context.uid);
     return {
