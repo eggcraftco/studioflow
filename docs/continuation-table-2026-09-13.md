@@ -224,3 +224,113 @@ So the Sales row reads:
 | Sales Faz 1 (read-only pilot) | **yes** — 7 functions, Round 177, rules, index, flag on `testwork` alone | `sales-faz1-release-candidate @ 05040bf3` carries **PR 3** (projection, backfill, tombstone cleanup), which is **not** in the release | in-app pilot acceptance by an authorised `testwork` session; and index proof C, which needs an assigned order |
 | Sales — native | **no**, and not claimed | — | the store builds predate the work |
 
+---
+
+# Corrections — four records that were wrong or thin
+
+## 1. The note-image rule: what was verified, and where
+
+**Verified:** the byte-identical file now live in production
+(`5bd58dce-a39e-4da4-a6bb-281623338b93`) passes 8 emulator checks, and the same
+file against the previous rules fails with the exact production symptom
+(`storage/unauthorized`). Separately, attaching an image through the real
+`/notes` UI in a browser **against the emulator** now succeeds: the object
+lands, the note gains its link, no alert fires. Before the fix that path died
+and alerted the raw error.
+
+**Not verified:** the user flow in **production**. Nobody has attached an image
+to a personal note on the live site, and no test file was written there. The
+production bucket still holds **zero** objects under any `personal_notes`
+prefix, which remains the cleanest available evidence: the first object that
+appears is a note image that succeeded.
+
+## 2. `05040bf3` is the security-fixed Sales RC, and it is RELEASED
+
+The earlier table called it "a candidate from 12 September carrying PR 3". Both
+halves were wrong.
+
+| | |
+| --- | --- |
+| `sales-faz1-release-candidate @ 05040bf3` | a merge of `sales-faz1-server`; **an ancestor of the deploy tip `72634e62`** |
+| Beyond what shipped (`9bf32b9a`) | **nothing** — `git log 9bf32b9a..05040bf3` is empty |
+| So its state is | **released**, not pending |
+
+**PR 3 is a different branch.** `sales-faz1-projection @ 865901ae` — the
+projection, backfill and tombstone cleanup — is **not** an ancestor of the
+deploy tip and is the Sales work that is genuinely still a candidate.
+
+Two different branches, two different states, and the previous table fused them.
+
+## 3. Native Sales is not "not started"
+
+`sales-native-faz1 @ 45753f5d` (record) on `6d8f460f` (the work), **not** merged
+into the deploy branch. 1,079 lines across seven files:
+
+| File | |
+| --- | --- |
+| `EGGcraft/SalesView.swift` | 468 lines — iOS and macOS |
+| `.../features/sales/SalesScreen.kt` | 377 lines — Android |
+| `ContentView.swift`, `StudioFlowMainScreen.kt` | the menu entries |
+| `DilMotoru.swift`, `StudioTranslations.kt` | 37 strings, eleven languages, both dictionaries |
+
+Three read-only tabs over the same four callables the web screen uses. No second
+calculation and no second data engine; the screens render the server's answer,
+and none of them writes anything.
+
+**Already done** (`docs/sales/faz1-native-candidate-2026-09-12.md`):
+
+| | |
+| --- | --- |
+| iOS build | `xcodebuild -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` — **BUILD SUCCEEDED** |
+| macOS build | `xcodebuild -destination 'platform=macOS'` — **BUILD SUCCEEDED** |
+| Android build | `./gradlew assembleDebug` — **BUILD SUCCESSFUL** |
+| Android emulator | debug APK on a Pixel 9 against the **live** server: a workspace outside the pilot allowlist shows **no Sales entry** — the server's answer reaching the menu |
+
+**What is actually missing**, which is a user acceptance and not a build:
+
+- the Sales **screen itself** on every platform — the list, the money gate, the
+  tabs, the Products empty state, the Channels distinctions, a row opening the
+  same order in Orders, workspace switching;
+- **iOS simulator: blocked**, and recorded as blocked rather than passed — one
+  simulator has NivaDesk's session lock on and asks for a passcode, another was
+  booted clean and its device-access request is pending;
+- **physical device: not done** on any platform;
+- **store: not done and out of scope** — no archive, no upload.
+
+The reason all of that is outstanding is one thing: it needs a session in a
+workspace inside the pilot allowlist, and today that is `testwork` alone, whose
+owner is blocked by the verify-email gate. Against the **emulator** that
+dependency does not apply, because the allowlist is seedable there — which is
+the route item 4 takes.
+
+## 4. The storage-log estimate: the arithmetic, and what it does not promise
+
+The earlier note said "~60 MB a month" and implied it stays free. The first
+needs its working shown; the second is not mine to promise.
+
+**Measured in this project** (read-only, 13 Sep 2026):
+
+| | |
+| --- | --- |
+| Objects in the bucket | 452 (161.84 MiB), 6 workspaces |
+| Log entries now, all sources, 24h | **1,000** — 713 `run.googleapis.com/stderr`, 285 `run.googleapis.com/requests`, 2 scheduler |
+| Data Access audit logs | **off for every service** (`auditConfigs` absent from the IAM policy) |
+| Log buckets | `_Default` 30 days, `_Required` 400 days |
+
+**The arithmetic, and it is an assumption, not a measurement.** A `DATA_READ`
+entry is written per object read, at roughly 1–2 KB of JSON. The read rate is
+the number nobody has: it cannot be measured *because* the log is off, which is
+the circularity. The estimate assumes reads land in the same order of magnitude
+as the app's total function traffic — 285 requests a day — and takes 1,000
+reads/day × 2 KB ≈ **60 MB a month** as a working figure.
+
+**What that does not promise.** If real read volume is ten times the assumption
+it is 600 MB; a hundred times, 6 GB. Cloud Logging's free allotment and per-GiB
+rate are published figures that change, and were not readable from the pricing
+page when this was written. So: **no guarantee it stays free.** The sound way
+round is to enable it, watch the first week's actual ingestion, and decide with
+a measured number instead of this one.
+
+Still not enabled, and the privacy consideration stands on its own: every read
+logs an object path, and those carry workspace and order ids.
+
