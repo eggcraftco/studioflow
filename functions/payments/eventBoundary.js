@@ -154,6 +154,32 @@ function platformEventAdmissible(event, { expectLivemode = false } = {}) {
 }
 
 /**
+ * May the CONNECTED handler act on this event at all?
+ *
+ * One refusal, and it is the one platformEventAdmissible already takes for the
+ * subscription rail (its point 3): livemode disagreeing with the keys this
+ * deployment runs on. The connected rail had no such check, and the stake here
+ * is higher — these events move a WORKSPACE's money rather than NivaDesk's own
+ * subscription state. A live event applied on a test deployment moves a real
+ * order's paidAmount and refundedAmount out of an environment that workspace
+ * holds no account in, and the reverse lets a test card change live figures.
+ *
+ * An absent livemode is admissible, exactly as on the platform rail. Stripe
+ * always sends the field, so an event without it is hand-built or replayed, and
+ * dropping a workspace's money over a field that says nothing is the worse of
+ * the two failures.
+ *
+ * Returns { admissible, reason }.
+ */
+function connectedEventAdmissible(event, { expectLivemode = false } = {}) {
+  const livemode = event && typeof event.livemode === "boolean" ? event.livemode : null;
+  if (livemode !== null && livemode !== Boolean(expectLivemode)) {
+    return { admissible: false, reason: "livemode_mismatch" };
+  }
+  return { admissible: true, reason: "" };
+}
+
+/**
  * The provider event ledger key (plan §6.3):
  *   paymentProviderEvents/{provider}:{account}:{eventId}
  *
@@ -197,8 +223,34 @@ function externalPaymentId(event) {
     // the event again with BOTH refunds listed, and the new one is the one this
     // delivery is about. Each refund keeps its own ledger row, which is why the
     // identity has to be the refund and not the charge.
+    //
+    // `refunds` is a Stripe LIST, which means it is PAGINATED: it carries
+    // `has_more`, and a charge refunded more times than one page holds is
+    // truncated. Stripe orders lists newest first, so `has_more` is harmless —
+    // the end that was cut is the OLDER one — and under that convention reading
+    // position 0 is correct.
+    //
+    // That convention is the only thing holding the answer up, and nothing here
+    // has ever seen a captured live payload to confirm it. A page that arrived
+    // the other way round would file every later refund under the FIRST
+    // refund's id: `create()` refuses the repeat as already-exists, and the
+    // second refund's money never reaches the ledger — the same silent loss
+    // this extractor was fixed for, from the other direction. So the newest is
+    // chosen from the DATA rather than from the position: the greatest
+    // `created` wins, and the list's own order only breaks a tie, because
+    // Stripe stamps whole seconds and two refunds can share one.
     const refunds = object.refunds && Array.isArray(object.refunds.data) ? object.refunds.data : [];
-    const newest = refunds.length ? refunds[0] : null;
+    let newest = null;
+    let newestCreated = null;
+    for (const entry of refunds) {
+      if (!entry || typeof entry !== "object") continue;
+      const created = Number(entry.created);
+      const stamp = Number.isFinite(created) ? created : null;
+      if (!newest) { newest = entry; newestCreated = stamp; continue; }
+      // One side has no comparable stamp: keep the order Stripe sent.
+      if (stamp === null || newestCreated === null) continue;
+      if (stamp > newestCreated) { newest = entry; newestCreated = stamp; }
+    }
     const refundId = text(
       (newest && (newest.id || newest.refundId))
       // Kept so a hand-built or legacy payload still resolves rather than
@@ -254,6 +306,7 @@ module.exports = {
   PLATFORM_EVENT_TYPES,
   routeEvent,
   platformEventAdmissible,
+  connectedEventAdmissible,
   eventLedgerId,
   externalPaymentId,
   matchesRequest

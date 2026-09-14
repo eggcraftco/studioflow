@@ -329,6 +329,17 @@ function createPaymentConnectFunctions({
       return;
     }
 
+    // The other environment's money. A test-mode deployment holds test-mode
+    // keys and connects its workspaces in test mode, so a live event on it —
+    // and a test event on a live deployment — is looking at figures from a
+    // reality this one has no account in. Refused BEFORE the event is claimed,
+    // so a misrouted endpoint leaves no half-processed row behind it.
+    const admissible = eventBoundary.connectedEventAdmissible(event, { expectLivemode: mode === "live" });
+    if (!admissible.admissible) {
+      response.status(202).json({ received: true, ignored: admissible.reason });
+      return;
+    }
+
     let claim;
     try {
       claim = await claimEvent(event, companyId);
@@ -502,6 +513,11 @@ function createPaymentConnectFunctions({
         amountMinor,
         currency,
         provider: PROVIDER,
+        // The account this link was created on, so a later event can be checked
+        // against the account the money was ASKED for. Server-only, like the
+        // connection document it comes from: requestSummary() has no field for
+        // it, so it never reaches a client.
+        connectedAccountId: String(accountId),
         publicStatus: "draft",
         clientRequestId,
         createdByUid: String(context.uid || ""),
@@ -535,6 +551,9 @@ function createPaymentConnectFunctions({
       metadata: { companyId: String(companyId), paymentRequestId: String(row.paymentRequestId), orderId: String(row.orderId) }
     });
     const patch = {
+      // Also written here, so a draft reserved before this field existed picks
+      // it up when it is finished rather than staying unguarded forever.
+      connectedAccountId: String(accountId),
       providerSessionId: String(session.sessionId || ""),
       providerPaymentIntentId: String(session.paymentIntentId || ""),
       url: String(session.url || ""),
@@ -730,7 +749,14 @@ function createPaymentConnectFunctions({
 
     const match = eventBoundary.matchesRequest(event, {
       paymentRequestId, companyId, currency: row.currency,
-      amountMinor: row.amountMinor, connectedAccountId: String(event.account || "")
+      // The account the LINK was made on, never the event's own. Passing
+      // `event.account` here compared the event with itself, so PR-P0's
+      // `account_mismatch` problem could not fire at all: a charge or refund
+      // stamped with a DIFFERENT connected account was applied to this
+      // workspace's order as though its own Stripe balance had moved.
+      // Empty on a request created before the field existed, and matchesRequest
+      // skips the comparison then rather than refusing every older link.
+      amountMinor: row.amountMinor, connectedAccountId: String(row.connectedAccountId || "")
     });
     if (!match.ok) {
       // A mismatch is never applied and never retried into oblivion: it is the

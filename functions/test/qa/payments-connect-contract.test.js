@@ -231,6 +231,98 @@ function pass(name) { checks += 1; console.log("PASS ", name); }
 }
 
 {
+  // NOTHING TO IDENTIFY IS ANSWERED WITH NOTHING — in every shape a charge can
+  // arrive in without a readable refund.
+  //
+  // `refunds` is an EXPANDABLE list. Stripe does not always send it expanded,
+  // an older replayed payload may not carry it at all, and a malformed one is
+  // whatever the sender chose. None of these can be guessed, because both
+  // available guesses are catastrophic: the charge id merges every refund of
+  // that charge into one row, and the payment intent collides with the row that
+  // already holds the PAYMENT — where `create()` would throw already-exists and
+  // the refund would vanish as a duplicate.
+  const charge = (object) => ({
+    type: "charge.refunded",
+    data: { object: { id: "ch_abc", object: "charge", payment_intent: "pi_1", amount: 100000, amount_refunded: 20000, ...object } }
+  });
+  for (const [name, object] of [
+    ["refunds absent entirely", {}],
+    ["refunds.data empty", { refunds: { object: "list", data: [] } }],
+    ["refunds is null", { refunds: null }],
+    ["refunds is a string", { refunds: "re_1" }],
+    ["refunds is an array", { refunds: ["re_1"] }],
+    ["refunds.data is not an array", { refunds: { object: "list", data: "re_1" } }],
+    ["refunds.data holds a hole", { refunds: { object: "list", data: [null] } }],
+    ["refunds.data holds a refund with no id", { refunds: { object: "list", data: [{ object: "refund", amount: 20000 }] } }]
+  ]) {
+    assert.strictEqual(boundary.externalPaymentId(charge(object)), "", `${name}: must yield no identity`);
+  }
+  assert.notStrictEqual(
+    boundary.externalPaymentId(charge({})), "pi:pi_1",
+    "and never the payment it refunds — that identity already holds the PAYMENT's ledger row"
+  );
+  pass("every unreadable refunds list yields no identity, never the charge and never the payment");
+}
+
+{
+  // PAGINATION AND ORDER.
+  //
+  // `refunds` is a Stripe LIST object: it carries `has_more`, and a charge with
+  // more refunds than the page holds is truncated. Stripe orders lists newest
+  // first, so `has_more: true` means the OLDER tail was cut and the newest
+  // refund is still in the page — under that convention, reading position 0 is
+  // correct and `has_more` changes nothing.
+  //
+  // That convention is the ONLY thing holding the answer up, and this rail has
+  // never seen a captured live payload to confirm it. A page that arrived the
+  // other way round would file every later refund under the FIRST refund's id:
+  // one row reused, `create()` refusing it as already-exists, and the second
+  // refund's money never reaching the ledger — the same silent loss e5d84009
+  // fixed, from a different direction. So the pick is made from the DATA and
+  // not from the position: the greatest `created` wins.
+  const page = (data, has_more = false) => ({
+    type: "charge.refunded",
+    data: { object: { id: "ch_abc", object: "charge", refunds: { object: "list", has_more, data } } }
+  });
+  const newest = { id: "re_new", object: "refund", created: 1_757_000_400 };
+  const oldest = { id: "re_old", object: "refund", created: 1_757_000_300 };
+
+  assert.strictEqual(boundary.externalPaymentId(page([newest, oldest], true)), "refund:re_new",
+    "newest first with an older tail truncated: the newest is the identity");
+  assert.strictEqual(boundary.externalPaymentId(page([oldest, newest], true)), "refund:re_new",
+    "and the same answer when the page arrives oldest first");
+  // Stripe stamps whole seconds, so two real refunds can share one. A tie has
+  // no signal in it, and list order — Stripe's newest-first — decides.
+  assert.strictEqual(
+    boundary.externalPaymentId(page([{ id: "re_a", created: 1_757_000_400 }, { id: "re_b", created: 1_757_000_400 }])),
+    "refund:re_a", "refunds stamped in the same second keep the list's order"
+  );
+  // A hand-built payload with no `created` anywhere is read in list order too.
+  assert.strictEqual(boundary.externalPaymentId(page([{ id: "re_a" }, { id: "re_b" }])), "refund:re_a");
+  pass("the newest refund is chosen by created, so a truncated or reordered page cannot pick the wrong one");
+}
+
+{
+  // THE CONNECTED RAIL'S OWN LIVEMODE REFUSAL.
+  //
+  // platformEventAdmissible has refused a livemode mismatch on the subscription
+  // rail since PR-P0 ("a test-mode deployment handed a live event is looking at
+  // another environment's money"). The connected rail carries the same risk and
+  // worse — these events move a workspace's own money — and had no such check.
+  const live = { type: "charge.refunded", account: "acct_known", livemode: true };
+  const test = { type: "charge.refunded", account: "acct_known", livemode: false };
+  assert.deepStrictEqual(boundary.connectedEventAdmissible(live, { expectLivemode: false }), { admissible: false, reason: "livemode_mismatch" });
+  assert.deepStrictEqual(boundary.connectedEventAdmissible(live, { expectLivemode: true }), { admissible: true, reason: "" });
+  assert.strictEqual(boundary.connectedEventAdmissible(test, { expectLivemode: true }).reason, "livemode_mismatch");
+  assert.strictEqual(boundary.connectedEventAdmissible(test, { expectLivemode: false }).admissible, true);
+  // A payload that does not state its livemode says nothing, and a field that
+  // says nothing must not drop a workspace's money. Same rule as the platform
+  // rail, which treats an absent livemode as admissible.
+  assert.strictEqual(boundary.connectedEventAdmissible({ type: "charge.refunded" }, { expectLivemode: true }).admissible, true);
+  pass("the connected rail refuses an event from the other livemode");
+}
+
+{
   // A late event may be recorded but must not move the state backwards.
   let state = request.emptyState({ publicStatus: "open", amountMinor: 1999 });
   state = request.apply(state, { id: "e_paid", type: "payment_intent.succeeded", sequence: 2000, amountMinor: 1999 }).state;
