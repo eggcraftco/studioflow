@@ -157,7 +157,27 @@ function createPaymentConnectFunctions({
 
     const current = await readConnection(companyId);
     let accountId = String(current.stripeAccountId || "").trim();
-    if (!accountId) {
+    if (accountId) {
+      // RECONNECT. `disconnectStripePaymentConnection` deletes the index row and
+      // deliberately keeps `stripeAccountId` — the account is the workspace's
+      // and holds their money, so it is never deleted at Stripe. That left a
+      // hole: this branch already had an account id, so the index write below
+      // never ran, and the row a disconnect removed was never put back.
+      //
+      // The consequence was silent and permanent. `resolveAccountCompany`
+      // reads that row and returns "" without it, so every later webhook for
+      // this workspace is refused as `unknown_connected_account` — the account
+      // charges cards, the money moves at Stripe, and nothing reaches the
+      // ledger. Reconnecting looked like it worked, because onboarding returns
+      // a link either way.
+      //
+      // Idempotent by shape: `set` on a row that already exists rewrites the
+      // same fields. So the ordinary case — a reconnect that never lost its
+      // index — is unchanged.
+      await indexRef(accountId).set({
+        provider: PROVIDER, companyId: String(companyId), createdAtMs: Date.now(), createdByUid: String(uid || "")
+      });
+    } else {
       const created = await transport().createAccount({
         country: String((companyData && companyData.country) || "").trim() || undefined,
         email: String((companyData && companyData.ownerEmail) || "").trim() || undefined,

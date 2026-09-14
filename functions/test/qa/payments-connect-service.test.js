@@ -173,6 +173,43 @@ const webhookRequest = (event, signature = "valid") => ({
     pass("disconnect removes our link and the index, and keeps the account");
   }
 
+  // 3b. Reconnect — the half the disconnect above used to leave broken.
+  {
+    const { store, fake, fns } = harness();
+    await fns.beginStripeConnectOnboarding({});
+    const accountId = store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+    fake.completeOnboarding(accountId);
+    await fns.refreshStripePaymentConnection({});
+    await fns.disconnectStripePaymentConnection({});
+    assert.strictEqual(store.read(`paymentConnectionIndex/stripe:${accountId}`), undefined,
+      "precondition: the disconnect above really did remove the index row");
+
+    // Reconnect. `stripeAccountId` survives a disconnect on purpose, so this
+    // takes the branch that already has an account and creates no new one.
+    await fns.beginStripeConnectOnboarding({});
+    const again = store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+    assert.strictEqual(again, accountId, "reconnect must reuse the workspace's own account, not open a second one");
+    assert.strictEqual(fake.accounts.size, 1, "reconnect created a second Stripe account");
+
+    // The row the disconnect removed is back. Without this the account charges
+    // cards and every event for it is refused as unknown_connected_account.
+    const row = store.read(`paymentConnectionIndex/stripe:${accountId}`);
+    assert(row, "reconnect left the reverse index missing, so this workspace's events can never be resolved");
+    assert.strictEqual(row.companyId, CO);
+
+    // Proved where it actually bites: through the webhook, not the index alone.
+    fake.completeOnboarding(accountId);
+    const event = {
+      id: "evt_reconnect_1", type: "account.updated", account: accountId,
+      created: 1_757_000_500, livemode: false, data: { object: { id: accountId } }
+    };
+    const response = fakeResponse();
+    await fns.stripeConnectWebhook(webhookRequest(event), response);
+    assert.strictEqual(response.out.code, 200,
+      `a reconnected workspace's event was refused: ${JSON.stringify(response.out.body)}`);
+    pass("reconnecting after a disconnect restores the index, so the account's events find their workspace again");
+  }
+
   // ---------------------------------------------------------------------------
   // 4. Permissions
   // ---------------------------------------------------------------------------
