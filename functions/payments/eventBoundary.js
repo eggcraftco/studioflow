@@ -186,7 +186,26 @@ function externalPaymentId(event) {
   const type = text(event && event.type);
   const object = (event && event.data && event.data.object) || {};
   if (type.startsWith("charge.refunded")) {
-    const refundId = text(object.refundId || object.refund_id);
+    // `charge.refunded` delivers the CHARGE, and a charge carries its refunds in
+    // a list — `refunds.data[]`, newest first. There is no top-level `refund_id`
+    // on it; that key was this rail's own invention, and every fixture fed it,
+    // so the suite passed while a real refund would have returned "" here and
+    // been dropped at `no_payment_identity` — the money silently never reaching
+    // the ledger and `refundedAmount` never moving.
+    //
+    // Newest-first is the right pick because a charge refunded twice delivers
+    // the event again with BOTH refunds listed, and the new one is the one this
+    // delivery is about. Each refund keeps its own ledger row, which is why the
+    // identity has to be the refund and not the charge.
+    const refunds = object.refunds && Array.isArray(object.refunds.data) ? object.refunds.data : [];
+    const newest = refunds.length ? refunds[0] : null;
+    const refundId = text(
+      (newest && (newest.id || newest.refundId))
+      // Kept so a hand-built or legacy payload still resolves rather than
+      // silently losing its money.
+      || object.refundId
+      || object.refund_id
+    );
     return refundId ? `refund:${refundId}` : "";
   }
   if (type.startsWith("charge.dispute")) {

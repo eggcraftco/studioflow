@@ -185,6 +185,52 @@ function pass(name) { checks += 1; console.log("PASS ", name); }
 }
 
 {
+  // A REFUND'S IDENTITY, FROM THE SHAPE STRIPE ACTUALLY SENDS.
+  //
+  // `charge.refunded` delivers the CHARGE, and a charge lists its refunds under
+  // `refunds.data[]`, newest first. There is no top-level `refund_id` on it —
+  // that key was this rail's own invention, and because every fixture in this
+  // repository fed it, all 85 payment checks passed while a real refund resolved
+  // to "" and was dropped at `no_payment_identity`: the money never reaching the
+  // ledger and `refundedAmount` never moving. A test written against the
+  // invented shape certifies the invention, which is why this one is written
+  // against the provider's.
+  const charge = (refunds, extra = {}) => ({
+    type: "charge.refunded",
+    data: { object: { id: "ch_abc", object: "charge", payment_intent: "pi_1", currency: "gbp",
+      amount: 100000, amount_refunded: 20000, refunded: false,
+      refunds: { object: "list", data: refunds }, ...extra } }
+  });
+
+  assert.strictEqual(
+    boundary.externalPaymentId(charge([{ id: "re_new", object: "refund", amount: 20000, charge: "ch_abc" }])),
+    "refund:re_new",
+    "the real payload's nested refund is the identity"
+  );
+
+  // A charge refunded twice re-delivers with BOTH listed, newest first: this
+  // delivery is about the new one, and it earns its own ledger row.
+  assert.strictEqual(
+    boundary.externalPaymentId(charge([{ id: "re_second", amount: 15000 }, { id: "re_new", amount: 20000 }])),
+    "refund:re_second",
+    "a second refund is not collapsed onto the first"
+  );
+
+  // Nothing to identify is answered with nothing, never a guess — keying the row
+  // on the charge would merge two refunds into one.
+  assert.strictEqual(boundary.externalPaymentId(charge([])), "", "an empty refunds list yields no identity");
+
+  // The hand-built legacy shape still resolves, so the existing race fixtures
+  // and any replayed older payload keep their money.
+  assert.strictEqual(
+    boundary.externalPaymentId({ type: "charge.refunded", data: { object: { refund_id: "re_legacy" } } }),
+    "refund:re_legacy",
+    "the legacy key is still honoured"
+  );
+  pass("a refund's identity comes from refunds.data[], the shape Stripe actually sends");
+}
+
+{
   // A late event may be recorded but must not move the state backwards.
   let state = request.emptyState({ publicStatus: "open", amountMinor: 1999 });
   state = request.apply(state, { id: "e_paid", type: "payment_intent.succeeded", sequence: 2000, amountMinor: 1999 }).state;
