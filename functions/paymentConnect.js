@@ -158,25 +158,24 @@ function createPaymentConnectFunctions({
     const current = await readConnection(companyId);
     let accountId = String(current.stripeAccountId || "").trim();
     if (accountId) {
-      // RECONNECT. `disconnectStripePaymentConnection` deletes the index row and
-      // deliberately keeps `stripeAccountId` — the account is the workspace's
-      // and holds their money, so it is never deleted at Stripe. That left a
-      // hole: this branch already had an account id, so the index write below
-      // never ran, and the row a disconnect removed was never put back.
+      // RECONNECT. `disconnectStripePaymentConnection` keeps `stripeAccountId`
+      // and now RETAINS the index row marked `active: false`, so this branch
+      // re-arms an existing mapping rather than restoring a deleted one.
       //
-      // The consequence was silent and permanent. `resolveAccountCompany`
-      // reads that row and returns "" without it, so every later webhook for
-      // this workspace is refused as `unknown_connected_account` — the account
-      // charges cards, the money moves at Stripe, and nothing reaches the
-      // ledger. Reconnecting looked like it worked, because onboarding returns
-      // a link either way.
+      // It is written down because the earlier version deleted that row, and
+      // the hole was silent and permanent in both directions. Reconnecting
+      // never rewrote the row — this branch already had an account id, so the
+      // index write in the `else` below never ran — and `resolveAccountCompany`
+      // returns "" without it, so every later webhook was refused as
+      // `unknown_connected_account`: the account charged cards, the money moved
+      // at Stripe, and nothing reached the ledger. Reconnecting looked like it
+      // worked, because onboarding returns a link either way.
       //
-      // Idempotent by shape: `set` on a row that already exists rewrites the
-      // same fields. So the ordinary case — a reconnect that never lost its
-      // index — is unchanged.
-      await indexRef(accountId).set({
-        provider: PROVIDER, companyId: String(companyId), createdAtMs: Date.now(), createdByUid: String(uid || "")
-      });
+      // CLAIMED, never blindly written. This row is top-level and keyed only by
+      // the account id, so an unguarded write here is a cross-tenant capture:
+      // every later payment for the owning workspace would resolve to this one.
+      // See `claimAccountIndex`, which refuses an account another workspace owns.
+      await claimAccountIndex(accountId, companyId, uid);
     } else {
       const created = await transport().createAccount({
         country: String((companyData && companyData.country) || "").trim() || undefined,
@@ -189,9 +188,7 @@ function createPaymentConnectFunctions({
       // at Stripe and its events must still find their way home; an account we
       // created but cannot resolve is exactly the "unknown_connected_account"
       // case the boundary refuses.
-      await indexRef(accountId).set({
-        provider: PROVIDER, companyId: String(companyId), createdAtMs: Date.now(), createdByUid: String(uid || "")
-      });
+      await claimAccountIndex(accountId, companyId, uid);
       await connectionRef(companyId).set({
         provider: PROVIDER,
         stripeAccountId: accountId,
@@ -262,16 +259,54 @@ function createPaymentConnectFunctions({
     requireAction("connect", context);
     const current = await readConnection(context.companyId);
     const accountId = String(current.stripeAccountId || "").trim();
-    if (accountId) await indexRef(accountId).delete();
-    await connectionRef(context.companyId).set({
-      status: "disconnected",
-      chargesEnabled: false,
-      payoutsEnabled: false,
-      disconnectedAt: Date.now(),
-      disconnectedByUid: String(context.uid || ""),
-      updatedAt: Date.now(),
-      updatedBy: "disconnect"
-    }, { merge: true });
+
+    // REFUSED WHILE MONEY COULD STILL MOVE, and decided here rather than on the
+    // screen. A warning that says "cancel your open links first" is advice; a
+    // customer halfway through Stripe's hosted page has not read it. `draft` is
+    // in the list for a reason of its own: a draft means Stripe may already
+    // hold a Checkout session we never finished writing down, so it can be paid
+    // while our document still says nothing.
+    //
+    // Read inside the transaction that writes the disconnect, so a link opened
+    // — or a payment landing — in the same moment cannot slip between the check
+    // and the write. The browser's view of "no open links" is never trusted.
+    const blocked = await db().runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(requestsRef(context.companyId));
+      const unsettled = snapshot.docs
+        .map((doc) => ({ paymentRequestId: doc.id, ...(doc.data() || {}) }))
+        .filter((row) => UNSETTLED_STATUSES.includes(String(row.publicStatus || "draft")));
+      if (unsettled.length) {
+        return {
+          count: unsettled.length,
+          ids: unsettled.slice(0, 20).map((row) => row.paymentRequestId)
+        };
+      }
+      transaction.set(connectionRef(context.companyId), {
+        status: "disconnected",
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        disconnectedAt: Date.now(),
+        disconnectedByUid: String(context.uid || ""),
+        updatedAt: Date.now(),
+        updatedBy: "disconnect"
+      }, { merge: true });
+      // The index row STAYS, marked inactive. See `resolveAccountCompany`: a
+      // payment or refund already in flight still has to find its workspace,
+      // and deleting the only record of whose money it is loses it silently.
+      if (accountId) {
+        transaction.set(indexRef(accountId), {
+          active: false, disconnectedAtMs: Date.now(), disconnectedByUid: String(context.uid || "")
+        }, { merge: true });
+      }
+      return null;
+    });
+
+    if (blocked) {
+      throw new HttpsError("failed-precondition",
+        "Cancel the payment links that are still open before disconnecting Stripe. A link already sent can still be paid, and after disconnecting nothing here would record it.",
+        { reason: "unsettled_payment_requests", count: blocked.count, paymentRequestIds: blocked.ids });
+    }
+
     const after = await readConnection(context.companyId);
     return { ok: true, connection: connectionState.publicSummary(after), accountKeptAtProvider: Boolean(accountId) };
   });
@@ -280,11 +315,85 @@ function createPaymentConnectFunctions({
   // Webhook — its own endpoint, its own signing secret
   // ---------------------------------------------------------------------------
 
+  /**
+   * Take ownership of an account's index row, or refuse.
+   *
+   * The index is a TOP-LEVEL collection keyed only by `stripe:{accountId}`, and
+   * that row is the only record of which workspace an account belongs to. A
+   * blind `set()` therefore lets any workspace that can name an account id take
+   * over its webhooks: every later payment and refund for workspace A would
+   * route to workspace B, which reads another tenant's money and writes it onto
+   * its own orders.
+   *
+   * That was not hypothetical — the reconnect path I added wrote this row
+   * unconditionally, which widened the window from "only when an account is
+   * created" to "any reconnect". So the row is CLAIMED: taken when it is free
+   * or already ours, refused otherwise. Refusing is safe because the only
+   * legitimate way to hold an account id is to have created it here.
+   */
+  async function claimAccountIndex(accountId, companyId, uid) {
+    const ref = indexRef(accountId);
+    await db().runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const owner = snapshot.exists ? String((snapshot.data() || {}).companyId || "") : "";
+      if (owner && owner !== String(companyId)) {
+        throw new HttpsError("permission-denied", "That Stripe account belongs to another workspace.", {
+          reason: "account_owned_by_another_workspace"
+        });
+      }
+      transaction.set(ref, {
+        provider: PROVIDER,
+        companyId: String(companyId),
+        // Re-armed on every claim, so a reconnect after a disconnect routes
+        // again without losing the row's history.
+        active: true,
+        claimedAtMs: Date.now(),
+        claimedByUid: String(uid || ""),
+        ...(snapshot.exists ? {} : { createdAtMs: Date.now(), createdByUid: String(uid || "") })
+      }, { merge: true });
+    });
+  }
+
+  /**
+   * Which workspace an account's events belong to.
+   *
+   * Deliberately indifferent to `active`. A disconnect stops NEW work — the
+   * connection's status is `disconnected`, so `capabilitiesFor` refuses to
+   * create a link — but it must not orphan money that was already in flight.
+   * A payment completing, or a refund issued, seconds after somebody pressed
+   * Disconnect still belongs to the workspace whose order it is, and the only
+   * record of that is this row. Deleting it made those events resolve to ""
+   * and be answered 202 as `unknown_connected_account`, which tells Stripe to
+   * stop retrying: the money moved and nothing recorded it, permanently.
+   *
+   * So the two questions are kept apart. "May this workspace ask for more
+   * money?" is the connection's status. "Whose money is this?" is this row, and
+   * the answer does not change because a link was removed.
+   */
   async function resolveAccountCompany(accountId) {
     const snapshot = await indexRef(accountId).get();
     if (!snapshot.exists) return "";
     return String((snapshot.data() || {}).companyId || "");
   }
+
+  /**
+   * Requests that could still move money, and therefore block a disconnect.
+   *
+   * `cancelled` is deliberately NOT here, and the reason is worth stating
+   * because the opposite looks safer. `cancelOrderPaymentRequest` expires the
+   * session at Stripe before recording anything, but it treats
+   * `resource_missing` as success — that code means the session was already
+   * expired OR already paid, and the two are indistinguishable from here. So a
+   * row reading `cancelled` can still be followed by a real payment.
+   *
+   * Blocking on it would not fix that: the workspace would be unable to
+   * disconnect at all, since nothing they can do clears the status. What makes
+   * it safe is the other half of this function — the index row is RETAINED, so
+   * the late `checkout.session.completed` still resolves to this workspace and
+   * still reaches the ledger. Cancelled links are allowed to pass precisely
+   * because the money behind them is no longer orphaned when it lands.
+   */
+  const UNSETTLED_STATUSES = Object.freeze(["draft", "open", "processing"]);
 
   /**
    * Record the event and say whether this delivery should do the work.

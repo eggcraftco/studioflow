@@ -17,6 +17,10 @@ function pass(name) { checks += 1; console.log("PASS ", name); }
 
 const CO = "c1";
 const OWNER = "uid-owner";
+// The order the disconnect-safety checks below hang a payment link on. The
+// harness does not seed it, because most checks here never touch an order;
+// the two that do write it themselves.
+const ORDER = "order-1";
 const MEMBER = "uid-member";
 
 /** Build the real factory over fakes. `who` decides which member calls. */
@@ -169,8 +173,127 @@ const webhookRequest = (event, signature = "valid") => ({
     // The account still exists at Stripe: it is the workspace's, and it holds
     // their money. Only our link is gone.
     assert(fake.accounts.has(accountId), "disconnect must not delete the workspace's Stripe account");
-    assert.strictEqual(store.read(`paymentConnectionIndex/stripe:${accountId}`), undefined);
-    pass("disconnect removes our link and the index, and keeps the account");
+
+    // The index row STAYS, marked inactive — and this assertion is the reverse
+    // of what it used to say. Deleting it was the tidy answer and the wrong
+    // one: the row is the only record of WHOSE money an account's events are,
+    // so a payment completing a second after Disconnect resolved to "" and was
+    // answered 202 as `unknown_connected_account`, which tells Stripe to stop
+    // retrying. The money moved and nothing recorded it, permanently.
+    //
+    // Stopping NEW work and orphaning OLD work are different jobs. The
+    // connection's status does the first (capabilitiesFor refuses to create a
+    // link when it is not `ready`); this row must keep doing the second.
+    const index = store.read(`paymentConnectionIndex/stripe:${accountId}`);
+    assert(index, "the index row must survive a disconnect, or in-flight money loses its workspace");
+    assert.strictEqual(index.companyId, CO);
+    assert.strictEqual(index.active, false, "it is retained but no longer arms new work");
+    assert(index.disconnectedAtMs > 0, "and it records when that happened");
+    pass("disconnect removes our link and keeps the account — and keeps the mapping, so late money still lands");
+  }
+
+  {
+    // THE SERVER REFUSES THE DISCONNECT. A warning on the screen is not a
+    // control: the browser's idea of what is open is a stale copy, and the
+    // check has to happen where the write happens.
+    //
+    // A link already sent can still be paid. Disconnecting while one is open
+    // used to be permitted, so the workspace could tear down the connection
+    // between a customer opening the page and their card going through.
+    const { store, fake, fns } = harness();
+    store.write(`companies/${CO}`, {
+      ownerUid: OWNER, companyName: "Acme", country: "GB",
+      ownerEmail: "owner@acme.test", seciliParaBirimi: "£"
+    });
+    store.write(`siparisler/${ORDER}`, {
+      companyId: CO, orderValue: 1000, paidAmount: 0, remainingAmount: 1000,
+      refundedAmount: 0, payments: [], assignedToUid: ""
+    });
+    await fns.beginStripeConnectOnboarding({});
+    const accountId = store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+    fake.completeOnboarding(accountId);
+    await fns.refreshStripePaymentConnection({});
+
+    const made = await fns.createOrderPaymentRequest({
+      data: { orderId: ORDER, amountMinor: 40000, purpose: "deposit" }
+    });
+    const requestId = made.request.paymentRequestId;
+    assert.strictEqual(store.read(`companies/${CO}/paymentRequests/${requestId}`).publicStatus, "open");
+
+    let refused = null;
+    try { await fns.disconnectStripePaymentConnection({}); }
+    catch (error) { refused = error; }
+    assert(refused, "an open payment link must block the disconnect");
+    assert.strictEqual(refused.code, "failed-precondition");
+    // The details are what the screen renders. They are asserted here because
+    // the fake used to drop HttpsError's third argument entirely, so a client
+    // reading them would have shown an empty list and tested clean.
+    assert.strictEqual(refused.details.reason, "unsettled_payment_requests");
+    assert.strictEqual(refused.details.count, 1);
+    assert.deepStrictEqual(refused.details.paymentRequestIds, [requestId]);
+
+    // And nothing was torn down on the way to refusing.
+    assert.strictEqual(store.read(`companies/${CO}/paymentConnections/stripe`).status, "ready");
+    assert.strictEqual(store.read(`paymentConnectionIndex/stripe:${accountId}`).active, true);
+
+    // Cancelling the link clears the block — the workspace is never stuck.
+    await fns.cancelOrderPaymentRequest({ data: { paymentRequestId: requestId } });
+    const freed = await fns.disconnectStripePaymentConnection({});
+    assert.strictEqual(freed.connection.status, "disconnected");
+    pass("the server refuses to disconnect while a link is still open, and says which one");
+  }
+
+  {
+    // CANCEL RACING A PAYMENT — the case the refusal above cannot cover.
+    //
+    // `cancelOrderPaymentRequest` expires the session at Stripe first, but
+    // `resource_missing` means "already expired OR already paid" and the two
+    // are indistinguishable from here, so it records `cancelled` and defers to
+    // the webhook. `cancelled` is therefore not an unsettled status, and the
+    // disconnect above is allowed through.
+    //
+    // Which means this is the sequence that decides whether money is lost:
+    // cancel, disconnect, and only then the payment lands. It must still reach
+    // the ledger, because the index row survived the disconnect.
+    const { store, fake, fns } = harness();
+    store.write(`companies/${CO}`, {
+      ownerUid: OWNER, companyName: "Acme", country: "GB",
+      ownerEmail: "owner@acme.test", seciliParaBirimi: "£"
+    });
+    store.write(`siparisler/${ORDER}`, {
+      companyId: CO, orderValue: 1000, paidAmount: 0, remainingAmount: 1000,
+      refundedAmount: 0, payments: [], assignedToUid: ""
+    });
+    await fns.beginStripeConnectOnboarding({});
+    const accountId = store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+    fake.completeOnboarding(accountId);
+    await fns.refreshStripePaymentConnection({});
+
+    const made = await fns.createOrderPaymentRequest({
+      data: { orderId: ORDER, amountMinor: 40000, purpose: "deposit" }
+    });
+    const requestId = made.request.paymentRequestId;
+
+    // The customer's card goes through at the same moment the workspace
+    // cancels. Stripe has the money; our row says cancelled.
+    await fns.cancelOrderPaymentRequest({ data: { paymentRequestId: requestId } });
+    assert.strictEqual(store.read(`companies/${CO}/paymentRequests/${requestId}`).publicStatus, "cancelled");
+    await fns.disconnectStripePaymentConnection({});
+
+    const response = fakeResponse();
+    await fns.stripeConnectWebhook(webhookRequest({
+      id: "evt_late_pay", type: "checkout.session.completed", account: accountId,
+      created: 1_757_000_100, livemode: false,
+      data: { object: { id: "cs_late", payment_intent: "pi_late", amount_total: 40000, currency: "gbp",
+        metadata: { companyId: CO, paymentRequestId: requestId, orderId: ORDER } } }
+    }), response);
+
+    const ledger = store.paths(`companies/${CO}/paymentLedger/`);
+    assert.strictEqual(ledger.length, 1, `the payment was lost: ${JSON.stringify(response.out.body)}`);
+    const settled = store.read(`companies/${CO}/paymentRequests/${requestId}`);
+    assert.strictEqual(settled.publicStatus, "paid", "a cancelled link that was paid anyway is paid, not cancelled");
+    assert.strictEqual(store.read(`siparisler/${ORDER}`).paidAmount, 400);
+    pass("a payment that lands after cancel AND disconnect still reaches the ledger and corrects the row");
   }
 
   // 3b. Reconnect — the half the disconnect above used to leave broken.
@@ -181,8 +304,8 @@ const webhookRequest = (event, signature = "valid") => ({
     fake.completeOnboarding(accountId);
     await fns.refreshStripePaymentConnection({});
     await fns.disconnectStripePaymentConnection({});
-    assert.strictEqual(store.read(`paymentConnectionIndex/stripe:${accountId}`), undefined,
-      "precondition: the disconnect above really did remove the index row");
+    assert.strictEqual(store.read(`paymentConnectionIndex/stripe:${accountId}`).active, false,
+      "precondition: the disconnect above really did disarm the index row");
 
     // Reconnect. `stripeAccountId` survives a disconnect on purpose, so this
     // takes the branch that already has an account and creates no new one.
@@ -325,20 +448,64 @@ const webhookRequest = (event, signature = "valid") => ({
   }
 
   {
-    // A disconnected workspace's events stop being accepted, because the index
-    // entry is what resolves them and disconnect deleted it.
+    // A late event after a disconnect STILL RESOLVES, and this is the reverse
+    // of what this check used to assert.
+    //
+    // It used to prove the event was ignored, because disconnect deleted the
+    // index. That looked like tidiness and was a silent loss: Stripe is told
+    // 202 for `unknown_connected_account`, so it stops retrying, and a payment
+    // or refund that completed moments after somebody pressed Disconnect was
+    // gone for good — the money at Stripe, nothing on the order.
+    //
+    // The mapping now survives, so the event finds its workspace and is
+    // recorded. What disconnect stops is NEW work, and that is the connection's
+    // status rather than this row.
     const { store, fake, fns } = harness();
     await fns.beginStripeConnectOnboarding({});
     const accountId = store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+    fake.completeOnboarding(accountId);
+    await fns.refreshStripePaymentConnection({});
     await fns.disconnectStripePaymentConnection({});
+
     const response = fakeResponse();
     await fns.stripeConnectWebhook(webhookRequest({
-      id: "evt_after", type: "account.updated", account: accountId, created: 9, data: { object: { id: accountId } }
+      id: "evt_after", type: "account.updated", account: accountId, created: 9,
+      livemode: false, data: { object: { id: accountId } }
     }), response);
-    assert.strictEqual(response.out.code, 202);
-    assert.strictEqual(response.out.body.ignored, "unknown_connected_account");
+    assert.strictEqual(response.out.code, 200, `a late event was dropped: ${JSON.stringify(response.out.body)}`);
+    assert.notStrictEqual(response.out.body.ignored, "unknown_connected_account",
+      "the workspace must still be resolvable for money already in flight");
+    // And it did not resurrect the connection: reconciling the past is not
+    // permission to take more.
     assert.strictEqual(store.read(`companies/${CO}/paymentConnections/stripe`).status, "disconnected");
-    pass("after a disconnect, that account's events no longer touch the workspace");
+    pass("after a disconnect the mapping survives, so late money still reaches its workspace — without reopening the connection");
+  }
+
+  {
+    // Another workspace cannot adopt an account it does not own.
+    //
+    // The index is a TOP-LEVEL row keyed only by the account id, and it is the
+    // only record of ownership — so a blind write is a cross-tenant capture:
+    // every later payment and refund for the first workspace would route to the
+    // second, which would read another tenant's money onto its own orders.
+    const a = harness();
+    await a.fns.beginStripeConnectOnboarding({});
+    const accountId = a.store.read(`companies/${CO}/paymentConnections/stripe`).stripeAccountId;
+
+    // A second workspace that somehow holds the same account id — a copied
+    // document, a restored backup, a hand-edited field.
+    const b = harness();
+    b.store.write(`companies/${CO}/paymentConnections/stripe`, { provider: "stripe", stripeAccountId: accountId, status: "disconnected" });
+    b.store.write(`paymentConnectionIndex/stripe:${accountId}`, { provider: "stripe", companyId: "someone-else", active: true });
+
+    await assert.rejects(
+      () => b.fns.beginStripeConnectOnboarding({}),
+      (error) => error.code === "permission-denied" && /another workspace/i.test(error.message),
+      "a workspace must not be able to claim an account another one owns"
+    );
+    assert.strictEqual(b.store.read(`paymentConnectionIndex/stripe:${accountId}`).companyId, "someone-else",
+      "and the refusal must leave the real owner's row untouched");
+    pass("an account already owned by another workspace cannot be claimed");
   }
 
   // ---------------------------------------------------------------------------

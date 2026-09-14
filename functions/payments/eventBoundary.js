@@ -219,26 +219,25 @@ function externalPaymentId(event) {
     // been dropped at `no_payment_identity` — the money silently never reaching
     // the ledger and `refundedAmount` never moving.
     //
-    // Newest-first is the right pick because a charge refunded twice delivers
-    // the event again with BOTH refunds listed, and the new one is the one this
-    // delivery is about. Each refund keeps its own ledger row, which is why the
-    // identity has to be the refund and not the charge.
+    // This returns which ONE id names the delivery. It is no longer how refund
+    // money is priced or written: where the event carries `refunds.data`,
+    // `refundSetFrom` below returns every refund and `applyProviderPayment`
+    // writes one ledger row per refund id, deduped by that id. The order the
+    // provider sent them in, and which end a truncated page lost, decide
+    // nothing about the money.
     //
-    // `refunds` is a Stripe LIST, which means it is PAGINATED: it carries
-    // `has_more`, and a charge refunded more times than one page holds is
-    // truncated. Stripe orders lists newest first, so `has_more` is harmless —
-    // the end that was cut is the OLDER one — and under that convention reading
-    // position 0 is correct.
+    // Two things still depend on the answer here, which is why it is still
+    // chosen carefully rather than taken from position 0:
+    //   - the presence gate: an event with no identity at all is skipped as
+    //     `no_payment_identity` before any work happens;
+    //   - the legacy/unpriced shape, where no per-refund amount exists to read
+    //     and one row is written under this id for the cumulative delta.
     //
-    // That convention is the only thing holding the answer up, and nothing here
-    // has ever seen a captured live payload to confirm it. A page that arrived
-    // the other way round would file every later refund under the FIRST
-    // refund's id: `create()` refuses the repeat as already-exists, and the
-    // second refund's money never reaches the ledger — the same silent loss
-    // this extractor was fixed for, from the other direction. So the newest is
-    // chosen from the DATA rather than from the position: the greatest
+    // So the newest is chosen from the DATA, not the position: the greatest
     // `created` wins, and the list's own order only breaks a tie, because
-    // Stripe stamps whole seconds and two refunds can share one.
+    // Stripe stamps whole seconds and two refunds can share one. A page that
+    // arrived oldest-first therefore changes nothing here — the fake transport
+    // lists oldest-first on purpose so a position-trusting reader fails.
     const refunds = object.refunds && Array.isArray(object.refunds.data) ? object.refunds.data : [];
     let newest = null;
     let newestCreated = null;
@@ -272,13 +271,13 @@ function externalPaymentId(event) {
  * EVERY refund on the charge, and whether the list was complete.
  *
  * `externalPaymentId` above answers "which ONE refund is this delivery about",
- * and it answers it by recency. That was the best available answer while a row
- * could only be written for one refund, and it rests on two assumptions about
- * Stripe that cannot be settled from this side: that `refunds.data` really does
- * arrive newest first, and that a list too long for one page loses its OLDER
- * end. Both are conventions. Neither is a contract.
+ * and it answers it by recency. While a row could only be written for one
+ * refund, that answer leaned on two conventions rather than contracts: that
+ * `refunds.data` arrives newest first, and that a list too long for one page
+ * loses its OLDER end.
  *
- * This is the answer that needs neither. A charge's refunds are a SET, each
+ * This is the answer that needs neither, so neither is a standing correctness
+ * assumption any more. A charge's refunds are a SET, each
  * with its own id, and the ledger is already keyed by that id
  * (`paymentLedger/{provider}:refund:{id}`) — so the identity does the deduping
  * and the order the provider happened to send them in decides nothing at all.

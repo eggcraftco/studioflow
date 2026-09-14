@@ -162,7 +162,19 @@ function makeFakeFirestore(nowRef = { value: Date.now() }) {
 }
 
 class FakeHttpsError extends Error {
-  constructor(code, message) { super(message); this.name = "HttpsError"; this.code = code; this.httpsCode = code; }
+  // `details` is the third argument the real firebase-functions HttpsError
+  // carries to the client, and this fake used to drop it. That is not a
+  // harmless omission: callers use it to say WHICH records blocked an
+  // operation, so a screen reading `error.details.paymentRequestIds` would test
+  // clean here and show the user an empty list. A fake that is less capable
+  // than the thing it stands in for hides exactly the bugs it exists to catch.
+  constructor(code, message, details) {
+    super(message);
+    this.name = "HttpsError";
+    this.code = code;
+    this.httpsCode = code;
+    if (details !== undefined) this.details = details;
+  }
 }
 
 module.exports = { makeFakeFirestore, FakeHttpsError, DELETE, SERVER_TS };
