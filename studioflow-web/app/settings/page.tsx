@@ -40,6 +40,7 @@ import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { EbayIntegrationSection } from "./EbayIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
+import { StripeIntegrationSection } from "./StripeIntegrationSection";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
@@ -5413,6 +5414,7 @@ function IntegrationsSection({
         {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "ebay" ? <EbayIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "stripe" ? <StripeIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} /> : null}

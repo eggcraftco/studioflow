@@ -277,16 +277,34 @@ async function paidOrder(h, { id = "evt_paid" } = {}) {
       "the late event resolved to its OWN refund and not to the one already filed"
     );
 
-    // Attribution, honestly: out of order there is ONE ledger row, filed under
-    // re_2 for the whole £1,000. A second row for re_1's £200 would be money
-    // already inside that £1,000 — a £1,200 refund on a £1,000 charge — and the
-    // rows are immutable, so the £1,000 cannot be split after the fact. The
-    // money is exact and the attribution is coarse; that is the trade, and it
-    // only happens when the deliveries are reordered. In order (below) each
-    // refund keeps its own row.
-    assert.deepStrictEqual(refundRows(h), [`companies/${CO}/paymentLedger/stripe:refund:re_2`],
-      "out of order, one row holds the whole cumulative total");
-    assert.strictEqual(ledgerRow(h, "refund:re_2").amountMinor, 100000);
+    // Attribution, and the trade this used to make is gone.
+    //
+    // It used to read: out of order there is ONE row, filed under re_2 for the
+    // whole £1,000, because a row could only be written for the refund the
+    // delivery was "about", and a second row would have been money already
+    // inside that £1,000. The money was exact and the attribution coarse.
+    //
+    // Reading `refunds.data` as a SET removes the trade rather than softening
+    // it. The first delivery already carries BOTH refunds, each with its own
+    // amount, so both rows are written at once — £200 and £800 — and the late
+    // delivery adds nothing because `create()` already holds both ids. £1,000
+    // either way, now attributed to the refunds that actually happened.
+    //
+    // This works because Stripe priced each entry. The bare-`refund_id` shape
+    // has no per-refund figure and still uses the cumulative delta; see
+    // `payments-races`, which is where pricing that shape per-delivery shows up
+    // as £1,200 on a £1,000 charge.
+    assert.deepStrictEqual(refundRows(h), [
+      `companies/${CO}/paymentLedger/stripe:refund:re_1`,
+      `companies/${CO}/paymentLedger/stripe:refund:re_2`
+    ], "out of order, each refund still earns its own row");
+    assert.strictEqual(ledgerRow(h, "refund:re_1").amountMinor, 20000, "its own £200, not a share of the total");
+    assert.strictEqual(ledgerRow(h, "refund:re_2").amountMinor, 80000, "its own £800, not the £1,000 cumulative total");
+    assert.strictEqual(
+      ledgerRow(h, "refund:re_1").amountMinor + ledgerRow(h, "refund:re_2").amountMinor,
+      100000,
+      "and together exactly the cumulative total — never £1,200"
+    );
 
     const g = harness();
     const inOrder = await paidOrder(g);
@@ -458,6 +476,96 @@ async function paidOrder(h, { id = "evt_paid" } = {}) {
     await h.fns.stripeConnectWebhook(webhook(silent), fakeResponse());
     assert.strictEqual(order(h).refundedAmount, 200, "an event with no livemode field is still applied");
     pass("an event from the other livemode is refused on both rails, and a payload that omits the field still lands");
+  }
+
+  // -------------------------------------------------------------------------
+  // The refunds are a SET, so neither their order nor a truncated page decides
+  // anything. These are the checks that fail if `refundSetFrom` is removed and
+  // the reader goes back to picking one entry out of the list.
+  // -------------------------------------------------------------------------
+  {
+    // Same two refunds, delivered to two workspaces in opposite list orders.
+    // Stripe documents newest-first; nothing here relies on that being true,
+    // which is the point — an assumption we cannot verify from this side must
+    // not be load-bearing.
+    const newestFirst = harness();
+    const a = await paidOrder(newestFirst);
+    await newestFirst.fns.stripeConnectWebhook(webhook(refunded({
+      account: a.account, requestId: a.requestId, id: "evt_order_a", created: 1_757_000_400,
+      refundList: [{ id: "re_y", amount: 30000, created: 1_757_000_400 }, { id: "re_x", amount: 20000, created: 1_757_000_300 }],
+      refundedTotalMinor: 50000
+    })), fakeResponse());
+
+    const oldestFirst = harness();
+    const b = await paidOrder(oldestFirst);
+    await oldestFirst.fns.stripeConnectWebhook(webhook(refunded({
+      account: b.account, requestId: b.requestId, id: "evt_order_b", created: 1_757_000_400,
+      refundList: [{ id: "re_x", amount: 20000, created: 1_757_000_300 }, { id: "re_y", amount: 30000, created: 1_757_000_400 }],
+      refundedTotalMinor: 50000
+    })), fakeResponse());
+
+    assert.deepStrictEqual(refundRows(newestFirst), refundRows(oldestFirst),
+      "the order Stripe listed them in changed which rows exist");
+    assert.strictEqual(ledgerRow(newestFirst, "refund:re_x").amountMinor, 20000);
+    assert.strictEqual(ledgerRow(newestFirst, "refund:re_y").amountMinor, 30000);
+    assert.strictEqual(ledgerRow(oldestFirst, "refund:re_x").amountMinor, 20000);
+    assert.strictEqual(ledgerRow(oldestFirst, "refund:re_y").amountMinor, 30000);
+    assert.strictEqual(order(newestFirst).refundedAmount, order(oldestFirst).refundedAmount,
+      "and the order's total is the same either way");
+    assert.strictEqual(order(newestFirst).refundedAmount, 500);
+    pass("the refunds are a set: reversing the list changes neither the rows nor the money");
+  }
+
+  {
+    // A page that says `has_more`. The old reader treated this as harmless on
+    // the strength of a convention — lists come newest first, so the end that
+    // was cut is the older one — which nothing here has ever been able to
+    // confirm against a live payload. Now the truncation is completed through
+    // the provider instead, so which end was cut does not matter.
+    const h = harness();
+    const { account, requestId } = await paidOrder(h);
+
+    // The provider holds three refunds; the event carries one and admits it is
+    // incomplete. The fake deliberately lists them OLDEST first — the opposite
+    // of Stripe's own convention — so a reader that still trusted position
+    // would pick the wrong one.
+    h.fake.refund("ch_pi_1", { id: "re_p1", amountMinor: 20000, created: 1_757_000_300 });
+    h.fake.refund("ch_pi_1", { id: "re_p2", amountMinor: 30000, created: 1_757_000_400 });
+    h.fake.refund("ch_pi_1", { id: "re_p3", amountMinor: 50000, created: 1_757_000_500 });
+
+    await h.fns.stripeConnectWebhook(webhook(refunded({
+      account, requestId, id: "evt_truncated", created: 1_757_000_500,
+      refundList: [{ id: "re_p3", amount: 50000, created: 1_757_000_500 }],
+      refundedTotalMinor: 100000, fully: true, hasMore: true
+    })), fakeResponse());
+
+    assert.deepStrictEqual(refundRows(h), [
+      `companies/${CO}/paymentLedger/stripe:refund:re_p1`,
+      `companies/${CO}/paymentLedger/stripe:refund:re_p2`,
+      `companies/${CO}/paymentLedger/stripe:refund:re_p3`
+    ], "a truncated page must be completed through the provider, not guessed at");
+    assert.strictEqual(ledgerRow(h, "refund:re_p1").amountMinor, 20000, "the refund the page had cut off still earns its own row");
+    assert.strictEqual(ledgerRow(h, "refund:re_p2").amountMinor, 30000);
+    assert.strictEqual(ledgerRow(h, "refund:re_p3").amountMinor, 50000);
+    assert.strictEqual(order(h).refundedAmount, 1000, "the cumulative total, counted exactly once");
+    assert(h.fake.calls.some((c) => c.method === "listChargeRefunds" && c.chargeId === "ch_pi_1"),
+      "the provider was actually asked to complete the list");
+    pass("a truncated refunds page is completed through the provider, so which end was cut decides nothing");
+  }
+
+  {
+    // And a complete page does NOT ask the provider: completion is for the
+    // truncated case, not a second round trip on every refund.
+    const h = harness();
+    const { account, requestId } = await paidOrder(h);
+    await h.fns.stripeConnectWebhook(webhook(refunded({
+      account, requestId, id: "evt_complete", created: 1_757_000_300,
+      refundList: [{ id: "re_only", amount: 20000, created: 1_757_000_300 }], refundedTotalMinor: 20000
+    })), fakeResponse());
+    assert(!h.fake.calls.some((c) => c.method === "listChargeRefunds"),
+      "a complete list must not cost a provider call");
+    assert.strictEqual(order(h).refundedAmount, 200);
+    pass("a complete refunds list is taken at face value, with no extra provider call");
   }
 
   console.log(`\nAll ${checks} refund identity checks passed.`);

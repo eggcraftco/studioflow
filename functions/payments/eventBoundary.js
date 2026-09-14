@@ -269,6 +269,89 @@ function externalPaymentId(event) {
 }
 
 /**
+ * EVERY refund on the charge, and whether the list was complete.
+ *
+ * `externalPaymentId` above answers "which ONE refund is this delivery about",
+ * and it answers it by recency. That was the best available answer while a row
+ * could only be written for one refund, and it rests on two assumptions about
+ * Stripe that cannot be settled from this side: that `refunds.data` really does
+ * arrive newest first, and that a list too long for one page loses its OLDER
+ * end. Both are conventions. Neither is a contract.
+ *
+ * This is the answer that needs neither. A charge's refunds are a SET, each
+ * with its own id, and the ledger is already keyed by that id
+ * (`paymentLedger/{provider}:refund:{id}`) — so the identity does the deduping
+ * and the order the provider happened to send them in decides nothing at all.
+ * A delivery that carries two refunds we have never seen writes two rows; a
+ * delivery that carries five we already hold writes none. Reordered, replayed
+ * or delivered out of sequence, the outcome is the same set.
+ *
+ * `complete` is `has_more === true` inverted: when Stripe says the list is
+ * truncated we have NOT seen every refund, and the caller completes it through
+ * the provider rather than guessing which end was cut. `chargeId` is what it
+ * needs to ask.
+ *
+ * Amounts come from each refund's own `amount`, never from the charge's
+ * cumulative `amount_refunded` — adding three payloads' running totals refunds
+ * £1,700 on a £1,000 charge, which is the trap this rail already documents.
+ */
+function refundSetFrom(event) {
+  const type = text(event && event.type);
+  const object = (event && event.data && event.data.object) || {};
+  if (!type.startsWith("charge.refunded")) {
+    return { refunds: [], complete: true, chargeId: "", hasMore: false };
+  }
+
+  const list = object.refunds && typeof object.refunds === "object" && !Array.isArray(object.refunds)
+    ? object.refunds
+    : null;
+  const rows = list && Array.isArray(list.data) ? list.data : [];
+  const seen = new Set();
+  const refunds = [];
+  for (const entry of rows) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = text(entry.id || entry.refundId);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const amount = Number(entry.amount);
+    refunds.push({
+      id,
+      externalPaymentId: `refund:${id}`,
+      // `null` rather than 0 for an unreadable amount: a refund whose figure we
+      // cannot read is not a refund of nothing, and the caller must be able to
+      // tell those apart rather than writing a £0.00 row.
+      amountMinor: Number.isSafeInteger(amount) && amount > 0 ? amount : null,
+      createdAtSeconds: Number.isFinite(Number(entry.created)) ? Number(entry.created) : null
+    });
+  }
+
+  // The legacy key, kept for the same reason the extractor keeps it: a
+  // hand-built or replayed payload still resolves rather than losing its money.
+  //
+  // ITS AMOUNT IS DELIBERATELY NULL, and the caller must price it from the
+  // cumulative delta instead. I tried the obvious thing first — this shape
+  // carries no list, so it describes one refund, so the charge's
+  // `amount_refunded` must be that refund's own figure — and it is wrong the
+  // moment the SAME charge is delivered again under a different refund id: two
+  // deliveries, two ids, each priced at its own running total, £1,000 + £200 on
+  // a £1,000 charge. `payments-races` catches it.
+  //
+  // A delta cannot double-count, because the second delivery moves the total by
+  // nothing. So per-refund amounts are used only where Stripe actually gives
+  // them — inside `refunds.data` — and the legacy shape keeps the arithmetic
+  // that was always immune to redelivery.
+  if (!refunds.length) {
+    const legacy = text(object.refundId || object.refund_id);
+    if (legacy) {
+      refunds.push({ id: legacy, externalPaymentId: `refund:${legacy}`, amountMinor: null, createdAtSeconds: null });
+    }
+  }
+
+  const hasMore = Boolean(list && list.has_more === true);
+  return { refunds, complete: !hasMore, hasMore, chargeId: text(object.id) };
+}
+
+/**
  * Does the event's own claim match what we asked for?
  *
  * Stripe tells us the amount, the currency and our metadata; all three have to
@@ -305,6 +388,7 @@ module.exports = {
   CONNECTED_EVENT_TYPES,
   PLATFORM_EVENT_TYPES,
   routeEvent,
+  refundSetFrom,
   platformEventAdmissible,
   connectedEventAdmissible,
   eventLedgerId,

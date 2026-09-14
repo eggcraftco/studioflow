@@ -37,7 +37,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "paypal" | "quickbooks" | "xero" | "chatgpt";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "stripe";
 
 export type IntegrationProvider = {
   id: string;
@@ -142,12 +142,16 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
   {
     // The workspace's OWN Stripe account (Connect), not NivaDesk's subscription
     // billing — that is the plan, and it is a different Stripe account
-    // entirely. `manage` is deliberately still empty: this card tells the truth
-    // about the connection, and the screen that creates payment links arrives
-    // with that feature rather than as a button that opens nothing.
+    // entirely.
+    //
+    // `manage` was empty for as long as this card could only REPORT a status:
+    // a button that opened nothing would have been worse than no button. It now
+    // opens the screen that connects, re-checks and disconnects — which is the
+    // one this card was waiting for. Creating the links themselves still lives
+    // where the money is: on the order, and together in Banking.
     id: "stripe", name: "Stripe", category: "automation", kind: "native", mark: "S",
     blurb: "Take card payments for an order straight into your own Stripe account.",
-    capabilities: ["Deposits and balances", "Apple Pay and Google Pay", "Paid into your account"], manage: "",
+    capabilities: ["Deposits and balances", "Apple Pay and Google Pay", "Paid into your account"], manage: "stripe",
   },
   {
     id: "paypal", name: "PayPal", category: "banking", kind: "native", mark: "P",

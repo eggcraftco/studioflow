@@ -806,26 +806,88 @@ function createPaymentConnectFunctions({
     const ledgerRow = requestState.ledgerRowFor(before, reduced.state, event);
 
     // (1) The money, once.
+    //
+    // A REFUND IS A SET, NOT A POSITION. `charge.refunded` delivers the whole
+    // charge, and its `refunds` list is paginated. Picking one entry from it —
+    // by position or by recency — makes the answer depend on the order Stripe
+    // sent them in and on which end a truncated page lost, and neither is a
+    // contract. So every refund on the charge is read, each row is keyed by its
+    // OWN id, and `create()` refusing an id we already hold is what makes a
+    // redelivery write nothing. Reordered, replayed or split across pages, the
+    // resulting set is identical.
+    //
+    // Each row carries that refund's own `amount`, never the charge's
+    // cumulative `amount_refunded`: adding three deliveries' running totals
+    // refunds £1,700 on a £1,000 charge.
     let ledgerWritten = false;
-    if (ledgerRow) {
+    const writeEntry = async (identity, type, amountMinor) => {
       const entry = orderLedger.entryFrom({
-        externalPaymentId, type: ledgerRow.type, amountMinor: ledgerRow.amountMinor,
+        externalPaymentId: identity, type, amountMinor,
         currency: row.currency, orderId: row.orderId, paymentRequestId,
         connectedAccountId: String(event.account || ""), provider: PROVIDER,
         receivedAtMs: Number(event.created || 0) * 1000
       });
-      if (entry) {
-        const entryId = orderLedger.ledgerEntryId(PROVIDER, externalPaymentId);
+      // null when the row would not identify an economic event — an unreadable
+      // amount among them. Not written, and not counted as written.
+      if (!entry) return false;
+      try {
+        await ledgerRef(companyId, orderLedger.ledgerEntryId(PROVIDER, identity)).create(entry);
+        return true;
+      } catch (error) {
+        // already-exists: this money is already in the ledger. Everything below
+        // still runs, because it is all derived from the ledger and converges
+        // rather than accumulating.
+        return false;
+      }
+    };
+
+    if (String(event.type || "").startsWith("charge.refunded")) {
+      let set = eventBoundary.refundSetFrom(event);
+      if (!set.complete && set.chargeId) {
+        // The list said it was truncated. Ask the provider for the rest rather
+        // than assuming which end was cut — and if that fails, fall back to the
+        // refunds the event did carry, because a partial answer still gets the
+        // refunds we CAN see into the ledger and a later delivery completes it.
         try {
-          await ledgerRef(companyId, entryId).create(entry);
-          ledgerWritten = true;
+          const completed = await transport().listChargeRefunds({
+            accountId: String(event.account || ""), chargeId: set.chargeId
+          });
+          const rows = Array.isArray(completed && completed.refunds) ? completed.refunds : [];
+          if (rows.length) {
+            set = eventBoundary.refundSetFrom({
+              type: "charge.refunded",
+              data: { object: { id: set.chargeId, refunds: { object: "list", has_more: completed.complete !== true, data: rows } } }
+            });
+          }
         } catch (error) {
-          // already-exists: this money is already in the ledger. Everything
-          // below still runs, because it is all derived from the ledger and
-          // converges rather than accumulating.
-          ledgerWritten = false;
+          console.warn("stripe refund completion failed:", error && error.message ? error.message : error);
         }
       }
+      // Priced two ways, and the difference is not cosmetic.
+      //
+      // Where Stripe gave us `refunds.data`, each entry carries its OWN amount,
+      // so every refund gets its own row for its own money and the order they
+      // arrived in decides nothing.
+      //
+      // Where it did not — the legacy/hand-built shape with a bare `refund_id`
+      // — there is no per-refund figure to read, and the charge's
+      // `amount_refunded` is a CUMULATIVE total. Pricing a row from that total
+      // double-counts as soon as the same charge is redelivered under a second
+      // refund id: £1,000 then £200 on a £1,000 charge. So that shape keeps the
+      // delta of cumulative totals, which moves by nothing on a redelivery and
+      // is therefore immune to it.
+      const priced = set.refunds.filter((entry) => Number.isSafeInteger(entry.amountMinor) && entry.amountMinor > 0);
+      if (priced.length) {
+        for (const refund of priced) {
+          if (await writeEntry(refund.externalPaymentId, "refund", refund.amountMinor)) ledgerWritten = true;
+        }
+      } else if (ledgerRow && set.refunds.length) {
+        // One unpriced refund, identified but not costed: the delta is what it
+        // is worth, and `externalPaymentId` already resolved which id it is.
+        ledgerWritten = await writeEntry(externalPaymentId, ledgerRow.type, ledgerRow.amountMinor);
+      }
+    } else if (ledgerRow) {
+      ledgerWritten = await writeEntry(externalPaymentId, ledgerRow.type, ledgerRow.amountMinor);
     }
 
     // (2) The request's own status.
