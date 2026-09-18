@@ -13,6 +13,7 @@ export const PUBLIC_SITE_EN = {
 
   "nav.publicPages": "Public pages",
   "nav.footer": "Footer navigation",
+  "nav.integrations": "Integrations",
   "nav.home": "Home",
   "nav.features": "Features",
   "nav.pricing": "Pricing",

@@ -874,6 +874,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
         <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
           <Link href="/">{t("nav.home")}</Link>
           <Link href="/features">{t("nav.features")}</Link>
+          <Link href="/integrations">{t("nav.integrations")}</Link>
           <Link href="/pricing">{t("nav.pricing")}</Link>
           <Link href="/faq">{t("nav.faq")}</Link>
           <Link href="/security">{t("nav.security")}</Link>
@@ -905,6 +906,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
         <div className="public-header-mobile-menu">
           <Link href="/" onClick={closeMenu}>{t("nav.home")}</Link>
           <Link href="/features" onClick={closeMenu}>{t("nav.features")}</Link>
+          <Link href="/integrations" onClick={closeMenu}>{t("nav.integrations")}</Link>
           <Link href="/pricing" onClick={closeMenu}>{t("nav.pricing")}</Link>
           <Link href="/faq" onClick={closeMenu}>{t("nav.faq")}</Link>
           <Link href="/security" onClick={closeMenu}>{t("nav.security")}</Link>
@@ -936,6 +938,7 @@ function PublicFooter() {
             <nav aria-label={t("footer.product")}>
               <Link href="/features">{t("nav.features")}</Link>
               <Link href="/chatgpt">{t("nav.chatgpt")}</Link>
+              <Link href="/integrations">{t("nav.integrations")}</Link>
               <Link href="/pricing">{t("nav.pricing")}</Link>
               <Link href="/guide">{t("nav.guide")}</Link>
               <Link href="/faq">{t("nav.faq")}</Link>
@@ -1010,7 +1013,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
   );
 }
 
-function PublicShell({ children }: { children: ReactNode }) {
+export function PublicShell({ children }: { children: ReactNode }) {
   return (
     <PublicSiteLanguageProvider>
       <PublicShellContent>{children}</PublicShellContent>
