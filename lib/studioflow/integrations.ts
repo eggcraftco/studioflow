@@ -26,6 +26,7 @@ import { getEtsyConnections } from "@/lib/studioflow/etsy";
 import { getWooConnections } from "@/lib/studioflow/woocommerce";
 import { getSquareConnections } from "@/lib/studioflow/square";
 import { getEbayConnections } from "@/lib/studioflow/ebay";
+import { getAmazonStatus, type AmazonAuthorizationMode, type AmazonConnection } from "@/lib/studioflow/amazon";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation";
@@ -37,7 +38,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "paypal" | "quickbooks" | "xero" | "chatgpt";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt";
 
 export type IntegrationProvider = {
   id: string;
@@ -97,8 +98,12 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Orders"], manage: "inbound",
   },
   {
-    id: "amazon", name: "Amazon", category: "commerce", kind: "planned", mark: "A",
-    blurb: "", capabilities: [], manage: "",
+    // A native connection, like Square and eBay: NivaDesk holds the seller's own
+    // authorisation and reads the orders itself. No logo file — Amazon's mark is
+    // theirs and we are not allowed to redraw it — so the tile keeps its initial.
+    id: "amazon", name: "Amazon", category: "commerce", kind: "native", mark: "A",
+    blurb: "Connect your Amazon seller account once; orders arrive on their own.",
+    capabilities: ["Orders"], manage: "amazon",
   },
   {
     // Named beside Amazon because a studio deciding where to list wants to see
@@ -204,7 +209,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, ebay, accounting, chatgpt, retired] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, ebay, amazon, accounting, chatgpt, retired] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -216,6 +221,10 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // settles as an empty list — the card then reads "Available", which is
     // what it said before this connector existed.
     getEbayConnections(companyId),
+    // Amazon is generally available, so this is asked for every workspace rather
+    // than only for listed ones. It answers for members too (three fields), and
+    // a rejection settles as "could not check" — never as "not connected".
+    getAmazonStatus(companyId),
     getDocs(collection(db, "companies", companyId, "accountingConnections")),
     // The ChatGPT grant lives in a top-level collection no client may read, so
     // this is the only way a workspace can be told it has one. Owner-only on
@@ -271,6 +280,10 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
           environment: row.environment,
         }))
       : [],
+    // A read that did not come back is null ("could not check"), never "" and
+    // never "published" — the same rule ebayWorkspaceEnabled follows above.
+    amazonAuthorizationMode: amazon.status === "fulfilled" ? amazon.value.authorizationMode : null,
+    amazonConnections: amazon.status === "fulfilled" ? amazon.value.connections : [],
     // Accounting providers (QuickBooks Online, Xero): the owner-readable connection projection.
     accountingConnections: accounting.status === "fulfilled"
       ? accounting.value.docs.map((row) => { const d = row.data(); return { provider: String(d.provider || ""), status: String(d.status || ""), mode: String(d.mode || ""), companyName: String(d.companyName || ""), syncState: String(d.syncState || ""), environment: String(d.environment || "production"), lastWebhookAtMs: Number(d.lastWebhookAtMs) || 0, linkedAtMs: Number(d.linkedAtMs) || 0 }; })
@@ -303,7 +316,7 @@ export async function revokeChatGPTConnection(companyId: string, tokenHash = "")
 }
 
 export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
-  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], ebayConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0, wooConnections: [], squareConnections: [], ebayConnections: [], amazonConnections: [], paypalConnections: [], accountingConnections: [], chatgptConnections: [], retiredHolds: [],
 };
 
 export type IntegrationSignals = {
@@ -322,6 +335,14 @@ export type IntegrationSignals = {
   ebayConnections: { account: string; status: string; specStatus: string; needsAttention: boolean; environment?: string }[];
   /** true/false = the server's answer; null = the read failed; undefined = not read yet. */
   ebayWorkspaceEnabled?: boolean | null;
+  /** Amazon connections, in the shape a MEMBER also receives — so nothing here
+   *  may require a field only an owner is given. */
+  amazonConnections: AmazonConnection[];
+  /** Whether Amazon has published the application yet, as the zone itself
+   *  reports it. "" = the server did not say; null = the read failed; undefined
+   *  = not read yet. None of the three is "published": that reading is the one
+   *  that would offer a consent screen which cannot complete. */
+  amazonAuthorizationMode?: AmazonAuthorizationMode | null;
   /** PayPal money feeds (first-party credentials), and whether one needs the owner's attention. */
   paypalConnections: { status: string; syncState: string; environment: string }[];
   /** Accounting providers (QuickBooks Online, Xero), with the mode the owner chose. */
@@ -441,6 +462,41 @@ function resolveProviderState(
       state: broken === live.length ? "attention" : "connected",
       detail: `${live.length === 1 ? live[0].account : `${live.length} accounts`}${sandbox}`,
     };
+  }
+
+  // Amazon is a native connection and a generally available one, so an
+  // unconnected workspace reads "Available" — never "planned".
+  //
+  // That distinction is the whole point of this branch. "planned" renders as
+  // "Coming soon" (INTEGRATION_STATE_LABELS) and
+  // `integrationStateOffersNoAction` suppresses the button entirely, so a
+  // workspace that may connect today would be told the opposite and given no
+  // way to act. The eBay branch above does return "planned" for an un-listed
+  // workspace, which is right for a connector gated per workspace and wrong
+  // here: Amazon is not gated that way.
+  //
+  // Draft mode is also NOT "planned". Amazon is a supported integration; what
+  // is pending is Amazon's review of our application. The card stays
+  // "Available" so the panel can be opened, and the panel says plainly that
+  // connecting is not possible yet. A card that offered nothing would leave
+  // that explanation unreachable.
+  if (provider.id === "amazon") {
+    const live = (signals.amazonConnections || []).filter((row) => row.status !== "disconnected");
+    if (live.length === 0) {
+      // Only a read that did not happen suppresses the card's action, and it
+      // says so honestly rather than claiming the workspace cannot connect.
+      if (signals.amazonAuthorizationMode === null) return { state: "unverified" };
+      if (signals.amazonAuthorizationMode === undefined) return { state: "checking" };
+      return { state: "available" };
+    }
+    // `needsReauth` is the SERVER's word, never re-derived from an error code
+    // here. A card goes amber only when EVERY live connection needs a look.
+    const broken = live.filter((row) => row.needsReauth).length;
+    // A member is given three fields, so the detail line must survive without
+    // marketplaces rather than assuming an owner's view.
+    const sites = (live[0].marketplaces || []).filter((row) => row.participating).map((row) => row.countryCode).filter(Boolean);
+    const detail = live.length > 1 ? `${live.length} accounts` : (sites.length ? sites.join(", ") : undefined);
+    return { state: broken === live.length ? "attention" : "connected", ...(detail ? { detail } : {}) };
   }
 
   if (provider.id === "quickbooks" || provider.id === "xero") {

@@ -39,6 +39,7 @@ import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { EbayIntegrationSection } from "./EbayIntegrationSection";
+import { AmazonIntegrationSection } from "./AmazonIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
@@ -174,6 +175,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
   ebay: "integrations",
+  amazon: "integrations",
   paypal: "integrations",
   shopify: "integrations",
   inbound: "integrations",
@@ -561,7 +563,7 @@ export default function SettingsPage() {
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
-      rawRequested === "square" || rawRequested === "ebay" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
+      rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -580,6 +582,14 @@ export default function SettingsPage() {
     // panel is where the seller is told whether it worked.
     if (params.get("ebay")) {
       setIntegrationProvider("ebay");
+      setActiveSection("integrations");
+    }
+    // Amazon returns to ?section=integrations — the hub, not a provider — so
+    // unlike eBay there is no section parameter to open the panel. The outcome
+    // parameter is the only thing that can, and it has to: the panel is where
+    // the seller is told whether the consent they just gave actually worked.
+    if (params.get("amazon")) {
+      setIntegrationProvider("amazon");
       setActiveSection("integrations");
     }
     if (!rawRequested) return;
@@ -5412,6 +5422,7 @@ function IntegrationsSection({
         {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "square" ? <SquareIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "ebay" ? <EbayIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "amazon" ? <AmazonIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
