@@ -129,6 +129,11 @@ const NAV_ITEMS: Array<
   { href: "/inventory", label: "Inventory", icon: "files" },
   { href: "/files", label: "Files", icon: "files" },
   { href: "/messages", label: "Messages", icon: "messages" },
+  // Two different conversations, kept two entries apart on purpose. Messages is
+  // the team talking to itself; Inbox is a CUSTOMER talking to the workshop,
+  // and a stranger's message must never be read — or acted on — as if it were a
+  // colleague's. That separation is the whole safety boundary between them.
+  { href: "/inbox", label: "Inbox", icon: "messages" },
   { href: "/quick-reply", label: "AI Replies", icon: "reply" },
   { href: "/settings", label: "Settings", icon: "settings" },
   { href: "/admin", label: "Insights", icon: "insights" },
@@ -148,6 +153,10 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/team-schedule": "schedule",
   "/customers": "customers",
   "/messages": "messages",
+  // The customer inbox rides the same access key as Messages rather than
+  // introducing a new one: it is a messages surface, so a role change moves
+  // both together instead of leaving one reachable when the other is not.
+  "/inbox": "messages",
   "/notes": "notes",
   "/quick-reply": "quickReply",
   "/settings": "settings",
