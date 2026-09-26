@@ -112,6 +112,7 @@ import {
 } from "@/lib/studioflow/production";
 import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
 import { OrderStockBlock } from "./OrderStockBlock";
+import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
@@ -7263,6 +7264,8 @@ export function OrderDetailContent({
                 saving={savingInlineField === "Delivered"}
                 onSave={value => saveDetailsPatch({ isDelivered: value === "Yes" }, "Delivered")}
               />
+              {/* DHL Express, only where the server has opened it for this workspace. */}
+              <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)} />
             </div>
           </section>
         );

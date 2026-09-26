@@ -41,6 +41,8 @@ import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { EbayIntegrationSection } from "./EbayIntegrationSection";
 import { AmazonIntegrationSection } from "./AmazonIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
+import { DhlExpressIntegrationSection } from "./DhlExpressIntegrationSection";
+import { getShippingConnection, type ShippingConnectionView } from "@/lib/studioflow/shipping";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
@@ -182,6 +184,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   etsy: "integrations",
   quickbooks: "integrations",
   xero: "integrations",
+  dhl: "integrations",
   sms: "sms-notifications",
   general: "profile-security",
   account: "profile-security",
@@ -563,7 +566,8 @@ export default function SettingsPage() {
       rawRequested === "woocommerce" ||
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
-      rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero"
+      rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
+      rawRequested === "dhl"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5379,6 +5383,17 @@ function IntegrationsSection({
   const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
   const [signals, setSignals] = useState<IntegrationSignals>(EMPTY_INTEGRATION_SIGNALS);
   const [loaded, setLoaded] = useState(false);
+  // DHL Express shows only where the server has opened it for this workspace.
+  const [dhl, setDhl] = useState<ShippingConnectionView | null>(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    void getShippingConnection(companyId)
+      .then((view) => { if (active) setDhl(view); })
+      .catch(() => { if (active) setDhl(null); });
+    return () => { active = false; };
+  }, [companyId, managing]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -5415,7 +5430,7 @@ function IntegrationsSection({
         <nav className="integrations-crumb">
           <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
           <span aria-hidden="true">/</span>
-          <strong>{INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? t("Setup")}</strong>
+          <strong>{managing === "dhl" ? "DHL Express" : INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? t("Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5424,6 +5439,7 @@ function IntegrationsSection({
         {managing === "ebay" ? <EbayIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "amazon" ? <AmazonIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "dhl" ? <DhlExpressIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5432,7 +5448,8 @@ function IntegrationsSection({
     );
   }
 
-  const connected = resolved.filter((row) => row.live.state === "connected").length;
+  // DHL is not one of those rows (its tile is below); a DHL connection counts all the same.
+  const connected = resolved.filter((row) => row.live.state === "connected").length + (dhl?.enabled && dhl.connected ? 1 : 0);
   const attention = resolved.filter((row) => row.live.state === "attention").length;
   const needle = query.trim().toLowerCase();
   const matches = (row: (typeof resolved)[number]) => {
@@ -5504,6 +5521,21 @@ function IntegrationsSection({
         </p>
       </div>
 
+      {dhl?.enabled && (!needle || "dhl express".includes(needle)) && (filter === "all" || (filter === "connected" ? dhl.connected : filter === "available" ? !dhl.connected : false)) ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Shipping")} aside={<span className="settings-tag is-muted">1</span>} />
+          <div className="integrations-grid settings-integrations-grid">
+            <IntegrationCard
+              provider={DHL_EXPRESS_TILE}
+              live={{ state: dhl.connected ? "connected" : "available", detail: dhl.connected && dhl.environment === "test" ? t("DHL test environment") : undefined }}
+              t={t}
+              highlighted={false}
+              onManage={() => setManaging("dhl")}
+            />
+          </div>
+        </section>
+      ) : null}
+
       {groups.map(group => group.rows.length === 0 ? null : (
         <section key={group.id} className="card app-card">
           <SettingsCardHead title={t(group.title)} aside={<span className="settings-tag is-muted">{group.rows.length}</span>} />
@@ -5540,6 +5572,14 @@ function IntegrationsSection({
     </div>
   );
 }
+
+// The DHL Express tile. Not in INTEGRATION_PROVIDERS (see integrations.ts): it is
+// built here and shown only to a workspace the server has opened DHL for.
+const DHL_EXPRESS_TILE: IntegrationProvider = {
+  id: "dhl_express", name: "DHL Express", category: "commerce", kind: "native", mark: "DHL",
+  blurb: "Create DHL Express labels from an order, with the customs declaration, and follow each parcel.",
+  capabilities: ["Shipping labels", "Customs declaration", "Tracking"], manage: "dhl",
+};
 
 function IntegrationCard({
   provider, live, t, highlighted, onManage, categoryLabel,

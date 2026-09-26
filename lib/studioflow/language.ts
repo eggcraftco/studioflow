@@ -1,5 +1,6 @@
 import { MAC_TRANSLATIONS } from "./macTranslations";
 import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
+import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -8157,3 +8158,7 @@ mergeIntoTranslations({
   "Open the project": { "Türkçe": "Projeyi aç", "Deutsch": "Projekt öffnen", "Français": "Ouvrir le projet", "Italiano": "Apri il progetto", "Español (Spanish)": "Abrir el proyecto", "Português": "Abrir o projeto", "Русский (Russian)": "Открыть проект", "日本語 (Japanese)": "プロジェクトを開く", "中文 (Chinese)": "打开项目", "العربية (Arabic)": "افتح المشروع", "हिन्दी (Hindi)": "प्रोजेक्ट खोलें" },
   "Create a project": { "Türkçe": "Proje oluştur", "Deutsch": "Projekt anlegen", "Français": "Créer un projet", "Italiano": "Crea un progetto", "Español (Spanish)": "Crear un proyecto", "Português": "Criar um projeto", "Русский (Russian)": "Создать проект", "日本語 (Japanese)": "プロジェクトを作成", "中文 (Chinese)": "创建项目", "العربية (Arabic)": "أنشئ مشروعًا", "हिन्दी (Hindi)": "प्रोजेक्ट बनाएँ" },
 });
+
+// DHL Express screens (shippingTranslations.ts). Merged per language like the
+// rest, so the few words it shares with the app only fill missing languages.
+mergeIntoTranslations(SHIPPING_TRANSLATIONS);
