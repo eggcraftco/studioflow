@@ -2122,7 +2122,7 @@ function relativeTime(ms: number): string {
 function MessagesStyles() {
   return (
     <style jsx global>{`
-      .messages-shell { display: flex; height: calc(100vh - 64px); background: var(--background); color: var(--text); }
+      .messages-shell { display: flex; height: 100%; min-height: 480px; background: var(--background); color: var(--text); }
       .thread-panel { width: 320px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
       .thread-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); }
       .thread-panel__header h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--text); }
