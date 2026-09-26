@@ -128,12 +128,11 @@ const NAV_ITEMS: Array<
   { href: "/customers", label: "Customers", icon: "customers" },
   { href: "/inventory", label: "Inventory", icon: "files" },
   { href: "/files", label: "Files", icon: "files" },
+  // One entry for both conversations. /messages is the team talking to itself and
+  // /inbox is a CUSTOMER writing to the workshop; they stay two separate tabs
+  // inside the page (components/MessagesTabs.tsx), never one list, because a
+  // stranger's message must never be read — or acted on — as a colleague's.
   { href: "/messages", label: "Messages", icon: "messages" },
-  // Two different conversations, kept two entries apart on purpose. Messages is
-  // the team talking to itself; Inbox is a CUSTOMER talking to the workshop,
-  // and a stranger's message must never be read — or acted on — as if it were a
-  // colleague's. That separation is the whole safety boundary between them.
-  { href: "/inbox", label: "Inbox", icon: "messages" },
   { href: "/quick-reply", label: "AI Replies", icon: "reply" },
   { href: "/settings", label: "Settings", icon: "settings" },
   { href: "/admin", label: "Insights", icon: "insights" },
@@ -2663,7 +2662,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
                 const active =
                   pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
+                  pathname.startsWith(`${item.href}/`) ||
+                  (item.href === "/messages" && (pathname === "/inbox" || pathname.startsWith("/inbox/")));
                 const showMsgBadge = item.href === "/messages" && messageUnreadCount > 0;
                 const showNotesBadge = item.href === "/notes" && notesReminderCount > 0;
                 return (

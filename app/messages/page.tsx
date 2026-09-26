@@ -9,6 +9,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
+import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
@@ -645,8 +646,9 @@ export default function MessagesPage() {
     <AppShell>
       <div className={`messages-shell${isPhoneLayout ? (phoneShowingConversation ? " phone-show-conv" : " phone-show-list") : ""}`}>
         <aside className="thread-panel">
+          <MessagesTabs active="team" language={language} companyId={workspace?.id} teamUnread={unreadCount} />
           <div className="thread-panel__header">
-            <h1>Messages</h1>
+            <h1>{t("Team")}</h1>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {unreadCount > 0 && <span className="badge-pill">{unreadCount}</span>}
               {canEditWorkspace && (

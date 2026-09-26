@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   loadCustomerPickerOptions,
@@ -303,13 +304,17 @@ export function InboxContent({
 
   return (
     <div className="inbox-page">
-      <header className="inbox-head">
-        <h1>{t("Inbox")}</h1>
-        <p className="inbox-sub">{t("Messages your customers sent to the workshop.")}</p>
-      </header>
-
       <div className="inbox-layout">
         <aside className="inbox-list" aria-label={t("Conversations")}>
+          <MessagesTabs
+            active="customers"
+            language={language}
+            customerUnread={rows ? rows.filter((row) => row.unread).length : undefined}
+          />
+          <header className="inbox-head">
+            <h1>{t("Customers")}</h1>
+            <p className="inbox-sub">{t("Messages your customers sent to the workshop.")}</p>
+          </header>
           {listError ? (
             // A refused read is not an empty list, so the empty state below does
             // not render underneath this.

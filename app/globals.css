@@ -31743,3 +31743,80 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 @media (max-width: 720px) {
   .inbox-link-columns { grid-template-columns: 1fr; }
 }
+/* ==== Messages: one place, two tabs (components/MessagesTabs.tsx) ====
+   Customers (the WhatsApp inbox, /inbox) and Team (/messages) sit side by side
+   at the top of the conversation list, each with its own unread count. */
+.msg-tabs { display: flex; gap: 6px; padding: 12px 12px 0; }
+.msg-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #d8d8de);
+  color: var(--text, #111);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: transparent;
+}
+.msg-tab:hover { background: rgba(127, 127, 127, 0.08); }
+.msg-tab:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+.msg-tab.is-active { background: var(--accent, #2563eb); border-color: var(--accent, #2563eb); color: #fff; }
+.msg-tab-channel { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 1px 6px; border-radius: 999px; background: rgba(37, 211, 102, 0.16); color: #128c7e; }
+.msg-tab.is-active .msg-tab-channel { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.msg-tab-count { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.4; text-align: center; }
+
+/* ==== Customer inbox: the same two panes as Team ====
+   List on the left under the tabs, the conversation on the right, the reply box
+   pinned to the bottom of the conversation so it cannot scroll out of sight. */
+.inbox-page { height: calc(100vh - 64px); background: var(--background, #f5f5f7); color: var(--text, #111); }
+.inbox-layout { display: flex; height: 100%; min-height: 0; }
+.inbox-list { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--surface, #fff); border-right: 1px solid var(--border, #d8d8de); overflow-y: auto; }
+.inbox-head { padding: 12px 16px; border-bottom: 1px solid var(--border, #d8d8de); }
+.inbox-head h1 { margin: 0; font-size: 18px; }
+.inbox-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted, #6b6b76); }
+.inbox-list ul { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.inbox-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label time" "preview preview";
+  gap: 2px 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.inbox-row:hover { background: rgba(127, 127, 127, 0.08); }
+.inbox-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
+.inbox-row-open { background: rgba(37, 99, 235, 0.1); }
+.inbox-row-label { grid-area: label; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.inbox-row-preview { grid-area: preview; font-size: 13px; color: var(--muted, #6b6b76); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-row-time { grid-area: time; font-size: 11px; color: var(--muted, #6b6b76); }
+.inbox-unread { color: #2563eb; font-size: 10px; }
+.inbox-thread { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.inbox-thread-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); }
+.inbox-thread-head strong { font-size: 15px; margin-right: 4px; }
+.inbox-messages { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.inbox-msg { max-width: 72%; padding: 8px 12px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; }
+.inbox-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-msg-in { align-self: flex-start; background: var(--surface, #fff); border: 1px solid var(--border, #d8d8de); border-bottom-left-radius: 4px; }
+.inbox-msg-out { align-self: flex-end; background: rgba(37, 211, 102, 0.18); border-bottom-right-radius: 4px; }
+.inbox-msg-untrusted { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-msg-tag { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted, #6b6b76); margin-bottom: 2px; }
+.inbox-msg-time { font-size: 10px; color: var(--muted, #6b6b76); align-self: flex-end; }
+.inbox-thread > .inbox-notice, .inbox-list > .inbox-notice { padding: 16px; margin: 0; color: var(--muted, #6b6b76); }
+.inbox-thread .inbox-reply { position: sticky; bottom: 0; margin-top: 0; padding: 12px 16px; background: var(--surface, #fff); border-top: 1px solid var(--border, #d8d8de); }
+@media (max-width: 720px) {
+  .inbox-page { height: auto; }
+  .inbox-layout { flex-direction: column; }
+  .inbox-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border, #d8d8de); max-height: 45vh; }
+  .inbox-msg { max-width: 88%; }
+}
