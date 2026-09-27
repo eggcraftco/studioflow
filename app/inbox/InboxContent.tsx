@@ -103,6 +103,18 @@ function replyWindowShut(replyWindow: CustomerInboxThread["replyWindow"], nowMs:
   return true;
 }
 
+/** Instagram's limit for a text message: 1000 bytes of UTF-8, not characters (Meta). The server checks it too. */
+const INSTAGRAM_MAX_REPLY_BYTES = 1000;
+
+/** Why an Instagram thread offers no composer, from the server's word. Keys: the caller translates. */
+function instagramReplyNotice(reason: string | undefined): string {
+  switch (reason) {
+    case "instagram_not_connected": return "Connect this workspace's Instagram account in Settings to reply from NivaDesk.";
+    case "instagram_reconnect": return "Instagram needs the account connected again before NivaDesk can reply. Open Settings, Customer Channels.";
+    default: return "Replies on Instagram are not available in NivaDesk yet. Answer in the Instagram app.";
+  }
+}
+
 /**
  * What a reply's delivery status says under the bubble. Keys, not sentences:
  * the caller translates. Unknown or empty says nothing rather than guessing.
@@ -141,7 +153,15 @@ function rowPreview(row: CustomerInboxRow, t: (text: string) => string): string 
 }
 
 /** Why a reply failed, in words a person can act on. */
-function failureReason(errorClass: string): string {
+function failureReason(errorClass: string, medium = ""): string {
+  if (medium === "instagram") {
+    switch (errorClass) {
+      case "permission": return "The 24-hour window may have closed, or this person cannot receive messages from this account.";
+      case "auth": return "The Instagram connection needs to be connected again.";
+      case "transient": return "Instagram had a temporary problem. Try again in a moment.";
+      default: return "Instagram did not deliver this reply.";
+    }
+  }
   switch (errorClass) {
     case "permission": return "The 24-hour window may have closed, or this number cannot receive WhatsApp messages.";
     case "auth": return "The WhatsApp connection needs to be reconnected.";
@@ -179,12 +199,15 @@ export function InboxContent({
   // Whether the WhatsApp line needs renewing, read once per workspace. A failure
   // to read it hides the banner rather than inventing one.
   const [whatsappNeedsRenewal, setWhatsappNeedsRenewal] = useState(false);
+  // The channels this workspace has, for the Messages tab's channel name.
+  const [statusChannels, setStatusChannels] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
     loadCustomerChannelStatus(workspace.id)
       .then((status) => {
         if (!alive) return;
         setWhatsappNeedsRenewal(status.cards.some((card) => card.channel === "whatsapp" && card.state === "reconnect_required"));
+        setStatusChannels(status.cards.filter((card) => card.state !== "not_connected" && card.state !== "unavailable").map((card) => card.channel));
       })
       .catch(() => { if (alive) setWhatsappNeedsRenewal(false); });
     return () => { alive = false; };
@@ -222,6 +245,12 @@ export function InboxContent({
   const ticket = useRef(0);
 
   const mayLink = canLinkForRole(workspace.role);
+  // An Instagram thread is answered on Instagram, and only while the server says
+  // the workspace's account can send (replyChannel); a server without the field
+  // reads as not answerable, as before Instagram replies existed.
+  const isInstagramThread = thread?.channelMedium === "instagram";
+  const instagramReady = isInstagramThread && thread?.replyChannel?.available === true;
+  const replyBytes = isInstagramThread ? new TextEncoder().encode(replyText.trim()).length : 0;
   // Erasing a customer's conversation is the owner's alone; the server checks again.
   const mayErase = normalizeWorkspaceRole(workspace.role) === "owner";
   const [eraseBusy, setEraseBusy] = useState(false);
@@ -398,7 +427,11 @@ export function InboxContent({
 
   const eraseThread = useCallback(async () => {
     if (!openId || eraseBusy) return;
-    if (!window.confirm(t("Delete this conversation and all its messages from NivaDesk? This cannot be undone. The customer's phone and WhatsApp keep their own copies."))) return;
+    // Deleting here does not reach the provider: say where the conversation stays.
+    const confirmText = isInstagramThread
+      ? t("Delete this conversation and all its messages from NivaDesk? This cannot be undone. The conversation stays in Instagram, for the customer and for this account.")
+      : t("Delete this conversation and all its messages from NivaDesk? This cannot be undone. The customer's phone and WhatsApp keep their own copies.");
+    if (!window.confirm(confirmText)) return;
     setEraseBusy(true);
     setEraseNotice("");
     try {
@@ -412,7 +445,7 @@ export function InboxContent({
     } finally {
       setEraseBusy(false);
     }
-  }, [openId, eraseBusy, workspace.id, loadList, t]);
+  }, [openId, eraseBusy, isInstagramThread, workspace.id, loadList, t]);
 
   const submitReply = useCallback(async () => {
     const body = replyText.trim();
@@ -470,6 +503,7 @@ export function InboxContent({
               ? rows.filter((row) => row.unread).length
               : undefined}
             companyId={workspace.id}
+            customerChannels={[...statusChannels, ...(rows ?? []).map((row) => row.channelMedium || "")]}
           />
           <header className="inbox-head">
             <h1>{t("Customers")}</h1>
@@ -874,38 +908,49 @@ export function InboxContent({
                       ) : null}
                     </span>
                     {message.direction === "outbound" && message.deliveryStatus === "failed" ? (
-                      <span className="inbox-msg-failure" role="note">{t(failureReason(message.errorClass))}</span>
+                      <span className="inbox-msg-failure" role="note">{t(failureReason(message.errorClass, thread.channelMedium))}</span>
                     ) : null}
                   </li>
                 ))}
               </ol>
-              {thread.channelMedium === "instagram" ? (
-                // Replies on Instagram are not built; the server refuses them too
-                // (customerReplySender.js, channel_not_supported). No composer,
-                // no "Send on WhatsApp" on a thread that did not come from WhatsApp.
-                <p className="inbox-notice" role="status">{t("Replies on Instagram are not available in NivaDesk yet. Answer in the Instagram app.")}</p>
+              {isInstagramThread && !instagramReady ? (
+                // The server says whether an Instagram reply can leave now
+                // (readCustomerInboxConversation → replyChannel) and refuses one
+                // that cannot. No composer, and never "Send on WhatsApp", on a
+                // thread that did not come from WhatsApp.
+                <p className="inbox-notice" role="status">{t(instagramReplyNotice(thread.replyChannel?.reason))}</p>
               ) : mayLink && replyWindowShut(thread.replyWindow, clock) ? (
                 <div className="inbox-notice inbox-reply-closed" role="status">
-                  <p>
-                    {thread.replyWindow?.state === "none"
-                      ? t("There is no open reply window for this conversation. WhatsApp only allows a free-form reply within 24 hours of the customer's last message.")
-                      : t("The 24-hour reply window has closed. WhatsApp only allows a free-form reply within 24 hours of the customer's last message — the customer has to write again before you can answer here.")}
-                  </p>
-                  <p>{t("Approved templates are not set up yet.")}</p>
+                  {isInstagramThread ? (
+                    <p>
+                      {thread.replyWindow?.state === "none"
+                        ? t("There is no open reply window for this conversation. Instagram only allows a reply within 24 hours of the customer's last message.")
+                        : t("The 24-hour reply window has closed. Instagram only allows a reply within 24 hours of the customer's last message — the customer has to write again before you can answer here.")}
+                    </p>
+                  ) : (
+                    <>
+                      <p>
+                        {thread.replyWindow?.state === "none"
+                          ? t("There is no open reply window for this conversation. WhatsApp only allows a free-form reply within 24 hours of the customer's last message.")
+                          : t("The 24-hour reply window has closed. WhatsApp only allows a free-form reply within 24 hours of the customer's last message — the customer has to write again before you can answer here.")}
+                      </p>
+                      <p>{t("Approved templates are not set up yet.")}</p>
+                    </>
+                  )}
                 </div>
               ) : mayLink ? (
                 <form
                   className="inbox-reply"
-                  aria-label={t("Reply on WhatsApp")}
+                  aria-label={isInstagramThread ? t("Reply on Instagram") : t("Reply on WhatsApp")}
                   onSubmit={(event) => { event.preventDefault(); void submitReply(); }}
                 >
                   <textarea
                     className="inbox-reply-text"
                     value={replyText}
-                    maxLength={4096}
+                    maxLength={isInstagramThread ? INSTAGRAM_MAX_REPLY_BYTES : 4096}
                     rows={3}
                     placeholder={t("Write a reply…")}
-                    aria-label={t("Reply on WhatsApp")}
+                    aria-label={isInstagramThread ? t("Reply on Instagram") : t("Reply on WhatsApp")}
                     disabled={replyBusy}
                     onChange={(event) => {
                       setReplyText(event.target.value);
@@ -919,14 +964,30 @@ export function InboxContent({
                       <button type="button" disabled={replyBusy} onClick={() => void submitReply()}>{t("Try again")}</button>
                     </div>
                   ) : null}
+                  {isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES ? (
+                    <p className="inbox-notice inbox-reply-error" role="alert">
+                      {t("That reply is too long for Instagram, which allows 1000 bytes; some characters, such as accented letters, use more than one byte.")}
+                    </p>
+                  ) : null}
                   <div className="inbox-reply-actions">
                     <p className="inbox-reply-hint">
                       {thread.replyWindow?.state === "open" && thread.replyWindow.closesAtMs
                         ? t("Free replies are open until {time}.").replace("{time}", timeLabel(thread.replyWindow.closesAtMs, language))
-                        : t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}
+                        : isInstagramThread
+                          ? t("Instagram allows a reply within 24 hours of the customer's last message.")
+                          : t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}
+                      {isInstagramThread ? (
+                        <span className="inbox-reply-bytes" aria-live="polite">
+                          {" · "}{t("{count} of 1000 bytes").replace("{count}", String(replyBytes))}
+                        </span>
+                      ) : null}
                     </p>
-                    <button type="submit" className="inbox-reply-send" disabled={replyBusy || !replyText.trim()}>
-                      {replyBusy ? t("Sending…") : t("Send on WhatsApp")}
+                    <button
+                      type="submit"
+                      className="inbox-reply-send"
+                      disabled={replyBusy || !replyText.trim() || (isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES)}
+                    >
+                      {replyBusy ? t("Sending…") : isInstagramThread ? t("Send on Instagram") : t("Send on WhatsApp")}
                     </button>
                   </div>
                 </form>

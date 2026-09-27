@@ -19,7 +19,8 @@ export function MessagesTabs({
   language,
   companyId,
   customerUnread,
-  teamUnread
+  teamUnread,
+  customerChannels
 }: {
   active: "customers" | "team";
   language: string | null | undefined;
@@ -27,9 +28,12 @@ export function MessagesTabs({
   companyId?: string;
   customerUnread?: number;
   teamUnread?: number;
+  /** The channels the page knows the workspace has ("whatsapp", "instagram"): connected, or a conversation from them in its list. */
+  customerChannels?: string[];
 }) {
   const t = (text: string) => studioT(text, language);
   const [loadedCustomerUnread, setLoadedCustomerUnread] = useState<number | null>(null);
+  const [loadedChannels, setLoadedChannels] = useState<string[]>([]);
 
   useEffect(() => {
     if (customerUnread !== undefined || !companyId) return;
@@ -37,13 +41,26 @@ export function MessagesTabs({
     // A workspace without the customer inbox answers with a refusal; the tab
     // then simply shows no number rather than an error in someone else's page.
     loadCustomerInboxConversations(companyId)
-      .then((rows) => { if (alive) setLoadedCustomerUnread(rows.filter((row) => row.unread).length); })
+      .then((rows) => {
+        if (!alive) return;
+        setLoadedCustomerUnread(rows.filter((row) => row.unread).length);
+        setLoadedChannels(rows.map((row) => row.channelMedium || ""));
+      })
       .catch(() => { if (alive) setLoadedCustomerUnread(null); });
     return () => { alive = false; };
   }, [companyId, customerUnread]);
 
   const customers = customerUnread ?? loadedCustomerUnread ?? 0;
   const team = teamUnread ?? 0;
+  // The tab names its channel while there is only one. WhatsApp is where this
+  // tab began. Once the workspace also has Instagram (connected, or a
+  // conversation from it in the list), a "WhatsApp" chip would say the tab holds
+  // only WhatsApp, and two names do not fit the tab. So the chip goes: each
+  // Instagram conversation carries its own channel name in the list. A page
+  // that passes its channels is the one source; what this tab loaded itself
+  // counts only when no channels were passed. Otherwise a conversation deleted
+  // on the page would keep hiding the chip until reload.
+  const channels = new Set(["whatsapp", ...(customerChannels ?? loadedChannels)].filter(Boolean));
 
   return (
     <nav className="msg-tabs" aria-label={t("Messages")}>
@@ -53,7 +70,7 @@ export function MessagesTabs({
         aria-current={active === "customers" ? "page" : undefined}
       >
         <span>{t("Customers")}</span>
-        <span className="msg-tab-channel">WhatsApp</span>
+        {channels.size === 1 ? <span className="msg-tab-channel">WhatsApp</span> : null}
         {customers > 0 ? <span className="msg-tab-count" aria-label={t("Unread")}>{customers > 99 ? "99+" : customers}</span> : null}
       </Link>
       <Link

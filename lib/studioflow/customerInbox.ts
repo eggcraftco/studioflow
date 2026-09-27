@@ -119,10 +119,19 @@ export type CustomerInboxReplyWindow = {
   reason: string;
 };
 
+/**
+ * Whether a reply can leave on this conversation's channel now, as the server
+ * decided it: an Instagram thread is answerable only while the workspace's own
+ * account is connected. `reason` is the server's word when it is not.
+ */
+export type CustomerInboxReplyChannel = { available: boolean; reason: string };
+
 export type CustomerInboxThread = CustomerInboxRow & {
   messages: CustomerInboxMessage[];
   /** Null when the server predates the window field; the screen then says only the general rule. */
   replyWindow?: CustomerInboxReplyWindow | null;
+  /** Null when the server predates the field: Instagram then reads as not answerable, as before. */
+  replyChannel?: CustomerInboxReplyChannel | null;
 };
 
 export async function loadCustomerInboxConversations(
@@ -191,11 +200,13 @@ export async function loadCustomerInboxThread(
 ): Promise<CustomerInboxThread | null> {
   const call = httpsCallable<
     { companyId: string; conversationId: string; messageLimit?: number },
-    { ok: boolean; conversation: CustomerInboxThread; replyWindow?: CustomerInboxReplyWindow }
+    { ok: boolean; conversation: CustomerInboxThread; replyWindow?: CustomerInboxReplyWindow; replyChannel?: CustomerInboxReplyChannel }
   >(functions, "readCustomerInboxConversation");
   const response = await call({ companyId, conversationId, ...(messageLimit ? { messageLimit } : {}) });
   const conversation = response.data?.conversation ?? null;
-  return conversation ? { ...conversation, replyWindow: response.data?.replyWindow ?? null } : null;
+  return conversation
+    ? { ...conversation, replyWindow: response.data?.replyWindow ?? null, replyChannel: response.data?.replyChannel ?? null }
+    : null;
 }
 
 /**
@@ -350,6 +361,8 @@ export type CustomerChannelLine = {
   lastErrorAtMs: number;
   /** "signup": the business connected it and the owner can renew or disconnect it; "operator": NivaDesk routed it. */
   connectedVia?: "signup" | "operator";
+  /** Whether the server holds a proof that this line belongs to the workspace (the owner's rule, 27 Sep). */
+  verified?: boolean;
 };
 
 /** A channel card: WhatsApp or Instagram, always both, each with its measured state. */
@@ -398,6 +411,62 @@ export async function connectWhatsAppNumber(
   );
   try {
     await call({ companyId, ...signup });
+    return { ok: true };
+  } catch (error) {
+    const reason = refusalReason(error);
+    if (reason) return { ok: false, reason };
+    throw error;
+  }
+}
+
+/**
+ * Start connecting the workspace's own Instagram account: the server signs a
+ * state and answers with Instagram's authorize address, which the page then
+ * opens in the same tab. Instagram sends the person back to Settings with one
+ * word (`?instagram=…`). Owner only; the server checks.
+ */
+export async function startInstagramConnect(companyId: string): Promise<{ ok: true; url: string } | { ok: false; reason: string }> {
+  const call = httpsCallable<{ companyId: string }, { ok: boolean; url: string }>(functions, "startInstagramConnect");
+  try {
+    const response = await call({ companyId });
+    const url = String(response.data?.url || "");
+    // Only Instagram's own authorize page, or an emulator's loopback fake.
+    if (!/^https:\/\/www\.instagram\.com\/oauth\/authorize\?/.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\//.test(url)) {
+      return { ok: false, reason: "not_configured" };
+    }
+    return { ok: true, url };
+  } catch (error) {
+    const reason = refusalReason(error);
+    if (reason) return { ok: false, reason };
+    throw error;
+  }
+}
+
+/** Take the workspace's own Instagram account off NivaDesk. Owner only, confirmed; the server checks both. */
+export async function disconnectInstagramAccount(companyId: string): Promise<ChannelChangeResult & { removeInInstagram?: boolean }> {
+  const call = httpsCallable<{ companyId: string; confirm: true }, { ok: boolean; removeInInstagram: boolean }>(
+    functions,
+    "disconnectInstagramAccount"
+  );
+  try {
+    const response = await call({ companyId, confirm: true });
+    return { ok: true, removeInInstagram: Boolean(response.data?.removeInInstagram) };
+  } catch (error) {
+    const reason = refusalReason(error);
+    if (reason) return { ok: false, reason };
+    throw error;
+  }
+}
+
+/**
+ * Ask the server to prove, with Meta, that the workspace's WhatsApp number
+ * belongs to it (the account on record lists the number). Owner only; the
+ * server checks. Nothing on this side decides "connected".
+ */
+export async function verifyWhatsAppLine(companyId: string): Promise<ChannelChangeResult> {
+  const call = httpsCallable<{ companyId: string }, { ok: boolean }>(functions, "verifyWhatsAppLine");
+  try {
+    await call({ companyId });
     return { ok: true };
   } catch (error) {
     const reason = refusalReason(error);
