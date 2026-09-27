@@ -13,7 +13,8 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-export const PRIVACY_POLICY_LAST_UPDATED = "16 June 2026";
+// Set to the day the customer-inbox text (7.1) goes live with release P2.
+export const PRIVACY_POLICY_LAST_UPDATED = "27 September 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -239,6 +240,21 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "We do not claim ownership of your uploaded content. You retain all rights to the content you upload, subject to the rights you grant us to operate and provide the service.",
           "Client Files and cloud-stored message attachments require an active eligible paid plan to open, preview, download, upload, rename, or delete them through the app. If eligible paid access ends, those files may be retained for up to 90 days so access can be restored if the workspace resubscribes during that period; after the retention period they may be deleted."
         ]
+      },
+      {
+        title: "7.1 Your customers' WhatsApp messages (customer inbox)",
+        paragraphs: [
+          "If your workspace connects a WhatsApp Business number, NivaDesk receives the messages your customers send to that number and keeps the replies your team sends from NivaDesk, so that your team can read and answer them in the customer inbox. For these messages your business is the controller, and NivaDesk processes them on your behalf.",
+          "Messages travel through the WhatsApp Business Platform, which is operated by Meta. Meta processes messages and files, and may keep its own copies of them, under Meta's own terms and policies. NivaDesk cannot delete copies held by Meta: deleting a message or a conversation in NivaDesk removes it from NivaDesk only.",
+          "How long NivaDesk keeps them:"
+        ],
+        bullets: [
+          "customer messages and your team's replies are deleted from NivaDesk automatically 90 days after they arrive, and a conversation is deleted with everything in it once its most recent message is 90 days old;",
+          "a photo or PDF a customer sends is copied into NivaDesk only when a member of your team opens it, and that copy is deleted 30 days after the customer sent the file;",
+          "a workspace owner can delete a customer's conversation at any time, which removes it from NivaDesk straight away;",
+          "deleted messages can remain in NivaDesk's database backups for up to 14 days, and deleted file copies can remain recoverable in our cloud storage for up to 7 days, until each of these expires;",
+          "your customer's phone number is not stored in readable form with their messages: the inbox shows only its last four digits, and the full number is kept encrypted only while a reply can still be sent (about a day after their last message)."
+        ]
       }
     ]
   },
@@ -336,6 +352,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "analytics and performance tools;",
       "customer support tools;",
       "email delivery providers;",
+      "messaging platforms your workspace connects, such as the WhatsApp Business Platform operated by Meta, to receive and send your customers' messages;",
       "error monitoring and crash reporting services;",
       "accountants, lawyers, or professional advisers;",
       "authorities where required by law."
@@ -389,6 +406,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "support messages may be kept to help us respond to your request and improve support;",
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
+      "your customers' WhatsApp messages are kept for 90 days, and NivaDesk's copies of files they send for 30 days, as described in section 7.1;",
       "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted."
     ],
     subsections: [
