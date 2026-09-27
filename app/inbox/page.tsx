@@ -8,7 +8,7 @@
 // that proved nothing — so every row here arrives through a callable, and the
 // screen holds no listener at all.
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -71,7 +71,10 @@ export default function InboxPage() {
 
   return (
     <AppShell>
-      <InboxContent workspace={workspace} language={language} />
+      {/* InboxContent reads ?conversation= (a notification's link). */}
+      <Suspense fallback={<LoadingScreen />}>
+        <InboxContent workspace={workspace} language={language} />
+      </Suspense>
     </AppShell>
   );
 }

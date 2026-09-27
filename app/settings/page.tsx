@@ -48,6 +48,7 @@ import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, use
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
+import { CustomerChannelsSection } from "./CustomerChannelsSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -138,6 +139,7 @@ type SettingsSectionId =
   | "team-access"
   | "message-settings"
   | "sms-notifications"
+  | "customer-channels"
   | "support-tickets"
   | "client-domain";
 
@@ -226,6 +228,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
   { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
   { id: "sms-notifications", title: "Customer SMS", appKey: "Customer SMS", description: "Text updates to customers: sender ID, what triggers a message, this month's usage.", icon: "reply", group: "workflowGroup" },
+  { id: "customer-channels", title: "Customer Channels", appKey: "Customer Channels", description: "WhatsApp and Instagram: which line your customers write to, and whether it works.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
   { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
@@ -248,6 +251,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   workflow: "status steps template material headings badges",
   "quick-reply": "ai reply openai api key knowledge tone quick",
   "sms-notifications": "sms text message texts sender id twilio notification trigger calling code customer updates mobile",
+  "customer-channels": "whatsapp instagram channel number connect reconnect inbox customer messages meta",
   financial: "vat tax fee currency corporation margin recalculate decimal",
   "team-access": "role member permission invite seat join request",
   "message-settings": "chat group messaging direct",
@@ -480,6 +484,9 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // that cannot text customers still deserves to be told that is why, and what
   // it would take. The screen itself is read-only for everyone but the owner.
   if (sectionId === "sms-notifications") return allowed("settingsWorkflow");
+  // Customer channels: shown like Customer SMS — a workspace without Messages is
+  // told by the server which plan carries it; the cards are read-only for all.
+  if (sectionId === "customer-channels") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -1124,6 +1131,8 @@ function renderSettingsSection({
       return <MessageSettingsSection workspace={workspace} language={language} />;
     case "sms-notifications":
       return <SmsNotificationsSection workspace={workspace} language={language} />;
+    case "customer-channels":
+      return <CustomerChannelsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":

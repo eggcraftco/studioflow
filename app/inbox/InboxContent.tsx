@@ -25,10 +25,13 @@
 // for the token that conversation was stored with.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { InboxAttachment } from "./InboxAttachment";
 import {
   loadCustomerPickerOptions,
   loadRecentOrders,
@@ -40,7 +43,14 @@ import {
 } from "@/lib/studioflow/firestore";
 import { customerSearchMatches } from "@/lib/studioflow/customers";
 import {
-  loadCustomerInboxConversations,
+  assignCustomerInbox,
+  loadCustomerInboxList,
+  setCustomerInboxLabels,
+  setCustomerInboxStatus,
+  type CustomerInboxFilters,
+  type CustomerInboxMember,
+  deleteCustomerInboxThread,
+  loadCustomerChannelStatus,
   loadCustomerInboxThread,
   markCustomerInboxThreadRead,
   linkCustomerInboxThread,
@@ -53,7 +63,9 @@ import {
 function timeLabel(ms: number, language: string | null | undefined) {
   if (!ms) return "";
   try {
-    return new Intl.DateTimeFormat(language === "Türkçe" ? "tr" : "en-GB", {
+    // The reader's own language's date format; English keeps the UK form.
+    const locale = studioLanguageLocale(language);
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
       day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
     }).format(new Date(ms));
   } catch {
@@ -80,6 +92,64 @@ type LinkOptions = {
   orders: OrderListItem[];
 };
 
+/**
+ * Is the free-form reply window shut, as far as the screen can tell?
+ * Unknown (an older server that sends no window) is NOT shut: the screen then
+ * shows the composer with the general rule, and the server still refuses late.
+ */
+function replyWindowShut(replyWindow: CustomerInboxThread["replyWindow"], nowMs: number): boolean {
+  if (!replyWindow) return false;
+  if (replyWindow.state === "open") return Boolean(replyWindow.closesAtMs) && nowMs >= replyWindow.closesAtMs;
+  return true;
+}
+
+/**
+ * What a reply's delivery status says under the bubble. Keys, not sentences:
+ * the caller translates. Unknown or empty says nothing rather than guessing.
+ */
+function deliveryLabel(status: string): string {
+  switch (status) {
+    case "sending": return "Sending reply…";
+    case "sent": return "Sent";
+    case "delivered": return "Delivered to phone";
+    case "read": return "Read by the customer";
+    case "failed": return "Not delivered";
+    case "suppressed": return "Not sent (test environment)";
+    default: return "";
+  }
+}
+
+/**
+ * What a list row says when the last message was a file with no words. Older
+ * rows stored the file's MIME type as the preview ("audio/ogg; codecs=opus");
+ * that is a machine's word, so it is replaced here by the kind, translated.
+ */
+const MIME_LIKE = /^[a-z]+\/[a-z0-9.+-]+(\s*;.*)?$/i;
+function mediaKindWord(messageType: string): string {
+  switch (messageType) {
+    case "image": return "Photo";
+    case "document": return "Document";
+    case "audio": return "Voice message";
+    default: return "Attachment";
+  }
+}
+function rowPreview(row: CustomerInboxRow, t: (text: string) => string): string {
+  const stored = row.lastMessagePreview || "";
+  if (stored && !MIME_LIKE.test(stored)) return stored;
+  if (["image", "document", "audio"].includes(row.lastMessageType)) return t(mediaKindWord(row.lastMessageType));
+  return stored;
+}
+
+/** Why a reply failed, in words a person can act on. */
+function failureReason(errorClass: string): string {
+  switch (errorClass) {
+    case "permission": return "The 24-hour window may have closed, or this number cannot receive WhatsApp messages.";
+    case "auth": return "The WhatsApp connection needs to be reconnected.";
+    case "transient": return "WhatsApp had a temporary problem. Try again in a moment.";
+    default: return "WhatsApp did not deliver this reply.";
+  }
+}
+
 export function InboxContent({
   workspace,
   language
@@ -92,9 +162,40 @@ export function InboxContent({
 
   // null means UNKNOWN. See the header.
   const [rows, setRows] = useState<CustomerInboxRow[] | null>(null);
+  // How the list is narrowed. Applied on the server; the search box waits for
+  // a pause in typing before it asks.
+  const [filters, setFilters] = useState<CustomerInboxFilters>({ status: "open", assignee: "anyone", label: "", query: "", unreadOnly: false });
+  const [queryDraft, setQueryDraft] = useState("");
+  const [members, setMembers] = useState<CustomerInboxMember[]>([]);
+  const [triageBusy, setTriageBusy] = useState(false);
+  const [labelDraft, setLabelDraft] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFilters((current) => (current.query === queryDraft.trim() ? current : { ...current, query: queryDraft.trim() })), 300);
+    return () => window.clearTimeout(timer);
+  }, [queryDraft]);
   const [listError, setListError] = useState("");
   const [openId, setOpenId] = useState("");
   const [thread, setThread] = useState<CustomerInboxThread | null>(null);
+  // Whether the WhatsApp line needs renewing, read once per workspace. A failure
+  // to read it hides the banner rather than inventing one.
+  const [whatsappNeedsRenewal, setWhatsappNeedsRenewal] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadCustomerChannelStatus(workspace.id)
+      .then((status) => {
+        if (!alive) return;
+        setWhatsappNeedsRenewal(status.cards.some((card) => card.channel === "whatsapp" && card.state === "reconnect_required"));
+      })
+      .catch(() => { if (alive) setWhatsappNeedsRenewal(false); });
+    return () => { alive = false; };
+  }, [workspace.id]);
+  // Re-read once a minute so a window that closes while the thread is open
+  // closes on screen too; the server refuses a late reply either way.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [threadError, setThreadError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -121,6 +222,10 @@ export function InboxContent({
   const ticket = useRef(0);
 
   const mayLink = canLinkForRole(workspace.role);
+  // Erasing a customer's conversation is the owner's alone; the server checks again.
+  const mayErase = normalizeWorkspaceRole(workspace.role) === "owner";
+  const [eraseBusy, setEraseBusy] = useState(false);
+  const [eraseNotice, setEraseNotice] = useState("");
   // The picker reuses the app's OWN list paths — the Quick Create customer
   // picker's query and the Orders screen's loader — so it offers exactly what
   // this member is already entitled to see, under the same access keys and the
@@ -133,15 +238,16 @@ export function InboxContent({
     const mine = ++ticket.current;
     setListError("");
     try {
-      const next = await loadCustomerInboxConversations(workspace.id);
+      const next = await loadCustomerInboxList(workspace.id, filters);
       if (mine !== ticket.current) return;
-      setRows(next);
+      setRows(next.conversations);
+      setMembers(next.assignableMembers);
     } catch (failure) {
       if (mine !== ticket.current) return;
       setRows(null);
       setListError(friendlyErrorMessage(failure, t));
     }
-  }, [workspace.id, t]);
+  }, [workspace.id, filters, t]);
 
   useEffect(() => {
     setRows(null);
@@ -170,6 +276,7 @@ export function InboxContent({
     setOpenId(conversationId);
     setThread(null);
     setThreadError("");
+    setEraseNotice("");
     setBusy(true);
     try {
       const next = await loadCustomerInboxThread(workspace.id, conversationId);
@@ -193,6 +300,20 @@ export function InboxContent({
       if (mine === ticket.current) setBusy(false);
     }
   }, [workspace.id, openId, t]);
+
+  // A notification opens one conversation: /inbox?conversation=<id>, the keyed
+  // id the list rows already carry. Opened once per link, after the list has
+  // loaded; the server decides whether this person may read it, exactly as it
+  // does for a click in the list.
+  const searchParams = useSearchParams();
+  const linkedConversation = String(searchParams?.get("conversation") || "");
+  const linkHandled = useRef("");
+  useEffect(() => {
+    if (rows === null || !/^[A-Za-z0-9_-]{8,160}$/.test(linkedConversation)) return;
+    if (linkHandled.current === linkedConversation) return;
+    linkHandled.current = linkedConversation;
+    void openThread(linkedConversation);
+  }, [rows, linkedConversation, openThread]);
 
   /**
    * The records this workspace can offer.
@@ -259,6 +380,40 @@ export function InboxContent({
     }
   }, [openId, customerChoice, orderChoice, workspace.id, loadList, openThread, t]);
 
+  // One path for every triage change: do it, then read the thread and the list
+  // back, so the screen shows what the server stored rather than what was clicked.
+  const runTriage = useCallback(async (change: () => Promise<unknown>) => {
+    if (!openId) return;
+    setTriageBusy(true);
+    try {
+      await change();
+      await openThread(openId);
+      await loadList();
+    } catch (failure) {
+      setThreadError(friendlyErrorMessage(failure, t));
+    } finally {
+      setTriageBusy(false);
+    }
+  }, [openId, openThread, loadList, t]);
+
+  const eraseThread = useCallback(async () => {
+    if (!openId || eraseBusy) return;
+    if (!window.confirm(t("Delete this conversation and all its messages from NivaDesk? This cannot be undone. The customer's phone and WhatsApp keep their own copies."))) return;
+    setEraseBusy(true);
+    setEraseNotice("");
+    try {
+      await deleteCustomerInboxThread(workspace.id, openId);
+      setOpenId("");
+      setThread(null);
+      setEraseNotice(t("Conversation deleted."));
+      await loadList();
+    } catch (failure) {
+      setThreadError(friendlyErrorMessage(failure, t));
+    } finally {
+      setEraseBusy(false);
+    }
+  }, [openId, eraseBusy, workspace.id, loadList, t]);
+
   const submitReply = useCallback(async () => {
     const body = replyText.trim();
     if (!openId || !body) return;
@@ -309,12 +464,61 @@ export function InboxContent({
           <MessagesTabs
             active="customers"
             language={language}
-            customerUnread={rows ? rows.filter((row) => row.unread).length : undefined}
+            // The tab counts every open unread conversation; while the list is
+            // narrowed, the tab loads its own count instead of the filtered one.
+            customerUnread={rows && filters.status === "open" && filters.assignee === "anyone" && !filters.label && !filters.query && !filters.unreadOnly
+              ? rows.filter((row) => row.unread).length
+              : undefined}
+            companyId={workspace.id}
           />
           <header className="inbox-head">
             <h1>{t("Customers")}</h1>
             <p className="inbox-sub">{t("Messages your customers sent to the workshop.")}</p>
           </header>
+          <div className="inbox-toolbar" role="search">
+            <input
+              type="search"
+              className="inbox-search"
+              value={queryDraft}
+              maxLength={60}
+              placeholder={t("Search conversations")}
+              aria-label={t("Search conversations")}
+              onChange={(event) => setQueryDraft(event.target.value)}
+            />
+            <div className="inbox-filter-row">
+              <select
+                aria-label={t("Conversation status")}
+                value={filters.status}
+                onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as CustomerInboxFilters["status"] }))}
+              >
+                <option value="open">{t("Open conversations")}</option>
+                <option value="closed">{t("Closed conversations")}</option>
+                <option value="all">{t("All conversations")}</option>
+              </select>
+              <select
+                aria-label={t("Assigned to")}
+                value={filters.assignee}
+                onChange={(event) => setFilters((current) => ({ ...current, assignee: event.target.value as CustomerInboxFilters["assignee"] }))}
+              >
+                <option value="anyone">{t("Anyone's")}</option>
+                <option value="me">{t("Assigned to me")}</option>
+                <option value="unassigned">{t("Unassigned")}</option>
+              </select>
+              <label className="inbox-unread-only">
+                <input
+                  type="checkbox"
+                  checked={Boolean(filters.unreadOnly)}
+                  onChange={(event) => setFilters((current) => ({ ...current, unreadOnly: event.target.checked }))}
+                />
+                {t("Unread only")}
+              </label>
+            </div>
+            {filters.label ? (
+              <button type="button" className="inbox-chip inbox-chip-active" onClick={() => setFilters((current) => ({ ...current, label: "" }))}>
+                {filters.label} ×
+              </button>
+            ) : null}
+          </div>
           {listError ? (
             // A refused read is not an empty list, so the empty state below does
             // not render underneath this.
@@ -325,7 +529,11 @@ export function InboxContent({
           ) : rows === null ? (
             <p className="inbox-notice">{t("Loading…")}</p>
           ) : rows.length === 0 ? (
-            <p className="inbox-notice">{t("No customer messages yet.")}</p>
+            <p className="inbox-notice">
+              {filters.query || filters.label || filters.unreadOnly || filters.assignee !== "anyone" || filters.status !== "open"
+                ? t("No conversations match these filters.")
+                : t("No customer messages yet.")}
+            </p>
           ) : (
             <ul>
               {rows.map((row) => (
@@ -336,11 +544,36 @@ export function InboxContent({
                     onClick={() => void openThread(row.conversationId)}
                   >
                     <span className="inbox-row-label">
-                      {row.maskedLabel || t("Unknown sender")}
+                      {/* Isolated LTR: in an RTL page "••••0111" would otherwise render reversed. */}
+                      {row.maskedLabel ? <bdi dir="ltr">{row.maskedLabel}</bdi> : t("Unknown sender")}
+                      {/* A channel other than WhatsApp says so: two customers can share four digits. */}
+                      {row.channelMedium && row.channelMedium !== "whatsapp" && row.channelDisplayName ? (
+                        <span className="inbox-row-channel">{row.channelDisplayName}</span>
+                      ) : null}
                       {row.unread ? <span className="inbox-unread" aria-label={t("Unread")}>●</span> : null}
                     </span>
-                    <span className="inbox-row-preview">{row.lastMessagePreview}</span>
+                    <span className="inbox-row-preview" dir="auto">{rowPreview(row, t)}</span>
                     <span className="inbox-row-time">{timeLabel(row.lastMessageAtMs, language)}</span>
+                    {(row.labels && row.labels.length) || row.assigneeUid || row.customerName ? (
+                      <span className="inbox-row-meta">
+                        {row.customerName ? <span className="inbox-row-customer" dir="auto">{row.customerName}</span> : null}
+                        {row.assigneeUid ? (
+                          <span className="inbox-row-assignee">{members.find((m) => m.uid === row.assigneeUid)?.name || t("Assigned")}</span>
+                        ) : null}
+                        {(row.labels || []).slice(0, 3).map((label) => (
+                          <span
+                            key={label}
+                            className="inbox-chip"
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => { event.stopPropagation(); setFilters((current) => ({ ...current, label })); }}
+                            onKeyDown={(event) => { if (event.key === "Enter") { event.stopPropagation(); setFilters((current) => ({ ...current, label })); } }}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               ))}
@@ -350,7 +583,10 @@ export function InboxContent({
 
         <section className="inbox-thread" aria-label={t("Conversation")}>
           {!openId ? (
-            <p className="inbox-notice">{t("Choose a conversation to read it.")}</p>
+            <>
+              {eraseNotice ? <p className="inbox-notice success-copy" role="status">{eraseNotice}</p> : null}
+              <p className="inbox-notice">{t("Choose a conversation to read it.")}</p>
+            </>
           ) : threadError ? (
             <div className="inbox-notice" role="alert">
               <p>{threadError}</p>
@@ -361,7 +597,7 @@ export function InboxContent({
           ) : (
             <>
               <div className="inbox-thread-head">
-                <strong>{thread.maskedLabel || t("Unknown sender")}</strong>
+                <strong>{thread.maskedLabel ? <bdi dir="ltr">{thread.maskedLabel}</bdi> : t("Unknown sender")}</strong>
                 {/* The medium's display name, as the server's vocabulary reads
                     the stored token. Not typed here: the same five letters mean
                     three different things depending on where they are stored,
@@ -391,7 +627,72 @@ export function InboxContent({
                     {t("Link this conversation")}
                   </button>
                 ) : null}
+                {mayErase ? (
+                  <button type="button" className="inbox-erase" disabled={eraseBusy} onClick={() => void eraseThread()}>
+                    {t("Delete conversation")}
+                  </button>
+                ) : null}
               </div>
+
+              {mayLink ? (
+                <div className="inbox-triage" aria-label={t("Conversation status")}>
+                  <button
+                    type="button"
+                    className="inbox-status-toggle"
+                    disabled={triageBusy}
+                    onClick={() => void runTriage(() => setCustomerInboxStatus(workspace.id, openId, thread.status === "closed" ? "open" : "closed"))}
+                  >
+                    {thread.status === "closed" ? t("Reopen conversation") : t("Mark as done")}
+                  </button>
+                  <label className="inbox-assign">
+                    {t("Assign to")}
+                    <select
+                      value={thread.assigneeUid || ""}
+                      disabled={triageBusy}
+                      onChange={(event) => { const value = event.target.value; void runTriage(() => assignCustomerInbox(workspace.id, openId, value)); }}
+                    >
+                      <option value="">{t("Nobody")}</option>
+                      {members.map((member) => <option key={member.uid} value={member.uid}>{member.name}</option>)}
+                    </select>
+                  </label>
+                  <div className="inbox-labels" aria-label={t("Conversation labels")}>
+                    {(thread.labels || []).map((label) => (
+                      <span key={label} className="inbox-chip">
+                        {label}
+                        <button
+                          type="button"
+                          aria-label={`${t("Remove label")} ${label}`}
+                          disabled={triageBusy}
+                          onClick={() => void runTriage(() => setCustomerInboxLabels(workspace.id, openId, (thread.labels || []).filter((l) => l !== label)))}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      className="inbox-label-input"
+                      value={labelDraft}
+                      maxLength={24}
+                      placeholder={t("Add a label")}
+                      aria-label={t("Add a label")}
+                      disabled={triageBusy}
+                      onChange={(event) => setLabelDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" || !labelDraft.trim()) return;
+                        event.preventDefault();
+                        const next = [...(thread.labels || []), labelDraft.trim()];
+                        setLabelDraft("");
+                        void runTriage(() => setCustomerInboxLabels(workspace.id, openId, next));
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (thread.labels && thread.labels.length) || thread.assigneeUid ? (
+                <div className="inbox-triage inbox-triage-readonly">
+                  {thread.assigneeUid ? <span className="inbox-row-assignee">{members.find((m) => m.uid === thread.assigneeUid)?.name || t("Assigned")}</span> : null}
+                  {(thread.labels || []).map((label) => <span key={label} className="inbox-chip">{label}</span>)}
+                </div>
+              ) : null}
 
               {linkOpen ? (
                 <section className="inbox-link" aria-label={t("Link this conversation")}>
@@ -527,6 +828,12 @@ export function InboxContent({
                 </section>
               ) : null}
 
+              {whatsappNeedsRenewal ? (
+                <p className="inbox-notice inbox-renewal" role="alert">
+                  {t("The WhatsApp connection needs to be renewed. Replies will not be sent until then.")}{" "}
+                  <a href="/settings?section=customer-channels">{t("Customer Channels")}</a>
+                </p>
+              ) : null}
               <ol className="inbox-messages">
                 {thread.messages.map((message) => (
                   <li
@@ -539,16 +846,54 @@ export function InboxContent({
                       // own words, and never acted on as an instruction.
                       <blockquote className="inbox-msg-untrusted">
                         <span className="inbox-msg-tag">{t("Customer wrote")}</span>
-                        {message.text ?? t("(no text)")}
+                        {/* Each message keeps its own direction: a Turkish sentence in an
+                            Arabic interface (or the reverse) must not have its punctuation
+                            moved to the wrong end. */}
+                        {message.text || !message.media ? <span dir="auto">{message.text ?? t("(no text)")}</span> : null}
+                        {message.media ? (
+                          <InboxAttachment
+                            key={`${thread.conversationId}:${message.messageId}`}
+                            companyId={workspace.id}
+                            conversationId={thread.conversationId}
+                            messageId={message.messageId}
+                            messageType={message.messageType}
+                            media={message.media}
+                            t={t}
+                          />
+                        ) : null}
                       </blockquote>
                     ) : (
-                      <p>{message.text ?? t("(no text)")}</p>
+                      <p dir="auto">{message.text ?? t("(no text)")}</p>
                     )}
-                    <span className="inbox-msg-time">{timeLabel(message.receivedAtMs, language)}</span>
+                    <span className="inbox-msg-time">
+                      {timeLabel(message.receivedAtMs, language)}
+                      {message.direction === "outbound" && deliveryLabel(message.deliveryStatus) ? (
+                        <span className={`inbox-msg-status inbox-msg-status-${message.deliveryStatus}`}>
+                          {" · "}{t(deliveryLabel(message.deliveryStatus))}
+                        </span>
+                      ) : null}
+                    </span>
+                    {message.direction === "outbound" && message.deliveryStatus === "failed" ? (
+                      <span className="inbox-msg-failure" role="note">{t(failureReason(message.errorClass))}</span>
+                    ) : null}
                   </li>
                 ))}
               </ol>
-              {mayLink ? (
+              {thread.channelMedium === "instagram" ? (
+                // Replies on Instagram are not built; the server refuses them too
+                // (customerReplySender.js, channel_not_supported). No composer,
+                // no "Send on WhatsApp" on a thread that did not come from WhatsApp.
+                <p className="inbox-notice" role="status">{t("Replies on Instagram are not available in NivaDesk yet. Answer in the Instagram app.")}</p>
+              ) : mayLink && replyWindowShut(thread.replyWindow, clock) ? (
+                <div className="inbox-notice inbox-reply-closed" role="status">
+                  <p>
+                    {thread.replyWindow?.state === "none"
+                      ? t("There is no open reply window for this conversation. WhatsApp only allows a free-form reply within 24 hours of the customer's last message.")
+                      : t("The 24-hour reply window has closed. WhatsApp only allows a free-form reply within 24 hours of the customer's last message — the customer has to write again before you can answer here.")}
+                  </p>
+                  <p>{t("Approved templates are not set up yet.")}</p>
+                </div>
+              ) : mayLink ? (
                 <form
                   className="inbox-reply"
                   aria-label={t("Reply on WhatsApp")}
@@ -575,7 +920,11 @@ export function InboxContent({
                     </div>
                   ) : null}
                   <div className="inbox-reply-actions">
-                    <p className="inbox-reply-hint">{t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}</p>
+                    <p className="inbox-reply-hint">
+                      {thread.replyWindow?.state === "open" && thread.replyWindow.closesAtMs
+                        ? t("Free replies are open until {time}.").replace("{time}", timeLabel(thread.replyWindow.closesAtMs, language))
+                        : t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}
+                    </p>
                     <button type="submit" className="inbox-reply-send" disabled={replyBusy || !replyText.trim()}>
                       {replyBusy ? t("Sending…") : t("Send on WhatsApp")}
                     </button>

@@ -34,7 +34,8 @@ messaging.onBackgroundMessage((payload) => {
     icon: "/icon.png",
     badge: "/icon.png",
     data,
-    tag: data.threadId || data.messageId || undefined,
+    // One tray entry per customer conversation, per team thread.
+    tag: data.conversationId || data.threadId || data.messageId || undefined,
   });
 });
 
@@ -42,13 +43,22 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
   let targetUrl = "/messages";
-  if (data.threadId) targetUrl = "/messages";
+  if (data.route === "customerInbox") {
+    // A customer wrote: the customer inbox, on that conversation.
+    targetUrl = data.conversationId ? "/inbox?conversation=" + encodeURIComponent(data.conversationId) : "/inbox";
+  } else if (data.threadId) targetUrl = "/messages";
   else if (data.ticketId) targetUrl = "/settings?section=support";
   else if (data.orderId) targetUrl = "/orders";
+  const targetPath = targetUrl.split("?")[0];
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes(targetUrl) && "focus" in client) return client.focus();
+        if (!client.url.includes(targetPath) || !("focus" in client)) continue;
+        // Already on the page: move it to the conversation, then bring it forward.
+        if (targetUrl !== targetPath && "navigate" in client) {
+          return client.navigate(targetUrl).then((moved) => (moved || client).focus());
+        }
+        return client.focus();
       }
       if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
     }),

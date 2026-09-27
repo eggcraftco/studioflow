@@ -164,7 +164,14 @@ export function NotificationsDrawer({
   const handleOpenNotification = (n: StudioActivityNotification) => {
     void handleMarkRead(n.id);
     const route = n.route.trim().toLowerCase();
-    if (route === "messagethread" || n.threadId.trim()) {
+    if (route === "customerinbox") {
+      // A customer wrote on WhatsApp: the customer inbox, on that conversation.
+      // The row carries nothing about the customer; the server decides again,
+      // when the thread is read, whether this person may see it.
+      const conversationId = n.conversationId.trim();
+      router.push(conversationId ? `/inbox?conversation=${encodeURIComponent(conversationId)}` : "/inbox");
+      onClose();
+    } else if (route === "messagethread" || n.threadId.trim()) {
       router.push("/messages");
       onClose();
     } else if (route === "supportticket" || n.ticketId.trim()) {

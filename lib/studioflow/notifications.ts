@@ -22,6 +22,9 @@ export type StudioActivityNotification = {
   ticketType: string;
   threadId: string;
   messageId: string;
+  /** A customer-inbox notification: the conversation to open (the keyed id the inbox list carries). */
+  conversationId: string;
+  channel: string;
   senderUid: string;
   senderName: string;
   senderEmail: string;
@@ -83,6 +86,8 @@ function notificationFromDoc(id: string, data: Record<string, unknown>): StudioA
     ticketType: str(data.ticketType),
     threadId: str(data.threadId),
     messageId: str(data.messageId),
+    conversationId: str(data.conversationId),
+    channel: str(data.channel),
     senderUid: str(data.senderUid),
     senderName: str(data.senderName),
     senderEmail: str(data.senderEmail),
@@ -251,6 +256,8 @@ export function iconForType(key: NotificationTypeKey | string): string {
 }
 
 export function notificationStackKey(notification: StudioActivityNotification): string {
+  // One customer writing five times is one stack, not five rows.
+  if (notification.conversationId.trim()) return `conversation:${notification.conversationId.trim()}`;
   if (notification.threadId.trim()) return `thread:${notification.threadId.trim()}`;
   if (notification.orderId.trim()) return `order:${notification.orderId.trim()}`;
   if (notification.ticketId.trim()) return `ticket:${notification.ticketId.trim()}`;
