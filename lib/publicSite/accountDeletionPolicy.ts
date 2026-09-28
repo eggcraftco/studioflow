@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const ACCOUNT_DELETION_POLICY_LAST_UPDATED = "13 May 2026";
+export const ACCOUNT_DELETION_POLICY_LAST_UPDATED = "28 September 2026";
 
 export const ACCOUNT_DELETION_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -99,6 +99,24 @@ export const ACCOUNT_DELETION_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "If you uploaded files or added client/customer data to a NivaDesk workspace, deletion depends on whether the content belongs to your personal account or to a shared business workspace.",
       "If the workspace is controlled by your business, workspace owner, or employer, we may need instructions from the workspace owner before deleting shared business records or client files.",
       "If you are the workspace owner and request full workspace deletion, we may delete or anonymise workspace content subject to the exceptions in this policy, our Privacy Policy, and any applicable Data Processing Agreement."
+    ],
+    subsections: [
+      {
+        title: "8.1 Customer messages from WhatsApp and Instagram",
+        paragraphs: [
+          "If your workspace connected WhatsApp or Instagram, the messages your customers sent through them belong to the workspace, not to any one member's account. What happens to them depends on what you delete:"
+        ],
+        bullets: [
+          "if you delete your own user account and you are a member of a workspace someone else owns, you are removed from that workspace and its customer messages are not deleted;",
+          "if you own the workspace, deleting your account (Settings → Account → Delete account) deletes the workspace's customer conversations and their reply windows, NivaDesk's copies of files customers sent, its WhatsApp and Instagram connections and access tokens, and the workspace's other records (orders, customers, notes, files, settings). This is different from Delete orders and customers in Settings, which removes orders and customers only and leaves the account, the connections and the customer conversations in place;",
+          "to delete one customer's conversation, open Messages → Customers, choose the conversation and choose Delete conversation. Only the workspace owner can do this, and it removes the conversation and everything in it from NivaDesk straight away;",
+          "to stop NivaDesk receiving an Instagram account's messages, go to Settings → Customer Channels and choose Disconnect: this deletes NivaDesk's access token and the connection at once and keeps the conversations. If you instead remove NivaDesk in your Instagram account's settings, under the apps and websites connected to it, Instagram sends NivaDesk a data deletion request and NivaDesk also deletes that account's customer conversations;",
+          "to take a WhatsApp number off NivaDesk, email contact@nivadesk.co.uk;",
+          "otherwise customer messages are deleted automatically 90 days after they arrive, and NivaDesk's copies of files customers send on WhatsApp 30 days after they were sent;",
+          "if you are a customer who wrote to a business that uses NivaDesk, ask that business to delete the conversation, or email contact@nivadesk.co.uk and we will pass your request to the business, which controls those messages;",
+          "copies held by Meta are governed by Meta's own policies; deleting in NivaDesk does not remove them."
+        ]
+      }
     ]
   },
   {
@@ -158,6 +176,8 @@ type LocalizedDeletionDraft = {
   introParagraphs: string[];
   sectionTitles: string[];
   sectionSummaries: string[];
+  // 8.1: customer messages from WhatsApp and Instagram, under "Uploaded files and client data".
+  channelsNotice?: { title: string; paragraphs: string[]; bullets: string[] };
 };
 
 function buildLocalizedDeletionPolicy(copy: LocalizedDeletionDraft): PrivacyPolicySection[] {
@@ -168,13 +188,32 @@ function buildLocalizedDeletionPolicy(copy: LocalizedDeletionDraft): PrivacyPoli
     },
     ...copy.sectionTitles.map((title, index) => ({
       title: `${index + 1}. ${title}`,
-      paragraphs: [copy.sectionSummaries[index] ?? ""]
+      paragraphs: [copy.sectionSummaries[index] ?? ""],
+      ...(index === 7 && copy.channelsNotice
+        ? { subsections: [{ title: `8.1 ${copy.channelsNotice.title}`, paragraphs: copy.channelsNotice.paragraphs, bullets: copy.channelsNotice.bullets }] }
+        : {})
     }))
   ];
 }
 
 const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionDraft>> = {
   Türkçe: {
+    channelsNotice: {
+      title: "WhatsApp ve Instagram'dan gelen müşteri mesajları",
+      paragraphs: [
+        "Workspace'iniz WhatsApp veya Instagram'ı bağladıysa, müşterilerinizin bu kanallardan gönderdiği mesajlar tek bir üyenin hesabına değil workspace'e aittir. Onlara ne olacağı neyi sildiğinize bağlıdır:"
+      ],
+      bullets: [
+        "kendi kullanıcı hesabınızı silerseniz ve başkasına ait bir workspace'in üyesiyseniz, o workspace'ten çıkarılırsınız; workspace'in müşteri mesajları silinmez;",
+        "workspace'in sahibiyseniz, hesabınızı silmek (Ayarlar → Hesap → Hesabı sil) workspace'in müşteri sohbetlerini ve yanıt pencerelerini, müşterilerin gönderdiği dosyaların NivaDesk'teki kopyalarını, WhatsApp ve Instagram bağlantılarını ve erişim anahtarlarını, ayrıca workspace'in diğer kayıtlarını (siparişler, müşteriler, notlar, dosyalar, ayarlar) siler. Bu, Ayarlar'daki Siparişleri ve müşterileri sil işleminden farklıdır; o işlem yalnızca siparişleri ve müşterileri kaldırır, hesabı, bağlantıları ve müşteri sohbetlerini yerinde bırakır;",
+        "tek bir müşterinin sohbetini silmek için Mesajlar → Müşteriler'i açın, sohbeti seçin ve Sohbeti sil'i seçin. Bunu yalnızca workspace sahibi yapabilir; sohbet, içindeki her şeyle birlikte NivaDesk'ten hemen kaldırılır;",
+        "NivaDesk'in bir Instagram hesabının mesajlarını almasını durdurmak için Ayarlar → Müşteri Kanalları'na gidin ve Bağlantıyı kes'i seçin: bu, NivaDesk'in erişim anahtarını ve bağlantıyı anında siler, sohbetleri ise korur. Bunun yerine NivaDesk'i Instagram hesabınızın ayarlarındaki bağlı uygulamalar ve web siteleri bölümünden kaldırırsanız, Instagram NivaDesk'e bir veri silme talebi gönderir ve NivaDesk o hesabın müşteri sohbetlerini de siler;",
+        "bir WhatsApp numarasını NivaDesk'ten kaldırmak için contact@nivadesk.co.uk adresine e-posta gönderin;",
+        "bunların dışında müşteri mesajları geldikten 90 gün sonra, müşterilerin WhatsApp'tan gönderdiği dosyaların NivaDesk'teki kopyaları ise gönderildikten 30 gün sonra otomatik olarak silinir;",
+        "NivaDesk kullanan bir işletmeye yazan bir müşteriyseniz, sohbeti silmesini o işletmeden isteyin veya contact@nivadesk.co.uk adresine yazın; talebinizi, bu mesajların denetleyicisi olan işletmeye iletiriz;",
+        "Meta'nın elindeki kopyalar Meta'nın kendi politikalarına tabidir; NivaDesk'te silmek bunları kaldırmaz."
+      ]
+    },
     lastUpdatedLabel: "Son güncelleme",
     introTitle: "Hesap Silme Politikası",
     introParagraphs: [
@@ -215,6 +254,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   Deutsch: {
+    channelsNotice: {
+      title: "Kundennachrichten aus WhatsApp und Instagram",
+      paragraphs: [
+        "Wenn Ihr Workspace WhatsApp oder Instagram verbunden hat, gehören die Nachrichten, die Ihre Kunden darüber gesendet haben, zum Workspace und nicht zum Konto eines einzelnen Mitglieds. Was mit ihnen geschieht, hängt davon ab, was Sie löschen:"
+      ],
+      bullets: [
+        "wenn Sie Ihr eigenes Benutzerkonto löschen und Mitglied eines Workspace sind, der jemand anderem gehört, werden Sie aus diesem Workspace entfernt; seine Kundennachrichten werden nicht gelöscht;",
+        "wenn Ihnen der Workspace gehört, löscht das Löschen Ihres Kontos (Einstellungen → Konto → Konto löschen) die Kundenunterhaltungen und Antwortfenster des Workspace, die Kopien von Kundendateien bei NivaDesk, seine WhatsApp- und Instagram-Verbindungen und Zugriffstoken sowie die übrigen Daten des Workspace (Aufträge, Kunden, Notizen, Dateien, Einstellungen). Das ist etwas anderes als Aufträge und Kunden löschen in den Einstellungen, das nur Aufträge und Kunden entfernt und das Konto, die Verbindungen und die Kundenunterhaltungen bestehen lässt;",
+        "um die Unterhaltung eines einzelnen Kunden zu löschen, öffnen Sie Nachrichten → Kunden, wählen die Unterhaltung und dann Unterhaltung löschen. Das kann nur der Inhaber des Workspace; die Unterhaltung wird mit allem darin sofort aus NivaDesk entfernt;",
+        "damit NivaDesk die Nachrichten eines Instagram-Kontos nicht mehr empfängt, gehen Sie zu Einstellungen → Kundenkanäle und wählen Trennen: das löscht das Zugriffstoken von NivaDesk und die Verbindung sofort und behält die Unterhaltungen. Wenn Sie NivaDesk stattdessen in den Einstellungen Ihres Instagram-Kontos unter den verbundenen Apps und Websites entfernen, sendet Instagram an NivaDesk eine Anfrage zur Datenlöschung, und NivaDesk löscht auch die Kundenunterhaltungen dieses Kontos;",
+        "um eine WhatsApp-Nummer von NivaDesk zu entfernen, schreiben Sie an contact@nivadesk.co.uk;",
+        "andernfalls werden Kundennachrichten 90 Tage nach ihrem Eingang automatisch gelöscht, und die Kopien von Dateien, die Kunden über WhatsApp senden, 30 Tage nachdem sie gesendet wurden;",
+        "wenn Sie ein Kunde sind, der einem Unternehmen geschrieben hat, das NivaDesk nutzt, bitten Sie dieses Unternehmen, die Unterhaltung zu löschen, oder schreiben Sie an contact@nivadesk.co.uk; wir leiten Ihre Anfrage an das Unternehmen weiter, das für diese Nachrichten verantwortlich ist;",
+        "Kopien bei Meta unterliegen den eigenen Richtlinien von Meta; das Löschen in NivaDesk entfernt sie nicht."
+      ]
+    },
     lastUpdatedLabel: "Zuletzt aktualisiert",
     introTitle: "Richtlinie zur Kontolöschung",
     introParagraphs: [
@@ -255,6 +310,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   Français: {
+    channelsNotice: {
+      title: "Messages de clients reçus via WhatsApp et Instagram",
+      paragraphs: [
+        "Si votre espace de travail a connecté WhatsApp ou Instagram, les messages que vos clients ont envoyés par ces canaux appartiennent à l'espace de travail, et non au compte d'un membre en particulier. Ce qu'il en advient dépend de ce que vous supprimez :"
+      ],
+      bullets: [
+        "si vous supprimez votre propre compte utilisateur et que vous êtes membre d'un espace de travail appartenant à quelqu'un d'autre, vous êtes retiré de cet espace de travail ; ses messages de clients ne sont pas supprimés ;",
+        "si l'espace de travail vous appartient, la suppression de votre compte (Paramètres → Compte → Supprimer le compte) supprime les conversations avec les clients et leurs fenêtres de réponse, les copies conservées par NivaDesk des fichiers envoyés par les clients, les connexions WhatsApp et Instagram et leurs jetons d'accès, ainsi que les autres données de l'espace de travail (commandes, clients, notes, fichiers, paramètres). Ce n'est pas la même chose que Supprimer les commandes et les clients dans les Paramètres, qui ne retire que les commandes et les clients et laisse en place le compte, les connexions et les conversations avec les clients ;",
+        "pour supprimer la conversation d'un seul client, ouvrez Messages → Clients, choisissez la conversation puis Supprimer la conversation. Seul le propriétaire de l'espace de travail peut le faire ; la conversation et tout ce qu'elle contient sont retirés de NivaDesk immédiatement ;",
+        "pour que NivaDesk cesse de recevoir les messages d'un compte Instagram, allez dans Paramètres → Canaux clients et choisissez Déconnecter : cela supprime aussitôt le jeton d'accès de NivaDesk et la connexion, et conserve les conversations. Si vous retirez plutôt NivaDesk dans les paramètres de votre compte Instagram, parmi les applications et sites web connectés, Instagram envoie à NivaDesk une demande de suppression de données et NivaDesk supprime aussi les conversations avec les clients de ce compte ;",
+        "pour retirer un numéro WhatsApp de NivaDesk, écrivez à contact@nivadesk.co.uk ;",
+        "sinon, les messages de clients sont supprimés automatiquement 90 jours après leur arrivée, et les copies conservées par NivaDesk des fichiers envoyés par les clients via WhatsApp 30 jours après leur envoi ;",
+        "si vous êtes un client ayant écrit à une entreprise qui utilise NivaDesk, demandez à cette entreprise de supprimer la conversation, ou écrivez à contact@nivadesk.co.uk ; nous transmettrons votre demande à l'entreprise, qui est responsable de ces messages ;",
+        "les copies détenues par Meta relèvent des politiques propres à Meta ; une suppression dans NivaDesk ne les retire pas."
+      ]
+    },
     lastUpdatedLabel: "Dernière mise à jour",
     introTitle: "Politique de suppression de compte",
     introParagraphs: [
@@ -295,6 +366,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   Italiano: {
+    channelsNotice: {
+      title: "Messaggi dei clienti da WhatsApp e Instagram",
+      paragraphs: [
+        "Se il tuo workspace ha collegato WhatsApp o Instagram, i messaggi che i tuoi clienti hanno inviato tramite questi canali appartengono al workspace, non all'account di un singolo membro. Cosa ne sarà dipende da cosa elimini:"
+      ],
+      bullets: [
+        "se elimini il tuo account utente e sei membro di un workspace di proprietà di qualcun altro, vieni rimosso da quel workspace; i suoi messaggi dei clienti non vengono eliminati;",
+        "se il workspace è tuo, eliminare il tuo account (Impostazioni → Account → Elimina account) elimina le conversazioni con i clienti e le relative finestre di risposta, le copie conservate da NivaDesk dei file inviati dai clienti, le connessioni WhatsApp e Instagram con i loro token di accesso e gli altri dati del workspace (ordini, clienti, note, file, impostazioni). È diverso da Elimina ordini e clienti nelle Impostazioni, che rimuove solo ordini e clienti e lascia al loro posto l'account, le connessioni e le conversazioni con i clienti;",
+        "per eliminare la conversazione di un singolo cliente, apri Messaggi → Clienti, scegli la conversazione e poi Elimina conversazione. Può farlo solo il proprietario del workspace; la conversazione, con tutto ciò che contiene, viene rimossa da NivaDesk immediatamente;",
+        "per far sì che NivaDesk smetta di ricevere i messaggi di un account Instagram, vai in Impostazioni → Canali clienti e scegli Disconnetti: questo elimina subito il token di accesso di NivaDesk e la connessione e conserva le conversazioni. Se invece rimuovi NivaDesk dalle impostazioni del tuo account Instagram, tra le app e i siti web collegati, Instagram invia a NivaDesk una richiesta di eliminazione dei dati e NivaDesk elimina anche le conversazioni con i clienti di quell'account;",
+        "per rimuovere un numero WhatsApp da NivaDesk, scrivi a contact@nivadesk.co.uk;",
+        "altrimenti i messaggi dei clienti vengono eliminati automaticamente 90 giorni dopo l'arrivo, e le copie conservate da NivaDesk dei file inviati dai clienti su WhatsApp 30 giorni dopo l'invio;",
+        "se sei un cliente che ha scritto a un'azienda che usa NivaDesk, chiedi a quell'azienda di eliminare la conversazione, oppure scrivi a contact@nivadesk.co.uk; inoltreremo la tua richiesta all'azienda, che è responsabile di quei messaggi;",
+        "le copie conservate da Meta sono soggette alle politiche di Meta; eliminare in NivaDesk non le rimuove."
+      ]
+    },
     lastUpdatedLabel: "Ultimo aggiornamento",
     introTitle: "Informativa sulla cancellazione dell'account",
     introParagraphs: [
@@ -335,6 +422,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "Español (Spanish)": {
+    channelsNotice: {
+      title: "Mensajes de clientes de WhatsApp e Instagram",
+      paragraphs: [
+        "Si tu espacio de trabajo conectó WhatsApp o Instagram, los mensajes que tus clientes enviaron por esos canales pertenecen al espacio de trabajo, no a la cuenta de un miembro en particular. Lo que ocurre con ellos depende de lo que elimines:"
+      ],
+      bullets: [
+        "si eliminas tu propia cuenta de usuario y eres miembro de un espacio de trabajo que pertenece a otra persona, se te retira de ese espacio de trabajo; sus mensajes de clientes no se eliminan;",
+        "si el espacio de trabajo es tuyo, eliminar tu cuenta (Ajustes → Cuenta → Eliminar cuenta) elimina las conversaciones con clientes y sus ventanas de respuesta, las copias que NivaDesk guarda de los archivos enviados por los clientes, las conexiones de WhatsApp e Instagram con sus tokens de acceso y los demás datos del espacio de trabajo (pedidos, clientes, notas, archivos, ajustes). No es lo mismo que Eliminar pedidos y clientes en Ajustes, que solo retira pedidos y clientes y deja en su sitio la cuenta, las conexiones y las conversaciones con clientes;",
+        "para eliminar la conversación de un solo cliente, abre Mensajes → Clientes, elige la conversación y luego Eliminar conversación. Solo el propietario del espacio de trabajo puede hacerlo; la conversación, con todo lo que contiene, se retira de NivaDesk de inmediato;",
+        "para que NivaDesk deje de recibir los mensajes de una cuenta de Instagram, ve a Ajustes → Canales de clientes y elige Desconectar: esto elimina en el acto el token de acceso de NivaDesk y la conexión, y conserva las conversaciones. Si en cambio retiras NivaDesk en los ajustes de tu cuenta de Instagram, entre las aplicaciones y sitios web conectados, Instagram envía a NivaDesk una solicitud de eliminación de datos y NivaDesk elimina también las conversaciones con clientes de esa cuenta;",
+        "para retirar un número de WhatsApp de NivaDesk, escribe a contact@nivadesk.co.uk;",
+        "en los demás casos, los mensajes de clientes se eliminan automáticamente 90 días después de llegar, y las copias que NivaDesk guarda de los archivos que los clientes envían por WhatsApp, 30 días después de su envío;",
+        "si eres un cliente que escribió a una empresa que usa NivaDesk, pide a esa empresa que elimine la conversación, o escribe a contact@nivadesk.co.uk; trasladaremos tu solicitud a la empresa, que es la responsable de esos mensajes;",
+        "las copias que conserva Meta se rigen por las políticas propias de Meta; eliminar en NivaDesk no las retira."
+      ]
+    },
     lastUpdatedLabel: "Última actualización",
     introTitle: "Política de eliminación de cuenta",
     introParagraphs: [
@@ -375,6 +478,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   Português: {
+    channelsNotice: {
+      title: "Mensagens de clientes do WhatsApp e do Instagram",
+      paragraphs: [
+        "Se o seu espaço de trabalho ligou o WhatsApp ou o Instagram, as mensagens que os seus clientes enviaram por esses canais pertencem ao espaço de trabalho, não à conta de um membro em particular. O que lhes acontece depende do que eliminar:"
+      ],
+      bullets: [
+        "se eliminar a sua própria conta de utilizador e for membro de um espaço de trabalho que pertence a outra pessoa, é removido desse espaço de trabalho; as mensagens de clientes dele não são eliminadas;",
+        "se o espaço de trabalho for seu, eliminar a sua conta (Definições → Conta → Eliminar conta) elimina as conversas com clientes e as respetivas janelas de resposta, as cópias que o NivaDesk guarda dos ficheiros enviados pelos clientes, as ligações ao WhatsApp e ao Instagram com os seus tokens de acesso e os restantes dados do espaço de trabalho (encomendas, clientes, notas, ficheiros, definições). Não é o mesmo que Eliminar encomendas e clientes nas Definições, que remove apenas encomendas e clientes e deixa no lugar a conta, as ligações e as conversas com clientes;",
+        "para eliminar a conversa de um único cliente, abra Mensagens → Clientes, escolha a conversa e depois Eliminar conversa. Só o proprietário do espaço de trabalho o pode fazer; a conversa, com tudo o que contém, é removida do NivaDesk de imediato;",
+        "para que o NivaDesk deixe de receber as mensagens de uma conta de Instagram, vá a Definições → Canais de clientes e escolha Desligar: isto elimina de imediato o token de acesso do NivaDesk e a ligação, e mantém as conversas. Se em vez disso remover o NivaDesk nas definições da sua conta de Instagram, nas aplicações e sites ligados, o Instagram envia ao NivaDesk um pedido de eliminação de dados e o NivaDesk elimina também as conversas com clientes dessa conta;",
+        "para retirar um número de WhatsApp do NivaDesk, escreva para contact@nivadesk.co.uk;",
+        "caso contrário, as mensagens de clientes são eliminadas automaticamente 90 dias depois de chegarem, e as cópias que o NivaDesk guarda dos ficheiros que os clientes enviam pelo WhatsApp 30 dias depois de terem sido enviados;",
+        "se for um cliente que escreveu a uma empresa que usa o NivaDesk, peça a essa empresa que elimine a conversa, ou escreva para contact@nivadesk.co.uk; transmitiremos o seu pedido à empresa, que é a responsável por essas mensagens;",
+        "as cópias guardadas pela Meta regem-se pelas políticas da própria Meta; eliminar no NivaDesk não as remove."
+      ]
+    },
     lastUpdatedLabel: "Última atualização",
     introTitle: "Política de Eliminação de Conta",
     introParagraphs: [
@@ -415,6 +534,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "Русский (Russian)": {
+    channelsNotice: {
+      title: "Сообщения клиентов из WhatsApp и Instagram",
+      paragraphs: [
+        "Если ваше рабочее пространство подключило WhatsApp или Instagram, сообщения, которые ваши клиенты отправили через эти каналы, принадлежат рабочему пространству, а не учётной записи отдельного участника. Что с ними произойдёт, зависит от того, что вы удаляете:"
+      ],
+      bullets: [
+        "если вы удаляете собственную учётную запись и являетесь участником рабочего пространства, принадлежащего другому лицу, вас удаляют из этого рабочего пространства; его сообщения клиентов не удаляются;",
+        "если рабочее пространство принадлежит вам, удаление вашей учётной записи (Настройки → Учётная запись → Удалить учётную запись) удаляет переписки с клиентами и их окна ответа, копии файлов клиентов, хранимые NivaDesk, подключения WhatsApp и Instagram с их токенами доступа, а также остальные данные рабочего пространства (заказы, клиенты, заметки, файлы, настройки). Это не то же самое, что «Удалить заказы и клиентов» в настройках: оно удаляет только заказы и клиентов, а учётная запись, подключения и переписки с клиентами остаются;",
+        "чтобы удалить переписку с одним клиентом, откройте Сообщения → Клиенты, выберите переписку и затем «Удалить переписку». Это может сделать только владелец рабочего пространства; переписка со всем содержимым сразу удаляется из NivaDesk;",
+        "чтобы NivaDesk перестал получать сообщения аккаунта Instagram, перейдите в Настройки → Каналы клиентов и выберите «Отключить»: это сразу удаляет токен доступа NivaDesk и подключение, а переписки сохраняются. Если вместо этого вы удалите NivaDesk в настройках своего аккаунта Instagram в разделе подключённых приложений и сайтов, Instagram отправит NivaDesk запрос на удаление данных, и NivaDesk также удалит переписки с клиентами этого аккаунта;",
+        "чтобы отключить номер WhatsApp от NivaDesk, напишите на contact@nivadesk.co.uk;",
+        "в остальных случаях сообщения клиентов удаляются автоматически через 90 дней после получения, а копии файлов, которые клиенты отправляют через WhatsApp и которые хранит NivaDesk, — через 30 дней после отправки;",
+        "если вы клиент, написавший компании, которая использует NivaDesk, попросите эту компанию удалить переписку или напишите на contact@nivadesk.co.uk; мы передадим ваш запрос компании, которая отвечает за эти сообщения;",
+        "копии, хранящиеся у Meta, регулируются собственными правилами Meta; удаление в NivaDesk их не затрагивает."
+      ]
+    },
     lastUpdatedLabel: "Последнее обновление",
     introTitle: "Политика удаления аккаунта",
     introParagraphs: [
@@ -455,6 +590,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "日本語 (Japanese)": {
+    channelsNotice: {
+      title: "WhatsAppとInstagramからの顧客メッセージ",
+      paragraphs: [
+        "ワークスペースがWhatsAppまたはInstagramを接続している場合、顧客がそれらを通じて送ったメッセージは、特定のメンバーのアカウントではなくワークスペースに属します。それらがどうなるかは、何を削除するかによって異なります。"
+      ],
+      bullets: [
+        "自分のユーザーアカウントを削除し、他の人が所有するワークスペースのメンバーである場合、そのワークスペースから削除されますが、ワークスペースの顧客メッセージは削除されません。",
+        "ワークスペースの所有者である場合、アカウントを削除する（設定 → アカウント → アカウントを削除）と、ワークスペースの顧客との会話とその返信ウィンドウ、顧客が送ったファイルのNivaDesk上のコピー、WhatsAppとInstagramの接続とアクセストークン、そしてワークスペースのその他のデータ（注文、顧客、メモ、ファイル、設定）が削除されます。これは設定の「注文と顧客を削除」とは異なります。そちらは注文と顧客のみを削除し、アカウント、接続、顧客との会話はそのまま残ります。",
+        "特定の顧客との会話を削除するには、メッセージ → 顧客を開き、会話を選択して「会話を削除」を選びます。これはワークスペースの所有者のみが行え、会話とその中のすべてが直ちにNivaDeskから削除されます。",
+        "NivaDeskがInstagramアカウントのメッセージを受信しないようにするには、設定 → 顧客チャネルで「接続を解除」を選びます。これによりNivaDeskのアクセストークンと接続が直ちに削除され、会話は残ります。代わりにInstagramアカウントの設定にある接続済みのアプリとウェブサイトからNivaDeskを削除した場合、InstagramはNivaDeskにデータ削除リクエストを送り、NivaDeskはそのアカウントの顧客との会話も削除します。",
+        "WhatsApp番号をNivaDeskから外すには、contact@nivadesk.co.uk までメールでご連絡ください。",
+        "上記以外の場合、顧客メッセージは受信から90日後に、顧客がWhatsAppで送ったファイルのNivaDesk上のコピーは送信から30日後に、自動的に削除されます。",
+        "NivaDeskを利用する事業者にメッセージを送った顧客の方は、その事業者に会話の削除を依頼するか、contact@nivadesk.co.uk までご連絡ください。これらのメッセージの管理者である事業者にご依頼をお伝えします。",
+        "Metaが保持するコピーはMeta自身のポリシーに従います。NivaDeskで削除してもそれらは削除されません。"
+      ]
+    },
     lastUpdatedLabel: "最終更新日",
     introTitle: "アカウント削除ポリシー",
     introParagraphs: [
@@ -495,6 +646,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "中文 (Chinese)": {
+    channelsNotice: {
+      title: "来自 WhatsApp 和 Instagram 的客户消息",
+      paragraphs: [
+        "如果你的工作区连接了 WhatsApp 或 Instagram，客户通过这些渠道发送的消息属于工作区，而不属于任何一位成员的账户。这些消息的去向取决于你删除的是什么："
+      ],
+      bullets: [
+        "如果你删除自己的用户账户，而你是他人所有的工作区的成员，你会从该工作区中被移除；该工作区的客户消息不会被删除；",
+        "如果工作区归你所有，删除你的账户（设置 → 账户 → 删除账户）会删除工作区的客户对话及其回复窗口、NivaDesk 保存的客户所发文件副本、WhatsApp 和 Instagram 连接及其访问令牌，以及工作区的其他数据（订单、客户、备注、文件、设置）。这与设置中的“删除订单和客户”不同：后者只移除订单和客户，账户、连接和客户对话都会保留；",
+        "要删除某一位客户的对话，请打开消息 → 客户，选择该对话，然后选择“删除对话”。只有工作区所有者可以执行此操作，该对话及其中的一切会立即从 NivaDesk 中移除；",
+        "要让 NivaDesk 停止接收某个 Instagram 账户的消息，请前往设置 → 客户渠道并选择“断开连接”：这会立即删除 NivaDesk 的访问令牌和该连接，并保留对话。如果你改为在 Instagram 账户设置中已连接的应用和网站里移除 NivaDesk，Instagram 会向 NivaDesk 发送数据删除请求，NivaDesk 也会删除该账户的客户对话；",
+        "要将某个 WhatsApp 号码从 NivaDesk 移除，请发送电子邮件至 contact@nivadesk.co.uk；",
+        "除此之外，客户消息会在收到 90 天后自动删除，客户通过 WhatsApp 发送的文件在 NivaDesk 中的副本会在发送 30 天后自动删除；",
+        "如果你是向使用 NivaDesk 的商家发送过消息的客户，请要求该商家删除对话，或发送电子邮件至 contact@nivadesk.co.uk，我们会把你的请求转交给对这些消息负责的商家；",
+        "Meta 持有的副本受 Meta 自身政策约束；在 NivaDesk 中删除不会移除这些副本。"
+      ]
+    },
     lastUpdatedLabel: "最后更新",
     introTitle: "账户删除政策",
     introParagraphs: [
@@ -535,6 +702,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "العربية (Arabic)": {
+    channelsNotice: {
+      title: "رسائل العملاء من WhatsApp وInstagram",
+      paragraphs: [
+        "إذا ربطت مساحة العمل الخاصة بك WhatsApp أو Instagram، فإن الرسائل التي أرسلها عملاؤك عبرهما تعود إلى مساحة العمل، لا إلى حساب أي عضو بعينه. وما يحدث لها يعتمد على ما تحذفه:"
+      ],
+      bullets: [
+        "إذا حذفت حساب المستخدم الخاص بك وكنت عضوًا في مساحة عمل يملكها شخص آخر، فستتم إزالتك من مساحة العمل تلك، ولا تُحذف رسائل عملائها؛",
+        "إذا كنت مالك مساحة العمل، فإن حذف حسابك (الإعدادات ← الحساب ← حذف الحساب) يحذف محادثات العملاء ونوافذ الرد الخاصة بها، ونسخ NivaDesk من الملفات التي أرسلها العملاء، واتصالات WhatsApp وInstagram مع رموز الوصول الخاصة بها، وسائر بيانات مساحة العمل (الطلبات والعملاء والملاحظات والملفات والإعدادات). ويختلف ذلك عن «حذف الطلبات والعملاء» في الإعدادات، الذي يزيل الطلبات والعملاء فقط ويُبقي الحساب والاتصالات ومحادثات العملاء كما هي؛",
+        "لحذف محادثة عميل واحد، افتح الرسائل ← العملاء، واختر المحادثة ثم اختر «حذف المحادثة». لا يمكن القيام بذلك إلا لمالك مساحة العمل، وتُزال المحادثة بكل ما فيها من NivaDesk فورًا؛",
+        "لإيقاف استلام NivaDesk لرسائل حساب Instagram، انتقل إلى الإعدادات ← قنوات العملاء واختر «قطع الاتصال»: يؤدي ذلك إلى حذف رمز الوصول الخاص بـ NivaDesk والاتصال على الفور مع الإبقاء على المحادثات. أما إذا أزلت NivaDesk من إعدادات حساب Instagram الخاص بك ضمن التطبيقات والمواقع المتصلة، فيرسل Instagram إلى NivaDesk طلب حذف بيانات، ويحذف NivaDesk أيضًا محادثات العملاء الخاصة بذلك الحساب؛",
+        "لإزالة رقم WhatsApp من NivaDesk، راسلنا على contact@nivadesk.co.uk؛",
+        "وبخلاف ذلك، تُحذف رسائل العملاء تلقائيًا بعد 90 يومًا من وصولها، وتُحذف نسخ NivaDesk من الملفات التي يرسلها العملاء عبر WhatsApp بعد 30 يومًا من إرسالها؛",
+        "إذا كنت عميلًا راسل شركة تستخدم NivaDesk، فاطلب من تلك الشركة حذف المحادثة، أو راسلنا على contact@nivadesk.co.uk وسننقل طلبك إلى الشركة المسؤولة عن تلك الرسائل؛",
+        "تخضع النسخ التي تحتفظ بها Meta لسياسات Meta الخاصة؛ والحذف في NivaDesk لا يزيلها."
+      ]
+    },
     lastUpdatedLabel: "آخر تحديث",
     introTitle: "سياسة حذف الحساب",
     introParagraphs: [
@@ -575,6 +758,22 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
     ]
   },
   "हिन्दी (Hindi)": {
+    channelsNotice: {
+      title: "WhatsApp और Instagram से आए ग्राहक संदेश",
+      paragraphs: [
+        "यदि आपके workspace ने WhatsApp या Instagram को जोड़ा है, तो आपके ग्राहकों द्वारा इन माध्यमों से भेजे गए संदेश workspace के होते हैं, किसी एक सदस्य के खाते के नहीं। उनका क्या होगा, यह इस पर निर्भर करता है कि आप क्या हटाते हैं:"
+      ],
+      bullets: [
+        "यदि आप अपना उपयोगकर्ता खाता हटाते हैं और आप किसी और के स्वामित्व वाले workspace के सदस्य हैं, तो आपको उस workspace से हटा दिया जाता है; उसके ग्राहक संदेश नहीं हटाए जाते;",
+        "यदि workspace आपका है, तो अपना खाता हटाने पर (सेटिंग्स → खाता → खाता हटाएँ) workspace के ग्राहक वार्तालाप और उनकी उत्तर विंडो, ग्राहकों द्वारा भेजी गई फ़ाइलों की NivaDesk की प्रतियाँ, WhatsApp और Instagram कनेक्शन और उनके एक्सेस टोकन, तथा workspace का बाकी डेटा (ऑर्डर, ग्राहक, नोट्स, फ़ाइलें, सेटिंग्स) हट जाते हैं। यह सेटिंग्स के ऑर्डर और ग्राहक हटाएँ से अलग है, जो केवल ऑर्डर और ग्राहक हटाता है और खाता, कनेक्शन और ग्राहक वार्तालाप यथावत रहते हैं;",
+        "किसी एक ग्राहक का वार्तालाप हटाने के लिए संदेश → ग्राहक खोलें, वार्तालाप चुनें और फिर वार्तालाप हटाएँ चुनें। यह केवल workspace का स्वामी कर सकता है, और वार्तालाप अपनी सारी सामग्री के साथ NivaDesk से तुरंत हट जाता है;",
+        "NivaDesk को किसी Instagram खाते के संदेश प्राप्त करने से रोकने के लिए सेटिंग्स → ग्राहक चैनल पर जाएँ और डिस्कनेक्ट चुनें: इससे NivaDesk का एक्सेस टोकन और कनेक्शन तुरंत हट जाता है और वार्तालाप बने रहते हैं। यदि इसके बजाय आप अपने Instagram खाते की सेटिंग्स में जुड़े हुए ऐप और वेबसाइटों में से NivaDesk को हटाते हैं, तो Instagram NivaDesk को डेटा हटाने का अनुरोध भेजता है और NivaDesk उस खाते के ग्राहक वार्तालाप भी हटा देता है;",
+        "किसी WhatsApp नंबर को NivaDesk से हटाने के लिए contact@nivadesk.co.uk पर ईमेल करें;",
+        "अन्यथा ग्राहक संदेश आने के 90 दिन बाद और ग्राहकों द्वारा WhatsApp पर भेजी गई फ़ाइलों की NivaDesk की प्रतियाँ भेजे जाने के 30 दिन बाद अपने आप हट जाती हैं;",
+        "यदि आप ऐसे ग्राहक हैं जिसने NivaDesk का उपयोग करने वाले किसी व्यवसाय को लिखा है, तो उस व्यवसाय से वार्तालाप हटाने के लिए कहें, या contact@nivadesk.co.uk पर ईमेल करें; हम आपका अनुरोध उस व्यवसाय तक पहुँचा देंगे, जो इन संदेशों का नियंत्रक है;",
+        "Meta के पास रखी प्रतियाँ Meta की अपनी नीतियों के अधीन हैं; NivaDesk में हटाने से वे नहीं हटतीं।"
+      ]
+    },
     lastUpdatedLabel: "अंतिम अपडेट",
     introTitle: "खाता हटाने की नीति",
     introParagraphs: [

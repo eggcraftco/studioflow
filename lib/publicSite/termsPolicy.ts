@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const TERMS_POLICY_LAST_UPDATED = "17 June 2026";
+export const TERMS_POLICY_LAST_UPDATED = "28 September 2026";
 
 export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -215,6 +215,17 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "NivaDesk may connect with third-party services such as authentication providers, payment providers, calendar tools, cloud services, app stores, analytics tools, or other integrations.",
       "Third-party services are controlled by their own providers and may have their own terms and privacy policies. We are not responsible for third-party services, their content, availability, security, errors, data practices, or changes.",
       "If you connect a third-party service to NivaDesk, you authorise us to access and use the relevant information from that service only as needed to provide the connected feature."
+    ],
+    subsections: [
+      {
+        title: "17.1 Messaging channels operated by Meta (WhatsApp and Instagram)",
+        paragraphs: [
+          "If you connect a WhatsApp Business number or an Instagram professional account to NivaDesk, NivaDesk acts on your behalf with Meta only to receive your customers' messages and to send the replies your team writes.",
+          "By connecting one, you confirm that you are authorised to connect it, and you agree to comply with the Meta terms and policies that apply to it, including the WhatsApp Business Terms of Service and WhatsApp Business Messaging Policy, the Instagram Terms of Use and Community Guidelines, the Meta Terms of Service and Community Standards, and the Meta Platform Terms and Developer Policies.",
+          "You are responsible for having any permission the law requires before you message your customers, and for respecting their requests to stop.",
+          "Meta may limit, suspend or end access to these channels under its own policies, and may charge for WhatsApp messaging under its own terms. NivaDesk is not responsible for Meta's services, decisions or charges."
+        ]
+      }
     ]
   },
   {

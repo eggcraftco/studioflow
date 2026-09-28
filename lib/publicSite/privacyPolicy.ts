@@ -13,8 +13,8 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-// Set to the day the customer-inbox text (7.1) goes live with release P2.
-export const PRIVACY_POLICY_LAST_UPDATED = "27 September 2026";
+// Set to the day the customer-inbox text (7.1, 7.2) goes live.
+export const PRIVACY_POLICY_LAST_UPDATED = "28 September 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -255,6 +255,23 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "deleted messages can remain in NivaDesk's database backups for up to 14 days, and deleted file copies can remain recoverable in our cloud storage for up to 7 days, until each of these expires;",
           "your customer's phone number is not stored in readable form with their messages: the inbox shows only its last four digits, and the full number is kept encrypted only while a reply can still be sent (about a day after their last message)."
         ]
+      },
+      {
+        title: "7.2 Your customers' Instagram messages (customer inbox)",
+        paragraphs: [
+          "If your workspace connects an Instagram professional account, NivaDesk receives the Direct messages your customers send to that account and keeps the replies your team sends from NivaDesk, so that your team can read and answer them in the customer inbox. For these messages your business is the controller, and NivaDesk processes them on your behalf.",
+          "To connect the account you sign in with Instagram and allow NivaDesk to read the account's basic profile (its ID and username) and to manage its messages. NivaDesk keeps the account's ID and username, and an access token that lets it receive and send the account's messages. The token is stored encrypted and renewed automatically while the account stays connected. Disconnecting the account in Settings → Customer Channels deletes the token and the connection straight away; conversations already in the inbox stay until they are deleted as described below. If you remove NivaDesk in your Instagram account's settings instead, Instagram sends NivaDesk a data deletion request, and NivaDesk deletes the token, the connection and that account's customer conversations from NivaDesk.",
+          "Messages travel through Instagram, which is operated by Meta. Meta processes messages, and may keep its own copies of them, under Meta's own terms and policies. NivaDesk cannot delete copies held by Meta: deleting a message or a conversation in NivaDesk removes it from NivaDesk only.",
+          "What NivaDesk keeps, and for how long:"
+        ],
+        bullets: [
+          "customer messages and your team's replies are deleted from NivaDesk automatically 90 days after they arrive, and a conversation is deleted with everything in it once its most recent message is 90 days old;",
+          "a workspace owner can delete a customer's conversation at any time, which removes it from NivaDesk straight away;",
+          "deleted messages can remain in NivaDesk's database backups for up to 14 days, until these expire;",
+          "photos and other attachments sent on Instagram are not stored in NivaDesk: a message with words keeps only its words, and a message that is only an attachment is not kept;",
+          "your customer's Instagram account ID is not stored in readable form with their messages: the inbox shows only a short label, and the ID is kept encrypted only while a reply can still be sent (about a day after their last message);",
+          "NivaDesk's AI features do not read the customer inbox: nothing in it is sent to an AI model by NivaDesk."
+        ]
       }
     ]
   },
@@ -352,7 +369,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "analytics and performance tools;",
       "customer support tools;",
       "email delivery providers;",
-      "messaging platforms your workspace connects, such as the WhatsApp Business Platform operated by Meta, to receive and send your customers' messages;",
+      "messaging platforms your workspace connects, such as the WhatsApp Business Platform and Instagram, both operated by Meta, to receive and send your customers' messages;",
       "error monitoring and crash reporting services;",
       "accountants, lawyers, or professional advisers;",
       "authorities where required by law."
@@ -406,7 +423,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "support messages may be kept to help us respond to your request and improve support;",
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
-      "your customers' WhatsApp messages are kept for 90 days, and NivaDesk's copies of files they send for 30 days, as described in section 7.1;",
+      "your customers' WhatsApp and Instagram messages are kept for 90 days, and NivaDesk's copies of files they send on WhatsApp for 30 days, as described in sections 7.1 and 7.2;",
       "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted."
     ],
     subsections: [

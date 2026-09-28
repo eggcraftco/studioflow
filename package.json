@@ -14,7 +14,8 @@
     "build:next": "next build",
     "test:finance": "node scripts/check-finance-vectors.mjs",
     "test:meta-signup": "node scripts/check-meta-signup.mjs",
-    "test:inbox-translations": "node scripts/check-inbox-translations.mjs"
+    "test:inbox-translations": "node scripts/check-inbox-translations.mjs",
+    "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

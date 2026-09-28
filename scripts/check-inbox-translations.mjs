@@ -11,7 +11,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENS = [
   "app/inbox/InboxContent.tsx",
   "app/inbox/InboxAttachment.tsx",
-  "app/settings/CustomerChannelsSection.tsx"
+  "app/settings/CustomerChannelsSection.tsx",
+  // The empty list's sentences, returned as keys the screen passes to t().
+  "lib/studioflow/inboxEmptyState.ts"
 ];
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português",
   "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];

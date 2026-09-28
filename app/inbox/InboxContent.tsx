@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { MessagesTabs } from "@/components/MessagesTabs";
+import { inboxEmptySentence, isDefaultInboxView } from "@/lib/studioflow/inboxEmptyState";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { InboxAttachment } from "./InboxAttachment";
 import {
@@ -185,6 +186,10 @@ export function InboxContent({
   // How the list is narrowed. Applied on the server; the search box waits for
   // a pause in typing before it asks.
   const [filters, setFilters] = useState<CustomerInboxFilters>({ status: "open", assignee: "anyone", label: "", query: "", unreadOnly: false });
+  // Whether the workspace has any customer conversation in any status. Asked only when the default Open list comes
+  // back empty, so an empty Open list can tell "No open conversations" from "No customer messages yet"
+  // (lib/studioflow/inboxEmptyState.ts). null = not asked, or the check failed.
+  const [anyConversation, setAnyConversation] = useState<boolean | null>(null);
   const [queryDraft, setQueryDraft] = useState("");
   const [members, setMembers] = useState<CustomerInboxMember[]>([]);
   const [triageBusy, setTriageBusy] = useState(false);
@@ -269,6 +274,20 @@ export function InboxContent({
     try {
       const next = await loadCustomerInboxList(workspace.id, filters);
       if (mine !== ticket.current) return;
+      let anyAtAll: boolean | null = null;
+      if (next.conversations.length === 0 && isDefaultInboxView(filters)) {
+        // One more question, and only for an empty Open list: is there any conversation at all? The list
+        // keeps "Loading…" until the answer, so the sentence does not change under the reader.
+        try {
+          const all = await loadCustomerInboxList(workspace.id, { status: "all", assignee: "anyone", label: "", query: "", unreadOnly: false });
+          if (mine !== ticket.current) return;
+          anyAtAll = all.conversations.length > 0;
+        } catch {
+          if (mine !== ticket.current) return;
+          anyAtAll = null;
+        }
+      }
+      setAnyConversation(anyAtAll);
       setRows(next.conversations);
       setMembers(next.assignableMembers);
     } catch (failure) {
@@ -563,11 +582,7 @@ export function InboxContent({
           ) : rows === null ? (
             <p className="inbox-notice">{t("Loading…")}</p>
           ) : rows.length === 0 ? (
-            <p className="inbox-notice">
-              {filters.query || filters.label || filters.unreadOnly || filters.assignee !== "anyone" || filters.status !== "open"
-                ? t("No conversations match these filters.")
-                : t("No customer messages yet.")}
-            </p>
+            <p className="inbox-notice">{t(inboxEmptySentence(filters, anyConversation))}</p>
           ) : (
             <ul>
               {rows.map((row) => (
