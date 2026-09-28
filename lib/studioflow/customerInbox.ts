@@ -81,6 +81,13 @@ export type CustomerInboxMedia = {
   openable?: boolean;
 };
 
+/**
+ * The customer's emoji reaction to one message (Instagram, WhatsApp): the emoji
+ * and when it was made. Never who — the server keys the reactor by the
+ * conversation, and a screen has no use for the id.
+ */
+export type CustomerInboxReaction = { emoji: string; atMs: number };
+
 /** One message as `conversationDetailRow` sends it. */
 export type CustomerInboxMessage = {
   messageId: string;
@@ -105,6 +112,11 @@ export type CustomerInboxMessage = {
   deliveryStatus: string;
   /** Set when deliveryStatus is "failed": permission, auth, transient, … */
   errorClass: string;
+  /**
+   * The customer's reaction to this message, either direction — shown under
+   * the bubble, never as a message row. Absent on a server that predates it.
+   */
+  reactions?: CustomerInboxReaction[];
 };
 
 /**
@@ -363,6 +375,13 @@ export type CustomerChannelLine = {
   connectedVia?: "signup" | "operator";
   /** Whether the server holds a proof that this line belongs to the workspace (the owner's rule, 27 Sep). */
   verified?: boolean;
+  /**
+   * The webhook fields the provider listed for this line the last time the
+   * server asked (Instagram: "messages", "message_reactions"), and when. Empty
+   * and 0 until the server has asked once.
+   */
+  subscribedFields?: string[];
+  subscribedFieldsCheckedAtMs?: number;
 };
 
 /** A channel card: WhatsApp or Instagram, always both, each with its measured state. */
@@ -435,6 +454,41 @@ export async function startInstagramConnect(companyId: string): Promise<{ ok: tr
       return { ok: false, reason: "not_configured" };
     }
     return { ok: true, url };
+  } catch (error) {
+    const reason = refusalReason(error);
+    if (reason) return { ok: false, reason };
+    throw error;
+  }
+}
+
+export type InstagramSubscriptionResult =
+  | { ok: true; dryRun: boolean; before: string[]; after: string[]; changed: boolean; checkedAtMs: number }
+  | { ok: false; reason: string };
+
+/**
+ * Ask the server what webhook fields Meta sends for the workspace's own
+ * Instagram account (`dryRun: true`), or have it re-assert the fields NivaDesk
+ * needs (`dryRun: false`) — with the token it already holds, so nothing is
+ * disconnected and the conversations stay. Owner only; the server checks. The
+ * answer is field names before and after, never a token.
+ */
+export async function updateInstagramSubscriptions(companyId: string, dryRun: boolean): Promise<InstagramSubscriptionResult> {
+  const call = httpsCallable<
+    { companyId: string; dryRun: boolean },
+    { ok: boolean; dryRun: boolean; before: unknown; after: unknown; changed: boolean; checkedAtMs: number }
+  >(functions, "updateInstagramSubscriptions");
+  const names = (value: unknown) => (Array.isArray(value) ? value.map((field) => String(field)) : []);
+  try {
+    const response = await call({ companyId, dryRun });
+    const data = response.data;
+    return {
+      ok: true,
+      dryRun: data?.dryRun !== false,
+      before: names(data?.before),
+      after: names(data?.after),
+      changed: Boolean(data?.changed),
+      checkedAtMs: Number(data?.checkedAtMs) || 0
+    };
   } catch (error) {
     const reason = refusalReason(error);
     if (reason) return { ok: false, reason };

@@ -31,11 +31,13 @@ import {
   disconnectInstagramAccount,
   disconnectWhatsAppNumber,
   startInstagramConnect,
+  updateInstagramSubscriptions,
   verifyWhatsAppLine,
   loadCustomerChannelStatus,
   type CustomerChannelCard,
   type CustomerChannelStatus
 } from "@/lib/studioflow/customerInbox";
+import { relativeTimeLabel } from "@/lib/studioflow/relativeTime";
 import { metaSignupConfig, runEmbeddedSignup } from "@/lib/studioflow/metaSignup";
 
 type Props = { workspace: WorkspaceContext; language?: string };
@@ -51,6 +53,28 @@ const STATE_LABEL: Record<CustomerChannelCard["state"], string> = {
 /** The label on the card's pill: a line nobody has proved yet waits, whatever else it measured. */
 function stateLabel(card: CustomerChannelCard): string {
   return card.reason === "awaiting_verification" ? "Awaiting verification" : STATE_LABEL[card.state];
+}
+
+/**
+ * A refused subscription check or update, from the server's reason word
+ * (inbox/instagramLoginFunctions.js updateInstagramSubscriptions). Keys: the
+ * caller translates. A dead token points at "Connect again", never at
+ * disconnecting: connecting the same account again is a renewal and keeps the
+ * conversations.
+ */
+function subscriptionSentence(reason: string): string {
+  switch (reason) {
+    case "owner_only": return "Only the workspace owner can check or update the Meta subscription.";
+    case "no_account": return "This workspace has no Instagram account connected.";
+    case "operator_account": return "This Instagram account was connected by NivaDesk. Contact NivaDesk support to change it.";
+    case "not_configured": return "Connecting Instagram is not available yet.";
+    case "no_credential":
+    case "token_expired":
+    case "unreadable_credential":
+    case "reconnect": return "Instagram no longer accepts this account's token. Use Connect again; the conversations stay.";
+    case "meta_refused": return "Meta refused the request. Try again in a moment.";
+    default: return "The subscription could not be checked. Try again.";
+  }
 }
 
 /** A refused verification, from the server's reason word. Keys: the caller translates. */
@@ -163,7 +187,7 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
   const [status, setStatus] = useState<CustomerChannelStatus | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"" | "connecting" | "disconnecting" | "verifying">("");
+  const [busy, setBusy] = useState<"" | "connecting" | "disconnecting" | "verifying" | "checking" | "updating">("");
   const [notice, setNotice] = useState("");
   const [actionError, setActionError] = useState("");
   const isOwner = normalizeWorkspaceRole(workspace.role) === "owner";
@@ -177,6 +201,9 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
       return new Date(ms).toISOString().slice(0, 16).replace("T", " ");
     }
   }, [language]);
+
+  /** "5 minutes ago" for the last week, the date beyond it — for "checked {time}". */
+  const ago = useCallback((ms: number) => relativeTimeLabel(ms, Date.now(), studioLocaleTag(language)) || when(ms), [language, when]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,6 +258,28 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
       const result = await disconnectInstagramAccount(workspace.id);
       if (!result.ok) { setActionError(t(instagramSentence(result.reason))); return; }
       setNotice(t("Instagram account disconnected. Also remove NivaDesk from the apps connected to the account in Instagram's settings, so Instagram stops sending its messages here."));
+      await load();
+    } catch (failure) {
+      setActionError(friendlyErrorMessage(failure, t));
+    } finally {
+      setBusy("");
+    }
+  }, [workspace.id, t, load]);
+
+  // The account's webhook subscription at Meta, with the token the server
+  // already holds: "Check" asks and changes nothing; "Update subscription"
+  // asks Meta for messages AND message reactions. Neither disconnects anything.
+  const checkSubscription = useCallback(async (dryRun: boolean) => {
+    setBusy(dryRun ? "checking" : "updating");
+    setNotice("");
+    setActionError("");
+    try {
+      const result = await updateInstagramSubscriptions(workspace.id, dryRun);
+      if (!result.ok) { setActionError(t(subscriptionSentence(result.reason))); return; }
+      const fields = result.after.length ? result.after.join(", ") : "—";
+      if (dryRun) setNotice(t("Meta lists these webhook fields for the account: {fields}.").replace("{fields}", fields));
+      else if (result.changed) setNotice(t("Subscription updated. Meta now lists: {fields}.").replace("{fields}", fields));
+      else setNotice(t("The subscription already had these fields: {fields}.").replace("{fields}", fields));
       await load();
     } catch (failure) {
       setActionError(friendlyErrorMessage(failure, t));
@@ -408,9 +457,33 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
                       {t("You sign in on Instagram and allow NivaDesk to receive and answer the account's messages. You can disconnect at any time.")}
                     </p>
                   ) : null}
+                  {ownLine ? (
+                    // The webhook fields Meta sends for this account, as the server last
+                    // read them, and the two owner-only actions. Nothing here disconnects.
+                    <div className="settings-subpanel" data-testid="instagram-subscription">
+                      <span className="settings-field-hint">
+                        {t("Meta subscription")}: {ownLine.subscribedFields?.length ? ownLine.subscribedFields.join(", ") : t("not checked yet")}
+                        {ownLine.subscribedFieldsCheckedAtMs ? ` · ${t("checked {time}").replace("{time}", ago(ownLine.subscribedFieldsCheckedAtMs))}` : ""}
+                      </span>
+                      <div className="settings-action-row">
+                        <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => void checkSubscription(true)}>
+                          {busy === "checking" ? t("Checking…") : t("Check")}
+                        </button>
+                        <button type="button" className="button" disabled={Boolean(busy)} onClick={() => void checkSubscription(false)}>
+                          {busy === "updating" ? t("Updating…") : t("Update subscription")}
+                        </button>
+                      </div>
+                      <p className="settings-field-hint">
+                        {t("Asks Meta which webhook fields this account sends to NivaDesk. Updating adds message reactions without disconnecting; the token and your conversations stay.")}
+                      </p>
+                    </div>
+                  ) : null}
                 </>
               ) : (
-                <p className="settings-field-hint">{t("Only the workspace owner can connect or disconnect an Instagram account.")}</p>
+                <>
+                  <p className="settings-field-hint">{t("Only the workspace owner can connect or disconnect an Instagram account.")}</p>
+                  {ownLine ? <p className="settings-field-hint">{t("Only the workspace owner can check or update the Meta subscription.")}</p> : null}
+                </>
               )
             ) : null}
           </section>

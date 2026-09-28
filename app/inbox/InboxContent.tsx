@@ -29,6 +29,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { studioLanguageLocale } from "@/lib/studioflow/languageDirection";
+import { relativeTimeLabel as relativeTime } from "@/lib/studioflow/relativeTime";
 import { MessagesTabs } from "@/components/MessagesTabs";
 import { inboxEmptySentence, isDefaultInboxView } from "@/lib/studioflow/inboxEmptyState";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
@@ -72,6 +73,17 @@ function timeLabel(ms: number, language: string | null | undefined) {
   } catch {
     return new Date(ms).toISOString().slice(0, 16).replace("T", " ");
   }
+}
+
+/**
+ * "5 minutes ago", "yesterday", in the reader's language, for the last week;
+ * the plain date and time beyond that. For a reaction's tooltip, where the
+ * question is "how long ago", not "when exactly".
+ */
+function relativeTimeLabel(ms: number, nowMs: number, language: string | null | undefined) {
+  if (!ms) return "";
+  const locale = studioLanguageLocale(language);
+  return relativeTime(ms, nowMs, locale === "en" ? "en-GB" : locale) || timeLabel(ms, language);
 }
 
 /**
@@ -922,6 +934,21 @@ export function InboxContent({
                         </span>
                       ) : null}
                     </span>
+                    {message.reactions && message.reactions.length ? (
+                      // The customer's emoji on this message: a small chip under
+                      // the bubble, on the customer's own message or on a reply.
+                      // Never a row of its own — a reaction is not a message.
+                      <span className="inbox-msg-reactions">
+                        {message.reactions.map((reaction, index) => {
+                          const reacted = t("Reacted {time}").replace("{time}", relativeTimeLabel(reaction.atMs, clock, language));
+                          return (
+                            <span key={`${reaction.emoji}:${reaction.atMs}:${index}`} className="inbox-msg-reaction" role="img" aria-label={reacted} title={reacted}>
+                              {reaction.emoji}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    ) : null}
                     {message.direction === "outbound" && message.deliveryStatus === "failed" ? (
                       <span className="inbox-msg-failure" role="note">{t(failureReason(message.errorClass, thread.channelMedium))}</span>
                     ) : null}
