@@ -41,3 +41,16 @@
 .ghostNode{filter:blur(1.8px);opacity:.68}.ghostLeft{left:5px;top:118px}.ghostTop{left:15px;top:10px}.ghostUpperRight{right:12px;top:22px}.ghostRight{right:5px;top:84px}.ghostLowerLeft{left:27px;bottom:8px}.ghostBottom{right:18px;bottom:9px}
 .nodeAmazon{left:0;top:132px}.nodeAmazon img{max-width:66px}.nodeChatGpt{right:91px;bottom:-1px}.nodeChatGpt img{width:46px;height:46px}
 .ghostTopCenter{left:188px;top:-8px}.hub img{filter:none}
+
+/* Availability, measured on 28 September 2026 (docs/deploys/site-integrations-2026-09-28).
+   Three labels, three colours: green is the only one a visitor may read as
+   "connect it yourself"; amber says "on request"; grey says "not yet". */
+.live{background:#e4f1e6;color:#25603a}.limited{background:#f6f0e6;color:#8d7353}.soon{background:#eceeea;color:#5f6b62}
+.note{width:100%;font-size:11px;line-height:1.7;color:#6b5a3a;background:#fbf7ef;border-radius:6px;padding:8px 10px;margin:-10px 0 18px}
+.legend{margin:0 0 34px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.legendTitle{font-size:11px;font-weight:600;letter-spacing:.4px;margin:0 0 10px}
+.legend ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.legend li{display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.7;color:var(--muted)}
+.legend li .status{margin:2px 0 0;flex-shrink:0;white-space:nowrap}
+.legendChecked{font-size:10px;color:#8a9484;margin:12px 0 0}
+@media(max-width:700px){.legend{padding:14px;margin-bottom:22px}.legend li{font-size:11px}}
