@@ -20,8 +20,19 @@ export type EtsySyncEvent = {
   type: string;
   error: string;
   receiptId: string;
-  /** Why an order_needs_review event was written. */
+  /**
+   * Why an order_needs_review event was written — and, on a webhook row whose
+   * outcome is `skipped`, which gate declined the receipt
+   * (`awaiting_first_import`, or one of the import-rule reasons).
+   */
   reason?: string;
+  /**
+   * What a webhook row resulted in: `created` / `updated` when the receipt was
+   * applied, `skipped` / `held` / `stale` when the server declined or ignored
+   * it, or one of `resource_missing` / `resource_foreign_host` /
+   * `resource_empty_body` / `no_resource` when the delivery was dropped.
+   */
+  outcome?: string;
 };
 
 export type EtsyConnection = {
@@ -40,6 +51,12 @@ export type EtsyConnection = {
   needsReconnect: boolean;
   importState: "none" | "running" | "done" | string;
   importedOrders: number;
+  /** The last sweep in numbers (etsySync.reconcileConnection): what to say instead of a green
+   *  "last successful sync" while nothing has been imported yet. Null until a sweep has run on the new server. */
+  lastSweep?: {
+    atMs: number; created: number; updated: number; stale: number; held: number;
+    skipped: number; failed: number; awaitingFirstImport: number; truncated: boolean;
+  } | null;
   recentEvents?: EtsySyncEvent[];
 };
 
@@ -230,7 +247,7 @@ export function etsyErrorText(code: string, t: (text: string) => string): string
  * underscores swapped for spaces is still the code; it just looks friendlier.
  */
 export function etsyEventText(
-  event: { type: string; receiptId: string; reason?: string },
+  event: { type: string; receiptId: string; reason?: string; outcome?: string },
   t: (text: string) => string
 ): string {
   const receipt = event.receiptId ? ` #${event.receiptId}` : "";
@@ -249,8 +266,40 @@ export function etsyEventText(
       return event.reason === "currency_mismatch"
         ? `${t("Order")}${receipt} ${t("needs currency review")}`
         : `${t("Order")}${receipt} ${t("needs a customer match")}`;
+    // A webhook row is not always an update. When Etsy's delivery was dropped
+    // the reason travels in `outcome`, and saying "Order updated" for it would
+    // report the opposite of what happened. No receipt number is shown on a
+    // drop: a dropped delivery has none.
+    //
+    // Nor is a delivery the server declined an update. `skipped` is the
+    // first-import gate or the seller's own import rules refusing the receipt
+    // (the server says which in `reason`), `held` is a workspace out of room,
+    // `stale` is an older snapshot that arrived late and was ignored, and
+    // `created` is an order that was just imported. Each says so; only an
+    // outcome nobody has seen yet keeps the original "updated" line.
     case "webhook":
-      return `${t("Order")}${receipt} ${t("updated")}`;
+      switch (event.outcome) {
+        case "resource_missing":
+          return t("Etsy sent an update without saying which order");
+        case "resource_foreign_host":
+          return t("Etsy sent an update pointing somewhere NivaDesk will not follow");
+        case "resource_empty_body":
+          return t("Etsy sent an update but returned nothing for it");
+        case "no_resource":
+          return t("Etsy sent an update NivaDesk could not read");
+        case "created":
+          return `${t("Order")}${receipt} ${t("imported")}`;
+        case "skipped":
+          return event.reason === "awaiting_first_import"
+            ? `${t("Order")}${receipt} ${t("is waiting for the first import")}`
+            : `${t("Order")}${receipt} ${t("was not imported")}`;
+        case "held":
+          return `${t("Order")}${receipt} ${t("is held until the plan has room")}`;
+        case "stale":
+          return `${t("Order")}${receipt} ${t("received an older update, which was ignored")}`;
+        default:
+          return `${t("Order")}${receipt} ${t("updated")}`;
+      }
     case "order_import_failed":
       return `${t("An order could not be imported")}${receipt}`;
     case "connected":

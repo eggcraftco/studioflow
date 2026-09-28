@@ -414,10 +414,34 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                 described as something it is not. */}
             <span className="studio-pill">{scopeLabel(connection.scopes, t)}</span>
           </li>
-          <li>
-            <span>{t("Last successful sync")}</span>
-            <span>{relativeTime(connection.lastSuccessAtMs, t)}</span>
-          </li>
+          {connection.importState === "none" ? (
+            <>
+              {/* Before the first import a sweep succeeds by reaching Etsy and
+                  skipping every receipt at the gate — so "Last successful
+                  sync 6 minutes ago" over a shop nothing has ever been
+                  imported from is true and misleading at once (the one live
+                  connection read exactly that for three weeks). Say what
+                  happened instead: checked, nothing imported, and how many
+                  receipts the last sweep found waiting. */}
+              <li>
+                <span>{t("Connection checked")}</span>
+                <span>{relativeTime(connection.lastSyncAtMs || connection.lastSuccessAtMs, t)}</span>
+              </li>
+              <li>
+                <span>{t("Orders imported")}</span>
+                <span className="muted-copy">
+                  {connection.lastSweep && connection.lastSweep.awaitingFirstImport > 0
+                    ? `${t("None yet")} · ${connection.lastSweep.awaitingFirstImport} ${t("receipts are waiting for your first import")}`
+                    : t("None yet — choose what to import below")}
+                </span>
+              </li>
+            </>
+          ) : (
+            <li>
+              <span>{t("Last successful sync")}</span>
+              <span>{relativeTime(connection.lastSuccessAtMs, t)}</span>
+            </li>
+          )}
         </ul>
       </section>
 
@@ -498,7 +522,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
         <section className="card app-card quick-reply-settings-card">
           <h3>{connection.importState === "none" ? t("Choose what to import") : t("Etsy sync")}</h3>
 
-          {connection.importState !== "none" ? (
+          {/* The log is shown before the first import too: a delivery Etsy
+              sent while the seller was still choosing what to import used to be
+              invisible here, and "nothing is happening" is the wrong thing to
+              tell somebody whose orders are waiting at the gate. */}
+          {connection.importState !== "none" || (connection.recentEvents && connection.recentEvents.length) ? (
             <>
               <p className="muted-copy">
                 {`${t("Last checked")} ${relativeTime(connection.lastSyncAtMs, t)}`}
