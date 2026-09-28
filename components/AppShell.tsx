@@ -1,8 +1,8 @@
 "use client";
 
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
+import { AppShellMountedContext } from "@/components/AppShellMounted";
 import {
-  createContext,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -181,8 +181,6 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/quick-reply": "quickReply",
   "/settings": "settings",
 };
-
-const AppShellMountedContext = createContext(false);
 
 let cachedAppShellUserId = "";
 let cachedWorkspace: WorkspaceContext | null = null;
@@ -1903,6 +1901,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   } = useSidebarCollapsed();
   const sidebarNavRef = useRef<HTMLElement | null>(null);
   const sidebarUserRef = useRef<HTMLDivElement | null>(null);
+  const shellScrollAreaRef = useRef<HTMLDivElement | null>(null);
+  // One shell now serves every app route (components/AppRouteFrame.tsx), so
+  // the content column would keep the last screen's scroll offset. Each screen
+  // opens at its top, as it did when it had a shell of its own; a link to an
+  // anchor (#...) is left alone.
+  useIsomorphicLayoutEffect(() => {
+    const area = shellScrollAreaRef.current;
+    if (area && !window.location.hash) area.scrollTop = 0;
+  }, [pathname]);
   // The user menu closes on a click anywhere else and on Escape, like any
   // dropdown; the drawer and the menu both close when the route changes.
   useEffect(() => {
@@ -3201,7 +3208,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 ) : null}
               </div>
             </aside>
-            <div className="app-shell-scroll-area" data-shell-page={shellPageKind}>
+            <div className="app-shell-scroll-area" data-shell-page={shellPageKind} ref={shellScrollAreaRef}>
               <div className={wideWorkspace ? "app-shell-content is-wide" : "app-shell-content"}>
             {workspaceLoadError && !workspace ? (
               <div className="layout-error toolbar-action-message workspace-load-error" role="status">

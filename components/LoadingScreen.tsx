@@ -1,4 +1,21 @@
+"use client";
+
+import { useContext } from "react";
+import { AppShellMountedContext } from "@/components/AppShellMounted";
+
 export function LoadingScreen() {
+  // Inside the app shell this is a page loading its own data after a sidebar
+  // click: the shell stays on screen and the wait shows in the content column
+  // (only once it lasts, see .app-content-loading). The full-screen cover below
+  // made every navigation look like a reload.
+  const insideShell = useContext(AppShellMountedContext);
+  if (insideShell) {
+    return (
+      <div className="app-content-loading" role="status" aria-live="polite" aria-busy="true">
+        <p>Loading your workspace…</p>
+      </div>
+    );
+  }
   return (
     <main
       className="page-shell loading-screen-overlay"
