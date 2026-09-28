@@ -5242,6 +5242,10 @@ export function OrderDetailContent({
   }
 
   async function handleExportInvoice() {
+    // Every price, the VAT and the total are on the invoice: not for a member
+    // without Financial Info, whichever button asked (neither button is shown
+    // to them; this is the backstop, so it also assigns no invoice number).
+    if (!canSeeFinance) return;
     try {
       let invoiceNumber = order.invoiceNumber;
       if (!invoiceNumber) {
@@ -6717,13 +6721,18 @@ export function OrderDetailContent({
                 disabled={!canInlineEditFullDetails}
                 onSave={note => saveDetailsPatch({ invoiceNote: note }, "Invoice note")}
               />
-              <button
-                type="button"
-                onClick={() => void handleExportInvoice()}
-                style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-              >
-                Invoice PDF
-              </button>
+              {/* The invoice prints every price, the VAT and the total, so it
+                  follows Financial Info like the Actions menu's Invoice PDF —
+                  not the Customer permission this card rides on. */}
+              {canSeeFinance ? (
+                <button
+                  type="button"
+                  onClick={() => void handleExportInvoice()}
+                  style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                >
+                  Invoice PDF
+                </button>
+              ) : null}
             </div>
           </section>
         );

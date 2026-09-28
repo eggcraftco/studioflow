@@ -249,18 +249,33 @@ function normalizeCardColorMap(value: unknown) {
   return output;
 }
 
+// A card's own id always decides. A legacy id only speaks for a card the map
+// does not name at all (a layout saved before the card had its current id).
+// It used to be applied last and win: iOS writes its whole visibility map on
+// every save, including `communication: true` (a card id the web folds into
+// "customer"), so a Customer card hidden on the Mac or iPhone — `customer:
+// false` — came back on the web, and so did any card with a legacy alias.
 function normalizeVisibility(value: unknown) {
   const output = { ...DEFAULT_VISIBILITY };
   if (!value || typeof value !== "object" || Array.isArray(value)) return output;
 
+  const stored = value as Record<string, unknown>;
+  const decided = new Set<OrderDetailCardId>();
   ORDER_DETAIL_CARD_IDS.forEach(cardId => {
-    const visible = (value as Record<string, unknown>)[cardId];
-    if (typeof visible === "boolean") output[cardId] = visible;
+    const visible = stored[cardId];
+    if (typeof visible === "boolean") {
+      output[cardId] = visible;
+      decided.add(cardId);
+    }
   });
 
   Object.entries(LEGACY_CARD_ID_MAP).forEach(([legacyId, cardId]) => {
-    const visible = (value as Record<string, unknown>)[legacyId];
-    if (typeof visible === "boolean") output[cardId] = visible;
+    if (decided.has(cardId)) return;
+    const visible = stored[legacyId];
+    if (typeof visible === "boolean") {
+      output[cardId] = visible;
+      decided.add(cardId);
+    }
   });
 
   return output;
