@@ -32330,6 +32330,58 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   background: var(--border);
 }
 
+/* ---- short windows ----
+   At 1107 x 824 the main list needed 606 px and was given 510, so Messages
+   and AI Replies sat below the fold, collapsed and expanded alike. The full
+   rows need about 920 px of window height (966 px with Sales), so below 980 px
+   the rows and gaps tighten, and below 820 px once more. Rows stay at least
+   32 px high; the lower section and the avatar block keep their place at the
+   bottom. The drawer (below 1024 px wide) is left as it was. A very short
+   window still scrolls the list, and AppShellFrame keeps the open screen's
+   item in view there. */
+@media (min-width: 1024px) and (max-height: 980px) {
+  .app-sidebar-top {
+    padding: 6px 10px 2px;
+  }
+
+  .app-sidebar-nav,
+  .app-sidebar-lower {
+    gap: 2px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .app-sidebar-item {
+    min-height: 36px;
+  }
+
+  .app-sidebar-user,
+  .app-sidebar.is-collapsed .app-sidebar-user {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .app-sidebar-user-button {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 820px) {
+  .app-sidebar-item {
+    min-height: 32px;
+  }
+}
+
+/* The width animates only once the sidebar has been painted in its settled
+   state (AppShellFrame adds is-settled after the first frame), so applying
+   the stored choice on load can never play as a collapse. */
+@media (min-width: 1024px) {
+  .app-sidebar:not(.is-settled) {
+    transition: none;
+  }
+}
+
 /* ---- the content column ---- */
 .app-shell-scroll-area {
   display: flex;

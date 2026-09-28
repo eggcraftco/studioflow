@@ -5,6 +5,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -254,15 +255,26 @@ function readStoredSidebarCollapsed(): boolean | null {
   return null;
 }
 
+// useLayoutEffect in the browser (it runs before the first paint), useEffect
+// on the server, where a layout effect would only warn.
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 function useSidebarCollapsed() {
   const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
+  // False until the settled state has been painted once. Until then the
+  // stylesheet holds the width transition (.app-sidebar:not(.is-settled)), so
+  // a width computed while the choice was being applied cannot play as a
+  // visible collapse on load.
+  const [settled, setSettled] = useState(false);
+  // The stored choice is read before the first paint: a viewer who collapsed
+  // the sidebar never sees a frame of it open. A plain effect ran after paint,
+  // so every load showed it expanded and then animated it shut.
+  useIsomorphicLayoutEffect(() => {
     const stored = readStoredSidebarCollapsed();
-    if (stored !== null) {
-      setCollapsed(stored);
-      return;
-    }
-    setCollapsed(window.innerWidth < 1280);
+    setCollapsed(stored !== null ? stored : window.innerWidth < 1280);
+    const frame = window.requestAnimationFrame(() => setSettled(true));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
   const toggle = () => {
     setCollapsed((current) => {
@@ -275,7 +287,7 @@ function useSidebarCollapsed() {
       return next;
     });
   };
-  return { collapsed, toggle };
+  return { collapsed, settled, toggle };
 }
 
 function profileInitials(
@@ -1884,7 +1896,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     canCreateOrdersForRole(workspace.role) &&
     workspace.entitlements.features.orders_create,
   );
-  const { collapsed: sidebarCollapsed, toggle: toggleSidebarCollapsed } = useSidebarCollapsed();
+  const {
+    collapsed: sidebarCollapsed,
+    settled: sidebarSettled,
+    toggle: toggleSidebarCollapsed,
+  } = useSidebarCollapsed();
+  const sidebarNavRef = useRef<HTMLElement | null>(null);
   const sidebarUserRef = useRef<HTMLDivElement | null>(null);
   // The user menu closes on a click anywhere else and on Escape, like any
   // dropdown; the drawer and the menu both close when the route changes.
@@ -1954,6 +1971,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     const paths = [item.href, ...(item.activeOn ?? [])];
     return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   }
+  // The open screen's item is kept in view inside the nav. A very short
+  // window still scrolls the list, and the sidebar is created again on most
+  // route changes with the list back at the top, so Messages on /inbox could
+  // sit below the fold. This is block "nearest" on the nav's own scrollTop:
+  // Element.scrollIntoView would also move the page and the drawer.
+  const visibleNavHrefs = NAV_ITEMS.filter((item) => !navItemHidden(item))
+    .map((item) => item.href)
+    .join(" ");
+  useEffect(() => {
+    const nav = sidebarNavRef.current;
+    const item = nav?.querySelector<HTMLElement>(".app-sidebar-item.is-active");
+    if (!nav || !item) return;
+    const navBox = nav.getBoundingClientRect();
+    const itemBox = item.getBoundingClientRect();
+    if (itemBox.top < navBox.top) nav.scrollTop -= navBox.top - itemBox.top;
+    else if (itemBox.bottom > navBox.bottom) nav.scrollTop += itemBox.bottom - navBox.bottom;
+  }, [pathname, visibleNavHrefs]);
   // Lets the stylesheet give the Orders workspace the whole height of the
   // content area (three columns that scroll inside), while every other page
   // keeps scrolling as a document.
@@ -2955,6 +2989,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               className={[
                 "app-sidebar",
                 sidebarCollapsed ? "is-collapsed" : "is-expanded",
+                sidebarSettled ? "is-settled" : "",
                 mobileNavOpen ? "is-open" : "",
               ].filter(Boolean).join(" ")}
               aria-label={t("Main navigation")}
@@ -2983,7 +3018,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   <NavIcon name="close" />
                 </button>
               </div>
-              <nav id="app-sidebar-nav" className="app-sidebar-nav">
+              <nav id="app-sidebar-nav" className="app-sidebar-nav" ref={sidebarNavRef}>
                 {NAV_ITEMS.map((item) => {
                   if (navItemHidden(item)) return null;
                   const active = navItemActive(item);
