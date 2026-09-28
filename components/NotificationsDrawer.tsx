@@ -18,6 +18,66 @@ import {
   typeLabel,
 } from "@/lib/studioflow/notifications";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import type { WebPushStatus } from "@/lib/studioflow/pushNotifications";
+
+// What the last press of "Enable notifications" came to, shown in the drawer. "dismissed" is the
+// browser's question closed without an answer; a refusal shows the blocked banner instead.
+type PushOutcome = WebPushStatus | "dismissed";
+
+// Safari and Firefox only show the permission question when it is asked inside the click itself. The
+// old path asked after awaiting the push module and Firebase's isSupported() (IndexedDB checks), by
+// which time the click was over, so Safari dropped the request and the button seemed to do nothing.
+// This asks first, synchronously, from the click handler; everything else waits for the answer.
+// Older Safari only takes the callback form, newer browsers return a promise: both are handled.
+function askNotificationPermission(): Promise<NotificationPermission> | null {
+  if (typeof window === "undefined" || !("Notification" in window)) return null;
+  try {
+    // The same flag the push module keeps: the browser has been asked, so a page load never asks again.
+    window.localStorage.setItem("nivadesk.pushPrompted", "1");
+  } catch {
+    /* private mode */
+  }
+  return new Promise<NotificationPermission>((resolve) => {
+    let settled = false;
+    const settle = (value: NotificationPermission) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    try {
+      const request = Notification.requestPermission(settle);
+      if (request && typeof request.then === "function") {
+        request.then(settle, () => settle(Notification.permission));
+      }
+    } catch {
+      settle(Notification.permission);
+    }
+  });
+}
+
+function isAppleMobile() {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isStandaloneApp() {
+  if (typeof window === "undefined") return false;
+  const nav = navigator as Navigator & { standalone?: boolean };
+  return nav.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true;
+}
+
+function isSafariBrowser() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /Safari\//.test(ua) && !/Chrome\/|Chromium\/|CriOS\/|FxiOS\/|EdgiOS\/|Edg\/|OPR\//.test(ua);
+}
+
+function blockedHelpText() {
+  const site = typeof window !== "undefined" && window.location.hostname ? window.location.hostname : "nivadesk.app";
+  return isSafariBrowser()
+    ? `In Safari, open Safari → Settings → Websites → Notifications, find ${site} and choose Allow.`
+    : "Click the padlock (or the site-settings icon) to the left of the web address, set Notifications to Allow, then reload this page.";
+}
 
 type Props = {
   open: boolean;
@@ -195,19 +255,51 @@ export function NotificationsDrawer({
   const showPermissionBanner = open && permState === "denied";
   const showEnableInvitation = open && permState === "default";
   const [enablingPush, setEnablingPush] = useState(false);
+  const [pushOutcome, setPushOutcome] = useState<PushOutcome | null>(null);
+  // A browser without the Notification API at all (iPhone / iPad Safari outside a Home Screen app) is
+  // told so when the drawer opens: there is no question to ask it.
+  const unsupportedOutcome = pushOutcome === "unsupported" || (open && permState === "unsupported");
 
-  async function enableNotifications() {
+  useEffect(() => {
+    if (!open) setPushOutcome(null);
+  }, [open]);
+
+  function enableNotifications() {
     if (!workspace || !uid) return;
-    setEnablingPush(true);
-    const mod = await import("@/lib/studioflow/pushNotifications");
-    try {
-      await mod.registerWebPush(workspace, { uid, email }, { requestPermission: true });
-    } catch {
-      /* the state below reports whatever the browser decided */
-    } finally {
-      setEnablingPush(false);
-      setPermState(mod.webPushPermissionState());
+    const answer = askNotificationPermission();
+    if (!answer) {
+      console.warn("[push] enable notifications: unsupported (no Notification API)");
+      setPermState("unsupported");
+      setPushOutcome("unsupported");
+      return;
     }
+    setEnablingPush(true);
+    setPushOutcome(null);
+    void answer
+      .then(async (permission) => {
+        setPermState(permission);
+        if (permission === "denied") {
+          console.warn("[push] enable notifications: permission_denied");
+          return;
+        }
+        if (permission !== "granted") {
+          console.warn("[push] enable notifications: dismissed (permission still default)");
+          setPushOutcome("dismissed");
+          return;
+        }
+        let status: WebPushStatus;
+        try {
+          const mod = await import("@/lib/studioflow/pushNotifications");
+          status = await mod.registerWebPush(workspace, { uid, email }, { requestPermission: false });
+          setPermState(mod.webPushPermissionState());
+        } catch (error) {
+          console.warn("[push] enable notifications: the push module did not load", error);
+          status = "error";
+        }
+        if (status !== "ok") console.warn(`[push] enable notifications: ${status}`);
+        setPushOutcome(status === "permission_denied" ? null : status);
+      })
+      .finally(() => setEnablingPush(false));
   }
 
   if (!open) return null;
@@ -295,12 +387,58 @@ export function NotificationsDrawer({
           <div className="notif-permission-banner is-invite">
             <div style={{ flex: 1 }}>
               <strong>Turn on notifications</strong>
-              <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
-                Get an alert when a message, order or support reply needs you.
-              </div>
+              {pushOutcome === "dismissed" ? (
+                <div role="status" style={{ fontSize: 11, marginTop: 2, fontWeight: 700 }}>
+                  You closed the browser&apos;s question — press Enable notifications to ask again.
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
+                  Get an alert when a message, order or support reply needs you.
+                </div>
+              )}
             </div>
-            <button type="button" disabled={enablingPush || !workspace} onClick={() => void enableNotifications()}>
+            <button type="button" disabled={enablingPush || !workspace} onClick={enableNotifications}>
               {enablingPush ? "Asking…" : "Enable notifications"}
+            </button>
+          </div>
+        )}
+
+        {open && pushOutcome === "ok" && (
+          <div className="notif-permission-banner is-success" role="status">
+            <div style={{ flex: 1 }}>
+              <strong>Notifications are on for this browser.</strong>
+            </div>
+          </div>
+        )}
+
+        {unsupportedOutcome && (
+          <div className="notif-permission-banner is-info" role="status">
+            <div style={{ flex: 1 }}>
+              <strong>This browser can&apos;t show NivaDesk notifications.</strong>
+              {isAppleMobile() && !isStandaloneApp() ? (
+                <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
+                  Add NivaDesk to your Home Screen (Share → Add to Home Screen) and open it from there to get notifications.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {open && pushOutcome === "not_configured" && (
+          <div className="notif-permission-banner is-info" role="status">
+            <div style={{ flex: 1 }}>
+              <strong>Notifications aren&apos;t available right now.</strong>
+            </div>
+          </div>
+        )}
+
+        {open && pushOutcome === "error" && (
+          <div className="notif-permission-banner is-error" role="alert">
+            <div style={{ flex: 1 }}>
+              <strong>Notifications could not be turned on. Try again.</strong>
+            </div>
+            <button type="button" disabled={enablingPush || !workspace} onClick={enableNotifications}>
+              {enablingPush ? "Asking…" : "Try again"}
             </button>
           </div>
         )}
@@ -309,11 +447,11 @@ export function NotificationsDrawer({
           <div className="notif-permission-banner">
             <div style={{ flex: 1 }}>
               <strong>Notifications are blocked</strong>
-              {/* A page cannot open chrome://settings — the browser blocks it and
-                  nothing happens. Say where the switch is instead. */}
+              {/* A page cannot open the browser's settings — the browser blocks it and
+                  nothing happens. Say where the switch is instead, for this browser. */}
               <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
                 {permissionHelpOpen
-                  ? "Click the padlock (or the icon left of the web address), find Notifications, and set it to Allow. Then reload this page."
+                  ? blockedHelpText()
                   : "Allow notifications in your browser settings to get push alerts."}
               </div>
             </div>
@@ -578,6 +716,8 @@ function timeText(ms: number, sectionId: string): string {
 function DrawerStyles() {
   return (
     <style jsx global>{`
+      /* The drawer is a solid panel: without a background of its own, the page behind showed through
+         between the cards, under the day labels and through the tinted banners. */
       .notif-drawer {
         position: fixed;
         right: 0; top: 0; bottom: 0;
@@ -589,6 +729,9 @@ function DrawerStyles() {
         flex-direction: column;
         gap: 10px;
         pointer-events: auto;
+        background: #f3f4f6;
+        border-left: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: -18px 0 40px rgba(15, 23, 42, 0.18);
       }
       .notif-card {
         background: #ffffff;
@@ -611,7 +754,7 @@ function DrawerStyles() {
       .notif-clear { background: transparent; border: none; color: #2563eb; font-size: 11px; cursor: pointer; font-weight: 600; margin-left: auto; }
       .notif-filters-expanded { padding-top: 6px; }
       .notif-section { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-      .notif-section-title { font-size: 10px; font-weight: 800; color: #9ca3af; letter-spacing: 0.6px; padding-left: 4px; }
+      .notif-section-title { font-size: 10px; font-weight: 800; color: #6b7280; letter-spacing: 0.6px; padding-left: 4px; }
       .notif-card-row { display: flex; gap: 10px; align-items: flex-start; }
       .notif-avatar { position: relative; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
       .notif-unread-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 1.5px solid white; }
@@ -632,11 +775,13 @@ function DrawerStyles() {
       .notif-stack-banner span { flex: 1; font-size: 10px; font-weight: 700; color: #2563eb; }
       .notif-stack-banner button { background: transparent; border: none; color: #2563eb; font-size: 11px; cursor: pointer; font-weight: 600; }
       .notif-empty { padding: 32px; display: flex; flex-direction: column; align-items: center; text-align: center; }
-      .notif-permission-banner { background: #fee2e2; color: #991b1b; border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
+      .notif-permission-banner { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
       .notif-permission-banner button { background: white; border: 1px solid #fca5a5; color: #991b1b; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
-      /* An offer, not a failure — it must not be painted like the blocked banner. */
-      .notif-permission-banner.is-invite { background: rgba(37,99,235,0.10); color: #1d4ed8; }
-      .notif-permission-banner.is-invite button { border-color: rgba(37,99,235,0.35); color: #1d4ed8; }
+      /* An offer, not a failure — it must not be painted like the blocked banner. Solid, not a tint. */
+      .notif-permission-banner.is-invite { background: #eef2ff; color: #1e3a8a; border-color: #c7d2fe; }
+      .notif-permission-banner.is-invite button { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+      .notif-permission-banner.is-success { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+      .notif-permission-banner.is-info { background: #ffffff; color: #374151; border-color: #e5e7eb; }
       .notif-permission-banner button:disabled { opacity: 0.6; cursor: not-allowed; }
       .notif-row-dismiss { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 999px; border: none; background: transparent; color: #9ca3af; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
       .notif-card:hover .notif-row-dismiss, .notif-row-dismiss:focus-visible { opacity: 1; }
