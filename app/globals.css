@@ -4000,6 +4000,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 }
 
 .order-list-thumbnail {
+  position: relative;
   width: 56px;
   aspect-ratio: 1;
   overflow: hidden;
@@ -4013,10 +4014,17 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   font-weight: 950;
 }
 
+/* The photo fills the square and shows its centre, as on the Mac. In the grid, height: 100% did not
+   resolve against the aspect-ratio box: a portrait photo sized its own row (54 × 68 in a 54 px box)
+   and showed its top. Pinned to the box instead; the placeholder icon stays grid-centred. */
 .order-list-thumbnail img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% 50%;
 }
 
 .order-list-card-body {
