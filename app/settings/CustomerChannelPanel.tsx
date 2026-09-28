@@ -1,9 +1,10 @@
 "use client";
 
-// Settings → Customer Channels.
+// Settings → Integrations → WhatsApp / Instagram (the "Manage" panel of the
+// two customer-channel tiles; until 28 Sep 2026 this was its own Customer
+// Channels area, and ?section=customer-channels still lands here).
 //
-// WhatsApp and Instagram, one card each, always both — so a workspace sees the
-// channel it has and the one it does not. Every state on these cards is the
+// One card for the channel the tile named. Every state on the card is the
 // server's measurement (a message stored, a reply accepted, an authentication
 // failure on a send), read through `getCustomerChannelStatus`; nothing here
 // claims "connected" that the server did not see.
@@ -40,7 +41,7 @@ import {
 import { relativeTimeLabel } from "@/lib/studioflow/relativeTime";
 import { metaSignupConfig, runEmbeddedSignup } from "@/lib/studioflow/metaSignup";
 
-type Props = { workspace: WorkspaceContext; language?: string };
+type Props = { workspace: WorkspaceContext; language?: string; channel: "whatsapp" | "instagram" };
 
 const STATE_LABEL: Record<CustomerChannelCard["state"], string> = {
   connected: "Connected",
@@ -182,7 +183,7 @@ function instagramSentence(word: string): string {
   }
 }
 
-export function CustomerChannelsSection({ workspace, language = "English" }: Props) {
+export function CustomerChannelPanel({ workspace, language = "English", channel }: Props) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const [status, setStatus] = useState<CustomerChannelStatus | null>(null);
   const [error, setError] = useState("");
@@ -346,7 +347,7 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
   if (!status) {
     return (
       <section className="card app-card">
-        <SettingsCardHead title={t("Customer Channels")} subtitle={t("WhatsApp and Instagram: which line your customers write to, and whether it works.")} />
+        <SettingsCardHead title={channel === "whatsapp" ? "WhatsApp" : "Instagram"} subtitle={t("WhatsApp and Instagram: which line your customers write to, and whether it works.")} />
         <p className="layout-error">{error}</p>
         <div className="settings-action-row">
           <button type="button" className="button secondary" onClick={() => void load()}>{t("Try again")}</button>
@@ -356,12 +357,14 @@ export function CustomerChannelsSection({ workspace, language = "English" }: Pro
   }
 
   const canSignUp = Boolean(signupConfig);
+  const cards = status.cards.filter((card) => card.channel === channel);
+  const connectedHere = cards.reduce((total, card) => total + card.connections.filter((line) => line.state === "connected").length, 0);
   return (
     <div className="settings-card-stack settings-channels-page">
-      <p className="settings-field-hint" role="status">{t("{count} connected").replace("{count}", String(status.connected))}</p>
+      <p className="settings-field-hint" role="status">{t("{count} connected").replace("{count}", String(connectedHere))}</p>
       {notice ? <p className="settings-field-hint" role="status">{notice}</p> : null}
       {actionError ? <p className="layout-error" role="alert">{actionError}</p> : null}
-      {status.cards.map((card) => {
+      {cards.map((card) => {
         const ownLine = card.connections.find((line) => line.connectedVia === "signup") || null;
         const offerConnect = card.channel === "whatsapp" && card.state === "not_connected" && canSignUp;
         const offerReconnect = card.channel === "whatsapp" && Boolean(ownLine) && card.state === "reconnect_required" && canSignUp;

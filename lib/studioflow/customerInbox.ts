@@ -86,7 +86,17 @@ export type CustomerInboxMedia = {
  * and when it was made. Never who — the server keys the reactor by the
  * conversation, and a screen has no use for the id.
  */
-export type CustomerInboxReaction = { emoji: string; atMs: number };
+export type CustomerInboxReaction = {
+  emoji: string;
+  atMs: number;
+  /** Whose: the customer's (from the provider) or the operator's (sent from NivaDesk). Absent on an older server: the customer's. */
+  by?: "customer" | "operator";
+  /** Operator entries only: what the provider said — or "suppressed" in a test environment. */
+  status?: "sent" | "suppressed";
+};
+
+/** The emoji a member may send as a reaction: the server's fixed six (channels/messageReactions.js OPERATOR_EMOJI). */
+export const OPERATOR_REACTION_EMOJI = ["\u2764\uFE0F", "\u{1F44D}", "\u{1F602}", "\u{1F62E}", "\u{1F622}", "\u{1F64F}"] as const;
 
 /** One message as `conversationDetailRow` sends it. */
 export type CustomerInboxMessage = {
@@ -113,10 +123,17 @@ export type CustomerInboxMessage = {
   /** Set when deliveryStatus is "failed": permission, auth, transient, … */
   errorClass: string;
   /**
-   * The customer's reaction to this message, either direction — shown under
-   * the bubble, never as a message row. Absent on a server that predates it.
+   * The reactions on this message, either direction — the customer's and the
+   * operator's, shown under the bubble, never as a message row. Absent on a
+   * server that predates it.
    */
   reactions?: CustomerInboxReaction[];
+  /**
+   * True on a customer's message the workspace can react to through the
+   * provider (its provider id was sealed at arrival). Absent or false: no
+   * chooser — the server would answer "too old to react to".
+   */
+  reactable?: boolean;
 };
 
 /**
@@ -337,20 +354,57 @@ export type CustomerInboxReplyResult = {
  * caller and reused on a retry: the server claims it before anything is sent,
  * so a second press with the same id is the same reply, never a second message.
  */
+/**
+ * A photo or PDF to send with the reply: the bytes as base64, their type
+ * (JPG, PNG, WebP or PDF) and, for a document, a name. The server bounds the
+ * size (photos 5 MB, PDFs 7 MB) and refuses anything else before sending.
+ */
+export type CustomerInboxOutboundMedia = { base64: string; mimeType: string; filename?: string };
+
 export async function sendCustomerInboxReply(
   companyId: string,
   conversationId: string,
   replyId: string,
-  body: string
+  body: string,
+  media?: CustomerInboxOutboundMedia | null
 ): Promise<CustomerInboxReplyResult> {
   return withWebSyncStatus(async () => {
     const call = httpsCallable<
-      { companyId: string; conversationId: string; replyId: string; body: string },
+      { companyId: string; conversationId: string; replyId: string; body: string; media?: CustomerInboxOutboundMedia },
       CustomerInboxReplyResult
     >(functions, "sendCustomerInboxReply");
-    const response = await call({ companyId, conversationId, replyId, body });
+    const response = await call({ companyId, conversationId, replyId, body, ...(media ? { media } : {}) });
     return response.data;
   }, "Sending on WhatsApp.");
+}
+
+export type CustomerInboxReactionResult = {
+  ok: boolean;
+  action: "react" | "unreact";
+  status: "sent" | "suppressed";
+  reaction: { emoji: string; atMs: number; byUid: string } | null;
+};
+
+/**
+ * React to a customer's message with one of the six emoji, or take the
+ * reaction back (`null`). The provider is told through the server, which
+ * opens the message's sealed provider id and the customer's sealed address
+ * for that one call; nothing of either reaches here.
+ */
+export async function reactToCustomerMessage(
+  companyId: string,
+  conversationId: string,
+  messageId: string,
+  emoji: string | null
+): Promise<CustomerInboxReactionResult> {
+  return withWebSyncStatus(async () => {
+    const call = httpsCallable<
+      { companyId: string; conversationId: string; messageId: string; emoji: string | null },
+      CustomerInboxReactionResult
+    >(functions, "reactToCustomerMessage");
+    const response = await call({ companyId, conversationId, messageId, emoji });
+    return response.data;
+  }, "Sending the reaction.");
 }
 
 /** A reply id: unique per reply, safe as a document id. */

@@ -28,19 +28,24 @@ import { getSquareConnections } from "@/lib/studioflow/square";
 import { getEbayConnections } from "@/lib/studioflow/ebay";
 import { getAmazonStatus, type AmazonAuthorizationMode, type AmazonConnection } from "@/lib/studioflow/amazon";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
+import { loadCustomerChannelStatus, type CustomerChannelCard } from "@/lib/studioflow/customerInbox";
 
-export type IntegrationCategory = "commerce" | "banking" | "automation";
+export type IntegrationCategory = "commerce" | "banking" | "automation" | "messaging";
 
 export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[] = [
   { id: "commerce", title: "Commerce & orders" },
   { id: "banking", title: "Banking & accounting" },
   { id: "automation", title: "Payments, files & automation" },
+  // WhatsApp and Instagram: the customer channels, as two tiles here rather
+  // than a Settings area of their own (28 Sep 2026). Their state is the
+  // server's measurement (getCustomerChannelStatus), never written here.
+  { id: "messaging", title: "Customer messaging" },
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "dhl";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "dhl" | "whatsapp" | "instagram";
 
 export type IntegrationProvider = {
   id: string;
@@ -115,6 +120,18 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     id: "ebay", name: "eBay", category: "commerce", kind: "native", mark: "E",
     blurb: "Connect your eBay seller account once; orders, payments and refunds arrive on their own.",
     capabilities: ["Orders"], manage: "ebay",
+  },
+  {
+    // The customer channels. No logo file: the marks are Meta's and are not
+    // redrawn here, so the tiles keep their initials like Square's.
+    id: "whatsapp", name: "WhatsApp", category: "messaging", kind: "native", mark: "W",
+    blurb: "Answer the WhatsApp messages your customers send, from Messages ▸ Customers.",
+    capabilities: ["Messages", "Replies", "Reactions", "Photos & PDFs"], manage: "whatsapp",
+  },
+  {
+    id: "instagram", name: "Instagram", category: "messaging", kind: "native", mark: "I",
+    blurb: "Answer the Instagram messages your customers send, from Messages ▸ Customers.",
+    capabilities: ["Messages", "Replies", "Reactions"], manage: "instagram",
   },
   {
     id: "openbanking", name: "Open Banking", category: "banking", kind: "native",
@@ -211,7 +228,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, ebay, amazon, accounting, chatgpt, retired] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, ebay, amazon, accounting, chatgpt, retired, channels] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -238,6 +255,10 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // says what it said before.
     httpsCallable<{ companyId: string }, { holds: { kind: string }[] }>(
       functions, "listRetiredIntegrationHolds")({ companyId }),
+    // The customer channels, as the server measured them. A workspace whose
+    // plan has no Messages is refused here, which settles as "could not
+    // check" — never as "not connected", and never as connectable.
+    loadCustomerChannelStatus(companyId),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -294,6 +315,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     retiredHolds: retired.status === "fulfilled"
       ? (retired.value.data?.holds ?? []).map((row) => (row.kind === "shopify" ? "shopify" : row.kind))
       : [],
+    customerChannels: channels.status === "fulfilled" ? channels.value.cards : null,
   };
 }
 
@@ -353,6 +375,8 @@ export type IntegrationSignals = {
   chatgptConnections: ChatGPTConnection[];
   /** Provider ids whose retired pasted-URL webhook token this workspace still holds. */
   retiredHolds: string[];
+  /** The customer channel cards (WhatsApp, Instagram) as the server measured them; null = the read failed; undefined = not read yet. */
+  customerChannels?: CustomerChannelCard[] | null;
 };
 
 /**
@@ -531,6 +555,30 @@ function resolveProviderState(
 
   if (provider.id === "openbanking") {
     return signals.bankConnections > 0 ? { state: "connected" } : { state: "available" };
+  }
+
+  // The customer channels read the server's card for the channel: "connected"
+  // and "reconnect required" are measurements (a message stored, a reply
+  // accepted, an auth failure), "not connected" offers the panel, "pending"
+  // (a routed line nobody has proved yet) is available with the panel saying
+  // why, and a channel the server does not offer this workspace reads as
+  // planned — the same honesty rule as eBay's rollout list.
+  if (provider.id === "whatsapp" || provider.id === "instagram") {
+    const cards = signals.customerChannels;
+    if (cards === null) return { state: "unverified" };
+    if (cards === undefined) return { state: "checking" };
+    const card = cards.find((row) => row.channel === provider.id);
+    if (!card) return { state: "unverified" };
+    const label = card.connections.map((line) => line.displayLabel).find(Boolean) || "";
+    switch (card.state) {
+      case "connected": return { state: "connected", ...(label ? { detail: label } : {}) };
+      // A line that must be reconnected, and a routed line nobody has proved yet
+      // or that has not received a message: both want a look, never "Available".
+      case "reconnect_required":
+      case "pending": return { state: "attention", ...(label ? { detail: label } : {}) };
+      case "not_connected": return { state: "available" };
+      default: return { state: "planned" };
+    }
   }
 
   // Everything else arrives over a webhook channel. A test delivery proves the

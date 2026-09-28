@@ -31674,75 +31674,276 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
   .shipment-piece-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shipment-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-/* ==== Customer inbox: the linking panel ====
-   The panel an operator attaches a conversation to a customer or an order
-   with. The rest of /inbox is deliberately plain; these rules exist so the two
-   pickers read as two columns of choosable records rather than as one run-on
-   list, and so the chosen one is visible without relying on colour alone. */
-.inbox-channel,
-.inbox-provider,
-.inbox-linked {
-  display: inline-flex;
+/* ==== Customer inbox (/inbox): three panes on the app's tokens ====
+   The conversation list on the left, the open thread in the middle, what the
+   thread is about on the right; on a phone the list, then the thread with a way
+   back, and the details as a sheet. Every colour is a theme token, so light and
+   dark are the same rules. The class names the acceptance scripts read
+   (.inbox-row, .inbox-msg, .inbox-msg-out/-in, .inbox-msg-reaction,
+   .inbox-row-preview, .inbox-unread, .inbox-reply) are kept. */
+.inbox-page { height: 100%; min-height: 480px; background: var(--background); color: var(--text); }
+.inbox-layout { display: flex; height: 100%; min-height: 0; position: relative; }
+
+/* --- the list --- */
+.inbox-list { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; }
+.inbox-head { padding: 10px 16px 6px; }
+.inbox-head h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.inbox-sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.inbox-toolbar { display: grid; gap: 8px; padding: 6px 12px 10px; border-bottom: 1px solid var(--border); }
+.inbox-search { width: 100%; font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--background); color: var(--text); }
+.inbox-filter-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.inbox-filter-row select, .inbox-assign select { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.inbox-unread-only { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.inbox-list ul { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.inbox-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas: "avatar label time" "avatar preview preview" "avatar meta meta";
+  column-gap: 10px;
+  row-gap: 2px;
   align-items: center;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border: 1px solid var(--border, #d8d8de);
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.inbox-link-open { margin-left: 8px; }
-.inbox-link {
-  margin: 12px 0 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--border, #d8d8de);
-  border-radius: 10px;
-}
-.inbox-link-head strong { display: block; }
-.inbox-link-head p { margin: 4px 0 0; font-size: 13px; }
-.inbox-link-scope { opacity: 0.75; }
-.inbox-link-search { width: 100%; margin: 10px 0; padding: 6px 8px; }
-.inbox-link-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.inbox-link-column h3 { margin: 0 0 6px; font-size: 13px; }
-.inbox-link-column ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
-.inbox-link-column li { margin: 0 0 4px; }
-.inbox-link-option {
-  display: block;
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--border, #d8d8de);
-  border-radius: 8px;
+  padding: 10px 10px;
+  border: none;
+  border-radius: 12px;
   background: transparent;
+  color: inherit;
   text-align: left;
   cursor: pointer;
-}
-/* The chosen record is marked by weight and a border, not by colour alone. */
-.inbox-link-option.is-chosen { border-width: 2px; font-weight: 600; }
-.inbox-link-option-name { display: block; }
-.inbox-link-option-sub { display: block; font-size: 12px; opacity: 0.75; }
-.inbox-link-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-/* ==== Customer inbox: the WhatsApp reply box ====
-   Under the thread, for members who may write. Plain like the rest of /inbox:
-   one field, the 24-hour rule said in words, one send button. */
-.inbox-reply { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border, #d8d8de); }
-.inbox-reply-text {
-  width: 100%;
-  min-height: 72px;
-  padding: 8px 10px;
-  border: 1px solid var(--border, #d8d8de);
-  border-radius: 8px;
   font: inherit;
-  resize: vertical;
 }
-.inbox-reply-text:focus-visible { outline: 2px solid var(--accent, #4f46e5); outline-offset: 1px; }
-.inbox-reply-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.inbox-reply-hint { margin: 0; font-size: 12px; color: var(--muted, #6b6b76); }
-.inbox-reply-send { padding: 8px 14px; border-radius: 8px; }
+.inbox-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.inbox-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.inbox-row-open { background: var(--accent-soft); }
+.inbox-row-open:hover { background: var(--accent-soft); }
+.inbox-avatar {
+  grid-area: avatar;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--accent);
+  align-self: start; flex-shrink: 0;
+}
+.inbox-avatar[data-channel="instagram"] { background: color-mix(in srgb, #d62976 16%, var(--surface)); color: #b5216a; }
+.inbox-avatar[data-channel="whatsapp"] { background: color-mix(in srgb, #25d366 18%, var(--surface)); color: #128c7e; }
+body[data-studio-theme="dark"] .inbox-avatar[data-channel="instagram"] { color: #f06aa8; }
+body[data-studio-theme="dark"] .inbox-avatar[data-channel="whatsapp"] { color: #5fe39b; }
+.inbox-avatar-lg { width: 56px; height: 56px; font-size: 18px; }
+.inbox-row-label { grid-area: label; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; font-weight: 700; font-size: 14px; }
+.inbox-row-customer { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.inbox-row-customer + .inbox-row-masked { font-weight: 500; color: var(--muted); font-size: 12px; }
+.inbox-row-channel, .inbox-chip-channel {
+  display: inline-flex; align-items: center; padding: 0 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; line-height: 17px; letter-spacing: 0.02em;
+  color: var(--text); border: 1px solid var(--border); background: var(--surface);
+}
+.inbox-row-channel[data-channel="whatsapp"], .inbox-chip-channel[data-channel="whatsapp"] { color: #128c7e; border-color: rgba(37, 211, 102, 0.4); background: rgba(37, 211, 102, 0.12); }
+.inbox-row-channel[data-channel="instagram"], .inbox-chip-channel[data-channel="instagram"] { color: #b5216a; border-color: rgba(214, 41, 118, 0.35); background: rgba(214, 41, 118, 0.10); }
+body[data-studio-theme="dark"] .inbox-row-channel[data-channel="whatsapp"], body[data-studio-theme="dark"] .inbox-chip-channel[data-channel="whatsapp"] { color: #5fe39b; }
+body[data-studio-theme="dark"] .inbox-row-channel[data-channel="instagram"], body[data-studio-theme="dark"] .inbox-chip-channel[data-channel="instagram"] { color: #f06aa8; }
+.inbox-row-time { grid-area: time; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; align-self: start; padding-top: 2px; }
+.inbox-row-preview { grid-area: preview; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-row.is-unread .inbox-row-preview { color: var(--text); font-weight: 600; }
+.inbox-unread { color: var(--accent); font-size: 10px; }
+.inbox-row-meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); }
+.inbox-row-assignee { font-size: 11px; font-weight: 600; color: var(--text); padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 7%, transparent); line-height: 17px; }
+.inbox-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; font-family: inherit; }
+.inbox-chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+.inbox-chip-active { justify-self: start; }
+.inbox-chip:focus-visible, .inbox-toolbar select:focus-visible, .inbox-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- the thread --- */
+.inbox-thread { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--background); }
+.inbox-thread-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
+.inbox-thread-empty-mark { width: 44px; height: 44px; opacity: 0.35; }
+.inbox-thread-empty-mark svg { width: 100%; height: 100%; }
+.inbox-thread-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.inbox-thread-head .inbox-avatar { width: 36px; height: 36px; font-size: 12px; }
+.inbox-thread-title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.inbox-thread-title strong { font-size: 15px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-thread-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.inbox-provider { font-size: 10px; color: var(--muted); padding: 0 6px; border-radius: 999px; border: 1px dashed var(--border); line-height: 17px; }
+.inbox-chip-status { font-size: 10px; font-weight: 700; padding: 0 7px; border-radius: 999px; line-height: 17px; }
+.inbox-chip-status.is-open { background: var(--success-soft); color: #1f7a3d; }
+.inbox-chip-status.is-closed { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--muted); }
+body[data-studio-theme="dark"] .inbox-chip-status.is-open { color: #5fe39b; }
+.inbox-back { display: none; width: 36px; height: 36px; padding: 6px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.inbox-back svg { width: 100%; height: 100%; }
+.inbox-details-toggle { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.inbox-details-toggle svg { width: 16px; height: 16px; }
+.inbox-details-toggle.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.inbox-thread-head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inbox-thread > .inbox-renewal { margin: 0; padding: 10px 16px; background: var(--danger-soft); color: var(--danger); border-bottom: 1px solid var(--border); }
+.inbox-renewal a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.inbox-messages { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 2px; }
+.inbox-day { align-self: center; margin: 10px 0 8px; }
+.inbox-day span { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.inbox-msg { max-width: min(72%, 640px); display: flex; flex-direction: column; gap: 2px; position: relative; }
+.inbox-msg.is-first { margin-top: 8px; }
+.inbox-msg-in { align-self: flex-start; align-items: flex-start; }
+.inbox-msg-out { align-self: flex-end; align-items: flex-end; }
+.inbox-bubble { padding: 8px 12px 6px; border-radius: 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.inbox-msg-in .inbox-bubble { background: var(--surface); border: 1px solid var(--border); border-top-left-radius: 6px; }
+.inbox-msg-in.is-last .inbox-bubble { border-bottom-left-radius: 4px; }
+.inbox-msg-out .inbox-bubble { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-top-right-radius: 6px; }
+.inbox-msg-out.is-last .inbox-bubble { border-bottom-right-radius: 4px; }
+.inbox-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
+.inbox-msg-untrusted { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
+.inbox-msg-tag { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.inbox-msg-time { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); align-self: flex-end; }
+.inbox-msg-status { display: inline-flex; align-items: center; gap: 3px; }
+.inbox-msg-ticks { letter-spacing: -2px; font-weight: 700; }
+.inbox-msg-status-read { color: var(--accent); }
+.inbox-msg-status-failed { color: var(--danger); font-weight: 600; }
+.inbox-msg-status-suppressed { color: var(--warning); }
+.inbox-msg-failure { font-size: 11px; color: var(--danger); align-self: flex-end; max-width: 100%; }
+/* Reactions: the customer's emoji and the workspace's own, as chips under the
+   bubble's corner, never a row of their own. The operator's chip is filled with
+   the accent so the two sides read differently at a glance. */
+.inbox-msg-reactions { display: inline-flex; gap: 4px; margin-top: -8px; margin-inline: 8px; position: relative; z-index: 1; }
+.inbox-msg-reaction { display: inline-block; font-size: 13px; line-height: 1.2; padding: 2px 7px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--text); cursor: default; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.inbox-msg-reaction-mine { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.inbox-msg-reaction-mine.is-suppressed { border-style: dashed; }
+/* The chooser: a small button that appears beside a customer's bubble on
+   hover or focus (always on a touch screen, with a long-press as well). */
+.inbox-react { position: relative; display: inline-flex; align-self: flex-start; margin-inline-start: 6px; }
+.inbox-react-open { width: 26px; height: 26px; padding: 4px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.inbox-react-open svg { width: 100%; height: 100%; }
+.inbox-msg:hover .inbox-react-open, .inbox-msg:focus-within .inbox-react-open, .inbox-react.is-open .inbox-react-open { opacity: 1; }
+.inbox-react-open:hover, .inbox-react.is-open .inbox-react-open { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .inbox-react-open { opacity: 1; } }
+.inbox-react-chooser { position: absolute; left: 0; top: 30px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+.inbox-react-choice { font: inherit; font-size: 20px; line-height: 1; width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; cursor: pointer; }
+.inbox-react-choice:hover, .inbox-react-choice:focus-visible { background: var(--accent-soft); transform: scale(1.15); outline: none; }
+.inbox-react-choice.is-current { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.inbox-react-remove { font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+/* A file a customer sent, inside their message, or one the workshop sent:
+   named, opened on request, and its state said in words. */
+.inbox-attachment { margin-top: 6px; display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: color-mix(in srgb, var(--text) 4%, transparent); white-space: normal; }
+.inbox-attachment-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.inbox-attachment-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.inbox-attachment-size { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.inbox-attachment-note { font-size: 12px; color: var(--muted); }
+.inbox-attachment-blocked { color: var(--danger); font-weight: 600; }
+.inbox-attachment-action { justify-self: start; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; }
+.inbox-attachment-action:focus-visible, .inbox-attachment-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inbox-attachment-preview { display: block; justify-self: start; max-width: 100%; border-radius: 8px; overflow: hidden; }
+.inbox-attachment-preview img { display: block; max-width: min(320px, 100%); max-height: 320px; width: auto; height: auto; object-fit: contain; }
+.inbox-thread > .inbox-notice, .inbox-list > .inbox-notice { padding: 16px; margin: 0; color: var(--muted); }
+.inbox-thread > .inbox-reply-closed { position: sticky; bottom: 0; margin: 0; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); display: grid; gap: 4px; color: var(--muted); }
+.inbox-reply-closed p { margin: 0; }
+
+/* --- the composer --- */
+.inbox-thread .inbox-reply { position: sticky; bottom: 0; margin-top: 0; padding: 10px 16px 10px; background: var(--surface); border-top: 1px solid var(--border); display: grid; gap: 8px; }
+.inbox-composer { display: flex; align-items: flex-end; gap: 8px; }
+.inbox-composer-tools { display: inline-flex; gap: 4px; padding-bottom: 4px; }
+.inbox-composer-btn { width: 36px; height: 36px; padding: 7px; border-radius: 10px; border: 1px solid var(--border); background: var(--background); color: var(--muted); cursor: pointer; }
+.inbox-composer-btn svg { width: 100%; height: 100%; }
+.inbox-composer-btn:hover, .inbox-composer-btn.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.inbox-composer-btn:focus-visible, .inbox-reply-send:focus-visible, .inbox-attach-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inbox-reply-text { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 14px; line-height: 1.4; padding: 9px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--background); color: var(--text); resize: vertical; min-height: 44px; max-height: 40vh; }
+.inbox-reply-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.inbox-reply-send { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 10px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; cursor: pointer; flex-shrink: 0; }
+.inbox-reply-send svg { width: 100%; height: 100%; }
+.inbox-reply-send:disabled { opacity: 0.45; cursor: default; }
+.inbox-reply-send-text { font-size: 10px; font-weight: 700; }
+.inbox-reply-hint { margin: 0; font-size: 12px; color: var(--muted); }
 .inbox-reply-error p { margin: 0 0 6px; }
-.inbox-link-error { margin-top: 12px; }
-@media (max-width: 720px) {
-  .inbox-link-columns { grid-template-columns: 1fr; }
+.inbox-reply-error button, .inbox-link-error button { font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.inbox-attach-preview { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--background); max-width: 100%; }
+.inbox-attach-preview img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; }
+.inbox-attach-doc { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 11px; font-weight: 800; }
+.inbox-attach-name { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-attach-size { font-size: 11px; color: var(--muted); margin-inline-start: auto; }
+.inbox-attach-remove { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 16px; line-height: 1; }
+/* The emoji chooser for the composer: a grid, searched by name. */
+.inbox-emoji { display: grid; gap: 8px; padding: 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16); max-width: 420px; }
+.inbox-emoji-search { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--background); color: var(--text); }
+.inbox-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 2px; max-height: 220px; overflow-y: auto; }
+.inbox-emoji-cell { font: inherit; font-size: 22px; line-height: 1; height: 38px; border-radius: 8px; border: 0; background: transparent; cursor: pointer; }
+.inbox-emoji-cell:hover, .inbox-emoji-cell:focus-visible { background: var(--accent-soft); outline: none; }
+.inbox-emoji-empty { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* --- the details column --- */
+.inbox-context { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; }
+.inbox-context-head { display: none; align-items: center; justify-content: space-between; }
+.inbox-context-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer; }
+.inbox-context-card { display: grid; gap: 8px; padding: 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--background); }
+.inbox-context-card h3 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.inbox-context-who { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.inbox-context-who-text { display: grid; gap: 3px; min-width: 0; }
+.inbox-context-who-text strong { font-size: 15px; font-weight: 800; overflow-wrap: anywhere; }
+.inbox-context-masked { font-size: 13px; color: var(--muted); }
+.inbox-context-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.inbox-context-facts { margin: 0; display: grid; gap: 6px; }
+.inbox-context-facts div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.inbox-context-facts dt { color: var(--muted); }
+.inbox-context-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.inbox-context-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.inbox-context-danger { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.inbox-context-scrim { display: none; }
+.inbox-link-open, .inbox-status-toggle, .inbox-erase { font: inherit; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; justify-self: start; }
+.inbox-link-open:hover, .inbox-status-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.inbox-status-toggle { background: var(--success-soft); border-color: transparent; color: #1f7a3d; }
+body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
+.inbox-status-toggle.is-reopen { background: var(--accent-soft); color: var(--accent); }
+.inbox-erase { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.inbox-triage { gap: 10px; }
+.inbox-assign { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.inbox-assign select { width: 100%; }
+.inbox-labels { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.inbox-labels-title { font-size: 12px; color: var(--muted); width: 100%; }
+.inbox-label-input { font: inherit; font-size: 12px; width: 130px; padding: 3px 8px; border-radius: 999px; border: 1px dashed var(--border); background: transparent; color: var(--text); }
+.inbox-triage button:focus-visible, .inbox-context select:focus-visible, .inbox-label-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The linking panel, inside the details column: two pickers of choosable
+   records, and the chosen one visible without relying on colour alone. */
+.inbox-link { display: grid; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.inbox-link-head strong { display: block; }
+.inbox-link-head p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.inbox-link-scope { opacity: 0.85; }
+.inbox-link-search { width: 100%; margin: 4px 0; padding: 7px 10px; font: inherit; font-size: 13px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.inbox-link-columns { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.inbox-link-column h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.inbox-link-column ul { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; display: grid; gap: 4px; }
+.inbox-link-column li { margin: 0; }
+.inbox-link-option { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.inbox-link-option.is-chosen { border-color: var(--accent); border-width: 2px; font-weight: 600; background: var(--accent-soft); }
+.inbox-link-option-name { display: block; }
+.inbox-link-option-sub { display: block; font-size: 12px; color: var(--muted); }
+.inbox-link-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.inbox-link-actions button { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.inbox-link-save { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
+.inbox-link-save:disabled { opacity: 0.5; }
+.inbox-link-error { margin-top: 4px; }
+.inbox-notice p { margin: 0 0 6px; }
+
+/* --- narrower screens: the details become a sheet --- */
+@media (max-width: 1100px) {
+  .inbox-context { position: absolute; inset: 0 0 0 auto; width: min(360px, 100%); z-index: 20; box-shadow: -12px 0 32px rgba(15, 23, 42, 0.18); transform: translateX(105%); transition: transform 160ms ease; }
+  .inbox-context.is-open { transform: translateX(0); }
+  .inbox-context-head { display: flex; }
+  .inbox-context-scrim { display: block; position: absolute; inset: 0; z-index: 19; border: 0; background: rgba(15, 23, 42, 0.25); cursor: pointer; }
 }
+/* --- a phone: the list, then the thread with a way back --- */
+@media (max-width: 720px) {
+  .inbox-page { height: auto; min-height: 100%; }
+  .inbox-layout { flex-direction: column; min-height: 100%; }
+  .inbox-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .inbox-layout.has-thread .inbox-list { display: none; }
+  .inbox-thread { min-height: calc(100dvh - 120px); }
+  .inbox-back { display: inline-flex; }
+  .inbox-details-toggle span { display: none; }
+  .inbox-details-toggle { padding: 6px; }
+  .inbox-messages { padding: 12px 12px; }
+  .inbox-msg { max-width: 88%; }
+  .inbox-msg-reaction { font-size: 12px; padding: 2px 6px; }
+  .inbox-thread .inbox-reply { padding: 8px 10px; }
+  .inbox-context { position: fixed; inset: 0; width: 100%; transform: translateY(105%); border-left: 0; }
+  .inbox-context.is-open { transform: translateY(0); }
+  .inbox-context-scrim { position: fixed; }
+  .inbox-emoji { max-width: 100%; }
+}
+
 /* ==== Messages: one place, two tabs (components/MessagesTabs.tsx) ====
    Customers (the WhatsApp inbox, /inbox) and Team (/messages) sit side by side
    at the top of the conversation list, each with its own unread count. */
@@ -31769,105 +31970,3 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .msg-tab.is-active .msg-tab-channel { background: rgba(255, 255, 255, 0.22); color: #fff; }
 .msg-tab-count { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.4; text-align: center; }
 
-/* ==== Customer inbox: the same two panes as Team ====
-   List on the left under the tabs, the conversation on the right, the reply box
-   pinned to the bottom of the conversation so it cannot scroll out of sight. */
-/* The height of the app's own scroll area, not the window's: the menu wraps to two
-   rows on narrower screens, and a fixed 100vh - 64px pushed the tabs and the
-   headers under it. */
-.inbox-page { height: 100%; min-height: 480px; background: var(--background, #f5f5f7); color: var(--text, #111); }
-.inbox-layout { display: flex; height: 100%; min-height: 0; }
-.inbox-list { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--surface, #fff); border-right: 1px solid var(--border, #d8d8de); overflow-y: auto; }
-.inbox-head { padding: 12px 16px; border-bottom: 1px solid var(--border, #d8d8de); }
-.inbox-head h1 { margin: 0; font-size: 18px; }
-.inbox-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted, #6b6b76); }
-.inbox-list ul { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
-.inbox-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: "label time" "preview preview";
-  gap: 2px 8px;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-.inbox-row:hover { background: rgba(127, 127, 127, 0.08); }
-.inbox-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
-.inbox-row-open { background: rgba(37, 99, 235, 0.1); }
-.inbox-row-label { grid-area: label; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
-.inbox-row-preview { grid-area: preview; font-size: 13px; color: var(--muted, #6b6b76); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inbox-row-time { grid-area: time; font-size: 11px; color: var(--muted, #6b6b76); }
-.inbox-unread { color: #2563eb; font-size: 10px; }
-.inbox-thread { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.inbox-thread-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); }
-.inbox-thread-head strong { font-size: 15px; margin-right: 4px; }
-.inbox-messages { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-.inbox-msg { max-width: 72%; padding: 8px 12px; border-radius: 14px; display: flex; flex-direction: column; gap: 4px; }
-.inbox-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.inbox-msg-in { align-self: flex-start; background: var(--surface, #fff); border: 1px solid var(--border, #d8d8de); border-bottom-left-radius: 4px; }
-.inbox-msg-out { align-self: flex-end; background: rgba(37, 211, 102, 0.18); border-bottom-right-radius: 4px; }
-.inbox-msg-untrusted { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.inbox-msg-tag { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted, #6b6b76); margin-bottom: 2px; }
-.inbox-msg-time { font-size: 10px; color: var(--muted, #6b6b76); align-self: flex-end; }
-.inbox-msg-status-read { color: var(--accent); }
-.inbox-msg-status-failed { color: var(--danger); font-weight: 600; }
-.inbox-msg-failure { font-size: 11px; color: var(--danger); align-self: flex-end; max-width: 100%; }
-/* The customer's emoji reaction to a message: a small chip under the bubble's
-   time, at the bubble's outer corner, never a row of its own. The surface and
-   border tokens follow the theme, so the chip reads on both bubble colours. */
-.inbox-msg-reactions { display: inline-flex; gap: 4px; align-self: flex-end; margin-top: -2px; }
-.inbox-msg-in .inbox-msg-reactions { align-self: flex-start; }
-.inbox-msg-reaction { display: inline-block; font-size: 13px; line-height: 1.2; padding: 2px 7px; border-radius: 999px; background: var(--surface, #fff); border: 1px solid var(--border, #d8d8de); color: var(--text, #111); cursor: default; }
-/* A file a customer sent, inside their message: named, opened on request, and
-   its state (checking, blocked, could not be checked) said in words. */
-.inbox-attachment { margin-top: 6px; display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border, #d8d8de); background: rgba(127, 127, 127, 0.05); white-space: normal; }
-.inbox-attachment-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
-.inbox-attachment-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
-.inbox-attachment-size { font-size: 11px; color: var(--muted, #6b6b76); font-variant-numeric: tabular-nums; }
-.inbox-attachment-note { font-size: 12px; color: var(--muted, #6b6b76); }
-.inbox-attachment-blocked { color: var(--danger); font-weight: 600; }
-.inbox-attachment-action { justify-self: start; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); color: var(--text, #111); cursor: pointer; text-decoration: none; }
-.inbox-attachment-action:focus-visible, .inbox-attachment-preview:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
-.inbox-attachment-preview { display: block; justify-self: start; max-width: 100%; border-radius: 8px; overflow: hidden; }
-.inbox-attachment-preview img { display: block; max-width: min(320px, 100%); max-height: 320px; width: auto; height: auto; object-fit: contain; }
-.inbox-thread > .inbox-reply-closed { position: sticky; bottom: 0; margin: 0; padding: 12px 16px; background: var(--surface, #fff); border-top: 1px solid var(--border, #d8d8de); display: grid; gap: 4px; }
-.inbox-reply-closed p { margin: 0; }
-.inbox-thread-head .inbox-link-open, .inbox-thread-head .inbox-erase { margin-inline-start: auto; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); color: var(--text, #111); cursor: pointer; }
-.inbox-thread-head .inbox-erase { margin-inline-start: 0; color: var(--danger); border-color: var(--danger-soft); }
-.inbox-thread-head .inbox-link-open + .inbox-erase { margin-inline-start: 6px; }
-.inbox-thread-head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.inbox-thread > .inbox-renewal { margin: 0; padding: 10px 16px; background: var(--danger-soft); color: var(--danger); border-bottom: 1px solid var(--border, #d8d8de); }
-.inbox-renewal a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
-.inbox-toolbar { display: grid; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border, #d8d8de); }
-.inbox-search { width: 100%; font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); color: var(--text, #111); }
-.inbox-filter-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
-.inbox-filter-row select, .inbox-assign select { font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); color: var(--text, #111); }
-.inbox-unread-only { display: inline-flex; gap: 4px; align-items: center; }
-.inbox-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; }
-.inbox-chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
-.inbox-chip-active { justify-self: start; }
-.inbox-row-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; color: var(--muted, #6b6b76); }
-.inbox-row-assignee { font-size: 11px; font-weight: 600; color: var(--text, #111); }
-.inbox-row-channel { margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 16px; color: var(--text, #111); border: 1px solid var(--border, rgba(127, 127, 127, 0.4)); }
-.inbox-row-customer { font-size: 11px; }
-.inbox-triage { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border, #d8d8de); font-size: 12px; }
-.inbox-status-toggle { font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border, #d8d8de); background: var(--surface, #fff); color: var(--text, #111); cursor: pointer; }
-.inbox-assign { display: inline-flex; gap: 6px; align-items: center; }
-.inbox-labels { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.inbox-label-input { font: inherit; font-size: 12px; width: 120px; padding: 3px 8px; border-radius: 999px; border: 1px dashed var(--border, #d8d8de); background: transparent; color: var(--text, #111); }
-.inbox-triage button:focus-visible, .inbox-chip:focus-visible, .inbox-toolbar select:focus-visible, .inbox-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.inbox-thread > .inbox-notice, .inbox-list > .inbox-notice { padding: 16px; margin: 0; color: var(--muted, #6b6b76); }
-.inbox-thread .inbox-reply { position: sticky; bottom: 0; margin-top: 0; padding: 12px 16px; background: var(--surface, #fff); border-top: 1px solid var(--border, #d8d8de); }
-@media (max-width: 720px) {
-  .inbox-page { height: auto; }
-  .inbox-layout { flex-direction: column; }
-  .inbox-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border, #d8d8de); max-height: 45vh; }
-  .inbox-msg { max-width: 88%; }
-  .inbox-msg-reaction { font-size: 12px; padding: 2px 6px; }
-}

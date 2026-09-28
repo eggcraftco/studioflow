@@ -11,7 +11,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENS = [
   "app/inbox/InboxContent.tsx",
   "app/inbox/InboxAttachment.tsx",
-  "app/settings/CustomerChannelsSection.tsx",
+  "app/settings/CustomerChannelPanel.tsx",
+  "app/inbox/EmojiPicker.tsx",
   // The empty list's sentences, returned as keys the screen passes to t().
   "lib/studioflow/inboxEmptyState.ts"
 ];

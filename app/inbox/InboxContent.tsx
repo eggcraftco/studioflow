@@ -1,6 +1,7 @@
 "use client";
 
-// The inbox itself: conversations on the left, the open thread on the right.
+// The inbox itself: conversations on the left, the open thread in the middle,
+// what the thread is about on the right.
 //
 // THREE RULES THIS SCREEN IS BUILT AROUND.
 //
@@ -23,6 +24,13 @@
 // PROVIDER all arrive decided. The browser re-derives none of it: "WhatsApp" is
 // not typed into this file, it is what the server's channel vocabulary answers
 // for the token that conversation was stored with.
+//
+// AND IT KEEPS UP WITHOUT A LISTENER. The collection is denied to every client,
+// so there is no snapshot to subscribe to. While a thread is open the screen
+// asks the server again every twenty seconds, and at once when the tab comes
+// back into focus — and it changes nothing on screen unless the answer differs
+// from what it already shows (28 Sep 2026: a customer's reaction arrived
+// server-side and the open thread kept showing the old state until reopened).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -34,6 +42,7 @@ import { MessagesTabs } from "@/components/MessagesTabs";
 import { inboxEmptySentence, isDefaultInboxView } from "@/lib/studioflow/inboxEmptyState";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { InboxAttachment } from "./InboxAttachment";
+import { EmojiPicker } from "./EmojiPicker";
 import {
   loadCustomerPickerOptions,
   loadRecentOrders,
@@ -56,11 +65,26 @@ import {
   loadCustomerInboxThread,
   markCustomerInboxThreadRead,
   linkCustomerInboxThread,
+  reactToCustomerMessage,
   sendCustomerInboxReply,
   newCustomerInboxReplyId,
+  OPERATOR_REACTION_EMOJI,
+  type CustomerInboxMessage,
+  type CustomerInboxOutboundMedia,
   type CustomerInboxRow,
   type CustomerInboxThread
 } from "@/lib/studioflow/customerInbox";
+
+/** How often an open thread and the list are read again while the tab is visible. */
+const POLL_MS = 20_000;
+
+/** The files the composer takes, and the server's ceilings for each (channels/customerMediaPolicy.js). */
+const ATTACHMENT_TYPES: Record<string, number> = {
+  "image/jpeg": 5 * 1024 * 1024,
+  "image/png": 5 * 1024 * 1024,
+  "image/webp": 5 * 1024 * 1024,
+  "application/pdf": 7 * 1024 * 1024
+};
 
 function timeLabel(ms: number, language: string | null | undefined) {
   if (!ms) return "";
@@ -75,15 +99,54 @@ function timeLabel(ms: number, language: string | null | undefined) {
   }
 }
 
+/** The clock alone, for a bubble inside a day group; the date lives on the separator above it. */
+function clockLabel(ms: number, language: string | null | undefined) {
+  if (!ms) return "";
+  try {
+    const locale = studioLanguageLocale(language);
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(11, 16);
+  }
+}
+
 /**
  * "5 minutes ago", "yesterday", in the reader's language, for the last week;
- * the plain date and time beyond that. For a reaction's tooltip, where the
- * question is "how long ago", not "when exactly".
+ * the plain date and time beyond that. For a reaction's tooltip and a list
+ * row, where the question is "how long ago", not "when exactly".
  */
 function relativeTimeLabel(ms: number, nowMs: number, language: string | null | undefined) {
   if (!ms) return "";
   const locale = studioLanguageLocale(language);
   return relativeTime(ms, nowMs, locale === "en" ? "en-GB" : locale) || timeLabel(ms, language);
+}
+
+/** One key per calendar day in the reader's own time zone, for the separators. */
+function dayKey(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+/** "Today", "Yesterday", else the date, for a day separator. Keys: the caller translates. */
+function dayLabel(ms: number, nowMs: number, language: string | null | undefined, t: (text: string) => string): string {
+  const key = dayKey(ms);
+  if (key === dayKey(nowMs)) return t("Today");
+  if (key === dayKey(nowMs - 24 * 60 * 60 * 1000)) return t("Yesterday");
+  try {
+    const locale = studioLanguageLocale(language);
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, { weekday: "short", day: "2-digit", month: "long" }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
+/** Two letters for the avatar: a linked customer's initials, else the last two characters of the masked label. */
+function initialsOf(name: string, maskedLabel: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  const digits = maskedLabel.replace(/[^0-9A-Za-z]/g, "");
+  return digits.slice(-2) || "?";
 }
 
 /**
@@ -123,7 +186,7 @@ const INSTAGRAM_MAX_REPLY_BYTES = 1000;
 function instagramReplyNotice(reason: string | undefined): string {
   switch (reason) {
     case "instagram_not_connected": return "Connect this workspace's Instagram account in Settings to reply from NivaDesk.";
-    case "instagram_reconnect": return "Instagram needs the account connected again before NivaDesk can reply. Open Settings, Customer Channels.";
+    case "instagram_reconnect": return "Instagram needs the account connected again before NivaDesk can reply. Open Settings, Integrations.";
     default: return "Replies on Instagram are not available in NivaDesk yet. Answer in the Instagram app.";
   }
 }
@@ -140,6 +203,16 @@ function deliveryLabel(status: string): string {
     case "read": return "Read by the customer";
     case "failed": return "Not delivered";
     case "suppressed": return "Not sent (test environment)";
+    default: return "";
+  }
+}
+
+/** The tick marks beside a reply's time: one sent, two delivered, two read (coloured by the CSS). */
+function deliveryTicks(status: string): string {
+  switch (status) {
+    case "sent": return "✓";
+    case "delivered":
+    case "read": return "✓✓";
     default: return "";
   }
 }
@@ -182,6 +255,68 @@ function failureReason(errorClass: string, medium = ""): string {
     default: return "WhatsApp did not deliver this reply.";
   }
 }
+
+/** The channel's name for a chip: the server's display name, never typed here. */
+function channelChip(row: Pick<CustomerInboxRow, "channelDisplayName" | "channelMedium">): string {
+  return row.channelDisplayName || "";
+}
+
+/** A file picked for the composer, read into memory: shown as a chip until sent or removed. */
+type Attachment = { file: File; mimeType: string; previewUrl: string; base64: string };
+
+async function readAttachment(file: File): Promise<Attachment | { error: string }> {
+  const mimeType = String(file.type || "").toLowerCase();
+  const max = ATTACHMENT_TYPES[mimeType];
+  if (!max) return { error: "Only JPG, PNG, WebP photos and PDF documents can be sent." };
+  if (file.size <= 0) return { error: "That file is empty." };
+  if (file.size > max) return { error: "That file is too large to send. Photos up to 5 MB, PDFs up to 7 MB." };
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result || "").replace(/^data:[^,]*,/, ""));
+    reader.readAsDataURL(file);
+  });
+  const previewUrl = mimeType.startsWith("image/") ? URL.createObjectURL(file) : "";
+  return { file, mimeType, previewUrl, base64 };
+}
+
+/** "340 KB", "1.2 MB". */
+function sizeLabel(bytes: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const ICON_EMOJI = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <circle cx="10" cy="10" r="7.5" /><path d="M7 8h.01M13 8h.01" strokeWidth="2.2" /><path d="M6.8 12.2a3.8 3.8 0 0 0 6.4 0" />
+  </svg>
+);
+const ICON_CLIP = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m14.5 8.5-5.6 5.6a2.5 2.5 0 0 1-3.5-3.5l6.4-6.4a1.7 1.7 0 0 1 2.4 2.4L7.8 13" />
+  </svg>
+);
+const ICON_SEND = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3.5 10h12M10.5 5l5 5-5 5" />
+  </svg>
+);
+const ICON_BACK = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12.5 4.5 7 10l5.5 5.5" />
+  </svg>
+);
+const ICON_INFO = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <circle cx="10" cy="10" r="7.5" /><path d="M10 9v5M10 6.5h.01" strokeWidth="2" />
+  </svg>
+);
+const ICON_REACT = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <circle cx="9" cy="10.5" r="6" /><path d="M6.8 9h.01M11.2 9h.01" strokeWidth="2.2" /><path d="M6.6 12.4a3.2 3.2 0 0 0 4.8 0" /><path d="M15.5 3v4M13.5 5h4" />
+  </svg>
+);
 
 export function InboxContent({
   workspace,
@@ -256,10 +391,32 @@ export function InboxContent({
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyError, setReplyError] = useState("");
   const pendingReplyId = useRef("");
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [attachError, setAttachError] = useState("");
+  const textarea = useRef<HTMLTextAreaElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+
+  // The reaction chooser: which customer bubble has it open, and which send is in flight.
+  const [reactOpenFor, setReactOpenFor] = useState("");
+  const [reactBusyFor, setReactBusyFor] = useState("");
+  const [reactError, setReactError] = useState("");
+  const longPress = useRef<number | null>(null);
+
+  // Phone layout: the list, or the open thread with a way back; the details
+  // panel is a sheet there and a column on a wide screen.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Discards an answer that arrives after the workspace moved on, so a switched
   // workspace never shows the previous one's conversations.
   const ticket = useRef(0);
+  // What the screen shows now, for the quiet re-reads to compare against.
+  const threadRef = useRef<CustomerInboxThread | null>(null);
+  const rowsRef = useRef<CustomerInboxRow[] | null>(null);
+  const openIdRef = useRef("");
+  threadRef.current = thread;
+  rowsRef.current = rows;
+  openIdRef.current = openId;
 
   const mayLink = canLinkForRole(workspace.role);
   // An Instagram thread is answered on Instagram, and only while the server says
@@ -322,6 +479,11 @@ export function InboxContent({
     setLinkError("");
     setReplyText("");
     setReplyError("");
+    setAttachment(null);
+    setAttachError("");
+    setEmojiOpen(false);
+    setReactOpenFor("");
+    setReactError("");
     pendingReplyId.current = "";
     void loadList();
   }, [loadList]);
@@ -331,6 +493,12 @@ export function InboxContent({
     if (conversationId !== openId) {
       setReplyText("");
       setReplyError("");
+      setAttachment(null);
+      setAttachError("");
+      setEmojiOpen(false);
+      setReactOpenFor("");
+      setReactError("");
+      setDetailsOpen(false);
       pendingReplyId.current = "";
     }
     setOpenId(conversationId);
@@ -360,6 +528,47 @@ export function InboxContent({
       if (mine === ticket.current) setBusy(false);
     }
   }, [workspace.id, openId, t]);
+
+  /**
+   * The quiet re-read: the open thread and the list, compared with what is on
+   * screen, and the screen touched only when the server's answer differs. It
+   * never marks anything read and never takes a ticket, so a click that lands
+   * meanwhile still wins; an answer for a thread that is no longer open is
+   * dropped. Nothing is asked while the tab is hidden.
+   */
+  const refreshQuietly = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    const conversationId = openIdRef.current;
+    const at = ticket.current;
+    try {
+      const [nextThread, nextList] = await Promise.all([
+        conversationId ? loadCustomerInboxThread(workspace.id, conversationId) : Promise.resolve(null),
+        loadCustomerInboxList(workspace.id, filters)
+      ]);
+      if (at !== ticket.current) return;
+      if (conversationId && conversationId === openIdRef.current && nextThread && threadRef.current
+        && JSON.stringify(nextThread) !== JSON.stringify(threadRef.current)) {
+        setThread(nextThread);
+      }
+      if (rowsRef.current !== null && JSON.stringify(nextList.conversations) !== JSON.stringify(rowsRef.current)) {
+        setRows(nextList.conversations);
+      }
+    } catch {
+      // A failed quiet read changes nothing: the next one, or a click, will say.
+    }
+  }, [workspace.id, filters]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => { void refreshQuietly(); }, POLL_MS);
+    const onFocus = () => { void refreshQuietly(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refreshQuietly]);
 
   // A notification opens one conversation: /inbox?conversation=<id>, the keyed
   // id the list rows already carry. Opened once per link, after the list has
@@ -402,9 +611,18 @@ export function InboxContent({
     }
   }, [workspace, user?.uid, maySeeCustomers, maySeeOrders, t]);
 
+  // The linked names come from the same records the picker offers; read once
+  // a thread with a link is open, so the panel can name what it is linked to.
+  useEffect(() => {
+    if (!thread || (!thread.customerId && !thread.orderId)) return;
+    if (options || optionsError) return;
+    void loadOptions();
+  }, [thread, options, optionsError, loadOptions]);
+
   const openLinkPanel = useCallback(() => {
     setLinkOpen(true);
     setLinkError("");
+    setDetailsOpen(true);
     setCustomerChoice(thread?.customerId ?? "");
     setOrderChoice(thread?.orderId ?? "");
     if (!options && !optionsError) void loadOptions();
@@ -469,6 +687,7 @@ export function InboxContent({
       await deleteCustomerInboxThread(workspace.id, openId);
       setOpenId("");
       setThread(null);
+      setDetailsOpen(false);
       setEraseNotice(t("Conversation deleted."));
       await loadList();
     } catch (failure) {
@@ -480,14 +699,19 @@ export function InboxContent({
 
   const submitReply = useCallback(async () => {
     const body = replyText.trim();
-    if (!openId || !body) return;
+    if (!openId || (!body && !attachment)) return;
     if (!pendingReplyId.current) pendingReplyId.current = newCustomerInboxReplyId();
     setReplyBusy(true);
     setReplyError("");
     try {
-      await sendCustomerInboxReply(workspace.id, openId, pendingReplyId.current, body);
+      const media: CustomerInboxOutboundMedia | null = attachment
+        ? { base64: attachment.base64, mimeType: attachment.mimeType, filename: attachment.file.name }
+        : null;
+      await sendCustomerInboxReply(workspace.id, openId, pendingReplyId.current, body, media);
       pendingReplyId.current = "";
       setReplyText("");
+      if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      setAttachment(null);
       // Read it back: the thread shows what the server stored, not what was typed.
       await openThread(openId);
       await loadList();
@@ -496,7 +720,58 @@ export function InboxContent({
     } finally {
       setReplyBusy(false);
     }
-  }, [openId, replyText, workspace.id, openThread, loadList, t]);
+  }, [openId, replyText, attachment, workspace.id, openThread, loadList, t]);
+
+  /** The emoji goes where the caret is, and the caret moves past it. */
+  const insertEmoji = useCallback((emoji: string) => {
+    const box = textarea.current;
+    const start = box ? box.selectionStart : replyText.length;
+    const end = box ? box.selectionEnd : replyText.length;
+    const next = `${replyText.slice(0, start)}${emoji}${replyText.slice(end)}`;
+    setReplyText(next);
+    if (!replyBusy && replyError) { setReplyError(""); pendingReplyId.current = ""; }
+    setEmojiOpen(false);
+    window.setTimeout(() => {
+      if (!box) return;
+      box.focus();
+      const caret = start + emoji.length;
+      box.setSelectionRange(caret, caret);
+    }, 0);
+  }, [replyText, replyBusy, replyError]);
+
+  const pickAttachment = useCallback(async (file: File | null) => {
+    setAttachError("");
+    if (!file) return;
+    const read = await readAttachment(file);
+    if ("error" in read) { setAttachError(t(read.error)); return; }
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(read);
+    if (!replyBusy && replyError) { setReplyError(""); pendingReplyId.current = ""; }
+  }, [attachment, replyBusy, replyError, t]);
+
+  const removeAttachment = useCallback(() => {
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+    setAttachError("");
+    if (fileInput.current) fileInput.current.value = "";
+  }, [attachment]);
+
+  /** Send one reaction (or its removal) and read the thread back from the server's answer. */
+  const react = useCallback(async (message: CustomerInboxMessage, emoji: string | null) => {
+    if (!openId || reactBusyFor) return;
+    setReactOpenFor("");
+    setReactBusyFor(message.messageId);
+    setReactError("");
+    try {
+      await reactToCustomerMessage(workspace.id, openId, message.messageId, emoji);
+      const next = await loadCustomerInboxThread(workspace.id, openId);
+      if (next && openIdRef.current === openId) setThread(next);
+    } catch (failure) {
+      setReactError(friendlyErrorMessage(failure, t));
+    } finally {
+      setReactBusyFor("");
+    }
+  }, [openId, reactBusyFor, workspace.id, t]);
 
   const customerMatches = useMemo(
     // One search rule for the whole app: the Customers page and the Quick
@@ -513,17 +788,324 @@ export function InboxContent({
 
   const linkedCustomerName = useMemo(() => {
     if (!thread?.customerId) return "";
-    return options?.customers.find((option) => option.id === thread.customerId)?.name ?? "";
-  }, [thread?.customerId, options]);
+    return thread.customerName || options?.customers.find((option) => option.id === thread.customerId)?.name || "";
+  }, [thread?.customerId, thread?.customerName, options]);
   const linkedOrderName = useMemo(() => {
     if (!thread?.orderId) return "";
     const order = options?.orders.find((entry) => entry.id === thread.orderId);
     return order ? order.designName : "";
   }, [thread?.orderId, options]);
 
+  /** The thread's messages with their day separators and their place in a run of the same side. */
+  const grouped = useMemo(() => {
+    const messages = thread?.messages ?? [];
+    const out: Array<{ kind: "day"; key: string; atMs: number } | { kind: "message"; message: CustomerInboxMessage; first: boolean; last: boolean }> = [];
+    messages.forEach((message, index) => {
+      const previous = messages[index - 1];
+      const next = messages[index + 1];
+      if (!previous || dayKey(previous.receivedAtMs) !== dayKey(message.receivedAtMs)) {
+        out.push({ kind: "day", key: `day-${dayKey(message.receivedAtMs)}-${index}`, atMs: message.receivedAtMs });
+      }
+      // Two neighbours are one run when they are the same side, the same day and under ten minutes apart.
+      const sameRun = (a: CustomerInboxMessage | undefined, b: CustomerInboxMessage | undefined) =>
+        Boolean(a && b) && a!.direction === b!.direction && dayKey(a!.receivedAtMs) === dayKey(b!.receivedAtMs) && Math.abs(b!.receivedAtMs - a!.receivedAtMs) < 10 * 60 * 1000;
+      out.push({ kind: "message", message, first: !sameRun(previous, message), last: !sameRun(message, next) });
+    });
+    return out;
+  }, [thread?.messages]);
+
+  const composerDisabled = replyBusy || (!replyText.trim() && !attachment) || (isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES);
+  const threadLabel = thread ? (thread.customerName || linkedCustomerName || "") : "";
+
+  const renderReactions = (message: CustomerInboxMessage) => {
+    const list = message.reactions ?? [];
+    const mine = list.find((reaction) => reaction.by === "operator") || null;
+    const theirs = list.filter((reaction) => reaction.by !== "operator");
+    if (!list.length) return null;
+    return (
+      // The customer's emoji on this message, and the workspace's own: small
+      // chips under the bubble, never a row of their own — a reaction is not a message.
+      <span className="inbox-msg-reactions">
+        {theirs.map((reaction, index) => {
+          const reacted = t("Reacted {time}").replace("{time}", relativeTimeLabel(reaction.atMs, clock, language));
+          return (
+            <span key={`${reaction.emoji}:${reaction.atMs}:${index}`} className="inbox-msg-reaction" role="img" aria-label={reacted} title={reacted}>
+              {reaction.emoji}
+            </span>
+          );
+        })}
+        {mine ? (() => {
+          const title = `${t("You reacted {time}").replace("{time}", relativeTimeLabel(mine.atMs, clock, language))}${mine.status === "suppressed" ? ` · ${t("Not sent (test environment)")}` : ""}`;
+          return (
+            <span className={`inbox-msg-reaction inbox-msg-reaction-mine${mine.status === "suppressed" ? " is-suppressed" : ""}`} role="img" aria-label={title} title={title}>
+              {mine.emoji}
+            </span>
+          );
+        })() : null}
+      </span>
+    );
+  };
+
+  const renderReactChooser = (message: CustomerInboxMessage) => {
+    if (!mayLink || message.direction !== "inbound" || message.reactable !== true) return null;
+    const mine = (message.reactions ?? []).find((reaction) => reaction.by === "operator") || null;
+    const open = reactOpenFor === message.messageId;
+    const sending = reactBusyFor === message.messageId;
+    return (
+      <div className={`inbox-react${open ? " is-open" : ""}`}>
+        <button
+          type="button"
+          className="inbox-react-open"
+          aria-label={t("React to this message")}
+          title={t("React to this message")}
+          aria-expanded={open}
+          disabled={sending}
+          onClick={(event) => { event.stopPropagation(); setReactError(""); setReactOpenFor(open ? "" : message.messageId); }}
+        >
+          {ICON_REACT}
+        </button>
+        {open ? (
+          <div className="inbox-react-chooser" role="menu" aria-label={t("React to this message")}>
+            {OPERATOR_REACTION_EMOJI.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                role="menuitem"
+                className={`inbox-react-choice${mine && mine.emoji === emoji ? " is-current" : ""}`}
+                onClick={() => void react(message, emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+            {mine ? (
+              <button type="button" role="menuitem" className="inbox-react-remove" onClick={() => void react(message, null)}>
+                {t("Remove your reaction")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const contextPanel = thread ? (
+    <aside className={`inbox-context${detailsOpen ? " is-open" : ""}`} aria-label={t("Conversation details")}>
+      <div className="inbox-context-head">
+        <strong>{t("Conversation details")}</strong>
+        <button type="button" className="inbox-context-close" aria-label={t("Close")} onClick={() => setDetailsOpen(false)}>×</button>
+      </div>
+      <section className="inbox-context-card inbox-context-who">
+        <span className="inbox-avatar inbox-avatar-lg" aria-hidden="true">{initialsOf(threadLabel, thread.maskedLabel)}</span>
+        <div className="inbox-context-who-text">
+          {threadLabel ? <strong dir="auto">{threadLabel}</strong> : null}
+          <span className="inbox-context-masked">{thread.maskedLabel ? <bdi dir="ltr">{thread.maskedLabel}</bdi> : t("Unknown sender")}</span>
+          <span className="inbox-context-chips">
+            {channelChip(thread) ? <span className="inbox-chip-channel" data-channel={thread.channelMedium || ""}>{channelChip(thread)}</span> : null}
+            {thread.providerDecided && thread.providerDisplayName ? <span className="inbox-provider">{thread.providerDisplayName}</span> : null}
+            <span className={`inbox-chip-status is-${thread.status === "closed" ? "closed" : "open"}`}>{thread.status === "closed" ? t("Marked as done") : t("Open conversation")}</span>
+          </span>
+        </div>
+      </section>
+
+      <section className="inbox-context-card">
+        <h3>{t("Linked records")}</h3>
+        <dl className="inbox-context-facts">
+          <div><dt>{t("Customer")}</dt><dd dir="auto">{thread.customerId ? (linkedCustomerName || t("Linked to a customer")) : "—"}</dd></div>
+          <div><dt>{t("Order")}</dt><dd dir="auto">{thread.orderId ? (linkedOrderName || t("Linked to an order")) : "—"}</dd></div>
+        </dl>
+        {mayLink && !linkOpen ? (
+          <button type="button" className="inbox-link-open" onClick={openLinkPanel}>{t("Link this conversation")}</button>
+        ) : null}
+        {linkOpen ? (
+          <section className="inbox-link" aria-label={t("Link this conversation")}>
+            <div className="inbox-link-head">
+              <strong>{t("Link this conversation")}</strong>
+              <p>{t("Attach it to a customer or an order in this workspace.")}</p>
+              <p className="inbox-link-scope">{t("Only this workspace's customers and orders are offered.")}</p>
+            </div>
+            {!mayLink ? (
+              <p className="inbox-notice">{t("Your role can read the inbox but cannot change what a conversation is linked to.")}</p>
+            ) : optionsError ? (
+              // Unknown, not empty — and with a way back.
+              <div className="inbox-notice" role="alert">
+                <p>{optionsError}</p>
+                <button type="button" onClick={() => void loadOptions()}>{t("Try again")}</button>
+              </div>
+            ) : options === null ? (
+              <p className="inbox-notice">{t("Loading…")}</p>
+            ) : (
+              <>
+                <input
+                  className="inbox-link-search"
+                  type="search"
+                  value={search}
+                  placeholder={t("Search customers and orders")}
+                  aria-label={t("Search customers and orders")}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <div className="inbox-link-columns">
+                  <div className="inbox-link-column">
+                    <h3>{t("Customer to link")}</h3>
+                    {!maySeeCustomers ? (
+                      <p className="inbox-notice">{t("Your role can read the inbox but cannot change what a conversation is linked to.")}</p>
+                    ) : options.customers.length === 0 ? (
+                      <p className="inbox-notice">{t("This workspace has no customers yet.")}</p>
+                    ) : customerMatches.length === 0 ? (
+                      <p className="inbox-notice">{t("Nothing matches that search.")}</p>
+                    ) : (
+                      <ul>
+                        {customerMatches.map((option) => (
+                          <li key={option.id}>
+                            <button
+                              type="button"
+                              className={option.id === customerChoice ? "inbox-link-option is-chosen" : "inbox-link-option"}
+                              aria-pressed={option.id === customerChoice}
+                              data-record-id={option.id}
+                              onClick={() => setCustomerChoice(option.id === customerChoice ? "" : option.id)}
+                            >
+                              {option.name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="inbox-link-column">
+                    <h3>{t("Order to link")}</h3>
+                    {!maySeeOrders ? (
+                      <p className="inbox-notice">{t("Your role can read the inbox but cannot change what a conversation is linked to.")}</p>
+                    ) : options.orders.length === 0 ? (
+                      <p className="inbox-notice">{t("This workspace has no orders yet.")}</p>
+                    ) : orderMatches.length === 0 ? (
+                      <p className="inbox-notice">{t("Nothing matches that search.")}</p>
+                    ) : (
+                      <ul>
+                        {orderMatches.map((order) => (
+                          <li key={order.id}>
+                            <button
+                              type="button"
+                              className={order.id === orderChoice ? "inbox-link-option is-chosen" : "inbox-link-option"}
+                              aria-pressed={order.id === orderChoice}
+                              data-record-id={order.id}
+                              onClick={() => setOrderChoice(order.id === orderChoice ? "" : order.id)}
+                            >
+                              <span className="inbox-link-option-name">{order.designName}</span>
+                              <span className="inbox-link-option-sub">{order.customerName}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+                {linkError ? (
+                  // The server's own sentence, with a retry. Never a
+                  // silent no-op, and never an empty panel.
+                  <div className="inbox-notice inbox-link-error" role="alert">
+                    <p>{linkError}</p>
+                    <button type="button" onClick={() => void submitLink()}>{t("Try again")}</button>
+                  </div>
+                ) : null}
+                <div className="inbox-link-actions">
+                  <button type="button" className="inbox-link-save" disabled={linkBusy || (!customerChoice && !orderChoice)} onClick={() => void submitLink()}>
+                    {linkBusy ? t("Saving the link…") : t("Save link")}
+                  </button>
+                  <button type="button" className="inbox-link-cancel" disabled={linkBusy} onClick={() => { setLinkOpen(false); setLinkError(""); }}>
+                    {t("Cancel")}
+                  </button>
+                  {customerChoice || orderChoice ? (
+                    <button type="button" className="inbox-link-clear" disabled={linkBusy} onClick={() => { setCustomerChoice(""); setOrderChoice(""); }}>
+                      {t("Clear the choice")}
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </section>
+        ) : null}
+      </section>
+
+      {mayLink ? (
+        <section className="inbox-context-card inbox-triage" aria-label={t("Conversation status")}>
+          <h3>{t("Triage")}</h3>
+          <button
+            type="button"
+            className={`inbox-status-toggle${thread.status === "closed" ? " is-reopen" : ""}`}
+            disabled={triageBusy}
+            onClick={() => void runTriage(() => setCustomerInboxStatus(workspace.id, openId, thread.status === "closed" ? "open" : "closed"))}
+          >
+            {thread.status === "closed" ? t("Reopen conversation") : t("Mark as done")}
+          </button>
+          <label className="inbox-assign">
+            <span>{t("Assign to")}</span>
+            <select
+              value={thread.assigneeUid || ""}
+              disabled={triageBusy}
+              onChange={(event) => { const value = event.target.value; void runTriage(() => assignCustomerInbox(workspace.id, openId, value)); }}
+            >
+              <option value="">{t("Nobody")}</option>
+              {members.map((member) => <option key={member.uid} value={member.uid}>{member.name}</option>)}
+            </select>
+          </label>
+          <div className="inbox-labels" aria-label={t("Conversation labels")}>
+            <span className="inbox-labels-title">{t("Labels")}</span>
+            {(thread.labels || []).map((label) => (
+              <span key={label} className="inbox-chip">
+                {label}
+                <button
+                  type="button"
+                  aria-label={`${t("Remove label")} ${label}`}
+                  disabled={triageBusy}
+                  onClick={() => void runTriage(() => setCustomerInboxLabels(workspace.id, openId, (thread.labels || []).filter((l) => l !== label)))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              className="inbox-label-input"
+              value={labelDraft}
+              maxLength={24}
+              placeholder={t("Add a label")}
+              aria-label={t("Add a label")}
+              disabled={triageBusy}
+              onChange={(event) => setLabelDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || !labelDraft.trim()) return;
+                event.preventDefault();
+                const next = [...(thread.labels || []), labelDraft.trim()];
+                setLabelDraft("");
+                void runTriage(() => setCustomerInboxLabels(workspace.id, openId, next));
+              }}
+            />
+          </div>
+        </section>
+      ) : (thread.labels && thread.labels.length) || thread.assigneeUid ? (
+        <section className="inbox-context-card inbox-triage inbox-triage-readonly">
+          <h3>{t("Triage")}</h3>
+          {thread.assigneeUid ? <span className="inbox-row-assignee">{members.find((m) => m.uid === thread.assigneeUid)?.name || t("Assigned")}</span> : null}
+          <div className="inbox-labels">{(thread.labels || []).map((label) => <span key={label} className="inbox-chip">{label}</span>)}</div>
+        </section>
+      ) : null}
+
+      {mayErase ? (
+        <section className="inbox-context-card inbox-context-danger">
+          <button type="button" className="inbox-erase" disabled={eraseBusy} onClick={() => void eraseThread()}>
+            {t("Delete conversation")}
+          </button>
+          <p className="inbox-context-hint">
+            {isInstagramThread
+              ? t("Deleting removes the conversation from NivaDesk only; it stays in Instagram.")
+              : t("Deleting removes the conversation from NivaDesk only; the customer's phone keeps its copy.")}
+          </p>
+        </section>
+      ) : null}
+    </aside>
+  ) : null;
+
   return (
     <div className="inbox-page">
-      <div className="inbox-layout">
+      <div className={`inbox-layout${openId ? " has-thread" : ""}${detailsOpen ? " has-details" : ""}`}>
         <aside className="inbox-list" aria-label={t("Conversations")}>
           <MessagesTabs
             active="customers"
@@ -601,23 +1183,27 @@ export function InboxContent({
                 <li key={row.conversationId}>
                   <button
                     type="button"
-                    className={row.conversationId === openId ? "inbox-row inbox-row-open" : "inbox-row"}
+                    className={`inbox-row${row.conversationId === openId ? " inbox-row-open" : ""}${row.unread ? " is-unread" : ""}`}
                     onClick={() => void openThread(row.conversationId)}
                   >
+                    <span className="inbox-avatar" aria-hidden="true" data-channel={row.channelMedium || ""}>
+                      {initialsOf(row.customerName || "", row.maskedLabel)}
+                    </span>
                     <span className="inbox-row-label">
-                      {/* Isolated LTR: in an RTL page "••••0111" would otherwise render reversed. */}
-                      {row.maskedLabel ? <bdi dir="ltr">{row.maskedLabel}</bdi> : t("Unknown sender")}
-                      {/* A channel other than WhatsApp says so: two customers can share four digits. */}
-                      {row.channelMedium && row.channelMedium !== "whatsapp" && row.channelDisplayName ? (
-                        <span className="inbox-row-channel">{row.channelDisplayName}</span>
-                      ) : null}
+                      {/* A linked customer's name leads; the masked label is what the list always has.
+                          Isolated LTR: in an RTL page "••••0111" would otherwise render reversed. */}
+                      {row.customerName ? <span className="inbox-row-customer" dir="auto">{row.customerName}</span> : null}
+                      {row.maskedLabel ? <bdi dir="ltr" className="inbox-row-masked">{row.maskedLabel}</bdi> : t("Unknown sender")}
+                      {/* The channel, always: two customers can share four digits. */}
+                      {channelChip(row) ? <span className="inbox-row-channel" data-channel={row.channelMedium || ""}>{channelChip(row)}</span> : null}
+                    </span>
+                    <span className="inbox-row-time">
+                      {relativeTimeLabel(row.lastMessageAtMs, clock, language)}
                       {row.unread ? <span className="inbox-unread" aria-label={t("Unread")}>●</span> : null}
                     </span>
                     <span className="inbox-row-preview" dir="auto">{rowPreview(row, t)}</span>
-                    <span className="inbox-row-time">{timeLabel(row.lastMessageAtMs, language)}</span>
-                    {(row.labels && row.labels.length) || row.assigneeUid || row.customerName ? (
+                    {(row.labels && row.labels.length) || row.assigneeUid ? (
                       <span className="inbox-row-meta">
-                        {row.customerName ? <span className="inbox-row-customer" dir="auto">{row.customerName}</span> : null}
                         {row.assigneeUid ? (
                           <span className="inbox-row-assignee">{members.find((m) => m.uid === row.assigneeUid)?.name || t("Assigned")}</span>
                         ) : null}
@@ -644,10 +1230,11 @@ export function InboxContent({
 
         <section className="inbox-thread" aria-label={t("Conversation")}>
           {!openId ? (
-            <>
+            <div className="inbox-thread-empty">
               {eraseNotice ? <p className="inbox-notice success-copy" role="status">{eraseNotice}</p> : null}
+              <span className="inbox-thread-empty-mark" aria-hidden="true">{ICON_EMOJI}</span>
               <p className="inbox-notice">{t("Choose a conversation to read it.")}</p>
-            </>
+            </div>
           ) : threadError ? (
             <div className="inbox-notice" role="alert">
               <p>{threadError}</p>
@@ -658,299 +1245,116 @@ export function InboxContent({
           ) : (
             <>
               <div className="inbox-thread-head">
-                <strong>{thread.maskedLabel ? <bdi dir="ltr">{thread.maskedLabel}</bdi> : t("Unknown sender")}</strong>
-                {/* The medium's display name, as the server's vocabulary reads
-                    the stored token. Not typed here: the same five letters mean
-                    three different things depending on where they are stored,
-                    and only the server knows which site this row came from. */}
-                {thread.channelDisplayName ? (
-                  <span className="inbox-channel" data-channel-role={thread.channelRole || ""}>
-                    {thread.channelDisplayName}
-                  </span>
-                ) : null}
-                {/* Who carries it — a separate question, and still open between
-                    Meta and Twilio. Shown only once something has decided. */}
-                {thread.providerDecided && thread.providerDisplayName ? (
-                  <span className="inbox-provider">{thread.providerDisplayName}</span>
-                ) : null}
-                {thread.customerId ? (
-                  <span className="inbox-linked">
-                    {t("Linked to a customer")}{linkedCustomerName ? `: ${linkedCustomerName}` : ""}
-                  </span>
-                ) : null}
-                {thread.orderId ? (
-                  <span className="inbox-linked">
-                    {t("Linked to an order")}{linkedOrderName ? `: ${linkedOrderName}` : ""}
-                  </span>
-                ) : null}
-                {mayLink && !linkOpen ? (
-                  <button type="button" className="inbox-link-open" onClick={openLinkPanel}>
-                    {t("Link this conversation")}
-                  </button>
-                ) : null}
-                {mayErase ? (
-                  <button type="button" className="inbox-erase" disabled={eraseBusy} onClick={() => void eraseThread()}>
-                    {t("Delete conversation")}
-                  </button>
-                ) : null}
-              </div>
-
-              {mayLink ? (
-                <div className="inbox-triage" aria-label={t("Conversation status")}>
-                  <button
-                    type="button"
-                    className="inbox-status-toggle"
-                    disabled={triageBusy}
-                    onClick={() => void runTriage(() => setCustomerInboxStatus(workspace.id, openId, thread.status === "closed" ? "open" : "closed"))}
-                  >
-                    {thread.status === "closed" ? t("Reopen conversation") : t("Mark as done")}
-                  </button>
-                  <label className="inbox-assign">
-                    {t("Assign to")}
-                    <select
-                      value={thread.assigneeUid || ""}
-                      disabled={triageBusy}
-                      onChange={(event) => { const value = event.target.value; void runTriage(() => assignCustomerInbox(workspace.id, openId, value)); }}
-                    >
-                      <option value="">{t("Nobody")}</option>
-                      {members.map((member) => <option key={member.uid} value={member.uid}>{member.name}</option>)}
-                    </select>
-                  </label>
-                  <div className="inbox-labels" aria-label={t("Conversation labels")}>
-                    {(thread.labels || []).map((label) => (
-                      <span key={label} className="inbox-chip">
-                        {label}
-                        <button
-                          type="button"
-                          aria-label={`${t("Remove label")} ${label}`}
-                          disabled={triageBusy}
-                          onClick={() => void runTriage(() => setCustomerInboxLabels(workspace.id, openId, (thread.labels || []).filter((l) => l !== label)))}
-                        >
-                          ×
-                        </button>
+                <button type="button" className="inbox-back" aria-label={t("Back to conversations")} onClick={() => { setOpenId(""); setThread(null); setDetailsOpen(false); }}>
+                  {ICON_BACK}
+                </button>
+                <span className="inbox-avatar" aria-hidden="true" data-channel={thread.channelMedium || ""}>{initialsOf(threadLabel, thread.maskedLabel)}</span>
+                <div className="inbox-thread-title">
+                  <strong dir="auto">{threadLabel || (thread.maskedLabel ? <bdi dir="ltr">{thread.maskedLabel}</bdi> : t("Unknown sender"))}</strong>
+                  <span className="inbox-thread-sub">
+                    {threadLabel && thread.maskedLabel ? <bdi dir="ltr">{thread.maskedLabel}</bdi> : null}
+                    {/* The medium's display name, as the server's vocabulary reads
+                        the stored token. Not typed here: the same five letters mean
+                        three different things depending on where they are stored,
+                        and only the server knows which site this row came from. */}
+                    {thread.channelDisplayName ? (
+                      <span className="inbox-channel inbox-chip-channel" data-channel-role={thread.channelRole || ""} data-channel={thread.channelMedium || ""}>
+                        {thread.channelDisplayName}
                       </span>
-                    ))}
-                    <input
-                      className="inbox-label-input"
-                      value={labelDraft}
-                      maxLength={24}
-                      placeholder={t("Add a label")}
-                      aria-label={t("Add a label")}
-                      disabled={triageBusy}
-                      onChange={(event) => setLabelDraft(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" || !labelDraft.trim()) return;
-                        event.preventDefault();
-                        const next = [...(thread.labels || []), labelDraft.trim()];
-                        setLabelDraft("");
-                        void runTriage(() => setCustomerInboxLabels(workspace.id, openId, next));
-                      }}
-                    />
-                  </div>
+                    ) : null}
+                    {thread.status === "closed" ? <span className="inbox-chip-status is-closed">{t("Marked as done")}</span> : null}
+                    {thread.assigneeUid ? <span className="inbox-row-assignee">{members.find((m) => m.uid === thread.assigneeUid)?.name || t("Assigned")}</span> : null}
+                  </span>
                 </div>
-              ) : (thread.labels && thread.labels.length) || thread.assigneeUid ? (
-                <div className="inbox-triage inbox-triage-readonly">
-                  {thread.assigneeUid ? <span className="inbox-row-assignee">{members.find((m) => m.uid === thread.assigneeUid)?.name || t("Assigned")}</span> : null}
-                  {(thread.labels || []).map((label) => <span key={label} className="inbox-chip">{label}</span>)}
-                </div>
-              ) : null}
-
-              {linkOpen ? (
-                <section className="inbox-link" aria-label={t("Link this conversation")}>
-                  <div className="inbox-link-head">
-                    <strong>{t("Link this conversation")}</strong>
-                    <p>{t("Attach it to a customer or an order in this workspace.")}</p>
-                    <p className="inbox-link-scope">{t("Only this workspace's customers and orders are offered.")}</p>
-                  </div>
-
-                  {!mayLink ? (
-                    <p className="inbox-notice">
-                      {t("Your role can read the inbox but cannot change what a conversation is linked to.")}
-                    </p>
-                  ) : optionsError ? (
-                    // Unknown, not empty — and with a way back.
-                    <div className="inbox-notice" role="alert">
-                      <p>{optionsError}</p>
-                      <button type="button" onClick={() => void loadOptions()}>{t("Try again")}</button>
-                    </div>
-                  ) : options === null ? (
-                    <p className="inbox-notice">{t("Loading…")}</p>
-                  ) : (
-                    <>
-                      <input
-                        className="inbox-link-search"
-                        type="search"
-                        value={search}
-                        placeholder={t("Search customers and orders")}
-                        aria-label={t("Search customers and orders")}
-                        onChange={(event) => setSearch(event.target.value)}
-                      />
-
-                      <div className="inbox-link-columns">
-                        <div className="inbox-link-column">
-                          <h3>{t("Customer to link")}</h3>
-                          {!maySeeCustomers ? (
-                            <p className="inbox-notice">
-                              {t("Your role can read the inbox but cannot change what a conversation is linked to.")}
-                            </p>
-                          ) : options.customers.length === 0 ? (
-                            <p className="inbox-notice">{t("This workspace has no customers yet.")}</p>
-                          ) : customerMatches.length === 0 ? (
-                            <p className="inbox-notice">{t("Nothing matches that search.")}</p>
-                          ) : (
-                            <ul>
-                              {customerMatches.map((option) => (
-                                <li key={option.id}>
-                                  <button
-                                    type="button"
-                                    className={option.id === customerChoice ? "inbox-link-option is-chosen" : "inbox-link-option"}
-                                    aria-pressed={option.id === customerChoice}
-                                    data-record-id={option.id}
-                                    onClick={() => setCustomerChoice(option.id === customerChoice ? "" : option.id)}
-                                  >
-                                    {option.name}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-
-                        <div className="inbox-link-column">
-                          <h3>{t("Order to link")}</h3>
-                          {!maySeeOrders ? (
-                            <p className="inbox-notice">
-                              {t("Your role can read the inbox but cannot change what a conversation is linked to.")}
-                            </p>
-                          ) : options.orders.length === 0 ? (
-                            <p className="inbox-notice">{t("This workspace has no orders yet.")}</p>
-                          ) : orderMatches.length === 0 ? (
-                            <p className="inbox-notice">{t("Nothing matches that search.")}</p>
-                          ) : (
-                            <ul>
-                              {orderMatches.map((order) => (
-                                <li key={order.id}>
-                                  <button
-                                    type="button"
-                                    className={order.id === orderChoice ? "inbox-link-option is-chosen" : "inbox-link-option"}
-                                    aria-pressed={order.id === orderChoice}
-                                    data-record-id={order.id}
-                                    onClick={() => setOrderChoice(order.id === orderChoice ? "" : order.id)}
-                                  >
-                                    <span className="inbox-link-option-name">{order.designName}</span>
-                                    <span className="inbox-link-option-sub">{order.customerName}</span>
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
-
-                      {linkError ? (
-                        // The server's own sentence, with a retry. Never a
-                        // silent no-op, and never an empty panel.
-                        <div className="inbox-notice inbox-link-error" role="alert">
-                          <p>{linkError}</p>
-                          <button type="button" onClick={() => void submitLink()}>{t("Try again")}</button>
-                        </div>
-                      ) : null}
-
-                      <div className="inbox-link-actions">
-                        <button
-                          type="button"
-                          className="inbox-link-save"
-                          disabled={linkBusy || (!customerChoice && !orderChoice)}
-                          onClick={() => void submitLink()}
-                        >
-                          {linkBusy ? t("Saving the link…") : t("Save link")}
-                        </button>
-                        <button
-                          type="button"
-                          className="inbox-link-cancel"
-                          disabled={linkBusy}
-                          onClick={() => { setLinkOpen(false); setLinkError(""); }}
-                        >
-                          {t("Cancel")}
-                        </button>
-                        {customerChoice || orderChoice ? (
-                          <button
-                            type="button"
-                            className="inbox-link-clear"
-                            disabled={linkBusy}
-                            onClick={() => { setCustomerChoice(""); setOrderChoice(""); }}
-                          >
-                            {t("Clear the choice")}
-                          </button>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
-                </section>
-              ) : null}
+                <button type="button" className={`inbox-details-toggle${detailsOpen ? " is-active" : ""}`} aria-expanded={detailsOpen} onClick={() => setDetailsOpen((value) => !value)}>
+                  {ICON_INFO}
+                  <span>{t("Details")}</span>
+                </button>
+              </div>
 
               {whatsappNeedsRenewal ? (
                 <p className="inbox-notice inbox-renewal" role="alert">
                   {t("The WhatsApp connection needs to be renewed. Replies will not be sent until then.")}{" "}
-                  <a href="/settings?section=customer-channels">{t("Customer Channels")}</a>
+                  <a href="/settings?section=whatsapp">{t("Integrations")}</a>
                 </p>
               ) : null}
+              {reactError ? (
+                <div className="inbox-notice inbox-reply-error" role="alert">
+                  <p>{reactError}</p>
+                  <button type="button" onClick={() => setReactError("")}>{t("Close")}</button>
+                </div>
+              ) : null}
               <ol className="inbox-messages">
-                {thread.messages.map((message) => (
+                {grouped.map((entry) => entry.kind === "day" ? (
+                  <li key={entry.key} className="inbox-day" role="separator" aria-label={dayLabel(entry.atMs, clock, language, t)}>
+                    <span>{dayLabel(entry.atMs, clock, language, t)}</span>
+                  </li>
+                ) : (
                   <li
-                    key={message.messageId}
-                    className={message.direction === "outbound" ? "inbox-msg inbox-msg-out" : "inbox-msg inbox-msg-in"}
+                    key={entry.message.messageId}
+                    className={`inbox-msg ${entry.message.direction === "outbound" ? "inbox-msg-out" : "inbox-msg-in"}${entry.first ? " is-first" : ""}${entry.last ? " is-last" : ""}`}
+                    onTouchStart={() => {
+                      if (entry.message.direction !== "inbound" || entry.message.reactable !== true || !mayLink) return;
+                      longPress.current = window.setTimeout(() => setReactOpenFor(entry.message.messageId), 500);
+                    }}
+                    onTouchEnd={() => { if (longPress.current !== null) { window.clearTimeout(longPress.current); longPress.current = null; } }}
+                    onTouchMove={() => { if (longPress.current !== null) { window.clearTimeout(longPress.current); longPress.current = null; } }}
                   >
-                    {message.untrusted ? (
-                      // Marked as what it is: something a stranger wrote. Shown
-                      // as a quotation so it cannot be mistaken for the app's
-                      // own words, and never acted on as an instruction.
-                      <blockquote className="inbox-msg-untrusted">
-                        <span className="inbox-msg-tag">{t("Customer wrote")}</span>
-                        {/* Each message keeps its own direction: a Turkish sentence in an
-                            Arabic interface (or the reverse) must not have its punctuation
-                            moved to the wrong end. */}
-                        {message.text || !message.media ? <span dir="auto">{message.text ?? t("(no text)")}</span> : null}
-                        {message.media ? (
-                          <InboxAttachment
-                            key={`${thread.conversationId}:${message.messageId}`}
-                            companyId={workspace.id}
-                            conversationId={thread.conversationId}
-                            messageId={message.messageId}
-                            messageType={message.messageType}
-                            media={message.media}
-                            t={t}
-                          />
+                    <div className="inbox-bubble">
+                      {entry.message.untrusted ? (
+                        // Marked as what it is: something a stranger wrote. Shown
+                        // as a quotation so it cannot be mistaken for the app's
+                        // own words, and never acted on as an instruction.
+                        <blockquote className="inbox-msg-untrusted">
+                          <span className="inbox-msg-tag">{t("Customer wrote")}</span>
+                          {/* Each message keeps its own direction: a Turkish sentence in an
+                              Arabic interface (or the reverse) must not have its punctuation
+                              moved to the wrong end. */}
+                          {entry.message.text || !entry.message.media ? <span dir="auto">{entry.message.text ?? t("(no text)")}</span> : null}
+                          {entry.message.media ? (
+                            <InboxAttachment
+                              key={`${thread.conversationId}:${entry.message.messageId}`}
+                              companyId={workspace.id}
+                              conversationId={thread.conversationId}
+                              messageId={entry.message.messageId}
+                              messageType={entry.message.messageType}
+                              media={entry.message.media}
+                              t={t}
+                            />
+                          ) : null}
+                        </blockquote>
+                      ) : (
+                        <>
+                          {entry.message.text ? <p dir="auto">{entry.message.text}</p> : entry.message.media ? null : <p dir="auto">{t("(no text)")}</p>}
+                          {entry.message.media ? (
+                            <InboxAttachment
+                              key={`${thread.conversationId}:${entry.message.messageId}`}
+                              companyId={workspace.id}
+                              conversationId={thread.conversationId}
+                              messageId={entry.message.messageId}
+                              messageType={entry.message.messageType}
+                              media={entry.message.media}
+                              t={t}
+                            />
+                          ) : null}
+                        </>
+                      )}
+                      <span className="inbox-msg-time">
+                        {clockLabel(entry.message.receivedAtMs, language)}
+                        {entry.message.direction === "outbound" && deliveryLabel(entry.message.deliveryStatus) ? (
+                          <span className={`inbox-msg-status inbox-msg-status-${entry.message.deliveryStatus}`} title={t(deliveryLabel(entry.message.deliveryStatus))}>
+                            {deliveryTicks(entry.message.deliveryStatus) ? (
+                              <span className="inbox-msg-ticks" aria-hidden="true">{deliveryTicks(entry.message.deliveryStatus)}</span>
+                            ) : null}
+                            <span className={deliveryTicks(entry.message.deliveryStatus) ? "sr-only" : ""}>{t(deliveryLabel(entry.message.deliveryStatus))}</span>
+                          </span>
                         ) : null}
-                      </blockquote>
-                    ) : (
-                      <p dir="auto">{message.text ?? t("(no text)")}</p>
-                    )}
-                    <span className="inbox-msg-time">
-                      {timeLabel(message.receivedAtMs, language)}
-                      {message.direction === "outbound" && deliveryLabel(message.deliveryStatus) ? (
-                        <span className={`inbox-msg-status inbox-msg-status-${message.deliveryStatus}`}>
-                          {" · "}{t(deliveryLabel(message.deliveryStatus))}
-                        </span>
-                      ) : null}
-                    </span>
-                    {message.reactions && message.reactions.length ? (
-                      // The customer's emoji on this message: a small chip under
-                      // the bubble, on the customer's own message or on a reply.
-                      // Never a row of its own — a reaction is not a message.
-                      <span className="inbox-msg-reactions">
-                        {message.reactions.map((reaction, index) => {
-                          const reacted = t("Reacted {time}").replace("{time}", relativeTimeLabel(reaction.atMs, clock, language));
-                          return (
-                            <span key={`${reaction.emoji}:${reaction.atMs}:${index}`} className="inbox-msg-reaction" role="img" aria-label={reacted} title={reacted}>
-                              {reaction.emoji}
-                            </span>
-                          );
-                        })}
                       </span>
-                    ) : null}
-                    {message.direction === "outbound" && message.deliveryStatus === "failed" ? (
-                      <span className="inbox-msg-failure" role="note">{t(failureReason(message.errorClass, thread.channelMedium))}</span>
+                    </div>
+                    {renderReactions(entry.message)}
+                    {renderReactChooser(entry.message)}
+                    {entry.message.direction === "outbound" && entry.message.deliveryStatus === "failed" ? (
+                      <span className="inbox-msg-failure" role="note">{t(failureReason(entry.message.errorClass, thread.channelMedium))}</span>
                     ) : null}
                   </li>
                 ))}
@@ -960,7 +1364,7 @@ export function InboxContent({
                 // (readCustomerInboxConversation → replyChannel) and refuses one
                 // that cannot. No composer, and never "Send on WhatsApp", on a
                 // thread that did not come from WhatsApp.
-                <p className="inbox-notice" role="status">{t(instagramReplyNotice(thread.replyChannel?.reason))}</p>
+                <p className="inbox-notice inbox-reply-closed" role="status">{t(instagramReplyNotice(thread.replyChannel?.reason))}</p>
               ) : mayLink && replyWindowShut(thread.replyWindow, clock) ? (
                 <div className="inbox-notice inbox-reply-closed" role="status">
                   {isInstagramThread ? (
@@ -986,20 +1390,65 @@ export function InboxContent({
                   aria-label={isInstagramThread ? t("Reply on Instagram") : t("Reply on WhatsApp")}
                   onSubmit={(event) => { event.preventDefault(); void submitReply(); }}
                 >
-                  <textarea
-                    className="inbox-reply-text"
-                    value={replyText}
-                    maxLength={isInstagramThread ? INSTAGRAM_MAX_REPLY_BYTES : 4096}
-                    rows={3}
-                    placeholder={t("Write a reply…")}
-                    aria-label={isInstagramThread ? t("Reply on Instagram") : t("Reply on WhatsApp")}
-                    disabled={replyBusy}
-                    onChange={(event) => {
-                      setReplyText(event.target.value);
-                      // New words are a new reply; a failed one is not retried with them.
-                      if (!replyBusy && replyError) { setReplyError(""); pendingReplyId.current = ""; }
-                    }}
-                  />
+                  {attachment ? (
+                    <div className="inbox-attach-preview">
+                      {attachment.previewUrl ? <img src={attachment.previewUrl} alt="" /> : <span className="inbox-attach-doc" aria-hidden="true">PDF</span>}
+                      <span className="inbox-attach-name" dir="auto">{attachment.file.name}</span>
+                      <span className="inbox-attach-size">{sizeLabel(attachment.file.size)}</span>
+                      <button type="button" className="inbox-attach-remove" aria-label={t("Remove attachment")} disabled={replyBusy} onClick={removeAttachment}>×</button>
+                    </div>
+                  ) : null}
+                  {attachError ? <p className="inbox-notice inbox-reply-error" role="alert">{attachError}</p> : null}
+                  <div className="inbox-composer">
+                    <div className="inbox-composer-tools">
+                      <button type="button" className={`inbox-composer-btn${emojiOpen ? " is-active" : ""}`} aria-label={t("Add emoji")} title={t("Add emoji")} aria-expanded={emojiOpen} disabled={replyBusy} onClick={() => setEmojiOpen((value) => !value)}>
+                        {ICON_EMOJI}
+                      </button>
+                      {!isInstagramThread ? (
+                        <>
+                          <button type="button" className="inbox-composer-btn" aria-label={t("Attach a photo or PDF")} title={t("Attach a photo or PDF")} disabled={replyBusy} onClick={() => fileInput.current?.click()}>
+                            {ICON_CLIP}
+                          </button>
+                          <input
+                            ref={fileInput}
+                            type="file"
+                            className="sr-only"
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            tabIndex={-1}
+                            onChange={(event) => { void pickAttachment(event.target.files && event.target.files[0] ? event.target.files[0] : null); }}
+                          />
+                        </>
+                      ) : null}
+                    </div>
+                    <textarea
+                      ref={textarea}
+                      className="inbox-reply-text"
+                      value={replyText}
+                      maxLength={isInstagramThread ? INSTAGRAM_MAX_REPLY_BYTES : 4096}
+                      rows={2}
+                      placeholder={attachment ? t("Add a caption…") : t("Write a reply…")}
+                      aria-label={isInstagramThread ? t("Reply on Instagram") : t("Reply on WhatsApp")}
+                      disabled={replyBusy}
+                      onChange={(event) => {
+                        setReplyText(event.target.value);
+                        // New words are a new reply; a failed one is not retried with them.
+                        if (!replyBusy && replyError) { setReplyError(""); pendingReplyId.current = ""; }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (!composerDisabled) void submitReply(); }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="inbox-reply-send"
+                      disabled={composerDisabled}
+                      aria-label={isInstagramThread ? t("Send on Instagram") : t("Send on WhatsApp")}
+                      title={isInstagramThread ? t("Send on Instagram") : t("Send on WhatsApp")}
+                    >
+                      {replyBusy ? <span className="inbox-reply-send-text">{t("Sending…")}</span> : ICON_SEND}
+                    </button>
+                  </div>
+                  {emojiOpen ? <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} t={t} /> : null}
                   {replyError ? (
                     <div className="inbox-notice inbox-reply-error" role="alert">
                       <p>{replyError}</p>
@@ -1011,35 +1460,29 @@ export function InboxContent({
                       {t("That reply is too long for Instagram, which allows 1000 bytes; some characters, such as accented letters, use more than one byte.")}
                     </p>
                   ) : null}
-                  <div className="inbox-reply-actions">
-                    <p className="inbox-reply-hint">
-                      {thread.replyWindow?.state === "open" && thread.replyWindow.closesAtMs
-                        ? t("Free replies are open until {time}.").replace("{time}", timeLabel(thread.replyWindow.closesAtMs, language))
-                        : isInstagramThread
-                          ? t("Instagram allows a reply within 24 hours of the customer's last message.")
-                          : t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}
-                      {isInstagramThread ? (
-                        <span className="inbox-reply-bytes" aria-live="polite">
-                          {" · "}{t("{count} of 1000 bytes").replace("{count}", String(replyBytes))}
-                        </span>
-                      ) : null}
-                    </p>
-                    <button
-                      type="submit"
-                      className="inbox-reply-send"
-                      disabled={replyBusy || !replyText.trim() || (isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES)}
-                    >
-                      {replyBusy ? t("Sending…") : isInstagramThread ? t("Send on Instagram") : t("Send on WhatsApp")}
-                    </button>
-                  </div>
+                  <p className="inbox-reply-hint">
+                    {thread.replyWindow?.state === "open" && thread.replyWindow.closesAtMs
+                      ? t("Free replies are open until {time}.").replace("{time}", timeLabel(thread.replyWindow.closesAtMs, language))
+                      : isInstagramThread
+                        ? t("Instagram allows a reply within 24 hours of the customer's last message.")
+                        : t("WhatsApp allows a free reply within 24 hours of the customer's last message.")}
+                    {isInstagramThread ? (
+                      <span className="inbox-reply-bytes" aria-live="polite">
+                        {" · "}{t("{count} of 1000 bytes").replace("{count}", String(replyBytes))}
+                      </span>
+                    ) : null}
+                  </p>
                 </form>
               ) : (
-                <p className="inbox-notice">{t("Your role can read the inbox but cannot reply.")}</p>
+                <p className="inbox-notice inbox-reply-closed">{t("Your role can read the inbox but cannot reply.")}</p>
               )}
               {user ? null : <p className="inbox-notice">{t("Sign in again to read this conversation.")}</p>}
             </>
           )}
         </section>
+
+        {contextPanel}
+        {detailsOpen && thread ? <button type="button" className="inbox-context-scrim" aria-label={t("Close")} onClick={() => setDetailsOpen(false)} /> : null}
       </div>
     </div>
   );

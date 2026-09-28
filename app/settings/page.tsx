@@ -48,7 +48,7 @@ import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, use
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
-import { CustomerChannelsSection } from "./CustomerChannelsSection";
+import { CustomerChannelPanel } from "./CustomerChannelPanel";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -139,7 +139,6 @@ type SettingsSectionId =
   | "team-access"
   | "message-settings"
   | "sms-notifications"
-  | "customer-channels"
   | "support-tickets"
   | "client-domain";
 
@@ -187,6 +186,11 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   quickbooks: "integrations",
   xero: "integrations",
   dhl: "integrations",
+  // The customer channels are two Integrations tiles (28 Sep 2026); the old
+  // Customer Channels area and the Instagram return address point here.
+  whatsapp: "integrations",
+  instagram: "integrations",
+  "customer-channels": "integrations",
   sms: "sms-notifications",
   general: "profile-security",
   account: "profile-security",
@@ -228,7 +232,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
   { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
   { id: "sms-notifications", title: "Customer SMS", appKey: "Customer SMS", description: "Text updates to customers: sender ID, what triggers a message, this month's usage.", icon: "reply", group: "workflowGroup" },
-  { id: "customer-channels", title: "Customer Channels", appKey: "Customer Channels", description: "WhatsApp and Instagram: which line your customers write to, and whether it works.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
   { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
@@ -251,14 +254,13 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   workflow: "status steps template material headings badges",
   "quick-reply": "ai reply openai api key knowledge tone quick",
   "sms-notifications": "sms text message texts sender id twilio notification trigger calling code customer updates mobile",
-  "customer-channels": "whatsapp instagram channel number connect reconnect inbox customer messages meta",
   financial: "vat tax fee currency corporation margin recalculate decimal",
   "team-access": "role member permission invite seat join request",
   "message-settings": "chat group messaging direct",
   "safety-uploads": "upload file size limit policy zip audit virus",
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
-  integrations: "integration connect webhook woocommerce shopify etsy square ebay marketplace pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
+  integrations: "integration connect webhook woocommerce shopify etsy square ebay marketplace pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api whatsapp instagram channel number reconnect inbox customer messages meta",
   "support-tickets": "ticket help support contact"
 };
 
@@ -484,9 +486,6 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // that cannot text customers still deserves to be told that is why, and what
   // it would take. The screen itself is read-only for everyone but the owner.
   if (sectionId === "sms-notifications") return allowed("settingsWorkflow");
-  // Customer channels: shown like Customer SMS — a workspace without Messages is
-  // told by the server which plan carries it; the cards are read-only for all.
-  if (sectionId === "customer-channels") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -574,9 +573,19 @@ export default function SettingsPage() {
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
-      rawRequested === "dhl"
+      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram"
     ) {
       setIntegrationProvider(rawRequested);
+    }
+    // The old Customer Channels area: its deep link lands on the Integrations
+    // hub with the channel's tile open — Instagram when Instagram's sign-in
+    // sent the person back (?instagram=…), WhatsApp otherwise.
+    if (rawRequested === "customer-channels") {
+      setIntegrationProvider(params.get("instagram") ? "instagram" : "whatsapp");
+    }
+    if (params.get("instagram")) {
+      setIntegrationProvider("instagram");
+      setActiveSection("integrations");
     }
     // Etsy sends the seller back to /settings with ?etsy=connected|cancelled|error
     // and no section of its own. That message is read by the Etsy panel, and the
@@ -1131,8 +1140,6 @@ function renderSettingsSection({
       return <MessageSettingsSection workspace={workspace} language={language} />;
     case "sms-notifications":
       return <SmsNotificationsSection workspace={workspace} language={language} />;
-    case "customer-channels":
-      return <CustomerChannelsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
@@ -5449,6 +5456,8 @@ function IntegrationsSection({
         {managing === "amazon" ? <AmazonIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "dhl" ? <DhlExpressIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "whatsapp" ? <CustomerChannelPanel workspace={workspace} language={language} channel="whatsapp" /> : null}
+        {managing === "instagram" ? <CustomerChannelPanel workspace={workspace} language={language} channel="instagram" /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} /> : null}
