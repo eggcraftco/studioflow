@@ -1177,6 +1177,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname === "/quick-reply" ||
     pathname === "/notes" ||
     pathname === "/messages" ||
+    // The customer inbox is the same three-pane layout as Team: the full width, never the 1180 px column.
+    pathname === "/inbox" ||
     pathname === "/settings" ||
     pathname === "/inventory" ||
     pathname === "/bank" ||
