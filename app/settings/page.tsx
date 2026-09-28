@@ -174,6 +174,11 @@ const SETTINGS_SECTIONS_NEEDING_DETAILS = new Set<SettingsSectionId>([
   "safety-uploads", "data", "plan-access", "team-access"
 ]);
 
+// Raised by the shell's avatar menu when /settings is already the route
+// (components/AppShell.tsx dispatches the same name; a page file must not
+// export anything Next does not know, so the string is repeated there).
+const SETTINGS_OPEN_SECTION_EVENT = "studioflow-settings-open-section";
+
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   square: "integrations",
@@ -824,6 +829,23 @@ export default function SettingsPage() {
     window.history.replaceState(null, "", url);
   }
 
+  // The avatar menu in the sidebar asks for a section while this page is
+  // already open (router.push only changes the query; the query is read once,
+  // at mount). The event carries the section id or one of its aliases and
+  // goes through the same unsaved-changes gate as a click in the list. The ref
+  // keeps the listener on the latest selectSection without re-subscribing.
+  const selectSectionRef = useRef<(sectionId: SettingsSectionId) => void>(() => {});
+  useEffect(() => {
+    function handleOpenSection(event: Event) {
+      const raw = (event as CustomEvent<{ section?: string }>).detail?.section?.trim() ?? "";
+      if (!raw) return;
+      const requested = (SETTINGS_SECTION_ALIASES[raw] ?? raw) as SettingsSectionId;
+      if (SETTINGS_SECTIONS.some(section => section.id === requested)) selectSectionRef.current(requested);
+    }
+    window.addEventListener(SETTINGS_OPEN_SECTION_EVENT, handleOpenSection);
+    return () => window.removeEventListener(SETTINGS_OPEN_SECTION_EVENT, handleOpenSection);
+  }, []);
+
   function selectSection(sectionId: SettingsSectionId) {
     if (sectionId === activeSection || !unsavedSectionId) {
       applySection(sectionId);
@@ -831,6 +853,7 @@ export default function SettingsPage() {
     }
     setPendingExit({ kind: "section", sectionId });
   }
+  selectSectionRef.current = selectSection;
 
   async function refreshSettingsAfterImport() {
     if (!workspace) return;

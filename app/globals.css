@@ -31970,3 +31970,936 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
 .msg-tab.is-active .msg-tab-channel { background: rgba(255, 255, 255, 0.22); color: #fff; }
 .msg-tab-count { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.4; text-align: center; }
 
+
+/* ==========================================================================
+   UI architecture update, 28 Sep 2026 (docs/ui/architecture-update-2026-09-28)
+   One top row + a collapsible left sidebar; the Orders screen fills the height
+   with three columns (sidebar · order list · order workspace).
+   ========================================================================== */
+
+.app-shell-frame,
+.app-shell-fixed > .app-shell-frame {
+  max-width: none;
+  width: 100%;
+}
+
+/* The top row lost its second (navigation) row: one row, main + account. */
+.app-shell-frame > .app-toolbar-native {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "main account";
+  margin-bottom: 10px;
+}
+
+.app-shell-frame .toolbar-main {
+  gap: 12px;
+}
+
+.app-shell-frame .toolbar-menu-button {
+  display: none;
+}
+
+.app-shell-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 12px;
+}
+
+/* ---- the sidebar ---- */
+.app-sidebar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  transition: width 180ms ease;
+  overflow: hidden;
+}
+
+.app-sidebar.is-collapsed {
+  width: 68px;
+}
+
+.app-sidebar-top {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px 10px 4px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-top {
+  justify-content: center;
+}
+
+.app-sidebar-toggle,
+.app-sidebar-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(247, 248, 250, 0.9);
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.app-sidebar-close {
+  display: none;
+}
+
+.app-sidebar-toggle:hover,
+.app-sidebar-close:hover {
+  color: var(--accent);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.app-sidebar-toggle:focus-visible,
+.app-sidebar-close:focus-visible,
+.app-sidebar-item:focus-visible,
+.app-sidebar-user-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-sidebar-toggle svg,
+.app-sidebar-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.app-sidebar-lower {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.app-sidebar-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.app-sidebar-item:hover {
+  background: rgba(37, 99, 235, 0.07);
+  color: var(--text);
+}
+
+.app-sidebar-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 750;
+}
+
+.app-sidebar-item-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.app-sidebar-item-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-sidebar-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-badge {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.app-sidebar-item.is-active .app-sidebar-badge {
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.app-sidebar.is-collapsed .app-sidebar-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-label {
+  display: none;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  margin: 0;
+  min-width: 16px;
+  padding: 1px 4px;
+  font-size: 9px;
+}
+
+/* ---- the user block ---- */
+.app-sidebar-user {
+  position: relative;
+  margin-top: auto;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.app-sidebar-user-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-sidebar-user-button:hover,
+.app-sidebar-user-button[aria-expanded="true"] {
+  background: rgba(37, 99, 235, 0.07);
+  border-color: var(--border);
+}
+
+.app-sidebar .toolbar-avatar {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+
+.app-sidebar-user-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.app-sidebar-user-text strong,
+.app-sidebar-user-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar-user-text strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.app-sidebar-user-text span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.app-sidebar-user-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.app-sidebar-user-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-user {
+  padding: 10px 8px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-user-button {
+  justify-content: center;
+  padding: 4px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-user-text,
+.app-sidebar.is-collapsed .app-sidebar-user-chevron {
+  display: none;
+}
+
+/* The menu opens upwards, above the block that owns it. */
+.app-sidebar-user-menu {
+  position: absolute;
+  top: auto;
+  bottom: calc(100% - 2px);
+  left: 10px;
+  right: 10px;
+  z-index: 60;
+  min-width: 200px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-user-menu {
+  left: 8px;
+  right: auto;
+  width: 224px;
+}
+
+.app-sidebar-user-menu button,
+.app-sidebar-user-menu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app-sidebar-user-menu a:hover,
+.app-sidebar-user-menu button:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.app-sidebar-user-menu svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.app-sidebar-user-menu button.danger,
+.app-sidebar-user-menu button.danger svg {
+  color: var(--danger);
+}
+
+.app-sidebar-user-menu-divider {
+  display: block;
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--border);
+}
+
+/* ---- the content column ---- */
+.app-shell-scroll-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-content {
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell-content:not(.is-wide) {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+@media (min-width: 981px) {
+  /* Orders: the three columns take the whole height and scroll inside. */
+  .app-shell-scroll-area[data-shell-page="orders"] {
+    overflow: hidden;
+  }
+
+  .app-shell-scroll-area[data-shell-page="orders"] .app-shell-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .app-shell-frame .orders-workspace.resizable-workspace {
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .app-shell-frame .orders-sidebar,
+  .app-shell-frame .orders-detail-pane {
+    max-height: none;
+    height: 100%;
+  }
+}
+
+/* ---- dark theme ---- */
+body[data-studio-theme="dark"] .app-sidebar {
+  background: #1b1b1b;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+body[data-studio-theme="dark"] .app-sidebar-toggle,
+body[data-studio-theme="dark"] .app-sidebar-close {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+body[data-studio-theme="dark"] .app-sidebar-item:hover,
+body[data-studio-theme="dark"] .app-sidebar-user-button:hover,
+body[data-studio-theme="dark"] .app-sidebar-user-button[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+body[data-studio-theme="dark"] .app-sidebar-item.is-active {
+  background: rgba(10, 132, 255, 0.18);
+  color: #0a84ff;
+}
+
+/* ---- below 1024 px the sidebar is a drawer ---- */
+@media (max-width: 1023px) {
+  .app-shell-frame .toolbar-menu-button {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    gap: 4px;
+    width: 36px;
+    height: 36px;
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.84);
+    color: var(--text);
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+
+  .app-shell-frame .toolbar-menu-button span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .app-shell-frame .toolbar-menu-button .toolbar-menu-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: auto;
+    height: auto;
+    min-width: 16px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .app-shell-body {
+    gap: 0;
+  }
+
+  .app-sidebar,
+  .app-sidebar.is-collapsed {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 80;
+    width: min(300px, 86vw);
+    border-radius: 0 18px 18px 0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+    transform: translateX(-104%);
+    transition: transform 200ms ease;
+  }
+
+  [dir="rtl"] .app-sidebar,
+  [dir="rtl"] .app-sidebar.is-collapsed {
+    left: auto;
+    right: 0;
+    border-radius: 18px 0 0 18px;
+    transform: translateX(104%);
+  }
+
+  .app-sidebar.is-open,
+  [dir="rtl"] .app-sidebar.is-open {
+    transform: none;
+  }
+
+  /* The drawer is always the expanded form. */
+  .app-sidebar-toggle {
+    display: none;
+  }
+
+  .app-sidebar-close {
+    display: inline-grid;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-top {
+    justify-content: flex-end;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-item {
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-label {
+    display: block;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-badge {
+    position: static;
+    min-width: 22px;
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-user {
+    padding: 10px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-user-button {
+    justify-content: flex-start;
+    padding: 6px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-user-text {
+    display: flex;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-user-chevron {
+    display: inline-grid;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar-user-menu {
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+
+  .app-shell-frame .mobile-nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 75;
+    border: 0;
+    background: rgba(15, 23, 42, 0.35);
+    cursor: default;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell-frame > .app-toolbar-native {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-shell-frame .toolbar-main {
+    gap: 8px;
+  }
+
+  .app-shell-frame .toolbar-menu-button {
+    border-radius: 13px;
+    background: rgba(239, 242, 246, 0.9);
+  }
+}
+
+/* ---- Orders workspace: the list panel header ---- */
+.orders-panel-heading h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.orders-panel-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.orders-team-chip {
+  gap: 6px;
+  max-width: 170px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  background: rgba(247, 248, 250, 0.92);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orders-team-chip svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.orders-team-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Order detail: the customer/project header ---- */
+.order-detail-toolbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.order-detail-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.order-detail-thumb {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(239, 242, 246, 0.92);
+  color: var(--muted);
+}
+
+.order-detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.order-detail-thumb .image-placeholder-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.order-detail-identity-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-detail-identity-text h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-detail-identity-text > p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-detail-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.order-detail-facts svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.order-detail-toolbar .order-header-meta {
+  flex: 0 1 auto;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.order-detail-toolbar .order-toolbar-pills {
+  margin-left: auto;
+}
+
+/* ---- Order detail: the tab bar (Overview live; five design-only tabs) ---- */
+.order-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 12px 14px 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.order-detail-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.order-detail-tab svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.order-detail-tab:hover {
+  background: rgba(37, 99, 235, 0.06);
+  color: var(--text);
+}
+
+.order-detail-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.order-detail-tab.is-active,
+.order-detail-tab.is-active:hover {
+  background: var(--accent-soft);
+  border-color: rgba(37, 99, 235, 0.16);
+  color: var(--accent);
+  font-weight: 800;
+}
+
+/* Design-only: readable, but visibly not a working control — dashed outline,
+   muted ink, a "Coming soon" tag, a not-allowed cursor. */
+.order-detail-tab.is-design-preview {
+  border-style: dashed;
+  border-color: rgba(23, 25, 35, 0.14);
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
+  cursor: not-allowed;
+}
+
+.order-detail-tab.is-design-preview:hover {
+  background: rgba(23, 25, 35, 0.035);
+  color: var(--muted);
+}
+
+.order-detail-tab-soon {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(23, 25, 35, 0.06);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.order-detail-tabs-note {
+  margin-left: auto;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Overview: the card columns fill the workspace width ----
+   Each column keeps its own width (the resize handle still writes it); when the
+   pane is wider than the columns together, the spare width is shared out, so
+   the cards make a grid instead of leaving a band on the right. Narrower than
+   that, the canvas keeps its max-content width and pans as before. */
+.app-shell-frame .order-detail-canvas {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+}
+
+/* The inline width is the flex basis; a column gives way down to the app's own
+   minimum column width (clampColumnWidth: 260) and grows past its width when
+   the pane has room. Below three minimums the columns overflow the canvas and
+   the workspace pans, as before. */
+.app-shell-frame .order-detail-column {
+  flex: 1 1 auto;
+  min-width: 260px;
+}
+
+.app-shell-frame .order-detail-workspace {
+  padding: 4px 0 14px;
+}
+
+.order-detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(239, 242, 246, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.order-detail-head .order-detail-toolbar,
+.order-detail-head .order-detail-tabs {
+  position: static;
+}
+
+.order-detail-head .order-detail-tabs {
+  margin: 10px 14px 0;
+}
+
+body[data-studio-theme="dark"] .order-detail-head {
+  background: rgba(20, 20, 20, 0.96);
+}
+
+/* ---- dark theme ---- */
+body[data-studio-theme="dark"] .orders-team-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f4f5f7;
+}
+
+body[data-studio-theme="dark"] .order-detail-thumb {
+  background: #303030;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body[data-studio-theme="dark"] .order-detail-tabs {
+  background: #171717;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+body[data-studio-theme="dark"] .order-detail-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body[data-studio-theme="dark"] .order-detail-tab.is-active,
+body[data-studio-theme="dark"] .order-detail-tab.is-active:hover {
+  background: rgba(10, 132, 255, 0.18);
+  border-color: rgba(10, 132, 255, 0.24);
+  color: #4f8cff;
+}
+
+body[data-studio-theme="dark"] .order-detail-tab.is-design-preview {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+body[data-studio-theme="dark"] .order-detail-tab-soon {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---- narrow screens ---- */
+@media (max-width: 640px) {
+  .order-detail-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 11px;
+  }
+
+  .order-detail-identity {
+    flex-basis: 100%;
+  }
+
+  .order-detail-toolbar .order-toolbar-pills {
+    margin-left: 0;
+  }
+
+  .order-detail-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 10px 10px 0;
+    border-radius: 12px;
+  }
+
+  .order-detail-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .order-detail-tabs-note {
+    display: none;
+  }
+}

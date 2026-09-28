@@ -7374,6 +7374,23 @@ const CUSTOMER_INBOX_TRANSLATIONS: TranslationTable = {
   "Meta code {code}": { "Türkçe": "Meta kodu {code}", "Deutsch": "Meta-Code {code}", "Français": "Code Meta {code}", "Italiano": "Codice Meta {code}", "Español (Spanish)": "Código de Meta {code}", "Português": "Código Meta {code}", "Русский (Russian)": "Код Meta {code}", "日本語 (Japanese)": "Metaコード {code}", "中文 (Chinese)": "Meta 代码 {code}", "العربية (Arabic)": "رمز Meta {code}", "हिन्दी (Hindi)": "Meta कोड {code}" },
 };
 
+// UI architecture update (28 Sep 2026): the sidebar, the avatar menu and the
+// order-detail tab bar. Every key here has all eleven translations; the check
+// is scripts/check-ui-workspace-translations.mjs.
+const UI_WORKSPACE_TRANSLATIONS: TranslationTable = {
+  "Logout": { "Türkçe": "Çıkış yap", "Deutsch": "Abmelden", "Français": "Se déconnecter", "Italiano": "Esci", "Español (Spanish)": "Cerrar sesión", "Português": "Terminar sessão", "Русский (Russian)": "Выйти", "日本語 (Japanese)": "ログアウト", "中文 (Chinese)": "退出登录", "العربية (Arabic)": "تسجيل الخروج", "हिन्दी (Hindi)": "लॉगआउट" },
+  "Insights": { "Türkçe": "İçgörüler", "Deutsch": "Einblicke", "Français": "Analyses", "Italiano": "Approfondimenti", "Español (Spanish)": "Estadísticas", "Português": "Informações", "Русский (Russian)": "Аналитика", "日本語 (Japanese)": "インサイト", "中文 (Chinese)": "洞察", "العربية (Arabic)": "الرؤى", "हिन्दी (Hindi)": "इनसाइट्स" },
+  "Collapse sidebar": { "Türkçe": "Kenar çubuğunu daralt", "Deutsch": "Seitenleiste einklappen", "Français": "Réduire la barre latérale", "Italiano": "Comprimi la barra laterale", "Español (Spanish)": "Contraer la barra lateral", "Português": "Recolher a barra lateral", "Русский (Russian)": "Свернуть боковую панель", "日本語 (Japanese)": "サイドバーを折りたたむ", "中文 (Chinese)": "收起侧边栏", "العربية (Arabic)": "طيّ الشريط الجانبي", "हिन्दी (Hindi)": "साइडबार छोटा करें" },
+  "Expand sidebar": { "Türkçe": "Kenar çubuğunu genişlet", "Deutsch": "Seitenleiste ausklappen", "Français": "Développer la barre latérale", "Italiano": "Espandi la barra laterale", "Español (Spanish)": "Expandir la barra lateral", "Português": "Expandir a barra lateral", "Русский (Russian)": "Развернуть боковую панель", "日本語 (Japanese)": "サイドバーを展開する", "中文 (Chinese)": "展开侧边栏", "العربية (Arabic)": "توسيع الشريط الجانبي", "हिन्दी (Hindi)": "साइडबार बड़ा करें" },
+  "Account menu": { "Türkçe": "Hesap menüsü", "Deutsch": "Kontomenü", "Français": "Menu du compte", "Italiano": "Menu dell'account", "Español (Spanish)": "Menú de la cuenta", "Português": "Menu da conta", "Русский (Russian)": "Меню аккаунта", "日本語 (Japanese)": "アカウントメニュー", "中文 (Chinese)": "账户菜单", "العربية (Arabic)": "قائمة الحساب", "हिन्दी (Hindi)": "खाता मेनू" },
+  "Design preview": { "Türkçe": "Tasarım önizlemesi", "Deutsch": "Design-Vorschau", "Français": "Aperçu du design", "Italiano": "Anteprima del design", "Español (Spanish)": "Vista previa del diseño", "Português": "Pré-visualização do design", "Русский (Russian)": "Предпросмотр дизайна", "日本語 (Japanese)": "デザインプレビュー", "中文 (Chinese)": "设计预览", "العربية (Arabic)": "معاينة التصميم", "हिन्दी (Hindi)": "डिज़ाइन पूर्वावलोकन" },
+  "This tab is a design preview. It is not functional yet.": { "Türkçe": "Bu sekme bir tasarım önizlemesidir. Henüz çalışmıyor.", "Deutsch": "Dieser Tab ist eine Design-Vorschau. Er ist noch nicht funktionsfähig.", "Français": "Cet onglet est un aperçu du design. Il n'est pas encore fonctionnel.", "Italiano": "Questa scheda è un'anteprima del design. Non è ancora funzionante.", "Español (Spanish)": "Esta pestaña es una vista previa del diseño. Todavía no funciona.", "Português": "Este separador é uma pré-visualização do design. Ainda não está funcional.", "Русский (Russian)": "Эта вкладка — предпросмотр дизайна. Она пока не работает.", "日本語 (Japanese)": "このタブはデザインプレビューです。まだ機能しません。", "中文 (Chinese)": "此标签页为设计预览，目前尚不可用。", "العربية (Arabic)": "هذا التبويب معاينة تصميم. لا يعمل بعد.", "हिन्दी (Hindi)": "यह टैब एक डिज़ाइन पूर्वावलोकन है। यह अभी काम नहीं करता।" },
+  "Order tabs": { "Türkçe": "Sipariş sekmeleri", "Deutsch": "Auftragsregister", "Français": "Onglets de la commande", "Italiano": "Schede dell'ordine", "Español (Spanish)": "Pestañas del pedido", "Português": "Separadores da encomenda", "Русский (Russian)": "Вкладки заказа", "日本語 (Japanese)": "注文タブ", "中文 (Chinese)": "订单标签页", "العربية (Arabic)": "تبويبات الطلب", "हिन्दी (Hindi)": "ऑर्डर टैब" },
+  "Order list": { "Türkçe": "Sipariş listesi", "Deutsch": "Auftragsliste", "Français": "Liste des commandes", "Italiano": "Elenco ordini", "Español (Spanish)": "Lista de pedidos", "Português": "Lista de encomendas", "Русский (Russian)": "Список заказов", "日本語 (Japanese)": "注文一覧", "中文 (Chinese)": "订单列表", "العربية (Arabic)": "قائمة الطلبات", "हिन्दी (Hindi)": "ऑर्डर सूची" },
+  "Back to orders": { "Türkçe": "Siparişlere dön", "Deutsch": "Zurück zu den Bestellungen", "Français": "Retour aux commandes", "Italiano": "Torna agli ordini", "Español (Spanish)": "Volver a los pedidos", "Português": "Voltar às encomendas", "Русский (Russian)": "Назад к заказам", "日本語 (Japanese)": "注文一覧に戻る", "中文 (Chinese)": "返回订单", "العربية (Arabic)": "العودة إلى الطلبات", "हिन्दी (Hindi)": "ऑर्डर पर वापस जाएँ" },
+  "Order workspace": { "Türkçe": "Sipariş çalışma alanı", "Deutsch": "Auftragsbereich", "Français": "Espace de la commande", "Italiano": "Area di lavoro dell'ordine", "Español (Spanish)": "Espacio del pedido", "Português": "Área da encomenda", "Русский (Russian)": "Рабочая область заказа", "日本語 (Japanese)": "注文ワークスペース", "中文 (Chinese)": "订单工作区", "العربية (Arabic)": "مساحة عمل الطلب", "हिन्दी (Hindi)": "ऑर्डर कार्यक्षेत्र" },
+};
+
 const TRANSLATIONS: TranslationTable = mergeTranslationTables(
   CUSTOMER_INBOX_TRANSLATIONS,
   WEB_TRANSLATIONS,
@@ -7393,6 +7410,7 @@ const TRANSLATIONS: TranslationTable = mergeTranslationTables(
   ONBOARDING_WIZARD_TRANSLATIONS,
   SALES_FAZ1_TRANSLATIONS,
   COMMERCE_HEALTH_TRANSLATIONS,
+  UI_WORKSPACE_TRANSLATIONS,
   {
 
     // Store orders parked because the plan is full.
@@ -7529,6 +7547,13 @@ const TRANSLATIONS: TranslationTable = mergeTranslationTables(
 for (const [key, langs] of Object.entries(MAC_TRANSLATIONS)) {
   TRANSLATIONS[key] = { ...(TRANSLATIONS[key] || {}), ...(langs as Partial<Record<StudioLanguage, string>>) };
 }
+
+// The Mac table's Turkish "Files" is the picker's "Dosyalardan Seç" (choose
+// from files); on the web the key is a navigation label — the sidebar item and
+// the order tab — and reads "Dosyalar". Web-only; the Swift source is untouched.
+mergeIntoTranslations({
+  "Files": { "Türkçe": "Dosyalar" }
+});
 
 // Free plan banner + collapsible verify strip (mirrors iOS/Android)
 mergeIntoTranslations({

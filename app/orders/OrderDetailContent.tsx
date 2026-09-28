@@ -1174,6 +1174,17 @@ function summaryDeliveryLabel(order: OrderDetail) {
   return `Late (${Math.abs(days)} days)`;
 }
 
+// summaryDeliveryLabel builds English ("34 days", "Late (3 days)"); the two
+// places that print it pass the result through this so the number keeps its
+// place and the words follow the language.
+function localizedDeliveryLabel(label: string, t: (text: string) => string) {
+  const days = /^(\d+) days$/.exec(label);
+  if (days) return `${days[1]} ${t("days")}`;
+  const late = /^Late \((\d+) days\)$/.exec(label);
+  if (late) return `${t("Late")} (${late[1]} ${t("days")})`;
+  return label === "-" ? label : t(label);
+}
+
 function summaryDeliveryTone(order: OrderDetail) {
   const status = order.status.trim().toLowerCase();
   if (status === "cancelled" || status === "canceled" || order.isDispatched) return "gray";
@@ -6449,7 +6460,7 @@ export function OrderDetailContent({
                   <span>Delivery In</span>
                   <strong className={`app-summary-delivery ${deliveryTone}`}>
                     <CardIconGlyph icon="historyClock" />
-                    {summaryDeliveryLabel(order)}
+                    {localizedDeliveryLabel(summaryDeliveryLabel(order), t)}
                   </strong>
                 </div>
               </div>
@@ -6646,6 +6657,10 @@ export function OrderDetailContent({
                 items={order.lineItems}
                 disabled={!canInlineEditFullDetails}
                 formatMoney={value => money(value)}
+                /* The card rides the Customer permission, so a member without
+                   financial info can still name the lines — but never sees a
+                   price, a line total or the running total here. */
+                showMoney={canSeeFinance}
                 onSave={items => saveDetailsPatch({ lineItems: items }, "Invoice items")}
               />
               <InvoiceFooterEditor
@@ -8553,6 +8568,69 @@ export function OrderDetailContent({
     );
   }
 
+  // "#1024": the workspace's own project number; an order created before the
+  // counter existed shows its invoice number instead, or nothing.
+  const orderReference = order.projectNumber && order.projectNumber > 0
+    ? String(order.projectNumber)
+    : order.invoiceNumber.trim();
+
+  // The tab bar under the header (spec §3). Overview is the card workspace
+  // below; the other five are DESIGN ONLY for now — they are disabled tabs
+  // with a "Design preview" caption, they never route or switch anything,
+  // and a click only says so. Their behaviour is a separate specification.
+  function renderOrderTabs() {
+    const tabs: Array<{ id: string; label: string; icon: CardIcon; live?: boolean }> = [
+      { id: "overview", label: "Overview", icon: "dashboard", live: true },
+      { id: "production", label: "Production", icon: "ordersProduction" },
+      { id: "timeline", label: "Timeline", icon: "historyClock" },
+      { id: "files", label: "Files", icon: "files" },
+      { id: "messages", label: "Messages", icon: "reply" },
+      { id: "notes", label: "Notes", icon: "notes" }
+    ];
+    const previewNote = t("This tab is a design preview. It is not functional yet.");
+    return (
+      <div className="order-detail-tabs" role="tablist" aria-label={t("Order tabs")}>
+        {tabs.map(tab => tab.live ? (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`order-tab-${tab.id}`}
+            className="order-detail-tab is-active"
+            aria-selected="true"
+            aria-controls="order-tab-panel-overview"
+          >
+            <CardIconGlyph icon={tab.icon} />
+            <span>{t(tab.label)}</span>
+          </button>
+        ) : (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`order-tab-${tab.id}`}
+            className="order-detail-tab is-design-preview"
+            aria-selected="false"
+            aria-disabled="true"
+            data-design-preview="true"
+            title={previewNote}
+            tabIndex={-1}
+            onClick={event => {
+              event.preventDefault();
+              dispatchStudioToast({ message: previewNote });
+            }}
+          >
+            <CardIconGlyph icon={tab.icon} />
+            <span>{t(tab.label)}</span>
+            <span className="order-detail-tab-soon" aria-hidden="true">{t("Coming soon")}</span>
+            <span className="visually-hidden">{previewNote}</span>
+          </button>
+        ))}
+        <span className="order-detail-tabs-note" aria-hidden="true">{t("Design preview")}</span>
+      </div>
+    );
+  }
+
   function renderHeaderMeta() {
     const deliveryTone = summaryDeliveryTone(order);
     const scheduleToneName = headerScheduleItem ? scheduleTone(headerScheduleItem) : "gray";
@@ -8567,7 +8645,7 @@ export function OrderDetailContent({
         {headerShowDeliveryTime ? (
           <span className={`order-header-meta-pill ${deliveryTone}`}>
             <CardIconGlyph icon="calendarClock" />
-            {summaryDeliveryLabel(order)}
+            {localizedDeliveryLabel(summaryDeliveryLabel(order), t)}
           </span>
         ) : null}
         {headerShowOrderValue && canSeeFinance ? (
@@ -8583,6 +8661,8 @@ export function OrderDetailContent({
   return (
     <DetailLanguageContext.Provider value={detailLanguage}>
     <div className="order-detail-shell">
+      {/* Header and tab bar stick together at the top of the scrolling pane. */}
+      <div className="order-detail-head">
       <section
         className="order-detail-toolbar"
         onContextMenu={event => {
@@ -8596,10 +8676,37 @@ export function OrderDetailContent({
           });
         }}
       >
-        <div>
-          {showBackLink ? <Link className="studio-pill" href="/orders">Back to orders</Link> : null}
-          <h1>{normalizeOrderCustomerName(order.customerName)}</h1>
-          <p>{order.designName}</p>
+        {/* The customer/project header (spec §2, Area 3): image, names, the
+            created date, the project number and the team, then the chips. */}
+        <div className="order-detail-identity">
+          <div className="order-detail-thumb" aria-hidden="true">
+            {order.designLink && isProbablyImageUrl(order.designLink) ? (
+              <img src={order.designLink} alt="" />
+            ) : (
+              <span className="image-placeholder-icon"><CardIconGlyph icon="photo" /></span>
+            )}
+          </div>
+          <div className="order-detail-identity-text">
+            {showBackLink ? <Link className="studio-pill" href="/orders">{t("Back to orders")}</Link> : null}
+            <h1>{normalizeOrderCustomerName(order.customerName)}</h1>
+            <p>{order.designName}</p>
+            <div className="order-detail-facts">
+              <span>
+                <CardIconGlyph icon="calendar" />
+                {t("Created")} {formatShortDate(order.paymentDate)}
+              </span>
+              {orderReference ? (
+                <span>
+                  <CardIconGlyph icon="orders" />
+                  {t("Order")} #{orderReference}
+                </span>
+              ) : null}
+              <span>
+                <CardIconGlyph icon="team" />
+                {workspace.name}
+              </span>
+            </div>
+          </div>
         </div>
         {renderHeaderMeta()}
         <div className="order-toolbar-pills">
@@ -8674,7 +8781,7 @@ export function OrderDetailContent({
                 boxShadow: "0 0 0 4px rgba(37, 99, 235, 0.18), 0 18px 42px rgba(37, 99, 235, 0.24)"
               } : undefined}
             >
-              Actions
+              {t("Actions")}
             </button>
             {firstProjectGuideStep === 4 ? (
               <span
@@ -8820,6 +8927,8 @@ export function OrderDetailContent({
           </div>
         </div>
       </section>
+      {renderOrderTabs()}
+      </div>
       {headerDetailsMenuPosition ? (
         <div
           className="order-header-details-context-menu"
@@ -9088,6 +9197,9 @@ export function OrderDetailContent({
       ) : (
         <>
           <div
+            id="order-tab-panel-overview"
+            role="tabpanel"
+            aria-labelledby="order-tab-overview"
             className={`order-detail-workspace${workspacePanning ? " is-panning" : ""}`}
             onPointerDown={startWorkspacePan}
             onPointerMove={moveWorkspacePan}
@@ -10114,11 +10226,14 @@ function LineItemsEditor({
   items,
   disabled,
   formatMoney,
+  showMoney = true,
   onSave
 }: {
   items: LineItemDetail[];
   disabled: boolean;
   formatMoney: (value: number) => string;
+  /** False for a member without financial info: names and quantities only. */
+  showMoney?: boolean;
   onSave: (items: LineItemDetail[]) => void;
 }) {
   const t = useDetailT();
@@ -10149,7 +10264,7 @@ function LineItemsEditor({
     <div style={{ marginTop: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Invoice Items</span>
-        {draft.length > 0 ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
+        {draft.length > 0 && showMoney ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
       </div>
       {draft.map((it, index) => (
         <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
@@ -10172,18 +10287,22 @@ function LineItemsEditor({
             onChange={e => updateRow(index, { quantity: Number(e.target.value) || 0 })}
             onBlur={() => commit(draftRef.current)}
           />
-          <input
-            className="input"
-            style={{ width: 88 }}
-            type="number"
-            min={0}
-            step="0.01"
-            value={it.unitPrice}
-            disabled={disabled}
-            onChange={e => updateRow(index, { unitPrice: Number(e.target.value) || 0 })}
-            onBlur={() => commit(draftRef.current)}
-          />
-          <span style={{ minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
+          {showMoney ? (
+            <input
+              className="input"
+              style={{ width: 88 }}
+              type="number"
+              min={0}
+              step="0.01"
+              value={it.unitPrice}
+              disabled={disabled}
+              onChange={e => updateRow(index, { unitPrice: Number(e.target.value) || 0 })}
+              onBlur={() => commit(draftRef.current)}
+            />
+          ) : null}
+          {showMoney ? (
+            <span style={{ minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
+          ) : null}
           {!disabled ? (
             <button
               type="button"

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
-import { CardTitle } from "@/components/CardTitle";
+import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
@@ -919,14 +919,22 @@ export default function OrdersPage() {
         className={sidebar.collapsed ? "orders-workspace resizable-workspace is-sidebar-collapsed" : "orders-workspace resizable-workspace"}
         style={sidebar.workspaceStyle}
       >
-        <aside className="orders-sidebar">
+        <aside className="orders-sidebar" aria-label={t("Order list")}>
           <div className="orders-sidebar-toolbar">
-            <div>
-              <p className="orders-kicker">{t("Orders")}</p>
-              <h1>{filteredOrders.length} {t("orders")}</h1>
-              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
+            {/* Title, count, then the team chip (this workspace, the role in
+                its tooltip) and Export — the second column of the workspace
+                (spec §2, Area 2). */}
+            <div className="orders-panel-heading">
+              <h1>{t("Orders")}</h1>
+              <p>{filteredOrders.length} {t("orders")}</p>
             </div>
             <div className="sidebar-toolbar-actions">
+              {workspace ? (
+                <span className="studio-pill orders-team-chip" title={`${workspace.name} · ${workspace.roleLabel} · ${workspace.billingPlanName}`}>
+                  <CardIconGlyph icon="team" />
+                  <span>{workspace.name}</span>
+                </span>
+              ) : null}
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
               <button
                 type="button"
@@ -1367,7 +1375,7 @@ export default function OrdersPage() {
           onDoubleClick={sidebar.resetWidth}
         />
 
-        <main className="orders-detail-pane">
+        <main className="orders-detail-pane" aria-label={t("Order workspace")}>
           {loadingDetail ? <LoadingScreen /> : null}
 
           {detailError ? (

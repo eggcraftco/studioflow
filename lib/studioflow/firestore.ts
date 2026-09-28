@@ -647,6 +647,8 @@ export type OrderDetail = {
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
   invoiceNumber: string;
+  /** The workspace's sequential project number (functions/orders/projectNumber.js); 0 when the order predates it. */
+  projectNumber?: number;
   // "custom" or "repair". A repair order carries the customer's own item, which
   // is recorded below and is deliberately not stock.
   orderType: string;
@@ -2305,6 +2307,7 @@ function mapOrderDetailSnapshot(
     invoiceNote: stringValue(data.invoiceNote, ""),
     lineItems: mapLineItems(data.lineItems),
     invoiceNumber: stringValue(data.invoiceNumber, ""),
+    projectNumber: numberValue(data.projectNumber, 0),
     orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
     repairIntake: mapRepairIntake(data.repairIntake),
     estimates: mapEstimates(data.estimates),

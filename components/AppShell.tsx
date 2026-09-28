@@ -95,10 +95,14 @@ import {
 } from "@/lib/studioflow/firstProjectGuide";
 
 type NavIconName =
+  | "home"
   | "orders"
+  | "sales"
+  | "production"
   | "dashboard"
   | "schedule"
   | "customers"
+  | "inventory"
   | "files"
   | "messages"
   | "notes"
@@ -106,35 +110,51 @@ type NavIconName =
   | "settings"
   | "activity"
   | "account"
+  | "workspace"
+  | "website"
   | "signout"
   | "insights"
-  | "bank";
+  | "bank"
+  | "sidebar"
+  | "chevron"
+  | "close";
 
-const NAV_ITEMS: Array<
-  | { href: string; label: string; icon: NavIconName }
-  | { label: string; icon: NavIconName; disabled: true }
-> = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: NavIconName;
+  /** Other paths that light this item up (a sibling screen of the same module). */
+  activeOn?: string[];
+};
+
+// Sidebar, main section (spec §"Sidebar Items"). Settings is not here on
+// purpose: it opens from the avatar block at the bottom of the sidebar.
+const NAV_ITEMS: NavItem[] = [
   // Home first: it is the screen that answers what needs attention, and the one
   // people should land on rather than an order list.
-  { href: "/home", label: "Home", icon: "dashboard" },
+  { href: "/home", label: "Home", icon: "home" },
   { href: "/orders", label: "Orders", icon: "orders" },
-  { href: "/sales", label: "Sales", icon: "orders" },
-  { href: "/production", label: "Production", icon: "schedule" },
+  { href: "/sales", label: "Sales", icon: "sales" },
+  { href: "/production", label: "Production", icon: "production" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/bank", label: "Banking", icon: "bank" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/customers", label: "Customers", icon: "customers" },
-  { href: "/inventory", label: "Inventory", icon: "files" },
+  { href: "/inventory", label: "Inventory", icon: "inventory" },
   { href: "/files", label: "Files", icon: "files" },
-  // One entry for both conversations. /messages is the team talking to itself and
-  // /inbox is a CUSTOMER writing to the workshop; they stay two separate tabs
-  // inside the page (components/MessagesTabs.tsx), never one list, because a
-  // stranger's message must never be read — or acted on — as a colleague's.
-  { href: "/messages", label: "Messages", icon: "messages" },
+  // One entry for both conversations. It opens the CUSTOMER inbox (/inbox);
+  // the team's own chat (/messages) is the second tab inside that screen
+  // (components/MessagesTabs.tsx). They stay two separate tabs, never one
+  // list, because a stranger's message must never be read — or acted on — as
+  // a colleague's. Both paths light this item up.
+  { href: "/inbox", label: "Messages", icon: "messages", activeOn: ["/messages"] },
   { href: "/quick-reply", label: "AI Replies", icon: "reply" },
-  { href: "/settings", label: "Settings", icon: "settings" },
+];
+
+// Sidebar, lower section (spec: "Lower section: Insights").
+const NAV_LOWER_ITEMS: NavItem[] = [
   { href: "/admin", label: "Insights", icon: "insights" },
 ];
 
@@ -214,6 +234,48 @@ function memberCanAccess(
   key: WorkspaceMemberAccessKey,
 ) {
   return workspace ? workspaceAccessAllows(workspace.memberAccess, key) : true;
+}
+
+// Sidebar open/closed, remembered per viewer in this browser. localStorage can
+// be absent or throw (private windows, blocked site data), so every access is
+// guarded and the sidebar simply starts from the width-based default then.
+// Without a stored choice: expanded on a wide desktop, icons-only below 1280px
+// so the three Orders columns keep their room.
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "nivadesk-sidebar-collapsed";
+
+function readStoredSidebarCollapsed(): boolean | null {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
+  } catch {
+    /* no storage — the default below is used */
+  }
+  return null;
+}
+
+function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const stored = readStoredSidebarCollapsed();
+    if (stored !== null) {
+      setCollapsed(stored);
+      return;
+    }
+    setCollapsed(window.innerWidth < 1280);
+  }, []);
+  const toggle = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* not remembered — still applied for this page */
+      }
+      return next;
+    });
+  };
+  return { collapsed, toggle };
 }
 
 function profileInitials(
@@ -390,6 +452,18 @@ function ToolbarIcon({
 
 function NavIcon({ name }: { name: NavIconName }) {
   const paths: Record<NavIconName, string[]> = {
+    home: ["M3 11l9-8 9 8", "M5 10v10h5v-6h4v6h5V10"],
+    sales: [
+      "M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z",
+      "M7.5 7.5h.01",
+    ],
+    production: ["M4 5h16v14H4z", "M9 5v14", "M15 5v14"],
+    inventory: ["M21 8l-9-5-9 5 9 5 9-5z", "M3 8v8l9 5 9-5V8", "M12 13v8"],
+    workspace: ["M3 21h18", "M5 21V7l7-4 7 4v14", "M9 21v-5h6v5"],
+    website: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z", "M2 12h20", "M12 2a15 15 0 0 1 0 20", "M12 2a15 15 0 0 0 0 20"],
+    sidebar: ["M4 5h16v14H4z", "M9 5v14"],
+    chevron: ["m6 9 6 6 6-6"],
+    close: ["M6 6l12 12", "M18 6 6 18"],
     orders: [
       "M8 6h12",
       "M8 12h12",
@@ -1810,6 +1884,81 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     canCreateOrdersForRole(workspace.role) &&
     workspace.entitlements.features.orders_create,
   );
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebarCollapsed } = useSidebarCollapsed();
+  const sidebarUserRef = useRef<HTMLDivElement | null>(null);
+  // The user menu closes on a click anywhere else and on Escape, like any
+  // dropdown; the drawer and the menu both close when the route changes.
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    function handlePointer(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (target && sidebarUserRef.current?.contains(target)) return;
+      setAvatarMenuOpen(false);
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setAvatarMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [avatarMenuOpen]);
+  useEffect(() => {
+    setMobileNavOpen(false);
+    setAvatarMenuOpen(false);
+  }, [pathname]);
+  function closeSidebarMenus() {
+    setAvatarMenuOpen(false);
+    setMobileNavOpen(false);
+  }
+  // Settings from the avatar menu. When /settings is already open, the route
+  // push only rewrites the query and the page would stay on its section, so
+  // the page is told directly (app/settings/page.tsx listens).
+  function openSettingsSection(section?: string) {
+    closeSidebarMenus();
+    router.push(section ? `/settings?section=${section}` : "/settings");
+    if (pathname === "/settings" && section) {
+      window.dispatchEvent(
+        new CustomEvent("studioflow-settings-open-section", { detail: { section } }),
+      );
+    }
+  }
+  // The same gates the top-row pills applied, now for the sidebar: the plan's
+  // features, the server's Sales answer, the admin list and the member's access
+  // keys. A hidden module is not offered; a typed URL is still checked by the
+  // page itself.
+  function navItemHidden(item: NavItem) {
+    if (item.href === "/dashboard" && !canSeeToolbarFinance) return true;
+    if (item.href === "/inbox" && workspace?.entitlements.features.messages !== true) return true;
+    if (item.href === "/quick-reply" && workspace?.quickReplyMenuEnabled === false) return true;
+    if (item.href === "/admin" && !isNivaDeskAdminEmail(user?.email)) return true;
+    if (
+      item.href === "/sales" &&
+      !(salesMenu?.companyId === workspace?.id && salesMenu?.showInMenu === true)
+    )
+      // Hidden until the server says this workspace is eligible, has asked for
+      // it, and this member may read orders — and only when the answer belongs
+      // to the workspace on screen now.
+      return true;
+    if (item.href === "/bank" && workspace?.entitlements.features.bank_feed !== true)
+      // The bank feed is Pro and above, so it is hidden rather than shown
+      // locked on Free and Lite.
+      return true;
+    const accessKey = NAV_ACCESS_BY_HREF[item.href];
+    if (accessKey && !memberCanAccess(workspace, accessKey)) return true;
+    return false;
+  }
+  function navItemActive(item: NavItem) {
+    const paths = [item.href, ...(item.activeOn ?? [])];
+    return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }
+  // Lets the stylesheet give the Orders workspace the whole height of the
+  // content area (three columns that scroll inside), while every other page
+  // keeps scrolling as a document.
+  const shellPageKind =
+    pathname === "/orders" || pathname.startsWith("/orders/") ? "orders" : "page";
   // No explicit choice yet: follow the browser locale instead of hard-coding
   // English (a stored personal or workspace choice always wins).
   const language =
@@ -1818,6 +1967,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     settings?.selectedLanguage ||
     studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
   const t = (text: string) => studioT(text, language);
+  const sidebarUserName =
+    workspace?.currentMemberDisplayName?.trim() ||
+    user?.displayName?.trim() ||
+    (user?.email ?? "").split("@")[0] ||
+    t("Account");
+  const sidebarUserRole =
+    workspace?.roleLabel?.trim() ||
+    (normalizeWorkspaceRole(workspace?.role) === "workflow" ? t("Workflow Only") : t("Member"));
+  const sidebarUserTitle = [sidebarUserName, sidebarUserRole, workspace?.name?.trim()].filter(Boolean).join(" · ");
   // Days left in the trial, counted from the explicit end the server wrote.
   // Rounded up so the last partial day still reads as a day rather than zero.
   const trialEnded = useMemo(
@@ -2537,15 +2695,34 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             onOpen={(href) => router.push(href)}
           />
         ) : null}
-        <div
-          className={
-            wideWorkspace
-              ? "shell-container shell-container-wide"
-              : "shell-container"
-          }
-        >
+        <div className="shell-container shell-container-wide app-shell-frame">
+          {/* ONE top row, kept as it was: brand, the margin chips (or the role
+              strip), the icon buttons and "+ Add Project". Navigation left this
+              row for the sidebar below; the hamburger at the far left opens
+              that sidebar as a drawer on narrow screens. */}
           <header className="app-toolbar app-toolbar-native">
             <div className="toolbar-main">
+              <button
+                className={
+                  mobileNavOpen
+                    ? "toolbar-menu-button is-open"
+                    : "toolbar-menu-button"
+                }
+                type="button"
+                aria-label={mobileNavOpen ? t("Close menu") : t("Open menu")}
+                aria-expanded={mobileNavOpen}
+                aria-controls="app-sidebar"
+                onClick={() => setMobileNavOpen((open) => !open)}
+              >
+                <span />
+                <span />
+                <span />
+                {notifUnreadCount > 0 ? (
+                  <span className="toolbar-menu-badge" aria-hidden="true">
+                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                  </span>
+                ) : null}
+              </button>
               <Link
                 href="/orders"
                 className="toolbar-brand native-brand"
@@ -2590,163 +2767,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 </div>
               )}
             </div>
-
-            <nav
-              className={
-                mobileNavOpen
-                  ? "toolbar-nav native-toolbar-nav is-open"
-                  : "toolbar-nav native-toolbar-nav"
-              }
-              aria-label={t("Main navigation")}
-            >
-              {NAV_ITEMS.map((item) => {
-                if (
-                  "href" in item &&
-                  item.href === "/dashboard" &&
-                  !canSeeToolbarFinance
-                )
-                  return null;
-                if (
-                  "href" in item &&
-                  item.href === "/messages" &&
-                  workspace?.entitlements.features.messages !== true
-                )
-                  return null;
-                if (
-                  "href" in item &&
-                  item.href === "/quick-reply" &&
-                  workspace?.quickReplyMenuEnabled === false
-                )
-                  return null;
-                if (
-                  "href" in item &&
-                  item.href === "/admin" &&
-                  !isNivaDeskAdminEmail(user?.email)
-                )
-                  return null;
-                if (
-                  "href" in item &&
-                  item.href === "/sales" &&
-                  !(
-                    salesMenu?.companyId === workspace?.id &&
-                    salesMenu?.showInMenu === true
-                  )
-                )
-                  // Hidden until the server says this workspace is eligible, has
-                  // asked for it, and this member may read orders — and only
-                  // when the answer belongs to the workspace on screen now.
-                  return null;
-                if (
-                  "href" in item &&
-                  item.href === "/bank" &&
-                  workspace?.entitlements.features.bank_feed !== true
-                )
-                  // The bank feed is Pro and above, so it is hidden rather than
-                  // shown locked on Free and Lite.
-                  return null;
-                if ("href" in item) {
-                  const accessKey = NAV_ACCESS_BY_HREF[item.href];
-                  if (accessKey && !memberCanAccess(workspace, accessKey))
-                    return null;
-                }
-                if (!("href" in item)) {
-                  return (
-                    <span
-                      key={item.label}
-                      className="nav-pill native-nav-pill disabled"
-                      aria-disabled="true"
-                    >
-                      <NavIcon name={item.icon} />
-                      {t(item.label)}
-                    </span>
-                  );
-                }
-
-                const active =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`) ||
-                  (item.href === "/messages" && (pathname === "/inbox" || pathname.startsWith("/inbox/")));
-                const showMsgBadge = item.href === "/messages" && messageUnreadCount > 0;
-                const showNotesBadge = item.href === "/notes" && notesReminderCount > 0;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={
-                      active
-                        ? "nav-pill native-nav-pill active"
-                        : "nav-pill native-nav-pill"
-                    }
-                  >
-                    <NavIcon name={item.icon} />
-                    {t(item.label)}
-                    {showMsgBadge && (
-                      <span className="nav-pill-badge">
-                        {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
-                      </span>
-                    )}
-                    {showNotesBadge && (
-                      <span className="nav-pill-badge">
-                        {notesReminderCount > 99 ? "99+" : notesReminderCount}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-              <button
-                type="button"
-                className="nav-pill native-nav-pill native-nav-extra"
-                onClick={() => {
-                  setMobileNavOpen(false);
-                  setNotifDrawerOpen(true);
-                }}
-              >
-                <NavIcon name="activity" />
-                {t("Activity")}
-                {notifUnreadCount > 0 && (
-                  <span className="nav-pill-badge">
-                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
-                  </span>
-                )}
-              </button>
-              {feedbackEnabled ? (
-                <button
-                  type="button"
-                  className="nav-pill native-nav-pill native-nav-extra"
-                  data-testid="feedback-menu-entry-mobile"
-                  onClick={() => {
-                    setMobileNavOpen(false);
-                    setFeedbackManualOpen(true);
-                  }}
-                >
-                  <NavIcon name="activity" />
-                  {t("Send feedback")}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="nav-pill native-nav-pill native-nav-extra"
-                onClick={() => {
-                  setMobileNavOpen(false);
-                  router.push("/settings?section=account");
-                }}
-              >
-                <NavIcon name="account" />
-                {t("Account")}
-              </button>
-              <span className="native-nav-divider native-nav-extra" aria-hidden="true" />
-              <button
-                type="button"
-                className="nav-pill native-nav-pill native-nav-signout native-nav-extra"
-                onClick={() => {
-                  setMobileNavOpen(false);
-                  void handleToolbarSignOut();
-                }}
-              >
-                <NavIcon name="signout" />
-                {t("Sign Out")}
-              </button>
-            </nav>
 
             <div className="toolbar-account native-toolbar-actions">
               {canSeeToolbarFinance ? (
@@ -2829,92 +2849,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                 </button>
               ) : null}
-              <span className="toolbar-avatar-wrap">
-                <button
-                  className="toolbar-avatar"
-                  type="button"
-                  title={t("Account")}
-                  aria-label={t("Account")}
-                  aria-expanded={avatarMenuOpen}
-                  onClick={() => setAvatarMenuOpen((open) => !open)}
-                >
-                  {showToolbarAvatarImage ? (
-                    <img
-                      src={toolbarAvatarUrl}
-                      alt=""
-                      onError={() => setAvatarImageFailed(true)}
-                    />
-                  ) : (
-                    <ToolbarAvatarPlaceholder
-                      initials={toolbarAvatarInitials}
-                    />
-                  )}
-                </button>
-                {avatarMenuOpen ? (
-                  <span className="toolbar-avatar-menu" role="menu">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                        router.push("/settings?section=account");
-                      }}
-                    >
-                      {t("Account")}
-                    </button>
-                    {feedbackEnabled ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        data-testid="feedback-menu-entry"
-                        onClick={() => {
-                          setAvatarMenuOpen(false);
-                          setFeedbackManualOpen(true);
-                        }}
-                      >
-                        {t("Send feedback")}
-                      </button>
-                    ) : null}
-                    <a
-                      role="menuitem"
-                      href="/"
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => setAvatarMenuOpen(false)}
-                    >
-                      {t("Visit website")}
-                    </a>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="danger"
-                      onClick={handleToolbarSignOut}
-                    >
-                      {t("Sign Out")}
-                    </button>
-                  </span>
-                ) : null}
-              </span>
-              <button
-                className={
-                  mobileNavOpen
-                    ? "toolbar-menu-button is-open"
-                    : "toolbar-menu-button"
-                }
-                type="button"
-                aria-label={mobileNavOpen ? t("Close menu") : t("Open menu")}
-                aria-expanded={mobileNavOpen}
-                onClick={() => setMobileNavOpen((open) => !open)}
-              >
-                <span />
-                <span />
-                <span />
-                {notifUnreadCount > 0 ? (
-                  <span className="toolbar-menu-badge" aria-hidden="true">
-                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
-                  </span>
-                ) : null}
-              </button>
             </div>
           </header>
           {showAddProjectGuide ? (
@@ -3001,15 +2935,239 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               </p>
             </div>
           ) : null}
-          {mobileNavOpen ? (
-            <button
-              className="mobile-nav-scrim"
-              type="button"
-              aria-label={t("Close menu")}
-              onClick={() => setMobileNavOpen(false)}
-            />
-          ) : null}
-          <div className="app-shell-scroll-area">
+          <div className="app-shell-body">
+            {mobileNavOpen ? (
+              <button
+                className="mobile-nav-scrim"
+                type="button"
+                aria-label={t("Close menu")}
+                onClick={() => setMobileNavOpen(false)}
+              />
+            ) : null}
+            {/* The collapsible sidebar (spec §1). Icons only when collapsed,
+                icons + names when expanded; the state is the viewer's own and
+                lives in this browser (see useSidebarCollapsed). Below 1024 px
+                the same element is a drawer that the hamburger in the top row
+                opens. Settings is deliberately NOT an item here: it opens from
+                the avatar block at the bottom. */}
+            <aside
+              id="app-sidebar"
+              className={[
+                "app-sidebar",
+                sidebarCollapsed ? "is-collapsed" : "is-expanded",
+                mobileNavOpen ? "is-open" : "",
+              ].filter(Boolean).join(" ")}
+              aria-label={t("Main navigation")}
+            >
+              <div className="app-sidebar-top">
+                <button
+                  type="button"
+                  className="app-sidebar-toggle"
+                  aria-label={sidebarCollapsed ? t("Expand sidebar") : t("Collapse sidebar")}
+                  title={sidebarCollapsed ? t("Expand sidebar") : t("Collapse sidebar")}
+                  aria-expanded={!sidebarCollapsed}
+                  aria-controls="app-sidebar-nav"
+                  onClick={toggleSidebarCollapsed}
+                >
+                  <NavIcon name="sidebar" />
+                </button>
+                {/* Only the drawer form shows this (below 1024 px): the
+                    hamburger in the top row sits under the open drawer. */}
+                <button
+                  type="button"
+                  className="app-sidebar-close"
+                  aria-label={t("Close menu")}
+                  title={t("Close menu")}
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  <NavIcon name="close" />
+                </button>
+              </div>
+              <nav id="app-sidebar-nav" className="app-sidebar-nav">
+                {NAV_ITEMS.map((item) => {
+                  if (navItemHidden(item)) return null;
+                  const active = navItemActive(item);
+                  const badge =
+                    item.href === "/inbox" && messageUnreadCount > 0
+                      ? messageUnreadCount
+                      : item.href === "/notes" && notesReminderCount > 0
+                        ? notesReminderCount
+                        : 0;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={active ? "app-sidebar-item is-active" : "app-sidebar-item"}
+                      aria-current={active ? "page" : undefined}
+                      title={sidebarCollapsed ? t(item.label) : undefined}
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span className="app-sidebar-item-icon" aria-hidden="true">
+                        <NavIcon name={item.icon} />
+                      </span>
+                      <span className="app-sidebar-label">{t(item.label)}</span>
+                      {badge > 0 ? (
+                        <span className="app-sidebar-badge">
+                          {badge > 99 ? "99+" : badge}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <div className="app-sidebar-lower">
+                <button
+                  type="button"
+                  className="app-sidebar-item"
+                  title={sidebarCollapsed ? t("Activity") : undefined}
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setNotifDrawerOpen(true);
+                  }}
+                >
+                  <span className="app-sidebar-item-icon" aria-hidden="true">
+                    <NavIcon name="activity" />
+                  </span>
+                  <span className="app-sidebar-label">{t("Activity")}</span>
+                  {notifUnreadCount > 0 ? (
+                    <span className="app-sidebar-badge">
+                      {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                    </span>
+                  ) : null}
+                </button>
+                {NAV_LOWER_ITEMS.map((item) => {
+                  if (navItemHidden(item)) return null;
+                  const active = navItemActive(item);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={active ? "app-sidebar-item is-active" : "app-sidebar-item"}
+                      aria-current={active ? "page" : undefined}
+                      title={sidebarCollapsed ? t(item.label) : undefined}
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span className="app-sidebar-item-icon" aria-hidden="true">
+                        <NavIcon name={item.icon} />
+                      </span>
+                      <span className="app-sidebar-label">{t(item.label)}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+              {/* The user block. Its menu is where Settings lives now (spec
+                  "User Menu / Settings"): Settings, Account, Workspace
+                  settings, Logout — plus the two entries the old top-right
+                  avatar menu already carried. */}
+              <div className="app-sidebar-user" ref={sidebarUserRef}>
+                <button
+                  type="button"
+                  className="app-sidebar-user-button"
+                  aria-label={t("Account menu")}
+                  aria-haspopup="menu"
+                  aria-expanded={avatarMenuOpen}
+                  aria-controls="app-sidebar-user-menu"
+                  title={sidebarUserTitle}
+                  onClick={() => setAvatarMenuOpen((open) => !open)}
+                >
+                  <span className="app-sidebar-avatar toolbar-avatar">
+                    {showToolbarAvatarImage ? (
+                      <img
+                        src={toolbarAvatarUrl}
+                        alt=""
+                        onError={() => setAvatarImageFailed(true)}
+                      />
+                    ) : (
+                      <ToolbarAvatarPlaceholder initials={toolbarAvatarInitials} />
+                    )}
+                  </span>
+                  <span className="app-sidebar-user-text">
+                    <strong>{sidebarUserName}</strong>
+                    <span>{workspace?.name?.trim() || sidebarUserRole}</span>
+                  </span>
+                  <span className="app-sidebar-user-chevron" aria-hidden="true">
+                    <NavIcon name="chevron" />
+                  </span>
+                </button>
+                {avatarMenuOpen ? (
+                  <div
+                    id="app-sidebar-user-menu"
+                    className="app-sidebar-user-menu toolbar-avatar-menu"
+                    role="menu"
+                    aria-label={t("Account menu")}
+                  >
+                    {memberCanAccess(workspace, "settings") ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => openSettingsSection()}
+                      >
+                        <NavIcon name="settings" />
+                        {t("Settings")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => openSettingsSection("profile-security")}
+                    >
+                      <NavIcon name="account" />
+                      {t("Account")}
+                    </button>
+                    {memberCanAccess(workspace, "settings") ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => openSettingsSection("branding")}
+                      >
+                        <NavIcon name="workspace" />
+                        {t("Workspace settings")}
+                      </button>
+                    ) : null}
+                    <span className="app-sidebar-user-menu-divider" aria-hidden="true" />
+                    {feedbackEnabled ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-testid="feedback-menu-entry"
+                        onClick={() => {
+                          closeSidebarMenus();
+                          setFeedbackManualOpen(true);
+                        }}
+                      >
+                        <NavIcon name="activity" />
+                        {t("Send feedback")}
+                      </button>
+                    ) : null}
+                    <a
+                      role="menuitem"
+                      href="/"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => closeSidebarMenus()}
+                    >
+                      <NavIcon name="website" />
+                      {t("Visit website")}
+                    </a>
+                    <span className="app-sidebar-user-menu-divider" aria-hidden="true" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="danger"
+                      onClick={() => {
+                        closeSidebarMenus();
+                        void handleToolbarSignOut();
+                      }}
+                    >
+                      <NavIcon name="signout" />
+                      {t("Logout")}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </aside>
+            <div className="app-shell-scroll-area" data-shell-page={shellPageKind}>
+              <div className={wideWorkspace ? "app-shell-content is-wide" : "app-shell-content"}>
             {workspaceLoadError && !workspace ? (
               <div className="layout-error toolbar-action-message workspace-load-error" role="status">
                 <strong>{t("Workspace not opened")}</strong>
@@ -3038,7 +3196,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 {t(orderCreateError)}
               </p>
             ) : null}
-            {children}
+                {children}
+              </div>
+            </div>
           </div>
         </div>
       </main>
