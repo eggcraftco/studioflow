@@ -155,12 +155,22 @@ export type CustomerInboxReplyWindow = {
  */
 export type CustomerInboxReplyChannel = { available: boolean; reason: string };
 
+/**
+ * Whether a REACTION may be sent from NivaDesk on this conversation's channel —
+ * a server constant per channel (functions/inbox/customerInboxFunctions.js
+ * REACT_OUT_CHANNELS), so switching a channel on again is a server change.
+ * `reason` is the server's word when it is off ("instagram_diagnosis").
+ */
+export type CustomerInboxReactOut = { available: boolean; reason: string };
+
 export type CustomerInboxThread = CustomerInboxRow & {
   messages: CustomerInboxMessage[];
   /** Null when the server predates the window field; the screen then says only the general rule. */
   replyWindow?: CustomerInboxReplyWindow | null;
   /** Null when the server predates the field: Instagram then reads as not answerable, as before. */
   replyChannel?: CustomerInboxReplyChannel | null;
+  /** Null when the server predates the field: the screen then offers the chooser on WhatsApp only. */
+  reactOut?: CustomerInboxReactOut | null;
 };
 
 export async function loadCustomerInboxConversations(
@@ -229,12 +239,12 @@ export async function loadCustomerInboxThread(
 ): Promise<CustomerInboxThread | null> {
   const call = httpsCallable<
     { companyId: string; conversationId: string; messageLimit?: number },
-    { ok: boolean; conversation: CustomerInboxThread; replyWindow?: CustomerInboxReplyWindow; replyChannel?: CustomerInboxReplyChannel }
+    { ok: boolean; conversation: CustomerInboxThread; replyWindow?: CustomerInboxReplyWindow; replyChannel?: CustomerInboxReplyChannel; reactOut?: CustomerInboxReactOut }
   >(functions, "readCustomerInboxConversation");
   const response = await call({ companyId, conversationId, ...(messageLimit ? { messageLimit } : {}) });
   const conversation = response.data?.conversation ?? null;
   return conversation
-    ? { ...conversation, replyWindow: response.data?.replyWindow ?? null, replyChannel: response.data?.replyChannel ?? null }
+    ? { ...conversation, replyWindow: response.data?.replyWindow ?? null, replyChannel: response.data?.replyChannel ?? null, reactOut: response.data?.reactOut ?? null }
     : null;
 }
 
@@ -376,6 +386,30 @@ export async function sendCustomerInboxReply(
     const response = await call({ companyId, conversationId, replyId, body, ...(media ? { media } : {}) });
     return response.data;
   }, "Sending on WhatsApp.");
+}
+
+/**
+ * Whether the workshop may react from here on this thread: the server's word
+ * when it gives one; on an older server, WhatsApp only (Instagram reactions
+ * are held while Meta's refusal of 28 Sep 2026 is being read).
+ */
+export function reactOutAvailable(thread: Pick<CustomerInboxThread, "reactOut" | "channelMedium"> | null | undefined): boolean {
+  if (!thread) return false;
+  if (thread.reactOut) return thread.reactOut.available === true;
+  return thread.channelMedium !== "instagram";
+}
+
+/**
+ * Meta's numbers on a refused send, from the callable's details — "100",
+ * "100.2534014" — or "" when the failure was not Meta's. For the notice's
+ * "(Meta code …)"; the sentence itself never travels.
+ */
+export function metaErrorCode(error: unknown): string {
+  const details = (error as { details?: { metaCode?: unknown; metaSubcode?: unknown } } | null)?.details;
+  const code = Number(details?.metaCode) || 0;
+  if (!code) return "";
+  const subcode = Number(details?.metaSubcode) || 0;
+  return subcode ? `${code}.${subcode}` : String(code);
 }
 
 export type CustomerInboxReactionResult = {

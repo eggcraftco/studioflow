@@ -65,6 +65,8 @@ import {
   loadCustomerInboxThread,
   markCustomerInboxThreadRead,
   linkCustomerInboxThread,
+  metaErrorCode,
+  reactOutAvailable,
   reactToCustomerMessage,
   sendCustomerInboxReply,
   newCustomerInboxReplyId,
@@ -767,7 +769,10 @@ export function InboxContent({
       const next = await loadCustomerInboxThread(workspace.id, openId);
       if (next && openIdRef.current === openId) setThread(next);
     } catch (failure) {
-      setReactError(friendlyErrorMessage(failure, t));
+      // Meta's number beside the sentence, when the refusal was Meta's: the
+      // owner reads "Instagram did not accept the reaction. (Meta code 100)".
+      const code = metaErrorCode(failure);
+      setReactError(`${friendlyErrorMessage(failure, t)}${code ? ` (${t("Meta code {code}").replace("{code}", code)})` : ""}`);
     } finally {
       setReactBusyFor("");
     }
@@ -846,8 +851,13 @@ export function InboxContent({
     );
   };
 
+  // Whether the chooser is drawn on this thread at all: the server's word per
+  // channel (`reactOut`), and WhatsApp only on a server that predates it. The
+  // customer's own reactions render either way.
+  const canReactHere = reactOutAvailable(thread);
+
   const renderReactChooser = (message: CustomerInboxMessage) => {
-    if (!mayLink || message.direction !== "inbound" || message.reactable !== true) return null;
+    if (!canReactHere || !mayLink || message.direction !== "inbound" || message.reactable !== true) return null;
     const mine = (message.reactions ?? []).find((reaction) => reaction.by === "operator") || null;
     const open = reactOpenFor === message.messageId;
     const sending = reactBusyFor === message.messageId;
@@ -1294,7 +1304,7 @@ export function InboxContent({
                     key={entry.message.messageId}
                     className={`inbox-msg ${entry.message.direction === "outbound" ? "inbox-msg-out" : "inbox-msg-in"}${entry.first ? " is-first" : ""}${entry.last ? " is-last" : ""}`}
                     onTouchStart={() => {
-                      if (entry.message.direction !== "inbound" || entry.message.reactable !== true || !mayLink) return;
+                      if (!canReactHere || entry.message.direction !== "inbound" || entry.message.reactable !== true || !mayLink) return;
                       longPress.current = window.setTimeout(() => setReactOpenFor(entry.message.messageId), 500);
                     }}
                     onTouchEnd={() => { if (longPress.current !== null) { window.clearTimeout(longPress.current); longPress.current = null; } }}

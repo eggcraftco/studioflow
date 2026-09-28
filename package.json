@@ -15,6 +15,7 @@
     "test:finance": "node scripts/check-finance-vectors.mjs",
     "test:meta-signup": "node scripts/check-meta-signup.mjs",
     "test:inbox-translations": "node scripts/check-inbox-translations.mjs",
+    "test:inbox-react-out": "node scripts/check-inbox-react-out.mjs",
     "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs"
   },
   "dependencies": {

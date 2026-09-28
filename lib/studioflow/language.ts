@@ -7370,6 +7370,8 @@ const CUSTOMER_INBOX_TRANSLATIONS: TranslationTable = {
   "Replies": { "Türkçe": "Yanıtlar", "Deutsch": "Antworten", "Français": "Réponses", "Italiano": "Risposte", "Español (Spanish)": "Respuestas", "Português": "Respostas", "Русский (Russian)": "Ответы", "日本語 (Japanese)": "返信", "中文 (Chinese)": "回复", "العربية (Arabic)": "الردود", "हिन्दी (Hindi)": "जवाब" },
   "Reactions": { "Türkçe": "Tepkiler", "Deutsch": "Reaktionen", "Français": "Réactions", "Italiano": "Reazioni", "Español (Spanish)": "Reacciones", "Português": "Reações", "Русский (Russian)": "Реакции", "日本語 (Japanese)": "リアクション", "中文 (Chinese)": "反应", "العربية (Arabic)": "التفاعلات", "हिन्दी (Hindi)": "प्रतिक्रियाएँ" },
   "Photos & PDFs": { "Türkçe": "Fotoğraflar ve PDF'ler", "Deutsch": "Fotos & PDFs", "Français": "Photos et PDF", "Italiano": "Foto e PDF", "Español (Spanish)": "Fotos y PDF", "Português": "Fotos e PDF", "Русский (Russian)": "Фото и PDF", "日本語 (Japanese)": "写真とPDF", "中文 (Chinese)": "照片和 PDF", "العربية (Arabic)": "الصور وملفات PDF", "हिन्दी (Hindi)": "फ़ोटो और PDF" },
+  // 28 Sep 2026: Meta's numeric code beside a refused reaction's sentence, for the owner's diagnosis.
+  "Meta code {code}": { "Türkçe": "Meta kodu {code}", "Deutsch": "Meta-Code {code}", "Français": "Code Meta {code}", "Italiano": "Codice Meta {code}", "Español (Spanish)": "Código de Meta {code}", "Português": "Código Meta {code}", "Русский (Russian)": "Код Meta {code}", "日本語 (Japanese)": "Metaコード {code}", "中文 (Chinese)": "Meta 代码 {code}", "العربية (Arabic)": "رمز Meta {code}", "हिन्दी (Hindi)": "Meta कोड {code}" },
 };
 
 const TRANSLATIONS: TranslationTable = mergeTranslationTables(
