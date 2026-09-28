@@ -15,6 +15,9 @@
 .whatsAppBrand{width:64px}.whatsAppBrand img{max-width:58px;width:58px;height:58px;max-height:58px}
 .amazonBrand{width:136px;overflow:hidden;justify-content:center}.amazonBrand img{max-width:136px;width:136px;height:56px;max-height:56px;transform:scale(1.75);transform-origin:center}
 .brand:focus-visible{outline:2px solid #2f6f6d;outline-offset:5px;border-radius:4px}
+/* A brand we have no file for keeps an initial on a quiet tile (Instagram Direct and DHL Express,
+   28 September 2026): the mark is theirs and is not redrawn, as in the app's own integration tiles. */
+.brandMark{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:#eef2ea;border:1px solid var(--line);color:var(--ink);font-family:var(--font-manrope,Arial),sans-serif;font-size:22px;font-weight:700;letter-spacing:0;line-height:1}
 .node img{width:80px;height:40px;object-fit:contain;display:block;margin:auto}
 
 .brand img,.node img{color-scheme:light}

@@ -1098,14 +1098,24 @@ export const PUBLIC_SITE_EN = {
   "integrations.action.request": "Request access",
   "integrations.action.ask": "Ask about this integration",
   "integrations.action.chatgpt": "Explore NivaDesk for ChatGPT",
-  "integrations.note.shopify": "Available on request while the Shopify App Store review completes.",
+  "integrations.note.shopify": "Awaiting Shopify App Store approval — customers can't install it yet.",
   "integrations.note.etsy": "Available on request while the app's commercial access with Etsy is arranged.",
   "integrations.note.quickbooks": "Available on request while production access with Intuit is arranged.",
   "integrations.note.twilio": "Available on request while the NivaDesk sender ID registration with the carrier completes.",
   "integrations.note.whatsapp": "Running for one business today; available on request while Meta's approval for other businesses completes.",
   "integrations.note.amazon": "Available on request while Amazon completes its review of the app; sellers cannot authorise it until then.",
   "integrations.note.xero": "Available on request until the first customer organisation is connected; proven so far with Xero's demo company.",
-  "integrations.note.ebay": "Runs against eBay's test environment only; a production connection is not available yet."
+  "integrations.note.ebay": "Runs against eBay's test environment only; a production connection is not available yet.",
+  // Second pass, 28 September 2026: the corrected Shopify detail, and the two
+  // cards added on the owner's instruction (Instagram Direct, DHL Express).
+  // Evidence: docs/deploys/site-integrations-update-2026-09-28/README.md.
+  "integrations.detail.shopify": "An official NivaDesk app for Shopify is built, but Shopify has not yet approved it for the App Store, so a store cannot install it yet. Talk to us about your shop and we will tell you exactly where that stands.",
+  "integrations.summary.instagram": "Answer your customers' Instagram messages from the NivaDesk customer inbox.",
+  "integrations.detail.instagram": "A customer inbox for Instagram Direct on the Team plan: your team replies to your customers' Instagram messages in NivaDesk, and the reactions customers add are shown. Sending reactions and attachments on Instagram is not available yet. It runs for one business today, on its own Instagram professional account.",
+  "integrations.note.instagram": "Available once Meta grants the app Advanced Access (App Review); each business then connects its own Instagram professional account.",
+  "integrations.summary.dhl": "Prepare DHL Express shipments from your orders and follow their tracking.",
+  "integrations.detail.dhl": "Shipment preparation and tracking for DHL Express, from the order in NivaDesk. The connection is switched on for one business today, and acceptance with DHL is still pending.",
+  "integrations.note.dhl": "Available once acceptance with DHL is complete; each business then connects its own DHL Express account and API credentials."
 } as const;
 
 export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
@@ -10911,8 +10921,10 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
 };
 
 // Public integrations directory: the three availability labels, the legend,
-// the card actions and the honest sentence on each limited card, in the
-// eleven non-English languages. Every key in PUBLIC_SITE_EN's
+// the card actions, the honest sentence on each limited card and the card
+// sentences written since 28 September 2026 (the Shopify detail, and the
+// Instagram Direct and DHL Express cards), in the eleven non-English
+// languages. Every key in PUBLIC_SITE_EN's
 // `integrations.*` block has a row in every language here, because
 // publicSiteT() falls back to English silently and a status label is the one
 // place that must not.
@@ -10930,14 +10942,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Erişim iste",
     "integrations.action.ask": "Bu entegrasyonu sor",
     "integrations.action.chatgpt": "ChatGPT için NivaDesk'i keşfet",
-    "integrations.note.shopify": "Shopify App Store incelemesi tamamlanana kadar talep üzerine sunuluyor.",
+    "integrations.note.shopify": "Shopify App Store onayı bekleniyor — müşteriler henüz yükleyemiyor.",
     "integrations.note.etsy": "Uygulamanın Etsy ile ticari erişimi ayarlanana kadar talep üzerine sunuluyor.",
     "integrations.note.quickbooks": "Intuit ile üretim erişimi ayarlanana kadar talep üzerine sunuluyor.",
     "integrations.note.twilio": "NivaDesk gönderici kimliğinin operatör kaydı tamamlanana kadar talep üzerine sunuluyor.",
     "integrations.note.whatsapp": "Bugün tek bir işletme için çalışıyor; Meta'nın diğer işletmeler için onayı tamamlanana kadar talep üzerine sunuluyor.",
     "integrations.note.amazon": "Amazon uygulamanın incelemesini tamamlayana kadar talep üzerine sunuluyor; o zamana kadar satıcılar uygulamayı yetkilendiremez.",
     "integrations.note.xero": "İlk müşteri kuruluşu bağlanana kadar talep üzerine sunuluyor; şimdiye kadar Xero'nun demo şirketiyle kanıtlandı.",
-    "integrations.note.ebay": "Yalnızca eBay'in test ortamında çalışıyor; üretim bağlantısı henüz sunulmuyor."
+    "integrations.note.ebay": "Yalnızca eBay'in test ortamında çalışıyor; üretim bağlantısı henüz sunulmuyor.",
+    "integrations.detail.shopify": "Shopify için resmi bir NivaDesk uygulaması geliştirildi, ancak Shopify onu App Store için henüz onaylamadı; bu yüzden mağazalar onu henüz yükleyemiyor. Mağazanızı bize anlatın, durumun tam olarak nerede olduğunu size söyleyelim.",
+    "integrations.summary.instagram": "Müşterilerinizin Instagram mesajlarını NivaDesk müşteri gelen kutusundan yanıtlayın.",
+    "integrations.detail.instagram": "Team planında Instagram Direct için müşteri gelen kutusu: ekibiniz müşterilerinizin Instagram mesajlarını NivaDesk'te yanıtlar ve müşterilerin eklediği tepkiler görünür. Instagram'da tepki ve ek göndermek henüz mümkün değil. Bugün tek bir işletme için, kendi Instagram profesyonel hesabıyla çalışıyor.",
+    "integrations.note.instagram": "Meta uygulamaya Gelişmiş Erişim (App Review) verdiğinde kullanılabilir; ardından her işletme kendi Instagram profesyonel hesabını bağlar.",
+    "integrations.summary.dhl": "Siparişlerinizden DHL Express gönderileri hazırlayın ve takiplerini izleyin.",
+    "integrations.detail.dhl": "DHL Express gönderileri NivaDesk'teki siparişten hazırlanır ve takip edilir. Bugün tek bir işletme için açık; DHL ile kabul süreci henüz tamamlanmadı.",
+    "integrations.note.dhl": "DHL ile kabul süreci tamamlandığında kullanılabilir; ardından her işletme kendi DHL Express hesabını ve API kimlik bilgilerini bağlar."
   },
   "Deutsch": {
     "integrations.state.live": "Live",
@@ -10952,14 +10971,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Zugang anfragen",
     "integrations.action.ask": "Zu dieser Integration anfragen",
     "integrations.action.chatgpt": "NivaDesk für ChatGPT entdecken",
-    "integrations.note.shopify": "Auf Anfrage verfügbar, bis die Prüfung im Shopify App Store abgeschlossen ist.",
+    "integrations.note.shopify": "Wartet auf die Freigabe im Shopify App Store — Kunden können die App noch nicht installieren.",
     "integrations.note.etsy": "Auf Anfrage verfügbar, bis der kommerzielle Zugang der App bei Etsy eingerichtet ist.",
     "integrations.note.quickbooks": "Auf Anfrage verfügbar, bis der Produktionszugang bei Intuit eingerichtet ist.",
     "integrations.note.twilio": "Auf Anfrage verfügbar, bis die Registrierung der NivaDesk-Absenderkennung beim Netzbetreiber abgeschlossen ist.",
     "integrations.note.whatsapp": "Läuft heute für ein Unternehmen; auf Anfrage verfügbar, bis Metas Freigabe für weitere Unternehmen vorliegt.",
     "integrations.note.amazon": "Auf Anfrage verfügbar, bis Amazon die Prüfung der App abgeschlossen hat; bis dahin können Verkäufer sie nicht autorisieren.",
     "integrations.note.xero": "Auf Anfrage verfügbar, bis die erste Kundenorganisation verbunden ist; bisher mit der Demo-Organisation von Xero nachgewiesen.",
-    "integrations.note.ebay": "Läuft nur gegen die Testumgebung von eBay; eine Produktionsverbindung ist noch nicht verfügbar."
+    "integrations.note.ebay": "Läuft nur gegen die Testumgebung von eBay; eine Produktionsverbindung ist noch nicht verfügbar.",
+    "integrations.detail.shopify": "Eine offizielle NivaDesk-App für Shopify ist fertig, aber Shopify hat sie noch nicht für den App Store freigegeben, daher kann ein Shop sie noch nicht installieren. Erzählen Sie uns von Ihrem Shop, und wir sagen Ihnen genau, wie der Stand ist.",
+    "integrations.summary.instagram": "Beantworten Sie die Instagram-Nachrichten Ihrer Kunden im NivaDesk-Kundenposteingang.",
+    "integrations.detail.instagram": "Ein Kundenposteingang für Instagram Direct im Team-Tarif: Ihr Team beantwortet die Instagram-Nachrichten Ihrer Kunden in NivaDesk, und die Reaktionen, die Kunden hinzufügen, werden angezeigt. Reaktionen und Anhänge auf Instagram zu senden ist noch nicht möglich. Heute läuft die Integration für ein Unternehmen, mit dessen eigenem professionellem Instagram-Konto.",
+    "integrations.note.instagram": "Verfügbar, sobald Meta der App den erweiterten Zugriff gewährt (App Review); danach verbindet jedes Unternehmen sein eigenes professionelles Instagram-Konto.",
+    "integrations.summary.dhl": "Bereiten Sie DHL-Express-Sendungen aus Ihren Bestellungen vor und behalten Sie die Sendungsverfolgung im Blick.",
+    "integrations.detail.dhl": "Sendungsvorbereitung und Sendungsverfolgung für DHL Express, direkt aus der Bestellung in NivaDesk. Heute ist die Integration für ein Unternehmen freigeschaltet, und die Abnahme mit DHL steht noch aus.",
+    "integrations.note.dhl": "Verfügbar, sobald die Abnahme mit DHL abgeschlossen ist; danach verbindet jedes Unternehmen sein eigenes DHL-Express-Konto und seine API-Zugangsdaten."
   },
   "Français": {
     "integrations.state.live": "Disponible",
@@ -10974,14 +11000,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Demander l'accès",
     "integrations.action.ask": "Poser une question sur cette intégration",
     "integrations.action.chatgpt": "Découvrir NivaDesk pour ChatGPT",
-    "integrations.note.shopify": "Disponible sur demande tant que l'examen par le Shopify App Store n'est pas terminé.",
+    "integrations.note.shopify": "En attente de l'approbation du Shopify App Store — les clients ne peuvent pas encore l'installer.",
     "integrations.note.etsy": "Disponible sur demande tant que l'accès commercial de l'application auprès d'Etsy n'est pas en place.",
     "integrations.note.quickbooks": "Disponible sur demande tant que l'accès de production auprès d'Intuit n'est pas en place.",
     "integrations.note.twilio": "Disponible sur demande tant que l'enregistrement de l'identifiant d'expéditeur NivaDesk auprès de l'opérateur n'est pas terminé.",
     "integrations.note.whatsapp": "En service pour une entreprise aujourd'hui ; disponible sur demande tant que l'approbation de Meta pour d'autres entreprises n'est pas obtenue.",
     "integrations.note.amazon": "Disponible sur demande tant qu'Amazon n'a pas terminé l'examen de l'application ; d'ici là, les vendeurs ne peuvent pas l'autoriser.",
     "integrations.note.xero": "Disponible sur demande jusqu'à la connexion de la première organisation cliente ; validée jusqu'ici avec l'organisation de démonstration de Xero.",
-    "integrations.note.ebay": "Fonctionne uniquement avec l'environnement de test d'eBay ; la connexion de production n'est pas encore disponible."
+    "integrations.note.ebay": "Fonctionne uniquement avec l'environnement de test d'eBay ; la connexion de production n'est pas encore disponible.",
+    "integrations.detail.shopify": "Une application NivaDesk officielle pour Shopify est prête, mais Shopify ne l'a pas encore approuvée pour l'App Store : une boutique ne peut donc pas encore l'installer. Parlez-nous de votre boutique et nous vous dirons précisément où en sont les choses.",
+    "integrations.summary.instagram": "Répondez aux messages Instagram de vos clients depuis la boîte de réception clients de NivaDesk.",
+    "integrations.detail.instagram": "Une boîte de réception clients pour Instagram Direct avec le forfait Team : votre équipe répond aux messages Instagram de vos clients dans NivaDesk, et les réactions ajoutées par les clients s'affichent. L'envoi de réactions et de pièces jointes sur Instagram n'est pas encore disponible. Elle fonctionne aujourd'hui pour une entreprise, avec son propre compte Instagram professionnel.",
+    "integrations.note.instagram": "Disponible dès que Meta accorde à l'application l'accès avancé (App Review) ; chaque entreprise connecte ensuite son propre compte Instagram professionnel.",
+    "integrations.summary.dhl": "Préparez des envois DHL Express à partir de vos commandes et suivez leur acheminement.",
+    "integrations.detail.dhl": "Préparation et suivi des envois DHL Express, depuis la commande dans NivaDesk. L'intégration est activée pour une entreprise aujourd'hui, et la validation avec DHL est encore en attente.",
+    "integrations.note.dhl": "Disponible dès que la validation avec DHL est terminée ; chaque entreprise connecte ensuite son propre compte DHL Express et ses identifiants API."
   },
   "Italiano": {
     "integrations.state.live": "Disponibile",
@@ -10996,14 +11029,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Richiedi l'accesso",
     "integrations.action.ask": "Chiedi informazioni su questa integrazione",
     "integrations.action.chatgpt": "Scopri NivaDesk per ChatGPT",
-    "integrations.note.shopify": "Disponibile su richiesta finché la revisione dello Shopify App Store non è completata.",
+    "integrations.note.shopify": "In attesa dell'approvazione dello Shopify App Store — i clienti non possono ancora installarla.",
     "integrations.note.etsy": "Disponibile su richiesta finché l'accesso commerciale dell'app presso Etsy non è attivato.",
     "integrations.note.quickbooks": "Disponibile su richiesta finché l'accesso di produzione con Intuit non è attivato.",
     "integrations.note.twilio": "Disponibile su richiesta finché la registrazione dell'ID mittente NivaDesk presso l'operatore non è completata.",
     "integrations.note.whatsapp": "Oggi attiva per una sola azienda; disponibile su richiesta finché l'approvazione di Meta per altre aziende non è completata.",
     "integrations.note.amazon": "Disponibile su richiesta finché Amazon non completa la revisione dell'app; fino ad allora i venditori non possono autorizzarla.",
     "integrations.note.xero": "Disponibile su richiesta finché non viene collegata la prima organizzazione cliente; finora verificata con l'azienda demo di Xero.",
-    "integrations.note.ebay": "Funziona solo con l'ambiente di test di eBay; la connessione di produzione non è ancora disponibile."
+    "integrations.note.ebay": "Funziona solo con l'ambiente di test di eBay; la connessione di produzione non è ancora disponibile.",
+    "integrations.detail.shopify": "Un'app NivaDesk ufficiale per Shopify è pronta, ma Shopify non l'ha ancora approvata per l'App Store, quindi un negozio non può ancora installarla. Parlaci del tuo negozio e ti diremo esattamente a che punto siamo.",
+    "integrations.summary.instagram": "Rispondi ai messaggi Instagram dei tuoi clienti dalla casella clienti di NivaDesk.",
+    "integrations.detail.instagram": "Una casella di posta clienti per Instagram Direct con il piano Team: il tuo team risponde ai messaggi Instagram dei tuoi clienti in NivaDesk, e le reazioni aggiunte dai clienti vengono mostrate. L'invio di reazioni e allegati su Instagram non è ancora disponibile. Oggi funziona per una sola azienda, con il suo account Instagram professionale.",
+    "integrations.note.instagram": "Disponibile quando Meta concede all'app l'accesso avanzato (App Review); ogni azienda collega poi il proprio account Instagram professionale.",
+    "integrations.summary.dhl": "Prepara le spedizioni DHL Express dai tuoi ordini e seguine il tracciamento.",
+    "integrations.detail.dhl": "Preparazione e tracciamento delle spedizioni DHL Express, dall'ordine in NivaDesk. Oggi l'integrazione è attiva per una sola azienda, e la verifica con DHL è ancora in sospeso.",
+    "integrations.note.dhl": "Disponibile quando la verifica con DHL sarà completata; ogni azienda collega poi il proprio account DHL Express e le proprie credenziali API."
   },
   "Español (Spanish)": {
     "integrations.state.live": "Disponible",
@@ -11018,14 +11058,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Solicitar acceso",
     "integrations.action.ask": "Preguntar por esta integración",
     "integrations.action.chatgpt": "Descubre NivaDesk para ChatGPT",
-    "integrations.note.shopify": "Disponible bajo petición mientras se completa la revisión de la Shopify App Store.",
+    "integrations.note.shopify": "Pendiente de aprobación en la Shopify App Store — los clientes aún no pueden instalarla.",
     "integrations.note.etsy": "Disponible bajo petición mientras se gestiona el acceso comercial de la aplicación con Etsy.",
     "integrations.note.quickbooks": "Disponible bajo petición mientras se gestiona el acceso de producción con Intuit.",
     "integrations.note.twilio": "Disponible bajo petición mientras se completa el registro del identificador de remitente NivaDesk ante el operador.",
     "integrations.note.whatsapp": "Hoy funciona para una sola empresa; disponible bajo petición mientras se completa la aprobación de Meta para otras empresas.",
     "integrations.note.amazon": "Disponible bajo petición mientras Amazon completa la revisión de la aplicación; hasta entonces los vendedores no pueden autorizarla.",
     "integrations.note.xero": "Disponible bajo petición hasta que se conecte la primera organización cliente; probada hasta ahora con la empresa de demostración de Xero.",
-    "integrations.note.ebay": "Solo funciona con el entorno de pruebas de eBay; la conexión de producción todavía no está disponible."
+    "integrations.note.ebay": "Solo funciona con el entorno de pruebas de eBay; la conexión de producción todavía no está disponible.",
+    "integrations.detail.shopify": "Hay una aplicación oficial de NivaDesk para Shopify ya desarrollada, pero Shopify aún no la ha aprobado para la App Store, así que una tienda todavía no puede instalarla. Cuéntanos sobre tu tienda y te diremos exactamente en qué punto está.",
+    "integrations.summary.instagram": "Responde a los mensajes de Instagram de tus clientes desde la bandeja de entrada de clientes de NivaDesk.",
+    "integrations.detail.instagram": "Una bandeja de entrada de clientes para Instagram Direct en el plan Team: tu equipo responde a los mensajes de Instagram de tus clientes en NivaDesk, y se muestran las reacciones que añaden los clientes. Enviar reacciones y archivos adjuntos en Instagram aún no está disponible. Hoy funciona para una sola empresa, con su propia cuenta profesional de Instagram.",
+    "integrations.note.instagram": "Disponible cuando Meta conceda a la aplicación el acceso avanzado (App Review); después, cada empresa conecta su propia cuenta profesional de Instagram.",
+    "integrations.summary.dhl": "Prepara envíos de DHL Express desde tus pedidos y consulta su seguimiento.",
+    "integrations.detail.dhl": "Preparación y seguimiento de envíos de DHL Express, desde el pedido en NivaDesk. Hoy la integración está activada para una sola empresa, y la validación con DHL sigue pendiente.",
+    "integrations.note.dhl": "Disponible cuando se complete la validación con DHL; después, cada empresa conecta su propia cuenta de DHL Express y sus credenciales de API."
   },
   "Português": {
     "integrations.state.live": "Disponível",
@@ -11040,14 +11087,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Pedir acesso",
     "integrations.action.ask": "Perguntar sobre esta integração",
     "integrations.action.chatgpt": "Descubra o NivaDesk para ChatGPT",
-    "integrations.note.shopify": "Disponível a pedido enquanto a revisão da Shopify App Store não estiver concluída.",
+    "integrations.note.shopify": "A aguardar aprovação da Shopify App Store — os clientes ainda não a podem instalar.",
     "integrations.note.etsy": "Disponível a pedido enquanto o acesso comercial da aplicação junto da Etsy não estiver configurado.",
     "integrations.note.quickbooks": "Disponível a pedido enquanto o acesso de produção junto da Intuit não estiver configurado.",
     "integrations.note.twilio": "Disponível a pedido enquanto o registo do identificador de remetente NivaDesk junto da operadora não estiver concluído.",
     "integrations.note.whatsapp": "Hoje funciona para uma única empresa; disponível a pedido enquanto a aprovação da Meta para outras empresas não estiver concluída.",
     "integrations.note.amazon": "Disponível a pedido enquanto a Amazon não concluir a revisão da aplicação; até lá, os vendedores não a podem autorizar.",
     "integrations.note.xero": "Disponível a pedido até que a primeira organização cliente seja ligada; comprovada até agora com a empresa de demonstração da Xero.",
-    "integrations.note.ebay": "Funciona apenas com o ambiente de testes do eBay; a ligação de produção ainda não está disponível."
+    "integrations.note.ebay": "Funciona apenas com o ambiente de testes do eBay; a ligação de produção ainda não está disponível.",
+    "integrations.detail.shopify": "Já existe uma aplicação oficial do NivaDesk para a Shopify, mas a Shopify ainda não a aprovou para a App Store, por isso uma loja ainda não a pode instalar. Fale-nos da sua loja e dir-lhe-emos exatamente em que ponto está.",
+    "integrations.summary.instagram": "Responda às mensagens de Instagram dos seus clientes a partir da caixa de entrada de clientes do NivaDesk.",
+    "integrations.detail.instagram": "Uma caixa de entrada de clientes para o Instagram Direct no plano Team: a sua equipa responde às mensagens de Instagram dos seus clientes no NivaDesk, e as reações que os clientes adicionam são mostradas. Ainda não é possível enviar reações nem anexos no Instagram. Hoje funciona para uma única empresa, com a sua própria conta profissional de Instagram.",
+    "integrations.note.instagram": "Disponível quando a Meta conceder à aplicação o acesso avançado (App Review); depois, cada empresa liga a sua própria conta profissional de Instagram.",
+    "integrations.summary.dhl": "Prepare envios DHL Express a partir das suas encomendas e acompanhe o rastreio.",
+    "integrations.detail.dhl": "Preparação e rastreio de envios DHL Express, a partir da encomenda no NivaDesk. Hoje a integração está ativada para uma única empresa, e a validação com a DHL ainda está pendente.",
+    "integrations.note.dhl": "Disponível quando a validação com a DHL estiver concluída; depois, cada empresa liga a sua própria conta DHL Express e as suas credenciais de API."
   },
   "Русский (Russian)": {
     "integrations.state.live": "Доступно",
@@ -11062,14 +11116,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "Запросить доступ",
     "integrations.action.ask": "Спросить об этой интеграции",
     "integrations.action.chatgpt": "Узнать о NivaDesk для ChatGPT",
-    "integrations.note.shopify": "Доступно по запросу, пока не завершена проверка в Shopify App Store.",
+    "integrations.note.shopify": "Ожидает одобрения в Shopify App Store — клиенты пока не могут его установить.",
     "integrations.note.etsy": "Доступно по запросу, пока не оформлен коммерческий доступ приложения у Etsy.",
     "integrations.note.quickbooks": "Доступно по запросу, пока не оформлен производственный доступ у Intuit.",
     "integrations.note.twilio": "Доступно по запросу, пока не завершена регистрация идентификатора отправителя NivaDesk у оператора связи.",
     "integrations.note.whatsapp": "Сегодня работает для одной компании; доступно по запросу, пока Meta не одобрит подключение других компаний.",
     "integrations.note.amazon": "Доступно по запросу, пока Amazon не завершит проверку приложения; до этого продавцы не могут его авторизовать.",
     "integrations.note.xero": "Доступно по запросу, пока не подключена первая организация клиента; на сегодня проверено на демо-компании Xero.",
-    "integrations.note.ebay": "Работает только с тестовой средой eBay; производственное подключение пока недоступно."
+    "integrations.note.ebay": "Работает только с тестовой средой eBay; производственное подключение пока недоступно.",
+    "integrations.detail.shopify": "Официальное приложение NivaDesk для Shopify готово, но Shopify ещё не одобрил его для App Store, поэтому магазин пока не может его установить. Расскажите нам о своём магазине, и мы точно скажем, на каком этапе дело.",
+    "integrations.summary.instagram": "Отвечайте на сообщения клиентов в Instagram из клиентских входящих NivaDesk.",
+    "integrations.detail.instagram": "Клиентские входящие для Instagram Direct на тарифе Team: ваша команда отвечает на сообщения клиентов в Instagram прямо в NivaDesk, а реакции, которые ставят клиенты, отображаются. Отправлять реакции и вложения в Instagram пока нельзя. Сегодня это работает для одной компании, с её собственным профессиональным аккаунтом Instagram.",
+    "integrations.note.instagram": "Станет доступно, когда Meta предоставит приложению расширенный доступ (App Review); затем каждая компания подключает собственный профессиональный аккаунт Instagram.",
+    "integrations.summary.dhl": "Готовьте отправления DHL Express из своих заказов и следите за их доставкой.",
+    "integrations.detail.dhl": "Подготовка отправлений DHL Express и их отслеживание — прямо из заказа в NivaDesk. Сегодня интеграция включена для одной компании, а приёмочная проверка с DHL ещё не завершена.",
+    "integrations.note.dhl": "Станет доступно после завершения приёмочной проверки с DHL; затем каждая компания подключает собственный аккаунт DHL Express и свои учётные данные API."
   },
   "日本語 (Japanese)": {
     "integrations.state.live": "提供中",
@@ -11084,14 +11145,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "利用をリクエスト",
     "integrations.action.ask": "この連携について問い合わせる",
     "integrations.action.chatgpt": "ChatGPT 向け NivaDesk を見る",
-    "integrations.note.shopify": "Shopify App Store の審査が完了するまで、ご依頼に応じて提供します。",
+    "integrations.note.shopify": "Shopify App Store の承認待ちです。お客様はまだインストールできません。",
     "integrations.note.etsy": "Etsy でのアプリの商用アクセスの手続きが整うまで、ご依頼に応じて提供します。",
     "integrations.note.quickbooks": "Intuit との本番アクセスの手続きが整うまで、ご依頼に応じて提供します。",
     "integrations.note.twilio": "通信事業者への NivaDesk 送信者 ID の登録が完了するまで、ご依頼に応じて提供します。",
     "integrations.note.whatsapp": "現在は1社で稼働中です。他の事業者向けの Meta の承認が完了するまで、ご依頼に応じて提供します。",
     "integrations.note.amazon": "Amazon によるアプリの審査が完了するまで、ご依頼に応じて提供します。それまで出品者はアプリを承認できません。",
     "integrations.note.xero": "最初のお客様の組織が接続されるまで、ご依頼に応じて提供します。現時点では Xero のデモ会社で動作を確認しています。",
-    "integrations.note.ebay": "eBay のテスト環境のみで動作しています。本番環境への接続はまだ提供していません。"
+    "integrations.note.ebay": "eBay のテスト環境のみで動作しています。本番環境への接続はまだ提供していません。",
+    "integrations.detail.shopify": "Shopify 向けの公式 NivaDesk アプリは開発済みですが、Shopify による App Store での承認がまだ下りていないため、ストアはまだインストールできません。お使いのストアについてお知らせいただければ、現在の状況を正確にお伝えします。",
+    "integrations.summary.instagram": "お客様からの Instagram メッセージに、NivaDesk のカスタマー受信箱から返信できます。",
+    "integrations.detail.instagram": "Team プランで利用できる Instagram Direct 用のカスタマー受信箱です。チームは NivaDesk でお客様の Instagram メッセージに返信でき、お客様が付けたリアクションも表示されます。Instagram でのリアクションや添付ファイルの送信にはまだ対応していません。現在は1社で、その事業者自身の Instagram プロアカウントを使って稼働しています。",
+    "integrations.note.instagram": "Meta がアプリに高度なアクセス（App Review）を付与した時点で利用可能になります。その後、各事業者がご自身の Instagram プロアカウントを接続します。",
+    "integrations.summary.dhl": "注文から DHL Express の発送を準備し、配送状況を追跡できます。",
+    "integrations.detail.dhl": "NivaDesk の注文から、DHL Express の発送準備と追跡を行えます。現在は1社で有効になっており、DHL との受け入れ確認はまだ完了していません。",
+    "integrations.note.dhl": "DHL との受け入れ確認が完了した時点で利用可能になります。その後、各事業者がご自身の DHL Express アカウントと API 認証情報を接続します。"
   },
   "中文 (Chinese)": {
     "integrations.state.live": "已上线",
@@ -11106,14 +11174,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "申请访问",
     "integrations.action.ask": "咨询此集成",
     "integrations.action.chatgpt": "了解 NivaDesk for ChatGPT",
-    "integrations.note.shopify": "在 Shopify App Store 审核完成之前，按需求提供。",
+    "integrations.note.shopify": "正在等待 Shopify App Store 批准 — 客户目前还无法安装。",
     "integrations.note.etsy": "在 Etsy 授予该应用商业访问权限之前，按需求提供。",
     "integrations.note.quickbooks": "在与 Intuit 的生产环境访问权限办妥之前，按需求提供。",
     "integrations.note.twilio": "在 NivaDesk 发送方 ID 完成运营商登记之前，按需求提供。",
     "integrations.note.whatsapp": "目前为一家企业运行；在 Meta 完成对其他企业的审批之前，按需求提供。",
     "integrations.note.amazon": "在 Amazon 完成对该应用的审核之前，按需求提供；在此之前，卖家无法授权该应用。",
     "integrations.note.xero": "在首个客户组织连接之前，按需求提供；目前已通过 Xero 的演示公司验证。",
-    "integrations.note.ebay": "目前仅在 eBay 的测试环境中运行；生产环境连接尚未提供。"
+    "integrations.note.ebay": "目前仅在 eBay 的测试环境中运行；生产环境连接尚未提供。",
+    "integrations.detail.shopify": "适用于 Shopify 的官方 NivaDesk 应用已开发完成，但 Shopify 尚未批准其上架 App Store，因此店铺目前还无法安装。请告诉我们您的店铺情况，我们会如实告知目前的进展。",
+    "integrations.summary.instagram": "在 NivaDesk 客户收件箱中回复客户的 Instagram 消息。",
+    "integrations.detail.instagram": "Team 套餐提供的 Instagram Direct 客户收件箱：您的团队可在 NivaDesk 中回复客户的 Instagram 消息，客户添加的表情回应也会显示。目前还不支持在 Instagram 上发送表情回应和附件。目前为一家企业运行，使用其自有的 Instagram 专业账号。",
+    "integrations.note.instagram": "在 Meta 授予该应用高级访问权限（App Review）后即可使用；之后每家企业连接自己的 Instagram 专业账号。",
+    "integrations.summary.dhl": "从订单准备 DHL Express 货件并跟踪物流。",
+    "integrations.detail.dhl": "在 NivaDesk 的订单中完成 DHL Express 货件准备与物流跟踪。目前已为一家企业开启，与 DHL 的验收尚未完成。",
+    "integrations.note.dhl": "与 DHL 的验收完成后即可使用；之后每家企业连接自己的 DHL Express 账户和 API 凭据。"
   },
   "العربية (Arabic)": {
     "integrations.state.live": "متاح",
@@ -11128,14 +11203,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "طلب الوصول",
     "integrations.action.ask": "الاستفسار عن هذا التكامل",
     "integrations.action.chatgpt": "استكشف NivaDesk لـ ChatGPT",
-    "integrations.note.shopify": "متاح عند الطلب إلى أن تكتمل مراجعة Shopify App Store.",
+    "integrations.note.shopify": "بانتظار موافقة Shopify App Store — لا يمكن للعملاء تثبيته بعد.",
     "integrations.note.etsy": "متاح عند الطلب إلى أن يتم ترتيب الوصول التجاري للتطبيق لدى Etsy.",
     "integrations.note.quickbooks": "متاح عند الطلب إلى أن يتم ترتيب وصول الإنتاج مع Intuit.",
     "integrations.note.twilio": "متاح عند الطلب إلى أن يكتمل تسجيل معرّف المرسل NivaDesk لدى مشغّل الشبكة.",
     "integrations.note.whatsapp": "يعمل اليوم لشركة واحدة؛ متاح عند الطلب إلى أن تكتمل موافقة Meta للشركات الأخرى.",
     "integrations.note.amazon": "متاح عند الطلب إلى أن تُكمل Amazon مراجعة التطبيق؛ وحتى ذلك الحين لا يمكن للبائعين تفويضه.",
     "integrations.note.xero": "متاح عند الطلب إلى أن يتم ربط أول مؤسسة عميل؛ وقد أُثبت حتى الآن مع شركة Xero التجريبية.",
-    "integrations.note.ebay": "يعمل فقط مع بيئة الاختبار في eBay؛ الربط في بيئة الإنتاج غير متاح بعد."
+    "integrations.note.ebay": "يعمل فقط مع بيئة الاختبار في eBay؛ الربط في بيئة الإنتاج غير متاح بعد.",
+    "integrations.detail.shopify": "تطبيق NivaDesk الرسمي لـ Shopify جاهز، لكن Shopify لم توافق عليه بعد في App Store، لذا لا يمكن لأي متجر تثبيته بعد. أخبرنا عن متجرك وسنخبرك بدقة أين وصلت الأمور.",
+    "integrations.summary.instagram": "رُدّ على رسائل Instagram من عملائك من صندوق وارد العملاء في NivaDesk.",
+    "integrations.detail.instagram": "صندوق وارد للعملاء لـ Instagram Direct في خطة Team: يرد فريقك على رسائل Instagram من عملائك داخل NivaDesk، وتظهر التفاعلات التي يضيفها العملاء. إرسال التفاعلات والمرفقات على Instagram غير متاح بعد. يعمل اليوم لشركة واحدة، بحسابها المهني الخاص على Instagram.",
+    "integrations.note.instagram": "يصبح متاحًا عندما تمنح Meta التطبيق الوصول المتقدم (App Review)؛ ثم تربط كل شركة حسابها المهني الخاص على Instagram.",
+    "integrations.summary.dhl": "جهّز شحنات DHL Express من طلباتك وتابع تتبّعها.",
+    "integrations.detail.dhl": "تجهيز شحنات DHL Express وتتبّعها من الطلب داخل NivaDesk. مفعّل اليوم لشركة واحدة، ولم يكتمل اختبار القبول مع DHL بعد.",
+    "integrations.note.dhl": "يصبح متاحًا عند اكتمال اختبار القبول مع DHL؛ ثم تربط كل شركة حساب DHL Express الخاص بها وبيانات اعتماد API."
   },
   "हिन्दी (Hindi)": {
     "integrations.state.live": "उपलब्ध",
@@ -11150,14 +11232,21 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.action.request": "पहुँच का अनुरोध करें",
     "integrations.action.ask": "इस इंटीग्रेशन के बारे में पूछें",
     "integrations.action.chatgpt": "ChatGPT के लिए NivaDesk देखें",
-    "integrations.note.shopify": "Shopify App Store की समीक्षा पूरी होने तक अनुरोध पर उपलब्ध।",
+    "integrations.note.shopify": "Shopify App Store की मंज़ूरी का इंतज़ार है — ग्राहक अभी इसे इंस्टॉल नहीं कर सकते।",
     "integrations.note.etsy": "Etsy के साथ ऐप की कमर्शियल एक्सेस की व्यवस्था होने तक अनुरोध पर उपलब्ध।",
     "integrations.note.quickbooks": "Intuit के साथ प्रोडक्शन एक्सेस की व्यवस्था होने तक अनुरोध पर उपलब्ध।",
     "integrations.note.twilio": "कैरियर के पास NivaDesk सेंडर आईडी का पंजीकरण पूरा होने तक अनुरोध पर उपलब्ध।",
     "integrations.note.whatsapp": "आज एक व्यवसाय के लिए चालू है; अन्य व्यवसायों के लिए Meta की मंज़ूरी पूरी होने तक अनुरोध पर उपलब्ध।",
     "integrations.note.amazon": "Amazon द्वारा ऐप की समीक्षा पूरी होने तक अनुरोध पर उपलब्ध; तब तक विक्रेता इसे अधिकृत नहीं कर सकते।",
     "integrations.note.xero": "पहला ग्राहक संगठन जुड़ने तक अनुरोध पर उपलब्ध; अब तक Xero की डेमो कंपनी के साथ सिद्ध।",
-    "integrations.note.ebay": "केवल eBay के टेस्ट एनवायरनमेंट पर चलता है; प्रोडक्शन कनेक्शन अभी उपलब्ध नहीं है।"
+    "integrations.note.ebay": "केवल eBay के टेस्ट एनवायरनमेंट पर चलता है; प्रोडक्शन कनेक्शन अभी उपलब्ध नहीं है।",
+    "integrations.detail.shopify": "Shopify के लिए NivaDesk का आधिकारिक ऐप तैयार है, लेकिन Shopify ने अभी तक इसे App Store के लिए मंज़ूरी नहीं दी है, इसलिए कोई स्टोर इसे अभी इंस्टॉल नहीं कर सकता। हमें अपने स्टोर के बारे में बताइए, हम आपको ठीक-ठीक बताएँगे कि स्थिति क्या है।",
+    "integrations.summary.instagram": "अपने ग्राहकों के Instagram संदेशों का जवाब NivaDesk के ग्राहक इनबॉक्स से दें।",
+    "integrations.detail.instagram": "Team प्लान पर Instagram Direct के लिए ग्राहक इनबॉक्स: आपकी टीम NivaDesk में आपके ग्राहकों के Instagram संदेशों का जवाब देती है, और ग्राहकों द्वारा जोड़ी गई प्रतिक्रियाएँ दिखाई देती हैं। Instagram पर प्रतिक्रियाएँ और अटैचमेंट भेजना अभी उपलब्ध नहीं है। आज यह एक व्यवसाय के लिए, उसके अपने Instagram प्रोफ़ेशनल अकाउंट के साथ चल रहा है।",
+    "integrations.note.instagram": "Meta द्वारा ऐप को एडवांस्ड एक्सेस (App Review) मिलने पर उपलब्ध; उसके बाद हर व्यवसाय अपना Instagram प्रोफ़ेशनल अकाउंट जोड़ता है।",
+    "integrations.summary.dhl": "अपने ऑर्डर से DHL Express शिपमेंट तैयार करें और उनकी ट्रैकिंग देखें।",
+    "integrations.detail.dhl": "NivaDesk में ऑर्डर से ही DHL Express शिपमेंट की तैयारी और ट्रैकिंग। आज यह एक व्यवसाय के लिए चालू है, और DHL के साथ स्वीकृति परीक्षण अभी बाकी है।",
+    "integrations.note.dhl": "DHL के साथ स्वीकृति परीक्षण पूरा होने पर उपलब्ध; उसके बाद हर व्यवसाय अपना DHL Express अकाउंट और API क्रेडेंशियल जोड़ता है।"
   }
 };
 

@@ -7,7 +7,7 @@ import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import styles from "./integrations.module.css";
 
-const categories = ["All integrations", "Commerce", "Accounting & banking", "Payments", "Communication", "AI"] as const;
+const categories = ["All integrations", "Commerce", "Accounting & banking", "Payments", "Shipping", "Communication", "AI"] as const;
 type Category = typeof categories[number];
 
 /**
@@ -30,21 +30,33 @@ type Category = typeof categories[number];
  *   "comingSoon"  not available to customers: not deployed, or deployed only
  *                 against the provider's test environment.
  *
- * Today: 5 live (WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 7 limited
- * (Shopify, Etsy, Xero, QuickBooks, Twilio, WhatsApp, Amazon), 1 coming soon
- * (eBay). The evidence per row is in
- * docs/deploys/site-integrations-2026-09-28/README.md. When a state changes,
- * change it here and in that record on the same day.
+ * Today: 5 live (WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 9 limited
+ * (Shopify, Etsy, Xero, QuickBooks, Twilio, WhatsApp, Instagram Direct,
+ * Amazon, DHL Express), 1 coming soon (eBay) — 15 cards. The evidence per row
+ * is in docs/deploys/site-integrations-2026-09-28/README.md and, for the
+ * second pass that added Instagram Direct and DHL Express and corrected the
+ * Shopify sentence, docs/deploys/site-integrations-update-2026-09-28/README.md.
+ * When a state changes, change it here and in that record on the same day.
  */
 type AvailabilityState = "live" | "limited" | "comingSoon";
 
+/**
+ * A card's summary or detail: an English literal (the page's marketing copy,
+ * English by design) or a key of the public-site table. A sentence added or
+ * rewritten since 28 September 2026 is a key, so it reads in all twelve
+ * languages like the labels and notes do.
+ */
+type CardText = string | { key: PublicSiteTranslationKey };
+
 type Integration = {
   name: string;
-  logo: string;
+  /** The brand's own file. Without one we may use, the tile shows `mark` instead; a mark is never redrawn. */
+  logo?: string;
+  mark?: string;
   website: string;
   category: Category;
-  summary: string;
-  detail: string;
+  summary: CardText;
+  detail: CardText;
   state: AvailabilityState;
   /** The honest sentence for a limited or coming-soon card, translated. */
   note?: PublicSiteTranslationKey;
@@ -57,7 +69,7 @@ const STATE_LABEL: Record<AvailabilityState, PublicSiteTranslationKey> = {
 };
 
 const integrations: Integration[] = [
-  { name: "Shopify", logo: "/integration-logos/shopify.svg", website: "https://www.shopify.com/", category: "Commerce", summary: "Bring your online shop orders into your workshop.", detail: "An official NivaDesk app for Shopify is built, and its App Store listing is with Shopify for review. Until Shopify approves it, a store cannot install it, so talk to us about your shop and we will tell you exactly where that stands.", state: "limited", note: "integrations.note.shopify" },
+  { name: "Shopify", logo: "/integration-logos/shopify.svg", website: "https://www.shopify.com/", category: "Commerce", summary: "Bring your online shop orders into your workshop.", detail: { key: "integrations.detail.shopify" }, state: "limited", note: "integrations.note.shopify" },
   { name: "Etsy", logo: "/integration-logos/etsy.svg", website: "https://www.etsy.com/", category: "Commerce", summary: "From handmade marketplace orders to work ready to organise.", detail: "The Etsy connection is live: orders, updates and shipping events arrive from Etsy as they happen, and you preview before anything is imported. Our Etsy app holds personal access today; the commercial access that other sellers' shops need is being arranged with Etsy, so shops are connected on request until then. Nothing is written back to your shop.", state: "limited", note: "integrations.note.etsy" },
   { name: "WooCommerce", logo: "/integration-logos/woocommerce.svg", website: "https://woocommerce.com/", category: "Commerce", summary: "Connect your WordPress shop with the work behind each order.", detail: "Approve NivaDesk at your store once; orders, customers and status changes then sync on their own, with a preview before any import. Product publishing and stock updates are separate capabilities and are not part of this connection.", state: "live" },
   { name: "Xero", logo: "/integration-logos/xero.svg", website: "https://www.xero.com/", category: "Accounting & banking", summary: "Give your accounting workflow a connection to your daily work.", detail: "A read-only Xero connection: NivaDesk reads your organisation, chart of accounts, VAT rates, contacts and items, and never writes anything back. So far it has run against Xero's demo company only, so the first customer organisations are connected with us, on request. Xero also limits an app like ours to a small number of organisations.", state: "limited", note: "integrations.note.xero" },
@@ -68,8 +80,14 @@ const integrations: Integration[] = [
   { name: "Twilio", logo: "/integration-logos/twilio.png", website: "https://www.twilio.com/", category: "Communication", summary: "Keep customers informed as their work moves forward.", detail: "Customer SMS notifications on the Pro and Team plans: your workspace settings decide which order updates go out. Messages are sent through Twilio from the NivaDesk sender name, and that sender name is still being registered with the carrier, so no live messages have gone out yet. Messaging charges apply.", state: "limited", note: "integrations.note.twilio" },
   { name: "ChatGPT", logo: "/integration-logos/chatgpt.svg", website: "https://chatgpt.com/", category: "AI", summary: "A conversational way to work with your NivaDesk information.", detail: "The NivaDesk app is published in the ChatGPT app directory: connect your workspace once and read orders, notes and finances, or make supported updates, from a conversation. A newer version has been approved and is waiting to be published.", state: "live" },
   { name: "WhatsApp", logo: "/integration-logos/whatsapp.svg", website: "https://www.whatsapp.com/", category: "Communication", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today on its own WhatsApp Business number; connecting other businesses waits on Meta's approval. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
+  // Instagram Direct and DHL Express, added 28 September 2026 (second pass). Both
+  // are open to one workspace only (appConfig/instagram, appConfig/shipping). No
+  // logo file: the marks are Meta's and DHL's and are not redrawn, so the tiles
+  // keep an initial, as the app's own integration tiles do.
+  { name: "Instagram Direct", mark: "I", website: "https://www.instagram.com/", category: "Communication", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
   { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: "A future connection for marketplace orders and workshop work.", detail: "The connection is built and runs against eBay's test environment only; eBay's sandbox cannot currently create test orders, so acceptance is waiting on eBay. Listing publication and marketplace stock updates are not part of it.", state: "comingSoon", note: "integrations.note.ebay" },
   { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
+  { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "limited", note: "integrations.note.dhl" },
 ];
 
 const logoVariants: Record<string, string> = {
@@ -88,7 +106,11 @@ function IntegrationsDirectoryContent() {
   const { t, locale } = usePublicSiteLanguage();
   const [category, setCategory] = useState<Category>("All integrations");
   const [query, setQuery] = useState("");
-  const filtered = integrations.filter(item => (category === "All integrations" || item.category === category) && `${item.name} ${item.summary} ${item.category}`.toLowerCase().includes(query.trim().toLowerCase()));
+  // A translated sentence carries the visitor's language on its own element;
+  // an English literal stays under the page's lang="en".
+  const cardText = (text: CardText) => typeof text === "string" ? text : t(text.key);
+  const cardLang = (text: CardText) => typeof text === "string" ? {} : { lang: locale, dir: "auto" as const };
+  const filtered = integrations.filter(item => (category === "All integrations" || item.category === category) && `${item.name} ${cardText(item.summary)} ${item.category}`.toLowerCase().includes(query.trim().toLowerCase()));
   const stateClass: Record<AvailabilityState, string> = { live: styles.live, limited: styles.limited, comingSoon: styles.soon };
   return <div className={styles.page} lang="en" dir="ltr">
     <section className={styles.hero}>
@@ -122,7 +144,7 @@ function IntegrationsDirectoryContent() {
         <p className={styles.legendChecked}>{t("integrations.legend.checked")}</p>
       </div>
       <div className={styles.layout}><aside className={styles.filters}><label htmlFor="integration-search">Find an integration</label><div className={styles.search}><span aria-hidden="true">⌕</span><input id="integration-search" type="search" placeholder="Search tools…" value={query} onChange={e => setQuery(e.target.value)} /></div><div className={styles.categoryList} role="group" aria-label="Integration category">{categories.map(c => <button key={c} aria-pressed={category === c} onClick={() => setCategory(c)}>{c}<span>{c === "All integrations" ? integrations.length : integrations.filter(i => i.category === c).length}</span></button>)}</div><p className={styles.filterNote}>Looking for something else?<br /><Link href="/contact">Tell us what you use ↗</Link></p></aside>
-      <div><p className={styles.results} role="status">{filtered.length} {filtered.length === 1 ? "integration" : "integrations"}{query && ` matching “${query}”`}</p><div className={styles.grid}>{filtered.map(item => <article key={item.name} className={styles.card}><div className={styles.cardTop}><a className={`${styles.brand} ${logoVariants[item.name] ?? ""}`} href={item.website} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} official website`}><img src={item.logo} alt={`${item.name} logo`} width={112} height={48} loading="lazy" /></a><span className={styles.category}>{item.category}</span></div><h3>{item.name}</h3><p className={styles.summary}>{item.summary}</p><span className={`${styles.status} ${stateClass[item.state]}`} lang={locale} dir="auto">{t(STATE_LABEL[item.state])}</span>{item.note && <p className={styles.note} lang={locale} dir="auto">{t(item.note)}</p>}<details className={styles.detail}><summary>What to expect <span aria-hidden="true">+</span></summary><p>{item.detail}</p>{item.name === "ChatGPT"
+      <div><p className={styles.results} role="status">{filtered.length} {filtered.length === 1 ? "integration" : "integrations"}{query && ` matching “${query}”`}</p><div className={styles.grid}>{filtered.map(item => <article key={item.name} className={styles.card}><div className={styles.cardTop}><a className={`${styles.brand} ${logoVariants[item.name] ?? ""}`} href={item.website} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} official website`}>{item.logo ? <img src={item.logo} alt={`${item.name} logo`} width={112} height={48} loading="lazy" /> : <span className={styles.brandMark} aria-hidden="true">{item.mark}</span>}</a><span className={styles.category}>{item.category}</span></div><h3>{item.name}</h3><p className={styles.summary} {...cardLang(item.summary)}>{cardText(item.summary)}</p><span className={`${styles.status} ${stateClass[item.state]}`} lang={locale} dir="auto">{t(STATE_LABEL[item.state])}</span>{item.note && <p className={styles.note} lang={locale} dir="auto">{t(item.note)}</p>}<details className={styles.detail}><summary>What to expect <span aria-hidden="true">+</span></summary><p {...cardLang(item.detail)}>{cardText(item.detail)}</p>{item.name === "ChatGPT"
         ? <Link href="/chatgpt" lang={locale} dir="auto">{t("integrations.action.chatgpt")} ↗</Link>
         : item.state === "live"
           ? <Link href="/login" lang={locale} dir="auto">{t("integrations.action.connect")} ↗</Link>
