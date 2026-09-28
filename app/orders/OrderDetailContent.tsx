@@ -2113,6 +2113,11 @@ export function OrderDetailContent({
   const [dragOverCardId, setDragOverCardId] = useState<OrderDetailCardId | null>(null);
   const [dragOverCardCue, setDragOverCardCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
   const [dragOverColumnIndex, setDragOverColumnIndex] = useState<number | null>(null);
+  // The columns' on-screen widths when a card drag starts; they hold for the whole drag (see
+  // handleCardDragStart), and the drag state itself arrives on the next task.
+  const [dragColumnWidths, setDragColumnWidths] = useState<number[] | null>(null);
+  const desktopCanvasRef = useRef<HTMLDivElement | null>(null);
+  const dragStartTimerRef = useRef<number | null>(null);
   const [resizingCardId, setResizingCardId] = useState<OrderDetailCardId | null>(null);
   // Live "384 × 497" readout while a card is being resized.
   const [resizeSizeLabel, setResizeSizeLabel] = useState("");
@@ -2420,6 +2425,7 @@ export function OrderDetailContent({
         // Local browser storage can be unavailable in private modes; keep the session state.
       }
       if (next) {
+        clearPendingCardDragStart();
         setDraggingCardId(null);
         setDragOverCardId(null);
         setDragOverCardCue(null);
@@ -3390,6 +3396,25 @@ export function OrderDetailContent({
     }, "Phone card order saved.");
   }
 
+  function measureRenderedColumnWidths() {
+    const canvas = desktopCanvasRef.current;
+    if (!canvas) return null;
+    return Array.from(canvas.children)
+      .filter((node): node is HTMLElement => node instanceof HTMLElement && node.classList.contains("order-detail-column"))
+      .map(node => node.getBoundingClientRect().width);
+  }
+
+  function clearPendingCardDragStart() {
+    if (dragStartTimerRef.current !== null) {
+      window.clearTimeout(dragStartTimerRef.current);
+      dragStartTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => () => {
+    if (dragStartTimerRef.current !== null) window.clearTimeout(dragStartTimerRef.current);
+  }, []);
+
   function handleCardDragStart(event: DragEvent<HTMLButtonElement>, cardId: OrderDetailCardId) {
     if (!canMoveResizeCards || savingLayout) {
       event.preventDefault();
@@ -3398,10 +3423,24 @@ export function OrderDetailContent({
 
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", cardId);
-    setDraggingCardId(cardId);
-    setDragOverCardId(null);
-    setDragOverCardCue(null);
-    setDragOverColumnIndex(null);
+    // A browser only starts the drag if the grip is still under the pointer once dragstart has run:
+    // Chrome and Safari hit-test the mouse-down point right after it and quietly cancel the drag
+    // (an immediate dragend) when something else is there. The drag state adds an empty drop column,
+    // and since the columns flex to fill the pane that new column took its share of the width: every
+    // column narrowed and all but the first slid sideways, so only first-column cards could be moved.
+    // Nothing on the page may move at dragstart, then. The columns keep their on-screen widths for the
+    // whole drag (the extra column is appended beyond them and the canvas pans to it), and the drag
+    // state is rendered on the next task, after the browser has committed to the drag.
+    const renderedWidths = measureRenderedColumnWidths();
+    clearPendingCardDragStart();
+    dragStartTimerRef.current = window.setTimeout(() => {
+      dragStartTimerRef.current = null;
+      setDragColumnWidths(renderedWidths);
+      setDraggingCardId(cardId);
+      setDragOverCardId(null);
+      setDragOverCardCue(null);
+      setDragOverColumnIndex(null);
+    }, 0);
   }
 
   function handleCardDragOver(event: DragEvent<HTMLDivElement>, cardId: OrderDetailCardId) {
@@ -3495,6 +3534,15 @@ export function OrderDetailContent({
     });
   }
 
+  // The moment the pointer crosses into another element (a card, the drop strip that just opened
+  // under it), Chrome and Safari fire dragenter and no dragover, and decide from dragenter alone
+  // whether a drop is allowed there. Every drop target sits inside a column, so the column accepts it.
+  function handleColumnDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!draggingCardId || !canMoveResizeCards || savingLayout || isNarrowLayout) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
   function handleColumnDragOver(event: DragEvent<HTMLDivElement>, columnIndex: number) {
     if (!draggingCardId || !canMoveResizeCards || savingLayout || isNarrowLayout) return;
     event.preventDefault();
@@ -3532,6 +3580,7 @@ export function OrderDetailContent({
   }
 
   function handleCardDragEnd() {
+    clearPendingCardDragStart();
     setDraggingCardId(null);
     setDragOverCardId(null);
     setDragOverCardCue(null);
@@ -9207,10 +9256,20 @@ export function OrderDetailContent({
             onPointerCancel={endWorkspacePan}
             onLostPointerCapture={endWorkspacePan}
           >
-            <div className="order-detail-canvas">
+            <div className="order-detail-canvas" ref={desktopCanvasRef}>
               {desktopColumns.map(column => {
                 const isEmptyColumn = column.cards.length === 0;
                 const showColumnDropTarget = Boolean(draggingCardId && (isEmptyColumn || dragOverColumnIndex === column.index));
+                // While a card is dragged the columns hold the widths they had on screen, and the
+                // extra drop column is added beyond them at its own width: nothing reflows, nothing
+                // slides out from under the pointer, and the canvas pans to the new column.
+                const heldWidths = draggingCardId ? dragColumnWidths : null;
+                const heldWidth = heldWidths && column.index < heldWidths.length ? heldWidths[column.index] : null;
+                const columnStyle: CSSProperties = heldWidth !== null
+                  ? { width: `${heldWidth}px`, flex: `0 0 ${heldWidth}px` }
+                  : heldWidths
+                    ? { width: `${column.width}px`, flex: `0 0 ${column.width}px` }
+                    : { width: `${column.width}px` };
 
                 return (
                   <div
@@ -9221,10 +9280,11 @@ export function OrderDetailContent({
                       isEmptyColumn ? "is-empty" : "",
                       dragOverColumnIndex === column.index ? "is-column-drop-target" : ""
                     ].filter(Boolean).join(" ")}
+                    onDragEnter={handleColumnDragEnter}
                     onDragOver={event => handleColumnDragOver(event, column.index)}
                     onDragLeave={event => handleColumnDragLeave(event, column.index)}
                     onDrop={event => handleColumnDrop(event, column.index)}
-                    style={{ width: `${column.width}px` }}
+                    style={columnStyle}
                   >
                     {column.cards.map(cardId => (
                       <Fragment key={cardId}>
