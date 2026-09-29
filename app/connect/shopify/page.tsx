@@ -72,7 +72,13 @@ export default function ConnectShopifyPage() {
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ workspaceName: string } | null>(null);
+  const [done, setDone] = useState<{
+    workspaceName: string;
+    billedElsewhere: boolean;
+    trialDays: number;
+    endedWebsiteTrial: boolean;
+    choosePlanUrl: string;
+  } | null>(null);
 
   useEffect(() => {
     setShop(urlParam("shop").trim().toLowerCase());
@@ -131,8 +137,23 @@ export default function ConnectShopifyPage() {
     try {
       const call = httpsCallable(functions, "shopifyCompleteConnect");
       const result = await call({ shop, nonce, companyId: selected });
-      const data = (result.data ?? {}) as { workspaceName?: string };
-      setDone({ workspaceName: data.workspaceName || "" });
+      const data = (result.data ?? {}) as {
+        workspaceName?: string;
+        billedElsewhere?: boolean;
+        trialDays?: number;
+        endedWebsiteTrial?: boolean;
+        choosePlanUrl?: string;
+      };
+      setDone({
+        workspaceName: data.workspaceName || "",
+        billedElsewhere: data.billedElsewhere === true,
+        trialDays: Number(data.trialDays) || 0,
+        endedWebsiteTrial: data.endedWebsiteTrial === true,
+        // Only ever a Shopify admin address, never anything the response could point elsewhere.
+        choosePlanUrl: /^https:\/\/admin\.shopify\.com\/store\/[a-z0-9-]+\/apps\//.test(String(data.choosePlanUrl || ""))
+          ? String(data.choosePlanUrl)
+          : "",
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Connection failed. Please try again.";
       setError(message.replace(/^Firebase: /, ""));
@@ -163,7 +184,35 @@ export default function ConnectShopifyPage() {
         <p style={{ fontWeight: 700, margin: "0 0 8px" }}>
           {shop} is now connected{done.workspaceName ? ` to ${done.workspaceName}` : ""}.
         </p>
-        <p style={muted}>
+        {done.billedElsewhere ? (
+          <p style={muted}>
+            Your NivaDesk plan stays billed where it is today — nothing changes on your invoice.
+          </p>
+        ) : (
+          <>
+            {/* A Shopify merchant's plan is chosen and paid in Shopify (their
+                rule 1.2.1), so the next step is the NivaDesk app's Plans page
+                in their Shopify admin — never a checkout on this site. */}
+            <p style={{ ...muted, color: "#171923" }}>
+              {done.endedWebsiteTrial && done.trialDays > 0
+                ? `Your free trial continues in Shopify: choose a plan in the NivaDesk app there, and your first ${done.trialDays} days are free.`
+                : done.trialDays > 0
+                  ? `Next, choose a plan in the NivaDesk app in your Shopify admin. It is billed through Shopify, and your first ${done.trialDays} days are free.`
+                  : "Next, choose a plan in the NivaDesk app in your Shopify admin. It is billed through Shopify."}
+            </p>
+            {done.choosePlanUrl ? (
+              <a
+                href={done.choosePlanUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...buttonPrimary, marginTop: 14, textDecoration: "none" }}
+              >
+                Choose a plan in Shopify
+              </a>
+            ) : null}
+          </>
+        )}
+        <p style={{ ...muted, marginTop: 14 }}>
           Return to the Shopify tab — it updates to Connected automatically. New orders will start
           syncing right away. You can close this tab.
         </p>

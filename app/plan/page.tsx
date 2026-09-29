@@ -167,15 +167,6 @@ export default function PlanPage() {
   // the gated test accounts. Purchase buttons are shown to workspace owners;
   // the backend enforces who can actually complete a checkout.
   const liveBillingEnabled = process.env.NEXT_PUBLIC_NIVADESK_BILLING_LIVE !== "false";
-  // A workspace billed through Shopify is billed by Shopify — full stop. Their
-  // rule 1.2.1 forbids an outside gateway for an App Store app, and offering
-  // Stripe here would be a genuine double charge on top of that.
-  // Either already billed by Shopify, or reached through a Shopify install and
-  // not already paying us elsewhere. A merchant who arrived from the App Store
-  // must not be able to route around Shopify by opening the website.
-  const shopifyBilled = (workspace?.billingProvider || "").toLowerCase() === "shopify"
-    || (Boolean(workspace?.shopifyLinkedShop) && !workspace?.billingSubscriptionId);
-
   // Shopify was never the only rail that can already be charging for this
   // workspace. An owner paying through the App Store or Google Play who buys
   // again here pays twice for one workspace, so the till is closed for them too
@@ -187,6 +178,32 @@ export default function PlanPage() {
   const planIsLive = ["active", "trialing", "past_due"].includes(
     (workspace?.billingStatus || "").toLowerCase())
     && Boolean(workspace?.billingPlan) && workspace?.billingPlan !== "demo";
+  // Paying NivaDesk on a rail of its own: Stripe here, the App Store or Play.
+  // The server's workspaceBilledOutsideShopify: that subscriber keeps their
+  // rail even after connecting a store. A trial or a complimentary grant is
+  // not a payment (the old test here, "no Stripe subscription id", read a stale
+  // id beside a grant as one).
+  const paysNivaDeskElsewhere = planIsLive && (
+    (workspace?.billingPlanSource || "").toLowerCase() === "stripe"
+    || ["stripe", "apple", "google", "play"].includes((workspace?.billingEffectiveProvider || "").toLowerCase()));
+
+  // A workspace billed through Shopify is billed by Shopify — full stop. Their
+  // rule 1.2.1 forbids an outside gateway for an App Store app, and offering
+  // Stripe here would be a genuine double charge on top of that.
+  // Either on a live Shopify plan, or reached through a Shopify install (its
+  // store is linked) and not paying us elsewhere. A merchant who arrived from
+  // the App Store must not be able to route around Shopify by opening the
+  // website. The server refuses the same purchase at every till. A Shopify
+  // plan that has ended with the store gone (uninstalled: the server clears
+  // the link) is not Shopify's any more, so the website sells again.
+  const shopifyBilled = ((workspace?.billingProvider || "").toLowerCase() === "shopify" && planIsLive)
+    || (Boolean(workspace?.shopifyLinkedShop) && !paysNivaDeskElsewhere);
+  // The NivaDesk app's Plans page inside this store's Shopify admin — where a
+  // Shopify merchant chooses a plan (Shopify's Billing API, their invoice).
+  const shopifyStoreHandle = (workspace?.shopifyLinkedShop || "").trim().toLowerCase().replace(/\.myshopify\.com$/, "");
+  const shopifyChoosePlanUrl = /^[a-z0-9][a-z0-9-]*$/.test(shopifyStoreHandle)
+    ? `https://admin.shopify.com/store/${shopifyStoreHandle}/apps/nivadesk-order-management/app/plan`
+    : "";
   const storeBilled = planIsLive && (planProvider === "apple" || planProvider === "google");
   const storeBilledName = planProvider === "apple" ? "the App Store" : "Google Play";
   const storeBilledWhere = planProvider === "apple"
@@ -383,10 +400,21 @@ export default function PlanPage() {
               <div className="pill">Billing</div>
               <h2 style={{ margin: "10px 0 6px" }}>This workspace is billed through Shopify</h2>
               <p style={{ color: "var(--muted)", margin: 0, maxWidth: 720 }}>
-                Your NivaDesk plan is charged on your Shopify invoice, and changing or cancelling it
-                happens in the NivaDesk app inside your Shopify admin — under Settings ▸ Apps.
-                Nothing is charged here.
+                Its Shopify store is connected with the NivaDesk app from the Shopify App Store, so its
+                plan is chosen, charged and cancelled in Shopify — on your Shopify invoice, through the
+                NivaDesk app in your Shopify admin. Nothing is charged here.
               </p>
+              {shopifyChoosePlanUrl ? (
+                <a
+                  className="button"
+                  href={shopifyChoosePlanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-flex", marginTop: 12 }}
+                >
+                  Choose a plan in Shopify
+                </a>
+              ) : null}
             </section>
           ) : null}
 
