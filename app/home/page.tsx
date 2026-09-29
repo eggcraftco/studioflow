@@ -421,7 +421,7 @@ export default function HomePage() {
 
   return (
     <AppShell>
-      <div className={`home-screen${customising ? " is-customising" : ""}`}>
+      <div className={`home-screen${customising ? " is-customising" : ""}`} data-home-order-scope={data.orderScope}>
         <header className="home-header">
           <div>
             <h1>{t("Home")}</h1>

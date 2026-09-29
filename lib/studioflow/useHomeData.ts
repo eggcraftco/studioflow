@@ -31,6 +31,7 @@ import {
   loadWorkspaceCustomers,
   loadWorkspaceProductionStages,
   workspaceAccessAllows,
+  workspaceOrderScope,
   type ClientFileListItem,
   type CustomerDirectoryItem,
   type DashboardCounts,
@@ -75,6 +76,10 @@ export type HomeBankTx = {
 
 export type HomeData = {
   status: Record<HomeDomain, HomeDomainStatus>;
+  /** "assigned" for a member whose orders are the ones assigned to them
+   *  (Workflow Only, Assigned Projects Only): every order read below is scoped
+   *  to those, as the Orders list is. "workspace" for everybody else. */
+  orderScope: "assigned" | "workspace";
   counts: DashboardCounts | null;
   financeOrders: DashboardFinanceOrder[];
   settings: WorkspaceSettingsOverview | null;
@@ -177,8 +182,12 @@ export function useHomeData(
       setDomain("orders", "loading");
       try {
         const [nextCounts, nextFinance, nextOrders, nextSchedule, nextSettings] = await Promise.all([
-          loadDashboardCounts(workspaceId),
-          loadDashboardFinanceOrders(workspaceId),
+          // With the workspace and the uid, so a member who may read only the
+          // orders assigned to them asks for those. Without them the two asked
+          // for the whole workspace, the rules refused it, and this Promise.all
+          // took every order card on Home down with it.
+          loadDashboardCounts(workspaceId, workspace, uid),
+          loadDashboardFinanceOrders(workspaceId, workspace, uid),
           loadRecentOrders(workspaceId, workspace, uid),
           loadScheduleOrders(workspaceId, workspace, uid),
           loadWorkspaceSettingsOverview(workspaceId).catch(() => null),
@@ -217,7 +226,7 @@ export function useHomeData(
       }
       setDomain("customers", "loading");
       try {
-        const next = await loadWorkspaceCustomers(workspaceId);
+        const next = await loadWorkspaceCustomers(workspaceId, workspace, uid);
         if (cancelled.current) return;
         setCustomers(next);
         setDomain("customers", "ready");
@@ -387,9 +396,12 @@ export function useHomeData(
 
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
+  const orderScope = workspaceOrderScope(workspace);
+
   return useMemo(
     () => ({
       status,
+      orderScope,
       counts,
       financeOrders,
       settings,
@@ -413,7 +425,7 @@ export function useHomeData(
       reload,
     }),
     [
-      status, counts, financeOrders, orders, scheduleOrders, customers,
+      status, orderScope, counts, financeOrders, orders, scheduleOrders, customers,
       workspace, inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
       bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],

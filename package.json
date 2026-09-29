@@ -21,7 +21,8 @@
     "test:ui-workspace-translations": "node scripts/check-ui-workspace-translations.mjs",
     "test:live-tracking": "node scripts/check-live-tracking.mjs",
     "test:customer-card": "node scripts/check-customer-card-visibility.mjs",
-    "test:production-panel": "node scripts/check-production-panel.mjs"
+    "test:production-panel": "node scripts/check-production-panel.mjs",
+    "test:home-order-scope": "node scripts/check-home-order-scope.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

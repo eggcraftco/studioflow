@@ -11,7 +11,8 @@ import {
   setDoc,
   where,
   type DocumentData,
-  type DocumentSnapshot
+  type DocumentSnapshot,
+  type QueryDocumentSnapshot
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
@@ -1207,7 +1208,26 @@ export async function switchActiveWorkspace(uid: string, companyId: string) {
   }, { merge: true });
 }
 
-export async function loadDashboardCounts(companyId: string): Promise<DashboardCounts> {
+/**
+ * Workflow Only, or a custom role with "Assigned Projects Only" (and not "Change
+ * Project Assignments"): the member reads only the orders assigned to them, the
+ * way the Orders list reads them (workspaceOrderQuery). The rules refuse such a
+ * member any query over the workspace's whole order set, so a loader that asks
+ * for it fails outright — on Home that took every card that reads orders with
+ * it ("This could not be loaded."). Only a caller that passes the workspace and
+ * the uid opts in; every other caller reads exactly what it read before.
+ */
+function usesAssignedOrderScope(workspace: WorkspaceContext | null | undefined, uid: string) {
+  return requiresAssignedToSelfFilter(workspace) && uid.trim() !== "";
+}
+
+/** "assigned" when this member's orders are the ones assigned to them, "workspace" otherwise. */
+export function workspaceOrderScope(workspace: WorkspaceContext | null | undefined): "assigned" | "workspace" {
+  return requiresAssignedToSelfFilter(workspace) ? "assigned" : "workspace";
+}
+
+export async function loadDashboardCounts(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardCounts> {
+  if (usesAssignedOrderScope(workspace, uid)) return loadAssignedDashboardCounts(companyId, workspace, uid);
   const ordersQuery = query(collection(db, "siparisler"), where("companyId", "==", companyId));
   const customersQuery = query(collection(db, "musteriler"), where("companyId", "==", companyId));
 
@@ -1219,6 +1239,36 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
     getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId), limit(1000)))
   ]);
 
+  return {
+    orderCount: ordersCountSnapshot.data().count,
+    customerCount: customersCountSnapshot.data().count,
+    ...tallyDashboardOrders(sampledOrdersSnapshot.docs),
+    sampledOrderCount: sampledOrdersSnapshot.size
+  };
+}
+
+/**
+ * The same counts over the orders assigned to this member (usesAssignedOrderScope).
+ * Every order in that scope is read, so the counts are exact. The customer count is
+ * asked only when the member's Customers area is on — Workflow Only has it off.
+ */
+async function loadAssignedDashboardCounts(companyId: string, workspace: WorkspaceContext | null | undefined, uid: string): Promise<DashboardCounts> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const [ordersSnapshot, customerCount] = await Promise.all([
+    getDocs(workspaceOrderQuery(companyId, workspace, uid)),
+    workspaceAccessAllows(workspace?.memberAccess, "customers")
+      ? getCountFromServer(query(collection(db, "musteriler"), where("companyId", "==", companyId))).then(snapshot => snapshot.data().count)
+      : Promise.resolve(0)
+  ]);
+  return {
+    orderCount: ordersSnapshot.size,
+    customerCount,
+    ...tallyDashboardOrders(ordersSnapshot.docs),
+    sampledOrderCount: ordersSnapshot.size
+  };
+}
+
+function tallyDashboardOrders(orderDocuments: QueryDocumentSnapshot<DocumentData>[]) {
   let activeOrderCount = 0;
   let completedOrderCount = 0;
   let cancelledOrderCount = 0;
@@ -1227,7 +1277,7 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
   const now = new Date();
   const inFourteenDays = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-  sampledOrdersSnapshot.docs.forEach(orderDocument => {
+  orderDocuments.forEach(orderDocument => {
     const data = orderDocument.data();
     if (data.isDeleted === true) return; // trash never counts as active work
     const status = stringValue(data.status, "").toLowerCase();
@@ -1254,14 +1304,11 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
   });
 
   return {
-    orderCount: ordersCountSnapshot.data().count,
-    customerCount: customersCountSnapshot.data().count,
     activeOrderCount,
     completedOrderCount,
     cancelledOrderCount,
     dueSoonCount,
-    estimatedFileUsageMB: Math.round((estimatedFileBytes / 1024 / 1024) * 10) / 10,
-    sampledOrderCount: sampledOrdersSnapshot.size
+    estimatedFileUsageMB: Math.round((estimatedFileBytes / 1024 / 1024) * 10) / 10
   };
 }
 
@@ -1291,8 +1338,13 @@ function financeBlockValue(raw: unknown): FinanceBlock | null {
   return block as FinanceBlock;
 }
 
-export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
-  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+export async function loadDashboardFinanceOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardFinanceOrder[]> {
+  // Only the orders this member may read (usesAssignedOrderScope above).
+  const assignedScope = usesAssignedOrderScope(workspace, uid);
+  if (assignedScope) await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(assignedScope
+    ? workspaceOrderQuery(companyId, workspace, uid)
+    : query(collection(db, "siparisler"), where("companyId", "==", companyId)));
   return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
@@ -1750,10 +1802,16 @@ export async function loadCustomerPickerOptions(companyId: string): Promise<Cust
     .sort((lhs, rhs) => lhs.name.localeCompare(rhs.name));
 }
 
-export async function loadWorkspaceCustomers(companyId: string): Promise<CustomerDirectoryItem[]> {
+export async function loadWorkspaceCustomers(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<CustomerDirectoryItem[]> {
+  // A customer's order history is read from the orders this member may read
+  // (usesAssignedOrderScope above); the directory itself is unchanged.
+  const assignedScope = usesAssignedOrderScope(workspace, uid);
+  if (assignedScope) await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const [customersSnapshot, ordersSnapshot] = await Promise.all([
     getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId))),
-    getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)))
+    getDocs(assignedScope
+      ? workspaceOrderQuery(companyId, workspace, uid)
+      : query(collection(db, "siparisler"), where("companyId", "==", companyId)))
   ]);
 
   const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
