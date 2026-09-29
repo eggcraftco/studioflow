@@ -19,6 +19,7 @@
     "test:inbox-react-out": "node scripts/check-inbox-react-out.mjs",
     "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs",
     "test:ui-workspace-translations": "node scripts/check-ui-workspace-translations.mjs",
+    "test:live-tracking": "node scripts/check-live-tracking.mjs",
     "test:customer-card": "node scripts/check-customer-card-visibility.mjs",
     "test:production-panel": "node scripts/check-production-panel.mjs"
   },

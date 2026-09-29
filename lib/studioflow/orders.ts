@@ -383,6 +383,41 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
   }
 }
 
+export type OrderTrackingResult = {
+  ok?: boolean;
+  provider?: string;
+  status?: string;
+  statusText?: string;
+  error?: string;
+  trackingSupportStatus?: string;
+  supportMessage?: string;
+  supportMessageKey?: string;
+};
+
+/**
+ * Ask the server to follow this order's tracking number — the registerTracking callable the Mac,
+ * the iPhone and Android already use. The server registers the number with 17TRACK (or answers it
+ * from DHL Express when the number is a waybill of the workspace's DHL connection, or from Royal
+ * Mail's own API when that is configured), writes the answer into the order's `tracking::` custom
+ * fields and into companies/{id}/trackingResults/{orderId}, and from then on the hourly refresh and
+ * the courier webhook keep that row current. Saving the number alone registers nothing: no server
+ * trigger looks at a saved number, which is why a number typed on the web had no status anywhere.
+ */
+export async function registerOrderTrackingFromWeb(
+  workspace: WorkspaceContext,
+  input: { orderId: string; trackingNumber: string; courier: string; language: string }
+): Promise<OrderTrackingResult> {
+  const callable = httpsCallable<Record<string, unknown>, OrderTrackingResult>(functions, "registerTracking");
+  const response = await callable({
+    companyId: workspace.id,
+    orderId: input.orderId,
+    trackingNumber: input.trackingNumber.trim(),
+    courier: input.courier.trim() || "Auto Detect",
+    language: input.language || "English"
+  });
+  return response.data ?? {};
+}
+
 export async function assignInvoiceNumberFromWeb(workspace: WorkspaceContext, orderId: string): Promise<string> {
   const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; invoiceNumber?: string }>(functions, "assignInvoiceNumber");
   const response = await callable({ companyId: workspace.id, orderId });

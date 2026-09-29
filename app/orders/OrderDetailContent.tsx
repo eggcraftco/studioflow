@@ -76,6 +76,7 @@ import {
   canEditOrderStatusForRole,
   ORDER_PREVIEW_IMAGE_ACCEPT,
   assignInvoiceNumberFromWeb,
+  registerOrderTrackingFromWeb,
   updateOrderFromWeb,
   uploadOrderPreviewImage,
   type CreateOrderInput,
@@ -113,6 +114,8 @@ import {
 import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
+import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
+import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
@@ -2304,6 +2307,8 @@ export function OrderDetailContent({
     };
   }, [headerDetailsMenuPosition]);
   const [savingInlineField, setSavingInlineField] = useState<string | null>(null);
+  const [trackingSyncing, setTrackingSyncing] = useState(false);
+  const [trackingNotice, setTrackingNotice] = useState<{ tone: "status" | "error"; text: string } | null>(null);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [previewLinkEditing, setPreviewLinkEditing] = useState(false);
   const [previewLinkDraft, setPreviewLinkDraft] = useState(order.designLink);
@@ -4476,9 +4481,14 @@ export function OrderDetailContent({
   }
 
   async function saveDetailsPatch(patch: DetailsPatch, fieldLabel: string) {
+    await writeDetailsPatch(patch, fieldLabel);
+  }
+
+  /** saveDetailsPatch, saying whether the write landed — for a save that has a follow-up. */
+  async function writeDetailsPatch(patch: DetailsPatch, fieldLabel: string): Promise<boolean> {
     if (!canInlineEditFullDetails) {
       setInlineError("Your workspace role cannot edit full order details.");
-      return;
+      return false;
     }
 
     setInlineError(null);
@@ -4490,12 +4500,41 @@ export function OrderDetailContent({
         orderId: order.id,
         details: patch
       });
+      return true;
     } catch (saveFailure) {
       await onReloadOrder();
       setInlineStatus(null);
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update order detail.");
+      return false;
     } finally {
       setSavingInlineField(null);
+    }
+  }
+
+  /**
+   * Ask the server to follow the saved tracking number: after the number is saved, after the
+   * courier is changed while a number is saved (it changes how the number is looked up), and on
+   * "Check Again". The Mac and the iPhone do the same 1.2 s after either changes, Android on
+   * "Refresh Live Status". The answer lands in the order and its trackingResults row, which the
+   * panel is listening to, so nothing here copies the reply onto the screen.
+   */
+  async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean) {
+    const cleaned = cleanTrackingNumber(trackingNumber);
+    if (!cleaned) return;
+    setTrackingSyncing(true);
+    setTrackingNotice(isManual ? { tone: "status", text: "Checking tracking…" } : null);
+    try {
+      await registerOrderTrackingFromWeb(workspace, {
+        orderId: order.id,
+        trackingNumber: cleaned,
+        courier: courier || "Auto Detect",
+        language: detailLanguage
+      });
+      setTrackingNotice(isManual ? { tone: "status", text: "Tracking updated." } : null);
+    } catch {
+      setTrackingNotice({ tone: "error", text: "Could not refresh live tracking." });
+    } finally {
+      setTrackingSyncing(false);
     }
   }
 
@@ -7312,15 +7351,49 @@ export function OrderDetailContent({
                 options={COURIER_OPTIONS}
                 disabled={!canEditWorkflowFields}
                 saving={savingInlineField === "Courier"}
-                onSave={value => saveDetailsPatch({ courier: value }, "Courier")}
+                onSave={async value => {
+                  const saved = await writeDetailsPatch({ courier: value }, "Courier");
+                  // A different courier changes how the saved number is looked up.
+                  if (saved && cleanTrackingNumber(order.trackingNumber)) {
+                    await requestLiveTracking(order.trackingNumber, String(value), false);
+                  }
+                }}
               />
               <InlineValueRow
                 label={t("Tracking")}
                 value={order.trackingNumber || ""}
                 disabled={!canEditWorkflowFields}
                 saving={savingInlineField === "Tracking"}
-                onSave={value => saveDetailsPatch({ trackingNumber: String(value) }, "Tracking")}
+                onSave={async value => {
+                  const next = String(value);
+                  const saved = await writeDetailsPatch({ trackingNumber: next }, "Tracking");
+                  if (saved && cleanTrackingNumber(next)) {
+                    await requestLiveTracking(next, order.courier || "Auto Detect", false);
+                  }
+                }}
               />
+              {cleanTrackingNumber(order.trackingNumber) ? (
+                <OrderLiveTrackingPanel
+                  companyId={workspace.id}
+                  orderId={order.id}
+                  trackingNumber={order.trackingNumber}
+                  courier={order.courier}
+                  customFields={order.customFields}
+                  language={detailLanguage}
+                  canRefresh={canEditWorkflowFields}
+                  syncing={trackingSyncing}
+                  onCheckAgain={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true)}
+                />
+              ) : (
+                <p className="layout-status finance-inline-message" style={{ marginTop: 8 }}>
+                  {`${t("No tracking number yet.")} ${t("Add a courier and tracking number to enable live status.")}`}
+                </p>
+              )}
+              {trackingNotice ? (
+                <p className={trackingNotice.tone === "error" ? "layout-error finance-inline-message" : "layout-status finance-inline-message"} role={trackingNotice.tone === "error" ? "alert" : "status"}>
+                  {t(trackingNotice.text)}
+                </p>
+              ) : null}
               <InlineSelectRow
                 label={t("Dispatched")}
                 value={order.isDispatched ? "Yes" : "No"}
