@@ -89,9 +89,14 @@ export function HomeCardShell({
   dragHandlers,
   lastUpdatedLabel,
   footerNote,
+  drawnSize,
 }: {
   definition: HomeCardDefinition;
   placement: HomeCardPlacement;
+  /** The size the card is drawn at, when the grid widened it to close the gap
+   *  at the end of its row (a 1x1 drawn as a 2x1). The menu keeps the card's
+   *  own size: that is what the member chose and what is saved. */
+  drawnSize?: HomeCardSize;
   state: HomeCardState;
   customising: boolean;
   t: (text: string) => string;
@@ -165,15 +170,16 @@ export function HomeCardShell({
 
   const router = useRouter();
   const heading = placement.heading?.trim() || t(definition.title);
+  const shownSize = drawnSize ?? placement.size;
 
   return (
     <section
       className={[
         "home-card",
-        `home-card-${placement.size}`,
+        `home-card-${shownSize}`,
         // A 1x1 becomes a square tap target on a phone; the media query decides
         // whether the class does anything.
-        placement.size === "1x1" ? "is-square" : "",
+        shownSize === "1x1" ? "is-square" : "",
         placement.tone ? `home-tone-${placement.tone}` : "",
         customising ? "is-customising" : "",
         dragHandlers.dragging ? "is-dragging" : "",

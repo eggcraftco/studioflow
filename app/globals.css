@@ -27456,15 +27456,43 @@ body[data-studio-theme="dark"] .onboard-connect-done { color: #4ade80; }
    out, so no other screen changes. */
 .shell-container:has(> * > .home-screen),
 .shell-container:has(.home-screen) { max-width: none; }
+/* The persistent shell (Round 195) caps its content column at 1180px too, and
+   that cap won: at 1920px the four columns sat in a 1000px strip with a third
+   of the window empty on either side. Home opts out of it the same way. The
+   selector outranks the shell's `:not(.is-wide)` rule further down the file. */
+.app-shell-scroll-area > .app-shell-content:has(> .home-screen) { max-width: none; }
 
-/* The row is the column width, so the only way to keep a 1x1 a *small* square
-   is to stop the column growing with the window: four columns in 1000px is a
-   238px square — the height the cards always had, now with a width to match
-   instead of a letterbox twice as wide. */
+/* How big a card is, decided by how much room there is (29 Sep 2026).
+   The row is the column width, so a 1x1 is a square, a 2x1 two squares wide
+   and a 2x2 four squares merged (§2) — that part is unchanged. What changed is
+   how the column is chosen. Four columns were kept at every width above the
+   phone, so beside the sidebar a 1x1 came out at 171-238px, and a 238px square
+   already cut the Money and Banking figures and the third activity row off.
+   Measured with a full workspace in all twelve languages, every 1x1 body fits
+   from 270px (with the small-square rules further down). So a 1x1 is never
+   drawn under 270px: four columns while four fit at that size, then three,
+   then two (the phone keeps its own two). It stops growing at 340px, where a
+   1x1 would start to read like a 2x2, and the screen is centred there. A
+   narrower grid than four fills its rows (packHomeGrid's fillRows). */
+@property --home-unit { syntax: "<length>"; inherits: true; initial-value: 270px; }
 .home-screen {
   display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px;
-  width: 100%; max-width: 1016px; margin-inline: auto;
+  width: 100%; margin-inline: auto;
+  container: home-screen / inline-size;
+  --home-gap: 16px;
+  --home-unit-max: 340px;
 }
+/* The header, the customise bar and the gallery line up with the grid under
+   them at every column count, so each row of the screen shares its width. */
+.home-screen > * {
+  --home-cols: 4;
+  width: 100%; margin-inline: auto;
+  max-width: calc(var(--home-cols) * var(--home-unit-max) + (var(--home-cols) - 1) * var(--home-gap));
+}
+/* 4 x 270 + 3 x 16 = 1128 and 3 x 270 + 2 x 16 = 842: the widths at which the
+   next column would push a 1x1 under 270px. */
+@container home-screen (max-width: 1127.98px) { .home-screen > * { --home-cols: 3; } }
+@container home-screen (max-width: 841.98px) { .home-screen > * { --home-cols: 2; } }
 
 .home-header {
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -27508,19 +27536,22 @@ body[data-studio-theme="dark"] .onboard-connect-done { color: #4ade80; }
 @media (prefers-reduced-motion: reduce) { .home-grid-gap { transition: none; } }
 
 .home-grid {
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid; gap: var(--home-gap);
+  grid-template-columns: repeat(var(--home-cols), minmax(0, 1fr));
   /* The row IS the column width, so a 1x1 is a square, a 2x1 is two squares
-     wide and a 2x2 is four squares merged (§2). --home-unit is published by the
-     grid itself, because CSS cannot derive one track from the other; the 236px
-     is only what the first paint uses before the measurement lands. A fixed row
-     against a much wider column is what made the desktop cards read as squat
-     letterboxes. Rows still grow rather than let a card paint over its
-     neighbour. */
+     wide and a 2x2 is four squares merged (§2). The column width is derived
+     here from the screen's own width (100cqi of .home-screen), in CSS, so the
+     first paint is already square. It used to be published by a script that
+     attached before the grid existed — Home renders a loading screen first —
+     so it never ran, and every row was the 236px fallback: 171 x 236 cards at
+     1024px, and a 236px-tall 2x1 on a phone whose square is 181px.
+     Registered as a <length> (@property above), so cards and bodies inherit a
+     measured length rather than a calc that would resolve against themselves. */
+  --home-unit: min(var(--home-unit-max), calc((100cqi - (var(--home-cols) - 1) * var(--home-gap)) / var(--home-cols)));
   /* Fixed, not minmax(...,auto): a row that grows for one tall card takes every
      card beside it with it, and they stop being squares. The native grids clip
      at the cell for exactly this reason, and web has to agree with them. */
-  grid-auto-rows: var(--home-unit, 236px);
+  grid-auto-rows: var(--home-unit);
 }
 
 .home-card {
@@ -27606,6 +27637,10 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-card-title {
   margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Inside the titles column the heading is a flex item, whose narrowest
+     width is its own text: "Biblioteca de archivos" ran 14px past a phone's
+     square instead of ending in its ellipsis. */
+  min-width: 0; max-width: 100%;
 }
 .home-card-subtitle { font-size: 12.5px; opacity: 0.6; margin-top: 1px; }
 .home-card-heading-input {
@@ -28924,6 +28959,12 @@ body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2
 .home-card-1x1 .home-activity-text strong { grid-area: title; }
 .home-card-1x1 .home-activity-text em { grid-area: detail; margin-top: 0; }
 .home-card-1x1 .home-activity-when { grid-area: when; padding-left: 8px; }
+/* Three two-line rows with 9px of padding need a 290px square (measured,
+   29 Sep). A 270-289px square keeps all three by giving each row 4px less
+   padding; a phone's square has room for two, whole, instead of half of a
+   third. The card's own width is its height at this size. */
+@container (max-width: 287.98px) { .home-card-1x1 .home-activity-list li { padding-top: 5px; padding-bottom: 5px; } }
+@container (max-width: 267.98px) { .home-card-1x1 .home-activity-list li:nth-child(n + 3) { display: none; } }
 .home-card-1x1 .home-money { gap: 14px; }
 .home-card-1x1 .home-money > .home-split-pair:last-child,
 .home-card-1x1 .home-money > .home-count-pair:last-child { margin-top: auto; }
@@ -28932,6 +28973,37 @@ body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2
 .home-card-1x1 .home-split-pair em { font-size: 12.5px; }
 .home-card-1x1 .home-split-pair b { font-size: 19px; }
 .home-card-1x1 .home-split-pair b.is-plain { font-size: 14px; }
+/* Money's and Banking's headline takes the size that fits its card (figureFit
+   in HomeCardBodies sets the character count): 36px wherever it fits, smaller
+   only when the figure is longer than the card is wide, as the Apple and
+   Android cards scale theirs. 0.62em per character is wider than any figure
+   measured in Inter (0.54-0.57); 28px is the body's padding. */
+.home-card-1x1 .home-money:not([class*="is-"]) > .home-metric-value {
+  font-size: min(36px, calc((100cqi - 28px) / (var(--figure-chars, 1) * 0.62)));
+}
+.home-card-1x1 .home-money.is-stock > .home-metric-value {
+  font-size: min(28px, calc((100cqi - 28px) / (var(--figure-chars, 1) * 0.62)));
+}
+.home-card-1x1 .home-money:not([class*="is-"]) > .home-split-pair b {
+  font-size: min(19px, calc((100cqi - 52px) / 2 / (var(--figure-chars, 1) * 0.62)));
+}
+/* Under 300px the square's blocks sit 8px apart rather than 14: a Japanese
+   or Hindi line box is taller than a Latin one, and at 275px the last line of
+   the revenue-and-costs bar fell off the Money card (measured, 29 Sep). */
+@container (max-width: 299.98px) {
+  .home-card-1x1 .home-money:not([class*="is-"]) { gap: 8px; }
+}
+/* A stock label longer than its third of the square ("Зарезервировано")
+   ran off the card: a flex item's narrowest width is its own text, so the
+   ellipsis never started. It takes two lines now, hyphenated where the
+   language has hyphens and broken where it has none. */
+.home-card-1x1 .home-figure-row.is-ruled em {
+  min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; hyphens: auto;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* The same for a quick action's name in its tile: an ellipsis, not a label
+   running out of the tile ("Добавить клиента" in a phone's 72px tile). */
+.home-action-tile .home-action-label { max-width: 100%; }
 .home-metric-value { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .home-metric-value.is-positive { color: #15803d; }
 .home-metric-value.is-negative { color: #dc2626; }
@@ -29304,6 +29376,13 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
    line that explains why, and keeps the step, the button and the way past it. */
 @container (max-width: 420px) {
   .home-setup.is-split { gap: 6px; }
+  /* One square tall on a phone (181px), the step and the list need the 19px
+     the count's own line took; the count sits beside its bar instead. */
+  .home-setup.is-split {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: center;
+    column-gap: 10px; row-gap: 6px;
+  }
+  .home-setup.is-split > :not(.home-metric-label):not(.home-progress) { grid-column: 1 / -1; }
   .home-setup.is-split .home-metric-label { font-size: 10.5px; }
   .home-setup.is-split .home-progress { margin: 0; }
   .home-setup-columns { gap: 10px; }
@@ -29574,6 +29653,20 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .home-card-2x1 .home-lane-row em { font-size: 11.5px; }
 .home-card-2x1 .home-lane-row b { font-size: 19px; }
 .home-card-2x1 .home-lane-row li { padding: 0 9px; }
+/* A phone's 2x1 gives each of the five lanes about 57px, and the dot beside
+   the name left the name 40px: "In Production" was cut to "In Produc" and
+   "Qualitätsprüfung" had no chance. Under 462px the order list is already
+   gone (below), so the lanes have the height: the dot goes above the name,
+   the name gets the lane's whole width and up to three lines, and a word
+   longer than the lane breaks rather than being cut. */
+@container (max-width: 461px) {
+  .home-card-2x1 .home-lane-head { flex-direction: column; gap: 3px; min-height: 0; }
+  .home-card-2x1 .home-lane-dot { margin-top: 0; }
+  .home-card-2x1 .home-lane-row li { padding: 0 6px; }
+  .home-card-2x1 .home-lane-row em { font-size: 10.5px; -webkit-line-clamp: 3; overflow-wrap: anywhere; }
+  /* Every figure still on one line, whichever name wrapped furthest. */
+  .home-card-2x1 .home-lane-row b { margin-top: auto; }
+}
 /* The tall card keeps three rows, and pays for the third the same way — less
    than the wide card needs, because it has the height and only wants ~20px. */
 .home-card-2x2 .home-order-list a { padding: 5px 0; gap: 10px; grid-template-columns: 34px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px; }
@@ -29651,7 +29744,10 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   /* Two columns on a phone, so a pair of 1x1 cards sits side by side instead of
      each one eating a whole screen. A 2x1 or 2x2 still takes the full width —
      it is drawn for two columns and there are exactly two. */
-  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; gap: 12px; }
+  /* The phone's gap is 12px, and the square is derived from the same number,
+     so it is set where the unit reads it rather than on the grid alone. */
+  .home-screen { --home-gap: 12px; }
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
   /* A 1x1 on a phone is a square: the size exists to answer one question at a
      glance, and a footer link only stretches it. The card itself opens the
      screen it summarises. */
@@ -29662,7 +29758,7 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   /* Two squares wide by ONE tall, like everywhere else. Without this the phone
      2x1 was the only card whose height came from its contents, so a card with
      one note more than the others stretched its whole grid row. */
-  .home-card-2x1 { height: var(--home-unit, 236px); }
+  .home-card-2x1 { height: var(--home-unit); }
   .home-card-2x2 { aspect-ratio: 1; }
   .home-card-2x2 .home-money-panels { grid-template-rows: 1fr; min-height: 0; }
   .home-card-2x2 .home-panel { min-height: 0; overflow: hidden; }
@@ -29891,6 +29987,81 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   .home-header h1 { font-size: 22px; }
 }
 
+/* The phone's squares, measured on a 390px phone (a 181px card, 115px of body
+   under the header) with a full workspace, 29 Sep 2026. Money and Banking set
+   two figures side by side in 70px each, so they ran into one another; their
+   rows and Inventory's, Customers' and the activity list's ran 7-53px past the
+   bottom of the card. The phone keeps its two columns, as the phone apps do,
+   so a square's content gives way instead: the pair stacks into two lines of
+   label and figure, and the parts that repeat something the card already says
+   step aside. */
+@media (max-width: 640px) {
+  .home-card.is-square .home-money:not([class*="is-"]) { gap: 6px; }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-metric-label { font-size: 12px; }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-split-pair {
+    grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: auto;
+  }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-split-pair > span {
+    flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px;
+  }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-split-pair > span + span { border-left: 0; padding-left: 0; }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-split-pair em { font-size: 11.5px; }
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-split-pair b { font-size: 14px; flex: 0 0 auto; }
+  /* Banking's freshness line took three lines in Russian and pushed the two
+     figures off the square; it keeps one, ending in an ellipsis. It keeps its
+     whole height too: a box that clips is a flex item that may shrink, and in
+     the full square it was squeezed to 11px in English and 4-7px in Japanese,
+     Chinese and Hindi, cutting the letters in half. The square's blocks sit 2px
+     apart instead of 6 to give it the room (measured, 29 Sep: 115px of body;
+     the tallest, Hindi, needs 114). */
+  .home-card.is-square .home-sync-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; flex-shrink: 0; margin: 0; }
+  .home-card.is-square .home-sync-line span { margin-right: 6px; }
+  .home-card.is-square .home-money:not([class*="is-"]):has(> .home-sync-line) { gap: 2px; }
+  /* Fixed line boxes for the file rows, as the schedule rows have: a Japanese,
+     Chinese or Hindi line is taller than a Latin one, and the third file of a
+     phone's 2x1 was cut by 2-8px in those languages. */
+  .home-file-list strong, .home-quota-line em, .home-quota-line b { line-height: 13px; }
+  .home-file-list em { line-height: 12px; }
+  /* The phone's own 2px row padding lost to the wide card's 4px on
+     specificity, so a phone 2x1's three file rows were 32px each and the third
+     did not fit under a Japanese or Hindi header. The icon keeps its size. */
+  .home-card-2x1 .home-file-list a { padding: 2px 0; }
+  /* Revenue against costs: the line above already says what came in. */
+  .home-card.is-square .home-money:not([class*="is-"]) > .home-ratio { display: none; }
+  /* The three counts already say what the stock-health bar draws. */
+  .home-card.is-square .home-money.is-stock > .home-stock-health,
+  .home-card.is-square .home-money.is-stock > .home-mix-bar { display: none; }
+  /* Quick actions on a phone's square: four 72px tiles could not hold an
+     action's name in most languages ("Téléverser un fichier" is 116px, and a
+     tile has 58), so the four tiles become four rows, glyph and name on one
+     line, each name with the square's whole width. */
+  .home-card.is-square .home-action-grid.is-tiles { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 3px; }
+  .home-card.is-square .home-action-tile { flex-direction: row; justify-content: flex-start; gap: 7px; padding: 0 8px; border-radius: 9px; }
+  .home-card.is-square .home-action-glyph svg { width: 16px; height: 16px; }
+  .home-card.is-square .home-action-label { font-size: 11px; }
+  /* One customer under the counts, whole, rather than one and a half. */
+  .home-card.is-square .home-people-list li:nth-child(n + 2) { display: none; }
+  /* A phone's 2x1 activity card listed all six rows in one column, 300px of
+     them in a 115px body; it shows the two that fit, whole. */
+  .home-card-2x1 .home-activity-list li:nth-child(n + 3) { display: none; }
+  /* The phone's 2x2 (a 374px square, 306px of body) had eight 45px rows under
+     two headings, 438px: two rows under each heading fit, and four under a
+     single one. */
+  .home-card-2x2 .home-activity-list.is-wide:not(:only-of-type) li:nth-child(n + 3),
+  .home-card-2x2 .home-activity-list.is-wide:only-of-type li:nth-child(n + 5) { display: none; }
+  /* Its quick actions (352px in 306) keep every action and the permissions
+     note by giving up some air between and inside the rows. */
+  .home-card-2x2 .home-action-groups { gap: 6px; }
+  .home-card-2x2 .home-action-grid.is-rows { gap: 6px; }
+  .home-card-2x2 .home-action-row { padding-top: 7px; padding-bottom: 7px; }
+  /* A wide card on a phone is one square tall now (181px, not the 236px it
+     was drawn at while the square went unmeasured), so its header gives the
+     body back 8px: the 30px badge the phone apps draw on every card. The
+     badge keeps its place at the start of the header. */
+  .home-card:not(.is-square) .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
+  .home-card:not(.is-square) .home-card-badge svg { width: 15px; height: 15px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-card, .home-card.is-dragging { transition: none; transform: none; }
   .home-card-skeleton span { animation: none; }
@@ -30006,6 +30177,10 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
    a block. Grid rather than flex: the columns have to line up between rows, and
    that is the whole point of the layout. */
 .home-activity-list.is-wide { display: block; }
+/* The wide-open card's rows carry their padding on the link inside them;
+   the list's own 9px on top of it made each row 63px, and eight of them did
+   not fit a 566px card (the last two sat under its edge). */
+.home-activity-list.is-wide li { padding: 0; }
 .home-activity-wide {
   display: grid;
   grid-template-columns: 30px minmax(120px, 1.15fr) minmax(0, 1.35fr) minmax(96px, auto) auto 10px;
@@ -30016,6 +30191,14 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   text-decoration: none;
 }
 .home-activity-wide.is-link:hover { background: var(--surface-2, rgba(0, 0, 0, 0.03)); border-radius: 10px; }
+/* A phone's 2x2 is 344px inside, and the row's fixed minimums (120px of
+   title, 96px of name, the time, the chevron and five gaps) came to 361px:
+   the chevron sat past the card's edge. Under 480px the columns may shrink
+   to nothing, and the name ends in an ellipsis like the title does. */
+@container (max-width: 479.98px) {
+  .home-activity-wide { grid-template-columns: 30px minmax(0, 1.15fr) minmax(0, 1.35fr) minmax(0, auto) auto 10px; column-gap: 8px; }
+  .home-activity-actor { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
 .home-activity-head {
   font-size: 13px; font-weight: 700; line-height: 1.25;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

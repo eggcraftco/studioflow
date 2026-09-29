@@ -105,41 +105,43 @@ export default function HomePage() {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   /** Which gap the card is over, if it is over one. */
   const [dropHole, setDropHole] = useState<number | null>(null);
-  /** Four columns, or two on a phone. The grid publishes it with the unit.
+  /** Four, three or two columns — the stylesheet chooses from the width Home
+   *  has (a 1x1 is never drawn under 270px), and two on a phone.
    *  Null until it has measured: placing cards explicitly against a guessed
    *  column count would put them in the wrong cells for a frame, and the
    *  browser's own auto-placement gets it right in the meantime. */
   const [columnCount, setColumnCount] = useState<number | null>(null);
+  /** The phone's two columns keep their holes, as the phones' own apps do; a
+   *  two- or three-column grid beside a sidebar or on a tablet fills its rows. */
+  const [phoneGrid, setPhoneGrid] = useState(false);
   const [saveError, setSaveError] = useState("");
   // A failed workspace read used to leave Home spinning for ever.
   const [workspaceError, setWorkspaceError] = useState("");
   const [workspaceAttempt, setWorkspaceAttempt] = useState(0);
   // The layout as the server last accepted it, so a failed save can be undone.
   const lastSaved = useRef<HomeLayout | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
+  // State, not a ref: the grid is not in the first render (a loading screen is),
+  // and an effect keyed on a ref ran once against null and never again — which
+  // is why the column count was never read and the square unit never set.
+  const [gridNode, setGridNode] = useState<HTMLDivElement | null>(null);
 
-  // A square 1x1 needs the row to equal the column, and CSS has no way to read
-  // one track's size into the other. The grid measures itself and publishes the
-  // column width; the stylesheet does the rest.
+  // The stylesheet picks the column count and derives the square from it; the
+  // packing needs the same column count, or the gaps it works out are gaps in a
+  // grid nobody is looking at. The grid resizes whenever the count changes.
   useEffect(() => {
-    const grid = gridRef.current;
+    const grid = gridNode;
     if (!grid) return;
     const apply = () => {
-      const styles = getComputedStyle(grid);
-      const columns = styles.gridTemplateColumns.split(" ").filter(Boolean).length;
+      const columns = getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length;
       if (columns < 1) return;
-      const gap = parseFloat(styles.columnGap) || 0;
-      const unit = (grid.clientWidth - gap * (columns - 1)) / columns;
-      if (unit > 0) grid.style.setProperty("--home-unit", `${Math.round(unit)}px`);
-      // The packing needs the same column count the stylesheet just used, or the
-      // gaps it works out are gaps in a grid nobody is looking at.
       setColumnCount(columns);
+      setPhoneGrid(window.matchMedia("(max-width: 640px)").matches);
     };
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(grid);
     return () => observer.disconnect();
-  }, []);
+  }, [gridNode]);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -258,8 +260,10 @@ export default function HomePage() {
   // Where each card lands, and where the holes are. Same arithmetic as the Mac
   // and Android packers, so one member's layout reads the same on all three.
   const grid = useMemo(
-    () => packHomeGrid(cards.map(({ placement }) => placement), columnCount ?? 4),
-    [cards, columnCount],
+    () => packHomeGrid(cards.map(({ placement }) => placement), columnCount ?? 4, {
+      fillRows: columnCount !== null && columnCount < 4 && !phoneGrid,
+    }),
+    [cards, columnCount, phoneGrid],
   );
   const cellOf = useCallback(
     (index: number) => {
@@ -271,6 +275,14 @@ export default function HomePage() {
       };
     },
     [grid, columnCount],
+  );
+  /** What a card is drawn as: its own size, or 2x1 for a 1x1 that closed the
+   *  gap at the end of its row. Everything the card SHOWS follows this; its
+   *  menu still shows, and changes, its own size. */
+  const drawnOf = useCallback(
+    (index: number) => (columnCount === null ? undefined : grid.slots[index]?.drawnSize)
+      ?? cards[index]?.placement.size ?? "1x1",
+    [grid, columnCount, cards],
   );
   /** A drop lands a card in front of whatever the gap sits in front of. */
   const dropAt = useCallback(
@@ -449,39 +461,41 @@ export default function HomePage() {
         ) : null}
 
         {/* The row height is the column width, so a 1x1 is a square, a 2x1 is two
-            squares wide and a 2x2 is four squares merged (§2). CSS cannot derive
-            one track from the other, so the grid measures itself. */}
-        <div className="home-grid" ref={gridRef}>
+            squares wide and a 2x2 is four squares merged (§2). The stylesheet
+            derives both from the width Home has; the page only reads back how
+            many columns that came to, for the packing. */}
+        <div className="home-grid" ref={setGridNode}>
           {cards.map(({ placement, definition }, index) => (
             <HomeCardShell
               key={placement.id}
               definition={definition}
               placement={placement}
+              drawnSize={drawnOf(index)}
               customising={customising}
               t={t}
               state={cardState(placement.id, isEmpty(placement.id, placement.period ?? "month"))}
               subtitle={
                 // The wide orders card leads with how many are live, beside its
                 // heading, exactly as the sheet reads it.
-                placement.id === "ordersProduction" && placement.size !== "1x1"
+                placement.id === "ordersProduction" && drawnOf(index) !== "1x1"
                   ? t("{count} active").replace("{count}",
                       String(data.scheduleOrders.filter((order) => !order.isDelivered).length))
                   // The wide stock card names what it is a view of, as the
                   // sheet does — the figures alone do not say.
-                  : placement.id === "inventory" && placement.size !== "1x1"
+                  : placement.id === "inventory" && drawnOf(index) !== "1x1"
                     ? t("Stock overview")
                     // How many files there are belongs beside the heading, as
                     // the sheet reads it.
-                    : placement.id === "files" && placement.size !== "1x1"
+                    : placement.id === "files" && drawnOf(index) !== "1x1"
                       ? `${data.files.length} ${t("files")}`
                       // Both week cards name which week beside the heading; the
                       // 1x1 has no week to name.
-                      : placement.id === "schedule" && placement.size !== "1x1"
+                      : placement.id === "schedule" && drawnOf(index) !== "1x1"
                         ? homeWeekRangeLabel(studioLocaleTag(language))
                         : undefined
               }
               footerNote={
-                placement.id === "recentActivity" && placement.size === "2x2"
+                placement.id === "recentActivity" && drawnOf(index) === "2x2"
                   ? t("Only activity you have permission to view is shown")
                   : undefined
               }
@@ -502,7 +516,7 @@ export default function HomePage() {
                   // 87px of "↑ Upload file" left the card's own title at 25px
                   // on the square, rendering as "Fil…". There the action is a
                   // mark; the wider cards have the room to name it.
-                  placement.size === "1x1" ? (
+                  drawnOf(index) === "1x1" ? (
                     <button
                       type="button"
                       className="home-head-icon-button is-outline"
@@ -521,7 +535,7 @@ export default function HomePage() {
                       ↑ {t("Upload file")}
                     </button>
                   )
-                ) : placement.id === "notes" && placement.size === "1x1" ? (
+                ) : placement.id === "notes" && drawnOf(index) === "1x1" ? (
                   // The square's create control is the composer in its body —
                   // but the shell replaces that body wholesale in four states:
                   // loading, error, offline and empty. The header is outside
@@ -551,7 +565,7 @@ export default function HomePage() {
                         caret already in it — the card has nowhere to put a
                         results list, and a second search that finds different
                         things would be worse than none. */}
-                    {placement.size === "2x2" ? (
+                    {drawnOf(index) === "2x2" ? (
                       <Link
                         className="home-head-icon-button"
                         href="/notes?search=1"
@@ -570,7 +584,7 @@ export default function HomePage() {
                       {t("New note")}
                     </button>
                   </>
-                ) : placement.id === "recentActivity" && placement.size === "2x2" ? (
+                ) : placement.id === "recentActivity" && drawnOf(index) === "2x2" ? (
                   // The sheet puts the pills beside the title on the wide-open
                   // card only: the smaller sizes have no room, and a filter you
                   // cannot see the effect of is a trap.
@@ -638,7 +652,7 @@ export default function HomePage() {
                 },
               }}
             >
-              {renderBody(placement.id, placement.size, placement.period ?? "month")}
+              {renderBody(placement.id, drawnOf(index), placement.period ?? "month")}
             </HomeCardShell>
           ))}
           {/* The gaps. A 2-wide card that does not fit the rest of a row starts

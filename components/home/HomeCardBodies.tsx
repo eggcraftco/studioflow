@@ -83,6 +83,21 @@ function cash(value: number, hide: boolean, settings: StudioMoneySettings) {
 
 /* ------------------------------------------------------------------ Money */
 
+/**
+ * The square's headline figure, sized to the card it is in.
+ *
+ * The figure is one line in a 36px face, and a square is 181px wide on a phone
+ * and 270px at its smallest beside a sidebar: "£8,820.38" ran off the phone's
+ * card and "£1,208,820.38" would run off the desktop's. The stylesheet takes
+ * the card's width and this count of characters and gives the figure the size
+ * that fits (never above 36px), which is what the Apple and Android cards do
+ * with a minimum scale factor. The two figures under it do the same in their
+ * half of the square ("£2,139,360.00" ran 21px into its neighbour at 275px).
+ */
+function figureFit(text: string): CSSProperties {
+  return { "--figure-chars": Math.max(1, text.length) } as CSSProperties;
+}
+
 export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
   // The header says which window these totals cover, so they have to actually
   // cover it — same rule the Dashboard applies, against the payment date.
@@ -113,10 +128,11 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
     return (
       <div className="home-money">
         <p className="home-metric-label">{t("Net profit")}</p>
-        <strong className={`home-metric-value ${profit >= 0 ? "is-positive" : "is-negative"}`}>{money(profit)}</strong>
+        <strong className={`home-metric-value ${profit >= 0 ? "is-positive" : "is-negative"}`}
+                style={figureFit(money(profit))}>{money(profit)}</strong>
         <div className="home-split-pair">
-          <span><em>{t("Revenue")}</em><b className="is-positive">{money(revenue)}</b></span>
-          <span><em>{t("Outstanding")}</em><b className="is-info">{money(outstanding)}</b></span>
+          <span><em>{t("Revenue")}</em><b className="is-positive" style={figureFit(money(revenue))}>{money(revenue)}</b></span>
+          <span><em>{t("Outstanding")}</em><b className="is-info" style={figureFit(money(outstanding))}>{money(outstanding)}</b></span>
         </div>
         <div className="home-ratio">
           <span className="home-ratio-head"><em>{t("Revenue")}</em><em>{t("Costs")}</em></span>
@@ -398,9 +414,9 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
             every week, and painting it red with a minus made an ordinary month
             look like a warning — the label already says "Spent", so the sign
             was saying it twice and the colour was saying something untrue. */}
-        <strong className="home-metric-value">{money(spent)}</strong>
+        <strong className="home-metric-value" style={figureFit(money(spent))}>{money(spent)}</strong>
         <div className="home-split-pair">
-          <span><em>{t("Incoming")}</em><b className="is-positive">+{money(incoming)}</b></span>
+          <span><em>{t("Incoming")}</em><b className="is-positive" style={figureFit(`+${money(incoming)}`)}>+{money(incoming)}</b></span>
           <span>
             <em>{t("Missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-negative" : ""}>{missingReceipts}</b>
@@ -650,7 +666,7 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
     return (
       <div className="home-money is-stock">
         <p className="home-metric-label">{t("total value")}</p>
-        <strong className="home-metric-value is-info">{money(summary.totalValue)}</strong>
+        <strong className="home-metric-value is-info" style={figureFit(money(summary.totalValue))}>{money(summary.totalValue)}</strong>
         <div className="home-figure-row is-ruled">
           <span>
             <em>{t("low stock")}</em>
