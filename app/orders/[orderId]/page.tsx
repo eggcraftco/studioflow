@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
@@ -12,6 +12,8 @@ import {
   loadWorkspaceSettingsOverview,
   orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
+  switchActiveWorkspace,
+  workspaceAccessAllows,
   workspaceAssignedProjectsOnly,
   type OrderDetail,
   type WorkspaceContext,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { OrderDetailContent } from "../OrderDetailContent";
 import { studioT } from "@/lib/studioflow/language";
+import { orderWorkspaceDecision, orderWorkspaceHint } from "@/lib/studioflow/orderLink";
 
 export default function OrderDetailPage() {
   const params = useParams<{ orderId: string }>();
@@ -30,6 +33,15 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(true);
+  // A link that names the workspace the order was listed in (the Production
+  // board's Open order, lib/studioflow/orderLink.ts). When the account's active
+  // workspace is another one, nothing is loaded: the page says so and offers
+  // the switch, which checks the membership itself.
+  const searchParams = useSearchParams();
+  const workspaceHint = orderWorkspaceHint(searchParams);
+  const [otherWorkspaceId, setOtherWorkspaceId] = useState("");
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
+  const [switchError, setSwitchError] = useState("");
 
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
 
@@ -45,9 +57,26 @@ export default function OrderDetailPage() {
     async function run() {
       setLoadingOrder(true);
       setError(null);
+      setOtherWorkspaceId("");
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        const decision = orderWorkspaceDecision(workspaceHint, loadedWorkspace.id);
+        if (decision.kind === "other-workspace") {
+          setWorkspace(null);
+          setOrder(null);
+          setOtherWorkspaceId(decision.workspaceId);
+          return;
+        }
+        // Orders are a permission of their own: the list and the Production
+        // board already turn a member without it away, and the order itself
+        // must not open for them either.
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
+          setWorkspace(null);
+          setOrder(null);
+          setError("Orders are not available to your role in this workspace.");
+          return;
+        }
         setWorkspace(loadedWorkspace);
 
         const [loadedOrder, loadedMoneySettings] = await Promise.all([
@@ -81,7 +110,22 @@ export default function OrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [orderId, user]);
+  }, [orderId, user, workspaceHint]);
+
+  async function switchToHintedWorkspace() {
+    if (!user || !otherWorkspaceId || switchingWorkspace) return;
+    setSwitchingWorkspace(true);
+    setSwitchError("");
+    try {
+      // Checks users/{uid}/workspaceAccess/{id} (and a paused seat) before it
+      // writes anything. On success AuthProvider sees activeCompanyId change and
+      // reloads this page, which then opens the order in that workspace.
+      await switchActiveWorkspace(user.uid, otherWorkspaceId);
+    } catch (failure) {
+      setSwitchError(failure instanceof Error && failure.message ? failure.message : "Workspace could not be selected.");
+      setSwitchingWorkspace(false);
+    }
+  }
 
   useEffect(() => {
     if (!workspace || !orderId) return;
@@ -136,8 +180,24 @@ export default function OrderDetailPage() {
 
       {error ? (
         <section className="card order-error-card">
-          <CardTitle icon="lock" eyebrow="Order error" title="Could not load order" />
+          <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load order")} />
           <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
+        </section>
+      ) : null}
+
+      {otherWorkspaceId && !error ? (
+        <section className="card order-error-card" data-order-other-workspace>
+          <CardTitle icon="lock" eyebrow={t("Order error")} title={t("This order is in another workspace.")} />
+          <p style={{ margin: "0 0 12px" }}>{t("Switch to that workspace to open this order.")}</p>
+          <button
+            type="button"
+            className="button"
+            disabled={switchingWorkspace}
+            onClick={() => { void switchToHintedWorkspace(); }}
+          >
+            {t("Switch workspace")}
+          </button>
+          {switchError ? <p style={{ color: "var(--danger)", margin: "12px 0 0" }} role="alert">{t(switchError)}</p> : null}
         </section>
       ) : null}
 

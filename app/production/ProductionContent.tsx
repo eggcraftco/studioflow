@@ -10,8 +10,14 @@
 // assignee, and offers Undo. Dropping into the blocked lane insists on a
 // reason, because a job that goes quiet without one is the exact failure this
 // screen exists to prevent.
+//
+// Done only grows, so its lane shows the latest few under the count, with the
+// whole list one click away in a lane that scrolls; the detail panel keeps its
+// own height and opens the order from its top (lib/studioflow/
+// productionDoneLane.ts, orderLink.ts).
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -40,6 +46,8 @@ import {
   type ProductionBlocker,
   type ProductionStage
 } from "@/lib/studioflow/production";
+import { orderPageHref } from "@/lib/studioflow/orderLink";
+import { doneLaneView, rememberMovedHere, sortDoneLane } from "@/lib/studioflow/productionDoneLane";
 import { ProductionStagesModal } from "./ProductionStagesModal";
 
 type ViewMode = "board" | "list" | "workload";
@@ -111,6 +119,11 @@ export function ProductionContent({
   const [blockerPrompt, setBlockerPrompt] = useState<{ orderId: string; stageId: string } | null>(null);
   const [stagesOpen, setStagesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The Done lane: the latest few until someone asks for all of it, and the
+  // jobs this visit moved into it, which go first so the move is seen.
+  const [doneExpanded, setDoneExpanded] = useState(false);
+  const [movedIntoDone, setMovedIntoDone] = useState<string[]>([]);
+  const panelRef = useRef<HTMLElement | null>(null);
 
   const canEdit = canEditOrderStatusForRole(workspace.role);
   const steps = useMemo<HeadingItem[]>(
@@ -240,19 +253,38 @@ export function ProductionContent({
       if (bucket) bucket.push(card);
       else map.set(card.stageId, [card]);
     });
-    // Soonest due first, undated last — the order a bench works in.
-    map.forEach(list => list.sort((a, b) => {
-      const left = a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const right = b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return left - right;
-    }));
+    // Soonest due first, undated last — the order a bench works in. Done is the
+    // exception: what finished last is what anyone looks for there.
+    map.forEach((list, stageId) => {
+      if (stageId === doneStageId) {
+        const latest = sortDoneLane(list, movedIntoDone);
+        list.splice(0, list.length, ...latest);
+        return;
+      }
+      list.sort((a, b) => {
+        const left = a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const right = b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        return left - right;
+      });
+    });
     return map;
-  }, [filteredCards, stages]);
+  }, [filteredCards, stages, doneStageId, movedIntoDone]);
 
   const selected = useMemo(
     () => filteredCards.find(card => card.order.id === selectedId) ?? null,
     [filteredCards, selectedId]
   );
+
+  // Below 1180 px the panel sits under the board instead of beside it, so a
+  // selection would open the details (and Open order) off-screen.
+  useEffect(() => {
+    if (!selectedId || typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1180px)").matches) return;
+    const frame = window.requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId]);
 
   const memberById = useMemo(() => {
     const map = new Map<string, TeamMemberDetail>();
@@ -270,6 +302,7 @@ export function ProductionContent({
     setBusy(true);
     try {
       const result = await setOrderProductionStage(workspace, { orderId, stageId, blocker });
+      if (stageId === doneStageId) setMovedIntoDone(ids => rememberMovedHere(ids, orderId));
       await reload();
       const target = stages.find(stage => stage.id === stageId);
       const previous = result?.previous;
@@ -297,7 +330,7 @@ export function ProductionContent({
     } finally {
       setBusy(false);
     }
-  }, [workspace, reload, stages, t]);
+  }, [workspace, reload, stages, t, doneStageId]);
 
   function requestMove(orderId: string, stageId: string) {
     const target = stages.find(stage => stage.id === stageId);
@@ -414,10 +447,16 @@ export function ProductionContent({
               {stages.map(stage => {
                 const list = cardsByStage.get(stage.id) ?? [];
                 const level = wipLoadLevel(list.length, stage.wipLimit);
+                const isDoneLane = stage.id === doneStageId;
+                const doneView = isDoneLane ? doneLaneView(list, doneExpanded) : null;
+                const shown = doneView ? doneView.visible : list;
+                const doneOpen = Boolean(doneView?.collapsible && doneExpanded);
+                const bodyId = `production-lane-${stage.id}`;
                 return (
                   <section
                     key={stage.id}
-                    className={`production-column${dragOverStage === stage.id ? " is-drop-target" : ""}`}
+                    data-stage-kind={stage.kind}
+                    className={`production-column${isDoneLane ? " production-column-done" : ""}${doneOpen ? " is-expanded" : ""}${dragOverStage === stage.id ? " is-drop-target" : ""}`}
                     onDragOver={event => {
                       if (!canEdit) return;
                       event.preventDefault();
@@ -443,8 +482,19 @@ export function ProductionContent({
                       ) : <div className="production-wip production-wip-none"><span style={{ width: "0%" }} /></div>}
                     </header>
 
-                    <div className="production-column-body">
-                      {list.map(card => (
+                    {doneView && doneView.total > 0 ? (
+                      // The count stays in the header above; this says which part is showing.
+                      <p className="production-done-summary" data-production-done-summary>
+                        {t("Latest due first")} · {doneView.visible.length} / {doneView.total}
+                      </p>
+                    ) : null}
+
+                    <div
+                      className="production-column-body"
+                      id={bodyId}
+                      data-production-done-scroll={isDoneLane ? "" : undefined}
+                    >
+                      {shown.map(card => (
                         <BoardCard
                           key={card.order.id}
                           card={card}
@@ -460,6 +510,19 @@ export function ProductionContent({
                       ))}
                       {list.length === 0 ? <p className="production-column-empty">{t("Nothing here")}</p> : null}
                     </div>
+
+                    {doneView?.collapsible ? (
+                      <button
+                        type="button"
+                        className="production-done-toggle"
+                        data-production-done-toggle
+                        aria-expanded={doneExpanded}
+                        aria-controls={bodyId}
+                        onClick={() => setDoneExpanded(current => !current)}
+                      >
+                        {doneExpanded ? t("Show less") : `${t("Show all")} (${doneView.total})`}
+                      </button>
+                    ) : null}
                   </section>
                 );
               })}
@@ -500,8 +563,9 @@ export function ProductionContent({
             canEdit={canEdit}
             busy={busy}
             assignee={assigneeName(selected.order)}
+            orderHref={orderPageHref(workspace.id, selected.order.id)}
+            panelRef={panelRef}
             onClose={() => setSelectedId("")}
-            onOpenOrder={() => router.push(`/orders/${selected.order.id}`)}
             onMove={stageId => requestMove(selected.order.id, stageId)}
           />
         ) : null}
@@ -579,6 +643,7 @@ function BoardCard({
   return (
     <div
       className={`production-card${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`}
+      data-order-id={order.id}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -758,7 +823,7 @@ function ProductionWorkloadView({
 }
 
 function ProductionDetailPanel({
-  card, stages, steps, t, canEdit, busy, assignee, onClose, onOpenOrder, onMove
+  card, stages, steps, t, canEdit, busy, assignee, orderHref, panelRef, onClose, onMove
 }: {
   card: ProductionCard;
   stages: ProductionStage[];
@@ -767,8 +832,10 @@ function ProductionDetailPanel({
   canEdit: boolean;
   busy: boolean;
   assignee: string;
+  /** The order's own page, naming the workspace it was listed in (orderLink.ts). */
+  orderHref: string;
+  panelRef: RefObject<HTMLElement | null>;
   onClose: () => void;
-  onOpenOrder: () => void;
   onMove: (stageId: string) => void;
 }) {
   const { order } = card;
@@ -776,7 +843,7 @@ function ProductionDetailPanel({
   const stage = stages.find(item => item.id === card.stageId);
 
   return (
-    <aside className="production-panel">
+    <aside className="production-panel" ref={panelRef}>
       <header className="production-panel-head">
         <span className="production-panel-grip" aria-hidden>••</span>
         <button type="button" className="production-panel-close" onClick={onClose} aria-label={t("Close")}>✕</button>
@@ -800,6 +867,13 @@ function ProductionDetailPanel({
           </span>
         </div>
       </div>
+
+      {/* A real link, first thing under the name: it opens in a new tab like any
+          other link, and it used to be a button at the foot of the panel, below
+          the steps, pushed further down by every card in the tallest lane. */}
+      <Link href={orderHref} prefetch={false} className="production-panel-open" data-production-open-order>
+        <span aria-hidden>↗</span> {t("Open order")}
+      </Link>
 
       <div className="production-panel-meta">
         <span className={card.isLate ? "is-late" : ""}>
@@ -863,9 +937,6 @@ function ProductionDetailPanel({
       </dl>
 
       <div className="production-panel-actions">
-        <button type="button" className="production-btn" onClick={onOpenOrder}>
-          <span aria-hidden>↗</span> {t("Open order")}
-        </button>
         <label className="production-panel-move">
           <span>{t("Update status")}</span>
           <select
