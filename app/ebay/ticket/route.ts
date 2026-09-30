@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ebayTicketCookieName } from "../../../lib/studioflow/ebayFlow";
 import { ebayTicketKey, verifyEbayTicket, TICKET_MAX_LENGTH } from "../../../lib/studioflow/ebayTicket";
-import { bucketFor, clientAddress, takeToken, type Bucket } from "../../../lib/studioflow/ebayAdmission";
+import { bucketFor, takeToken, untrustedBucketKey, type Bucket } from "../../../lib/studioflow/ebayAdmission";
 
 // Sealing the browser-binding ticket into a cookie (design §5.5).
 //
@@ -151,15 +151,23 @@ export async function POST(request: NextRequest) {
   const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") { tick("blocked", nowMs); sayRefused(nowMs); return refuse(400); }
 
-  // 3. Admission, bounded twice. The address is used for a counter and never for
-  // anything else. A refusal is not final yet: an exhausted PROCESS bucket is
-  // reconsidered at step 5 for a caller whose ticket verifies, because that
-  // bucket is anonymous and global and refusing on it alone is a kill switch.
-  // The per-address bucket is final — it binds one address, so it cannot be a
-  // kill switch for anybody else.
-  const address = clientAddress(request.headers.get("x-forwarded-for"));
-  const admission = admitted(address, nowMs);
-  if (admission === "address") { tick("throttled", nowMs); sayRefused(nowMs); return refuse(429); }
+  // 3. Admission, bounded twice, and NEITHER bound is final here.
+  //
+  // The per-address bucket used to be final, on the reasoning that it binds one
+  // address and so cannot be a kill switch for anybody else. That reasoning has
+  // one hole, and it is the whole of M1: the address is not a property of the
+  // caller, it is `x-forwarded-for`, a header the caller writes. Keying a FINAL
+  // refusal on a value the refused party chose let a stranger hold this route
+  // closed for whichever address they named — and naming a seller's address
+  // costs 30 requests a minute, no account, no ticket, no session. The global
+  // bucket was never touched, so the bound that was supposed to catch a flood
+  // never saw one.
+  //
+  // Both decisions are carried to step 5 instead. A ticket this route can prove
+  // a key holder minted draws on a reserve keyed on the ticket's own state; a
+  // caller who cannot produce one stays refused, which is where the anonymous
+  // bound still does its work.
+  const admission = admitted(untrustedBucketKey(request.headers.get("x-forwarded-for")), nowMs);
 
   const text = await readCapped(request);
   if (text === null) { tick("refused", nowMs); sayRefused(nowMs); return refuse(400); }
@@ -191,18 +199,24 @@ export async function POST(request: NextRequest) {
   // ticket itself names.
   const verified = verifyEbayTicket(ebayTicketKey(key), ticket, nowMs);
   if (!verified.ok) {
-    // An unverifiable ticket under an exhausted process bucket is a flood, and it
-    // is told so rather than told its ticket is bad: the 429 is the honest answer
+    // An unverifiable ticket under EITHER exhausted bucket is a flood, and it is
+    // told so rather than told its ticket is bad: the 429 is the honest answer
     // and it costs the caller a retry rather than a diagnosis.
-    tick(admission === "process" ? "throttled" : "refused", nowMs);
+    //
+    // This line is what keeps the anonymous bound real after M1. Draining a
+    // bucket — by any address, including one the caller invented — never admits
+    // somebody who cannot show that a key holder minted their ticket.
+    tick(admission !== "ok" ? "throttled" : "refused", nowMs);
     sayRefused(nowMs);
-    return refuse(admission === "process" ? 429 : 400);
+    return refuse(admission !== "ok" ? 429 : 400);
   }
-  // The reserve. Only reached when the anonymous global bucket is empty, and keyed
-  // on the ticket's own MAC-covered state, so the one caller who can exhaust it —
+  // The reserve. Reached when EITHER anonymous bucket refused, and keyed on the
+  // ticket's own MAC-covered state, so the one caller who can exhaust it —
   // somebody replaying a valid ticket of their own — closes their own flow and
-  // nobody else's.
-  if (admission === "process"
+  // nobody else's. That is also the ceiling on what M1 can still cost a seller:
+  // a stranger who names their address can spend this flow's reserve, and cannot
+  // take the connection.
+  if (admission !== "ok"
     && !takeToken(bucketFor(flowBuckets, verified.state, RESERVE_PER_FLOW_PER_MINUTE, nowMs), RESERVE_PER_FLOW_PER_MINUTE, nowMs)) {
     tick("throttled", nowMs); sayRefused(nowMs); return refuse(429);
   }

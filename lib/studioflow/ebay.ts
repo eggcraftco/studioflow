@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { ebayNonceCookieName } from "@/lib/studioflow/ebayFlow";
+import { ebayHandoffFields, ebayHandoffTarget, ebayTableText } from "@/lib/studioflow/ebayScreenRules";
 
 // The browser's whole view of the eBay connector.
 //
@@ -88,12 +89,12 @@ const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, na
  * arrives without it is refused. See docs/ebay-connector-design.md §5.
  */
 export async function beginEbayConnect(companyId: string) {
-  return (await call<{ companyId: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; ticket: string; scopes: string[]; environment: string }>(
+  return (await call<{ companyId: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; ticket: string; scopes: string[]; environment: string; handoff?: string }>(
     "beginEbayConnect")({ companyId })).data;
 }
 /** The native start page's half: the uid that began the flow claims it once. */
 export async function claimEbayConnectState(state: string) {
-  return (await call<{ state: string }, { ok: boolean; authorizeUrl: string; nonce: string; ticket: string }>("claimEbayConnectState")({ state })).data;
+  return (await call<{ state: string }, { ok: boolean; authorizeUrl: string; nonce: string; ticket: string; handoff?: string }>("claimEbayConnectState")({ state })).data;
 }
 export async function getEbayConnections(companyId: string) {
   const data = (await call<{ companyId: string }, { ok: boolean; connections: EbayConnection[]; configured: boolean; workspaceEnabled?: boolean; environment: string }>(
@@ -153,6 +154,16 @@ export async function revealRestrictedCustomer(companyId: string, orderId: strin
 // Codes into sentences. This is the ONLY place an eBay code becomes words —
 // a technical code must never reach the screen — and every English string
 // below has an entry in the other eleven languages (language.ts).
+//
+// EVERY ONE OF THE THREE TABLES IS READ THROUGH `ebayTableText`, and none of
+// them is ever indexed directly. They are plain object literals, so a bare
+// `TABLE[key]` answers for every key on `Object.prototype` as well as for the
+// words listed here: `reason=constructor` used to return a FUNCTION, which is
+// truthy, so it took the place of the fallback sentence and the seller was shown
+// an empty error banner. `ebayScreenRules.ebayTableText` is an own-property
+// lookup that returns a sentence or the fallback and nothing else; it lives in
+// that module because that module imports nothing and can therefore be executed
+// by a test, which this file — which reaches Firebase at module scope — cannot.
 // --------------------------------------------------------------------------
 
 const ERROR_TEXT: Record<string, string> = {
@@ -171,7 +182,7 @@ const ERROR_TEXT: Record<string, string> = {
 
 /** "" for the benign codes ("", truncated, paused_by_owner): they are not faults. */
 export function ebayErrorText(code: string): string {
-  return ERROR_TEXT[String(code || "").trim()] || "";
+  return ebayTableText(ERROR_TEXT, code, "");
 }
 
 /** Why a connection is not where it should be, whatever the code behind it. */
@@ -218,10 +229,12 @@ const REASON_TEXT: Record<string, string> = {
   exchange: "eBay did not complete the connection. Try again."
 };
 
-/** The `reason` the callback route redirects with, and verify's own reason codes. */
+/** The `reason` the callback route redirects with, and verify's own reason codes.
+ *  The route only ever redirects with a word from its own closed union, but this
+ *  is read from `window.location.search`, so the input is whatever a link says. */
 export function ebayReasonText(reason: string): string {
   const key = String(reason || "").trim();
-  return REASON_TEXT[key] || ebayErrorText(key) || "eBay did not complete the connection. Try again.";
+  return ebayTableText(REASON_TEXT, key, "") || ebayErrorText(key) || "eBay did not complete the connection. Try again.";
 }
 
 const EVENT_TEXT: Record<string, string> = {
@@ -251,7 +264,7 @@ const EVENT_TEXT: Record<string, string> = {
 };
 
 export function ebayEventText(type: string): string {
-  return EVENT_TEXT[String(type || "").trim()] || "Activity";
+  return ebayTableText(EVENT_TEXT, type, "Activity");
 }
 
 /**
@@ -313,4 +326,38 @@ export async function sealEbayTicket(ticket: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * An EDGE flow's binding, handed to the Worker on connect.nivadesk.app
+ * (docs/ebay-callback-edge.md). A top-level form POST, because the Worker must
+ * answer with the two Set-Cookie headers on ITS OWN host and then send the seller
+ * to eBay, and a fetch() could do neither. Nothing goes in a URL: the four values
+ * travel in the body, and the Worker verifies the ticket and logs none of them.
+ *
+ * Answers FALSE, and sends nobody anywhere, when the target is not one this page
+ * may post a binding to or when a field is missing (ebayScreenRules RULE 4).
+ * The referrer policy is left at the default on purpose: a no-referrer form sends
+ * "Origin: null", and the Worker refuses every origin but ours.
+ */
+export function submitEbayHandoff(handoff: unknown, input: { state?: unknown; nonce?: unknown; ticket?: unknown; authorizeUrl?: unknown }): boolean {
+  if (typeof document === "undefined" || typeof window === "undefined") return false;
+  const target = ebayHandoffTarget(handoff, window.location.hostname);
+  const fields = ebayHandoffFields(input);
+  if (!target || !fields) return false;
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = target;
+  form.enctype = "application/x-www-form-urlencoded";
+  form.style.display = "none";
+  for (const [name, value] of fields) {
+    const field = document.createElement("input");
+    field.type = "hidden";
+    field.name = name;
+    field.value = value;
+    form.appendChild(field);
+  }
+  document.body.appendChild(form);
+  form.submit();
+  return true;
 }

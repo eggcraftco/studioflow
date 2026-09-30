@@ -17,7 +17,7 @@ import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
   beginEbayConnect, getEbayConnections, verifyEbayConnection, updateEbayConnectionSettings,
   previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
-  setEbayNonceCookie, sealEbayTicket, ebayEventText, ebayReasonText, ebaySpecStatusText, ebayStatusLabel,
+  setEbayNonceCookie, sealEbayTicket, submitEbayHandoff, ebayEventText, ebayReasonText, ebaySpecStatusText, ebayStatusLabel,
   type EbayConnection, type EbayImportPreview, type EbayImportResult
 } from "@/lib/studioflow/ebay";
 import { ebayCallableErrorText } from "@/lib/studioflow/ebayScreenRules";
@@ -114,6 +114,14 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
   const startConnect = () => guard("connect", async () => {
     const result = await beginEbayConnect(companyId);
     if (!result?.authorizeUrl || !result?.ticket) { setError(t("eBay did not complete the connection. Try again.")); return; }
+    // A production (edge) flow returns through connect.nivadesk.app, so its
+    // binding is sealed THERE: the Worker receives it in a same-site form POST,
+    // sets both cookies on its own host and sends the seller on to eBay. Nothing
+    // is written on nivadesk.app for it (docs/ebay-callback-edge.md).
+    if (result.handoff) {
+      if (!submitEbayHandoff(result.handoff, result)) setError(t("eBay did not complete the connection. Try again."));
+      return;
+    }
     setEbayNonceCookie(result.state, result.nonce);
     if (!(await sealEbayTicket(result.ticket))) { setError(t("eBay did not complete the connection. Try again.")); return; }
     window.location.href = result.authorizeUrl;

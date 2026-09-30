@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { claimEbayConnectState, sealEbayTicket, setEbayNonceCookie } from "@/lib/studioflow/ebay";
+import { claimEbayConnectState, sealEbayTicket, setEbayNonceCookie, submitEbayHandoff } from "@/lib/studioflow/ebay";
 import { ebayStartLoginHref } from "@/lib/studioflow/ebayScreenRules";
 import { studioT } from "@/lib/studioflow/language";
 
@@ -46,6 +46,15 @@ export function EbayStartContent() {
         const result = await claimEbayConnectState(state);
         if (cancelled) return;
         if (!result?.authorizeUrl || !result?.ticket) { setError(t("eBay did not complete the connection. Try again.")); return; }
+        // A production (edge) flow is sealed on connect.nivadesk.app, not here: the
+        // Worker takes the binding in a same-site form POST, sets both cookies on
+        // its own host and sends the seller on (docs/ebay-callback-edge.md).
+        if (result.handoff) {
+          if (!submitEbayHandoff(result.handoff, { state, nonce: result.nonce, ticket: result.ticket, authorizeUrl: result.authorizeUrl })) {
+            setError(t("eBay did not complete the connection. Try again."));
+          }
+          return;
+        }
         // Both cookies are written in the browser that is about to be sent to
         // eBay, which is the whole point of this page: the nonce from here, and
         // the ticket by a response from our own origin, because a ticket cookie

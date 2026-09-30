@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, randomBytes } from "node:crypto";
 import { ebayNonceCookieName, ebayTicketCookieName } from "../../../lib/studioflow/ebayFlow";
-import { bucketFor, clientAddress, takeToken, type Bucket } from "../../../lib/studioflow/ebayAdmission";
-import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure } from "../../../lib/studioflow/ebayTicket";
+import { bucketFor, takeToken, untrustedBucketKey, type Bucket } from "../../../lib/studioflow/ebayAdmission";
+import { ebayTicketKey, verifyEbayTicketForFlow, type TicketFailure, type TicketResult } from "../../../lib/studioflow/ebayTicket";
 import { spendTicket } from "../../../lib/studioflow/ebayTicketSpend";
 
 // eBay's RuName holds one "accepted URL" per application, and the seller's
@@ -57,6 +57,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const CALLBACK = "https://europe-west2-eggcraft-studio.cloudfunctions.net/ebayOAuthCallback";
+// An isolated acceptance run points this route at an emulator, and nothing else
+// can: the override is honoured only in a NON-production build (next dev) and
+// only for a loopback target. `next build` inlines NODE_ENV as "production", so
+// on Hostinger the branch is dead code and the relay goes to CALLBACK whatever
+// the environment says — a mistyped variable there cannot aim a signed body.
+const LOOPBACK_RELAY = /^http:\/\/127\.0\.0\.1:\d{2,5}\/[A-Za-z0-9_\-/]+$/;
+function relayTarget(): string {
+  const override = String(process.env.NIVADESK_EBAY_CALLBACK_RELAY_URL || "");
+  if (process.env.NODE_ENV !== "production" && LOOPBACK_RELAY.test(override)) return override;
+  return CALLBACK;
+}
 
 // The same shapes the function enforces. They are checked here as an economy —
 // a scan then never costs a function invocation — and there as well, because the
@@ -97,8 +108,93 @@ const RELAY_TIMEOUT_MS = 45 * 1000;
 // it is meant to be reached first by anything that matters, and it is far above
 // any plausible rate of genuine phished landings — which are rare, because the
 // common case is a seller with cookies, who never reaches this path.
+//
+// AND THE PER-ADDRESS COUNTER IS NOT A LEVER OF ITS OWN — which is L1, the
+// callback's half of M1. It used to refuse FINALLY: thirty landings naming a
+// chosen address drained that key's bucket, and after that a genuine phished
+// landing from that address made no dispose POST at all, leaving eBay's code
+// both unregistered and unspent. The reasoning that allowed it was the ticket
+// route's word for word ("it binds one address, so it cannot be a kill switch
+// for anybody else"), and it has the same hole: the key is not a property of
+// the caller, it is a header the caller writes, so an attacker does not evade
+// that bucket, they AIM it. Here it is worse than at the sealing route, because
+// what a refusal withholds is not something the caller wanted — a disposal is
+// OUR defence for the seller whose code just landed, and an attacker who
+// triggers one "is doing our job". A bound that an attacker can point at a
+// victim to switch off the victim's own protection is upside down.
+//
+// So no refusal keyed on that value is final any more, and BOTH escapes from it
+// are keyed on something the caller cannot write:
+//
+//   * a landing whose TICKET VERIFIES — the one proof this route possesses at
+//     that point, a MAC only `beginEbayConnect` and `claimEbayConnectState` can
+//     produce — draws on a reserve keyed on the ticket's own MAC-covered state.
+//     That is M1's reserve, in the same shape and for the same reason: the one
+//     party who can exhaust it is somebody replaying a ticket of their own, and
+//     they spend their own flow's.
+//   * a landing with NO proof — the phished case, which is the one L1 executed —
+//     falls through to a reserve keyed on NOTHING AT ALL. Being global, it
+//     cannot be aimed: an attacker who wants a chosen address suppressed must
+//     drain it as well, which costs the same whoever they are naming.
+//
+// WHAT THAT BUYS AND WHAT IT DOES NOT, said plainly rather than rounded up.
+// Suppressing one named address went from thirty requests a minute to a hundred
+// and fifty — the address bucket plus the whole unproven reserve — against the
+// three hundred a minute that suppresses everybody. So the cheap lever is gone
+// and the expensive one is the flood we already reason about. It is NOT a proof
+// that a chosen address can never be suppressed, and this comment does not claim
+// one.
+//
+// AND THAT THREE HUNDRED A MINUTE IS NO LONGER A BLANKET REFUSAL. It was this
+// package's last standing residual, recorded in both admission scripts as the
+// thing neither M1 nor L1 closed, and it is the same sentence one bound further
+// out. The per-process bucket is keyed on nothing, so it cannot be AIMED — that
+// is why it was chosen as the final bound — but being keyed on nothing also
+// means it cannot tell anybody apart, and one caller can spend all of it. The
+// cheapest way is to send NO header at all, because `disposeAdmitted` returns
+// "ok" on an empty key and the per-key ration above never applies to the one
+// caller who matters. Three hundred cookie-less landings a minute then refused
+// EVERY other seller's disposal, a landing whose ticket VERIFIED included:
+// `mayDispose` returned false on "process" before it looked at the proof. That is
+// L1's own harm — eBay's code left unregistered and unspent — reached through the
+// bound L1 did not cover.
+//
+// So the proof is consulted at BOTH bounds now, and what it buys above the
+// process bucket is a bucket of its own, rationed by the per-flow reserve so that
+// no single flow can take more than a sixth of it.
+//
+// THE CEILING THEREFORE MOVES, and it is stated rather than waved at: from three
+// hundred signed POSTs a minute per process to three hundred and sixty. The extra
+// sixty are not anonymous — every one needs a MAC only `beginEbayConnect` and
+// `claimEbayConnectState` can produce, across at least six separate flows — which
+// is what keeps the anonymous-abuse bound real. An unprovable caller cannot reach
+// a token of the proven class at any rate, so the flood the per-process bucket
+// exists to stop pays exactly what it paid before.
 const DISPOSE_PER_ADDRESS_PER_MINUTE = 30;
 const DISPOSE_PER_PROCESS_PER_MINUTE = 300;
+// Keyed on the ticket's own MAC-covered state. The sealing route's number, for
+// the sealing route's reason.
+const DISPOSE_RESERVE_PER_FLOW_PER_MINUTE = 10;
+// Keyed on nothing. Sized so that one bucketing key can never take more than
+// half the process budget — thirty of its own plus this — which is the rationing
+// the per-address bucket exists to do, and all of it that survives L1.
+const DISPOSE_UNPROVEN_RESERVE_PER_MINUTE = 120;
+// THE PROVEN CLASS'S OWN CEILING, and the whole of what the fairness fix adds.
+//
+// Keyed on nothing, like the process bucket — but it is charged ONLY by a landing
+// whose ticket verifies, so the caller who can drain it is not the caller the
+// process bucket exists to stop. An anonymous flood cannot spend a single token
+// of it at any price: it is a MAC only `beginEbayConnect` and
+// `claimEbayConnectState` can produce, both authenticated and both
+// workspace-owner gated.
+//
+// It is rationed by the per-flow reserve above it — a landing reaches this bucket
+// only after taking one of its own flow's ten — so no single flow can take more
+// than a sixth of it, and draining it needs key-holder MACs across at least six
+// separate flows. That is what stops this from becoming the defect it closes: a
+// bound one caller can empty on their own is a bound one caller can point at
+// everybody else.
+const DISPOSE_PROVEN_PER_MINUTE = 60;
 const COUNTER_WINDOW_MS = 60 * 1000;
 const OPS_LOG_EVERY_MS = 60 * 1000;
 
@@ -119,14 +215,69 @@ const FUNCTION_REASONS: ReadonlySet<string> = new Set<Reason>([
 const SETTINGS = "https://nivadesk.app/settings?section=ebay";
 
 const disposeBuckets = new Map<string, Bucket>();
+const disposeFlowBuckets = new Map<string, Bucket>();
 const disposeProcessBucket: Bucket = { tokens: DISPOSE_PER_PROCESS_PER_MINUTE, atMs: 0 };
-function disposeAdmitted(address: string, nowMs: number): boolean {
+const disposeUnprovenBucket: Bucket = { tokens: DISPOSE_UNPROVEN_RESERVE_PER_MINUTE, atMs: 0 };
+const disposeProvenBucket: Bucket = { tokens: DISPOSE_PROVEN_PER_MINUTE, atMs: 0 };
+
+/** `ok`, or WHICH bound refused — because the caller treats them differently. */
+type DisposeAdmission = "ok" | "process" | "key";
+
+function disposeAdmitted(key: string, nowMs: number): DisposeAdmission {
   // The process bucket FIRST, so that omitting or spoofing the header does not
-  // skip the only bound that binds an adversary. An absent address used to mean
-  // "admit" here, with nothing above it.
-  if (!takeToken(disposeProcessBucket, DISPOSE_PER_PROCESS_PER_MINUTE, nowMs)) return false;
-  if (!address) return true;
-  return takeToken(bucketFor(disposeBuckets, address, DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs), DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs);
+  // skip the only bound that binds an adversary. An absent key used to mean
+  // "admit" here, with nothing above it. It is also what makes the ceiling
+  // argument above true: every landing that reaches the buckets below has
+  // already spent one of these.
+  if (!takeToken(disposeProcessBucket, DISPOSE_PER_PROCESS_PER_MINUTE, nowMs)) return "process";
+  if (!key) return "ok";
+  if (takeToken(bucketFor(disposeBuckets, key, DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs), DISPOSE_PER_ADDRESS_PER_MINUTE, nowMs)) return "ok";
+  return "key";
+}
+
+/**
+ * Whether the disposal goes out. L1 is in which refusals are reconsidered here;
+ * the fairness fix is that NEITHER of them is final against a proof any more.
+ *
+ * THE TWO BOUNDS ARE NOT FINAL FOR THE SAME REASON. `key` is keyed on a value the
+ * refused party chose, so a final refusal there is a lever an attacker points at
+ * a chosen seller (L1). `process` is keyed on nothing, so it cannot be aimed —
+ * but it also cannot tell anybody apart, and ONE caller can spend the whole of
+ * it: an empty key skips the ration above it, so three hundred cookie-less
+ * landings a minute used to refuse every seller's disposal at once, a verified
+ * one included. A bound one caller can empty on their own is a bound one caller
+ * can hold shut against everybody else.
+ *
+ * WHAT THE PROOF DRAWS ON IS RATIONED PER FLOW, and that is what makes recovery
+ * fair rather than a race the fastest caller wins: the reserve is keyed on the
+ * ticket's own MAC-covered state, so the only party who can exhaust it is
+ * somebody replaying a ticket of their own, and what they spend is their own
+ * flow's. Nobody can take another flow's share by asking sooner or more often.
+ *
+ * ABOVE THE PER-KEY BOUND that reserve is the whole of it: such a landing has
+ * already spent a process token, so honouring it moves no ceiling. ABOVE THE
+ * PROCESS BOUND it does move one, so it is charged to the proven class's own
+ * bucket as well — and that bucket is unreachable without a key holder's MAC, so
+ * the flood this route is bounded against cannot touch a token of it.
+ *
+ * A prover never does worse than an unprover: under `key` it tries its own
+ * reserve first and falls through to the same global reserve an unprover gets.
+ * Under `process` it does not fall through — that reserve sits below a bound
+ * which is final for unproven callers, and a proof must not become a way to raid
+ * what is being held back from a flood.
+ */
+function mayDispose(admission: DisposeAdmission, ticket: TicketResult, nowMs: number): boolean {
+  if (admission === "ok") return true;
+  if (ticket.ok && takeToken(bucketFor(disposeFlowBuckets, ticket.state, DISPOSE_RESERVE_PER_FLOW_PER_MINUTE, nowMs), DISPOSE_RESERVE_PER_FLOW_PER_MINUTE, nowMs)) {
+    // The per-key case is already paid for; the process case is not, and buys a
+    // token of the proven class's own bucket or nothing. A flow that spends its
+    // reserve here and finds that bucket empty has spent one of its own ten and
+    // nobody else's — the cost of a refusal stays inside the flow that asked.
+    return admission === "key" || takeToken(disposeProvenBucket, DISPOSE_PROVEN_PER_MINUTE, nowMs);
+  }
+  // No proof at all: the anonymous bound is final, exactly as it was.
+  if (admission === "process") return false;
+  return takeToken(disposeUnprovenBucket, DISPOSE_UNPROVEN_RESERVE_PER_MINUTE, nowMs);
 }
 
 // The example is throttled; the COUNT is not. A count over a throttled line
@@ -208,7 +359,7 @@ async function post(raw: string, key: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
   try {
-    const response = await fetch(CALLBACK, {
+    const response = await fetch(relayTarget(), {
       method: "POST",
       // No header this route was given: the seller's User-Agent, Referer, IP and
       // cookies stay on the first hop.
@@ -402,16 +553,26 @@ export async function GET(request: NextRequest) {
   // this code and spend it at eBay" — and it is subject to a counter, which is
   // exactly what the connect path above is not.
   //
-  // An exhausted counter here is the one place a landing leaves eBay's code
-  // UNREGISTERED as well as unspent, which is why the bound is a per-process one
-  // sized well above genuine traffic rather than a per-address one an attacker
-  // steps around. It is on deploy plan §4.2's list for that reason.
+  // An exhausted PER-PROCESS counter here is still the one place a landing leaves
+  // eBay's code UNREGISTERED as well as unspent, and it is on deploy plan §4.2's
+  // list for that reason — but it is final only for a caller who can prove
+  // NOTHING. Keyed on nothing a caller can write, it cannot be aimed; keyed on
+  // nothing at all, it also cannot tell anybody apart, so one caller could spend
+  // the whole of it and hold every seller's disposal shut at once. A landing
+  // whose ticket verifies is therefore no longer refused by it.
+  //
+  // The per-address bucket underneath it is NOT final and must not become final
+  // again — it is keyed on a header the caller writes, so a final refusal there
+  // is a lever an attacker points at a chosen seller rather than a bound an
+  // attacker steps around (L1). `mayDispose` is where both are decided.
   if (ticket.ok) countRefusal("replay", rid, nowMs); else countRefusal(ticket.failure, rid, nowMs);
-  const address = clientAddress(request.headers.get("x-forwarded-for"));
+  const bucketKey = untrustedBucketKey(request.headers.get("x-forwarded-for"));
   const raw = JSON.stringify({ v: 1, op: "dispose", rid, code });
   // Over the cap there is nothing the function would accept, so the request is
-  // not made rather than made to be refused.
-  if (Buffer.byteLength(raw, "utf8") <= MAX_BODY_BYTES && disposeAdmitted(address, nowMs)) {
+  // not made rather than made to be refused — and the `&&` keeps the buckets
+  // uncharged for a body that was never going to be sent.
+  if (Buffer.byteLength(raw, "utf8") <= MAX_BODY_BYTES
+    && mayDispose(disposeAdmitted(bucketKey, nowMs), ticket, nowMs)) {
     const sent = await post(raw, key);
     if (sent.status !== 200) console.error(`ebay callback dispose rid=${rid} status=${sent.status}`);
   }
