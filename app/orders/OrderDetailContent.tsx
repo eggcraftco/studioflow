@@ -1864,8 +1864,16 @@ function measuredCardMinimumHeight(cardId: OrderDetailCardId, frame: Element | n
     return total + element.scrollHeight + marginTop + marginBottom;
   }, paddingTop + paddingBottom);
 
-  return Math.min(Math.max(Math.ceil(measured + 4), 160), 1200);
+  return Math.min(Math.max(Math.ceil(measured + 4), 160), MEASURED_CARD_MAXIMUMS[cardId] ?? 1200);
 }
+
+// The Financial card is the one card whose content keeps growing with the order's own records — the payments
+// list and, in the Payment Links pilot, one row (and a row of buttons) per link. Capped at 1200 px like the others,
+// on a phone it ran out of room and the card below was drawn over its last rows (found in the S2 screens at 375 px:
+// Copy link / Show link / Cancel hidden under Priority / Risk). It may grow to fit what it holds.
+const MEASURED_CARD_MAXIMUMS: Partial<Record<OrderDetailCardId, number>> = {
+  financial: 4800
+};
 
 function elementOuterHeight(element: HTMLElement | null) {
   if (!element) return 0;
