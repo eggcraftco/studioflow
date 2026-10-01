@@ -30,6 +30,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { formatMinor, tabForStatus, type PaymentLinkRow } from "@/components/PaymentLinksPanel";
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
+import { usePaymentLinksAvailable } from "@/lib/studioflow/usePaymentLinksAvailable";
 
 type ListResult = {
   ok: boolean;
@@ -71,6 +72,9 @@ export default function OrderPaymentLinks({
   /** Whether this person may ask a customer for money. The server checks again. */
   canCreate: boolean;
 }) {
+  // The pilot gate, as the server answers it (S2). Outside the pilot this card
+  // does not exist: nothing is listed, nothing is asked, nothing is shown.
+  const available = usePaymentLinksAvailable(companyId);
   const [state, setState] = useState<ListResult | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -83,7 +87,7 @@ export default function OrderPaymentLinks({
   const latest = useRef(0);
 
   const load = useCallback(async () => {
-    if (!companyId || !orderId) return;
+    if (!companyId || !orderId || available !== true) return;
     const ticket = ++latest.current;
     setError("");
     try {
@@ -100,7 +104,7 @@ export default function OrderPaymentLinks({
       setState(null);
       setError(messageForError(e));
     }
-  }, [companyId, orderId]);
+  }, [companyId, orderId, available]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -175,6 +179,7 @@ export default function OrderPaymentLinks({
   const statusLabel = (status: string) =>
     status === "partially_refunded" ? t("Partially refunded") : t(status.charAt(0).toUpperCase() + status.slice(1));
 
+  if (available !== true) return null;
   if (error) {
     return (
       <div className="finance-payments-ledger" role="alert" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

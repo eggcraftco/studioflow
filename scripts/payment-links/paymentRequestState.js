@@ -113,17 +113,32 @@ function apply(current, event) {
 
   const next = Object.assign({}, state, { appliedEventIds: applied.concat([id]).slice(-50) });
   if (Number.isFinite(sequence) && sequence > Number(state.lastEventSequence || 0)) next.lastEventSequence = sequence;
-  if (stale) return { changed: true, state: next, reason: "stale_event_recorded_only" };
 
   // 3. The money facts, which are cumulative and therefore order-independent:
   // Stripe reports a charge's refunded TOTAL, not a delta, so taking the max is
   // both idempotent and safe under reordering.
+  //
+  // APPLIED BEFORE THE STALENESS RETURN, and that order is the fix for a real
+  // defect (S2, 1 Oct 2026). A refund is always CREATED after the payment it
+  // reverses, so when Stripe DELIVERS `charge.refunded` first, the payment's own
+  // event arrives carrying an older timestamp. The old reducer returned at the
+  // staleness check before reading its money: the payment never reached the
+  // ledger, the request stayed "open" over a card that had been charged, and
+  // the order went on asking the customer for the whole amount. Staleness may
+  // decide what a STATUS says; it must never decide whether money is counted.
   if (intent === "paid" && Number.isSafeInteger(Number(event.amountMinor)) && Number(event.amountMinor) > 0) {
     next.paidAmountMinor = Math.max(Number(state.paidAmountMinor || 0), Number(event.amountMinor));
   }
   if (intent === "refunded" && Number.isSafeInteger(Number(event.refundedTotalMinor))) {
     next.refundedAmountMinor = Math.max(Number(state.refundedAmountMinor || 0), Number(event.refundedTotalMinor));
   }
+
+  // A stale event that carries no money moves nothing else: an old
+  // "payment_failed" or "processing" must not touch a request a newer event
+  // already settled. A stale event that DOES carry money goes on below, where
+  // the rank rule still lets the status move forward only.
+  const carriesMoney = intent === "paid" || intent === "refunded";
+  if (stale && !carriesMoney) return { changed: true, state: next, reason: "stale_event_recorded_only" };
 
   // 4. A refund that arrives before its payment. We know the money moved back,
   // so we keep the amount, but we do NOT claim a paid state we never observed.
@@ -133,8 +148,11 @@ function apply(current, event) {
   }
 
   let target = intent;
-  if (intent === "refunded") {
-    const fully = event.fullyRefunded === true
+  // The payment that a refund was waiting for. Once both amounts are known the
+  // status says what happened to the money as a whole — partially or fully
+  // refunded — rather than "paid" over a refund the request already holds.
+  if (intent === "refunded" || (intent === "paid" && Number(next.refundedAmountMinor || 0) > 0)) {
+    const fully = (intent === "refunded" && event.fullyRefunded === true)
       || Number(next.refundedAmountMinor || 0) >= Number(next.paidAmountMinor || 0);
     target = fully ? "refunded" : "partially_refunded";
   }
@@ -164,7 +182,11 @@ function apply(current, event) {
 function ledgerRowFor(before, after, event) {
   const type = String(event && event.type ? event.type : "");
   const intent = EVENT_INTENT[type];
-  if (intent === "paid" && before.publicStatus !== "paid" && after.publicStatus === "paid") {
+  // Owed when the PAID AMOUNT first appears, not when the status first reads
+  // "paid": a payment whose refund was delivered first lands as
+  // partially_refunded and is still a payment. The ledger row's own id (the
+  // PaymentIntent) is what makes a second delivery write nothing.
+  if (intent === "paid" && Number(before.paidAmountMinor || 0) <= 0 && Number(after.paidAmountMinor || 0) > 0) {
     return { type: "payment", amountMinor: Number(after.paidAmountMinor || 0) };
   }
   if (intent === "refunded") {

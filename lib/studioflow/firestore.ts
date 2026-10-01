@@ -553,6 +553,9 @@ export type PaymentEntryDetail = {
   note: string;
   createdByUid: string;
   createdByEmail: string;
+  /** True on a row the Payment Links rail wrote for a Stripe TEST payment or
+   *  refund (orderLedger.mirrorRowFor, S2). Read-only: never written back. */
+  test?: boolean;
 };
 
 // One billable invoice line (gross / VAT-inclusive). When present, their sum drives the
@@ -2164,7 +2167,8 @@ function mapPayments(value: unknown): PaymentEntryDetail[] {
       method: stringValue(entry.method, ""),
       note: stringValue(entry.note, ""),
       createdByUid: stringValue(entry.createdByUid, ""),
-      createdByEmail: stringValue(entry.createdByEmail, "")
+      createdByEmail: stringValue(entry.createdByEmail, ""),
+      ...(entry.test === true ? { test: true } : {})
     };
   }).sort((first, second) => (second.date?.getTime() ?? 0) - (first.date?.getTime() ?? 0));
 }

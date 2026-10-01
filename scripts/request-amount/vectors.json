@@ -98,6 +98,18 @@
    "expect": 123456789
   },
   {
+   "typed": "1.234,56",
+   "currency": "GBP",
+   "expect": 123456,
+   "note": "S2: grouping dot and decimal comma (tr, de)"
+  },
+  {
+   "typed": "1,234.56",
+   "currency": "GBP",
+   "expect": 123456,
+   "note": "S2: grouping comma and decimal point (en)"
+  },
+  {
    "typed": "1.250.000",
    "currency": "GBP",
    "expect": 125000000
@@ -304,6 +316,18 @@
    "typed": "\u00a31,250",
    "currency": "GBP",
    "expect": "ambiguous"
+  },
+  {
+   "typed": "1.234",
+   "currency": "GBP",
+   "expect": "ambiguous",
+   "note": "S2: three digits after one separator read two ways"
+  },
+  {
+   "typed": "1,234",
+   "currency": "GBP",
+   "expect": "ambiguous",
+   "note": "S2: three digits after one separator read two ways"
   },
   {
    "typed": "12,50,00",
