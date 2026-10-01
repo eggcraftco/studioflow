@@ -340,6 +340,10 @@ export type OrderListItem = {
   previewImageUrl: string;
   customFields: Record<string, string>;
   extraStatuses: Record<string, string>;
+  /** `commerce.provider` as the common engine wrote it ("ebay", "square", …), "" when the order has no stamp. */
+  commerceProvider: string;
+  /** `orderSource` as the public order form wrote it ("inbound"), "" otherwise. */
+  orderSource: string;
 };
 
 export type ScheduleOrderItem = {
@@ -565,6 +569,8 @@ export type OrderChannelStamp = {
   provider: string; providerDisplayName: string; connectionDisplayName: string; connectionId: string; externalId: string; orderNumber: string;
   externalAdminUrl: string; platformStatus: string; paymentStatus: string; fulfillmentStatus: string; currency: string; grandTotal: string;
   externalUpdatedAt: string; lastAppliedAtMs: number; lastEventOrigin: string; reviewRequired: boolean; reviewReasons: string[];
+  /** The provider's own money, one concept per field (`commerce.money`, eBay since E1, 1 Oct 2026); null when the stamp has none. Read by lib/studioflow/ebayScreens.ts. */
+  money: Record<string, unknown> | null;
 };
 
 function channelStampValue(value: unknown): OrderChannelStamp | null {
@@ -578,7 +584,8 @@ function channelStampValue(value: unknown): OrderChannelStamp | null {
     externalAdminUrl: stringValue(v.externalAdminUrl, ""), platformStatus: stringValue(v.platformStatus, ""), paymentStatus: stringValue(v.paymentStatus, ""),
     fulfillmentStatus: stringValue(v.fulfillmentStatus, ""), currency: stringValue(v.currency, ""), grandTotal: stringValue(v.grandTotal, ""),
     externalUpdatedAt: stringValue(v.externalUpdatedAt, ""), lastAppliedAtMs: Number(v.lastAppliedAtMs) || 0, lastEventOrigin: stringValue(v.lastEventOrigin, ""),
-    reviewRequired: booleanValue(v.reviewRequired, false), reviewReasons: stringArrayValue(v.reviewReasons)
+    reviewRequired: booleanValue(v.reviewRequired, false), reviewReasons: stringArrayValue(v.reviewReasons),
+    money: v.money && typeof v.money === "object" && !Array.isArray(v.money) ? { ...(v.money as Record<string, unknown>) } : null
   };
 }
 
@@ -1645,7 +1652,11 @@ export async function loadRecentOrders(companyId: string, workspace?: WorkspaceC
         data.designLink
       ),
       customFields: recordStringValue(data.customFields),
-      extraStatuses: recordStringValue(data.extraStatuses)
+      extraStatuses: recordStringValue(data.extraStatuses),
+      commerceProvider: data.commerce && typeof data.commerce === "object" && !Array.isArray(data.commerce)
+        ? stringValue((data.commerce as Record<string, unknown>).provider, "")
+        : "",
+      orderSource: stringValue(data.orderSource, "")
     };
   });
 

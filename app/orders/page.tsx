@@ -47,7 +47,9 @@ import {
 import { saveOrderCardDisplaySettings } from "@/lib/studioflow/settingsActions";
 import {
   filterAndSortOrders,
+  ORDER_SOURCE_FILTERS,
   type OrderQuickFilterId,
+  type OrderSourceId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
@@ -150,6 +152,7 @@ export default function OrdersPage() {
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderQuickFilterId>("all");
+  const [orderSource, setOrderSource] = useState<OrderSourceId>("all");
   const [orderSortMode, setOrderSortMode] = useState<OrderSortMode>("smart");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
@@ -179,6 +182,10 @@ export default function OrdersPage() {
     // customer — the search box already matches customer names.
     const customerName = searchParams.get("customerName");
     if (customerName) setOrderSearch(customerName);
+    // The eBay card's "See eBay orders" lands here with ?source=ebay; only a
+    // word the source menu knows is taken, anything else leaves the filter alone.
+    const source = searchParams.get("source");
+    if (source && ORDER_SOURCE_FILTERS.some(item => item.id === source)) setOrderSource(source as OrderSourceId);
   }, [searchParams]);
 
   useEffect(() => {
@@ -357,8 +364,8 @@ export default function OrdersPage() {
     loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
   }, [orderFilter, workspace, user]);
   const filteredOrders = useMemo(
-    () => filterAndSortOrders(orderFilter === "trash" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode),
-    [orderFilter, orderSearch, orderSortMode, visibleOrders, deletedOrders]
+    () => filterAndSortOrders(orderFilter === "trash" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode, orderSource),
+    [orderFilter, orderSearch, orderSortMode, orderSource, visibleOrders, deletedOrders]
   );
   useEffect(() => {
     ordersCountRef.current = orders.length;
@@ -1023,6 +1030,8 @@ export default function OrdersPage() {
               onSortModeChange={setOrderSortMode}
               language={language}
               deletedCount={deletedOrders.length}
+              source={orderSource}
+              onSourceChange={setOrderSource}
             />
           </div>
 
@@ -1433,6 +1442,8 @@ export default function OrdersPage() {
               onSortModeChange={setOrderSortMode}
               language={language}
               deletedCount={deletedOrders.length}
+              source={orderSource}
+              onSourceChange={setOrderSource}
             />
             <button
               className={mobileSearchOpen ? "orders-mobile-search-toggle is-active" : "orders-mobile-search-toggle"}

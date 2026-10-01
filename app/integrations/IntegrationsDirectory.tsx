@@ -30,9 +30,9 @@ type Category = typeof categories[number];
  *   "comingSoon"  not available to customers: not deployed, or deployed only
  *                 against the provider's test environment.
  *
- * Today: 5 live (WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 9 limited
+ * Today: 5 live (WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 10 limited
  * (Shopify, Etsy, Xero, QuickBooks, Twilio, WhatsApp, Instagram Direct,
- * Amazon, DHL Express), 1 coming soon (eBay) — 15 cards. The evidence per row
+ * Amazon, DHL Express, eBay since 1 October 2026) — 15 cards. The evidence per row
  * is in docs/deploys/site-integrations-2026-09-28/README.md and, for the
  * second pass that added Instagram Direct and DHL Express and corrected the
  * Shopify sentence, docs/deploys/site-integrations-update-2026-09-28/README.md.
@@ -85,7 +85,9 @@ const integrations: Integration[] = [
   // logo file: the marks are Meta's and DHL's and are not redrawn, so the tiles
   // keep an initial, as the app's own integration tiles do.
   { name: "Instagram Direct", mark: "I", website: "https://www.instagram.com/", category: "Communication", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
-  { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: "A future connection for marketplace orders and workshop work.", detail: "The connection is built and runs against eBay's test environment only; eBay's sandbox cannot currently create test orders, so acceptance is waiting on eBay. Listing publication and marketplace stock updates are not part of it.", state: "comingSoon", note: "integrations.note.ebay" },
+  // eBay, 1 October 2026: a production, read-only connection accepted by eBay on a
+  // real seller account; open to named workspaces (appConfig/commerce.connectors.workspaces).
+  { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "limited", note: "integrations.note.ebay" },
   { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
   { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "limited", note: "integrations.note.dhl" },
 ];

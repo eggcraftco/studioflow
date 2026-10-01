@@ -32,7 +32,58 @@ export type FilterableOrder = {
   isDelivered?: boolean;
   customFields?: Record<string, string>;
   extraStatuses?: Record<string, string>;
+  /** The common engine's provider on an order it applied (`commerce.provider`), when the row carries it. */
+  commerceProvider?: string;
+  /** "inbound" on an order the public order form created (`orderSource`). */
+  orderSource?: string;
 };
+
+// ---- where an order came from (1 Oct 2026, package E3) ----------------------
+// Read from what the server writes, in this order: the engine's `commerce.provider`
+// (eBay, Square, WooCommerce, Shopify, Etsy, Amazon once applied by it), the
+// adapter's `customFields.Source` display word (the same providers, including the
+// orders written before the engine stamped them), the public order form's
+// `orderSource`. Anything else was added by hand.
+export type OrderSourceId = "all" | "ebay" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "inbound" | "manual";
+
+export const ORDER_SOURCE_FILTERS: Array<{ id: OrderSourceId; label: string }> = [
+  { id: "all", label: "All sources" },
+  { id: "ebay", label: "eBay" },
+  { id: "shopify", label: "Shopify" },
+  { id: "woocommerce", label: "WooCommerce" },
+  { id: "etsy", label: "Etsy" },
+  { id: "square", label: "Square" },
+  { id: "amazon", label: "Amazon" },
+  { id: "inbound", label: "Website" },
+  { id: "manual", label: "Added by hand" }
+];
+
+const SOURCE_WORDS: Record<string, Exclude<OrderSourceId, "all">> = {
+  ebay: "ebay", shopify: "shopify", woocommerce: "woocommerce", woo: "woocommerce", etsy: "etsy", square: "square", amazon: "amazon", inbound: "inbound", website: "inbound"
+};
+
+export function orderSourceOf(order: Pick<FilterableOrder, "commerceProvider" | "orderSource" | "customFields">): Exclude<OrderSourceId, "all"> {
+  const candidates = [order.commerceProvider, order.customFields?.["Source"], order.orderSource];
+  for (const candidate of candidates) {
+    const word = String(candidate ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (word && Object.prototype.hasOwnProperty.call(SOURCE_WORDS, word)) return SOURCE_WORDS[word];
+  }
+  return "manual";
+}
+
+export function orderMatchesSource(order: FilterableOrder, source: OrderSourceId) {
+  return source === "all" || orderSourceOf(order) === source;
+}
+
+/** The sources present in a list, in the menu's order, so the menu offers only real choices. */
+export function orderSourcesPresent(orders: FilterableOrder[]): OrderSourceId[] {
+  const present = new Set(orders.map(orderSourceOf));
+  return ORDER_SOURCE_FILTERS.map(item => item.id).filter(id => id !== "all" && present.has(id as Exclude<OrderSourceId, "all">));
+}
+
+export function sourceFilterCount(orders: FilterableOrder[], source: OrderSourceId) {
+  return orders.filter(order => orderMatchesSource(order, source)).length;
+}
 
 export const ORDER_QUICK_FILTERS: Array<{ id: OrderQuickFilterId; label: string }> = [
   { id: "all", label: "All" },
@@ -247,10 +298,11 @@ export function filterAndSortOrders<T extends FilterableOrder>(
   orders: T[],
   query: string,
   filter: OrderQuickFilterId,
-  sortMode: OrderSortMode
+  sortMode: OrderSortMode,
+  source: OrderSourceId = "all"
 ) {
   return sortOrdersForMode(
-    orders.filter(order => orderMatchesSearch(order, query)).filter(order => orderMatchesQuickFilter(order, filter)),
+    orders.filter(order => orderMatchesSearch(order, query)).filter(order => orderMatchesQuickFilter(order, filter)).filter(order => orderMatchesSource(order, source)),
     sortMode
   );
 }

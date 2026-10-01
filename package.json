@@ -22,7 +22,8 @@
     "test:live-tracking": "node scripts/check-live-tracking.mjs",
     "test:customer-card": "node scripts/check-customer-card-visibility.mjs",
     "test:production-panel": "node scripts/check-production-panel.mjs",
-    "test:home-order-scope": "node scripts/check-home-order-scope.mjs"
+    "test:home-order-scope": "node scripts/check-home-order-scope.mjs",
+    "test:ebay-screens": "node scripts/check-ebay-screens.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

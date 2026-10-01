@@ -112,6 +112,7 @@ import {
   type ProductionStage
 } from "@/lib/studioflow/production";
 import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
+import { EbayOrderBlock } from "./EbayOrderBlock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
@@ -1429,8 +1430,11 @@ function ShopifySourceStrip({
 const CHANNEL_SOURCES = ["Square", "WooCommerce", "Etsy"];
 function ChannelSourceStrip({
   order,
+  showMoney = true,
 }: {
   order: { customFields: Record<string, string>; commerce: OrderChannelStamp | null; designLink: string };
+  /** Financial Info gate: the platform's total is money, so a member without it sees the strip without the amount. */
+  showMoney?: boolean;
 }) {
   const language = useContext(DetailLanguageContext);
   const t = (text: string) => studioT(text, language);
@@ -1438,6 +1442,7 @@ function ChannelSourceStrip({
   const stamp = order.commerce;
   const source = (stamp?.providerDisplayName || cf["Source"] || "").trim();
   if (source === "Shopify" && !stamp) return null;   // the Shopify strip above owns that case
+  if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;   // EbayOrderBlock below owns eBay
   if (!stamp && !CHANNEL_SOURCES.includes(source)) return null;
   const field = (suffix: string) => (cf[`${source} ${suffix}`] || "").trim();
   const number = stamp?.orderNumber || field("Order Number") || field("Receipt ID");
@@ -1458,7 +1463,7 @@ function ChannelSourceStrip({
       {location ? <span className="shopify-source-item">· {t("Location")}: {location}</span> : null}
       {platformStatus ? <span className="shopify-source-item">· {t("Platform status")}: {platformStatus}</span> : null}
       {paymentStatus ? <span className="shopify-source-item">· {t("Payment")}: {paymentStatus.replace(/_/g, " ")}</span> : null}
-      {total ? <span className="shopify-source-item">· {total} {currency}</span> : null}
+      {total && showMoney ? <span className="shopify-source-item">· {total} {currency}</span> : null}
       {stamp?.reviewRequired ? <span className="shopify-source-item">· {t("Needs attention")}</span> : null}
       {link ? (
         <a className="shopify-source-link" href={link} target="_blank" rel="noreferrer">
@@ -9315,7 +9320,8 @@ export function OrderDetailContent({
 
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
-      <ChannelSourceStrip order={order} />
+      <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
+      <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
 
       {allCardsHidden ? (

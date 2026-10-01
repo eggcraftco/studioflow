@@ -1,5 +1,6 @@
+import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { db, functions } from "@/lib/firebase/client";
 import { ebayNonceCookieName } from "@/lib/studioflow/ebayFlow";
 import { ebayHandoffFields, ebayHandoffTarget, ebayTableText } from "@/lib/studioflow/ebayScreenRules";
 
@@ -54,6 +55,8 @@ export type EbayConnection = {
   lastSuccessAtMs: number;
   lastVerifiedAtMs: number;
   lastFullReconciliationAtMs: number;
+  /** The row's `importFinishedAtMs`, once the public view exposes it (server package E2); absent today. */
+  importFinishedAtMs?: number;
   lastErrorCode: string;
   lastErrorAtMs: number;
   /** When the 18-month refresh authorisation should be renewed by. 0 = unknown. */
@@ -134,6 +137,45 @@ export async function retryEbayImportFailures(companyId: string, connectionId: s
 }
 export async function syncEbayNow(companyId: string, connectionId: string) {
   return (await call<{ companyId: string; connectionId: string }, EbaySyncResult>("syncEbayNow")({ companyId, connectionId })).data;
+}
+/**
+ * The records the card's counts come from, beside the connection row (package
+ * E3). Every one is the server's: the health record the connector touches, the
+ * review queue the engine writes, the parked queue the plan limit fills, and a
+ * count the database itself computes over the orders the connector wrote. Each
+ * is read on its own and each failure is its own `null`, so a card whose review
+ * queue cannot be read still shows the connection. Only NUMBERS come back here:
+ * the review queue's rows carry the buyer's name and the total, and the card has
+ * no use for either, so they are dropped at this door.
+ */
+export type EbayHealthOrders = { state: string; lastSuccessAtMs?: number | null; lastAttemptAtMs?: number | null; pendingRetries?: number; deadLetters?: number };
+export async function getEbayHealthOrders(companyId: string, connectionId: string): Promise<EbayHealthOrders | null> {
+  const data = (await call<{ companyId: string; provider: string }, { connections?: { provider: string; connectionId: string; health?: Record<string, EbayHealthOrders> }[] }>(
+    "getCommerceHealth")({ companyId, provider: "ebay" })).data;
+  const row = (data?.connections ?? []).find((entry) => entry.provider === "ebay" && entry.connectionId === connectionId);
+  return row?.health?.orders ?? null;
+}
+export async function countEbayReviewItems(companyId: string): Promise<number> {
+  const data = (await call<{ companyId: string }, { items?: { provider: string }[] }>("listCommerceReviewQueue")({ companyId })).data;
+  return (data?.items ?? []).filter((item) => item.provider === "ebay").length;
+}
+export async function countEbayHeldOrders(companyId: string): Promise<number> {
+  const data = (await call<{ companyId: string }, { held?: { provider: string }[] }>("listHeldIntegrationOrders")({ companyId })).data;
+  return (data?.held ?? []).filter((row) => row.provider === "ebay").length;
+}
+/**
+ * How many eBay orders this workspace holds: a count the database computes
+ * (an aggregation, no order is downloaded) over `commerce.provider == "ebay"`,
+ * the stamp the common engine writes on every order it applies — by the import,
+ * its Retry, Sync now, the sweeps and the event worker alike. The connection
+ * row's `importCounters` cannot stand in for it: the separate Retry never adds
+ * to them. Orders in the Trash are counted too (the count cannot exclude a field
+ * that most orders do not carry). The rules refuse the query to a member who may
+ * not list the workspace's orders, and the tile then shows a dash.
+ */
+export async function countEbayOrders(companyId: string): Promise<number> {
+  const snapshot = await getCountFromServer(query(collection(db, "siparisler"), where("companyId", "==", companyId), where("commerce.provider", "==", "ebay")));
+  return snapshot.data().count;
 }
 /** eBay has no revoke endpoint: this destroys our copy of the tokens. */
 export async function disconnectEbay(companyId: string, connectionId: string) {

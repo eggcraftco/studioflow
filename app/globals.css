@@ -33198,3 +33198,204 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
     display: none;
   }
 }
+
+/* eBay screens (1 Oct 2026, package E3): the source section of the order filter
+   menu, the order page's eBay block and the Settings card's count tiles. */
+.order-filter-menu-heading {
+  margin: 6px 12px 2px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ebay-order-block {
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.ebay-order-block .shopify-source-badge {
+  background: rgba(37, 99, 235, 0.16);
+  color: #1d4ed8;
+}
+
+.ebay-order-block .shopify-source-link {
+  color: #1d4ed8;
+}
+
+.ebay-order-block__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-basis: 100%;
+}
+
+/* eBay's money, one concept per line (commerce.money); fee and payout lines are information only. */
+.ebay-order-block__money {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 14px;
+  flex-basis: 100%;
+  margin: 2px 0 0;
+}
+
+.ebay-order-block__money > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ebay-order-block__money dt {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.ebay-order-block__money dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ebay-order-block__money .is-info dd {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* The payout sentence and other-currency amounts take a whole row pair, not one narrow column. */
+.ebay-order-block__money > [data-ebay-money-line="seller_payout"],
+.ebay-order-block__money > [data-ebay-money-line="other_currency"] {
+  grid-column: span 2;
+}
+
+/* Long seller names and translated statuses wrap instead of pushing the page sideways on a phone. */
+.ebay-order-block .shopify-source-item {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ebay-order-block .due-pill {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.ebay-order-block__note {
+  flex-basis: 100%;
+  white-space: normal;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.ebay-card-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.ebay-card-counts > a,
+.ebay-card-counts > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.ebay-card-counts strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.ebay-card-counts small {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ebay-card-counts > a:hover {
+  border-color: #1d4ed8;
+}
+
+.ebay-attention {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--danger-soft);
+}
+
+.ebay-attention.is-notice {
+  background: var(--warning-soft);
+}
+
+.ebay-attention .layout-error,
+.ebay-attention .ebay-attention__text {
+  margin: 0;
+  flex: 1 1 240px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ebay-attention__text {
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* The card's facts as label / value rows (the shared list has no row layout of its own). */
+[data-ebay-card] .settings-rule-list {
+  list-style: none;
+  margin: 12px 0 4px;
+  padding: 0;
+  gap: 0;
+}
+
+[data-ebay-card] .settings-rule-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+[data-ebay-card] .settings-rule-list li > span:first-child {
+  color: var(--muted);
+  font-size: 13px;
+  flex: 0 0 auto;
+  max-width: 48%;
+}
+
+.ebay-card-seller {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+[data-ebay-card] .settings-rule-list li > span:last-child {
+  text-align: end;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+body[data-studio-theme="dark"] .ebay-order-block {
+  background: rgba(96, 165, 250, 0.12);
+}
+
+body[data-studio-theme="dark"] .ebay-order-block .shopify-source-badge,
+body[data-studio-theme="dark"] .ebay-order-block .shopify-source-link {
+  color: #93c5fd;
+}
+
+body[data-studio-theme="dark"] .ebay-order-block .due-pill:not(.warning):not(.danger):not(.success) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}

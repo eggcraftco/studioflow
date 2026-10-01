@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
-import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 
 // Faz 2 / OBS-003+004 — freshness per data type per connection, and the
@@ -37,7 +37,9 @@ type CommerceReviewRow = {
 };
 // §10.5 — the review reasons the engine writes, in the merchant's words.
 const REVIEW_REASON_LABELS: Record<string, string> = {
-  ad_hoc_line_item: "Item not in the catalogue", no_line_items: "No line items", missing_total: "Missing total", unresolved_variation: "Unresolved variation"
+  ad_hoc_line_item: "Item not in the catalogue", no_line_items: "No line items", missing_total: "Missing total", unresolved_variation: "Unresolved variation",
+  // eBay writes this one for every order whose tax side it cannot tell (1 Oct 2026: the real connection's only review item).
+  tax_responsibility_unknown: "Who collects the tax is unknown"
 };
 const COMMERCE_STATUS_LABELS: Record<string, string> = {
   applied: "Applied", retrying: "Retrying", dead: "Dead", skipped: "Skipped", duplicate: "Duplicate", stale: "Stale", noop: "No change",
@@ -67,10 +69,25 @@ function commerceAgoText(ms: number | null | undefined, t: (text: string) => str
   return `${Math.round(diff / 86400000)} ${t("days ago")}`;
 }
 
-export function CommerceSyncHealthCard({ workspace, language = "English", provider }: { workspace: WorkspaceContext; language?: string; provider: string }) {
+export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true }: {
+  workspace: WorkspaceContext; language?: string; provider: string;
+  /**
+   * False when the provider's own card states the connection's freshness (eBay,
+   * package E3). The connector's connect flow stamps this record as a "success"
+   * before any order was read, so for eBay the row above — "Last connection
+   * check" and "Last successful order sync" from the connection itself — is the
+   * truthful one, and one screen must not carry two different answers.
+   */
+  freshness?: boolean;
+}) {
   const t = (text: string) => studioT(text, language);
   const companyId = workspace.id.trim();
   const isOwner = workspace.role === "owner";
+  // The review rows carry the buyer's name and the order's total. A member without
+  // Orders sees neither; without Financial Info, no total (package E3, the gates
+  // the order screens already apply).
+  const canSeeOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
+  const canSeeMoney = canSeeOrders && workspaceAccessAllows(workspace.memberAccess, "financialInfo");
   const [connections, setConnections] = useState<CommerceHealthConnection[] | null>(null);
   const [card, setCard] = useState<CommerceHealthCard | null>(null);
   const [events, setEvents] = useState<CommerceEventRow[]>([]);
@@ -93,7 +110,10 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
       setReview((queue.data?.items ?? []).filter((row) => row.provider === provider));
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not load."));
+      // A callable that fails without a sentence of its own answers a bare code word
+      // ("internal", "unavailable"); the screen says "Could not load." instead (package E3).
+      const message = err instanceof Error ? err.message.trim() : "";
+      setError(message && !/^[a-z]+(-[a-z]+)*$/.test(message) ? message : t("Could not load."));
       setConnections([]);
     }
   }, [companyId, provider, language]);
@@ -131,12 +151,14 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
   const stateClass: Record<string, string> = { fresh: "due-pill success", stale: "due-pill warning", never: "due-pill", unsupported: "due-pill" };
 
   return (
-    <section className="card app-card">
+    <section className="card app-card" id="commerce-sync-health">
       <CardTitle icon="dashboard" eyebrow={t("Sync health")} title={t("Sync health")} />
       <p className="muted-copy">{t("Freshness per data type for this connection, and the events behind it.")}</p>
       {error ? <p className="layout-error">{error}</p> : null}
       {connections === null ? (
         <p className="muted-copy">{t("Loading…")}</p>
+      ) : !freshness ? (
+        <p className="muted-copy" style={{ fontSize: 12.5 }} data-commerce-health-freshness="on-provider-card">{t("The connection's freshness is on the eBay card above.")}</p>
       ) : connections.length === 0 ? (
         <div>
           <span className="due-pill">{t(EMPTY_STATE_LABEL[card?.state ?? "never_synced"] ?? "Never synced")}</span>
@@ -178,7 +200,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
               {review.map((row) => (
                 <div key={row.orderId} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12.5 }}>
                   <span className="due-pill warning">{row.providerDisplayName || row.provider}</span>
-                  <span>#{row.orderNumber || row.externalId}{row.customerName ? ` · ${row.customerName}` : ""}{row.grandTotal ? ` · ${row.grandTotal} ${row.currency || ""}` : ""}</span>
+                  <span>#{row.orderNumber || row.externalId}{canSeeOrders && row.customerName ? ` · ${row.customerName}` : ""}{canSeeMoney && row.grandTotal ? ` · ${row.grandTotal} ${row.currency || ""}` : ""}</span>
                   <span className="muted-copy">{row.reasons.map((r) => t(REVIEW_REASON_LABELS[r] || r)).join(", ")}</span>
                   <a className="button secondary" style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 }} href={`/orders/${encodeURIComponent(row.orderId)}`}>{t("Open order")}</a>
                   {isOwner ? (
