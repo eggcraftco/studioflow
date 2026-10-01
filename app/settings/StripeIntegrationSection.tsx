@@ -164,9 +164,13 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
           ) : null}
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            {status === "disconnected" || status === "onboarding" ? (
+            {status === "disconnected" || status === "onboarding" || status === "restricted" ? (
+              // A restricted account is one Stripe is still asking about: the
+              // owner must be able to go back and answer, and the server resumes
+              // onboarding on the SAME account (beginStripeConnectOnboarding
+              // reuses the stored account id), so no second account is made.
               <button type="button" className="button" disabled={!isOwner || busy === "connect"} onClick={() => void connect()}>
-                {busy === "connect" ? t("Opening…") : status === "onboarding" ? t("Continue with Stripe") : t("Connect Stripe")}
+                {busy === "connect" ? t("Opening…") : status === "disconnected" ? t("Connect Stripe") : t("Continue with Stripe")}
               </button>
             ) : null}
             <button type="button" className="button secondary" disabled={!isOwner || busy === "refresh"} onClick={() => void recheck()}>
