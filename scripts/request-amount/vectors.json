@@ -1,0 +1,567 @@
+{
+ "about": "How a payment-link amount typed or pasted on any keyboard becomes minor units. Web (studioflow-web/lib/studioflow/money.ts parseRequestAmount), Apple (EGGcraft/MoneyInput.swift nvParseRequestAmount) and Android (util/MoneyInput.kt parseRequestAmount) all run these, in several locales, and must give the SAME answer in every locale: the amount meant, or the refusal named here. Never a different number.",
+ "reasons": [
+  "empty",
+  "not_positive",
+  "unreadable",
+  "wrong_currency",
+  "ambiguous",
+  "too_many_decimals",
+  "no_decimals",
+  "misplaced_grouping"
+ ],
+ "locales": [
+  "en-GB",
+  "tr-TR",
+  "de-DE",
+  "fr-FR",
+  "es-ES",
+  "it-IT",
+  "pt-PT",
+  "ru-RU",
+  "ja-JP",
+  "zh-CN",
+  "ar",
+  "hi-IN",
+  "de-CH",
+  "en-US"
+ ],
+ "cases": [
+  {
+   "typed": "12,50",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "12.50",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "12,5",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "12.5",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "12",
+   "currency": "GBP",
+   "expect": 1200
+  },
+  {
+   "typed": "0,75",
+   "currency": "GBP",
+   "expect": 75
+  },
+  {
+   "typed": ",75",
+   "currency": "GBP",
+   "expect": 75
+  },
+  {
+   "typed": "12,",
+   "currency": "GBP",
+   "expect": 1200
+  },
+  {
+   "typed": "1,25",
+   "currency": "GBP",
+   "expect": 125
+  },
+  {
+   "typed": "00012.50",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "1.250,00",
+   "currency": "GBP",
+   "expect": 125000
+  },
+  {
+   "typed": "1,250.00",
+   "currency": "GBP",
+   "expect": 125000
+  },
+  {
+   "typed": "1.234.567,89",
+   "currency": "GBP",
+   "expect": 123456789
+  },
+  {
+   "typed": "1,234,567.89",
+   "currency": "GBP",
+   "expect": 123456789
+  },
+  {
+   "typed": "1.250.000",
+   "currency": "GBP",
+   "expect": 125000000
+  },
+  {
+   "typed": "1,250,000",
+   "currency": "GBP",
+   "expect": 125000000
+  },
+  {
+   "typed": "\u00a31,250.00",
+   "currency": "GBP",
+   "expect": 125000
+  },
+  {
+   "typed": " 12,50 ",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "GBP 12.50",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "gbp12.50",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "12.50 GBP",
+   "currency": "GBP",
+   "expect": 1250
+  },
+  {
+   "typed": "1 250,50",
+   "currency": "GBP",
+   "expect": 125050,
+   "note": "plain space grouping"
+  },
+  {
+   "typed": "1\u00a0250,50",
+   "currency": "GBP",
+   "expect": 125050,
+   "note": "no-break space (ru)"
+  },
+  {
+   "typed": "1\u202f250,50",
+   "currency": "GBP",
+   "expect": 125050,
+   "note": "narrow no-break space (fr)"
+  },
+  {
+   "typed": "1.250,00 \u20ac",
+   "currency": "EUR",
+   "expect": 125000
+  },
+  {
+   "typed": "\u20ac 1.250,00",
+   "currency": "EUR",
+   "expect": 125000
+  },
+  {
+   "typed": "12,50 \u20ac",
+   "currency": "EUR",
+   "expect": 1250
+  },
+  {
+   "typed": "12,50 TL",
+   "currency": "TRY",
+   "expect": 1250
+  },
+  {
+   "typed": "\u20ba1.250,00",
+   "currency": "TRY",
+   "expect": 125000
+  },
+  {
+   "typed": "CHF 1'250.50",
+   "currency": "CHF",
+   "expect": 125050,
+   "note": "Swiss apostrophe grouping"
+  },
+  {
+   "typed": "1\u2019250.50",
+   "currency": "CHF",
+   "expect": 125050,
+   "note": "typographic apostrophe"
+  },
+  {
+   "typed": "A$12.50",
+   "currency": "AUD",
+   "expect": 1250
+  },
+  {
+   "typed": "$12.50",
+   "currency": "USD",
+   "expect": 1250
+  },
+  {
+   "typed": "$12.50",
+   "currency": "CAD",
+   "expect": 1250
+  },
+  {
+   "typed": "12.50 \u062f.\u0625",
+   "currency": "AED",
+   "expect": 1250
+  },
+  {
+   "typed": "\uff11\uff12\uff0e\uff15\uff10",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "full-width digits and dot"
+  },
+  {
+   "typed": "\uff11\uff12\uff0c\uff15\uff10",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "full-width comma"
+  },
+  {
+   "typed": "\u0661\u0662\u066b\u0665\u0660",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "Arabic-Indic digits, Arabic decimal mark"
+  },
+  {
+   "typed": "\u0661\u066c\u0662\u0665\u0660\u066b\u0665\u0660",
+   "currency": "GBP",
+   "expect": 125050,
+   "note": "Arabic thousands mark"
+  },
+  {
+   "typed": "\u06f1\u06f2\u066b\u06f5\u06f0",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "Extended Arabic-Indic digits"
+  },
+  {
+   "typed": "\u0967\u0968.\u096b\u0966",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "Devanagari digits"
+  },
+  {
+   "typed": "12\u066b50",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "ASCII digits, Arabic decimal mark"
+  },
+  {
+   "typed": "\u20ac12.50",
+   "currency": "GBP",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "EUR 12.50",
+   "currency": "GBP",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "$12.50",
+   "currency": "GBP",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "12,50 TL",
+   "currency": "GBP",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "1.250,00 \u20ac",
+   "currency": "GBP",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "12.50 abc",
+   "currency": "GBP",
+   "expect": "wrong_currency",
+   "note": "any three letters read as an ISO code"
+  },
+  {
+   "typed": "1,250",
+   "currency": "GBP",
+   "expect": "ambiguous"
+  },
+  {
+   "typed": "1.250",
+   "currency": "GBP",
+   "expect": "ambiguous"
+  },
+  {
+   "typed": "12,505",
+   "currency": "GBP",
+   "expect": "ambiguous"
+  },
+  {
+   "typed": "999.999",
+   "currency": "GBP",
+   "expect": "ambiguous"
+  },
+  {
+   "typed": "\u00a31,250",
+   "currency": "GBP",
+   "expect": "ambiguous"
+  },
+  {
+   "typed": "12,50,00",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1.2.3",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1,25,000.00",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1.250,00,00",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "12,5.00",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1,2345.00",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "12.505.5",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "12..50",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "12 50",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1 2345",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "1 250'000",
+   "currency": "GBP",
+   "expect": "misplaced_grouping"
+  },
+  {
+   "typed": "0,750",
+   "currency": "GBP",
+   "expect": "too_many_decimals"
+  },
+  {
+   "typed": "12,5055",
+   "currency": "GBP",
+   "expect": "too_many_decimals"
+  },
+  {
+   "typed": "1234,567",
+   "currency": "GBP",
+   "expect": "too_many_decimals"
+  },
+  {
+   "typed": "0.001",
+   "currency": "GBP",
+   "expect": "too_many_decimals"
+  },
+  {
+   "typed": "1 250,505",
+   "currency": "GBP",
+   "expect": "too_many_decimals"
+  },
+  {
+   "typed": "12a50",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "12/50",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "12;50",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "12.50e3",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "(12.50)",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "Rs.1250",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "12 50x",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "1234567890123456",
+   "currency": "GBP",
+   "expect": "unreadable"
+  },
+  {
+   "typed": "",
+   "currency": "GBP",
+   "expect": "empty"
+  },
+  {
+   "typed": "   ",
+   "currency": "GBP",
+   "expect": "empty"
+  },
+  {
+   "typed": "abc",
+   "currency": "GBP",
+   "expect": "empty"
+  },
+  {
+   "typed": "\u00a3",
+   "currency": "GBP",
+   "expect": "empty"
+  },
+  {
+   "typed": ",",
+   "currency": "GBP",
+   "expect": "empty"
+  },
+  {
+   "typed": "0",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "0,00",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "-5",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "-12,50",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "\u221212,50",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "- \u00a312.50",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "12-50",
+   "currency": "GBP",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "1250",
+   "currency": "JPY",
+   "expect": 1250
+  },
+  {
+   "typed": "1,250",
+   "currency": "JPY",
+   "expect": 1250
+  },
+  {
+   "typed": "1.250",
+   "currency": "JPY",
+   "expect": 1250
+  },
+  {
+   "typed": "1 250",
+   "currency": "JPY",
+   "expect": 1250
+  },
+  {
+   "typed": "\u00a51,250",
+   "currency": "JPY",
+   "expect": 1250
+  },
+  {
+   "typed": "1.250.000",
+   "currency": "JPY",
+   "expect": 1250000
+  },
+  {
+   "typed": "12,50",
+   "currency": "JPY",
+   "expect": "no_decimals"
+  },
+  {
+   "typed": "1.250,5",
+   "currency": "JPY",
+   "expect": "no_decimals"
+  },
+  {
+   "typed": "1,250.00",
+   "currency": "JPY",
+   "expect": "no_decimals"
+  },
+  {
+   "typed": "0,5",
+   "currency": "JPY",
+   "expect": "no_decimals"
+  },
+  {
+   "typed": "0",
+   "currency": "JPY",
+   "expect": "not_positive"
+  },
+  {
+   "typed": "\u20ac1,250",
+   "currency": "JPY",
+   "expect": "wrong_currency"
+  },
+  {
+   "typed": "1\u3000250,50",
+   "currency": "GBP",
+   "expect": 125050,
+   "note": "ideographic space (Japanese IME)"
+  },
+  {
+   "typed": "\ufeff12,50",
+   "currency": "GBP",
+   "expect": 1250,
+   "note": "byte-order mark, as pasted from some files"
+  },
+  {
+   "typed": "12\u200b50",
+   "currency": "GBP",
+   "expect": "unreadable",
+   "note": "zero-width space is not a space"
+  }
+ ]
+}
