@@ -113,6 +113,7 @@ import {
 } from "@/lib/studioflow/production";
 import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
 import { EbayOrderBlock } from "./EbayOrderBlock";
+import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
@@ -9323,6 +9324,7 @@ export function OrderDetailContent({
       <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
+      <EbayOrderRefreshButton order={order} language={detailLanguage} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">

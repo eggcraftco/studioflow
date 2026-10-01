@@ -14,6 +14,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
+import { EbayPreviewList } from "./EbayPreviewList";
 import {
   beginEbayConnect, getEbayConnections, verifyEbayConnection, updateEbayConnectionSettings,
   previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
@@ -337,6 +338,10 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
           </p>
         ) : null}
         {/* E2 slot: the selectable Preview list and "Refresh order" mount here (their own components); nothing in this card is theirs. */}
+        {isOwner && importDone && preview ? (
+          <EbayPreviewList companyId={companyId} connectionId={connection.id} preview={preview} includeUnpaid={includeUnpaid} includeCancelled={includeCancelled}
+            language={language} disabled={connection.status !== "connected"} onImported={async () => { await refresh(true); }} />
+        ) : null}
         <p className="muted-copy">{t("Listings and stock stay managed on eBay.")}</p>
       </section>
 
@@ -385,6 +390,10 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
               {" · "}{t("Cancelled")}: {preview.cancelled}
               {preview.marketplaces.length ? ` · ${t("eBay sites")}: ${preview.marketplaces.join(", ")}` : ""}
             </p>
+          ) : null}
+          {preview ? (
+            <EbayPreviewList companyId={companyId} connectionId={connection.id} preview={preview} includeUnpaid={includeUnpaid} includeCancelled={includeCancelled}
+              language={language} disabled={connection.status !== "connected"} onImported={async () => { await refresh(true); }} />
           ) : null}
           {imported ? (
             <p className="success-copy">
