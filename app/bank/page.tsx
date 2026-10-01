@@ -14,13 +14,14 @@ import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "fi
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import PaymentLinksPanel from "@/components/PaymentLinksPanel";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
@@ -309,7 +310,7 @@ function BankPageContent() {
   const [filesPicker, setFilesPicker] = useState<{ open: boolean; loading: boolean; files: Array<{ id: string; displayName: string; fileName: string; fileType: string }>; search: string }>({ open: false, loading: false, files: [], search: "" });
   const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
   // Banking tabs + the transaction drawer.
-  type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules";
+  type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules" | "payment-links";
   // Faz 5: the feed has more than one source now (bank, PayPal); the chips narrow every list and total.
   const [sourceFilter, setSourceFilter] = useState<"all" | "bank" | "paypal">("all");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -317,7 +318,7 @@ function BankPageContent() {
   const [tab, setTab] = useState<BankTab>(() => {
     if (typeof window === "undefined") return "overview";
     const value = new URLSearchParams(window.location.search).get("tab");
-    return (["overview", "transactions", "recurring", "receipts", "rules"] as const).includes(value as BankTab) ? (value as BankTab) : (new URLSearchParams(window.location.search).get("flow") ? "transactions" : "overview");
+    return (["overview", "transactions", "recurring", "receipts", "rules", "payment-links"] as const).includes(value as BankTab) ? (value as BankTab) : (new URLSearchParams(window.location.search).get("flow") ? "transactions" : "overview");
   });
   const [drawerTxId, setDrawerTxId] = useState<string | null>(null);
   const [drawerCategory, setDrawerCategory] = useState("");
@@ -671,14 +672,20 @@ function BankPageContent() {
   // ---- Link a spending transaction to an order's expenses -----------------
 
   useEffect(() => {
-    if (!isOwner || !workspace || orderOptions !== null || transactions.length === 0) return;
+    // Loaded for the expense-linking picker AND for the Payment Links tab's
+    // order picker. The transaction count used to gate it, which was right
+    // while orders were only ever linked to a bank line: a workspace with no
+    // bank feed can still take card payments, and on that workspace the picker
+    // would have stayed empty for ever.
+    if (!isOwner || !workspace || orderOptions !== null) return;
+    if (transactions.length === 0 && tab !== "payment-links") return;
     let cancelled = false;
     loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? "")
       .then(options => { if (!cancelled) setOrderOptions(options); })
       .catch(() => { if (!cancelled) setOrderOptions([]); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOwner, workspace, companyId, transactions.length]);
+  }, [isOwner, workspace, companyId, transactions.length, tab]);
 
   async function linkToOrder(transaction: BankTransaction, orderId: string) {
     setBusy(`link-${transaction.id}`);
@@ -1753,7 +1760,8 @@ function BankPageContent() {
                   ["transactions", t("Transactions")],
                   ["recurring", t("Recurring")],
                   ["receipts", t("Receipts")],
-                  ["rules", t("Rules")]
+                  ["rules", t("Rules")],
+                  ["payment-links", t("Payment Links")]
                 ] as const).map(([key, label]) => (
                   <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
                     style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1 }}>
@@ -2822,6 +2830,21 @@ function BankPageContent() {
                     }} />
                 </div>
               </>
+            ) : null}
+
+            {/* ================= PAYMENT LINKS ================= */}
+            {/* Not gated on transactions.length, unlike the panels above: a
+                workspace can take card payments with no bank feed connected at
+                all, and hiding the screen behind a bank connection would make
+                the feature look missing. */}
+            {tab === "payment-links" ? (
+              <PaymentLinksPanel
+                companyId={companyId}
+                t={t}
+                locale={studioLocaleTag(language)}
+                orders={orderOptions}
+                onOpenOrder={(orderId) => router.push(`/orders?order=${encodeURIComponent(orderId)}`)}
+              />
             ) : null}
 
             {/* ================= RULES ================= */}

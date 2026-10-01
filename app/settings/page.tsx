@@ -41,6 +41,7 @@ import { SquareIntegrationSection } from "./SquareIntegrationSection";
 import { EbayIntegrationSection } from "./EbayIntegrationSection";
 import { AmazonIntegrationSection } from "./AmazonIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
+import { StripeIntegrationSection } from "./StripeIntegrationSection";
 import { DhlExpressIntegrationSection } from "./DhlExpressIntegrationSection";
 import { getShippingConnection, type ShippingConnectionView } from "@/lib/studioflow/shipping";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
@@ -5478,6 +5479,7 @@ function IntegrationsSection({
         {managing === "ebay" ? <EbayIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "amazon" ? <AmazonIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "stripe" ? <StripeIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "dhl" ? <DhlExpressIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "whatsapp" ? <CustomerChannelPanel workspace={workspace} language={language} channel="whatsapp" /> : null}
         {managing === "instagram" ? <CustomerChannelPanel workspace={workspace} language={language} channel="instagram" /> : null}
@@ -5658,7 +5660,10 @@ function IntegrationCard({
           the same sentence three times. */}
       {live.state === "planned" ? null : (
         <>
-          {live.detail ? <p className="integration-detail">{live.detail}</p> : null}
+          {/* Most details are a store or shop name, which studioT returns
+              unchanged; the Stripe card's are sentences, and those have
+              entries. One render path, both kinds. */}
+          {live.detail ? <p className="integration-detail">{t(live.detail)}</p> : null}
           {live.legacyAddress ? (
             <p className="integration-legacy-address">
               {t("The old webhook address for this shop was retired and no longer accepts orders. Anything still posting to it is being turned away.")}
