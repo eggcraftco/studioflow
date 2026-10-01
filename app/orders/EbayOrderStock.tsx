@@ -15,7 +15,7 @@
 // a label for it.
 //
 // Costs only with Financial Info (the server leaves them out otherwise).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { usePrivateMoney } from "@/components/PricePrivacy";
 import { registerOrderTrackingFromWeb, updateOrderFromWeb } from "@/lib/studioflow/orders";
@@ -47,13 +47,19 @@ export function EbayOrderStock({ workspace, currencySymbol = "", order, language
   const [returning, setReturning] = useState<{ lineItemId: string; max: number; quantity: string } | null>(null);
 
   // A reload does not clear the error: an action sets its own answer (a refusal, a failed follow) before reloading,
-  // and clears it when it starts.
+  // and clears it when it starts. The FIRST load failing draws nothing at all — the server functions not deployed yet
+  // (a web round published before them), an order the server does not treat as eBay's — instead of an error on every
+  // eBay order; once the block has been drawn, a failed reload is said.
+  const drawn = useRef(false);
+  const [absent, setAbsent] = useState(false);
   const load = useCallback(async () => {
-    try { setView(orderStockViewOf(await getEbayOrderStock(workspace.id, order.id))); }
-    catch { setError(t("Could not load the stock for this order.")); }
+    try { setView(orderStockViewOf(await getEbayOrderStock(workspace.id, order.id))); drawn.current = true; }
+    catch { if (drawn.current) setError(t("Could not load the stock for this order.")); else setAbsent(true); }
   }, [workspace.id, order.id, t]);
   useEffect(() => { if (isEbay) void load(); }, [isEbay, load]);
-  if (!isEbay) return null;
+  // Drawn only where eBay listings are switched on for the workspace (appConfig/ebayInventory, the server's answer):
+  // with the switch off — never on, or rolled back — the order page is exactly what it was before this package.
+  if (!isEbay || absent || (view !== null && !view.enabled)) return null;
 
   async function dryRun(lineItemId: string) {
     setBusy(`plan:${lineItemId}`); setNotice(""); setError("");
