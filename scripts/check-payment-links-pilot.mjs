@@ -106,6 +106,10 @@ try {
   const emptyAt = card.indexOf("if (!state) return null;");
   expect("order card renders nothing (not even an error) until the answer is true", gateAt > 0 && gateAt < errorAt && gateAt < emptyAt);
 
+  const hook = read("lib/studioflow/usePaymentLinksAvailable.ts");
+  expect("no workspace yet is 'unknown' (null), never 'no': the hook asks nothing for an empty id",
+    /const id = String\(companyId \|\| ""\)\.trim\(\);\s*if \(!id\) return \(\) => \{ active = false; \};/.test(hook));
+
   const bank = read("app/bank/page.tsx");
   expect("Banking asks the gate", /const paymentLinksAnswer = usePaymentLinksAvailable\(companyId\);/.test(bank));
   expect("Banking draws the Payment Links tab only inside the pilot", /\.filter\(\(\[key\]\) => key !== "payment-links" \|\| paymentLinksOn\)/.test(bank));
