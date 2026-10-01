@@ -9328,7 +9328,7 @@ export function OrderDetailContent({
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
       <EbayOrderRefreshButton order={order} language={detailLanguage} />
       {/* Package E4: the order's stock (through its listings' links) and every package eBay says went out. */}
-      <EbayOrderStock workspace={workspace} order={order} language={detailLanguage} canSeeFinance={canSeeFinance} canEditOrder={canEditOrderFully} onOrderChanged={onReloadOrder} />
+      <EbayOrderStock workspace={workspace} currencySymbol={moneySymbol(moneySettings)} order={order} language={detailLanguage} canSeeFinance={canSeeFinance} canEditOrder={canEditOrderFully} onOrderChanged={onReloadOrder} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">

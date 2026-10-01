@@ -189,7 +189,7 @@ export function EbayListingsPanel({ workspace, language, canEdit, items, categor
                         <input type="checkbox" checked={picked} disabled={!editable || !canChoose(row) || busy !== ""} onChange={() => toggle(row)} aria-label={`${t("Choose")}: ${row.title}`} />
                         {row.pictureUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img className="ebay-inv__pic" src={row.pictureUrl} alt="" loading="lazy" referrerPolicy="no-referrer" title={t("Picture shown from eBay's servers; not copied into NivaDesk")} />
+                          <img className="ebay-inv__pic" src={row.pictureUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} title={t("Picture shown from eBay's servers; not copied into NivaDesk")} />
                         ) : <span className="ebay-inv__pic is-empty" aria-hidden="true" />}
                         <div className="ebay-inv__what">
                           <strong className="ebay-inv__title">{row.title}</strong>

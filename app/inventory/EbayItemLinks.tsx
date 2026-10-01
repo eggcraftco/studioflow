@@ -77,7 +77,7 @@ export function EbayItemLinks({ workspace, item, items, canEdit, language, onCha
           <li key={link.linkId} data-link-id={link.linkId}>
             {safePictureUrl(link.pictureUrl) ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img className="ebay-inv__pic" src={safePictureUrl(link.pictureUrl)} alt="" loading="lazy" referrerPolicy="no-referrer" title={t("Picture shown from eBay's servers; not copied into NivaDesk")} />
+              <img className="ebay-inv__pic" src={safePictureUrl(link.pictureUrl)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} title={t("Picture shown from eBay's servers; not copied into NivaDesk")} />
             ) : null}
             <div className="ebay-inv__what">
               <strong className="ebay-inv__title">{link.title}</strong>

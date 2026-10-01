@@ -24121,6 +24121,9 @@ body[data-studio-theme="dark"] .inventory-status.is-archived { color: #9ca3af; }
 .inventory-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 900px) { .inventory-shell { grid-template-columns: 1fr; } }
 .inventory-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 12px; }
+/* One column: a sticky nav would stay pinned over the content scrolling under it (seen on the eBay listings panel at
+   375 px, package E4) — on a phone the nav scrolls away with the page like everything else. */
+@media (max-width: 900px) { .inventory-nav { position: static; } }
 .inventory-nav-group {
   font-size: 10.5px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;
   opacity: 0.55; margin: 12px 0 4px; padding: 0 10px;
@@ -33430,9 +33433,10 @@ body[data-studio-theme="dark"] .ebay-order-block .due-pill:not(.warning):not(.da
 .ebay-inv__decide { display: grid; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .ebay-inv__decide > label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; margin-inline-end: 12px; }
 .ebay-inv__fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.ebay-inv__fields .input { min-width: 0; max-width: 100%; }
+.ebay-inv__fields .input, .ebay-inv__actions .input, .ebay-inv-card__actions .input { width: auto; flex: 1 1 200px; max-width: 420px; min-width: 0; padding: 6px 10px; border-radius: 10px; font-size: 14px; background: var(--surface); }
 .ebay-inv__count { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; flex-wrap: wrap; }
-.ebay-inv__count .input { width: 7em; }
+.ebay-inv__count .input { flex: 0 0 6em; width: 6em; }
+.ebay-order-stock .input { width: 5em; padding: 4px 8px; border-radius: 8px; background: var(--surface); }
 .ebay-inv__problem { margin: 0; font-size: 12px; color: var(--danger); }
 .ebay-inv__done { margin: 0; font-size: 12px; color: var(--success); font-weight: 600; }
 .ebay-inv__footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; position: sticky; bottom: 0; background: var(--background); padding: 8px 0; }
@@ -33444,6 +33448,7 @@ body[data-studio-theme="dark"] .ebay-order-block .due-pill:not(.warning):not(.da
 .ebay-order-stock h4 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; }
 .ebay-order-stock__lines, .ebay-order-stock__packages { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .ebay-order-stock__lines > li, .ebay-order-stock__packages > li { display: grid; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--panel); min-width: 0; }
+.ebay-order-stock__lines > li { justify-items: start; }
 .ebay-order-stock__packages > li { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
 .ebay-order-stock__packages code { overflow-wrap: anywhere; }
 .ebay-order-stock__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -73,8 +73,9 @@ const stock = R.orderStockViewOf({ enabled: true, canEdit: true, money: false, r
   { lineItemId: "L3", title: "Ring", quantity: 2, link: { linkId: LINK(3), inventoryItemId: "R" }, stock: { state: "none", reservedQty: 0, soldQty: 0, returnedQty: 0, blocked: { reason: "not_enough_stock", atMs: 1 } } },
   { lineItemId: "L4", title: "Unlinked", quantity: 1, link: null, stock: null },
   { lineItemId: "L5", title: "Reserved", quantity: 2, link: { linkId: LINK(4), inventoryItemId: "S" }, stock: { state: "reserved", reservedQty: 2, soldQty: 0, returnedQty: 0 } }
-], packages: [{ id: "F1", trackingNumber: "RM 1234 5678 9GB", carrierCode: "RoyalMail", lines: [{ lineItemId: "L1", quantity: 1 }] }, { id: "F2", trackingNumber: "<img src=x>", carrierCode: "Hermes" }] });
+], packages: [{ id: "F1", trackingNumber: "RM 1234 5678 9GB", carrierCode: "RoyalMail", lines: [{ lineItemId: "L1", quantity: 1 }], followProblem: true, onOrder: true }, { id: "F2", trackingNumber: "<img src=x>", carrierCode: "Hermes", followed: true, followProblem: true }] });
 expect("a tracking number is letters and digits (spaces removed); anything else is dropped; couriers mapped", stock.packages.map((p) => [p.trackingNumber, p.courier]), [["RM123456789GB", "Royal Mail"], ["", "Auto Detect"]]);
+expect("a failed attempt to follow is a problem, never 'followed'; 'followed' wins over a stale problem flag", stock.packages.map((p) => [p.followed, p.followProblem, p.onOrder]), [[false, true, true], [true, false, false]]);
 expect("the address is restricted unless the server says it is on the order", stock.address, "restricted");
 expect("line words", stock.lines.map((l) => R.lineStockSentence(l).sentence), ["Sold from stock ({sold}) · {card}", "Placed before the listing was linked — stock not taken", "Could not take stock: {reason}", "Not linked to a stock card", "Reserved {reserved} of {quantity} on {card}"]);
 expect("buttons: Item returned only for goods that went out on an undone sale; Reserve only for a linked line with no record or a blocked one", stock.lines.map((l) => R.lineActions(stock, l)), [
@@ -121,14 +122,14 @@ ok("the Inventory entry shows only when the server says the feature is on (or th
 ok("/inventory?panel=ebay opens the panel", /get\("panel"\) === "ebay"\) setTab\("ebay"\)/.test(inv));
 ok("the item panel mounts the card's eBay section", /<EbayItemLinks workspace=\{workspace\} item=\{item\}/.test(read("app/inventory/ItemDetailPanel.tsx")));
 const orderPage = read("app/orders/OrderDetailContent.tsx");
-ok("the order page mounts the order's stock + shipments under eBay's block, with the finance and edit gates", /<EbayOrderRefreshButton[^>]*\/>\s*\{\/\*[^*]*\*\/\}\s*<EbayOrderStock workspace=\{workspace\} order=\{order\} language=\{detailLanguage\} canSeeFinance=\{canSeeFinance\} canEditOrder=\{canEditOrderFully\}/.test(orderPage));
+ok("the order page mounts the order's stock + shipments under eBay's block, with the finance and edit gates", /<EbayOrderRefreshButton[^>]*\/>\s*\{\/\*[^*]*\*\/\}\s*<EbayOrderStock workspace=\{workspace\} currencySymbol=\{moneySymbol\(moneySettings\)\} order=\{order\} language=\{detailLanguage\} canSeeFinance=\{canSeeFinance\} canEditOrder=\{canEditOrderFully\}/.test(orderPage));
 ok("the DHL panel is told when the address is not on an eBay order", /addressRestricted=\{order\.commerce\?\.provider === "ebay"/.test(orderPage));
 const dhl = read("app/orders/OrderShipmentsPanel.tsx");
 ok("…and then offers no 'Prepare a DHL shipment'", /can\?\.prepare && connected && !addressRestricted \? \(/.test(dhl));
 ok("the eBay settings card mounts the inventory line", /<EbayInventoryLine companyId=\{companyId\} connectionId=\{connection\.id\}/.test(read("app/settings/EbayIntegrationSection.tsx")));
 const lib = read("lib/studioflow/ebayInventory.ts");
 for (const fn of ["getEbayListingLinks", "previewEbayListings", "importEbayListings", "changeEbayListingLink", "getEbayOrderStock", "updateEbayOrderStock"]) ok(`the screens call ${fn}`, lib.includes(`"${fn}"`));
-ok("Follow in NivaDesk uses registerTracking (the order tracking card's own path)", /registerOrderTrackingFromWeb\(workspace, \{ orderId: order\.id, trackingNumber, courier, language \}\)/.test(read("app/orders/EbayOrderStock.tsx")));
+ok("Follow in NivaDesk saves the number and courier on the order, then registerTracking (the order tracking card's own path)", /updateOrderFromWeb\(workspace, \{ orderId: order\.id, details: \{ trackingNumber, courier \} \}\);\s*const answer = await registerOrderTrackingFromWeb\(workspace, \{ orderId: order\.id, trackingNumber, courier, language \}\)/.test(read("app/orders/EbayOrderStock.tsx")));
 const all = screens.map(read).join("\n") + lib + source;
 ok("nothing names an eBay call that writes", !/ReviseInventoryStatus|ReviseFixedPriceItem|bulk_update_price_quantity|bulkUpdatePriceQuantity|shipping_fulfillment|createShippingFulfillment|bulkMigrateListing|CompleteSale|EndItem/.test(all));
 ok("a picture is loaded without a referrer, lazily", /referrerPolicy="no-referrer"/.test(read("app/inventory/EbayListingsPanel.tsx")) && /loading="lazy"/.test(read("app/inventory/EbayItemLinks.tsx")));

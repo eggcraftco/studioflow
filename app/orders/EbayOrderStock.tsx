@@ -17,13 +17,16 @@
 // Costs only with Financial Info (the server leaves them out otherwise).
 import { useCallback, useEffect, useState } from "react";
 import { studioLocaleTag } from "@/lib/studioflow/language";
-import { registerOrderTrackingFromWeb } from "@/lib/studioflow/orders";
+import { usePrivateMoney } from "@/components/PricePrivacy";
+import { registerOrderTrackingFromWeb, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { getEbayOrderStock, updateEbayOrderStock, ebayInventoryT } from "@/lib/studioflow/ebayInventory";
 import { fill, lineActions, lineStockSentence, orderStockViewOf, reasonSentence, type EbayOrderStockView } from "@/lib/studioflow/ebayInventoryRules";
 
 type Props = {
   workspace: WorkspaceContext;
+  /** The workspace's own money symbol (the order page's moneySymbol). */
+  currencySymbol?: string;
   order: { id: string; companyId?: string; commerce: { provider?: string } | null };
   language: string;
   canSeeFinance: boolean;
@@ -31,7 +34,8 @@ type Props = {
   onOrderChanged?: () => void | Promise<void>;
 };
 
-export function EbayOrderStock({ workspace, order, language, canSeeFinance, canEditOrder, onOrderChanged }: Props) {
+export function EbayOrderStock({ workspace, currencySymbol = "", order, language, canSeeFinance, canEditOrder, onOrderChanged }: Props) {
+  const money = usePrivateMoney();
   const t = useCallback((sentence: string) => ebayInventoryT(sentence, language), [language]);
   const locale = studioLocaleTag(language);
   const isEbay = String(order.commerce?.provider || "") === "ebay";
@@ -42,8 +46,10 @@ export function EbayOrderStock({ workspace, order, language, canSeeFinance, canE
   const [plan, setPlan] = useState<{ lineItemId: string; sentence: string } | null>(null);
   const [returning, setReturning] = useState<{ lineItemId: string; max: number; quantity: string } | null>(null);
 
+  // A reload does not clear the error: an action sets its own answer (a refusal, a failed follow) before reloading,
+  // and clears it when it starts.
   const load = useCallback(async () => {
-    try { setView(orderStockViewOf(await getEbayOrderStock(workspace.id, order.id))); setError(""); }
+    try { setView(orderStockViewOf(await getEbayOrderStock(workspace.id, order.id))); }
     catch { setError(t("Could not load the stock for this order.")); }
   }, [workspace.id, order.id, t]);
   useEffect(() => { if (isEbay) void load(); }, [isEbay, load]);
@@ -82,11 +88,15 @@ export function EbayOrderStock({ workspace, order, language, canSeeFinance, canE
       setError(err instanceof Error && err.message ? err.message : t("This could not be done."));
     } finally { setBusy(""); }
   }
+  // Exactly what the order's tracking card does: the number and courier are saved on the order, then registerTracking
+  // follows it (17TRACK; DHL Express answers only for a waybill of the workspace's own DHL connection).
   async function follow(trackingNumber: string, courier: string) {
     setBusy(`track:${trackingNumber}`); setError(""); setNotice("");
     try {
-      await registerOrderTrackingFromWeb(workspace, { orderId: order.id, trackingNumber, courier, language });
-      setNotice(t("Followed in NivaDesk"));
+      await updateOrderFromWeb(workspace, { orderId: order.id, details: { trackingNumber, courier } });
+      const answer = await registerOrderTrackingFromWeb(workspace, { orderId: order.id, trackingNumber, courier, language });
+      if (answer && answer.ok === false) setError(t("This could not be done."));
+      else setNotice(t("Followed in NivaDesk"));
       await load();
       if (onOrderChanged) await onOrderChanged();
     } catch (err) {
@@ -118,7 +128,8 @@ export function EbayOrderStock({ workspace, order, language, canSeeFinance, canE
                     <span className={`ebay-inv__chip is-${words.tone}`}>{fill(t(words.sentence), { ...words.values, reason: words.values.reason ? t(String(words.values.reason)) : "" })}</span>
                     {!line.link && !line.stock ? <a className="inventory-sub" href="/inventory?panel=ebay">{t("Link it in Inventory ▸ eBay listings")}</a> : null}
                     {line.stock && line.stock.linkMovedSince ? <span className="inventory-sub">{t("The listing now points to another card; this order keeps the card it took stock from.")}</span> : null}
-                    {canSeeFinance && view.money && card && typeof card.unitCost === "number" ? <span className="inventory-sub">{t("Unit cost")}: {card.unitCost.toLocaleString(locale)}</span> : null}
+                    {canSeeFinance && view.money && card && card.costNotEntered ? <span className="inventory-sub">{t("Cost not entered — eBay does not know what you paid.")}</span>
+                      : canSeeFinance && view.money && card && typeof card.unitCost === "number" ? <span className="inventory-sub">{t("Unit cost")}: {money(currencySymbol, card.unitCost)}</span> : null}
                     {line.needsReturnDecision ? <span className="inventory-sub">{t("A refund on eBay is money, not goods: the item stays sold until you say it came back.")}</span> : null}
                     {canEditOrder ? (
                       <div className="ebay-order-stock__actions">
@@ -161,13 +172,14 @@ export function EbayOrderStock({ workspace, order, language, canSeeFinance, canE
               <>
                 <ul className="ebay-order-stock__packages" data-testid="ebay-order-packages">
                   {view.packages.map((pkg) => (
-                    <li key={pkg.id || pkg.trackingNumber} data-followed={pkg.followed ? "1" : "0"}>
+                    <li key={pkg.id || pkg.trackingNumber} data-followed={pkg.followed ? "1" : pkg.followProblem ? "problem" : "0"}>
                       <div>
                         <strong><code>{pkg.trackingNumber || "—"}</code></strong>
                         <span className="inventory-sub">{pkg.carrier || pkg.carrierCode}{pkg.shippedAt ? ` · ${fill(t("Shipped {date}"), { date: shipped(pkg.shippedAt) })}` : ""}</span>
                         {pkg.lines.length ? <span className="inventory-sub">{t("In this package")}: {pkg.lines.map((l) => `${l.title || l.lineItemId} × ${l.quantity}`).join(", ")}</span> : null}
                       </div>
                       <div className="ebay-order-stock__actions">
+                        {pkg.followProblem ? <span className="inventory-sub" role="status" data-testid="ebay-package-follow-problem">{t("NivaDesk could not start following this number — the tracking panel on this order says why")}</span> : !pkg.followed && pkg.onOrder ? <span className="inventory-sub">{t("In the order's tracking field — not followed yet")}</span> : null}
                         {pkg.followed ? <span className="due-pill success">{t("Followed in NivaDesk")}</span> : canEditOrder && pkg.trackingNumber ? (
                           <button type="button" className="inventory-link" data-testid="ebay-package-follow" disabled={busy !== ""} onClick={() => void follow(pkg.trackingNumber, pkg.courier)}>
                             {busy === `track:${pkg.trackingNumber}` ? t("Following…") : t("Follow in NivaDesk")}
