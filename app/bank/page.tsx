@@ -15,6 +15,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import PaymentLinksPanel from "@/components/PaymentLinksPanel";
+import { usePaymentLinksAvailable } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
@@ -368,6 +369,14 @@ function BankPageContent() {
   // mutation (connect, categorise, receipts, Pandle) stays with the owner.
   const canViewBank = isOwner || workspaceAccessAllows(workspace?.memberAccess, "bankFeed");
   const companyId = workspace?.id ?? "";
+  // The Payment Links pilot (S2): the server says which workspaces may use it.
+  // Outside the pilot the tab is not drawn and a ?tab=payment-links link falls
+  // back to the overview — no panel, no button, no error.
+  const paymentLinksAnswer = usePaymentLinksAvailable(companyId);
+  const paymentLinksOn = paymentLinksAnswer === true;
+  useEffect(() => {
+    if (tab === "payment-links" && paymentLinksAnswer === false) setTab("overview");
+  }, [tab, paymentLinksAnswer]);
   // Arriving from Home's "Add receipt" quick action: open the receipt picker.
   // The feed is read-only (§7) — a receipt is matched to a transaction, never
   // typed in as a new one.
@@ -1762,7 +1771,7 @@ function BankPageContent() {
                   ["receipts", t("Receipts")],
                   ["rules", t("Rules")],
                   ["payment-links", t("Payment Links")]
-                ] as const).map(([key, label]) => (
+                ] as const).filter(([key]) => key !== "payment-links" || paymentLinksOn).map(([key, label]) => (
                   <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
                     style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1 }}>
                     {label}
@@ -2837,7 +2846,7 @@ function BankPageContent() {
                 workspace can take card payments with no bank feed connected at
                 all, and hiding the screen behind a bank connection would make
                 the feature look missing. */}
-            {tab === "payment-links" ? (
+            {tab === "payment-links" && paymentLinksOn ? (
               <PaymentLinksPanel
                 companyId={companyId}
                 t={t}

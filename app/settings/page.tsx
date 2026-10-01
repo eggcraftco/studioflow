@@ -186,6 +186,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   ebay: "integrations",
   amazon: "integrations",
   paypal: "integrations",
+  stripe: "integrations",
   shopify: "integrations",
   inbound: "integrations",
   etsy: "integrations",
@@ -579,9 +580,18 @@ export default function SettingsPage() {
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
-      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram"
+      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe"
     ) {
       setIntegrationProvider(rawRequested);
+    }
+    // Stripe sends the owner back from its hosted onboarding to
+    // /settings?stripe=connected (or =retry) with no section of its own. The
+    // Stripe screen is where the new status is read, so the return opens it —
+    // for a workspace outside the Payment Links pilot that screen says, neutrally,
+    // that it is not available (the server's answer).
+    if (params.get("stripe")) {
+      setIntegrationProvider("stripe");
+      setActiveSection("integrations");
     }
     // The old Customer Channels area: its deep link lands on the Integrations
     // hub with the channel's tile open — Instagram when Instagram's sign-in

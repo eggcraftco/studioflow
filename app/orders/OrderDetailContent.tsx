@@ -123,6 +123,9 @@ import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
+/** The notes the Payment Links rail writes on a TEST row (functions/payments/orderLedger.js, S2). */
+const TEST_PAYMENT_NOTES = new Set(["Stripe TEST payment - no real money moved", "Stripe TEST refund - no real money moved"]);
+
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
 const ORDER_HEADER_SHOW_DELIVERY_TIME_KEY = "orderDetailHeaderShowDeliveryTime";
 const ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY = "orderDetailHeaderShowUpcomingSchedule";
@@ -7057,7 +7060,18 @@ export function OrderDetailContent({
                                 <span className="finance-payments-meta">
                                   {payment.date ? payment.date.toLocaleDateString() : ""}
                                   {payment.method ? ` · ${payment.method}` : ""}
-                                  {payment.note ? ` · ${payment.note}` : ""}
+                                  {/* The two fixed sentences the Payment Links rail writes on a
+                                      TEST row are shown in the reader's language; every other
+                                      note is the workspace's own text and is shown as typed. */}
+                                  {payment.note ? ` · ${TEST_PAYMENT_NOTES.has(payment.note) ? t(payment.note) : payment.note}` : ""}
+                                  {payment.test ? (
+                                    <span
+                                      title={t("This link was created on a Stripe test account. No real money moves.")}
+                                      style={{ marginLeft: 6, color: "#b45309", border: "1px solid currentColor", borderRadius: 4, padding: "0 4px", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase" }}
+                                    >
+                                      {t("Test")}
+                                    </span>
+                                  ) : null}
                                 </span>
                               )}
                               {canInlineEditFinance && editingPaymentNoteId !== payment.id ? (

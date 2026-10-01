@@ -46,6 +46,7 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
   const [connection, setConnection] = useState<StripeConnectionSummary | null>(null);
   const [known, setKnown] = useState(false);
   const [configured, setConfigured] = useState(true);
+  const [unavailableReason, setUnavailableReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -61,6 +62,7 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
       if (ticket !== latest.current) return;
       setConnection(view.connection);
       setConfigured(view.configured);
+      setUnavailableReason(view.configured ? "" : view.reason);
       setKnown(true);
       // A success clears whatever the last failure said, or a recovered screen
       // keeps apologising.
@@ -132,9 +134,13 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
       {loading ? (
         <p className="muted-copy">{t("Loading...")}</p>
       ) : !configured ? (
-        // The server has no Stripe keys. Nothing a workspace does here can fix
-        // that, so it must not be offered a button that cannot work.
-        <p className="muted-copy">{t("Card payments are not set up on this server yet.")}</p>
+        // Not offered here. Either this workspace is outside the Payment Links
+        // pilot (the server's answer, S2) or the server has the rail switched
+        // off. Nothing a workspace does here can change either, so there is no
+        // button that cannot work and nothing that reads as an error.
+        <p className="muted-copy">{unavailableReason === "not_in_pilot"
+          ? t("Card payment links are not available for this workspace yet.")
+          : t("Card payments are not set up on this server yet.")}</p>
       ) : !known ? (
         <p className="muted-copy">{t("This connection could not be read, so its state is unknown.")}</p>
       ) : (

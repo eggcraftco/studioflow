@@ -15,17 +15,52 @@ const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, na
 
 export type StripeConnectionView = {
   configured: boolean;
+  /** Why `configured` is false, when it is: "not_in_pilot" (this workspace is
+   *  outside the Payment Links pilot) or "rail_disabled" (the server has the
+   *  rail switched off). "" when configured. */
+  reason: string;
   connection: StripeConnectionSummary | null;
 };
 
 /** Anyone in the workspace may ask whether payments work. */
 export async function getStripeConnection(companyId: string): Promise<StripeConnectionView> {
-  const result = await call<{ companyId: string }, { ok: boolean; configured: boolean; connection: StripeConnectionSummary }>(
+  const result = await call<{ companyId: string }, { ok: boolean; configured: boolean; reason?: string; connection: StripeConnectionSummary }>(
     "getStripePaymentConnection")({ companyId });
   return {
     configured: result.data?.configured === true,
+    reason: String(result.data?.reason ?? ""),
     connection: result.data?.connection ?? null,
   };
+}
+
+/**
+ * Whether this workspace may see Payment Links at all (S2 pilot gate).
+ *
+ * The SERVER decides — getStripePaymentConnection says `configured: false` with
+ * reason "not_in_pilot" for every workspace outside the pilot, and refuses the
+ * other eight callables for them. This is how the screens follow that answer:
+ * a surface renders nothing until this resolves true, so a workspace outside
+ * the pilot sees no tab, no card, no button and no error.
+ *
+ * One read per workspace per page load, shared by every surface that asks. A
+ * failed read answers false and is not remembered, so the next surface to ask
+ * tries again — hiding is the safe direction, and an error is never shown for
+ * a feature the workspace may not have.
+ */
+const availability = new Map<string, Promise<boolean>>();
+export function paymentLinksAvailable(companyId: string): Promise<boolean> {
+  const id = String(companyId || "").trim();
+  if (!id) return Promise.resolve(false);
+  const known = availability.get(id);
+  if (known) return known;
+  const pending = getStripeConnection(id)
+    .then((view) => view.configured === true)
+    .catch(() => {
+      availability.delete(id);
+      return false;
+    });
+  availability.set(id, pending);
+  return pending;
 }
 
 /**
