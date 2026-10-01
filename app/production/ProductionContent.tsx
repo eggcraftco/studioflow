@@ -47,6 +47,7 @@ import {
   type ProductionStage
 } from "@/lib/studioflow/production";
 import { orderPageHref } from "@/lib/studioflow/orderLink";
+import { orderIsCancelled } from "@/lib/studioflow/orderFilters";
 import { doneLaneView, rememberMovedHere, sortDoneLane } from "@/lib/studioflow/productionDoneLane";
 import { ProductionStagesModal } from "./ProductionStagesModal";
 
@@ -172,7 +173,9 @@ export function ProductionContent({
   const cards = useMemo<ProductionCard[]>(() => {
     const today = startOfToday();
     return orders
-      .filter(order => !order.isDelivered || showDone)
+      // A cancelled order never reaches a lane: it is not work, and it has no
+      // "Done" either — it would otherwise sit in Ready for ever.
+      .filter(order => !orderIsCancelled(order) && (!order.isDelivered || showDone))
       .map(order => {
         const resolved = resolveProductionStage(order, stages, steps);
         const materials = { ...order.materialsDefaultToggles, ...order.materialsToggles };

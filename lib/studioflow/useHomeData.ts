@@ -19,6 +19,7 @@ import {
   type ProductionStage,
 } from "@/lib/studioflow/production";
 import { loadWorkspaceBlockHeadings, type HeadingItem } from "@/lib/studioflow/blockHeadings";
+import { orderIsCancelled } from "@/lib/studioflow/orderFilters";
 import { detectRecurringSpends, monthlyFixedTotal, type BankVendor } from "@/lib/studioflow/bankInsights";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
@@ -197,7 +198,10 @@ export function useHomeData(
         setFinanceOrders(nextFinance);
         setSettings(nextSettings);
         setOrders(nextOrders);
-        setScheduleOrders(nextSchedule);
+        // A cancelled order is not work: the production, due-date and customer
+        // cards all read this list, and a cancelled marketplace order (eBay
+        // imports them by default) sat there as live and late work.
+        setScheduleOrders(nextSchedule.filter((order) => !orderIsCancelled(order)));
         setLastLoadedAtMs(Date.now());
         setDomain("orders", "ready");
       } catch {
