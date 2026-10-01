@@ -37,6 +37,7 @@ import {
 } from "@/lib/studioflow/inventory";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
+import { EbayItemLinks } from "./EbayItemLinks";
 
 type PanelTab = "details" | "history" | "purchases" | "photos" | "files";
 
@@ -104,7 +105,8 @@ export function ItemDetailPanel({
   onChanged,
   onEdit,
   onPrintLabel,
-  onManagePhotos
+  onManagePhotos,
+  allItems = []
 }: {
   workspace: WorkspaceContext;
   item: InventoryItem;
@@ -115,6 +117,8 @@ export function ItemDetailPanel({
   onEdit: (item: InventoryItem) => void;
   onPrintLabel: (item: InventoryItem) => void;
   onManagePhotos: (item: InventoryItem) => void;
+  /** The cards on screen — the eBay section's "Change card" picks from them. */
+  allItems?: InventoryItem[];
 }) {
   const money = usePrivateMoney();
   const { language, user } = useAuth();
@@ -396,6 +400,9 @@ export function ItemDetailPanel({
               </>
             )}
           </section>
+
+          {/* Package E4: the eBay listings linked to this card (drawn only for a card that has any). */}
+          <EbayItemLinks workspace={workspace} item={item} items={allItems} canEdit={canEdit} language={language} onChanged={onChanged} />
 
           <section className="inventory-panel-card">
             <header><strong>{t("Basic Information")}</strong></header>

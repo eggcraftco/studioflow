@@ -94,6 +94,8 @@ export type InventoryItem = {
   purchaseNumber?: string;
   source: string;
   updatedAtMs: number;
+  /** eBay listings linked to this card (package E4) — ids only; the listing's price and quantity stay server-side. */
+  channelLinks?: Array<{ provider: string; connectionId: string; itemId: string; variationKey: string }>;
 };
 
 export type InventorySummary = {

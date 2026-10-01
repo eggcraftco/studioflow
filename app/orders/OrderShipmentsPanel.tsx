@@ -34,6 +34,7 @@ import {
   type ShippingConnectionView
 } from "@/lib/studioflow/shipping";
 import { ShipmentDraftDialog } from "./ShipmentDraftDialog";
+import { ebayInventoryT } from "@/lib/studioflow/ebayInventory";
 
 const EDITABLE = new Set(["draft", "invalid", "rejected", "not_sent"]);
 
@@ -68,7 +69,8 @@ export function OrderShipmentsPanel({
   orderId,
   language,
   onOrderChanged,
-  onSizeChange
+  onSizeChange,
+  addressRestricted = false
 }: {
   workspace: WorkspaceContext;
   orderId: string;
@@ -77,6 +79,11 @@ export function OrderShipmentsPanel({
   onOrderChanged?: () => Promise<void> | void;
   /** The panel grew or shrank on its own (shipments loaded, a notice shown). */
   onSizeChange?: () => void;
+  /**
+   * The delivery address is not on this order (an eBay buyer's is in eBay's protected store — package E4): a label
+   * cannot be prepared from it, so the panel does not offer one as if it could and says where the label is made.
+   */
+  addressRestricted?: boolean;
 }) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const companyId = workspace.id.trim();
@@ -389,8 +396,11 @@ export function OrderShipmentsPanel({
       {error ? <p className="shipment-error">{error}</p> : null}
       {notice ? <p className="shipment-note">{notice}</p> : null}
 
+      {addressRestricted && can?.prepare && connected ? (
+        <p className="shipment-muted" data-testid="dhl-address-restricted">{ebayInventoryT("The buyer's address is kept protected by eBay, so NivaDesk cannot make a shipping label for this order. Create the label in eBay — the tracking number comes back here by itself.", language)}</p>
+      ) : null}
       <div className="shipment-actions">
-        {can?.prepare && connected ? (
+        {can?.prepare && connected && !addressRestricted ? (
           <button type="button" className="inventory-link" disabled={Boolean(busy)} onClick={() => void prepareNew()}>
             {busy === "start" ? t("Preparing…") : t("+ Prepare a DHL shipment")}
           </button>

@@ -15,6 +15,7 @@ import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/f
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { EbayPreviewList } from "./EbayPreviewList";
+import { EbayInventoryLine } from "./EbayInventoryLine";
 import {
   beginEbayConnect, getEbayConnections, verifyEbayConnection, updateEbayConnectionSettings,
   previewEbayImport, runEbayImport, retryEbayImportFailures, syncEbayNow, disconnectEbay,
@@ -343,6 +344,8 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
             language={language} disabled={connection.status !== "connected"} onImported={async () => { await refresh(true); }} />
         ) : null}
         <p className="muted-copy">{t("Listings and stock stay managed on eBay.")}</p>
+        {/* Package E4: eBay listings → Inventory (only where the server has switched it on). */}
+        <EbayInventoryLine companyId={companyId} connectionId={connection.id} language={language} />
       </section>
 
       {isOwner && !importDone ? (

@@ -114,6 +114,7 @@ import {
 import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studioflow/ebay";
 import { EbayOrderBlock } from "./EbayOrderBlock";
 import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
+import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
@@ -7417,7 +7418,8 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ isDelivered: value === "Yes" }, "Delivered")}
               />
               {/* DHL Express, only where the server has opened it for this workspace. */}
-              <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)} />
+              <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
+                addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()} />
             </div>
           </section>
         );
@@ -9325,6 +9327,8 @@ export function OrderDetailContent({
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
       <EbayOrderRefreshButton order={order} language={detailLanguage} />
+      {/* Package E4: the order's stock (through its listings' links) and every package eBay says went out. */}
+      <EbayOrderStock workspace={workspace} order={order} language={detailLanguage} canSeeFinance={canSeeFinance} canEditOrder={canEditOrderFully} onOrderChanged={onReloadOrder} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">

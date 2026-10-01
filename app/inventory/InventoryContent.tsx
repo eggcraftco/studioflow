@@ -41,8 +41,10 @@ import { LocationsPanel } from "./LocationsPanel";
 import { RecipesPanel } from "./RecipesPanel";
 import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
+import { EbayListingsPanel } from "./EbayListingsPanel";
+import { getEbayListingLinks, ebayInventoryT } from "@/lib/studioflow/ebayInventory";
 
-type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports" | "categories";
+type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports" | "categories" | "ebay";
 
 // Small glyphs so a long list scans by shape, not by reading every word.
 const CATEGORY_ICON: Record<string, string> = {
@@ -141,6 +143,15 @@ export function InventoryContent({
   const [photosFor, setPhotosFor] = useState<InventoryItem | null>(null);
   const [labelFor, setLabelFor] = useState<InventoryItem | null>(null);
   const [tab, setTab] = useState<InventoryTab>("items");
+  // eBay listings (package E4): the entry shows only where the server has switched it on for this workspace (a
+  // failed or missing call hides it), and /inventory?panel=ebay — the eBay settings card's link — opens it.
+  const [ebayListingsOn, setEbayListingsOn] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getEbayListingLinks(workspace.id).then((answer) => { if (!cancelled) setEbayListingsOn(answer.enabled === true); }).catch(() => { if (!cancelled) setEbayListingsOn(false); });
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("panel") === "ebay") setTab("ebay");
+    return () => { cancelled = true; };
+  }, [workspace.id]);
   // The report's call (§28): ONE primary navigation. The sidebar is it; the
   // old tab strip is gone. Quick views are saved filters over the same list.
   const [quickView, setQuickView] = useState<"all" | "low" | "incoming" | "reserved">("all");
@@ -467,6 +478,9 @@ export function InventoryContent({
         <p className="inventory-nav-group">{t("Purchasing")}</p>
         <button type="button" data-active={tab === "purchases"} onClick={() => { setTab("purchases"); setSelectedId(""); }}>{t("Purchases")}</button>
         <button type="button" data-active={tab === "suppliers"} onClick={() => { setTab("suppliers"); setSelectedId(""); }}>{t("Suppliers")}</button>
+        {ebayListingsOn || tab === "ebay" ? (
+          <button type="button" data-active={tab === "ebay"} data-testid="inventory-nav-ebay" onClick={() => { setTab("ebay"); setSelectedId(""); }}>{ebayInventoryT("eBay listings", language)}</button>
+        ) : null}
         <p className="inventory-nav-group">{t("Manage")}</p>
         <button type="button" data-active={tab === "stocktake"} onClick={() => { setTab("stocktake"); setSelectedId(""); }}>{t("Stocktake")}</button>
         <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
@@ -476,7 +490,16 @@ export function InventoryContent({
       </nav>
 
       <div className="inventory-main">
-      {tab === "purchases" ? (
+      {tab === "ebay" ? (
+        <EbayListingsPanel
+          workspace={workspace}
+          language={language}
+          canEdit={canEdit}
+          items={items}
+          categoryOptions={categoryOptions}
+          onStockChanged={() => void reload()}
+        />
+      ) : tab === "purchases" ? (
         <PurchasesPanel
           workspace={workspace}
           currencySymbol={currencySymbol}
@@ -778,6 +801,7 @@ export function InventoryContent({
           onEdit={target => setEditing(target)}
           onPrintLabel={target => setLabelFor(target)}
           onManagePhotos={target => setPhotosFor(target)}
+          allItems={items}
         />
       ) : null}
       </div>

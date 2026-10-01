@@ -24,7 +24,8 @@
     "test:production-panel": "node scripts/check-production-panel.mjs",
     "test:home-order-scope": "node scripts/check-home-order-scope.mjs",
     "test:ebay-screens": "node scripts/check-ebay-screens.mjs",
-    "test:ebay-sync": "node scripts/check-ebay-sync.mjs"
+    "test:ebay-sync": "node scripts/check-ebay-sync.mjs",
+    "test:ebay-inventory": "node scripts/check-ebay-inventory.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
