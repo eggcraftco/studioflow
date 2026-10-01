@@ -63,6 +63,7 @@ export default function OrderPaymentLinks({
   t,
   canCreate,
   locale,
+  onSizeChange,
 }: {
   companyId: string;
   orderId: string;
@@ -71,6 +72,10 @@ export default function OrderPaymentLinks({
   locale: string;
   /** Whether this person may ask a customer for money. The server checks again. */
   canCreate: boolean;
+  /** The card grew or shrank on its own (it appears after two reads, a form opens, a link is shown). The order
+   *  board sizes its cards from a measurement it takes when IT renders, so without this the Financial card kept
+   *  its pre-load height and the card below it was drawn over this one. Same contract as OrderShipmentsPanel. */
+  onSizeChange?: () => void;
 }) {
   // The pilot gate, as the server answers it (S2). Outside the pilot this card
   // does not exist: nothing is listed, nothing is asked, nothing is shown.
@@ -85,6 +90,21 @@ export default function OrderPaymentLinks({
   const [copiedId, setCopiedId] = useState("");
   const [shownId, setShownId] = useState("");
   const latest = useRef(0);
+  const sizeChangeRef = useRef(onSizeChange);
+  sizeChangeRef.current = onSizeChange;
+  const observerRef = useRef<ResizeObserver | null>(null);
+  // Attached to whichever root is drawn (the card, or its error line): a new root, a removed one, and every
+  // change in its height are reported, so the board re-measures the card this lives in.
+  const rootRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (node && typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => sizeChangeRef.current?.());
+      observer.observe(node);
+      observerRef.current = observer;
+    }
+    sizeChangeRef.current?.();
+  }, []);
 
   const load = useCallback(async () => {
     if (!companyId || !orderId || available !== true) return;
@@ -182,7 +202,7 @@ export default function OrderPaymentLinks({
   if (available !== true) return null;
   if (error) {
     return (
-      <div className="finance-payments-ledger" role="alert" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div ref={rootRef} className="finance-payments-ledger" role="alert" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12.5, color: "#b91c1c" }}>{t(error)}</span>
         <button type="button" className="finance-payments-add" onClick={() => void load()}>{t("Try again")}</button>
       </div>
@@ -193,7 +213,7 @@ export default function OrderPaymentLinks({
   const currency = state.currency;
 
   return (
-    <div className="finance-payments-ledger">
+    <div ref={rootRef} className="finance-payments-ledger">
       <div className="finance-payments-head">
         <span className="finance-payments-title">
           {t("Payment links")}

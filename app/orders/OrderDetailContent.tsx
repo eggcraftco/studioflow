@@ -7255,6 +7255,7 @@ export function OrderDetailContent({
                   t={t}
                   canCreate={canInlineEditFinance}
                   locale={studioLocaleTag(detailLanguage)}
+                  onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                 />
               </>
             ) : (
