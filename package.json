@@ -30,7 +30,8 @@
     "test:payment-links": "node scripts/check-payment-links-panel.mjs",
     "test:request-amount": "node scripts/check-request-amount.mjs",
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
-    "test:stripe-resume": "node scripts/check-stripe-resume.mjs"
+    "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
+    "test:inventory-notes": "node scripts/check-inventory-notes.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

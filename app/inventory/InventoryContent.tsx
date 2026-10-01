@@ -1120,6 +1120,16 @@ function NewItemModal({
               </datalist>
             </div>
           </div>
+          <label className="inventory-field is-wide">
+            <span>{t("Notes")}</span>
+            <textarea
+              className="input"
+              rows={3}
+              maxLength={2000}
+              value={draft.notes ?? ""}
+              onChange={e => set("notes", e.target.value)}
+            />
+          </label>
         </div>
 
         <div className="inventory-cost-block">

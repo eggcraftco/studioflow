@@ -504,7 +504,7 @@ export function ItemDetailPanel({
               <dd>{item.ownership === "customer" ? t("Customer's") : money(currencySymbol, inventoryLineValue(item))}</dd>
               {item.currentValueEst > 0 ? <><dt>{t("Current value (est.)")}</dt><dd>{money(currencySymbol, item.currentValueEst)}</dd></> : null}
             </dl>
-            {item.notes ? <p className="inventory-sub">{item.notes}</p> : <p className="inventory-sub">{t("No notes yet.")}</p>}
+            {item.notes ? <p className="inventory-sub" style={{ whiteSpace: "pre-wrap" }}>{item.notes}</p> : <p className="inventory-sub">{t("No notes yet.")}</p>}
           </section>
 
           {canEdit ? (
