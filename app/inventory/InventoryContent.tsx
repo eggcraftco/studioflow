@@ -1126,6 +1126,7 @@ function NewItemModal({
               className="input"
               rows={3}
               maxLength={2000}
+              style={{ font: "inherit", resize: "vertical" }}
               value={draft.notes ?? ""}
               onChange={e => set("notes", e.target.value)}
             />
