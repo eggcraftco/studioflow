@@ -6793,7 +6793,7 @@ function PlanAccessSection({
   );
   const limitCell = (limit: number | null) => limit === null ? <span className="settings-plan-cell is-yes">✓ {t("Unlimited")}</span> : <span className="settings-plan-cell">{limit}</span>;
   const compareRows: { label: string; icon: CardIcon; render: (plan: PlanRow) => React.ReactNode }[] = [
-    { label: "Orders", icon: "orders", render: plan => limitCell(plan.orderLimit) },
+    { label: "Active orders", icon: "orders", render: plan => limitCell(plan.orderLimit) },
     { label: "Customers", icon: "customers", render: plan => limitCell(plan.customerLimit) },
     { label: "Storage", icon: "storage", render: plan => <span className="settings-plan-cell">{formatStorageFromMB(plan.storageLimitMB)}</span> },
     { label: "Client Files", icon: "files", render: plan => included(plan.features.client_files) },
@@ -6831,7 +6831,9 @@ function PlanAccessSection({
             <div className="settings-metric">
               <small>{t("Orders")}</small>
               <strong>{counts?.orderCount ?? 0}</strong>
-              <em>{currentPlan.orderLimit === null ? t("Unlimited") : `${t("of")} ${currentPlan.orderLimit}`}</em>
+              {/* The plan limit counts ACTIVE orders (the server skips delivered and deleted ones);
+                  the figure above is every order, so the limit is named rather than shown as "of N". */}
+              <em>{currentPlan.orderLimit === null ? t("Unlimited") : `≤ ${currentPlan.orderLimit} ${t("active orders")}`}</em>
             </div>
             <div className="settings-metric">
               <small>{t("Customers")}</small>

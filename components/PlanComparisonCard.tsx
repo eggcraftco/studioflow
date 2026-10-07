@@ -16,7 +16,7 @@ const PLAN_DESCRIPTION: Record<string, string> = {
 };
 
 function orderText(plan: PlanEntitlements) {
-  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} orders`;
+  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} active orders`;
 }
 
 function customerText(plan: PlanEntitlements) {

@@ -81,12 +81,12 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
     question: "Is there a free version of NivaDesk?",
     answer:
-      "Yes. The Free plan keeps up to 10 orders and 10 customers at no cost and with no card required, for as long as you like. Upgrade whenever you're ready."
+      "Yes. The Free plan keeps up to 10 active orders (delivered and deleted orders don't count) and unlimited customers at no cost and with no card required, for as long as you like. Upgrade whenever you're ready."
   },
   {
     question: "Which NivaDesk plans are available?",
     answer:
-      "Free (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
+      "Free (free), Starter (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
   },
   {
     question: "Can I pay monthly or yearly?",
@@ -101,7 +101,7 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
     question: "What are the Free plan limits?",
     answer:
-      "Free includes up to 10 orders and 10 customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
+      "Free includes up to 10 active orders (delivered and deleted orders don't count), unlimited customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
   },
   {
     question: "How do I cancel, and does NivaDesk offer refunds?",

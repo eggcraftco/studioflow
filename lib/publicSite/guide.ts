@@ -113,7 +113,7 @@ const TREE_EN: GuideNode[] = [
         title: "What happens when the trial ends",
         blocks: [
           { kind: "para", text: "The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable." },
-          { kind: "para", text: "What stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep." },
+          { kind: "para", text: "What stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Marking finished orders delivered, or deleting ones you no longer need, brings you back under the limit. NivaDesk never decides which of your orders to keep." },
           { kind: "para", text: "Upgrading later picks everything up exactly where it stopped." }
         ]
       },
@@ -1396,7 +1396,7 @@ const TREE_TR: GuideNode[] = [
         id: "trial-no-credit-card",
         title: "Kaydolmak için kredi kartı yok",
         blocks: [
-          { kind: "para", text: "NivaDesk'e kaydolmak için kredi kartı gerekmez; kurulumun hiçbir yerinde ödeme bilgisi istenmez. Free planın süresi hiç dolmaz: 10 aktif sipariş, 10 müşteri, kişisel notlarınız ve dışa aktarma erişimi; ücretsiz ve süresiz." },
+          { kind: "para", text: "NivaDesk'e kaydolmak için kredi kartı gerekmez; kurulumun hiçbir yerinde ödeme bilgisi istenmez. Free planın süresi hiç dolmaz: 10 aktif sipariş, sınırsız müşteri, kişisel notlarınız ve dışa aktarma erişimi; ücretsiz ve süresiz." },
           { kind: "para", text: "Ücretli planın 14 günlük denemesi bundan ayrıdır ve kaydolduğunuzda başlamaz." }
         ]
       },
@@ -1418,7 +1418,7 @@ const TREE_TR: GuideNode[] = [
         title: "Deneme bitince ne olur",
         blocks: [
           { kind: "para", text: "Çalışma alanı Free'ye döner ve bir bildirim bunu açıkça söyler; \"Free ile devam et\" ile \"Bir plan seç\" yan yana durur. Hiçbir şey silinmez: bütün siparişler, müşteriler, dosyalar ve notlar görünür ve dışa aktarılabilir kalır." },
-          { kind: "para", text: "Duran şeyler ücretli plan özellikleridir — Client Files, gelişmiş finans, ekip mesajlaşması — ve Free'nin 10 aktif sipariş sınırının üstünde yeni sipariş açmak. Biten siparişleri arşivlemek sizi sınırın altına döndürür. NivaDesk hangi siparişlerinizin kalacağına asla kendisi karar vermez." },
+          { kind: "para", text: "Duran şeyler ücretli plan özellikleridir — Client Files, gelişmiş finans, ekip mesajlaşması — ve Free'nin 10 aktif sipariş sınırının üstünde yeni sipariş açmak. Biten siparişleri teslim edildi olarak işaretlemek ya da artık gerekmeyenleri silmek sizi sınırın altına döndürür. NivaDesk hangi siparişlerinizin kalacağına asla kendisi karar vermez." },
           { kind: "para", text: "Sonradan yükseltmek her şeyi kaldığı yerden devam ettirir." }
         ]
       },

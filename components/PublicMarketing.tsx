@@ -1413,7 +1413,7 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
         <div className="public-plan-stat">
           <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 4h7v13h-7zM8.5 4V3h3v1M8.5 8h3M8.5 11h3" /></svg>
           <span className="public-plan-stat-label">{t("plan.limit.orders")}</span>
-          <strong>{plan.orderLimit ?? t("plan.limit.unlimited")}</strong>
+          <strong>{plan.orderLimit == null ? t("plan.limit.unlimited") : t("plan.limit.activeOrders").replace("{count}", String(plan.orderLimit))}</strong>
         </div>
         <div className="public-plan-stat">
           <svg className="public-plan-stat-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 9a2.4 2.4 0 100-4.8 2.4 2.4 0 000 4.8zM12.6 8.8a2 2 0 100-4M3.5 15.5c0-2 1.6-3.6 3.5-3.6s3.5 1.6 3.5 3.6M12 11.9c1.9 0 3.5 1.3 3.5 3.6" /></svg>

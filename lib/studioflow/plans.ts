@@ -43,7 +43,10 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
     title: "Free",
     purchaseModel: "Free",
     orderLimit: 10,
-    customerLimit: 10,
+    // Customers are unlimited on every plan since 28 Aug 2026 (functions/index.js
+    // PLAN_ENTITLEMENTS.demo.customerLimit null). The 10 is ACTIVE orders: the
+    // server skips isDelivered and isDeleted orders when it counts.
+    customerLimit: null,
     storageLimitMB: 50,
     teamMemberLimit: 1,
     features: {
