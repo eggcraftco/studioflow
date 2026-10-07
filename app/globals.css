@@ -24905,19 +24905,24 @@ body[data-studio-theme="dark"] .order-list-card.multi-selected {
 }
 
 /* Global-website report, visual pass: skip link, hero zoom, muted Planned card. */
+/* Hidden ABOVE the page, not 9999px to the left: under dir="rtl" (Arabic) a
+   far-left offset is scrollable overflow, and every public page scrolled
+   sideways to 10,374px at 375px wide (found 7 Oct 2026). Above the top edge is
+   never scrollable in either direction. */
 .public-skip-link {
   position: absolute;
-  left: -9999px;
+  inset-inline-start: 0;
   top: 0;
   z-index: 60;
   padding: 10px 16px;
-  border-radius: 0 0 10px 0;
+  border-end-end-radius: 10px;
   background: var(--public-accent);
   color: #fff;
   font-weight: 600;
+  transform: translateY(-120%);
 }
 .public-skip-link:focus {
-  left: 0;
+  transform: none;
 }
 .hero-shot-zoom {
   position: absolute;

@@ -57,3 +57,6 @@
 .legend li .status{margin:2px 0 0;flex-shrink:0;white-space:nowrap}
 .legendChecked{font-size:10px;color:#8a9484;margin:12px 0 0}
 @media(max-width:700px){.legend{padding:14px;margin-bottom:22px}.legend li{font-size:11px}}
+
+/* The Amazon card's link to its seller page (/integrations/amazon), on the card face. */
+.cardLink{display:inline-flex;align-items:center;min-height:44px;margin:-8px 0 10px;font-size:12px;font-weight:600;color:var(--green)!important;text-underline-offset:4px}

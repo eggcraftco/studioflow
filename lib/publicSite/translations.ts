@@ -1098,6 +1098,7 @@ export const PUBLIC_SITE_EN = {
   "integrations.action.request": "Request access",
   "integrations.action.ask": "Ask about this integration",
   "integrations.action.chatgpt": "Explore NivaDesk for ChatGPT",
+  "integrations.action.amazonPage": "Details for Amazon sellers",
   "integrations.note.shopify": "Awaiting Shopify App Store approval — customers can't install it yet.",
   "integrations.note.etsy": "Available on request while the app's commercial access with Etsy is arranged.",
   "integrations.note.quickbooks": "Available on request while production access with Intuit is arranged.",
@@ -11314,6 +11315,22 @@ const FILL_TRANSLATIONS_19: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+// The Amazon card's link to /integrations/amazon (7 October 2026). Every
+// language in one table, keyed by language — never split across tables.
+const FILL_TRANSLATIONS_20: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  Türkçe: { "integrations.action.amazonPage": "Amazon satıcıları için ayrıntılar" },
+  Deutsch: { "integrations.action.amazonPage": "Details für Amazon-Verkäufer" },
+  "Français": { "integrations.action.amazonPage": "Détails pour les vendeurs Amazon" },
+  Italiano: { "integrations.action.amazonPage": "Dettagli per i venditori Amazon" },
+  "Español (Spanish)": { "integrations.action.amazonPage": "Detalles para vendedores de Amazon" },
+  "Português": { "integrations.action.amazonPage": "Detalhes para vendedores da Amazon" },
+  "Русский (Russian)": { "integrations.action.amazonPage": "Подробнее для продавцов Amazon" },
+  "日本語 (Japanese)": { "integrations.action.amazonPage": "Amazon セラー向けの詳細" },
+  "中文 (Chinese)": { "integrations.action.amazonPage": "面向 Amazon 卖家的详情" },
+  "العربية (Arabic)": { "integrations.action.amazonPage": "تفاصيل لبائعي Amazon" },
+  "हिन्दी (Hindi)": { "integrations.action.amazonPage": "Amazon विक्रेताओं के लिए विवरण" }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -11333,7 +11350,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_16,
   FILL_TRANSLATIONS_17,
   FILL_TRANSLATIONS_18,
-  FILL_TRANSLATIONS_19
+  FILL_TRANSLATIONS_19,
+  FILL_TRANSLATIONS_20
 ];
 
 function mergeFill(
