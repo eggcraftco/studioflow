@@ -26,6 +26,8 @@ import {
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
 import { studioT } from "@/lib/studioflow/language";
+import { PLAN_ORDER_RULE_HINT, formatActiveOfLimit, formatTotalOrdersLine, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
+import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
   orders_read: "View existing orders",
@@ -113,6 +115,7 @@ export default function PlanPage() {
   const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [counts, setCounts] = useState<DashboardCounts | null>(null);
+  const [orderUsage, setOrderUsage] = useState<PlanOrderUsage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -138,9 +141,17 @@ export default function PlanPage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
-        const loadedCounts = await loadDashboardCounts(loadedWorkspace.id);
+        const [loadedCounts, loadedOrderUsage] = await Promise.all([
+          loadDashboardCounts(loadedWorkspace.id),
+          // Active orders by the server's rule, total outside Trash (planOrderUsage.ts).
+          loadPlanOrderUsage(loadedWorkspace.id, loadedWorkspace.entitlements.orderLimit).catch(usageError => {
+            console.warn("Plan order usage could not be loaded:", usageError);
+            return null;
+          })
+        ]);
         if (cancelled) return;
         setCounts(loadedCounts);
+        setOrderUsage(loadedOrderUsage);
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : "Could not load billing data.");
@@ -311,7 +322,11 @@ export default function PlanPage() {
               </p>
               <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginTop: 18 }}>
                 <MiniMetric title="Status" value={billingStatusLabel(workspace.billingStatus)} note="Workspace billing state" />
-                <MiniMetric title="Orders" value={String(counts.orderCount)} note="Existing data" />
+                <MiniMetric
+                  title={t("Active orders")}
+                  value={orderUsage ? (orderUsage.limit == null ? `${orderUsage.active} (${t("no limit")})` : formatActiveOfLimit(orderUsage.active, orderUsage.limit)) : "—"}
+                  note={`${orderUsage ? formatTotalOrdersLine(orderUsage.total, t) : `${t("Total orders")}: —`}. ${t(PLAN_ORDER_RULE_HINT)}`}
+                />
                 <MiniMetric
                   title={workspace.entitlements.features.team_access ? "Current seat allowance" : "Users"}
                   value={workspace.entitlements.features.team_access ? String(workspace.billingTeamMemberLimit) : "1 included"}

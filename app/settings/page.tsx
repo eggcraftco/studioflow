@@ -4,6 +4,8 @@ import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { PLAN_ORDER_RULE_HINT, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
+import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -6804,6 +6806,20 @@ function PlanAccessSection({
     { label: "Storage Add-ons", icon: "storage", render: plan => included(plan.features.storage_addons) }
   ];
   const usedMB = counts?.estimatedFileUsageMB ?? 0;
+  const [orderUsage, setOrderUsage] = useState<PlanOrderUsage | null>(null);
+  const [orderUsageFailed, setOrderUsageFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setOrderUsage(null);
+    setOrderUsageFailed(false);
+    loadPlanOrderUsage(workspace.id, currentPlan.orderLimit)
+      .then(result => { if (!cancelled) setOrderUsage(result); })
+      .catch(loadError => {
+        console.warn("Plan order usage could not be loaded:", loadError);
+        if (!cancelled) setOrderUsageFailed(true);
+      });
+    return () => { cancelled = true; };
+  }, [workspace.id, currentPlan.orderLimit]);
   const seatsIncluded = currentPlan.includedTeamSeats ?? workspace.billingTeamMemberLimit;
   const billingActive = workspace.billingStatus === "active" || workspace.billingStatus === "trialing";
 
@@ -6828,12 +6844,22 @@ function PlanAccessSection({
           <p className="settings-field-hint">{planSummaryText(currentPlan.plan)}</p>
           {!isActiveWorkspaceOwner ? <p className="settings-field-hint">{t("This workspace plan is managed by its owner.")}</p> : null}
           <div className="settings-metric-grid">
-            <div className="settings-metric">
+            <div className="settings-metric settings-metric-orders">
               <small>{t("Orders")}</small>
-              <strong>{counts?.orderCount ?? 0}</strong>
-              {/* The plan limit counts ACTIVE orders (the server skips delivered and deleted ones);
-                  the figure above is every order, so the limit is named rather than shown as "of N". */}
-              <em>{currentPlan.orderLimit === null ? t("Unlimited") : `≤ ${currentPlan.orderLimit} ${t("active orders")}`}</em>
+              {/* Two numbers, never one: the plan limit counts ACTIVE orders by the
+                  server's rule (not delivered, not in Trash — status is not read,
+                  so a cancelled order still counts); the total is every order
+                  outside Trash. lib/studioflow/planOrderUsage.ts holds the rule. */}
+              <strong className="settings-plan-orders-active" data-testid="plan-active-orders">
+                {orderUsage ? formatActiveOrdersLine(orderUsage.active, orderUsage.limit, t) : orderUsageFailed ? `${t("Active orders")}: —` : t("Loading...")}
+              </strong>
+              <em data-testid="plan-total-orders">{orderUsage ? formatTotalOrdersLine(orderUsage.total, t) : `${t("Total orders")}: —`}</em>
+              {orderUsage && orderUsage.limit != null ? (
+                <div className="settings-progress-track settings-plan-orders-track" aria-hidden="true">
+                  <div className="settings-progress-fill" style={{ width: `${planOrderUsagePercent(orderUsage.active, orderUsage.limit)}%` }} />
+                </div>
+              ) : null}
+              <p className="settings-field-hint settings-plan-orders-hint">{t(PLAN_ORDER_RULE_HINT)}</p>
             </div>
             <div className="settings-metric">
               <small>{t("Customers")}</small>

@@ -31564,6 +31564,11 @@ body[data-studio-theme="dark"] .settings-feature { background: var(--panel); }
 .settings-metric-wide strong { font-size: 24px; }
 .settings-metric-of { font-size: 14px; font-weight: 600; color: var(--muted); }
 .settings-metric .settings-progress-track { margin-top: 6px; }
+/* Plan & Access: active (limit) and total orders, with the counting rule under them. */
+.settings-metric-orders { grid-column: 1 / -1; }
+.settings-metric-orders strong { overflow-wrap: anywhere; }
+.settings-metric-orders .settings-progress-track { background: var(--settings-border); max-width: 360px; }
+.settings-plan-orders-hint { margin: 6px 0 0; font-size: 12px; line-height: 1.45; }
 .settings-member-list { display: grid; gap: 8px; }
 .settings-member-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--settings-border); border-radius: 10px; background: var(--settings-surface); }
 .settings-member-avatar { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 800; overflow: hidden; flex: 0 0 auto; }
