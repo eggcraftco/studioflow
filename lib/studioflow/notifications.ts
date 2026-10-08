@@ -4,6 +4,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -153,22 +154,44 @@ export function listenToActivityNotifications(
   email: string,
   callback: (items: StudioActivityNotification[]) => void,
 ): Unsubscribe {
-  if (!workspace.id) {
+  const uidClean = uid.trim();
+  if (!workspace.id || !uidClean) {
     callback([]);
     return () => {};
   }
+  // Bell ACL (8 Oct 2026): firestore.rules lets a member read only the rows
+  // whose recipientUids name them, and a list that does not say so in the
+  // query is refused outright. The server writes each row with exactly what
+  // its recipients may read today and moves a member off a row when their
+  // access narrows (customers / financialInfo / orders off, assigned-only).
   const q = query(
     collection(db, "companies", workspace.id, "notifications"),
+    where("recipientUids", "array-contains", uidClean),
     orderBy("createdAt", "desc"),
     limit(100),
   );
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs
-      .map((d) => notificationFromDoc(d.id, d.data() as Record<string, unknown>))
-      .filter((n) => isNotificationVisible(n, uid, email))
-      .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    callback(items);
-  });
+  // A snapshot served from this browser's persistent cache is not shown: after
+  // an access change it can still hold a row the member may no longer read
+  // (first paint, offline) until the server answers. Metadata changes are
+  // listened to so the server-confirmed snapshot always arrives, even when it
+  // matches the cache.
+  return onSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snap) => {
+      if (snap.metadata.fromCache) return;
+      const items = snap.docs
+        .map((d) => notificationFromDoc(d.id, d.data() as Record<string, unknown>))
+        .filter((n) => isNotificationVisible(n, uidClean, email))
+        .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      callback(items);
+    },
+    () => {
+      // Refused (rules, signed out, removed from the workspace): an empty bell,
+      // never the last list this tab happened to hold.
+      callback([]);
+    },
+  );
 }
 
 type CallableResult<T> = { data: T };
