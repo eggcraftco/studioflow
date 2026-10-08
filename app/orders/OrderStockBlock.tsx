@@ -28,7 +28,7 @@ import {
 } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
-import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
@@ -64,6 +64,12 @@ export function OrderStockBlock({
 
   const reload = useCallback(async () => {
     if (!orderId) return;
+    // Never ask for the order's inventory with the inventory key OFF: the
+    // server refuses it, and the parent card does not mount this block then.
+    if (!workspaceAccessAllows(workspace.memberAccess, "inventory")) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const result = await getOrderInventory(workspace, orderId);

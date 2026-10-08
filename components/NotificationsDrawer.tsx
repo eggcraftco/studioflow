@@ -14,6 +14,7 @@ import {
   notificationStackKey,
   rejectWorkflowOrderDeletion,
   type StudioActivityNotification,
+  notificationVisibleForAccess,
   typeKeyFor,
   typeLabel,
 } from "@/lib/studioflow/notifications";
@@ -132,9 +133,14 @@ export function NotificationsDrawer({
     setOptimisticReadIds(new Set());
   }, [workspace?.id]);
 
+  // The key gate is applied again here, on top of AppShell's: the drawer is
+  // the Activity page, and a row from a closed area must not be listed in it.
   const visible = useMemo(
-    () => notifications.filter((n) => !dismissedLocally.has(n.id) && !isNotificationDismissed(n, uid, email)),
-    [notifications, dismissedLocally, uid, email],
+    () => notifications.filter((n) =>
+      notificationVisibleForAccess(n, workspace?.memberAccess)
+      && !dismissedLocally.has(n.id)
+      && !isNotificationDismissed(n, uid, email)),
+    [notifications, dismissedLocally, uid, email, workspace?.memberAccess],
   );
 
   const computeUnread = (n: StudioActivityNotification) => {
@@ -222,6 +228,9 @@ export function NotificationsDrawer({
   };
 
   const handleOpenNotification = (n: StudioActivityNotification) => {
+    // A row from a closed area is never opened: the page it leads to would
+    // redirect, and the callable behind it would be refused.
+    if (!notificationVisibleForAccess(n, workspace?.memberAccess)) return;
     void handleMarkRead(n.id);
     const route = n.route.trim().toLowerCase();
     if (route === "customerinbox") {

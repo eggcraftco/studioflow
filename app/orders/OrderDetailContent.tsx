@@ -5838,7 +5838,11 @@ export function OrderDetailContent({
   // unknown is not a yes.
   const [workspaceSms, setWorkspaceSms] = useState<WorkspaceSmsSettings | null>(null);
   const [workspaceSmsFailed, setWorkspaceSmsFailed] = useState(false);
+  // The SMS row lives on the customer-portal card; a member who cannot see that
+  // card (cardCustomer key) gets no getWorkspaceSmsSettings call for it.
+  const showsPortalSmsRow = canShowOrderCard("customerPortal");
   useEffect(() => {
+    if (!showsPortalSmsRow) return;
     let cancelled = false;
     getWorkspaceSmsSettings(workspace)
       .then(result => {
@@ -5852,7 +5856,7 @@ export function OrderDetailContent({
     return () => {
       cancelled = true;
     };
-  }, [workspace]);
+  }, [workspace, showsPortalSmsRow]);
 
   async function createPortalLink() {
     setPortalBusy(true);
@@ -6771,14 +6775,27 @@ export function OrderDetailContent({
                     />
                   </>
                 ) : null}
-                <div className="app-card-divider" />
-                <OrderStockBlock
-                  workspace={workspace}
-                  orderId={order.id}
-                  currencySymbol={moneySymbol(moneySettings)}
-                  canEdit={canInlineEditFullDetails}
-                  onUseAsBaseCost={total => { void saveMoneyFinanceValue("watchPurchasePrice", total, "Cost (Base)"); }}
-                />
+                {workspaceAccessAllows(workspace.memberAccess, "inventory") ? (
+                  <>
+                    {/* The stock block asks the server for this order's inventory
+                        (getOrderInventory); with the inventory key OFF that call
+                        is refused, so the block is not mounted and the card keeps
+                        only its checklist and notes (owner's rule, 8 Oct 2026). */}
+                    <div className="app-card-divider" />
+                    <OrderStockBlock
+                      workspace={workspace}
+                      orderId={order.id}
+                      currencySymbol={moneySymbol(moneySettings)}
+                      canEdit={canInlineEditFullDetails}
+                      onUseAsBaseCost={total => { void saveMoneyFinanceValue("watchPurchasePrice", total, "Cost (Base)"); }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="app-card-divider" />
+                    <p className="muted-copy">{t("Inventory is not part of your access in this workspace.")}</p>
+                  </>
+                )}
               </div>
             ) : (
               <LockedInline title={t("Materials & Inventory locked")} note={t("Materials cards are available from NivaDesk Starter.")} />
