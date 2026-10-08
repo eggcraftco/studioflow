@@ -217,9 +217,13 @@ export default function MessagesPage() {
           setPhoneShowingConversation(false);
           void messageThreadPresence(workspace.id, openId).then((presence) => {
             dispatchStudioToast({
-              message: presence === "present"
-                ? t("You no longer have access to this group.")
-                : t("This group was deleted"),
+              // Only a read that finds no document proves a deletion; a refused
+              // read (a member who was removed reads the same) stays neutral.
+              message: presence === "missing"
+                ? t("This group was deleted")
+                : presence === "present"
+                  ? t("You no longer have access to this group.")
+                  : t("This group is no longer available."),
             });
           });
         }
@@ -633,6 +637,7 @@ export default function MessagesPage() {
       await deleteMessageThread(workspace, threadId);
       expectedGoneThreadIdRef.current = "";
       setDeleteGroupOpen(false);
+      dispatchStudioToast({ message: t("This group was deleted") });
       setInfoOpen(false);
       setPhoneShowingConversation(false);
       // The list listener drops it too; do not wait for that to leave the screen.
