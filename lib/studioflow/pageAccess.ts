@@ -21,7 +21,8 @@ export const PAGE_ACCESS_BY_PATH: Record<string, WorkspaceMemberAccessKey> = {
   // Inventory has its own key since the 8 Oct 2026 addendum.
   "/inventory": "inventory",
   "/schedule": "schedule",
-  "/team-schedule": "schedule",
+  // Its own key since the 8 Oct 2026 Team Schedule contract.
+  "/team-schedule": "teamSchedule",
   "/customers": "customers",
   // Two messaging surfaces, two keys: the team's own messages ride `teamChat`,
   // the customer inbox rides `messages`. The one sidebar item that serves both

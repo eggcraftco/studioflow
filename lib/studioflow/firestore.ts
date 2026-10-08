@@ -95,6 +95,10 @@ export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "inventory", label: "Inventory", description: "Inventory menu and pages." },
   { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
   { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
+  // Team Schedule (docs/team-schedule-access-contract-2026-10-08.md): the team-wide
+  // calendar, loaded from listTeamScheduleItems without finance or contact fields.
+  // Off for workflow and assigned-only members unless the owner turns it on.
+  { key: "teamSchedule", label: "Team Schedule", description: "See the whole team's assigned work on the Team Schedule calendar, without prices, contact details, files or notes. Other members' jobs are view-only." },
   { key: "customers", label: "Customers", description: "Customer list and contact directory." },
   // Two messaging surfaces, two keys (docs/messaging-access-contract-2026-10-08.md):
   // `messages` is the CUSTOMER inbox and its notifications, `teamChat` is the
@@ -831,7 +835,10 @@ function customRolesMap(companyData: Record<string, unknown>) {
       name: stringValue(data.name, "Custom Role"),
       description: stringValue(data.description, ""),
       baseRole: normalizeWorkspaceRole(data.baseRole, "member") || "member",
-      access: normalizeWorkspaceMemberAccess(data.access)
+      access: enforceTeamScheduleScope(
+        normalizeWorkspaceMemberAccess(data.access),
+        data.access && typeof data.access === "object" ? data.access as Record<string, unknown> : null
+      )
     };
   });
   return roles;
@@ -890,6 +897,7 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
     access.manageProjectAssignments = false;
     access.orders = true;
     access.schedule = true;
+    access.teamSchedule = false;
     access.quickReply = true;
     access.clientFiles = true;
     access.cardClientFiles = true;
@@ -927,7 +935,7 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
     : {};
   const roleValue = workspaceMemberRoleValue(companyData, uid, "member");
   const customRole = customRolesMap(companyData)[roleValue];
-  if (customRole) return normalizeWorkspaceMemberAccess(customRole.access);
+  if (customRole) return { ...customRole.access };
   const memberAccess = companyData.memberAccess && typeof companyData.memberAccess === "object" && !Array.isArray(companyData.memberAccess)
     ? companyData.memberAccess as Record<string, unknown>
     : {};
@@ -953,7 +961,17 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
     merged.clientFiles = true;
     merged.cardClientFiles = true;
   }
-  return merged;
+  return enforceTeamScheduleScope(merged, { ...inlineAccess, ...rootAccess });
+}
+
+/**
+ * An assigned-only member sees the team calendar only when `teamSchedule: true`
+ * is stored for them; a missing key is not a grant. Same rule as the server
+ * (functions/index.js enforceTeamScheduleScope).
+ */
+export function enforceTeamScheduleScope(access: WorkspaceMemberAccess, explicit: Record<string, unknown> | null | undefined): WorkspaceMemberAccess {
+  if (access.assignedProjectsOnly === true && (explicit ?? {}).teamSchedule !== true) access.teamSchedule = false;
+  return access;
 }
 
 function resolveRole(companyData: Record<string, unknown>, uid: string, companyId: string) {
@@ -2635,4 +2653,66 @@ export async function loadTeamAccessData(workspace: WorkspaceContext): Promise<T
   }
 
   return { members, joinRequests, customRoles };
+}
+
+// ----- Team Schedule (docs/team-schedule-access-contract-2026-10-08.md) -----
+// The server callable that feeds the team calendar for members. It returns
+// calendar fields only — no prices, contact details, files or notes — and is
+// refused when the member's `teamSchedule` key is off. Name must match
+// functions/index.js `exports.listTeamScheduleItems`.
+export const TEAM_SCHEDULE_CALLABLE = "listTeamScheduleItems";
+
+export type TeamScheduleItem = ScheduleOrderItem & { assignedToName: string };
+
+type TeamScheduleItemPayload = {
+  orderId?: string; projectNumber?: number; designName?: string; customerName?: string;
+  assignedToUid?: string; assignedToName?: string; paymentDate?: string | null; deliveryTime?: number;
+  dueDate?: string | null; status?: string; designStatus?: string; productionStageOverride?: string;
+  isDelivered?: boolean; isDispatched?: boolean;
+};
+
+function isoDateOrNull(value: unknown): Date | null {
+  if (typeof value !== "string" || !value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export async function loadTeamScheduleItems(companyId: string, range?: { from: Date; to: Date }): Promise<TeamScheduleItem[]> {
+  const callable = httpsCallable<Record<string, unknown>, { items?: TeamScheduleItemPayload[] }>(functions, TEAM_SCHEDULE_CALLABLE);
+  const result = await callable({
+    companyId,
+    ...(range ? { from: range.from.toISOString(), to: range.to.toISOString() } : {})
+  });
+  const items = Array.isArray(result.data?.items) ? result.data.items : [];
+  return items.map(item => ({
+    id: String(item.orderId ?? ""),
+    projectNumber: Number(item.projectNumber ?? 0) || 0,
+    assignedToUid: String(item.assignedToUid ?? ""),
+    assignedToName: String(item.assignedToName ?? ""),
+    assignedToEmail: "",
+    customerName: typeof item.customerName === "string" ? item.customerName : "",
+    designName: String(item.designName ?? ""),
+    watchRef: "",
+    status: String(item.status || "Not Yet"),
+    designStatus: String(item.designStatus || "Not Yet"),
+    priority: "Normal",
+    risk: "None",
+    riskReason: "",
+    notes: "",
+    paidAmount: 0,
+    remainingAmount: 0,
+    paymentDate: isoDateOrNull(item.paymentDate),
+    deliveryTime: Number(item.deliveryTime ?? 0) || 0,
+    dueDate: isoDateOrNull(item.dueDate),
+    isDispatched: item.isDispatched === true,
+    isDelivered: item.isDelivered === true,
+    previewImageUrl: "",
+    clientFileCount: 0,
+    customFields: {},
+    extraStatuses: {},
+    productionStageOverride: String(item.productionStageOverride ?? ""),
+    productionBlocker: null,
+    materialsDefaultToggles: {},
+    materialsToggles: {}
+  })).filter(item => item.id);
 }

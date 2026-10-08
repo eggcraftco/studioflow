@@ -16,6 +16,8 @@ import {
 } from "@/lib/studioflow/blockHeadings";
 import {
   loadScheduleOrders,
+  loadTeamScheduleItems,
+  normalizeWorkspaceRole,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
   loadTeamAccessData,
@@ -398,6 +400,40 @@ function planNotice(workspace: WorkspaceContext | null) {
   return "Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Starter.";
 }
 
+const TEAM_SCHEDULE_PAST_DAYS = 180;
+const TEAM_SCHEDULE_FUTURE_DAYS = 365;
+
+/** True when this viewer reads the Team Schedule through the server callable (every member; the owner keeps the direct read). */
+function teamScheduleViaCallable(teamMode: boolean, workspace: WorkspaceContext | null) {
+  return teamMode && normalizeWorkspaceRole(workspace?.role ?? "") !== "owner";
+}
+
+async function loadOrdersForView(teamMode: boolean, workspace: WorkspaceContext, uid: string): Promise<ScheduleOrderItem[]> {
+  if (!teamScheduleViaCallable(teamMode, workspace)) return loadScheduleOrders(workspace.id, workspace, uid);
+  // No Team plan → the server would refuse; do not ask.
+  if (workspace.billingPlan !== "team_monthly") return [];
+  const now = new Date();
+  return loadTeamScheduleItems(workspace.id, {
+    from: addDays(now, -TEAM_SCHEDULE_PAST_DAYS),
+    to: addDays(now, TEAM_SCHEDULE_FUTURE_DAYS)
+  });
+}
+
+/** Members built from the callable's assignee names when the roster is not readable for this member. */
+function teamMembersFromItems(items: ScheduleOrderItem[]): TeamMemberDetail[] {
+  const seen = new Map<string, TeamMemberDetail>();
+  for (const item of items) {
+    const id = item.assignedToUid.trim();
+    if (!id || seen.has(id)) continue;
+    const name = "assignedToName" in item ? String((item as { assignedToName?: string }).assignedToName || "") : "";
+    seen.set(id, {
+      id, email: "", displayName: name, photoURL: "", role: "member", effectiveRole: "member", roleLabel: "",
+      access: {} as TeamMemberDetail["access"], addedAt: null, isOwner: false, suspended: false, suspendedReason: "", suspendedAt: null
+    });
+  }
+  return [...seen.values()];
+}
+
 export default function SchedulePage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -479,7 +515,7 @@ export default function SchedulePage() {
     const currentWorkspace = workspace;
     async function pickUpNewProject(createdOrderId: string) {
       try {
-        const loadedOrders = await loadScheduleOrders(currentWorkspace.id, currentWorkspace, uid);
+        const loadedOrders = await loadOrdersForView(teamMode, currentWorkspace, uid);
         setOrders(loadedOrders);
         // Reloading is not enough to make the project findable. Its bar starts
         // today, and the person may well have panned months ahead to plan — so
@@ -510,7 +546,7 @@ export default function SchedulePage() {
       window.removeEventListener("studioflow-order-created", handleCreated);
       window.removeEventListener("studioflow-order-removed", handleRemoved);
     };
-  }, [workspace, user]);
+  }, [workspace, user, teamMode]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(SCHEDULE_ZOOM_STORAGE_KEY);
@@ -537,14 +573,20 @@ export default function SchedulePage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
-        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "schedule")) {
+        // /team-schedule rides its own key (teamSchedule); /schedule rides schedule.
+        // A closed page redirects BEFORE any order or team data is read.
+        if (teamMode && !workspaceAccessAllows(loadedWorkspace.memberAccess, "teamSchedule")) {
+          router.replace(pageAccessRedirectFor("/team-schedule", loadedWorkspace.memberAccess));
+          return;
+        }
+        if (!teamMode && !workspaceAccessAllows(loadedWorkspace.memberAccess, "schedule")) {
           router.replace(pageAccessRedirectFor("/schedule", loadedWorkspace.memberAccess));
           return;
         }
         setWorkspace(loadedWorkspace);
 
         const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
-          loadScheduleOrders(loadedWorkspace.id, loadedWorkspace, uid),
+          loadOrdersForView(teamMode, loadedWorkspace, uid),
           loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
@@ -553,9 +595,11 @@ export default function SchedulePage() {
         setBlockHeadingSettings(loadedBlockHeadings);
         setMoneySettings(loadedMoneySettings);
 
+        const rosterFallback = teamScheduleViaCallable(teamMode, loadedWorkspace) ? teamMembersFromItems(loadedOrders) : [];
+        if (rosterFallback.length) setTeamMembers(rosterFallback);
         loadTeamAccessData(loadedWorkspace)
-          .then(data => { if (!cancelled) setTeamMembers(data.members); })
-          .catch(() => { /* team roster is best-effort */ });
+          .then(data => { if (!cancelled && data.members.length) setTeamMembers(data.members); })
+          .catch(() => { /* team roster is best-effort; members fall back to the callable's names */ });
 
         const firstActive = loadedOrders.filter(order => !orderIsClosed(order)).sort((lhs, rhs) => orderStartDate(lhs).getTime() - orderStartDate(rhs).getTime())[0];
         const anchorOrder = firstActive ?? loadedOrders[0];
@@ -574,7 +618,8 @@ export default function SchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, teamMode]);
 
   const spanOptions = useMemo(() => availableSpans(workspace), [workspace]);
   const filterOptions = useMemo(() => availableFilters(workspace), [workspace]);
@@ -937,6 +982,19 @@ export default function SchedulePage() {
       : `${shortDate(visibleStart, locale)} - ${shortDate(addDays(visibleEnd, -1), locale)}`;
 
   // ----- Team Schedule computed values -----
+  // Members see other people's jobs view-only: no click-through to the order
+  // page (they may not be able to read it), a tooltip naming the assignee.
+  const teamReadOnly = teamScheduleViaCallable(teamMode, workspace);
+  const canOpenScheduleOrder = (order: ScheduleOrderItem) => !teamReadOnly || orderIsAssignedToCurrentUser(order, user);
+  const openScheduleOrder = (order: ScheduleOrderItem) => {
+    if (!canOpenScheduleOrder(order)) return;
+    router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`);
+  };
+  const scheduleOrderTooltip = (order: ScheduleOrderItem) => {
+    if (canOpenScheduleOrder(order)) return undefined;
+    const name = assigneeLabelForOrder(order, teamMembers) || ("assignedToName" in order ? String((order as { assignedToName?: string }).assignedToName || "") : "");
+    return `${t("Assigned to")} ${name || t("Unassigned")}`;
+  };
   const teamPlanActive = workspace?.billingPlan === "team_monthly";
   const visibleTeamMembers = teamMembers.filter(member => !hiddenMemberIds.has(member.id));
   const ordersForMember = (memberId: string) => visibleOrders.filter(order => (order.assignedToUid || "").trim() === memberId);
@@ -1105,8 +1163,8 @@ export default function SchedulePage() {
             </div>
             <div className="schedule-header-actions">
               {workspace ? <span className="studio-pill">{workspace.name} - {workspace.roleLabel}</span> : null}
-              {selectedOrder ? (
-                <button className="button secondary schedule-header-button" type="button" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(selectedOrder.id)}`)}>
+              {selectedOrder && canOpenScheduleOrder(selectedOrder) ? (
+                <button className="button secondary schedule-header-button" type="button" onClick={() => openScheduleOrder(selectedOrder)}>
                   {t("Open Order")}
                 </button>
               ) : null}
@@ -1373,7 +1431,7 @@ export default function SchedulePage() {
                           {memberOrders.length === 0 ? (
                             <p className="team-agenda-empty">{t("No assigned work in this range.")}</p>
                           ) : memberOrders.map(order => (
-                            <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}>
+                            <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
                               <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                               <span className="schedule-agenda-body">
                                 <span className="schedule-agenda-top">
@@ -1399,7 +1457,7 @@ export default function SchedulePage() {
                           <span className="team-badge">{teamUnassignedOrders.length} {t("jobs")}</span>
                         </div>
                         {teamUnassignedOrders.map(order => (
-                          <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}>
+                          <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
                             <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                             <span className="schedule-agenda-body">
                               <span className="schedule-agenda-top">
@@ -1462,7 +1520,8 @@ export default function SchedulePage() {
                                   className={`team-grid-bar ${scheduleTone(order)}${order.id === selectedOrderId ? " selected" : ""}`}
                                   style={{ left: metrics.x, width: metrics.width, top: i * 64 + 6 }}
                                   onClick={() => selectScheduleOrder(order)}
-                                  onDoubleClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}
+                                  onDoubleClick={() => openScheduleOrder(order)}
+                                  title={scheduleOrderTooltip(order)}
                                 >
                                   <strong>{titleForOrder(order)}</strong>
                                   <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
@@ -1508,7 +1567,11 @@ export default function SchedulePage() {
                         <div className="team-detail-row"><span>{t("Schedule")}</span><strong>{scheduleRangeText(selectedOrder)}</strong></div>
                         {countdownText(selectedOrder) ? <div className="team-detail-row"><span>{t("Due")}</span><strong className={orderIsLate(selectedOrder) ? "late" : ""}>{countdownText(selectedOrder)}</strong></div> : null}
                         <div className="team-detail-row"><span>{t("Assigned to")}</span><strong>{assigneeLabelForOrder(selectedOrder, teamMembers) || t("Unassigned")}</strong></div>
-                        <button type="button" className="button team-open-btn" onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(selectedOrder.id)}`)}>{t("Open Order")}</button>
+                        {canOpenScheduleOrder(selectedOrder) ? (
+                          <button type="button" className="button team-open-btn" onClick={() => openScheduleOrder(selectedOrder)}>{t("Open Order")}</button>
+                        ) : (
+                          <p className="team-card-hint">{scheduleOrderTooltip(selectedOrder)}</p>
+                        )}
                       </>
                     ) : (
                       <p className="team-card-hint">{t("Select a job to see its details.")}</p>

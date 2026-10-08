@@ -8913,3 +8913,21 @@ mergeIntoTranslations({
 mergeIntoTranslations({
   "Inventory menu and pages.": { "Türkçe": "Envanter menüsü ve sayfaları.", "Deutsch": "Bestandsmenü und -seiten.", "Français": "Menu et pages d'inventaire.", "Italiano": "Menu e pagine dell'inventario.", "Español (Spanish)": "Menú y páginas de inventario.", "Português": "Menu e páginas de inventário.", "Русский (Russian)": "Меню и страницы инвентаря.", "日本語 (Japanese)": "在庫メニューとページ。", "中文 (Chinese)": "库存菜单和页面。", "العربية (Arabic)": "قائمة المخزون وصفحاته.", "हिन्दी (Hindi)": "इन्वेंटरी मेनू और पेज।" },
 });
+
+// Team Schedule access key (docs/team-schedule-access-contract-2026-10-08.md).
+mergeIntoTranslations({
+  "Team Schedule": { "Türkçe": "Ekip Planı", "Deutsch": "Team-Planung", "Français": "Planning d'équipe", "Italiano": "Pianificazione team", "Español (Spanish)": "Planificación del equipo", "Português": "Agenda da equipa", "Русский (Russian)": "График команды", "日本語 (Japanese)": "チームスケジュール", "中文 (Chinese)": "团队日程", "العربية (Arabic)": "جدول الفريق", "हिन्दी (Hindi)": "टीम शेड्यूल" },
+  "See the whole team's assigned work on the Team Schedule calendar, without prices, contact details, files or notes. Other members' jobs are view-only.": {
+    "Türkçe": "Ekibin tüm atanmış işlerini Ekip Planı takviminde görür; fiyat, iletişim bilgisi, dosya ve not olmadan. Diğer üyelerin işleri yalnızca görüntülenir.",
+    "Deutsch": "Zeigt alle zugewiesenen Aufträge des Teams im Team-Planungskalender – ohne Preise, Kontaktdaten, Dateien oder Notizen. Aufträge anderer Mitglieder sind nur lesbar.",
+    "Français": "Voir tout le travail attribué de l'équipe dans le calendrier Planning d'équipe, sans prix, coordonnées, fichiers ni notes. Les travaux des autres membres sont en lecture seule.",
+    "Italiano": "Vede tutto il lavoro assegnato del team nel calendario Pianificazione team, senza prezzi, contatti, file o note. I lavori degli altri membri sono di sola lettura.",
+    "Español (Spanish)": "Ver todo el trabajo asignado del equipo en el calendario de Planificación del equipo, sin precios, datos de contacto, archivos ni notas. Los trabajos de otros miembros son de solo lectura.",
+    "Português": "Ver todo o trabalho atribuído da equipa no calendário Agenda da equipa, sem preços, contactos, ficheiros ou notas. Os trabalhos de outros membros são só de leitura.",
+    "Русский (Russian)": "Все назначенные работы команды в календаре «График команды» — без цен, контактов, файлов и заметок. Работы других участников доступны только для просмотра.",
+    "日本語 (Japanese)": "チーム全員の担当作業をチームスケジュールのカレンダーで表示します。価格・連絡先・ファイル・メモは含まれません。他のメンバーの作業は閲覧のみです。",
+    "中文 (Chinese)": "在团队日程日历中查看团队所有已分配的工作，不含价格、联系方式、文件或备注。其他成员的工作仅可查看。",
+    "العربية (Arabic)": "عرض كل الأعمال المُسندة للفريق في تقويم جدول الفريق، دون الأسعار أو بيانات الاتصال أو الملفات أو الملاحظات. أعمال الأعضاء الآخرين للعرض فقط.",
+    "हिन्दी (Hindi)": "टीम शेड्यूल कैलेंडर में पूरी टीम का सौंपा गया काम देखें — बिना कीमत, संपर्क विवरण, फ़ाइलों या नोट्स के। दूसरे सदस्यों के काम केवल देखने के लिए हैं।"
+  }
+});

@@ -59,7 +59,11 @@ export function MemberAccessEditor({
     const currentValue = strictEnabled ? normalizedAccess[key] === true : normalizedAccess[key] !== false;
     onChange({
       ...normalizedAccess,
-      [key]: !currentValue
+      [key]: !currentValue,
+      // Turning "Assigned Projects Only" on also turns Team Schedule off: an
+      // assigned-only member sees the team calendar only when the owner then
+      // switches it back on (docs/team-schedule-access-contract-2026-10-08.md).
+      ...(key === "assignedProjectsOnly" && !currentValue ? { teamSchedule: false } : {})
     });
   }
 

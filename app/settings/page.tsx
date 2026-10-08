@@ -400,6 +400,7 @@ function baseRoleMatrixAccess(baseRole: string): WorkspaceMemberAccess {
     access.manageProjectAssignments = false;
     access.orders = true;
     access.schedule = true;
+    access.teamSchedule = false;
     access.quickReply = true;
     access.clientFiles = true;
     access.cardClientFiles = true;
@@ -420,6 +421,8 @@ const PERMISSION_MATRIX_ROWS: PermissionMatrixRow[] = [
   { key: "dashboard", label: "Dashboard", value: column => column.access.dashboard !== false },
   { key: "financialInfo", label: "Financial Info", value: column => column.access.financialInfo !== false },
   { key: "customers", label: "Customers", value: column => column.access.customers !== false },
+  // Assigned-only columns need an explicit true; everyone else is on unless switched off.
+  { key: "teamSchedule", label: "Team Schedule", value: column => column.access.assignedProjectsOnly === true ? column.access.teamSchedule === true : column.access.teamSchedule !== false },
   // Two rows for two surfaces: the customer inbox and the team's own messaging
   // are separate permissions (docs/messaging-access-contract-2026-10-08.md).
   { key: "messages", label: "Customer messages (WhatsApp, Instagram)", value: column => column.access.messages !== false },
