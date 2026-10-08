@@ -50,6 +50,7 @@ import {
   setHomeCardTone,
   showHomeCard,
   visibleHomeCards,
+  canSeeGettingStarted,
   type HomeCardId,
   type HomeCardPeriod,
   type HomeCardSize,
@@ -219,9 +220,10 @@ export default function HomePage() {
    * one.
    */
   const wantsSetupChecklist = useMemo(
-    () => layout.cards.some((card) => card.id === "gettingStarted")
+    () => canSeeGettingStarted(workspace?.role)
+      && layout.cards.some((card) => card.id === "gettingStarted")
       && !layout.hidden.includes("gettingStarted"),
-    [layout],
+    [layout, workspace?.role],
   );
   const [setupChecklist, setSetupChecklist] = useState<SetupChecklist | null>(null);
   useEffect(() => {

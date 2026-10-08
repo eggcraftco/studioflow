@@ -1,13 +1,12 @@
-// Sidebar labels + order-card menu descriptions (8 Oct 2026).
+// Sidebar labels (8 Oct 2026).
 //
-// Two things this guards:
-//  1. Every sidebar label (components/AppShell.tsx NAV_ITEMS, NAV_LOWER_ITEMS,
-//     Activity) has a translation in all 11 non-English languages, so the width
-//     chosen for the sidebar is chosen from the real strings.
-//  2. Every order-card "..." menu option description (lib/studioflow/
-//     orderCardMenuDescriptions.ts) is translated in all 11 languages, probed
-//     through the real studioT (deep merge, Mac table last) — a key that only
-//     exists in the file is not proof.
+// Every sidebar label (components/AppShell.tsx NAV_ITEMS, NAV_LOWER_ITEMS,
+// Activity) has a translation in all 11 non-English languages, probed through
+// the real studioT (deep merge, Mac table last), so the width chosen for the
+// sidebar is chosen from the real strings. The order-card "..." menu option
+// descriptions this script once checked were removed the same day (they read
+// as clutter); the card purposes that replaced them are checked by
+// scripts/check-card-purposes.mjs.
 //
 //   node scripts/check-menu-card-strings.mjs            # pass/fail
 //   node scripts/check-menu-card-strings.mjs --labels   # also print the labels
@@ -27,7 +26,10 @@ const compile = (rel, name) => {
     .replace(/from "\.\/(\w+)"/g, 'from "./$1.mjs"');
   fs.writeFileSync(path.join(tmp, `${name}.mjs`), js);
 };
-for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "orderCardMenuDescriptions"]) {
+// language.ts and every sibling table it imports (the list grows: a new
+// table is a new `./x` import there, found rather than listed here).
+const tables = ["language", ...new Set([...read("lib/studioflow/language.ts").matchAll(/from "\.\/(\w+)"/g)].map((m) => m[1]))];
+for (const name of tables) {
   if (fs.existsSync(path.join(root, `lib/studioflow/${name}.ts`))) compile(`lib/studioflow/${name}.ts`, name);
 }
 const { studioT, SUPPORTED_STUDIO_LANGUAGES } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
@@ -57,29 +59,6 @@ for (const label of labels) {
 }
 if (process.argv.includes("--labels")) {
   console.log(JSON.stringify({ labels, languages, table }, null, 0));
-}
-
-// 2. Card menu descriptions.
-if (fs.existsSync(path.join(tmp, "orderCardMenuDescriptions.mjs"))) {
-  const mod = await import(pathToFileURL(path.join(tmp, "orderCardMenuDescriptions.mjs")).href);
-  const descriptions = mod.ORDER_CARD_MENU_DESCRIPTIONS;
-  const keys = Object.keys(descriptions);
-  checks += 1;
-  if (keys.length < 15) failures.push(`card menu descriptions: only ${keys.length} options described`);
-  for (const key of keys) {
-    const english = descriptions[key];
-    for (const lang of languages) {
-      checks += 1;
-      const out = studioT(english, lang);
-      if (out === english) failures.push(`description "${key}" has no ${lang} translation`);
-    }
-  }
-  // The TSX must reference every described option id, and describe every button it has.
-  const tsx = read("app/orders/OrderDetailContent.tsx");
-  for (const key of keys) {
-    checks += 1;
-    if (!tsx.includes(`"${key}"`)) failures.push(`description id "${key}" is not used in OrderDetailContent.tsx`);
-  }
 }
 
 if (failures.length) {

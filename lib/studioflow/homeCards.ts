@@ -68,6 +68,8 @@ export type HomeCardDefinition = {
   access?: WorkspaceMemberAccessKey;
   /** Owner-only cards: money and banking are workspace finances. */
   financeOnly?: boolean;
+  /** Shown to the workspace OWNER only, whatever access keys a member holds. */
+  ownerOnly?: boolean;
   /** The card reports a total, so its header offers the range that total covers. */
   periods?: boolean;
   /** Where the card's single footer link goes. Deep links, filters pre-applied. */
@@ -88,6 +90,9 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     id: "gettingStarted",
     title: "Getting started",
     icon: "checklist",
+    // Setting the workspace up is the owner's job; a member, viewer, workflow
+    // or custom-role member is not shown the checklist (8 Oct 2026).
+    ownerOnly: true,
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
     href: "/settings",
@@ -356,11 +361,21 @@ export function normaliseHomeLayout(raw: unknown): HomeLayout {
  * a member whose role cannot see financial info must not read the net profit off
  * the Home screen instead.
  */
+/**
+ * The "Getting started" gate: the workspace role is "owner", nothing else.
+ * Not an access key — a member granted every key is still not the owner.
+ * Pure, so scripts/check-card-purposes.mjs can run it on every role.
+ */
+export function canSeeGettingStarted(role: string | null | undefined): boolean {
+  return typeof role === "string" && role.trim().toLowerCase() === "owner";
+}
+
 export function canSeeHomeCard(
   card: HomeCardDefinition,
   workspace: WorkspaceContext | null,
 ): boolean {
   if (!workspace) return false;
+  if (card.ownerOnly && !canSeeGettingStarted(workspace.role)) return false;
   if (card.access && !workspaceAccessAllows(workspace.memberAccess, card.access)) return false;
   if (card.financeOnly && !workspaceAccessAllows(workspace.memberAccess, "financialInfo")) return false;
   return true;

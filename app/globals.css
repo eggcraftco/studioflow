@@ -8322,6 +8322,48 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   outline-offset: 2px;
 }
 
+/* ---- card purpose "i" (8 Oct 2026) ----
+   Every card header carries an "i" before the "...": the same 40 x 40 target,
+   on the same centre line. It opens one text saying what THAT card is for
+   (lib/studioflow/orderCardPurposes.ts). Desktop: a popover under the button,
+   anchored to the wrap's end edge so it opens inwards in LTR and RTL alike.
+   Phone (the ≤768px narrow layout): the text is printed under the card title
+   instead. Escape / outside click close it; focus returns to the "i". */
+.order-card-info-button.is-on .order-card-menu-face {
+  border-color: var(--accent, #2563eb);
+  background: var(--accent-soft, rgba(37, 99, 235, 0.12));
+  color: var(--accent, #2563eb);
+}
+.order-card-purpose[hidden] { display: none; }
+.order-card-purpose p {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text);
+  text-align: start;
+}
+.order-card-purpose.is-popover {
+  position: absolute;
+  top: 42px;
+  inset-inline-end: 0;
+  z-index: 71;
+  width: min(320px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid rgba(120, 120, 140, 0.22);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
+}
+.order-card-purpose.is-inline {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--accent-soft, rgba(37, 99, 235, 0.08));
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+body[data-studio-theme="dark"] .order-card-purpose.is-popover { border-color: rgba(255, 255, 255, 0.14); }
+
 .order-card-menu-panel {
   position: absolute;
   top: 36px;
@@ -26527,12 +26569,11 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   border-radius: 0;
   text-align: left;
 }
-.block-custom-actions > .block-custom-opt:last-child > button { border-bottom: 0; }
+.block-custom-actions button:last-child { border-bottom: 0; }
 .block-custom-actions button:hover:not(:disabled) { background: rgba(120, 120, 140, 0.08); }
 .block-custom-actions button:disabled { opacity: 0.45; cursor: default; }
 .block-custom-actions svg { width: 18px; height: 18px; flex: none; opacity: 0.8; }
 .block-custom-move { display: flex; gap: 8px; flex-wrap: wrap; }
-.block-custom-move > .block-custom-opt { flex: 1; min-width: 72px; }
 .block-custom-move button {
   width: 100%;
   border: 1px solid rgba(120, 120, 140, 0.28);
@@ -26554,9 +26595,6 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 }
 /* No overflow clip on the segment (it would swallow the option tooltips);
    the end buttons carry the corners themselves. */
-.block-custom-segment > .block-custom-opt:first-child > button { border-start-start-radius: 9px; border-end-start-radius: 9px; }
-.block-custom-segment > .block-custom-opt:last-child > button { border-start-end-radius: 9px; border-end-end-radius: 9px; }
-.block-custom-segment > .block-custom-opt { flex: 1; }
 .block-custom-segment button {
   width: 100%;
   border: 0;
@@ -26568,7 +26606,7 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   cursor: pointer;
   border-inline-end: 1px solid rgba(120, 120, 140, 0.2);
 }
-.block-custom-segment > .block-custom-opt:last-child > button { border-inline-end: 0; }
+.block-custom-segment button:last-child { border-inline-end: 0; }
 .block-custom-segment button.is-active {
   background: rgba(37, 99, 235, 0.1);
   color: var(--accent, #2563eb);
@@ -26632,7 +26670,6 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   padding-top: 8px;
   border-top: 1px solid rgba(120, 120, 140, 0.16);
 }
-.block-custom-footer > .block-custom-opt { flex: 1; }
 .block-custom-footer button {
   width: 100%;
   border-radius: 12px;
@@ -26653,107 +26690,6 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 }
 .block-custom-footer button:disabled { opacity: 0.5; cursor: default; }
 
-/* ---- option descriptions (8 Oct 2026) ----
-   Every option in the panel sits in a .block-custom-opt with its description
-   (.block-custom-desc) as a SIBLING of the button, linked by aria-describedby.
-   Desktop (a pointer that hovers): the description is a tooltip under the
-   option on hover and on keyboard focus. Phone (no hover): the "i" in the
-   header turns .is-describing on and every description is printed under its
-   option. Neither path touches the button, so reading never runs anything. */
-.block-custom-opt { position: relative; display: grid; min-width: 0; }
-/* Geometry lives here, at low specificity, so the placement rules below can
-   override it; the hover rule only switches the tooltip on. */
-.block-custom-desc {
-  display: none;
-  top: calc(100% + 4px);
-  inset-inline-start: 0;
-}
-.block-custom-info {
-  width: 32px;
-  height: 32px;
-  display: inline-grid;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-  padding: 0;
-}
-.block-custom-info svg { width: 18px; height: 18px; }
-.block-custom-info:hover { background: rgba(120, 120, 140, 0.12); opacity: 1; }
-.block-custom-info.is-on { background: var(--accent-soft); color: var(--accent, #2563eb); opacity: 1; }
-.block-custom-info:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
-@media (hover: hover) and (pointer: fine) {
-  .block-custom-panel:not(.is-describing) .block-custom-opt:hover > .block-custom-desc,
-  .block-custom-panel:not(.is-describing) .block-custom-opt:focus-within > .block-custom-desc,
-  .order-card-menu-wrap:not(.is-open):hover > .block-custom-desc,
-  .order-card-menu-wrap:not(.is-open):focus-within > .block-custom-desc {
-    display: block;
-    position: absolute;
-    z-index: 4;
-    width: max-content;
-    min-width: 160px;
-    max-width: 260px;
-    padding: 7px 10px;
-    border-radius: 9px;
-    background: #1f2330;
-    color: #f3f4f6;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1.35;
-    text-align: start;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
-    pointer-events: none;
-  }
-  /* The panel clips what leaves it, so items at the end of a row open to the
-     start side, and items near the bottom open upwards. */
-  .block-custom-opt:last-child > .block-custom-desc,
-  .block-custom-color-grid > .block-custom-opt:nth-child(even) > .block-custom-desc,
-  .block-custom-move > .block-custom-opt:nth-child(n + 3) > .block-custom-desc,
-  .order-card-menu-wrap > .block-custom-desc {
-    inset-inline-start: auto;
-    inset-inline-end: 0;
-  }
-  .block-custom-color-grid .block-custom-desc,
-  .block-custom-footer .block-custom-desc,
-  .block-custom-panel > .block-custom-opt > .block-custom-desc {
-    top: auto;
-    bottom: calc(100% + 4px);
-  }
-  .order-card-menu-wrap > .block-custom-desc { top: calc(100% + 2px); }
-}
-.block-custom-panel.is-describing .block-custom-desc {
-  display: block;
-  padding: 3px 4px 7px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-.block-custom-panel.is-describing .block-custom-move,
-.block-custom-panel.is-describing .block-custom-segment,
-.block-custom-panel.is-describing .block-custom-footer {
-  flex-direction: column;
-}
-.block-custom-panel.is-describing .block-custom-move > .block-custom-opt,
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt,
-.block-custom-panel.is-describing .block-custom-footer > .block-custom-opt {
-  flex: none;
-}
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt > button { border-radius: 0; }
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:first-child > button { border-start-start-radius: 9px; border-start-end-radius: 9px; }
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:last-child > button { border-end-start-radius: 9px; border-end-end-radius: 9px; }
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt > button {
-  border-inline-end: 0;
-  border-bottom: 1px solid rgba(120, 120, 140, 0.2);
-}
-.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:last-child > button { border-bottom: 0; }
-.block-custom-panel.is-describing .block-custom-color-grid { grid-template-columns: minmax(0, 1fr); }
-.block-custom-panel.is-describing .block-custom-header .block-custom-desc { display: none; }
-body[data-studio-theme="dark"] .block-custom-panel:not(.is-describing) .block-custom-desc,
-body[data-studio-theme="dark"] .order-card-menu-wrap > .block-custom-desc { border: 1px solid rgba(255, 255, 255, 0.14); }
 .block-custom-label-rows { display: grid; gap: 8px; }
 .block-custom-label-row {
   display: grid;

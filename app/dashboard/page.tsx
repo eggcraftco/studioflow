@@ -34,6 +34,7 @@ import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
 import { loadSetupChecklist, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
+import { canSeeGettingStarted } from "@/lib/studioflow/homeCards";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -906,7 +907,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {workspace ? (
+          {workspace && canSeeGettingStarted(workspace.role) ? (
             <GettingStartedCard
               workspaceId={workspace.id}
               orderCount={counts.orderCount}

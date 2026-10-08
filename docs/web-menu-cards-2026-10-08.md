@@ -52,6 +52,10 @@ Ekran: `shot-sidebars.png` (EN/DE/ES/IT/JA/AR + daraltılmış PT), `shot-sideba
 
 ## 2. Kart "…" menüsü: her seçenek için açıklama
 
+> **GERİ ALINDI (8 Eki, `web-cards-info-2026-10-08`):** bu bölüm isteği yanlış okumuştu. Seçenek
+> açıklamaları kaldırıldı; yerine kart başlığındaki "i" kartın ne için olduğunu söylüyor —
+> bkz. `docs/web-card-purposes-2026-10-08.md`. Aşağısı tarihçe.
+
 Sipariş detayındaki her kartın sağ üst "…" düğmesi `renderCardMenu`
 (`app/orders/OrderDetailContent.tsx`) ile **Block customisation** panelini açar
 (`role="dialog"`). Seçenekler ve açıklamalar `lib/studioflow/orderCardMenuDescriptions.ts`:
