@@ -38,7 +38,8 @@
     "test:export-date-range": "node scripts/check-export-date-range.mjs",
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
     "test:upload-progress": "node scripts/check-upload-progress.mjs",
-    "test:upload-translations": "node scripts/check-upload-translations.mjs"
+    "test:upload-translations": "node scripts/check-upload-translations.mjs",
+    "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

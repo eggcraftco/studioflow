@@ -8110,10 +8110,14 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16), 0 14px 30px rgba(37, 99, 235, 0.10);
 }
 
+/* Card header row (8 Oct 2026): the card has 14 px padding and a 25 px title
+   row, so the row's centre is 26.5 px from the frame. Handle, lock, meaning
+   chip and the "..." button are all centred on that line, and the offsets are
+   logical so Arabic mirrors them. */
 .order-card-drag-handle {
   position: absolute;
-  top: 16px;
-  left: 15px;
+  top: 13px;
+  inset-inline-start: 15px;
   z-index: 2;
   width: 26px;
   height: 26px;
@@ -8145,8 +8149,8 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
 .order-card-layout-lock-handle {
   position: absolute;
-  top: 16px;
-  left: 15px;
+  top: 13px;
+  inset-inline-start: 15px;
   z-index: 2;
   width: 26px;
   height: 26px;
@@ -8168,7 +8172,22 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 }
 
 .order-detail-card-frame.has-drag-handle .order-detail-card > .card-title {
-  padding-left: 34px;
+  padding-inline-start: 34px;
+}
+
+/* Room for the "..." button (40 px target, 10 px in): the title never runs
+   under it, and a long trade heading wraps instead of hiding. */
+.order-detail-card-frame .order-detail-card > .card-title {
+  padding-inline-end: 44px;
+  min-height: 26px;
+}
+
+.order-detail-card-frame .order-detail-card > .card-title > div {
+  min-width: 0;
+}
+
+.order-detail-card .card-title-text {
+  overflow-wrap: anywhere;
 }
 
 .order-detail-card-frame.can-resize .order-detail-card {
@@ -8252,28 +8271,55 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
 .order-card-menu-wrap {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 6px;
+  inset-inline-end: 10px;
   z-index: 5;
+  display: flex;
+  justify-content: flex-end;
 }
 
+/* The button is the 40 x 40 touch target; the 32 px disc inside is what is
+   seen. Its centre sits on the title row's centre line (6 + 20 = 26), and
+   its visible edge is 14 px from the frame, in line with the card padding. */
 .order-card-menu-button {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.order-card-menu-face {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
   border: 1px solid transparent;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 900;
-  line-height: 1;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
-.order-card-menu-button:hover {
+.order-card-menu-button:hover .order-card-menu-face,
+.order-card-menu-wrap.is-open .order-card-menu-face {
   border-color: var(--border);
   background: #fff;
+}
+
+.order-card-menu-button:focus-visible {
+  outline: none;
+}
+
+.order-card-menu-button:focus-visible .order-card-menu-face {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .order-card-menu-panel {
@@ -13211,7 +13257,7 @@ body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-c
   }
 
   .order-detail-card-frame.has-drag-handle .order-detail-card > .card-title {
-    padding-left: 0;
+    padding-inline-start: 0;
   }
 
   .order-detail-mobile-stack .order-detail-card {
@@ -13441,12 +13487,16 @@ body[data-studio-theme="dark"] .order-detail-card .card-title-icon {
 }
 
 body[data-studio-theme="dark"] .order-card-menu-button {
-  background: rgba(255, 255, 255, 0.10);
   color: #f3f4f6;
+}
+
+body[data-studio-theme="dark"] .order-card-menu-face {
+  background: rgba(255, 255, 255, 0.10);
   box-shadow: none;
 }
 
-body[data-studio-theme="dark"] .order-card-menu-button:hover {
+body[data-studio-theme="dark"] .order-card-menu-button:hover .order-card-menu-face,
+body[data-studio-theme="dark"] .order-card-menu-wrap.is-open .order-card-menu-face {
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 255, 0.14);
 }
@@ -24954,8 +25004,8 @@ body[data-studio-theme="dark"] .order-list-card.multi-selected {
 /* ---- Decision 3B: color meanings — the chip on a colored card. ---- */
 .order-card-meaning-chip {
   position: absolute;
-  top: 13px;
-  right: 46px;
+  top: 18px;
+  inset-inline-end: 54px;
   z-index: 5;
   font-size: 10px;
   font-weight: 800;
@@ -24964,10 +25014,19 @@ body[data-studio-theme="dark"] .order-list-card.multi-selected {
   border-radius: 999px;
   padding: 2.5px 10px;
   pointer-events: none;
-  max-width: 45%;
+  /* The heading comes first: the chip gives way (ellipsis) before the heading
+     has to wrap. On a 350 px card the row has 320 px; handle 34, icon 33 and
+     the "..." reserve leave the heading 123 px with the chip capped at 22 %
+     (measured 8 Oct 2026: "Metals & Stones" needs 114 px at 700/14 px). */
+  max-width: 22%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* With a chip in the header the heading stops before it and wraps if it must,
+   instead of running underneath (8 Oct 2026). */
+.order-detail-card-frame:has(> .order-card-meaning-chip) .order-detail-card > .card-title {
+  padding-inline-end: calc(60px + 22%);
 }
 .order-card-meaning-chip[data-card-color="Red"]    { background: #e5484d; }
 .order-card-meaning-chip[data-card-color="Orange"] { background: #f5a623; }
@@ -26408,8 +26467,8 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 }
 .block-custom-panel {
   position: absolute;
-  top: 34px;
-  right: 0;
+  top: 42px;
+  inset-inline-end: 0;
   z-index: 71;
   width: min(420px, calc(100vw - 24px));
   max-height: min(78vh, 720px);
@@ -26422,12 +26481,13 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   padding: 12px 14px 14px;
   display: grid;
   gap: 7px;
-  text-align: left;
+  text-align: start;
 }
 .block-custom-labels {
   position: relative;
   top: auto;
   right: auto;
+  inset-inline-end: auto;
   width: min(440px, 100%);
 }
 .block-custom-header {
@@ -26467,14 +26527,14 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   border-radius: 0;
   text-align: left;
 }
-.block-custom-actions button:last-child { border-bottom: 0; }
+.block-custom-actions > .block-custom-opt:last-child > button { border-bottom: 0; }
 .block-custom-actions button:hover:not(:disabled) { background: rgba(120, 120, 140, 0.08); }
 .block-custom-actions button:disabled { opacity: 0.45; cursor: default; }
 .block-custom-actions svg { width: 18px; height: 18px; flex: none; opacity: 0.8; }
 .block-custom-move { display: flex; gap: 8px; flex-wrap: wrap; }
+.block-custom-move > .block-custom-opt { flex: 1; min-width: 72px; }
 .block-custom-move button {
-  flex: 1;
-  min-width: 72px;
+  width: 100%;
   border: 1px solid rgba(120, 120, 140, 0.28);
   background: transparent;
   color: inherit;
@@ -26491,10 +26551,14 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   display: flex;
   border: 1px solid rgba(120, 120, 140, 0.28);
   border-radius: 10px;
-  overflow: hidden;
 }
+/* No overflow clip on the segment (it would swallow the option tooltips);
+   the end buttons carry the corners themselves. */
+.block-custom-segment > .block-custom-opt:first-child > button { border-start-start-radius: 9px; border-end-start-radius: 9px; }
+.block-custom-segment > .block-custom-opt:last-child > button { border-start-end-radius: 9px; border-end-end-radius: 9px; }
+.block-custom-segment > .block-custom-opt { flex: 1; }
 .block-custom-segment button {
-  flex: 1;
+  width: 100%;
   border: 0;
   background: transparent;
   color: inherit;
@@ -26502,9 +26566,9 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  border-right: 1px solid rgba(120, 120, 140, 0.2);
+  border-inline-end: 1px solid rgba(120, 120, 140, 0.2);
 }
-.block-custom-segment button:last-child { border-right: 0; }
+.block-custom-segment > .block-custom-opt:last-child > button { border-inline-end: 0; }
 .block-custom-segment button.is-active {
   background: rgba(37, 99, 235, 0.1);
   color: var(--accent, #2563eb);
@@ -26568,8 +26632,9 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   padding-top: 8px;
   border-top: 1px solid rgba(120, 120, 140, 0.16);
 }
+.block-custom-footer > .block-custom-opt { flex: 1; }
 .block-custom-footer button {
-  flex: 1;
+  width: 100%;
   border-radius: 12px;
   padding: 9px 10px;
   font-size: 14px;
@@ -26587,6 +26652,108 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   color: #fff;
 }
 .block-custom-footer button:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- option descriptions (8 Oct 2026) ----
+   Every option in the panel sits in a .block-custom-opt with its description
+   (.block-custom-desc) as a SIBLING of the button, linked by aria-describedby.
+   Desktop (a pointer that hovers): the description is a tooltip under the
+   option on hover and on keyboard focus. Phone (no hover): the "i" in the
+   header turns .is-describing on and every description is printed under its
+   option. Neither path touches the button, so reading never runs anything. */
+.block-custom-opt { position: relative; display: grid; min-width: 0; }
+/* Geometry lives here, at low specificity, so the placement rules below can
+   override it; the hover rule only switches the tooltip on. */
+.block-custom-desc {
+  display: none;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+}
+.block-custom-info {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0;
+}
+.block-custom-info svg { width: 18px; height: 18px; }
+.block-custom-info:hover { background: rgba(120, 120, 140, 0.12); opacity: 1; }
+.block-custom-info.is-on { background: var(--accent-soft); color: var(--accent, #2563eb); opacity: 1; }
+.block-custom-info:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .block-custom-panel:not(.is-describing) .block-custom-opt:hover > .block-custom-desc,
+  .block-custom-panel:not(.is-describing) .block-custom-opt:focus-within > .block-custom-desc,
+  .order-card-menu-wrap:not(.is-open):hover > .block-custom-desc,
+  .order-card-menu-wrap:not(.is-open):focus-within > .block-custom-desc {
+    display: block;
+    position: absolute;
+    z-index: 4;
+    width: max-content;
+    min-width: 160px;
+    max-width: 260px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: #1f2330;
+    color: #f3f4f6;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: start;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+    pointer-events: none;
+  }
+  /* The panel clips what leaves it, so items at the end of a row open to the
+     start side, and items near the bottom open upwards. */
+  .block-custom-opt:last-child > .block-custom-desc,
+  .block-custom-color-grid > .block-custom-opt:nth-child(even) > .block-custom-desc,
+  .block-custom-move > .block-custom-opt:nth-child(n + 3) > .block-custom-desc,
+  .order-card-menu-wrap > .block-custom-desc {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+  }
+  .block-custom-color-grid .block-custom-desc,
+  .block-custom-footer .block-custom-desc,
+  .block-custom-panel > .block-custom-opt > .block-custom-desc {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+  .order-card-menu-wrap > .block-custom-desc { top: calc(100% + 2px); }
+}
+.block-custom-panel.is-describing .block-custom-desc {
+  display: block;
+  padding: 3px 4px 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.block-custom-panel.is-describing .block-custom-move,
+.block-custom-panel.is-describing .block-custom-segment,
+.block-custom-panel.is-describing .block-custom-footer {
+  flex-direction: column;
+}
+.block-custom-panel.is-describing .block-custom-move > .block-custom-opt,
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt,
+.block-custom-panel.is-describing .block-custom-footer > .block-custom-opt {
+  flex: none;
+}
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt > button { border-radius: 0; }
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:first-child > button { border-start-start-radius: 9px; border-start-end-radius: 9px; }
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:last-child > button { border-end-start-radius: 9px; border-end-end-radius: 9px; }
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt > button {
+  border-inline-end: 0;
+  border-bottom: 1px solid rgba(120, 120, 140, 0.2);
+}
+.block-custom-panel.is-describing .block-custom-segment > .block-custom-opt:last-child > button { border-bottom: 0; }
+.block-custom-panel.is-describing .block-custom-color-grid { grid-template-columns: minmax(0, 1fr); }
+.block-custom-panel.is-describing .block-custom-header .block-custom-desc { display: none; }
+body[data-studio-theme="dark"] .block-custom-panel:not(.is-describing) .block-custom-desc,
+body[data-studio-theme="dark"] .order-card-menu-wrap > .block-custom-desc { border: 1px solid rgba(255, 255, 255, 0.14); }
 .block-custom-label-rows { display: grid; gap: 8px; }
 .block-custom-label-row {
   display: grid;
@@ -32387,7 +32554,15 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
 .app-sidebar {
   position: relative;
   flex: 0 0 auto;
-  width: 232px;
+  /* 208 px, from the labels themselves (8 Oct 2026): chrome is 8+8 nav padding,
+     10+10 item padding, 22 icon, 10 gap = 68 px, leaving 140 px for the label.
+     Measured in Inter 650 at 14 px, the longest label in ten of the twelve
+     languages is Italian "Pianificazione team" at 134 px; only Spanish
+     "Planificación del equipo" (163 px) and Portuguese "Planeamento da
+     equipa" (159 px) exceed it — those did not fit at 232 px either — and
+     wrap to a second line (.app-sidebar-label), with the full text in the
+     item's title. docs/web-menu-cards-2026-10-08.md has the table. */
+  width: 208px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -32456,7 +32631,7 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -32468,7 +32643,7 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-top: 1px solid var(--border);
 }
 
@@ -32476,10 +32651,10 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   min-height: 42px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -32487,9 +32662,8 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   font: inherit;
   font-size: 14px;
   font-weight: 650;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
-  white-space: nowrap;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -32518,15 +32692,24 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   height: 20px;
 }
 
+/* A label that does not fit wraps once, then clips; the item's title holds
+   the full text (a browser's larger minimum font size lands here too). */
 .app-sidebar-label {
   flex: 1 1 auto;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+  padding: 2px 0;
 }
 
 .app-sidebar-badge {
-  margin-left: auto;
+  margin-inline-start: auto;
   min-width: 22px;
   padding: 2px 7px;
   border-radius: 999px;
@@ -32943,11 +33126,11 @@ body[data-studio-theme="dark"] .app-sidebar-item.is-active {
 
   .app-sidebar.is-collapsed .app-sidebar-item {
     justify-content: flex-start;
-    padding: 0 12px;
+    padding: 0 10px;
   }
 
   .app-sidebar.is-collapsed .app-sidebar-label {
-    display: block;
+    display: -webkit-box;
   }
 
   .app-sidebar.is-collapsed .app-sidebar-badge {

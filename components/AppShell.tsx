@@ -3025,6 +3025,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   <NavIcon name="close" />
                 </button>
               </div>
+              {/* title on every item, collapsed or not: the sidebar is 208 px
+                  (chosen from the longest label in the 12 languages, see
+                  docs/web-menu-cards-2026-10-08.md) and a label that still does
+                  not fit wraps to two lines, then clips — the tooltip carries
+                  the full text. */}
               <nav id="app-sidebar-nav" className="app-sidebar-nav" ref={sidebarNavRef}>
                 {NAV_ITEMS.map((item) => {
                   if (navItemHidden(item)) return null;
@@ -3041,7 +3046,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                       href={item.href}
                       className={active ? "app-sidebar-item is-active" : "app-sidebar-item"}
                       aria-current={active ? "page" : undefined}
-                      title={sidebarCollapsed ? t(item.label) : undefined}
+                      title={t(item.label)}
                       onClick={() => setMobileNavOpen(false)}
                     >
                       <span className="app-sidebar-item-icon" aria-hidden="true">
@@ -3061,7 +3066,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   className="app-sidebar-item"
-                  title={sidebarCollapsed ? t("Activity") : undefined}
+                  title={t("Activity")}
                   onClick={() => {
                     setMobileNavOpen(false);
                     setNotifDrawerOpen(true);
@@ -3086,7 +3091,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                       href={item.href}
                       className={active ? "app-sidebar-item is-active" : "app-sidebar-item"}
                       aria-current={active ? "page" : undefined}
-                      title={sidebarCollapsed ? t(item.label) : undefined}
+                      title={t(item.label)}
                       onClick={() => setMobileNavOpen(false)}
                     >
                       <span className="app-sidebar-item-icon" aria-hidden="true">
