@@ -95,6 +95,7 @@ import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/stud
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings, getSettingsAuditLog } from "@/lib/studioflow/settingsActions";
+import { PDF_TOGGLE_DOCUMENTS, canViewInvoiceDocument, createPdfPreviewSequencer, pdfPreviewKindAfterToggle, pdfRenderSettings, pdfToggleMaskReason, pdfViewerAccess, type PdfDocumentKind, type PdfToggleKey as SharedPdfToggleKey, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
@@ -2587,6 +2588,26 @@ function settingsWithDefaultCompanyNumbers(settings: WorkspaceSettingsOverview |
   };
 }
 
+// The preview renderers live in the order-detail module and load on first use.
+// The promise is shared across renders; a failed load is forgotten so Retry
+// imports again instead of replaying the same rejection.
+type PdfPreviewRenderers = {
+  invoice: (settings: WorkspaceSettingsOverview) => string;
+  jobsheet: (settings: WorkspaceSettingsOverview, workspaceName: string, access: PdfViewerAccess) => string;
+};
+let pdfPreviewRenderersPromise: Promise<PdfPreviewRenderers> | null = null;
+function loadPdfPreviewRenderers(): Promise<PdfPreviewRenderers> {
+  if (!pdfPreviewRenderersPromise) {
+    pdfPreviewRenderersPromise = import("@/app/orders/OrderDetailContent")
+      .then(mod => ({ invoice: mod.invoicePreviewHtml, jobsheet: mod.jobSheetPreviewHtml }))
+      .catch(loadError => {
+        pdfPreviewRenderersPromise = null;
+        throw loadError;
+      });
+  }
+  return pdfPreviewRenderersPromise;
+}
+
 const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   "pdfShowCustomer" |
   "pdfShowContact" |
@@ -2714,21 +2735,47 @@ function PdfExportSettingsSection({
     () => handleSave(true)
   );
 
-  // The live preview: the same generators the real print buttons use, loaded
-  // once from the order-detail module and re-run on every unsaved change.
-  type PdfPreviewModule = { invoice: (settings: WorkspaceSettingsOverview) => string; jobsheet: (settings: WorkspaceSettingsOverview, name: string) => string };
-  const [previewModule, setPreviewModule] = useState<PdfPreviewModule | null>(null);
-  const [previewKind, setPreviewKind] = useState<"invoice" | "jobsheet">("invoice");
+  // The live preview: the same generators the real print buttons use, run with
+  // this member's own permissions (lib/studioflow/pdfDocumentOptions.ts) on
+  // every unsaved change. Generation is asynchronous — the order-detail module
+  // loads on first use — so each run takes a token and only the newest may
+  // publish: a slow render can never overwrite the preview of a newer change.
+  const viewerAccess = useMemo<PdfViewerAccess>(
+    () => pdfViewerAccess(workspace.memberAccess, workspace.entitlements.features),
+    [workspace.memberAccess, workspace.entitlements.features]
+  );
+  const canPreviewInvoice = canViewInvoiceDocument(viewerAccess);
+  const [previewKind, setPreviewKind] = useState<PdfDocumentKind>(canPreviewInvoice ? "invoice" : "jobsheet");
+  const [preview, setPreview] = useState<{ status: "loading" | "ready" | "error"; html: string; message: string }>({ status: "loading", html: "", message: "" });
+  const [previewAttempt, setPreviewAttempt] = useState(0);
+  const previewSequencer = useRef(createPdfPreviewSequencer());
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
+  const effectivePreviewKind: PdfDocumentKind = canPreviewInvoice ? previewKind : "jobsheet";
   useEffect(() => {
-    let cancelled = false;
-    import("@/app/orders/OrderDetailContent").then(mod => {
-      if (!cancelled) setPreviewModule({ invoice: mod.invoicePreviewHtml, jobsheet: mod.jobSheetPreviewHtml });
-    }).catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    if (!draft || !settings) return;
+    const sequencer = previewSequencer.current;
+    const token = sequencer.next();
+    setPreview(current => ({ ...current, status: "loading", message: "" }));
+    // One settings object for the renderer: the stored document with the
+    // unsaved draft on top — the shape the print buttons read once it is saved.
+    const renderSettings = pdfRenderSettings(settings, draft);
+    loadPdfPreviewRenderers()
+      .then(renderers => {
+        if (!sequencer.isCurrent(token)) return;
+        const html = effectivePreviewKind === "invoice"
+          ? renderers.invoice(renderSettings)
+          : renderers.jobsheet(renderSettings, workspace.name, viewerAccess);
+        setPreview({ status: "ready", html, message: "" });
+      })
+      .catch(previewError => {
+        if (!sequencer.isCurrent(token)) return;
+        setPreview({ status: "error", html: "", message: previewError instanceof Error ? previewError.message : String(previewError) });
+      });
+  }, [draft, settings, effectivePreviewKind, workspace.name, viewerAccess, previewAttempt]);
+  useEffect(() => {
+    const sequencer = previewSequencer.current;
+    return () => sequencer.cancel();
   }, []);
   useEffect(() => {
     const node = previewFrameRef.current;
@@ -2740,12 +2787,6 @@ function PdfExportSettingsSection({
     observer.observe(node);
     return () => observer.disconnect();
   }, [draft === null]);
-  const previewHtml = useMemo(() => {
-    if (!previewModule || !draft || !settings) return "";
-    const previewSettings = { ...settings, ...draft } as WorkspaceSettingsOverview;
-    return previewKind === "invoice" ? previewModule.invoice(previewSettings) : previewModule.jobsheet(previewSettings, workspace.name);
-  }, [previewModule, draft, settings, previewKind, workspace.name]);
-
   useSettingsHeaderActions(
     <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
       {t("Open Export page")}
@@ -2761,6 +2802,15 @@ function PdfExportSettingsSection({
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
+  }
+
+  // A switch is always visible in the preview: when it does not change the
+  // document on screen (most sections are job-sheet only), the preview moves
+  // to the first document it does change.
+  function updatePdfToggle(key: PdfToggleKey, value: boolean) {
+    updateBoolean(key, value);
+    const nextKind = pdfPreviewKindAfterToggle(effectivePreviewKind, key as SharedPdfToggleKey);
+    if (nextKind !== effectivePreviewKind && (nextKind !== "invoice" || canPreviewInvoice)) setPreviewKind(nextKind);
   }
 
   // A preset only rewrites the toggles this role is allowed to see: for a
@@ -2914,9 +2964,16 @@ function PdfExportSettingsSection({
                             className="settings-switch"
                             checked={Boolean(draft[key])}
                             disabled={!canEdit || saving}
-                            onChange={event => updateBoolean(key, event.target.checked)}
+                            onChange={event => updatePdfToggle(key, event.target.checked)}
                           />
                           <span className="settings-toggle-line-label">{t(toggleLabels.get(String(key)) ?? String(key))}</span>
+                          {pdfToggleMaskReason(key as SharedPdfToggleKey, viewerAccess) === "permission" ? (
+                            <span className="settings-tag is-muted" title={t("Your permissions hide this section from every PDF you print, so the preview does not show it.")}>{t("Hidden by your permissions")}</span>
+                          ) : pdfToggleMaskReason(key as SharedPdfToggleKey, viewerAccess) === "plan" ? (
+                            <span className="settings-tag is-muted" title={t("This section needs the advanced finance feature of your plan, so your PDFs and the preview do not show it.")}>{t("Hidden by your plan")}</span>
+                          ) : !PDF_TOGGLE_DOCUMENTS[key as SharedPdfToggleKey].includes("invoice") ? (
+                            <span className="settings-tag is-muted" title={t("This section is printed on the job sheet; the invoice bills line items only.")}>{t("Job sheet only")}</span>
+                          ) : null}
                           <span className="settings-tag is-muted">{t(scope)}</span>
                         </label>
                         {isInternal ? (
@@ -2938,23 +2995,40 @@ function PdfExportSettingsSection({
 
         <section className="card app-card settings-pdf-preview-card">
           <SettingsCardHead title={t("PDF preview")} subtitle={t("Sample order · live preview")} />
-          <div className="settings-pdf-preview" ref={previewFrameRef} style={{ height: `${Math.round(1123 * previewScale)}px` }}>
-            {previewHtml ? (
+          <div
+            className={preview.status === "loading" && preview.html ? "settings-pdf-preview is-updating" : "settings-pdf-preview"}
+            ref={previewFrameRef}
+            style={{ height: `${Math.round(1123 * previewScale)}px` }}
+            aria-busy={preview.status === "loading"}
+            data-preview-status={preview.status}
+            data-preview-kind={effectivePreviewKind}
+          >
+            {preview.html ? (
               <iframe
-                srcDoc={previewHtml}
+                srcDoc={preview.html}
                 sandbox=""
                 title={t("PDF preview")}
                 style={{ transform: `scale(${previewScale})` }}
               />
+            ) : preview.status === "error" ? (
+              <div className="settings-pdf-preview-state" role="alert">
+                <p className="settings-field-hint is-danger">{t("The preview could not be generated.")}</p>
+                {preview.message ? <p className="settings-field-hint">{preview.message}</p> : null}
+                <button type="button" className="button secondary" onClick={() => setPreviewAttempt(current => current + 1)}>{t("Retry")}</button>
+              </div>
             ) : (
-              <p className="settings-field-hint">{t("Loading...")}</p>
+              <p className="settings-field-hint" role="status">{t("Loading...")}</p>
             )}
+            {preview.status === "loading" && preview.html ? <span className="settings-pdf-preview-updating" role="status">{t("Loading...")}</span> : null}
           </div>
+          {!canPreviewInvoice ? (
+            <p className="settings-field-hint">{t("The invoice prints every price, so it is not available to your role; the job sheet preview follows your permissions.")}</p>
+          ) : null}
           <div className="settings-button-row">
-            <button type="button" className={previewKind === "invoice" ? "button secondary is-selected" : "button secondary"} aria-pressed={previewKind === "invoice"} onClick={() => setPreviewKind("invoice")}>
+            <button type="button" className={effectivePreviewKind === "invoice" ? "button secondary is-selected" : "button secondary"} aria-pressed={effectivePreviewKind === "invoice"} disabled={!canPreviewInvoice} onClick={() => setPreviewKind("invoice")}>
               {t("Preview invoice")}
             </button>
-            <button type="button" className={previewKind === "jobsheet" ? "button secondary is-selected" : "button secondary"} aria-pressed={previewKind === "jobsheet"} onClick={() => setPreviewKind("jobsheet")}>
+            <button type="button" className={effectivePreviewKind === "jobsheet" ? "button secondary is-selected" : "button secondary"} aria-pressed={effectivePreviewKind === "jobsheet"} onClick={() => setPreviewKind("jobsheet")}>
               {t("Preview job sheet")}
             </button>
           </div>

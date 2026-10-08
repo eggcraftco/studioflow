@@ -31109,6 +31109,49 @@ body[data-studio-theme="dark"] .settings-theme-radio { background: var(--panel);
 .settings-portal-mock-card span:last-child { width: 60%; }
 .settings-portal-mock-powered { margin: 0 16px; font-size: 11px; color: var(--muted); text-align: center; }
 
+/* Export page: the date-range picker (components/ExportOrdersPanel.tsx) */
+.export-range-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #d9d9e3);
+  background: var(--surface, #fff);
+  color: var(--text, #111);
+  box-sizing: border-box;
+}
+.export-range-field:focus-within { border-color: var(--accent, #4f6bed); box-shadow: 0 0 0 3px var(--accent-soft, rgba(79, 107, 237, 0.18)); }
+.export-range-field[data-disabled="true"] { opacity: 0.6; }
+.export-range-field-icon,
+.export-range-field-chevron { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--muted); pointer-events: none; }
+.export-range-field-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+.export-range-field-select:disabled { cursor: not-allowed; }
+.export-range-field-select::-ms-expand { display: none; }
+
 /* PDF Export */
 .settings-pdf-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .settings-preset-tabs {
@@ -31171,6 +31214,11 @@ body[data-studio-theme="dark"] .settings-theme-radio { background: var(--panel);
   background: #fff;
 }
 .settings-pdf-preview > .settings-field-hint { padding: 16px; }
+.settings-pdf-preview-state { display: grid; gap: 10px; padding: 16px; justify-items: start; }
+.settings-pdf-preview-state .settings-field-hint { padding: 0; }
+.settings-pdf-preview-state .settings-field-hint.is-danger { color: var(--danger, #c0392b); font-weight: 600; }
+.settings-pdf-preview.is-updating iframe { opacity: 0.55; transition: opacity 120ms ease; }
+.settings-pdf-preview-updating { position: absolute; top: 10px; inset-inline-end: 10px; padding: 4px 10px; border-radius: 999px; background: var(--settings-surface); color: var(--muted); font-size: 12px; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12); }
 .settings-content-pane .button.secondary.is-selected { background: var(--settings-row-active); border-color: var(--accent); }
 .settings-table { display: grid; gap: 8px; }
 .settings-table-head, .settings-table-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) 36px; gap: 10px; align-items: center; }

@@ -88,6 +88,7 @@ export function ExportOrdersPanel({
   // If finance access changes (or default isn't allowed), keep the picker valid.
   const activeTemplate = templates.some((tpl) => tpl.id === template) ? template : templates[0]?.id ?? "orders";
   const selected = TEMPLATES.find((tpl) => tpl.id === activeTemplate) ?? TEMPLATES[0];
+  const selectedPresetLabel = t(PRESETS.find((option) => option.id === preset)?.label ?? "");
 
   async function run() {
     if (!workspace || busy) return;
@@ -131,9 +132,10 @@ export function ExportOrdersPanel({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-        <div>
-          <label style={labelStyle}>Report</label>
+        <div style={{ minWidth: 0 }}>
+          <label style={labelStyle} htmlFor="export-orders-report">{t("Report")}</label>
           <select
+            id="export-orders-report"
             style={fieldStyle}
             value={activeTemplate}
             onChange={(event) => setTemplate(event.target.value as ExportTemplate)}
@@ -146,25 +148,21 @@ export function ExportOrdersPanel({
             ))}
           </select>
         </div>
-        <div>
-          <label style={labelStyle}>Date range</label>
-          <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none", display: "flex" }}>
-              <CalendarIcon />
-            </span>
-            <select
-              style={{ ...fieldStyle, paddingLeft: 38 }}
-              value={preset}
-              onChange={(event) => setPreset(event.target.value as ExportRangePreset)}
-              disabled={disabled || busy}
-            >
-              {PRESETS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={{ minWidth: 0 }}>
+          <label style={labelStyle} htmlFor="export-orders-range">{t("Date range")}</label>
+          <ExportDateRangeField
+            id="export-orders-range"
+            value={preset}
+            label={selectedPresetLabel}
+            disabled={disabled || busy}
+            onChange={(next) => setPreset(next)}
+          >
+            {PRESETS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {t(option.label)}
+              </option>
+            ))}
+          </ExportDateRangeField>
         </div>
       </div>
 
@@ -173,11 +171,11 @@ export function ExportOrdersPanel({
       {preset === "custom" ? (
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 160px" }}>
-            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>From</label>
+            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("From")}</label>
             <input type="date" style={fieldStyle} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} disabled={busy} />
           </div>
           <div style={{ flex: "1 1 160px" }}>
-            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>To</label>
+            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("To")}</label>
             <input type="date" style={fieldStyle} value={customTo} onChange={(event) => setCustomTo(event.target.value)} disabled={busy} />
           </div>
         </div>
@@ -223,6 +221,58 @@ export function ExportOrdersPanel({
       {status ? <p style={{ margin: "14px 0 0", color: "var(--muted)", fontWeight: 800 }}>{t(status)}</p> : null}
       {error ? <p style={{ margin: "14px 0 0", color: "var(--danger, #c0392b)", fontWeight: 800 }}>{t(error)}</p> : null}
     </div>
+  );
+}
+
+// The date-range picker: icon, the selected text and the chevron in one flex
+// row with a gap. The icon used to float over the select's padding, which
+// Safari's native menulist ignores, so the text was drawn under it; in Arabic
+// the browser's own arrow moved to the left and sat on the icon. The row
+// follows the writing direction on its own, the text truncates with an
+// ellipsis and carries the full label in `title`, and the field never shrinks
+// below a readable width.
+function ExportDateRangeField({
+  id,
+  value,
+  label,
+  disabled,
+  onChange,
+  children
+}: {
+  id: string;
+  value: ExportRangePreset;
+  label: string;
+  disabled: boolean;
+  onChange: (next: ExportRangePreset) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="export-range-field" title={label} data-disabled={disabled ? "true" : undefined}>
+      <span className="export-range-field-icon" aria-hidden="true">
+        <CalendarIcon />
+      </span>
+      <select
+        id={id}
+        className="export-range-field-select"
+        value={value}
+        title={label}
+        onChange={(event) => onChange(event.target.value as ExportRangePreset)}
+        disabled={disabled}
+      >
+        {children}
+      </select>
+      <span className="export-range-field-chevron" aria-hidden="true">
+        <ChevronIcon />
+      </span>
+    </div>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   );
 }
 

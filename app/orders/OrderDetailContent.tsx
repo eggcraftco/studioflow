@@ -106,6 +106,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, parseAmountInput, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { PDF_FULL_ACCESS, pdfViewerAccess, resolvePdfDocumentOptions, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
 import {
   DEFAULT_PRODUCTION_STAGES,
   productionStagesFromSettings,
@@ -729,18 +730,12 @@ function orderPdfHtml(
   const settings = options.settings;
   const orderName = order.customerName.trim() || order.designName.trim() || "Order";
   const designName = order.designName.trim() || "-";
-  const showCustomer = settings?.pdfShowCustomer ?? true;
-  const showContact = settings?.pdfShowContact ?? true;
-  const showPreview = settings?.pdfShowPreview ?? true;
-  const showFinCustomer = Boolean(options.canSeeFinance && (settings?.pdfShowFinCustomer ?? true));
-  const showPaymentMethod = Boolean(showFinCustomer && options.canSeeAdvancedFinance && (settings?.pdfShowPaymentMethod ?? true));
-  const showFinInternal = Boolean(options.canSeeAdvancedFinance && (settings?.pdfShowFinInternal ?? false));
-  const showStatus = settings?.pdfShowStatus ?? true;
-  const showShipping = settings?.pdfShowShipping ?? true;
-  const showAddress = settings?.pdfShowAddress ?? true;
-  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
-  const showMaterials = settings?.pdfShowMaterials ?? true;
-  const showPriority = settings?.pdfShowPriority ?? true;
+  // Settings + the viewer's permissions → sections, from the one mapping the
+  // Settings preview reads too (lib/studioflow/pdfDocumentOptions.ts).
+  const {
+    showCustomer, showContact, showPreview, showFinCustomer, showPaymentMethod, showFinInternal,
+    showStatus, showShipping, showAddress, showShippingAddress, showMaterials, showPriority
+  } = resolvePdfDocumentOptions(settings, { canSeeFinance: options.canSeeFinance, canSeeAdvancedFinance: options.canSeeAdvancedFinance });
   const appSubtitle = settings?.appSubtitle?.trim() || workspaceName || "NivaDesk";
   const logoUrl = settings?.appLogoUrl?.trim() || "";
   const taxRuleName = order.taxType === "Profit"
@@ -1002,8 +997,9 @@ function invoiceHtml(
       </div>`
     : "";
   const description = order.designName?.trim() || order.customerName?.trim() || "Order";
-  const showAddress = settings?.pdfShowAddress ?? true;
-  const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
+  // The two address switches are the only PDF settings an invoice reads; the
+  // document itself is gated on Financial Info by its callers (every price is on it).
+  const { showAddress, showShippingAddress } = resolvePdfDocumentOptions(settings, PDF_FULL_ACCESS);
   const billingAddr = (order.customFields.communicationAddress || order.customFields.Address || "").trim();
   const shipLine = [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ");
   const shipRecipient = order.shippingName || order.customerName || "";
@@ -2380,8 +2376,14 @@ export function OrderDetailContent({
   );
   const isOrderCardLayoutIndependent = Boolean(independentCardLayout);
 
-  const canSeeFinance = useMemo(() => workspaceAccessAllows(workspace.memberAccess, "financialInfo"), [workspace.memberAccess]);
-  const canSeeAdvancedFinance = Boolean(workspace.entitlements.features.financial_advanced && canSeeFinance);
+  // The same derivation the Settings → PDF Export preview uses, so what a
+  // member sees there is what their Export PDF prints.
+  const viewerAccess = useMemo<PdfViewerAccess>(
+    () => pdfViewerAccess(workspace.memberAccess, workspace.entitlements.features),
+    [workspace.memberAccess, workspace.entitlements.features]
+  );
+  const canSeeFinance = viewerAccess.canSeeFinance;
+  const canSeeAdvancedFinance = viewerAccess.canSeeAdvancedFinance;
   const canAccessOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
   const canUseClientFiles = Boolean(workspace.entitlements.features.client_files);
   const canManageClientFiles = Boolean(canUseClientFiles && workspaceAccessAllows(workspace.memberAccess, "clientFiles") && canManageClientFilesForRole(workspace.role));
@@ -11603,14 +11605,17 @@ export function invoicePreviewHtml(settings: WorkspaceSettingsOverview | null | 
   return invoiceHtml(pdfPreviewSampleOrder(), settings, null);
 }
 
+// The viewer's own permissions go in: a member without Financial Info gets the
+// same job sheet the Export PDF button would print them — no money on it.
 export function jobSheetPreviewHtml(
   settings: WorkspaceSettingsOverview | null | undefined,
-  workspaceName: string
+  workspaceName: string,
+  access: PdfViewerAccess = PDF_FULL_ACCESS
 ): string {
   return orderPdfHtml(pdfPreviewSampleOrder(), workspaceName || "My Studio", {
     settings,
-    canSeeFinance: true,
-    canSeeAdvancedFinance: true,
+    canSeeFinance: access.canSeeFinance,
+    canSeeAdvancedFinance: access.canSeeAdvancedFinance,
     hideNumbers: false,
     previewUrl: "",
     statusSteps: [
