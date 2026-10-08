@@ -108,7 +108,9 @@ import {
   type WorkSessionDetail,
   type WorkspaceMemberAccessKey,
   type WorkspaceContext,
-  type WorkspaceSettingsOverview
+  type WorkspaceSettingsOverview,
+  ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE,
+  canEditOrderDates
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, parseAmountInput, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { PDF_FULL_ACCESS, pdfViewerAccess, resolvePdfDocumentOptions, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
@@ -2493,6 +2495,10 @@ export function OrderDetailContent({
   const netProfitAfterCT = order.netProfit - corporationTaxAmount;
   const canInlineEditFinance = Boolean(canSeeFinance && canEditOrderFully);
   const canInlineEditFullDetails = canEditOrderDetailsForRole(workspace.role);
+  // Timeline & Delivery: the created date (paymentDate) and the due setting
+  // (deliveryTime / due date) are read-only for an assigned-projects-only
+  // member (canEditOrderDates); every other field keeps its own gate.
+  const canEditDates = canEditOrderDates(workspace);
   const canEditToDoItems = canEditWorkflowFields;
   const canEditScheduleItems = Boolean(canEditWorkflowFields && workspaceAccessAllows(workspace.memberAccess, "schedule"));
   const canEditWorkTime = canEditWorkflowFields;
@@ -4596,6 +4602,10 @@ export function OrderDetailContent({
   async function writeDetailsPatch(patch: DetailsPatch, fieldLabel: string): Promise<boolean> {
     if (!canInlineEditFullDetails) {
       setInlineError("Your workspace role cannot edit full order details.");
+      return false;
+    }
+    if (!canEditDates && (patch.paymentDate !== undefined || patch.deliveryTime !== undefined || patch.deliveryDueDate !== undefined)) {
+      setInlineError(ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE);
       return false;
     }
 
@@ -6856,7 +6866,7 @@ export function OrderDetailContent({
                 displayValue={order.deliveryTime > 0 ? `${order.deliveryTime} days` : "-"}
                 inputType="number"
                 tone={deliveryValueTone}
-                disabled={!canEditWorkflowFields}
+                disabled={!canEditWorkflowFields || !canEditDates}
                 saving={savingInlineField === "Delivery Time"}
                 onSave={value => saveDetailsPatch({ deliveryTime: Number(value) }, "Delivery Time")}
               />
@@ -6865,7 +6875,7 @@ export function OrderDetailContent({
                 value={dateInputValue(order.dueDate)}
                 displayValue={formatDate(order.dueDate)}
                 inputType="date"
-                disabled={!canEditWorkflowFields}
+                disabled={!canEditWorkflowFields || !canEditDates}
                 saving={savingInlineField === "Delivery Due"}
                 onSave={value => saveDetailsPatch({ deliveryDueDate: String(value) }, "Delivery Due")}
               />
@@ -6874,7 +6884,7 @@ export function OrderDetailContent({
                 value={dateInputValue(order.paymentDate)}
                 displayValue={formatDate(order.paymentDate)}
                 inputType="date"
-                disabled={!canEditOrderFully}
+                disabled={!canEditOrderFully || !canEditDates}
                 saving={savingInlineField === "Created Date"}
                 onSave={value => saveDetailsPatch({ paymentDate: String(value) }, "Created Date")}
               />
@@ -9687,6 +9697,9 @@ function OrderEditModal({
       const payload = canEditFullOrder
         ? {
           ...form,
+          // An assigned-projects-only member may not move the due date; the
+          // field is disabled below and its value never travels.
+          ...(canEditOrderDates(workspace) ? {} : { deliveryDueDate: undefined }),
           customerName: normalizeOrderCustomerName(form.customerName),
           designName: form.designName.trim(),
           watchRef: form.watchRef.trim(),
@@ -9756,7 +9769,7 @@ function OrderEditModal({
               </div>
               <label>
                 Delivery due date
-                <input className="input" type="date" value={form.deliveryDueDate} onChange={event => updateField("deliveryDueDate", event.target.value)} disabled={saving} />
+                <input className="input" type="date" value={form.deliveryDueDate} onChange={event => updateField("deliveryDueDate", event.target.value)} disabled={saving || !canEditOrderDates(workspace)} title={canEditOrderDates(workspace) ? undefined : "This field is read-only for your role."} />
               </label>
             </>
           ) : null}

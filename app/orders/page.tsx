@@ -28,10 +28,10 @@ import {
   type OrderListItem,
   type TeamMemberDetail,
   type WorkspaceContext,
-  type WorkspaceSettingsOverview
+  type WorkspaceSettingsOverview,
+  canCreateOrders
 } from "@/lib/studioflow/firestore";
 import {
-  canCreateOrdersForRole,
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
   deleteOrderFromWeb,
@@ -914,7 +914,7 @@ export default function OrdersPage() {
   const canCreateFirstOrder = Boolean(
     workspace &&
     workspaceAccessAllows(workspace.memberAccess, "orders") &&
-    canCreateOrdersForRole(workspace.role) &&
+    canCreateOrders(workspace) &&
     workspace.entitlements.features.orders_create
   );
 
@@ -975,7 +975,7 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {heldOrders && (heldOrders.heldCount ?? 0) > 0 ? (
+          {heldOrders && (heldOrders.heldCount ?? 0) > 0 && canCreateFirstOrder ? (
             <div className="orders-held-banner" role="status">
               <strong>
                 {heldOrders.heldCount} {(heldOrders.heldCount ?? 0) === 1

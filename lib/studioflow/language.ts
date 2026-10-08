@@ -7440,8 +7440,17 @@ const UI_WORKSPACE_TRANSLATIONS: TranslationTable = {
   "Order workspace": { "Türkçe": "Sipariş çalışma alanı", "Deutsch": "Auftragsbereich", "Français": "Espace de la commande", "Italiano": "Area di lavoro dell'ordine", "Español (Spanish)": "Espacio del pedido", "Português": "Área da encomenda", "Русский (Russian)": "Рабочая область заказа", "日本語 (Japanese)": "注文ワークスペース", "中文 (Chinese)": "订单工作区", "العربية (Arabic)": "مساحة عمل الطلب", "हिन्दी (Hindi)": "ऑर्डर कार्यक्षेत्र" },
 };
 
+// "Assigned projects only" rule (8 Oct 2026): the two sentences an assigned-only
+// member reads when an old path still reaches a create or a date write — the
+// server's assigned_only_cannot_create / assigned_only_cannot_change_dates.
+const ASSIGNED_ONLY_TRANSLATIONS: TranslationTable = {
+  "Members with access to assigned projects only cannot create projects.": { "Türkçe": "Yalnızca atanan projelere erişimi olan üyeler proje oluşturamaz.", "Deutsch": "Mitglieder mit Zugriff nur auf zugewiesene Projekte können keine Projekte anlegen.", "Français": "Les membres ayant accès uniquement aux projets assignés ne peuvent pas créer de projets.", "Italiano": "I membri con accesso solo ai progetti assegnati non possono creare progetti.", "Español (Spanish)": "Los miembros con acceso solo a los proyectos asignados no pueden crear proyectos.", "Português": "Os membros com acesso apenas aos projetos atribuídos não podem criar projetos.", "Русский (Russian)": "Участники с доступом только к назначенным проектам не могут создавать проекты.", "日本語 (Japanese)": "割り当てられたプロジェクトのみにアクセスできるメンバーは、プロジェクトを作成できません。", "中文 (Chinese)": "仅能访问已分配项目的成员无法创建项目。", "العربية (Arabic)": "الأعضاء الذين لديهم صلاحية الوصول إلى المشاريع المسندة فقط لا يمكنهم إنشاء مشاريع.", "हिन्दी (Hindi)": "केवल सौंपे गए प्रोजेक्ट तक पहुँच वाले सदस्य प्रोजेक्ट नहीं बना सकते।" },
+  "Members with access to assigned projects only cannot change the created date or the due date.": { "Türkçe": "Yalnızca atanan projelere erişimi olan üyeler oluşturulma tarihini veya teslim tarihini değiştiremez.", "Deutsch": "Mitglieder mit Zugriff nur auf zugewiesene Projekte können das Erstellungsdatum oder den Fälligkeitstermin nicht ändern.", "Français": "Les membres ayant accès uniquement aux projets assignés ne peuvent pas modifier la date de création ni la date d'échéance.", "Italiano": "I membri con accesso solo ai progetti assegnati non possono modificare la data di creazione o la data di scadenza.", "Español (Spanish)": "Los miembros con acceso solo a los proyectos asignados no pueden cambiar la fecha de creación ni la fecha de entrega.", "Português": "Os membros com acesso apenas aos projetos atribuídos não podem alterar a data de criação nem a data de entrega.", "Русский (Russian)": "Участники с доступом только к назначенным проектам не могут менять дату создания или срок сдачи.", "日本語 (Japanese)": "割り当てられたプロジェクトのみにアクセスできるメンバーは、作成日や納期を変更できません。", "中文 (Chinese)": "仅能访问已分配项目的成员无法更改创建日期或截止日期。", "العربية (Arabic)": "الأعضاء الذين لديهم صلاحية الوصول إلى المشاريع المسندة فقط لا يمكنهم تغيير تاريخ الإنشاء أو تاريخ الاستحقاق.", "हिन्दी (Hindi)": "केवल सौंपे गए प्रोजेक्ट तक पहुँच वाले सदस्य निर्माण तिथि या नियत तिथि नहीं बदल सकते।" },
+};
+
 const TRANSLATIONS: TranslationTable = mergeTranslationTables(
   CUSTOMER_INBOX_TRANSLATIONS,
+  ASSIGNED_ONLY_TRANSLATIONS,
   WEB_TRANSLATIONS,
   SESSION_LOCK_TRANSLATIONS,
   TOP_MENU_TRANSLATIONS,

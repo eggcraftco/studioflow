@@ -1,7 +1,14 @@
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "@/lib/firebase/client";
-import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import {
+  ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE,
+  ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE,
+  canCreateOrders,
+  normalizeWorkspaceRole,
+  roleCanCreateOrders,
+  type WorkspaceContext,
+} from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
@@ -177,9 +184,11 @@ export type DeleteOrderResult = {
   [key: string]: unknown;
 };
 
+/** Role-only half of the create gate. Entry points read canCreateOrders(workspace),
+ *  which also applies the assigned-projects-only rule; this stays for the
+ *  role-derived editing gates below. */
 export function canCreateOrdersForRole(role: string) {
-  const normalized = normalizeWorkspaceRole(role);
-  return normalized === "owner" || normalized === "admin" || normalized === "member" || normalized === "workflow";
+  return roleCanCreateOrders(role);
 }
 
 export function canEditOrderFullyForRole(role: string) {
@@ -202,6 +211,7 @@ export function canEditOrderDetailsForRole(role: string) {
 
 function friendlyCreateOrderError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  if (/assigned_only_cannot_create/i.test(message)) return ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE;
   if (/plan.*limit|order limit|failed-precondition/i.test(message)) {
     return "Your current plan has reached its project limit. Upgrade the workspace plan to add more projects.";
   }
@@ -228,6 +238,8 @@ function friendlyUndoOrderCreateError(error: unknown) {
 
 function friendlyUpdateOrderError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  if (/assigned_only_cannot_change_dates/i.test(message)) return ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE;
+  if (/assigned_only_cannot_create/i.test(message)) return ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE;
   if (/^Your current role/i.test(message)) return message;
   if (/workflow/i.test(message)) return "Workflow Only can edit order details, but cannot edit finance fields.";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit this order.";
@@ -282,8 +294,8 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
     throw new Error("Creating projects is not available on the current workspace plan.");
   }
 
-  if (!canCreateOrdersForRole(workspace.role)) {
-    throw new Error("Your workspace role cannot create projects.");
+  if (!canCreateOrders(workspace)) {
+    throw new Error(canCreateOrdersForRole(workspace.role) ? ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE : "Your workspace role cannot create projects.");
   }
 
   try {
@@ -339,8 +351,8 @@ export async function undoOrderCreateFromWeb(
   orderId: string,
   customerCreated: boolean
 ) {
-  if (!canCreateOrdersForRole(workspace.role)) {
-    throw new Error("Your workspace role cannot create projects.");
+  if (!canCreateOrders(workspace)) {
+    throw new Error(canCreateOrdersForRole(workspace.role) ? ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE : "Your workspace role cannot create projects.");
   }
 
   try {

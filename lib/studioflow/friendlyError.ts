@@ -27,6 +27,13 @@ const FUNCTION_MESSAGES: Record<string, string> = {
   "functions/internal": "Something went wrong. Please try again."
 };
 
+/** The server's reason codes for the assigned-projects-only rule (createWebOrder /
+ *  updateWebOrder refuse with these); the sentences live with the client gate. */
+const ASSIGNED_ONLY_REASONS: Record<string, string> = {
+  "assigned_only_cannot_create": "Members with access to assigned projects only cannot create projects.",
+  "assigned_only_cannot_change_dates": "Members with access to assigned projects only cannot change the created date or the due date."
+};
+
 const GENERIC = "Something went wrong. Please try again.";
 
 function errorCode(error: unknown): string {
@@ -58,6 +65,11 @@ export function friendlyErrorMessage(error: unknown, t: (s: string) => string): 
   const lower = message.toLowerCase();
 
   if (code && AUTH_MESSAGES[code]) return t(AUTH_MESSAGES[code]);
+  for (const [reason, text] of Object.entries(ASSIGNED_ONLY_REASONS)) {
+    const details = (error as { details?: unknown } | null)?.details;
+    const detailReason = details && typeof details === "object" ? String((details as { reason?: unknown }).reason ?? "") : typeof details === "string" ? details : "";
+    if (lower.includes(reason) || detailReason === reason) return t(text);
+  }
   if (code === "functions/failed-precondition") {
     // The server's own sentence explains plan limits and prerequisites; keep it.
     return looksRaw(message) ? t(GENERIC) : t(message);

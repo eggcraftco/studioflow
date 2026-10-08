@@ -22,6 +22,8 @@ import {
   orderIsAssignedToCurrentUser,
   workspaceAssignedProjectsOnly,
   workspaceAccessAllows,
+  canCreateOrders,
+  canEditOrderDates,
   type ScheduleOrderItem,
   type TeamMemberDetail,
   type WorkspaceContext,
@@ -35,7 +37,7 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
-import { canCreateOrdersForRole, canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
+import { canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
@@ -723,8 +725,10 @@ export default function SchedulePage() {
   const readyCount = filteredOrders.filter(orderIsReadyToShip).length;
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
-  const canEditSchedule = Boolean(workspace && canEditOrderStatusForRole(workspace.role));
-  const canCreateScheduleOrder = Boolean(workspace && workspace.entitlements.features.orders_create && canCreateOrdersForRole(workspace.role));
+  // Dragging a bar rewrites paymentDate + deliveryTime, which an
+  // assigned-projects-only member may not change (canEditOrderDates).
+  const canEditSchedule = Boolean(workspace && canEditOrderStatusForRole(workspace.role) && canEditOrderDates(workspace));
+  const canCreateScheduleOrder = Boolean(workspace && workspace.entitlements.features.orders_create && canCreateOrders(workspace));
   const canUseCalendarExport = Boolean(workspace && workspace.billingPlan !== "demo");
   const selectedOrder = useMemo(
     () => visibleSourceOrders.find(order => order.id === selectedOrderId) ?? filteredOrders[0] ?? null,

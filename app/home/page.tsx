@@ -33,6 +33,7 @@ import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
+  canCreateOrders,
   type WorkspaceContext,
   type WorkspaceSettingsOverview,
 } from "@/lib/studioflow/firestore";
@@ -367,6 +368,9 @@ export default function HomePage() {
     const props: CardBodyProps = {
       size, period, data, t, locale: studioLocaleTag(language),
       moneySettings, hideNumbers, onQuickAction: handleQuickAction,
+      // "New order" is hidden from a member who only works inside assigned
+      // projects (canCreateOrders); the toolbar hides its button the same way.
+      canCreateOrders: canCreateOrders(workspace),
     };
     switch (id) {
       case "money": return <MoneyCardBody {...props} />;

@@ -1574,11 +1574,46 @@ function isWorkflowAssignedView(workspace?: WorkspaceContext | null) {
 
 // Returns true when the user is restricted to seeing only their own assigned orders.
 // Covers both strict workflow and custom-role "Assigned Projects Only" members.
-function requiresAssignedToSelfFilter(workspace?: WorkspaceContext | null) {
+export function requiresAssignedToSelfFilter(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null) {
   if (normalizeWorkspaceRole(workspace?.role) === "workflow") return true;
-  return workspace?.memberAccess.assignedProjectsOnly === true
-    && workspace?.memberAccess.manageProjectAssignments !== true;
+  return workspace?.memberAccess?.assignedProjectsOnly === true
+    && workspace?.memberAccess?.manageProjectAssignments !== true;
 }
+
+// --- "Assigned projects only" (owner's rule, 8 Oct 2026) ---------------------
+//
+// A member whose effective access is "Assigned projects only" — the Workflow
+// role, or a custom role with assignedProjectsOnly and without
+// manageProjectAssignments (requiresAssignedToSelfFilter) — works inside the
+// projects given to them. They do not open new projects, and they do not move
+// a project's created date or its due setting. Every "+ Add Project" entry
+// point and the two date fields of the Timeline & Delivery card read these two
+// helpers; the server refuses the same writes with assigned_only_cannot_create
+// and assigned_only_cannot_change_dates. Pure: role + memberAccess only.
+
+/** Roles that may open a project at all (before the assigned-only rule). */
+export function roleCanCreateOrders(role: string) {
+  const normalized = normalizeWorkspaceRole(role);
+  return normalized === "owner" || normalized === "admin" || normalized === "member" || normalized === "workflow";
+}
+
+/** May this member open a new project (toolbar, Quick Create, empty state, Home quick action, import)? */
+export function canCreateOrders(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null) {
+  if (!workspace) return false;
+  if (!roleCanCreateOrders(workspace.role)) return false;
+  return !requiresAssignedToSelfFilter(workspace);
+}
+
+/** May this member change a project's created date (paymentDate) or its due setting (deliveryTime / due date)? */
+export function canEditOrderDates(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null) {
+  if (!workspace) return false;
+  return !requiresAssignedToSelfFilter(workspace);
+}
+
+/** The sentence shown when an assigned-only member reaches a create path (the server's assigned_only_cannot_create). */
+export const ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE = "Members with access to assigned projects only cannot create projects.";
+/** The sentence shown when an assigned-only member reaches a date write (the server's assigned_only_cannot_change_dates). */
+export const ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE = "Members with access to assigned projects only cannot change the created date or the due date.";
 
 const workflowViewSyncByWorkspace = new Map<string, Promise<void>>();
 

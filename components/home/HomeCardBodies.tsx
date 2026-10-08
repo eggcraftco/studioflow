@@ -42,6 +42,9 @@ export type CardBodyProps = {
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
+  /** False hides the "New order" quick action: the member may not open
+   *  projects (role, or assigned-projects-only). Undefined keeps it. */
+  canCreateOrders?: boolean;
   /** Which slice of the activity feed to show. Only the 2x2 activity card
    *  offers the pills; every other size and card ignores it. */
   activityFilter?: ActivityFilterId;
@@ -2106,12 +2109,15 @@ const QUICK_ACTION_GROUPS: { id: "create" | "capture" | "finance"; label: string
   { id: "finance", label: "Finance & communication" },
 ];
 
-export function QuickActionsCardBody({ size, t, onQuickAction }: CardBodyProps) {
+export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders }: CardBodyProps) {
+  // The "order" action is the toolbar's "+ Add Project"; it leaves the card for
+  // the same member the toolbar hides it from.
+  const quickActions = canCreateOrders === false ? QUICK_ACTIONS.filter((action) => action.id !== "order") : QUICK_ACTIONS;
   // 1x1: four large tinted tiles, icon over label.
   if (size === "1x1") {
     return (
       <div className="home-action-grid is-tiles">
-        {QUICK_ACTIONS.slice(0, 4).map((action) => (
+        {quickActions.slice(0, 4).map((action) => (
           <button
             key={action.id}
             type="button"
@@ -2130,7 +2136,7 @@ export function QuickActionsCardBody({ size, t, onQuickAction }: CardBodyProps) 
   if (size === "2x1") {
     return (
       <div className="home-action-grid is-rows">
-        {QUICK_ACTIONS.slice(0, 6).map((action) => (
+        {quickActions.slice(0, 6).map((action) => (
           <button
             key={action.id}
             type="button"
@@ -2149,7 +2155,7 @@ export function QuickActionsCardBody({ size, t, onQuickAction }: CardBodyProps) 
   return (
     <div className="home-action-groups">
       {QUICK_ACTION_GROUPS.map((group) => {
-        const rows = QUICK_ACTIONS.filter((action) => action.group === group.id);
+        const rows = quickActions.filter((action) => action.group === group.id);
         if (rows.length === 0) return null;
         return (
           <div key={group.id} className="home-action-group">

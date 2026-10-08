@@ -38,6 +38,8 @@ import {
   type WorkspaceMemberAccessKey,
   type WorkspaceContext,
   type WorkspaceSettingsOverview,
+  ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE,
+  canCreateOrders,
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
@@ -1889,10 +1891,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // the same button the toolbar shows, so the action opens where the user is.
   useQuickActionEvent("order", (payload) => handleAddOrder(payload));
 
+  // canCreateOrders carries the role gate AND the assigned-projects-only
+  // rule: a member who only works inside assigned projects never sees "+ Add
+  // Project" (the owner's rule, 8 Oct 2026).
   const canCreateToolbarOrder = Boolean(
     workspace &&
     memberCanAccess(workspace, "orders") &&
-    canCreateOrdersForRole(workspace.role) &&
+    canCreateOrders(workspace) &&
     workspace.entitlements.features.orders_create,
   );
   const {
@@ -2325,8 +2330,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!canCreateOrdersForRole(workspace.role)) {
-      setOrderCreateError(t("Your workspace role cannot create projects."));
+    if (!canCreateOrders(workspace)) {
+      // Every create entry (toolbar, Home quick action, Orders empty state,
+      // Schedule "+ New Project") lands here, so the assigned-only member who
+      // reaches it through an old path hears the rule rather than a form.
+      setOrderCreateError(
+        canCreateOrdersForRole(workspace.role)
+          ? t(ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE)
+          : t("Your workspace role cannot create projects."),
+      );
       return;
     }
 
