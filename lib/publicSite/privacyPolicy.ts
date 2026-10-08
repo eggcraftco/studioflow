@@ -13,7 +13,7 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-// Set to the day the customer-inbox text (7.1, 7.2) goes live.
+// Set to the day the newest section goes live (7.3 Amazon: set on publish, after the owner approves the text).
 export const PRIVACY_POLICY_LAST_UPDATED = "28 September 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
@@ -272,6 +272,26 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "your customer's Instagram account ID is not stored in readable form with their messages: the inbox shows only a short label, and the ID is kept encrypted only while a reply can still be sent (about a day after their last message);",
           "NivaDesk's AI features do not read the customer inbox: nothing in it is sent to an AI model by NivaDesk."
         ]
+      },
+      {
+        title: "7.3 Your Amazon orders (Amazon seller connection)",
+        paragraphs: [
+          "If your workspace connects an Amazon seller account, NivaDesk reads that account's orders through Amazon's Selling Partner API so that they appear as orders in your workspace. You give this permission on Amazon's own consent page. NivaDesk then holds a refresh token for the account, which it uses only to read orders. The token and everything else NivaDesk receives from Amazon are handled in a dedicated system that runs in London (Google Cloud region europe-west2), the same region as the rest of NivaDesk, but separate from it.",
+          "NivaDesk does not accept personal data about your buyers from Amazon. Buyer names, delivery addresses, e-mail addresses, phone numbers and tax identifiers are refused at the boundary of that dedicated system: they are not stored there, not sent on to your workspace and not shown anywhere in NivaDesk. Any field that system has not been told is safe is refused too, and an order that cannot be read without such a field is left out rather than stored. What travels is the order itself: Amazon's order number, dates, status, totals, delivery service level, marketplace, and for each item its title, SKU, ASIN, quantities and prices.",
+          "What NivaDesk keeps, and for how long:"
+        ],
+        bullets: [
+          "a connection record (your Amazon seller ID, the marketplaces you chose, the dates of connection and of the last sync) and the refresh token, for as long as the connection is active;",
+          "a copy of each order in the dedicated system, deleted automatically 90 days after NivaDesk last saw it change on Amazon; that system keeps no backups, so a deleted copy is gone within an hour;",
+          "the order created in your workspace, which is your record like any other order: it stays until you delete it and follows section 17;",
+          "technical logs of the dedicated system (request times, document paths that include Amazon order numbers, your seller ID in connection events, and error codes) kept for up to 400 days for security and audit; they never contain buyer data or tokens."
+        ]
+      },
+      {
+        title: "",
+        paragraphs: [
+          "Disconnecting the account. When you disconnect the account in Settings, NivaDesk marks the connection as disconnected straight away and every sync stops: no further request is made to Amazon on your behalf, and nothing more is stored or sent to your workspace, including an order that was being read at that moment. NivaDesk then destroys the refresh token and deletes the order copies held in the dedicated system; if either step fails, it is retried automatically until it is done. Orders already created in your workspace are not deleted by disconnecting: delete them in your workspace if you no longer want them. A connection you make later is a new connection and is not affected by this cleanup. Amazon's own records of your orders are Amazon's, under Amazon's terms, and NivaDesk cannot delete them."
+        ]
       }
     ]
   },
@@ -424,6 +444,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
       "your customers' WhatsApp and Instagram messages are kept for 90 days, and NivaDesk's copies of files they send on WhatsApp for 30 days, as described in sections 7.1 and 7.2;",
+      "copies of your Amazon orders held in NivaDesk's dedicated Amazon system are deleted 90 days after NivaDesk last saw them change, and on disconnection, as described in section 7.3;",
       "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted."
     ],
     subsections: [
