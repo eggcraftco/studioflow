@@ -1412,19 +1412,25 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
     taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),
     companyNumbers: decodeCompanyNumbers(data.companyNumbersJSON),
-    pdfShowCustomer: booleanValue(data.pdfShowCustomer, true),
-    pdfShowContact: booleanValue(data.pdfShowContact, true),
-    pdfShowPreview: booleanValue(data.pdfShowPreview, true),
+    // The nine finance-free PDF switches may be personal: savePersonalInterfaceSettings
+    // stores a member's own choice in personalInterfaceSettings/{uid}, and the server's
+    // getPersonalInterfaceSettings reads it before the shared value. The print buttons
+    // read this overview, so without the same precedence here a member's saved
+    // "Personal" PDF sections changed the Settings preview and nothing else.
+    pdfShowCustomer: booleanValue(personalData.pdfShowCustomer ?? data.pdfShowCustomer, true),
+    pdfShowContact: booleanValue(personalData.pdfShowContact ?? data.pdfShowContact, true),
+    pdfShowPreview: booleanValue(personalData.pdfShowPreview ?? data.pdfShowPreview, true),
+    // The three money switches are workspace-shared only; the server never stores them per user.
     pdfShowFinCustomer: booleanValue(data.pdfShowFinCustomer, true),
     pdfShowPaymentMethod: booleanValue(data.pdfShowPaymentMethod, true),
     pdfShowFinInternal: booleanValue(data.pdfShowFinInternal, false),
-    pdfShowStatus: booleanValue(data.pdfShowStatus, true),
-    pdfShowShipping: booleanValue(data.pdfShowShipping, true),
-    pdfShowMaterials: booleanValue(data.pdfShowMaterials, true),
-    pdfShowAddress: booleanValue(data.pdfShowAddress, true),
-    pdfShowShippingAddress: booleanValue(data.pdfShowShippingAddress, true),
+    pdfShowStatus: booleanValue(personalData.pdfShowStatus ?? data.pdfShowStatus, true),
+    pdfShowShipping: booleanValue(personalData.pdfShowShipping ?? data.pdfShowShipping, true),
+    pdfShowMaterials: booleanValue(personalData.pdfShowMaterials ?? data.pdfShowMaterials, true),
+    pdfShowAddress: booleanValue(personalData.pdfShowAddress ?? data.pdfShowAddress, true),
+    pdfShowShippingAddress: booleanValue(personalData.pdfShowShippingAddress ?? data.pdfShowShippingAddress, true),
     orderItemsHeading: stringValue(data.orderItemsHeading, ""),
-    pdfShowPriority: booleanValue(data.pdfShowPriority, true),
+    pdfShowPriority: booleanValue(personalData.pdfShowPriority ?? data.pdfShowPriority, true),
     financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
     financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),
     financialShowBaseCost: booleanValue(data.financialShowBaseCost, true),
