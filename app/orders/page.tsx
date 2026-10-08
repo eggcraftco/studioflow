@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
@@ -56,6 +56,7 @@ import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
+import { OrderListRail } from "@/components/OrderListRail";
 import { OrderDetailContent } from "./OrderDetailContent";
 import {
   getFirstProjectGuideState,
@@ -167,6 +168,16 @@ export default function OrdersPage() {
   const [mergingOrders, setMergingOrders] = useState(false);
   const [showOrderStatusBadges, setShowOrderStatusBadges] = useState(true);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-orders-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
+  // The full list is hidden (display: none) while the sidebar is folded, which
+  // loses its scroll offset; the last offset is kept here and put back when the
+  // list opens again, so the fold leaves the person where they were.
+  const ordersListRef = useRef<HTMLDivElement | null>(null);
+  const ordersListScrollTopRef = useRef(0);
+  useLayoutEffect(() => {
+    if (sidebar.collapsed) return;
+    const node = ordersListRef.current;
+    if (node && ordersListScrollTopRef.current > 0) node.scrollTop = ordersListScrollTopRef.current;
+  }, [sidebar.collapsed]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -1090,7 +1101,11 @@ export default function OrdersPage() {
               </div>
             </div>
           ) : null}
-          <div className="orders-list">
+          <div
+            className="orders-list"
+            ref={ordersListRef}
+            onScroll={event => { ordersListScrollTopRef.current = event.currentTarget.scrollTop; }}
+          >
             {filteredOrders.map(order => (
               <div
                 key={order.id}
@@ -1121,6 +1136,16 @@ export default function OrdersPage() {
               </div>
             ))}
           </div>
+          {sidebar.collapsed ? (
+            <OrderListRail
+              orders={filteredOrders}
+              selectedId={selectedOrderId}
+              onSelect={order => handleOrderCardClick(order)}
+              label={t("Collapsed order list")}
+              statusText={status => t(status)}
+              idPrefix="orders-rail-order"
+            />
+          ) : null}
 
           {orderContextMenu && contextOrder ? (
             <div

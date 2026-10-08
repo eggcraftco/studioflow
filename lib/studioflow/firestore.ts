@@ -316,6 +316,8 @@ export type QuickReplySettings = {
 
 export type OrderListItem = {
   id: string;
+  /** The workspace's sequential project number; 0 when the order predates it. The collapsed rail shows it. */
+  projectNumber: number;
   assignedToUid: string;
   assignedToEmail: string;
   customerName: string;
@@ -348,6 +350,8 @@ export type OrderListItem = {
 
 export type ScheduleOrderItem = {
   id: string;
+  /** The workspace's sequential project number; 0 when the order predates it. The collapsed rail shows it. */
+  projectNumber: number;
   assignedToUid: string;
   assignedToEmail: string;
   customerName: string;
@@ -1649,6 +1653,7 @@ export async function loadRecentOrders(companyId: string, workspace?: WorkspaceC
       isDispatched: booleanValue(data.isDispatched, false),
       isDelivered: booleanValue(data.isDelivered, false),
       clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
+      projectNumber: numberValue(data.projectNumber, 0),
       previewImageUrl: firstStringValue(
         data.previewImageUrl,
         data.previewImageURL,
@@ -1707,6 +1712,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
       dueDate,
       isDispatched: booleanValue(data.isDispatched, false),
       isDelivered: booleanValue(data.isDelivered, false),
+      projectNumber: numberValue(data.projectNumber, 0),
       previewImageUrl: firstStringValue(
         data.previewImageUrl,
         data.previewImageURL,

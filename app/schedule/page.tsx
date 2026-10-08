@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
@@ -38,6 +38,7 @@ import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { canCreateOrdersForRole, canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
+import { OrderListRail } from "@/components/OrderListRail";
 
 type ScheduleSpan = "weekly" | "monthly" | "threeMonths" | "sixMonths" | "yearly";
 type ScheduleFilter = OrderQuickFilterId;
@@ -443,6 +444,17 @@ export default function SchedulePage() {
   } | null>(null);
   const [scheduleTimelinePanning, setScheduleTimelinePanning] = useState(false);
   const sidebar = useResizableSidebar({ storageKey: "studioflow-schedule-sidebar", workspaceId: workspace?.id, initialWidth: 320, maxWidth: 720 });
+  // As on Orders: the folded list is display: none and forgets its scroll
+  // offset; keep the last one and restore it when the list opens. The timeline's
+  // own date position (anchorDate, the scroller's scrollLeft) is in the main
+  // pane and is not touched by the fold.
+  const scheduleListRef = useRef<HTMLDivElement | null>(null);
+  const scheduleListScrollTopRef = useRef(0);
+  useLayoutEffect(() => {
+    if (sidebar.collapsed) return;
+    const node = scheduleListRef.current;
+    if (node && scheduleListScrollTopRef.current > 0) node.scrollTop = scheduleListScrollTopRef.current;
+  }, [sidebar.collapsed]);
   const pathname = usePathname();
   const teamMode = pathname === "/team-schedule";
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
@@ -1029,7 +1041,11 @@ export default function SchedulePage() {
             />
           </div>
 
-          <div className="orders-list">
+          <div
+            className="orders-list"
+            ref={scheduleListRef}
+            onScroll={event => { scheduleListScrollTopRef.current = event.currentTarget.scrollTop; }}
+          >
             {filteredOrders.map(order => (
               <div
                 key={order.id}
@@ -1051,6 +1067,17 @@ export default function SchedulePage() {
               </div>
             ))}
           </div>
+          {sidebar.collapsed ? (
+            <OrderListRail
+              orders={filteredOrders}
+              selectedId={selectedOrderId}
+              onSelect={order => selectScheduleOrder(order)}
+              onHoverChange={setHoveredOrderId}
+              label={t("Collapsed order list")}
+              statusText={status => t(status)}
+              idPrefix="schedule-rail-order"
+            />
+          ) : null}
         </aside>
 
         <button

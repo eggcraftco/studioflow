@@ -34,6 +34,8 @@ import {
 } from "@/lib/studioflow/customerPortal";
 import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { orderSourceLink, orderSourceLinkReasonText } from "@/lib/studioflow/orderSourceLink";
+import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
   CLIENT_FILE_ACCEPT,
@@ -1434,7 +1436,7 @@ function ChannelSourceStrip({
   order,
   showMoney = true,
 }: {
-  order: { customFields: Record<string, string>; commerce: OrderChannelStamp | null; designLink: string };
+  order: { companyId?: string; customFields: Record<string, string>; commerce: OrderChannelStamp | null };
   /** Financial Info gate: the platform's total is money, so a member without it sees the strip without the amount. */
   showMoney?: boolean;
 }) {
@@ -1443,6 +1445,11 @@ function ChannelSourceStrip({
   const cf = order.customFields || {};
   const stamp = order.commerce;
   const source = (stamp?.providerDisplayName || cf["Source"] || "").trim();
+  // The link back to the shop (lib/studioflow/orderSourceLink.ts): from the
+  // server's stamp only — never from the preview field, which is the order's
+  // photo. A WooCommerce shop lives on its own domain, so its host is checked
+  // against the workspace's connections before the link is offered.
+  const connectedHosts = useConnectedStoreHosts(order.companyId || "", (stamp?.provider || source).toLowerCase() === "woocommerce");
   if (source === "Shopify" && !stamp) return null;   // the Shopify strip above owns that case
   if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;   // EbayOrderBlock below owns eBay
   if (!stamp && !CHANNEL_SOURCES.includes(source)) return null;
@@ -1454,7 +1461,8 @@ function ChannelSourceStrip({
   const total = stamp?.grandTotal || field("Total");
   const location = field("Location");
   const sourceName = field("Source");
-  const link = stamp?.externalAdminUrl || (/^https?:\/\//.test(order.designLink || "") ? order.designLink : "");
+  const sourceLink = orderSourceLink({ commerce: stamp, customFields: cf, connectedHosts });
+  const linkReason = sourceLink.kind === "none" ? orderSourceLinkReasonText(sourceLink.reason) : "";
   const connection = stamp?.connectionDisplayName || "";
   return (
     <div className="shopify-source-strip channel-source-strip">
@@ -1467,10 +1475,14 @@ function ChannelSourceStrip({
       {paymentStatus ? <span className="shopify-source-item">· {t("Payment")}: {paymentStatus.replace(/_/g, " ")}</span> : null}
       {total && showMoney ? <span className="shopify-source-item">· {total} {currency}</span> : null}
       {stamp?.reviewRequired ? <span className="shopify-source-item">· {t("Needs attention")}</span> : null}
-      {link ? (
-        <a className="shopify-source-link" href={link} target="_blank" rel="noreferrer">
+      {sourceLink.kind === "link" ? (
+        <a className="shopify-source-link" href={sourceLink.href} target="_blank" rel="noopener noreferrer" data-order-source-link="1">
           {t("Open in")} {source} ↗
         </a>
+      ) : linkReason ? (
+        <span className="shopify-source-link is-unavailable" aria-disabled="true" title={t(linkReason)} data-order-source-link="unavailable">
+          {t("Order link not available")}
+        </span>
       ) : null}
     </div>
   );
@@ -6495,8 +6507,8 @@ export function OrderDetailContent({
                         {order.designLink ? "Edit photo link" : "Paste photo link..."}
                       </button>
                       {order.designLink ? (
-                        <a href={order.designLink} target="_blank" rel="noreferrer">
-                          Open
+                        <a href={order.designLink} target="_blank" rel="noopener noreferrer" data-preview-open-link="1">
+                          {t("Open preview image")}
                         </a>
                       ) : null}
                       {order.designLink ? (
