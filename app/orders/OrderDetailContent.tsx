@@ -63,6 +63,12 @@ import {
   type OrderDetailCardLayout
 } from "@/lib/studioflow/cardLayouts";
 import {
+  ORDER_CARD_MENU_DESCRIPTIONS,
+  ORDER_CARD_MENU_DESCRIPTIONS_TOGGLE,
+  orderCardMenuDescriptionId,
+  type OrderCardMenuOptionId
+} from "@/lib/studioflow/orderCardMenuDescriptions";
+import {
   loadWorkspaceBlockHeadings,
   saveWorkspaceBlockHeadings,
   WEB_BLOCK_HEADING_CARD_IDS,
@@ -2187,6 +2193,10 @@ export function OrderDetailContent({
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<OrderDetailCardId | null>(null);
+  // Card "..." panel: whether the option descriptions are shown under each
+  // option (the "i" in the panel header; a phone has no hover). The viewer's
+  // choice for this screen, not stored.
+  const [cardMenuDescriptionsOn, setCardMenuDescriptionsOn] = useState(false);
   // Workspace colour meanings (defaults overridable via Manage colour labels).
   const [colorMeanings, setColorMeanings] = useState<Record<string, string>>(CARD_COLOR_MEANINGS);
   const [colorLabelsOpen, setColorLabelsOpen] = useState(false);
@@ -2535,7 +2545,9 @@ export function OrderDetailContent({
       ".order-card-height-resize-handle",
       ".order-card-corner-resize-handle",
       ".order-card-menu",
+      ".order-card-menu-wrap",
       ".order-card-menu-panel",
+      ".block-custom-panel",
       ".workspace-blocks-modal",
       "button",
       "a",
@@ -5479,87 +5491,151 @@ export function OrderDetailContent({
         : "Card layout is loading.";
     const sizeKey = activeCardSizeKey(cardId);
     const activeColor = cardProfileColor(cardLayout, cardId);
+    // One description per option (lib/studioflow/orderCardMenuDescriptions.ts):
+    // a sibling of the button, never inside it, so hovering, focusing or (with
+    // the "i" toggle on a phone) reading it cannot run the option. The button
+    // points at it with aria-describedby.
+    const descId = (option: OrderCardMenuOptionId, suffix?: string) => orderCardMenuDescriptionId(cardId, option, suffix);
+    const describe = (option: OrderCardMenuOptionId, suffix?: string) => (
+      <span className="block-custom-desc" id={descId(option, suffix)}>
+        {t(ORDER_CARD_MENU_DESCRIPTIONS[option])}
+      </span>
+    );
+    const pdfIcon = (
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+    );
 
     return (
-      <div className="order-card-menu-wrap">
+      <div className={menuOpen ? "order-card-menu-wrap is-open" : "order-card-menu-wrap"}>
+        {/* 40 x 40 hit area; the visible 32 px disc is the inner span, so the
+            target meets the touch minimum without the disc growing. */}
         <button
           aria-label={`${cardLabel(cardId)} menu`}
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen}
+          aria-describedby={descId("menuButton")}
           className="order-card-menu-button"
           type="button"
           onClick={() => setOpenCardMenuId(current => current === cardId ? null : cardId)}
         >
-          ...
+          <span className="order-card-menu-face" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5.5" cy="12" r="2.1" /><circle cx="12" cy="12" r="2.1" /><circle cx="18.5" cy="12" r="2.1" /></svg>
+          </span>
         </button>
+        {describe("menuButton")}
         {menuOpen ? (
           <>
             <div className="block-custom-backdrop" onClick={() => setOpenCardMenuId(null)} aria-hidden="true" />
-            <div className="block-custom-panel" role="dialog" aria-label={`${cardLabel(cardId)} — ${t("Block customisation")}`}>
+            <div
+              className={cardMenuDescriptionsOn ? "block-custom-panel is-describing" : "block-custom-panel"}
+              role="dialog"
+              aria-label={`${cardLabel(cardId)} — ${t("Block customisation")}`}
+            >
               <header className="block-custom-header">
                 <strong>{t("Block customisation")}</strong>
                 <span className="block-custom-grip" aria-hidden="true">⠿</span>
-                <button type="button" className="block-custom-close" aria-label={t("Close")} onClick={() => setOpenCardMenuId(null)}>×</button>
+                <button
+                  type="button"
+                  className={cardMenuDescriptionsOn ? "block-custom-info is-on" : "block-custom-info"}
+                  aria-pressed={cardMenuDescriptionsOn}
+                  aria-label={t(ORDER_CARD_MENU_DESCRIPTIONS_TOGGLE)}
+                  title={t(ORDER_CARD_MENU_DESCRIPTIONS_TOGGLE)}
+                  onClick={() => setCardMenuDescriptionsOn(on => !on)}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="M12 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><circle cx="12" cy="7.8" r="1.15" fill="currentColor" /></svg>
+                </button>
+                <div className="block-custom-opt">
+                  <button type="button" className="block-custom-close" aria-label={t("Close")} aria-describedby={descId("closePanel", "x")} onClick={() => setOpenCardMenuId(null)}>×</button>
+                  {describe("closePanel", "x")}
+                </div>
               </header>
 
               {locked ? <p className="order-card-menu-note">{t(lockedNote)}</p> : null}
 
               <div className="block-custom-actions">
                 {cardId === "todo" ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      setTodoError(null);
-                      try {
-                        openTodoPdfPrint(order, optimisticTodoItems, workspace.name);
-                      } catch (exportError) {
-                        setTodoError(exportError instanceof Error ? exportError.message : "To Do PDF could not be opened.");
-                      }
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
-                    {t("Export to-do PDF")}
-                  </button>
+                  <div className="block-custom-opt">
+                    <button
+                      type="button"
+                      aria-describedby={descId("exportTodoPdf")}
+                      onClick={() => {
+                        setOpenCardMenuId(null);
+                        setTodoError(null);
+                        try {
+                          openTodoPdfPrint(order, optimisticTodoItems, workspace.name);
+                        } catch (exportError) {
+                          setTodoError(exportError instanceof Error ? exportError.message : "To Do PDF could not be opened.");
+                        }
+                      }}
+                    >
+                      {pdfIcon}
+                      {t("Export to-do PDF")}
+                    </button>
+                    {describe("exportTodoPdf")}
+                  </div>
                 ) : null}
                 {cardId === "historyLog" && canUseLiteWorkspaceCards ? (
+                  <div className="block-custom-opt">
+                    <button
+                      type="button"
+                      aria-describedby={descId("exportHistoryPdf")}
+                      onClick={() => {
+                        setOpenCardMenuId(null);
+                        setInlineError(null);
+                        try {
+                          openHistoryPdfPrint(order, workspace.name);
+                        } catch (exportError) {
+                          setInlineError(exportError instanceof Error ? exportError.message : "History Log PDF could not be opened.");
+                        }
+                      }}
+                    >
+                      {pdfIcon}
+                      {t("Export history PDF")}
+                    </button>
+                    {describe("exportHistoryPdf")}
+                  </div>
+                ) : null}
+                <div className="block-custom-opt">
                   <button
                     type="button"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      setInlineError(null);
-                      try {
-                        openHistoryPdfPrint(order, workspace.name);
-                      } catch (exportError) {
-                        setInlineError(exportError instanceof Error ? exportError.message : "History Log PDF could not be opened.");
-                      }
-                    }}
+                    disabled={locked || savingLayout}
+                    aria-describedby={descId(headingAvailable ? "editHeading" : "editHeadingUnavailable")}
+                    onClick={() => editCardHeading(cardId)}
                   >
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
-                    {t("Export history PDF")}
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+                    {t("Edit block heading")}
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={locked || savingLayout}
-                  onClick={() => editCardHeading(cardId)}
-                  title={headingAvailable ? t("Edit the headings inside this block") : t("This card does not have web heading editing yet")}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
-                  {t("Edit block heading")}
-                </button>
-                <button type="button" disabled={locked || savingLayout} onClick={() => hideCard(cardId)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10 5.3A9.8 9.8 0 0 1 12 5c7 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A16.4 16.4 0 0 0 2 12s3 7 10 7a9.9 9.9 0 0 0 3.4-.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  {t("Hide block")}
-                </button>
+                  {describe(headingAvailable ? "editHeading" : "editHeadingUnavailable")}
+                </div>
+                <div className="block-custom-opt">
+                  <button type="button" disabled={locked || savingLayout} aria-describedby={descId("hideBlock")} onClick={() => hideCard(cardId)}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10 5.3A9.8 9.8 0 0 1 12 5c7 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A16.4 16.4 0 0 0 2 12s3 7 10 7a9.9 9.9 0 0 0 3.4-.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {t("Hide block")}
+                  </button>
+                  {describe("hideBlock")}
+                </div>
               </div>
 
               <div className="order-card-menu-label">{t("Position")}</div>
               <div className="block-custom-move">
-                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑ {t("Up")}</button>
-                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓ {t("Down")}</button>
+                <div className="block-custom-opt">
+                  <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} up`} aria-describedby={descId("moveUp")} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑ {t("Up")}</button>
+                  {describe("moveUp")}
+                </div>
+                <div className="block-custom-opt">
+                  <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} down`} aria-describedby={descId("moveDown")} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓ {t("Down")}</button>
+                  {describe("moveDown")}
+                </div>
                 {!isNarrowLayout ? (
                   <>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>← {t("Left")}</button>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→ {t("Right")}</button>
+                    <div className="block-custom-opt">
+                      <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the previous column`} aria-describedby={descId("moveLeft")} onClick={() => moveCardColumnBy(cardId, -1)}>← {t("Left")}</button>
+                      {describe("moveLeft")}
+                    </div>
+                    <div className="block-custom-opt">
+                      <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the next column`} aria-describedby={descId("moveRight")} onClick={() => moveCardColumnBy(cardId, 1)}>→ {t("Right")}</button>
+                      {describe("moveRight")}
+                    </div>
                   </>
                 ) : null}
               </div>
@@ -5567,63 +5643,93 @@ export function OrderDetailContent({
 
               <div className="order-card-menu-label">{t("Width")}</div>
               <div className="block-custom-segment">
-                <button
-                  type="button"
-                  className={sizeKey === "fit" ? "is-active" : ""}
-                  disabled={locked || savingLayout}
-                  onClick={() => applyCardSizePreset(cardId, "fit")}
-                  title={t("Shrink the card to exactly its content")}
-                >
-                  {t("Fit content")}
-                </button>
-                <button
-                  type="button"
-                  disabled={locked || savingLayout}
-                  onClick={() => applyCardSizePreset(cardId, "matchColumn")}
-                  title={t("Give every card in this column this card's height")}
-                >
-                  {t("Match column")}
-                </button>
+                <div className="block-custom-opt">
+                  <button
+                    type="button"
+                    className={sizeKey === "fit" ? "is-active" : ""}
+                    disabled={locked || savingLayout}
+                    aria-describedby={descId("fitContent")}
+                    onClick={() => applyCardSizePreset(cardId, "fit")}
+                  >
+                    {t("Fit content")}
+                  </button>
+                  {describe("fitContent")}
+                </div>
+                <div className="block-custom-opt">
+                  <button
+                    type="button"
+                    disabled={locked || savingLayout}
+                    aria-describedby={descId("matchColumn")}
+                    onClick={() => applyCardSizePreset(cardId, "matchColumn")}
+                  >
+                    {t("Match column")}
+                  </button>
+                  {describe("matchColumn")}
+                </div>
               </div>
 
               <div className="order-card-menu-label">{t("Card size")}</div>
               <div className="block-custom-segment block-custom-sml">
-                <button type="button" className={sizeKey === "S" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
-                <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
-                <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+                <div className="block-custom-opt">
+                  <button type="button" className={sizeKey === "S" ? "is-active" : ""} disabled={locked || savingLayout} aria-describedby={descId("sizeS")} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
+                  {describe("sizeS")}
+                </div>
+                <div className="block-custom-opt">
+                  <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} aria-describedby={descId("sizeM")} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
+                  {describe("sizeM")}
+                </div>
+                <div className="block-custom-opt">
+                  <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} aria-describedby={descId("sizeL")} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+                  {describe("sizeL")}
+                </div>
               </div>
 
               <div className="order-card-menu-label">{t("Colour")}</div>
               <div className="block-custom-color-grid">
-                {CARD_COLOR_OPTIONS.map(color => (
-                  <button
-                    key={color}
-                    className={`block-custom-color${activeColor === color ? " is-selected" : ""}`}
-                    type="button"
-                    disabled={locked || savingLayout}
-                    onClick={() => setCardColor(cardId, color)}
-                  >
-                    <span className="block-custom-swatch" data-card-color={color} aria-hidden="true" />
-                    <span className="block-custom-color-name">
-                      {t(color)}
-                      {colorMeanings[color] ? <small>{t(colorMeanings[color])}</small> : null}
-                    </span>
-                  </button>
-                ))}
+                {CARD_COLOR_OPTIONS.map(color => {
+                  const option: OrderCardMenuOptionId = color === "Default" ? "colourDefault" : "colourTint";
+                  return (
+                    <div className="block-custom-opt" key={color}>
+                      <button
+                        className={`block-custom-color${activeColor === color ? " is-selected" : ""}`}
+                        type="button"
+                        disabled={locked || savingLayout}
+                        aria-describedby={descId(option, color)}
+                        onClick={() => setCardColor(cardId, color)}
+                      >
+                        <span className="block-custom-swatch" data-card-color={color} aria-hidden="true" />
+                        <span className="block-custom-color-name">
+                          {t(color)}
+                          {colorMeanings[color] ? <small>{t(colorMeanings[color])}</small> : null}
+                        </span>
+                      </button>
+                      {describe(option, color)}
+                    </div>
+                  );
+                })}
               </div>
               {!locked ? (
-                <button type="button" className="block-custom-link" onClick={openColorLabelsEditor}>
-                  {t("Manage colour labels")}
-                </button>
+                <div className="block-custom-opt">
+                  <button type="button" className="block-custom-link" aria-describedby={descId("manageColourLabels")} onClick={openColorLabelsEditor}>
+                    {t("Manage colour labels")}
+                  </button>
+                  {describe("manageColourLabels")}
+                </div>
               ) : null}
 
               <footer className="block-custom-footer">
-                <button type="button" className="block-custom-reset" disabled={locked || savingLayout} onClick={() => resetCard(cardId)}>
-                  {t("Reset")}
-                </button>
-                <button type="button" className="block-custom-done" onClick={() => setOpenCardMenuId(null)}>
-                  {t("Done")}
-                </button>
+                <div className="block-custom-opt">
+                  <button type="button" className="block-custom-reset" disabled={locked || savingLayout} aria-describedby={descId("reset")} onClick={() => resetCard(cardId)}>
+                    {t("Reset")}
+                  </button>
+                  {describe("reset")}
+                </div>
+                <div className="block-custom-opt">
+                  <button type="button" className="block-custom-done" aria-describedby={descId("closePanel")} onClick={() => setOpenCardMenuId(null)}>
+                    {t("Done")}
+                  </button>
+                  {describe("closePanel")}
+                </div>
               </footer>
             </div>
           </>
