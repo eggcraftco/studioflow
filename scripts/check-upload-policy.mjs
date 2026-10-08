@@ -11,6 +11,7 @@ import path from "path";
 import os from "os";
 import { fileURLToPath, pathToFileURL } from "url";
 import ts from "typescript";
+import { createHash } from "crypto";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -54,7 +55,8 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
 } else {
   compile("lib/studioflow/uploadPolicy.ts", "uploadPolicy");
   const {
-    UPLOAD_POLICY_BUILTIN_SENTENCE, uploadPolicyVersion, uploadPolicyWording,
+    UPLOAD_POLICY_BUILTIN_SENTENCE, uploadPolicyVersion, uploadPolicyVersionForText, uploadPolicyVersionShort,
+    normalizeUploadPolicyText, uploadPolicyWording,
     readUploadPolicyAcceptance, writeUploadPolicyAcceptance, clearUploadPolicyAcceptance,
     uploadPolicyAllows, uploadPolicyStamp, uploadPolicyMetadata
   } = await import(pathToFileURL(path.join(tmp, "uploadPolicy.mjs")).href);
@@ -65,32 +67,67 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
   expect("wording: workspace text wins, trimmed", uploadPolicyWording("  Studio rule.  "), "Studio rule.");
 
   // 1. Version key derivation.
-  expect("version: server stamp wins", uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: 1759900000000, uploadSafetyPolicyText: "Studio rule." }), "ts-1759900000000");
-  expect("version: fractional ms are floored", uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: 1759900000000.7 }), "ts-1759900000000");
-  const textVersion = uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: null, uploadSafetyPolicyText: "Studio rule." });
-  expect("version: no stamp -> text hash", /^text-[0-9a-f]{16}$/.test(textVersion), true);
+  // 1. Version derivation — the shared contract (docs/native/upload-policy-
+  //    version-contract-2026-10-08.md v2): the nine vectors, full 64-hex,
+  //    server value first, no timestamp source.
+  const vectors = JSON.parse(read("scripts/fixtures/upload-policy-version-vectors.json"));
+  expect("vectors: nine cases in scripts/fixtures", vectors.length, 9);
+  const docVectors = path.join(root, "..", "docs", "native", "upload-policy-version-vectors.json");
+  if (fs.existsSync(docVectors)) expect("vectors: fixture equals docs/native copy", vectors, JSON.parse(fs.readFileSync(docVectors, "utf8")));
+  for (const vector of vectors) {
+    expect(`vector "${vector.case}": version`, uploadPolicyVersionForText(vector.text), vector.version);
+    expect(`vector "${vector.case}": via uploadPolicyVersion (no stored value)`, uploadPolicyVersion({ uploadSafetyPolicyText: vector.text }), vector.version);
+    expect(`vector "${vector.case}": short form`, uploadPolicyVersionShort(vector.version), vector.short);
+    if (vector.version !== "builtin-1") {
+      const normalized = normalizeUploadPolicyText(vector.text);
+      expect(`vector "${vector.case}": bundled SHA-256 equals node:crypto`, vector.version, `sha256-${createHash("sha256").update(Buffer.from(normalized, "utf8")).digest("hex")}`);
+    }
+  }
+  // Longer than one 64-byte block and across a block boundary: the bundled hash must still equal node's.
+  for (const length of [55, 56, 63, 64, 65, 119, 120, 500, 2000]) {
+    const text = "x".repeat(length);
+    expect(`sha256: ${length}-byte text equals node:crypto`, uploadPolicyVersionForText(text), `sha256-${createHash("sha256").update(text, "utf8").digest("hex")}`);
+  }
+  expect("version: full 64 hex, never a prefix", /^sha256-[0-9a-f]{64}$/.test(uploadPolicyVersionForText("Studio rule.")), true);
+  expect("version: the stored server value wins", uploadPolicyVersion({ uploadSafetyPolicyVersion: "sha256-" + "a".repeat(64), uploadSafetyPolicyText: "Studio rule." }), "sha256-" + "a".repeat(64));
+  expect("version: stored value wins over an empty text too", uploadPolicyVersion({ uploadSafetyPolicyVersion: "builtin-1", uploadSafetyPolicyText: "" }), "builtin-1");
+  {
+    const warnings = [];
+    const original = console.warn;
+    console.warn = (...args) => { warnings.push(args.join(" ")); };
+    try {
+      uploadPolicyVersion({ uploadSafetyPolicyVersion: "sha256-" + "b".repeat(64), uploadSafetyPolicyText: "Studio rule." });
+      uploadPolicyVersion({ uploadSafetyPolicyVersion: "sha256-" + "b".repeat(64), uploadSafetyPolicyText: "Studio rule." });
+      uploadPolicyVersion({ uploadSafetyPolicyVersion: uploadPolicyVersionForText("Studio rule."), uploadSafetyPolicyText: "Studio rule." });
+    } finally {
+      console.warn = original;
+    }
+    expect("version: a stored/computed disagreement is warned once, agreement never", warnings.length, 1);
+  }
+  const textVersion = uploadPolicyVersion({ uploadSafetyPolicyText: "Studio rule." });
   expect("version: the same text hashes the same", uploadPolicyVersion({ uploadSafetyPolicyText: "Studio rule." }), textVersion);
   expect("version: surrounding whitespace does not change the text version", uploadPolicyVersion({ uploadSafetyPolicyText: "  Studio rule.\n" }), textVersion);
   expect("version: a different text is a different version", uploadPolicyVersion({ uploadSafetyPolicyText: "Studio rule, revised." }) === textVersion, false);
-  expect("version: no stamp, no text -> builtin-1", uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: null, uploadSafetyPolicyText: "" }), "builtin-1");
+  expect("version: no stored value, no text -> builtin-1", uploadPolicyVersion({ uploadSafetyPolicyText: "" }), "builtin-1");
   expect("version: whitespace text -> builtin-1", uploadPolicyVersion({ uploadSafetyPolicyText: "  " }), "builtin-1");
   expect("version: nothing loaded yet -> builtin-1", uploadPolicyVersion(null), "builtin-1");
-  expect("version: a zero / NaN stamp is no stamp", [uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: 0 }), uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: Number.NaN })], ["builtin-1", "builtin-1"]);
+  expect("version: no timestamp source (an unrelated save never re-asks)", uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: 1759900000000, uploadSafetyPolicyText: "Studio rule." }), textVersion);
+  expect("version: the module has no ts- source at all", /`ts-\$\{/.test(read("lib/studioflow/uploadPolicy.ts")), false);
 
   // 2. An acceptance of an older version does not count.
   const store = fakeStorage();
   const now = new Date("2026-10-08T12:34:56.000Z");
-  const first = writeUploadPolicyAcceptance(store, "ws1", "ts-100", now);
-  expect("accept: records version and ISO-8601 UTC time", first, { version: "ts-100", acceptedAt: "2026-10-08T12:34:56.000Z" });
-  expect("accept: key is workspace + version", Object.keys(store.dump()), ["studioflow-upload-policy-acceptance:ws1:ts-100"]);
-  expect("read: the current version is accepted", readUploadPolicyAcceptance(store, "ws1", "ts-100"), first);
-  expect("read: a newer version is NOT accepted (re-ask)", readUploadPolicyAcceptance(store, "ws1", "ts-200"), null);
-  expect("read: another workspace is NOT accepted", readUploadPolicyAcceptance(store, "ws2", "ts-100"), null);
-  expect("read: no store (SSR) -> null", readUploadPolicyAcceptance(null, "ws1", "ts-100"), null);
-  const second = writeUploadPolicyAcceptance(store, "ws1", "ts-200", new Date("2026-10-09T00:00:00.000Z"));
-  expect("accept again: the older version's entry is dropped", Object.keys(store.dump()), ["studioflow-upload-policy-acceptance:ws1:ts-200"]);
-  expect("read: old version no longer counts after re-acceptance", readUploadPolicyAcceptance(store, "ws1", "ts-100"), null);
-  expect("read: the new version counts", readUploadPolicyAcceptance(store, "ws1", "ts-200"), second);
+  const first = writeUploadPolicyAcceptance(store, "ws1", "v-old", now);
+  expect("accept: records version and ISO-8601 UTC time", first, { version: "v-old", acceptedAt: "2026-10-08T12:34:56.000Z" });
+  expect("accept: key is workspace + version", Object.keys(store.dump()), ["studioflow-upload-policy-acceptance:ws1:v-old"]);
+  expect("read: the current version is accepted", readUploadPolicyAcceptance(store, "ws1", "v-old"), first);
+  expect("read: a newer version is NOT accepted (re-ask)", readUploadPolicyAcceptance(store, "ws1", "v-new"), null);
+  expect("read: another workspace is NOT accepted", readUploadPolicyAcceptance(store, "ws2", "v-old"), null);
+  expect("read: no store (SSR) -> null", readUploadPolicyAcceptance(null, "ws1", "v-old"), null);
+  const second = writeUploadPolicyAcceptance(store, "ws1", "v-new", new Date("2026-10-09T00:00:00.000Z"));
+  expect("accept again: the older version's entry is dropped", Object.keys(store.dump()), ["studioflow-upload-policy-acceptance:ws1:v-new"]);
+  expect("read: old version no longer counts after re-acceptance", readUploadPolicyAcceptance(store, "ws1", "v-old"), null);
+  expect("read: the new version counts", readUploadPolicyAcceptance(store, "ws1", "v-new"), second);
   // The pre-versioning flag ("accepted", no version) is not an acceptance of anything.
   const legacy = fakeStorage();
   legacy.setItem("studioflow-upload-policy-accepted:ws1", "accepted");
@@ -99,26 +136,26 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
   clearUploadPolicyAcceptance(legacy, "ws1");
   expect("reset: clears the legacy keys too", Object.keys(legacy.dump()), []);
   const broken = fakeStorage();
-  broken.setItem("studioflow-upload-policy-acceptance:ws1:ts-1", "not json");
-  expect("read: unparseable entry does not count", readUploadPolicyAcceptance(broken, "ws1", "ts-1"), null);
-  broken.setItem("studioflow-upload-policy-acceptance:ws1:ts-1", JSON.stringify({ version: "ts-1", acceptedAt: "yesterday" }));
-  expect("read: an entry without a real time does not count", readUploadPolicyAcceptance(broken, "ws1", "ts-1"), null);
-  broken.setItem("studioflow-upload-policy-acceptance:ws1:ts-1", JSON.stringify({ version: "ts-9", acceptedAt: "2026-10-08T00:00:00.000Z" }));
-  expect("read: a version mismatch inside the entry does not count", readUploadPolicyAcceptance(broken, "ws1", "ts-1"), null);
+  broken.setItem("studioflow-upload-policy-acceptance:ws1:v-1", "not json");
+  expect("read: unparseable entry does not count", readUploadPolicyAcceptance(broken, "ws1", "v-1"), null);
+  broken.setItem("studioflow-upload-policy-acceptance:ws1:v-1", JSON.stringify({ version: "v-1", acceptedAt: "yesterday" }));
+  expect("read: an entry without a real time does not count", readUploadPolicyAcceptance(broken, "ws1", "v-1"), null);
+  broken.setItem("studioflow-upload-policy-acceptance:ws1:v-1", JSON.stringify({ version: "v-other", acceptedAt: "2026-10-08T00:00:00.000Z" }));
+  expect("read: a version mismatch inside the entry does not count", readUploadPolicyAcceptance(broken, "ws1", "v-1"), null);
   clearUploadPolicyAcceptance(store, "ws1");
-  expect("reset: nothing left for the workspace", readUploadPolicyAcceptance(store, "ws1", "ts-200"), null);
+  expect("reset: nothing left for the workspace", readUploadPolicyAcceptance(store, "ws1", "v-new"), null);
 
   // 3. The four metadata cases. policyAccepted is "true" ONLY with a real
   //    acceptance; policyAcceptedAt / policyVersion only then.
-  const acceptance = { version: "ts-200", acceptedAt: "2026-10-09T00:00:00.000Z" };
+  const acceptance = { version: "v-new", acceptedAt: "2026-10-09T00:00:00.000Z" };
   expect("required + accepted: gate opens", uploadPolicyAllows(true, acceptance), true);
   expect("required + accepted: metadata", uploadPolicyMetadata(uploadPolicyStamp(true, acceptance)),
-    { policyRequired: "true", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "ts-200" });
+    { policyRequired: "true", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "v-new" });
   expect("required + none: gate blocks", uploadPolicyAllows(true, null), false);
   expect("required + none: metadata (no At / Version keys)", uploadPolicyMetadata(uploadPolicyStamp(true, null)), { policyRequired: "true", policyAccepted: "false" });
   expect("not required + accepted: gate opens", uploadPolicyAllows(false, acceptance), true);
   expect("not required + accepted: a real acceptance is still recorded", uploadPolicyMetadata(uploadPolicyStamp(false, acceptance)),
-    { policyRequired: "false", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "ts-200" });
+    { policyRequired: "false", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "v-new" });
   expect("not required + none: gate opens (false must not block)", uploadPolicyAllows(false, null), true);
   expect("not required + none: no manufactured acceptance", uploadPolicyMetadata(uploadPolicyStamp(false, null)), { policyRequired: "false", policyAccepted: "false" });
   expect("not required + none: At / Version absent, not empty strings",
@@ -155,7 +192,9 @@ expect("client_files upload: writes the stamp (policyRequired + policyAccepted s
 expect("client_files upload: no `!require || accepted` stamp left in the pages",
   [orderPage, filesPage].some((src) => /policyAccepted:\s*!\w+RequirePolicyAcceptance\s*\|\|/.test(src) || /policyAccepted:\s*!\w+RequiresPolicyAcceptance\s*\|\|/.test(src)), false);
 expect("client_files upload: legacy uploadPolicyAccepted key no longer written", /\buploadPolicyAccepted\s*:/.test(clientFiles), false);
-expect("overview: reads uploadSafetySettingsUpdatedAt as the version source", overview.includes("uploadSafetySettingsUpdatedAtMs: dateValue(data.uploadSafetySettingsUpdatedAt)"), true);
+expect("overview: reads the server-stored uploadSafetyPolicyVersion", overview.includes("uploadSafetyPolicyVersion: stringValue(data.uploadSafetyPolicyVersion, \"\") || null"), true);
+expect("overview: the timestamp is not the version source", /uploadSafetySettingsUpdatedAtMs[^\n]*version/i.test(overview), false);
+expect("settings page: the saved version is read back from the server, not guessed", read("app/settings/page.tsx").includes("uploadSafetyPolicyVersion: refreshed?.uploadSafetyPolicyVersion"), true);
 
 // The preview image: its copy is mirrored into client_files (uploadClientFileForOrder
 // inside uploadPreviewFile), so when that mirror can happen the path must refuse

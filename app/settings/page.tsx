@@ -3799,8 +3799,9 @@ function SafetyUploadsSection({
   }, [settings]);
 
   // The acceptance shown here is the one for the CURRENT policy version
-  // (lib/studioflow/uploadPolicy.ts); after a save the version moves on, so
-  // "Accepted" turns into "Not accepted" until the browser accepts again.
+  // (lib/studioflow/uploadPolicy.ts); after a save that changes the policy
+  // TEXT the version moves on, so "Accepted" turns into "Not accepted" until
+  // the browser accepts again. Saving only the size or the switch keeps it.
   const policyVersion = uploadPolicyVersion(settings);
   useEffect(() => {
     try {
@@ -3850,15 +3851,19 @@ function SafetyUploadsSection({
         uploadSafetyMaxFileSizeMB: maxFileSizeMB,
         uploadSafetyPolicyText: policyText
       });
-      // The server stamps uploadSafetySettingsUpdatedAt on every save; that
-      // stamp is the policy version, so read it back rather than guess it.
+      // The server writes uploadSafetyPolicyVersion from the saved text on
+      // every save; read it back rather than guess it, so the status card and
+      // the next upload agree with the stored version.
       const refreshed = await loadWorkspaceSettingsOverview(workspace.id).catch(() => null);
       onSaved({
         ...settings,
         uploadSafetyRequirePolicyAcceptance: result.settings?.uploadSafetyRequirePolicyAcceptance ?? requirePolicy,
         uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB,
         uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText,
-        uploadSafetySettingsUpdatedAtMs: refreshed?.uploadSafetySettingsUpdatedAtMs ?? settings.uploadSafetySettingsUpdatedAtMs
+        uploadSafetySettingsUpdatedAtMs: refreshed?.uploadSafetySettingsUpdatedAtMs ?? settings.uploadSafetySettingsUpdatedAtMs,
+        uploadSafetyPolicyVersion: refreshed?.uploadSafetyPolicyVersion
+          ?? (result.settings as { uploadSafetyPolicyVersion?: string } | undefined)?.uploadSafetyPolicyVersion
+          ?? null
       });
       markSafetySaved();
       setStatus(result.message || "Upload Safety settings saved.");
