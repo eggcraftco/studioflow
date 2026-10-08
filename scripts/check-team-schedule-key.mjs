@@ -80,6 +80,11 @@ check("team view: clicks go through openScheduleOrder with the assignee tooltip"
 check("openScheduleOrder refuses other members' jobs", /const openScheduleOrder = \(order: ScheduleOrderItem\) => \{\s*if \(!canOpenScheduleOrder\(order\)\) return;/.test(schedule));
 check("tooltip: Assigned to <name>", schedule.includes('return `${t("Assigned to")} ${name || t("Unassigned")}`;'));
 
+// The callable already scopes the rows server-side; the page must not narrow them
+// again to the viewer's own jobs (an assigned-only member with the key sees the team).
+const sourceMemo = schedule.slice(schedule.indexOf("const visibleSourceOrders = useMemo("), schedule.indexOf("const filteredOrders = useMemo("));
+check("team view (callable): no assigned-to-self narrowing of the team's rows", /workspaceAssignedProjectsOnly\(workspace\.memberAccess\) && !teamScheduleViaCallable\(teamMode, workspace\)/.test(sourceMemo));
+
 // 4. Callable name = server export.
 const nameMatch = firestore.match(/export const TEAM_SCHEDULE_CALLABLE = "(\w+)";/);
 check("client callable constant", nameMatch?.[1] === "listTeamScheduleItems");

@@ -749,11 +749,14 @@ export default function SchedulePage() {
     Math.round(minimumTimelineWidth * clampedTimelineZoom)
   );
 
+  // On the Team Schedule a member's rows come from listTeamScheduleItems, already
+  // scoped and finance-free on the server: an assigned-only member with the key
+  // sees the whole team's jobs there (others' view-only), so no self-narrowing.
   const visibleSourceOrders = useMemo(
-    () => workspace && workspaceAssignedProjectsOnly(workspace.memberAccess)
+    () => workspace && workspaceAssignedProjectsOnly(workspace.memberAccess) && !teamScheduleViaCallable(teamMode, workspace)
       ? orders.filter(order => orderIsAssignedToCurrentUser(order, user))
       : orders,
-    [orders, user, workspace]
+    [orders, user, workspace, teamMode]
   );
 
   const filteredOrders = useMemo(() => {
