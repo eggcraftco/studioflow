@@ -130,6 +130,7 @@ import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
+import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
@@ -2371,6 +2372,9 @@ export function OrderDetailContent({
   const [savingInlineField, setSavingInlineField] = useState<string | null>(null);
   const [trackingSyncing, setTrackingSyncing] = useState(false);
   const [trackingNotice, setTrackingNotice] = useState<{ tone: "status" | "error"; text: string } | null>(null);
+  // The number the member just saved, so the Shipping card can ask "Send the tracking details to
+  // the customer by e-mail?" — asked once per save, answered only by the member (OrderTrackingEmailSection).
+  const [trackingEmailPrompt, setTrackingEmailPrompt] = useState<string | null>(null);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [previewLinkEditing, setPreviewLinkEditing] = useState(false);
   const [previewLinkDraft, setPreviewLinkDraft] = useState(order.designLink);
@@ -7529,7 +7533,10 @@ export function OrderDetailContent({
                   const next = String(value);
                   const saved = await writeDetailsPatch({ trackingNumber: next }, "Tracking");
                   if (saved && cleanTrackingNumber(next)) {
+                    setTrackingEmailPrompt(cleanTrackingNumber(next)); // asked before the lookup answers
                     await requestLiveTracking(next, order.courier || "Auto Detect", false);
+                  } else {
+                    setTrackingEmailPrompt(null);
                   }
                 }}
               />
@@ -7550,6 +7557,18 @@ export function OrderDetailContent({
                   {`${t("No tracking number yet.")} ${t("Add a courier and tracking number to enable live status.")}`}
                 </p>
               )}
+              {cleanTrackingNumber(order.trackingNumber) ? (
+                <OrderTrackingEmailSection
+                  workspace={workspace}
+                  orderId={order.id}
+                  trackingNumber={order.trackingNumber}
+                  orderRecord={order.trackingEmail}
+                  language={detailLanguage}
+                  canSend={canEditWorkflowFields}
+                  promptForNumber={trackingEmailPrompt}
+                  onPromptHandled={() => setTrackingEmailPrompt(null)}
+                />
+              ) : null}
               {trackingNotice ? (
                 <p className={trackingNotice.tone === "error" ? "layout-error finance-inline-message" : "layout-status finance-inline-message"} role={trackingNotice.tone === "error" ? "alert" : "status"}>
                   {t(trackingNotice.text)}
@@ -11694,6 +11713,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     courier: "Royal Mail",
     isDispatched: true,
     isDelivered: false,
+    trackingEmail: null,
     customFields: {},
     customToggles: {},
     extraStatuses: {},

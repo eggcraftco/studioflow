@@ -1,6 +1,7 @@
 import { MAC_TRANSLATIONS } from "./macTranslations";
 import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
+import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -8609,6 +8610,10 @@ mergeIntoTranslations({
 // DHL Express screens (shippingTranslations.ts). Merged per language like the
 // rest, so the few words it shares with the app only fill missing languages.
 mergeIntoTranslations(SHIPPING_TRANSLATIONS);
+
+// "Send the tracking details to the customer by e-mail?" (trackingEmailTranslations.ts):
+// the Shipping card's question, the preview dialog and the result line. Same per-language merge.
+mergeIntoTranslations(TRACKING_EMAIL_TRANSLATIONS);
 
 // Production board (Round 202): the Done lane's summary, and the order page when
 // a link names another workspace or the role has no orders access. The three

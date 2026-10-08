@@ -171,10 +171,12 @@ for (const [file, source] of [["ProductionContent.tsx panel", panel], ["[orderId
 const importsFixed = (js) => js
   .replace(/from "\.\/macTranslations"/g, 'from "./macTranslations.mjs"')
   .replace(/from "\.\/settingsContentTranslations"/g, 'from "./settingsContentTranslations.mjs"')
-  .replace(/from "\.\/shippingTranslations"/g, 'from "./shippingTranslations.mjs"');
+  .replace(/from "\.\/shippingTranslations"/g, 'from "./shippingTranslations.mjs"')
+  .replace(/from "\.\/trackingEmailTranslations"/g, 'from "./trackingEmailTranslations.mjs"');
 compile("lib/studioflow/macTranslations.ts", "macTranslations.mjs", importsFixed);
 compile("lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs", importsFixed);
 compile("lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs", importsFixed);
+compile("lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs", importsFixed);
 const languageFile = compile("lib/studioflow/language.ts", "language.mjs", importsFixed);
 const { studioT } = await import(pathToFileURL(languageFile).href);
 expect("studioT answers English as is", studioT("Open order", "English"), "Open order");

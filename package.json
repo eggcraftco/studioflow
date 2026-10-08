@@ -20,6 +20,7 @@
     "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs",
     "test:ui-workspace-translations": "node scripts/check-ui-workspace-translations.mjs",
     "test:live-tracking": "node scripts/check-live-tracking.mjs",
+    "test:tracking-email": "node scripts/check-tracking-email.mjs",
     "test:customer-card": "node scripts/check-customer-card-visibility.mjs",
     "test:production-panel": "node scripts/check-production-panel.mjs",
     "test:home-order-scope": "node scripts/check-home-order-scope.mjs",
