@@ -10,6 +10,7 @@ import {
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/uploadPolicy";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
@@ -579,8 +580,9 @@ export async function uploadOrderPreviewImage({
     email: string | null;
     displayName: string | null;
   };
-  uploadSafety?: {
-    policyAccepted: boolean;
+  /** The same stamp the Client Files mirror of this image carries. */
+  uploadSafety: {
+    policy: UploadPolicyStamp;
     maxSizeMB: number;
   };
 }) {
@@ -588,7 +590,7 @@ export async function uploadOrderPreviewImage({
     throw new Error("Your workspace role cannot edit this order.");
   }
 
-  const maxSizeMB = Math.min(Math.max(Math.round(uploadSafety?.maxSizeMB ?? 10), 1), 50);
+  const maxSizeMB = Math.min(Math.max(Math.round(uploadSafety.maxSizeMB ?? 10), 1), 50);
   if (file.size > maxSizeMB * 1024 * 1024) {
     throw new Error(`This image is larger than the ${maxSizeMB} MB workspace upload limit.`);
   }
@@ -617,7 +619,7 @@ export async function uploadOrderPreviewImage({
           fileType: contentType,
           fileSize: String(file.size),
           storagePath: storageRef.fullPath,
-          policyAccepted: uploadSafety?.policyAccepted ? "true" : "false",
+          ...uploadPolicyMetadata(uploadSafety.policy),
           maxSizeMB: String(maxSizeMB)
         }
       });

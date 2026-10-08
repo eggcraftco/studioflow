@@ -5,6 +5,7 @@ import { auth, db, functions, storage } from "@/lib/firebase/client";
 import { requireWorkspacePlanAction } from "@/lib/studioflow/planActions";
 import { normalizeWorkspaceRole, type ClientFileDetail, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/uploadPolicy";
 import { browserUploadDeps } from "@/lib/studioflow/storageUploadDeps";
 import { newUploadSlot, type UploadScanState, type UploadSlot } from "@/lib/studioflow/uploadProgress";
 import { awaitScanVerdict, throwIfCancelled, transferTracked, type TrackedUploadHooks } from "@/lib/studioflow/uploadRunner";
@@ -218,8 +219,12 @@ export async function uploadClientFileForOrder({
   orderId: string;
   file: File;
   user: UploadUser;
-  uploadSafety?: {
-    policyAccepted: boolean;
+  /** The policy stamp (uploadPolicyStamp) and the workspace size limit at
+   *  upload time. policyRequired and policyAccepted are written separately;
+   *  "true" in policyAccepted only ever means a real acceptance of the
+   *  current policy version exists in this browser. */
+  uploadSafety: {
+    policy: UploadPolicyStamp;
     maxSizeMB: number;
   };
   slot?: UploadSlot;
@@ -266,10 +271,13 @@ export async function uploadClientFileForOrder({
         fileType: contentType,
         fileSize: String(file.size),
         storagePath: storageRef.fullPath,
-        policyAccepted: uploadSafety ? String(uploadSafety.policyAccepted) : "",
-        maxSizeMB: uploadSafety ? String(uploadSafety.maxSizeMB) : "",
-        uploadPolicyAccepted: uploadSafety ? String(uploadSafety.policyAccepted) : "",
-        uploadMaxSizeMB: uploadSafety ? String(uploadSafety.maxSizeMB) : ""
+        // policyRequired / policyAccepted (+ policyAcceptedAt, policyVersion
+        // only with a real acceptance). The old duplicate key
+        // uploadPolicyAccepted is gone: nothing read it (functions, rules and
+        // the three clients only ever wrote it). Old objects are not rewritten.
+        ...uploadPolicyMetadata(uploadSafety.policy),
+        maxSizeMB: String(uploadSafety.maxSizeMB),
+        uploadMaxSizeMB: String(uploadSafety.maxSizeMB)
       }
     });
     await transferTracked(deps, storageRef.fullPath, hooks, { skipIfExists: isRetry });

@@ -265,6 +265,10 @@ export type WorkspaceSettingsOverview = {
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
   uploadSafetyPolicyText: string;
+  /** companySettings.uploadSafetySettingsUpdatedAt (the server stamps every
+   *  Safety & Uploads save) as epoch ms; null when the workspace never saved
+   *  the section. It is the policy version uploaders accept. */
+  uploadSafetySettingsUpdatedAtMs: number | null;
   // Who wins when a store updates an existing customer: "store" | "nivadesk".
   integrationCustomerSync: string;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
@@ -1480,6 +1484,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
     uploadSafetyPolicyText: stringValue(data.uploadSafetyPolicyText, ""),
+    uploadSafetySettingsUpdatedAtMs: dateValue(data.uploadSafetySettingsUpdatedAt)?.getTime() ?? null,
     integrationCustomerSync: stringValue(data.integrationCustomerSync, "store"),
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
