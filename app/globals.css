@@ -33849,6 +33849,7 @@ body[data-studio-theme="dark"] .ebay-order-block .due-pill:not(.warning):not(.da
 @media (max-width: 640px) {
   .bank-receipt-viewer { height: calc(100vh - 24px); border-radius: 12px; }
   .bank-receipt-viewer-head { flex-wrap: wrap; }
+}
 
 /* Per-file upload progress (components/UploadQueuePanel.tsx, 8 Oct 2026).
    Logical properties only, so the Arabic (dir=rtl) page mirrors it; the fill
