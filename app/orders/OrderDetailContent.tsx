@@ -2091,8 +2091,9 @@ export function OrderDetailContent({
       setOrderLinkedNotes(all.filter(note => !note.isDeleted && !note.isArchived && note.linkedOrderId === order.id));
     });
   }, [workspace.id, user, order.id]);
-  // The policy version uploaders accept: the server's Safety & Uploads save
-  // stamp, else a hash of the workspace text, else the built-in sentence. The
+  // The policy version uploaders accept: the server-stored
+  // uploadSafetyPolicyVersion, else the same SHA-256 of the workspace text,
+  // else the built-in version "builtin-1" (lib/studioflow/uploadPolicy.ts). The
   // acceptance below is read for THIS version only — a changed policy is
   // asked again (lib/studioflow/uploadPolicy.ts).
   const clientFileUploadPolicyVersion = uploadPolicyVersion(moneySettings);

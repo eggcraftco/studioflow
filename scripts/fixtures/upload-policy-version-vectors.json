@@ -1,0 +1,56 @@
+[
+ {
+  "case": "empty",
+  "text": "",
+  "version": "builtin-1",
+  "short": "builtin-1"
+ },
+ {
+  "case": "whitespace only",
+  "text": "  \n\t ",
+  "version": "builtin-1",
+  "short": "builtin-1"
+ },
+ {
+  "case": "plain",
+  "text": "Only upload files you own or are allowed to share.",
+  "version": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+  "short": "sha256-9a1a0c809b93"
+ },
+ {
+  "case": "crlf + trailing spaces (equals plain two-line LF)",
+  "text": "Line one.  \r\nLine two.\t\r\n",
+  "version": "sha256-2f9ce0b72be8c99f2560d28081f32ace70d5ff46c732191ea75ca22158af8e3e",
+  "short": "sha256-2f9ce0b72be8"
+ },
+ {
+  "case": "lf two-line",
+  "text": "Line one.\nLine two.",
+  "version": "sha256-2f9ce0b72be8c99f2560d28081f32ace70d5ff46c732191ea75ca22158af8e3e",
+  "short": "sha256-2f9ce0b72be8"
+ },
+ {
+  "case": "nfd e-acute (equals nfc)",
+  "text": "Café rules",
+  "version": "sha256-38f6866cd699d7d0f0318b4b0d3ec176b4e1954888b195047268000eece649a8",
+  "short": "sha256-38f6866cd699"
+ },
+ {
+  "case": "nfc e-acute",
+  "text": "Café rules",
+  "version": "sha256-38f6866cd699d7d0f0318b4b0d3ec176b4e1954888b195047268000eece649a8",
+  "short": "sha256-38f6866cd699"
+ },
+ {
+  "case": "turkish + emoji",
+  "text": "Yalnızca sahibi olduğunuz dosyaları yükleyin 📦",
+  "version": "sha256-32b9093c1c655406c578d2fe4ff6bebd8eee3a438d3a23d86bd307da5ead17fc",
+  "short": "sha256-32b9093c1c65"
+ },
+ {
+  "case": "meaningful change (one word)",
+  "text": "Only upload files you own or are permitted to share.",
+  "version": "sha256-f3e64bcd3e8f4cf44a3bf869ae2e454333ba5267889b442a19ccf0adeca6b264",
+  "short": "sha256-f3e64bcd3e8f"
+ }
+]
