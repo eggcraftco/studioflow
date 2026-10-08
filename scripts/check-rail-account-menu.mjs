@@ -59,7 +59,11 @@ const prop = (name) => {
 };
 check("position: fixed (escapes the rail's overflow: hidden)", prop("position") === "fixed");
 check("min-width >= 240px", parseInt(prop("min-width") ?? "0", 10) >= 240);
-const z = parseInt(prop("z-index") ?? "0", 10);
+// The z-index may be a ladder token (`var(--z-floating-menu)`, see the :root
+// ladder in globals.css) — resolve it against the ladder before comparing.
+const zRaw = prop("z-index") ?? "0";
+const ladder = (name) => parseInt((css.match(new RegExp(`${name}:\\s*(\\d+)`)) || [])[1] ?? "0", 10);
+const z = /var\(--([\w-]+)\)/.test(zRaw) ? ladder(`--${zRaw.match(/var\(--([\w-]+)\)/)[1]}`) : parseInt(zRaw, 10);
 check("z-index above the drawer (80) and the top-row menus (40)", z > 80);
 check("overflow: auto for short windows", prop("overflow") === "auto" && !!prop("max-height"));
 check("rail still clips its overflow (the reason the menu must leave it)", /\.app-sidebar \{[^}]*overflow: hidden;/.test(css));
