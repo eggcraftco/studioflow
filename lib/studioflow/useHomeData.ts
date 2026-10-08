@@ -292,6 +292,9 @@ export function useHomeData(
     workspace && (workspace.role === "owner" || workspaceAccessAllows(workspace.memberAccess, "bankFeed")),
   );
   useEffect(() => {
+    // The previous workspace's rows (or rows cached before access was lost)
+    // never survive into the next subscription.
+    setBankTransactions([]);
     if (!workspaceId || !canSeeBank) {
       setDomain("bank", canSeeBank ? "loading" : "denied");
       return;
@@ -327,7 +330,12 @@ export function useHomeData(
         );
         setDomain("bank", "ready");
       },
-      () => setDomain("bank", "denied"),
+      () => {
+        // Permission lost (grant removed, plan ended, member suspended): the
+        // rows the cache already painted must not stay on the card.
+        setBankTransactions([]);
+        setDomain("bank", "denied");
+      },
     );
     return () => unsubscribe();
   }, [workspaceId, canSeeBank, setDomain, reloadKey]);
@@ -349,6 +357,8 @@ export function useHomeData(
 
   // Connection health, from the connections themselves.
   useEffect(() => {
+    setBankLastSync(null);
+    setBankNeedsAttention(false);
     if (!workspaceId || !canSeeBank) return;
     return onSnapshot(
       collection(db, "companies", workspaceId, "bankConnections"),
@@ -365,11 +375,15 @@ export function useHomeData(
         setBankLastSync(newest);
         setBankNeedsAttention(unhealthy);
       },
-      () => {},
+      () => {
+        setBankLastSync(null);
+        setBankNeedsAttention(false);
+      },
     );
   }, [workspaceId, canSeeBank]);
 
   useEffect(() => {
+    setBankVendors([]);
     if (!workspaceId || !canSeeBank) return;
     return onSnapshot(
       collection(db, "companies", workspaceId, "bankVendors"),

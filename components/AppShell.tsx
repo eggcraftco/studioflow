@@ -22,7 +22,7 @@ import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner,
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
-import { auth, db } from "@/lib/firebase/client";
+import { auth, db, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
   loadCustomerPickerOptions,
@@ -2452,7 +2452,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     }
     clearDeviceLocalWorkspaceCache();
     await signOut(auth);
-    router.replace("/login");
+    // Wipe this browser's Firestore copy (bank rows included) and leave with a
+    // full load: the Firestore instance is terminated by the clear.
+    await clearFirestoreLocalCache();
+    window.location.assign("/login");
   }
 
   const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);

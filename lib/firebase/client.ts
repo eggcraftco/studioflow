@@ -1,7 +1,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { connectAuthEmulator, getAuth, signInWithCustomToken, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
-import { connectFirestoreEmulator, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { clearIndexedDbPersistence, connectFirestoreEmulator, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, terminate } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
@@ -75,6 +75,25 @@ function createDb() {
 }
 
 export const db = createDb();
+
+// The persistent cache is this browser's copy of everything the signed-in
+// person was allowed to read — bank transactions included. It must not outlive
+// the sign-in: once the Firestore instance is stopped the IndexedDB store can be
+// wiped. Call AFTER signOut(); the page must then navigate with a full load
+// (window.location), because the instance is gone. Best effort: another tab may
+// still hold the cache (the multi-tab manager refuses the clear), and in that
+// case the next sign-in on this browser starts from the old copy until that tab
+// closes — which is why the callers also hard-reload.
+export async function clearFirestoreLocalCache(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "europe-west2");
 

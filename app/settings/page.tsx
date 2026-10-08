@@ -19,7 +19,7 @@ import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPrevie
 import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studioflow/planActions";
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { auth, db, functions } from "@/lib/firebase/client";
+import { auth, db, functions, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { collection, getDocs } from "firebase/firestore";
 import {
   INTEGRATION_CATEGORIES,
@@ -4260,7 +4260,10 @@ function AccountSection({
       }
       clearDeviceLocalWorkspaceCache();
       await signOut(auth);
-      router.replace("/login");
+      // Wipe this browser's Firestore copy (bank rows included) and leave with a
+      // full load: the Firestore instance is terminated by the clear.
+      await clearFirestoreLocalCache();
+      window.location.assign("/login");
     } catch (signOutError) {
       setProfileError(signOutError instanceof Error ? signOutError.message : t("Could not sign out."));
       setSigningOut(false);
@@ -4622,7 +4625,8 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
       } catch {
         // account already gone server-side
       }
-      router.replace("/login");
+      await clearFirestoreLocalCache();
+      window.location.assign("/login");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Could not delete the account."));
       setBusy(false);
@@ -7102,6 +7106,9 @@ function TeamAccessSection({
     setStatus("");
     try {
       await switchActiveWorkspace(user.uid, option.id);
+      // Drop this browser's Firestore copy before the reload: the next
+      // workspace starts from the server, not from rows cached for the last one.
+      await clearFirestoreLocalCache();
       window.location.reload();
     } catch (switchError) {
       setError(switchError instanceof Error ? switchError.message : t("Could not switch workspace."));
