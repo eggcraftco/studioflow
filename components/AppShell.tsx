@@ -1907,6 +1907,41 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   } = useSidebarCollapsed();
   const sidebarNavRef = useRef<HTMLElement | null>(null);
   const sidebarUserRef = useRef<HTMLDivElement | null>(null);
+  const sidebarUserMenuRef = useRef<HTMLDivElement | null>(null);
+  // Collapsed rail (>= 1024 px): the menu floats OUTSIDE the 68 px rail,
+  // anchored to the avatar, because the rail clips its overflow (owner's
+  // report, 8 Oct 2026). The anchor is measured when the menu opens; null
+  // means the menu stays inside the block as before (expanded sidebar, and
+  // the drawer below 1024 px, which is always the expanded form).
+  const [railMenuAnchor, setRailMenuAnchor] = useState<{
+    bottom: number;
+    left: number | null;
+    right: number | null;
+  } | null>(null);
+  const accountMenuFloats = avatarMenuOpen && sidebarCollapsed && railMenuAnchor !== null;
+  function openAvatarMenu() {
+    const button = sidebarUserRef.current?.querySelector<HTMLElement>(".app-sidebar-user-button");
+    const rail = sidebarUserRef.current?.closest<HTMLElement>(".app-sidebar");
+    const floats =
+      sidebarCollapsed &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches &&
+      !!button &&
+      !!rail;
+    if (floats && button && rail) {
+      const buttonRect = button.getBoundingClientRect();
+      const railRect = rail.getBoundingClientRect();
+      const rtl = document.documentElement.dir === "rtl";
+      setRailMenuAnchor({
+        bottom: Math.max(8, window.innerHeight - buttonRect.bottom),
+        left: rtl ? null : railRect.right + 8,
+        right: rtl ? window.innerWidth - railRect.left + 8 : null,
+      });
+    } else {
+      setRailMenuAnchor(null);
+    }
+    setAvatarMenuOpen(true);
+  }
   const shellScrollAreaRef = useRef<HTMLDivElement | null>(null);
   // One shell now serves every app route (components/AppRouteFrame.tsx), so
   // the content column would keep the last screen's scroll offset. Each screen
@@ -1928,13 +1963,31 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") setAvatarMenuOpen(false);
     }
+    // A floating menu is positioned from a measurement, so a resize closes it
+    // rather than leaving it hanging where the avatar used to be.
+    function handleResize() {
+      if (railMenuAnchor !== null) setAvatarMenuOpen(false);
+    }
     document.addEventListener("pointerdown", handlePointer);
     window.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", handleResize);
     return () => {
       document.removeEventListener("pointerdown", handlePointer);
       window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", handleResize);
     };
-  }, [avatarMenuOpen]);
+  }, [avatarMenuOpen, railMenuAnchor]);
+  // Keyboard focus moves into the floating menu (it is no longer next to
+  // the button in the layout); the expanded block keeps its old behaviour.
+  useEffect(() => {
+    if (!accountMenuFloats) return;
+    const first = sidebarUserMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    first?.focus();
+  }, [accountMenuFloats]);
+  // Toggling the rail while the menu is open invalidates the measurement.
+  useEffect(() => {
+    setAvatarMenuOpen(false);
+  }, [sidebarCollapsed]);
   useEffect(() => {
     setMobileNavOpen(false);
     setAvatarMenuOpen(false);
@@ -3136,7 +3189,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   aria-expanded={avatarMenuOpen}
                   aria-controls="app-sidebar-user-menu"
                   title={sidebarUserTitle}
-                  onClick={() => setAvatarMenuOpen((open) => !open)}
+                  onClick={() => (avatarMenuOpen ? setAvatarMenuOpen(false) : openAvatarMenu())}
                 >
                   <span className="app-sidebar-avatar toolbar-avatar">
                     {showToolbarAvatarImage ? (
@@ -3160,9 +3213,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 {avatarMenuOpen ? (
                   <div
                     id="app-sidebar-user-menu"
-                    className="app-sidebar-user-menu toolbar-avatar-menu"
+                    ref={sidebarUserMenuRef}
+                    className={
+                      accountMenuFloats
+                        ? "app-sidebar-user-menu toolbar-avatar-menu is-floating"
+                        : "app-sidebar-user-menu toolbar-avatar-menu"
+                    }
                     role="menu"
                     aria-label={t("Account menu")}
+                    style={
+                      accountMenuFloats && railMenuAnchor
+                        ? {
+                            bottom: railMenuAnchor.bottom,
+                            left: railMenuAnchor.left ?? "auto",
+                            right: railMenuAnchor.right ?? "auto",
+                          }
+                        : undefined
+                    }
                   >
                     {memberCanAccess(workspace, "settings") ? (
                       <button

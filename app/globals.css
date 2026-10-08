@@ -32784,6 +32784,23 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   width: 224px;
 }
 
+/* Collapsed rail (8 Oct 2026): .app-sidebar clips its overflow, so a 224 px
+   menu inside the 68 px rail was squeezed and unreadable. With is-floating
+   the menu leaves the rail: fixed to the viewport, anchored to the avatar
+   (AppShell measures bottom/left, or bottom/right in RTL, when it opens),
+   to the right of the rail in LTR and to its left in RTL, above the drawer
+   (80) and the top-row menus (40). */
+.app-sidebar.is-collapsed .app-sidebar-user-menu.is-floating {
+  position: fixed;
+  top: auto;
+  width: auto;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 96px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  z-index: 120;
+}
+
 .app-sidebar-user-menu button,
 .app-sidebar-user-menu a {
   display: flex;
