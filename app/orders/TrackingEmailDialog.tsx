@@ -165,6 +165,7 @@ export function TrackingEmailDialog({
                 <input
                   className="input"
                   type="email"
+                  dir="ltr"
                   value={to}
                   onChange={event => setTo(event.target.value)}
                   aria-invalid={to.length > 0 && !toValid}
@@ -175,11 +176,11 @@ export function TrackingEmailDialog({
               </label>
               <label className="inventory-field">
                 <span>{t("Sender")}</span>
-                <input className="input" value={preview.from} readOnly aria-readonly="true" />
+                <input className="input" value={preview.from} readOnly aria-readonly="true" dir="ltr" />
               </label>
               <label className="inventory-field">
                 <span>{t("Reply-To")}</span>
-                <input className="input" value={preview.replyTo} readOnly aria-readonly="true" placeholder={t("Not set")} />
+                <input className="input" value={preview.replyTo} readOnly aria-readonly="true" dir="ltr" placeholder={t("Not set")} />
                 {!preview.replyTo ? <span className="inventory-field-hint">{t("Not set — add a reply-to address in Settings so the customer's reply reaches you.")}</span> : null}
               </label>
               <label className="inventory-field is-wide">
