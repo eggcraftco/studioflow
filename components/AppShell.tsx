@@ -44,6 +44,7 @@ import {
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
 import { fetchSalesCapability } from "@/lib/studioflow/sales";
+import { notificationVisibleForAccess } from "@/lib/studioflow/notificationAccess";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
@@ -1700,7 +1701,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         workspace,
         user.uid,
         user.email ?? "",
-        (items) => setNotifications(items),
+        // Rows from an area whose access key is OFF for this member never reach
+        // the drawer or the badge (lib/studioflow/notificationAccess.ts).
+        (items) => setNotifications(items.filter((item) => mod.notificationVisibleForAccess(item, workspace.memberAccess))),
       );
     })();
     return () => {
@@ -1797,6 +1800,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const notifUnreadCount = useMemo(() => {
     if (!user) return 0;
     return notifications.filter((n) => {
+      if (!notificationVisibleForAccess(n, workspace?.memberAccess)) return false;
       if (notifDismissedLocal.has(n.id)) return false;
       const uidClean = user.uid;
       const emailClean = (user.email ?? "").toLowerCase();
@@ -1806,7 +1810,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       if (emailClean && n.readByMillis[emailClean]) return false;
       return true;
     }).length;
-  }, [notifications, notifDismissedLocal, user]);
+  }, [notifications, notifDismissedLocal, user, workspace?.memberAccess]);
 
   useEffect(() => {
     function refreshFirstProjectGuide() {
@@ -2206,6 +2210,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     setSalesMenu(null);
     cachedSalesMenu = null;
     if (!companyId || !uid) return;
+    // The server answers "no_access" for a member without the orders key or in
+    // the workflow-only role; that answer is known here, so the call is skipped
+    // (getSalesCapability is gated by the same rule, functions/sales/capability.js).
+    if (workspace && (!workspaceAccessAllows(workspace.memberAccess, "orders") || workspace.role === "workflow")) {
+      setSalesMenu({ companyId, showInMenu: false });
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {

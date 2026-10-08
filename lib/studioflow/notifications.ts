@@ -9,6 +9,13 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+export {
+  notificationAccessKeyFor,
+  notificationVisibleForAccess,
+  type NotificationAccessKey,
+  type NotificationAccessLike,
+  type NotificationAccessRow,
+} from "@/lib/studioflow/notificationAccess";
 
 export type StudioActivityNotification = {
   id: string;

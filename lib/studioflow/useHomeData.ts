@@ -11,6 +11,7 @@ import {
 } from "@/lib/studioflow/inventory";
 import {
   listenToActivityNotifications,
+  notificationVisibleForAccess,
   type StudioActivityNotification,
 } from "@/lib/studioflow/notifications";
 import {
@@ -240,6 +241,13 @@ export function useHomeData(
     })();
 
     (async () => {
+      // The inventory key hides the Home card (homeCards.ts `access`); the
+      // summary must not be fetched for it either — the server refuses the
+      // call, and the refusal was a wasted request and a console error.
+      if (!workspaceAccessAllows(workspace.memberAccess, "inventory")) {
+        setDomain("inventory", "denied");
+        return;
+      }
       setDomain("inventory", "loading");
       try {
         // The callable answers { ok, summary } — the summary is nested. Reading
@@ -345,7 +353,12 @@ export function useHomeData(
   // activity must never widen what someone can see.
   useEffect(() => {
     if (!workspace?.id) return;
-    return listenToActivityNotifications(workspace, uid, email, setActivity);
+    // A row from an area whose key is OFF for this member (customer messages,
+    // team chat, inventory, customers, bank, finance) is dropped here, before
+    // the card sees it: rows already addressed to the member before the key
+    // was turned off would otherwise still be listed (owner's rule, 8 Oct 2026).
+    return listenToActivityNotifications(workspace, uid, email, (items) =>
+      setActivity(items.filter((item) => notificationVisibleForAccess(item, workspace.memberAccess))));
   }, [workspace, uid, email]);
 
   // §13: the Notes card is for notes — the ones in the Notes app, not the free

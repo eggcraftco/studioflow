@@ -353,8 +353,11 @@ export default function OrdersPage() {
 
   // The parked queue only exists for a workspace with a limit, so this is a
   // cheap no-op for everyone on a paid plan.
+  // Importing a held order is a create path: a member who cannot create orders
+  // (role, assigned-only, or the orders key) never asks for the queue.
   useEffect(() => {
     if (!workspace) return;
+    if (!workspaceAccessAllows(workspace.memberAccess, "orders") || !canCreateOrders(workspace)) return;
     let cancelled = false;
     void listHeldIntegrationOrders(workspace)
       .then(result => { if (!cancelled) setHeldOrders(result); })

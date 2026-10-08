@@ -43,6 +43,9 @@ export function MessagesTabs({
 
   useEffect(() => {
     if (customerUnread !== undefined || !companyId) return;
+    // The Customers tab is not offered with the messages key OFF, and its
+    // count (listCustomerInboxConversations) is not fetched for it either.
+    if (!allowed.customers) return;
     let alive = true;
     // A workspace without the customer inbox answers with a refusal; the tab
     // then simply shows no number rather than an error in someone else's page.
@@ -54,7 +57,7 @@ export function MessagesTabs({
       })
       .catch(() => { if (alive) setLoadedCustomerUnread(null); });
     return () => { alive = false; };
-  }, [companyId, customerUnread]);
+  }, [companyId, customerUnread, allowed.customers]);
 
   const customers = customerUnread ?? loadedCustomerUnread ?? 0;
   const team = teamUnread ?? 0;
