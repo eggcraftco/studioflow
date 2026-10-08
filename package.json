@@ -42,6 +42,7 @@
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
     "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs",
     "test:card-purposes": "node scripts/check-card-purposes.mjs",
+    "test:card-stacking": "node scripts/check-card-stacking.mjs",
     "test:messaging-access": "node scripts/check-messaging-access.mjs"
   },
   "dependencies": {

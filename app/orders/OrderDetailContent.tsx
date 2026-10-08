@@ -2280,6 +2280,24 @@ export function OrderDetailContent({
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [openCardInfoId]);
+
+  // Both card popovers (the purpose text and the "..." panel) are positioned
+  // inside the card, so they scroll with it and would slide under the sticky
+  // order head (globals.css --z-sticky-header) — nothing may paint over that
+  // bar. Instead of clamping, close them as soon as the pane or page scrolls.
+  // A scroll INSIDE the "..." panel (it has its own scrollbar) is not the pane
+  // moving, so it is ignored.
+  useEffect(() => {
+    if (!openCardInfoId && !openCardMenuId) return;
+    function onScroll(event: Event) {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".block-custom-panel, .order-card-purpose")) return;
+      setOpenCardInfoId(null);
+      setOpenCardMenuId(null);
+    }
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, [openCardInfoId, openCardMenuId]);
   const [headingEditorCardId, setHeadingEditorCardId] = useState<OrderDetailCardId | null>(null);
   const [financeStatus, setFinanceStatus] = useState<string | null>(null);
   const [financeError, setFinanceError] = useState<string | null>(null);
