@@ -32,6 +32,7 @@ import {
   updateTeamMemberRole,
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
+import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
 import { studioT } from "@/lib/studioflow/language";
 import {
   inviteWorkspaceMember,
@@ -227,19 +228,22 @@ export default function TeamPage() {
     window.setTimeout(() => setCopied(""), 1600);
   }
 
-  async function runTeamAction(key: string, action: () => Promise<unknown>, success: string) {
+  async function runTeamAction(key: string, action: () => Promise<unknown>, success: string): Promise<boolean> {
     setActioning(key);
+    let succeeded = false;
     setError("");
     setMessage("");
     try {
       await action();
+      succeeded = true;
       setMessage(success);
       await refreshTeam();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t("Team action failed."));
+      setError(teamRefusalMessage(actionError, "Team action failed."));
     } finally {
       setActioning("");
     }
+    return succeeded;
   }
 
   async function switchWorkspace(option: JoinedWorkspaceOption) {
@@ -285,12 +289,13 @@ export default function TeamPage() {
   async function submitAccessRequest() {
     const cleanIdentifier = requestOwnerIdentifier.trim();
     if (!cleanIdentifier || actioning) return;
-    await runTeamAction(
+    const sent = await runTeamAction(
       "request-access",
       () => requestWorkspaceAccess(cleanIdentifier),
       t("Access request sent. The workspace owner can approve it from Team Access.")
     );
-    setRequestOwnerIdentifier("");
+    // What was typed stays when the request is refused, so it can be sent again.
+    if (sent) setRequestOwnerIdentifier("");
   }
 
   if (loading || !user) return <LoadingScreen />;

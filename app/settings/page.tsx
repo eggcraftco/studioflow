@@ -98,6 +98,7 @@ import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMe
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings, getSettingsAuditLog } from "@/lib/studioflow/settingsActions";
 import { PDF_TOGGLE_DOCUMENTS, canViewInvoiceDocument, createPdfPreviewSequencer, pdfPreviewKindAfterToggle, pdfRenderSettings, pdfToggleMaskReason, pdfViewerAccess, type PdfDocumentKind, type PdfToggleKey as SharedPdfToggleKey, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
+import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
 import { canManageClientFilesForRole } from "@/lib/studioflow/clientFiles";
@@ -7263,30 +7264,34 @@ function TeamAccessSection({
     }
   }
 
-  async function runTeamAction(key: string, action: () => Promise<unknown>, success: string) {
+  async function runTeamAction(key: string, action: () => Promise<unknown>, success: string): Promise<boolean> {
     setActioning(key);
+    let succeeded = false;
     setError("");
     setStatus("");
     try {
       await action();
+      succeeded = true;
       setStatus(success);
       await onRefreshTeamAccess();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t("Team action failed."));
+      setError(teamRefusalMessage(actionError, "Team action failed."));
     } finally {
       setActioning("");
     }
+    return succeeded;
   }
 
   async function submitAccessRequest() {
     const cleanIdentifier = requestOwnerIdentifier.trim();
     if (!cleanIdentifier || actioning) return;
-    await runTeamAction(
+    const sent = await runTeamAction(
       "request-access",
       () => requestWorkspaceAccess(cleanIdentifier),
       t("Access request sent. The workspace owner can approve it from Team Access.")
     );
-    setRequestOwnerIdentifier("");
+    // What was typed stays when the request is refused, so it can be sent again.
+    if (sent) setRequestOwnerIdentifier("");
   }
 
   async function retryTeamDataLoad() {

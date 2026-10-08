@@ -9,6 +9,7 @@ import {
   type WorkspaceMemberAccess
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
 
 export const WEB_TEAM_ROLES = [
   { value: "member", label: "Member" },
@@ -40,9 +41,10 @@ function normalizeRole(role: string): string {
   return "member";
 }
 
+// A refusal says why — no permission, no free seat, no connection (teamRefusal.ts, same reasons as the native apps) —
+// instead of the SDK's "internal" / "Missing or insufficient permissions." or the server's untranslatable seat text.
 function callableError(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return "Team action failed. Please try again.";
+  return teamRefusalMessage(error, "Team action failed. Please try again.");
 }
 
 function normalizeAccess(access: WorkspaceMemberAccess): WorkspaceMemberAccess {
