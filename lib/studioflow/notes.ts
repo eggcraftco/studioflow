@@ -10,42 +10,12 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
+import { keepNoteDocumentFields, keepNoteFromDoc, type StudioKeepNote } from "./noteDocument";
 
-// ------------------------------------------------------------------
-// Types — mirror Android StudioKeepNote / Mac StudioKeepNote
-// ------------------------------------------------------------------
-
-export type StudioKeepNote = {
-  id: string;
-  title: string;
-  text: string;
-  colorName: string;
-  ownerUserId: string;
-  ownerEmail: string;
-  ownerName: string;
-  sharedWith: string[];
-  collaboratorEmails: string[];
-  activeEditorUserId: string;
-  activeEditorEmail: string;
-  activeEditorUpdatedAtMillis: number | null;
-  isPinned: boolean;
-  isArchived: boolean;
-  isDeleted: boolean;
-  labels: string[];
-  links: string[];
-  reminderDateMillis: number | null;
-  manualOrder: number;
-  createdAtMillis: number | null;
-  updatedAtMillis: number | null;
-  // One note, shown wherever its context lives (the Files model): the TYPE
-  // says what the note is about, the linked ids say where else it surfaces,
-  // and visibility is a separate axis from type.
-  noteType: "personal" | "order" | "customer" | "team";
-  linkedOrderId: string;
-  linkedOrderLabel: string;
-  linkedCustomerName: string;
-  visibility: "only_me" | "workspace";
-};
+// The type and the document converters live in noteDocument.ts (pure, no
+// Firebase client) so the round-trip test can import them from Node.
+export type { StudioKeepNote } from "./noteDocument";
+export { keepNoteDocumentFields, keepNoteFromDoc } from "./noteDocument";
 
 export type StudioProjectNoteItem = {
   id: string;
@@ -64,57 +34,6 @@ export type StudioProjectNoteItem = {
 
 function notesCollection(companyId: string, userId: string) {
   return collection(db, "companies", companyId, "personal_notes", userId, "notes");
-}
-
-function tsToMillis(value: unknown): number | null {
-  if (!value) return null;
-  if (value instanceof Timestamp) return value.toMillis();
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (value instanceof Date) return value.getTime();
-  // A {seconds, nanoseconds} map (written by a non-web SDK or a raw REST
-  // payload) and an ISO string are still real dates — dropping them to null
-  // is exactly the silent reminder loss the QA report caught.
-  if (typeof value === "object" && typeof (value as { seconds?: unknown }).seconds === "number") {
-    return Math.round((value as { seconds: number }).seconds * 1000);
-  }
-  if (typeof value === "string") {
-    const ms = Date.parse(value);
-    return Number.isFinite(ms) ? ms : null;
-  }
-  return null;
-}
-
-function keepNoteFromDoc(id: string, data: Record<string, unknown>): StudioKeepNote {
-  return {
-    id,
-    title: (data.title as string) || "",
-    text: (data.text as string) || "",
-    colorName: (data.colorName as string) || "default",
-    ownerUserId: (data.ownerUserId as string) || "",
-    ownerEmail: (data.ownerEmail as string) || "",
-    ownerName: (data.ownerName as string) || "",
-    sharedWith: Array.isArray(data.sharedWith) ? (data.sharedWith as string[]) : [],
-    collaboratorEmails: Array.isArray(data.collaboratorEmails)
-      ? (data.collaboratorEmails as string[])
-      : [],
-    activeEditorUserId: (data.activeEditorUserId as string) || "",
-    activeEditorEmail: (data.activeEditorEmail as string) || "",
-    activeEditorUpdatedAtMillis: tsToMillis(data.activeEditorUpdatedAt),
-    isPinned: Boolean(data.isPinned),
-    isArchived: Boolean(data.isArchived),
-    isDeleted: Boolean(data.isDeleted),
-    labels: Array.isArray(data.labels) ? (data.labels as string[]) : [],
-    links: Array.isArray(data.links) ? (data.links as string[]) : [],
-    reminderDateMillis: tsToMillis(data.reminderDate),
-    manualOrder: typeof data.manualOrder === "number" ? (data.manualOrder as number) : 0,
-    createdAtMillis: tsToMillis(data.createdAt),
-    updatedAtMillis: tsToMillis(data.updatedAt),
-    noteType: (["personal", "order", "customer", "team"].includes(String(data.noteType)) ? String(data.noteType) : "personal") as StudioKeepNote["noteType"],
-    linkedOrderId: (data.linkedOrderId as string) || "",
-    linkedOrderLabel: (data.linkedOrderLabel as string) || "",
-    linkedCustomerName: (data.linkedCustomerName as string) || "",
-    visibility: (String(data.visibility) === "workspace" ? "workspace" : "only_me") as StudioKeepNote["visibility"],
-  };
 }
 
 export function listenToKeepNotes(
@@ -144,36 +63,10 @@ export async function saveKeepNote(
 ): Promise<void> {
   if (!companyId || !userId || !note.id) return;
   const ref = doc(notesCollection(companyId, userId), note.id);
+  // Field list and values come from keepNoteDocumentFields — the text is
+  // written exactly as given. Only the two server timestamps are added here.
   await setDoc(ref, {
-    title: note.title,
-    text: note.text,
-    colorName: note.colorName,
-    ownerUserId: note.ownerUserId,
-    ownerEmail: note.ownerEmail,
-    ownerName: note.ownerName,
-    sharedWith: note.sharedWith,
-    collaboratorEmails: note.collaboratorEmails,
-    activeEditorUserId: note.activeEditorUserId,
-    activeEditorEmail: note.activeEditorEmail,
-    activeEditorUpdatedAt: note.activeEditorUpdatedAtMillis
-      ? Timestamp.fromMillis(note.activeEditorUpdatedAtMillis)
-      : null,
-    isPinned: note.isPinned,
-    isArchived: note.isArchived,
-    isDeleted: note.isDeleted,
-    labels: note.labels,
-    links: note.links,
-    // NaN is falsy, but be explicit: an invalid millis value must never be
-    // silently written as "no reminder".
-    reminderDate: note.reminderDateMillis != null && Number.isFinite(note.reminderDateMillis)
-      ? Timestamp.fromMillis(note.reminderDateMillis)
-      : null,
-    manualOrder: note.manualOrder,
-    noteType: note.noteType || "personal",
-    linkedOrderId: note.linkedOrderId || "",
-    linkedOrderLabel: note.linkedOrderLabel || "",
-    linkedCustomerName: note.linkedCustomerName || "",
-    visibility: note.visibility === "workspace" ? "workspace" : "only_me",
+    ...keepNoteDocumentFields(note),
     createdAt: note.createdAtMillis
       ? Timestamp.fromMillis(note.createdAtMillis)
       : serverTimestamp(),
