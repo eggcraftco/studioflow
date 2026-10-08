@@ -26,6 +26,7 @@ import {
   type WorkspaceAccessOutcome,
   type WorkspaceStoredRead,
 } from "@/lib/studioflow/workspaceResolution";
+import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -642,6 +643,9 @@ export type OrderDetail = {
   courier: string;
   isDispatched: boolean;
   isDelivered: boolean;
+  /** The last "tracking details" e-mail for this order's number — the server's record, copied
+   *  onto the order (the authoritative copy is the trackingResults row). Null when none was sent. */
+  trackingEmail: TrackingEmailRecord | null;
   /** UX-010/012 — the common engine's stamp on an order it applied (Woo, Square, and Shopify/Etsy once primary): provider-agnostic channel details. */
   commerce: OrderChannelStamp | null;
   customFields: Record<string, string>;
@@ -2362,6 +2366,7 @@ function mapOrderDetailSnapshot(
     courier: stringValue(data.courier, ""),
     isDispatched: booleanValue(data.isDispatched, false),
     isDelivered: booleanValue(data.isDelivered, false),
+    trackingEmail: trackingEmailRecordFrom(data.trackingEmail),
     customFields: stringMapValue(data.customFields),
     commerce: channelStampValue(data.commerce),
     customToggles: booleanMapValue(data.customToggles),
