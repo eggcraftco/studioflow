@@ -161,7 +161,7 @@ export function TrackingEmailDialog({
 
             <div className="inventory-form">
               <label className="inventory-field is-wide">
-                <span>{t("To")}</span>
+                <span>{t("Recipient")}</span>
                 <input
                   className="input"
                   type="email"
@@ -174,7 +174,7 @@ export function TrackingEmailDialog({
                 {to.length > 0 && !toValid ? <span className="inventory-field-hint" style={{ color: "#dc2626" }}>{t("Enter a valid e-mail address.")}</span> : null}
               </label>
               <label className="inventory-field">
-                <span>{t("From")}</span>
+                <span>{t("Sender")}</span>
                 <input className="input" value={preview.from} readOnly aria-readonly="true" />
               </label>
               <label className="inventory-field">
