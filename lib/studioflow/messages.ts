@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -35,6 +36,10 @@ export type StudioMessageThread = {
   mutedUntilByMillis: Record<string, number>;
   pinnedMessageIds: string[];
   isUnread: boolean;
+  /** Who opened the group (createMessageThread writes it from 8 Oct 2026; older groups have none). */
+  createdByUid: string;
+  /** Server-computed for the caller by listMessageThreads; undefined when the row came from the live listener without it. */
+  canDelete?: boolean;
 };
 
 export type StudioMessageItem = {
@@ -178,6 +183,8 @@ function threadFromDoc(id: string, data: Record<string, unknown>, currentUid: st
     mutedUntilByMillis: millisMap(data.mutedUntilBy),
     pinnedMessageIds: stringList(data.pinnedMessageIds),
     isUnread,
+    createdByUid: stringValue(data.createdByUid),
+    canDelete: typeof data.canDelete === "boolean" ? data.canDelete : undefined,
   };
 }
 
@@ -249,6 +256,13 @@ export function listenToMessageThreads(
   }
   let active = true;
   let unsubscribeSnapshot: Unsubscribe = () => {};
+  // listMessageThreads computes `canDelete` for the caller; the thread documents
+  // the live listener reads do not carry it, so keep the server's answer per id.
+  const serverCanDelete = new Map<string, boolean>();
+  const withServerCanDelete = (thread: StudioMessageThread): StudioMessageThread =>
+    thread.canDelete === undefined && serverCanDelete.has(thread.id)
+      ? { ...thread, canDelete: serverCanDelete.get(thread.id) }
+      : thread;
   const q = query(
     collection(db, "companies", workspace.id, "messageThreads"),
     where("memberUids", "array-contains", currentUid),
@@ -257,7 +271,7 @@ export function listenToMessageThreads(
     if (!active) return;
     unsubscribeSnapshot = onSnapshot(q, (snap) => {
       const list = snap.docs
-        .map((d) => threadFromDoc(d.id, d.data() as Record<string, unknown>, currentUid))
+        .map((d) => withServerCanDelete(threadFromDoc(d.id, d.data() as Record<string, unknown>, currentUid)))
         .filter((t) => t.id === "team" || t.memberUids.includes(currentUid));
       callback(sortThreads(list));
     }, (error) => {
@@ -275,6 +289,9 @@ export function listenToMessageThreads(
       const initial = (data.threads ?? [])
         .map((item) => threadFromDoc(String(item.id ?? ""), item, currentUid))
         .filter((thread) => thread.id === "team" || thread.memberUids.includes(currentUid));
+      for (const thread of initial) {
+        if (thread.canDelete !== undefined) serverCanDelete.set(thread.id, thread.canDelete);
+      }
       callback(sortThreads(initial));
       startRealtimeListener();
     })
@@ -307,6 +324,11 @@ export function listenToThreadMessages(
       if (item) items.push(item);
     });
     callback(items);
+  }, (error) => {
+    // A group deleted (or the viewer removed) while open: the rules stop the
+    // listener. The thread list listener moves the screen away; stay quiet here.
+    console.warn("thread messages listener stopped:", error instanceof Error ? error.message : String(error));
+    callback([]);
   });
 }
 
@@ -604,6 +626,45 @@ export async function renameMessageThread(
 export async function leaveMessageThread(workspace: WorkspaceContext, threadId: string): Promise<void> {
   if (!workspace.id || !threadId) return;
   await call("leaveMessageThread", { companyId: workspace.id, threadId });
+}
+
+/**
+ * Who may delete a group (owner decision, 8 Oct 2026): the person who opened it,
+ * or the workspace owner. Never Team Chat, never a direct conversation. The
+ * server's `canDelete` wins when present; deleteMessageThread decides again.
+ */
+export function canDeleteMessageThread(
+  thread: StudioMessageThread,
+  currentUid: string,
+  viewerIsOwner: boolean,
+): boolean {
+  if (thread.id === "team" || thread.type !== "group") return false;
+  if (typeof thread.canDelete === "boolean") return thread.canDelete;
+  return viewerIsOwner || (!!currentUid && thread.createdByUid === currentUid);
+}
+
+/** Hard-deletes a group with all its messages and files, for everyone. */
+export async function deleteMessageThread(workspace: WorkspaceContext, threadId: string): Promise<void> {
+  if (!workspace.id || !threadId || threadId === "team") return;
+  await call("deleteMessageThread", { companyId: workspace.id, threadId });
+}
+
+/**
+ * After an open thread drops out of the list: "missing" when the document is
+ * gone (deleted), "present" when it still exists, "unknown" when the read is
+ * refused (e.g. the viewer was removed from it) or fails.
+ */
+export async function messageThreadPresence(
+  workspaceId: string,
+  threadId: string,
+): Promise<"missing" | "present" | "unknown"> {
+  if (!workspaceId || !threadId) return "unknown";
+  try {
+    const snap = await getDoc(doc(db, "companies", workspaceId, "messageThreads", threadId));
+    return snap.exists() ? "present" : "missing";
+  } catch {
+    return "unknown";
+  }
 }
 
 export async function removeMemberFromMessageThread(

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
@@ -15,8 +16,10 @@ import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, ty
 import { canDeleteTeamMessage, messagingRedirectFor } from "@/lib/studioflow/messagingAccess";
 import {
   addMembersToMessageThread,
+  canDeleteMessageThread,
   createMessageThread,
   deleteMessageForMe,
+  deleteMessageThread,
   deleteThreadMessage,
   displayThreadTitle,
   editThreadMessage,
@@ -31,6 +34,7 @@ import {
   listenToTypingUsers,
   loadMessageTeamMembers,
   markMessageThreadRead,
+  messageThreadPresence,
   pinMessageInThread,
   renameMessageThread,
   senderLabel,
@@ -103,6 +107,14 @@ export default function MessagesPage() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
+  // The open thread and the list it came from, read inside the list listener to
+  // tell "this group just vanished" apart from an ordinary list update.
+  const selectedThreadIdRef = useRef("");
+  const threadsRef = useRef<StudioMessageThread[]>([]);
+  // A thread this viewer deleted or left: its disappearance is expected, no notice.
+  const expectedGoneThreadIdRef = useRef("");
   const [forwardMessage, setForwardMessage] = useState<StudioMessageItem | null>(null);
   const [muteMenuOpen, setMuteMenuOpen] = useState(false);
   const [workspaceSettings, setWorkspaceSettings] = useState<StudioMessageWorkspaceSettings>({
@@ -183,8 +195,36 @@ export default function MessagesPage() {
   }, [user]);
 
   useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+  }, [selectedThreadId]);
+
+  useEffect(() => {
     if (!workspace || !user) return;
     const unsub = listenToMessageThreads(workspace, user.uid, (list) => {
+      // The open group dropped out of the list without this viewer deleting or
+      // leaving it: someone else deleted it (or removed this viewer). The
+      // selection below falls back to Team Chat; say why, once.
+      const openId = selectedThreadIdRef.current;
+      const before = threadsRef.current.find((t) => t.id === openId);
+      if (openId && before && before.type === "group" && !list.some((t) => t.id === openId)) {
+        if (expectedGoneThreadIdRef.current === openId) {
+          expectedGoneThreadIdRef.current = "";
+        } else {
+          setDeleteGroupOpen(false);
+          setRenameOpen(false);
+          setAddMembersOpen(false);
+          setInfoOpen(false);
+          setPhoneShowingConversation(false);
+          void messageThreadPresence(workspace.id, openId).then((presence) => {
+            dispatchStudioToast({
+              message: presence === "present"
+                ? t("You no longer have access to this group.")
+                : t("This group was deleted"),
+            });
+          });
+        }
+      }
+      threadsRef.current = list;
       setThreads(list);
       setSelectedThreadId((current) => {
         if (current && list.some((t) => t.id === current)) return current;
@@ -584,13 +624,44 @@ export default function MessagesPage() {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    if (!workspace || !selectedThread || deletingGroup) return;
+    const threadId = selectedThread.id;
+    setDeletingGroup(true);
+    expectedGoneThreadIdRef.current = threadId;
+    try {
+      await deleteMessageThread(workspace, threadId);
+      expectedGoneThreadIdRef.current = "";
+      setDeleteGroupOpen(false);
+      setInfoOpen(false);
+      setPhoneShowingConversation(false);
+      // The list listener drops it too; do not wait for that to leave the screen.
+      setThreads((current) => current.filter((t) => t.id !== threadId));
+      threadsRef.current = threadsRef.current.filter((t) => t.id !== threadId);
+      setSelectedThreadId((current) => (current === threadId ? "team" : current));
+    } catch (err) {
+      if (expectedGoneThreadIdRef.current === threadId) expectedGoneThreadIdRef.current = "";
+      setDeleteGroupOpen(false);
+      const code = String((err as { code?: unknown } | null)?.code ?? "").toLowerCase();
+      setErrorMessage(
+        code === "functions/permission-denied"
+          ? t("Only the group's creator or the workspace owner can delete this group.")
+          : friendlyErrorMessage(err, t) || t("Could not delete group."),
+      );
+    } finally {
+      setDeletingGroup(false);
+    }
+  };
+
   const handleLeave = async () => {
     if (!workspace || !selectedThread) return;
+    expectedGoneThreadIdRef.current = selectedThread.id;
     try {
       await leaveMessageThread(workspace, selectedThread.id);
       setInfoOpen(false);
       setSelectedThreadId("");
     } catch (err) {
+      expectedGoneThreadIdRef.current = "";
       setErrorMessage(friendlyErrorMessage(err, t) || t("Could not leave."));
     }
   };
@@ -885,7 +956,18 @@ export default function MessagesPage() {
           onRename={() => { setInfoOpen(false); setRenameOpen(true); }}
           onAddMembers={() => { setInfoOpen(false); setAddMembersOpen(true); }}
           onLeave={() => void handleLeave()}
+          canDeleteGroup={canDeleteMessageThread(selectedThread, user.uid, viewerIsOwner)}
+          onDeleteGroup={() => { setInfoOpen(false); setDeleteGroupOpen(true); }}
           onRemoveMember={(uid) => void handleRemoveMember(uid)}
+        />
+      )}
+
+      {deleteGroupOpen && selectedThread && selectedThread.type === "group" && (
+        <DeleteGroupDialog
+          title={displayThreadTitle(selectedThread, user.uid, teamMembers)}
+          deleting={deletingGroup}
+          onCancel={() => { if (!deletingGroup) setDeleteGroupOpen(false); }}
+          onDelete={() => void handleDeleteGroup()}
         />
       )}
 
@@ -1804,6 +1886,8 @@ function ThreadInfoDialog({
   onRename,
   onAddMembers,
   onLeave,
+  canDeleteGroup,
+  onDeleteGroup,
   onRemoveMember,
 }: {
   thread: StudioMessageThread;
@@ -1814,6 +1898,9 @@ function ThreadInfoDialog({
   onRename: () => void;
   onAddMembers: () => void;
   onLeave: () => void;
+  /** canDeleteMessageThread: the group's creator or the workspace owner; never Team Chat or a DM. */
+  canDeleteGroup: boolean;
+  onDeleteGroup: () => void;
   onRemoveMember: (uid: string) => void;
 }) {
   const { language } = useAuth();
@@ -1848,10 +1935,44 @@ function ThreadInfoDialog({
           })}
         </div>
         <div className="dialog-actions">
-          {isGroup && <button type="button" onClick={onRename}>Rename</button>}
-          {isGroup && <button type="button" onClick={onAddMembers}>Add members</button>}
-          {!isTeam && <button type="button" onClick={onLeave}>Leave</button>}
-          <button type="button" className="primary" onClick={onClose}>Close</button>
+          {isGroup && <button type="button" onClick={onRename}>{t("Rename")}</button>}
+          {isGroup && <button type="button" onClick={onAddMembers}>{t("Add members")}</button>}
+          {!isTeam && <button type="button" onClick={onLeave}>{t("Leave")}</button>}
+          {isGroup && !isTeam && canDeleteGroup && (
+            <button type="button" className="danger" onClick={onDeleteGroup}>{t("Delete group")}</button>
+          )}
+          <button type="button" className="primary" onClick={onClose}>{t("Close")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteGroupDialog({
+  title,
+  deleting,
+  onCancel,
+  onDelete,
+}: {
+  title: string;
+  deleting: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  return (
+    <div className="dialog-backdrop" onClick={onCancel}>
+      <div className="dialog-card" role="alertdialog" aria-modal="true" aria-labelledby="delete-group-title" onClick={(e) => e.stopPropagation()}>
+        <h3 id="delete-group-title">{t("Delete group?")}</h3>
+        <p style={{ margin: 0, color: "var(--muted)", fontSize: 14, lineHeight: 1.45 }}>
+          {t("This deletes \"{title}\" and all its messages for everyone. This can't be undone.").replace("{title}", title)}
+        </p>
+        <div className="dialog-actions">
+          <button type="button" onClick={onCancel} disabled={deleting}>{t("Cancel")}</button>
+          <button type="button" className="danger" onClick={onDelete} disabled={deleting} autoFocus>
+            {deleting ? t("Deleting…") : t("Delete")}
+          </button>
         </div>
       </div>
     </div>
@@ -2202,6 +2323,7 @@ function MessagesStyles() {
       .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
       .dialog-actions button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 600; }
       .dialog-actions button.primary { background: #2563eb; color: white; border-color: #2563eb; }
+      .dialog-actions button.danger { background: #dc2626; color: white; border-color: #dc2626; }
       .dialog-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
       .pinned-bar { padding: 8px 16px; background: rgba(37,99,235,0.06); border-bottom: 1px solid #e5e7eb; display: flex; gap: 12px; align-items: center; overflow-x: auto; }
       .pinned-bar__title { font-size: 11px; font-weight: 700; color: #2563eb; flex-shrink: 0; }
