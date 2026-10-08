@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, functions, storage } from "@/lib/firebase/client";
+import { auth, db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceSettingsOverview, type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 // ------------------------------------------------------------------
@@ -524,6 +524,12 @@ export async function uploadMessageFileAndSend(
   const uuid = (typeof crypto !== "undefined" && "randomUUID" in crypto)
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // uploaderUid lets the uploader delete their own file under storage.rules
+  // (docs/team-group-delete-contract-2026-10-08.md). It comes from the signed-in
+  // Firebase Auth user only — never from a parameter — and the rules refuse
+  // any value other than the caller's own uid.
+  const uploaderUid = auth.currentUser?.uid ?? "";
+  if (!uploaderUid) throw new Error("You must be signed in to send a file.");
   const storagePath = `companies/${workspace.id}/message_files/${threadId}/${uuid}_${cleanName}`;
   const ref = storageRef(storage, storagePath);
   await uploadBytes(ref, file, {
@@ -533,6 +539,7 @@ export async function uploadMessageFileAndSend(
       threadId,
       originalFileName: cleanName,
       source: "web_message",
+      uploaderUid,
     },
   });
   const downloadUrl = await getDownloadURL(ref);
