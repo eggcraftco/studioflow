@@ -10,6 +10,7 @@ import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/
 
 export type OrderListCardItem = {
   id: string;
+  projectNumber?: number;
   assignedToUid?: string;
   assignedToEmail?: string;
   customerName: string;

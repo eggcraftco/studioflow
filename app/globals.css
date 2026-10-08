@@ -3481,6 +3481,95 @@ body[data-studio-theme="dark"] .quick-create-link { color: #7db2ff; }
   overflow: auto;
 }
 
+/* The folded list's rail (components/OrderListRail.tsx): one square per order in the
+   current filter, the photo or the initials, the status colour in the corner, a ring on
+   the selected one. It lives only while the list is collapsed (64 px). */
+.orders-rail {
+  display: grid;
+  gap: 8px;
+  padding: 10px 8px 14px;
+  justify-items: center;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.orders-rail-item {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: rgba(239, 242, 246, 0.92);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.orders-rail-item img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.orders-rail-fallback {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 3px;
+}
+
+.orders-rail-item:hover {
+  border-color: rgba(0, 122, 255, 0.35);
+}
+
+.orders-rail-item.is-selected {
+  border-color: rgba(0, 122, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.18);
+}
+
+.orders-rail-item:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.orders-rail-dot {
+  position: absolute;
+  inset-inline-end: 3px;
+  bottom: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #f59e0b;
+}
+
+.orders-rail-dot.is-success { background: #16a34a; }
+.orders-rail-dot.is-danger { background: var(--danger); }
+.orders-rail-dot.is-neutral { background: #9ca3af; }
+.orders-rail-dot.is-warning { background: #f59e0b; }
+
+body[data-studio-theme="dark"] .orders-rail-item {
+  background: #262626;
+  color: #d4d4d4;
+}
+
+body[data-studio-theme="dark"] .orders-rail-dot {
+  border-color: #1f1f1f;
+}
+
 .orders-sidebar-message,
 .orders-sidebar-error {
   margin: 0;
@@ -15363,6 +15452,15 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .shopify-source-link:hover {
   text-decoration: underline;
+}
+
+/* The strip when the shop gave no address we can trust (lib/studioflow/orderSourceLink.ts):
+   the words say so, the reason sits in the tooltip, and nothing opens. */
+.shopify-source-link.is-unavailable {
+  color: var(--muted);
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 .public-web-links {
