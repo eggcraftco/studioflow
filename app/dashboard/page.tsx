@@ -571,6 +571,11 @@ export default function DashboardPage() {
   const canViewBankFeed = isWorkspaceOwner || Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "bankFeed"));
   const workspaceId = workspace?.id ?? "";
   useEffect(() => {
+    // Whatever the previous workspace (or the previous permission state) left
+    // here goes first — the cache can paint the old rows before the server
+    // answers for the new ones, and a denied listener answers with nothing.
+    setBankTransactions([]);
+    setBankLastSync(null);
     if (!workspaceId || !canViewBankFeed) return;
     const unsubTx = onSnapshot(
       query(collection(db, "companies", workspaceId, "bankTransactions"), orderBy("bookingDate", "desc")),

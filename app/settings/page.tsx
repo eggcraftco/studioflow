@@ -7032,6 +7032,9 @@ function TeamAccessSection({
     setStatus("");
     try {
       await switchActiveWorkspace(user.uid, option.id);
+      // Drop this browser's Firestore copy before the reload: the next
+      // workspace starts from the server, not from rows cached for the last one.
+      await clearFirestoreLocalCache();
       window.location.reload();
     } catch (switchError) {
       setError(switchError instanceof Error ? switchError.message : t("Could not switch workspace."));

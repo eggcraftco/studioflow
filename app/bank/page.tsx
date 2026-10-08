@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { deleteObject, ref as storageRef, uploadBytes } from "firebase/storage";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -25,6 +25,7 @@ import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
+import { BankReceiptViewer, type BankReceiptViewerRequest } from "@/components/BankReceiptViewer";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -256,6 +257,9 @@ function BankPageContent() {
   const [vendors, setVendors] = useState<BankVendor[]>([]);
   // Waiting receipt being assigned by hand → shows a transaction picker.
   const [assignWaitingId, setAssignWaitingId] = useState<string | null>(null);
+  // The receipt being viewed (waiting list or a transaction). The bytes come
+  // through the authorised server door, never a Storage download URL.
+  const [receiptView, setReceiptView] = useState<BankReceiptViewerRequest | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showRecurring, setShowRecurring] = useState(true);
   const [txPage, setTxPage] = useState(1);
@@ -387,6 +391,16 @@ function BankPageContent() {
 
   // Live views over the server-written feed (owner-only per Firestore rules).
   useEffect(() => {
+    // Whatever the previous workspace (or the previous permission state) left
+    // here goes first: the cache can paint old rows before the server answers,
+    // and a refused listener answers with nothing at all.
+    setConnections([]);
+    setTransactions([]);
+    setCustomCategories([]);
+    setRules([]);
+    setVendors([]);
+    setWaitingReceipts([]);
+    setReceiptView(null);
     if (!companyId || !canViewBank) return;
     const unsubConnections = onSnapshot(
       collection(db, "companies", companyId, "bankConnections"),
@@ -665,13 +679,17 @@ function BankPageContent() {
     }
   }
 
-  async function openReceipt(transaction: BankTransaction) {
-    try {
-      const url = await getDownloadURL(storageRef(storage, transaction.receiptPath));
-      window.open(url, "_blank", "noopener");
-    } catch {
-      setError(t("Could not open the invoice."));
-    }
+  // Opens through the server door (openBankReceiptFile + nvOpenBankReceiptFile):
+  // the Storage rule for bank_receipts is owner-only, so getDownloadURL used to
+  // fail for every member the bank rule lets read the row. The viewer loads,
+  // zooms images, previews PDFs, and says plainly when a file is gone.
+  function openReceipt(transaction: BankTransaction) {
+    if (!transaction.receiptPath) return;
+    setReceiptView({ companyId, transactionId: transaction.id, name: transaction.receiptName || t("Receipt") });
+  }
+
+  function openWaitingReceipt(item: WaitingReceipt) {
+    setReceiptView({ companyId, inboxId: item.id, name: item.fileName });
   }
 
   async function removeReceipt(transaction: BankTransaction) {
@@ -2745,20 +2763,26 @@ function BankPageContent() {
                         return (
                           <div key={item.id} style={{ border: `1px solid ${stale ? "rgba(220,38,38,0.35)" : "rgba(120,120,140,0.18)"}`, borderRadius: 10, padding: "8px 12px", background: "var(--surface, #fff)" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                              <FileBadge name={item.fileName} size={28} />
+                              <button type="button" onClick={() => openWaitingReceipt(item)} aria-label={t("View receipt")} title={t("View receipt")} style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", display: "inline-flex" }}>
+                                <FileBadge name={item.fileName} size={28} />
+                              </button>
                               <div style={{ flex: 1, minWidth: 180 }}>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.fileName}</div>
+                                <button type="button" onClick={() => openWaitingReceipt(item)} title={t("View receipt")}
+                                  style={{ ...attentionLink, fontSize: 12.5, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left" }}>{item.fileName}</button>
                                 <div style={{ fontSize: 11, opacity: 0.65 }}>
                                   {item.amount ? money(item.amount, currency0) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
                                   {stale ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
                               </div>
+                              <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                                <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => openWaitingReceipt(item)} aria-label={t("View receipt")}><ReceiptGlyph size={14} /> {t("View")}</button>
                               {isOwner ? (
                                 <span style={{ display: "inline-flex", gap: 6 }}>
                                   <button type="button" style={bankBtnSm} disabled={busy === `waiting-${item.id}`} onClick={() => setAssignWaitingId(picking ? null : item.id)}>{picking ? t("Cancel") : t("Assign to a transaction")}</button>
                                   <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `waiting-${item.id}`} onClick={() => void deleteWaitingReceipt(item)}>{t("Remove")}</button>
                                 </span>
                               ) : null}
+                              </span>
                             </div>
                             {picking ? (
                               <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", borderTop: "1px solid rgba(120,120,140,0.14)", paddingTop: 6 }}>
@@ -3739,6 +3763,7 @@ function BankPageContent() {
         </aside>
       ) : null}
       </div>
+      <BankReceiptViewer request={receiptView} onClose={() => setReceiptView(null)} t={t} />
     </AppShell>
   );
 }

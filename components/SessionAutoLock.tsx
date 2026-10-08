@@ -9,7 +9,7 @@ import {
   signOut,
   type AuthProvider as FirebaseAuthProvider
 } from "firebase/auth";
-import { auth, googleProvider, appleProvider } from "@/lib/firebase/client";
+import { auth, googleProvider, appleProvider, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -139,6 +139,11 @@ export function SessionAutoLock() {
       }
       clearDeviceLocalWorkspaceCache();
       await signOut(auth);
+      // The lock screen's sign-out is a sign-out like any other: the browser's
+      // Firestore copy goes with it, and the page reloads because the instance
+      // is terminated by the clear.
+      await clearFirestoreLocalCache();
+      window.location.assign("/login");
     } catch {
       // Ignore — the auth listener will reconcile state.
     }
