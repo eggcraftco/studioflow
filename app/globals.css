@@ -1,3 +1,29 @@
+/* Stacking ladder (8 Oct 2026). Every positioned element that belongs to
+   page CONTENT (card drag/resize handles, the "i" and "..." buttons, colour
+   chips, size badges, schedule blocks) stays at or below --z-content-max, so
+   a sticky header (--z-sticky-header) painted in the same scrolling pane
+   always covers it, the app top bar covers both, drawers cover the top bar,
+   and floating menus cover everything. A card's own popovers (the purpose
+   text, the "..." panel and its backdrop) live INSIDE the card's stacking
+   context, so their --z-local-* values only order them against the card and
+   can never lift them over a sticky header; the order view closes them when
+   the pane scrolls. scripts/check-card-stacking.mjs asserts the ladder. */
+:root {
+  --z-content-handle: 2;        /* drag / lock handles */
+  --z-content-control: 4;       /* height resize handle */
+  --z-content-control-raised: 5;/* corner resize, "i"/"..." wrap, meaning chip */
+  --z-content-active: 6;        /* card being resized, size badge, drag preview */
+  --z-content-overlay: 8;       /* after-drop strip */
+  --z-content-max: 10;          /* nothing in content may exceed this */
+  --z-local-backdrop: 1;        /* inside a card's own stacking context */
+  --z-local-popover: 2;         /* inside a card's own stacking context */
+  --z-sticky-header: 30;        /* order detail head, schedule month header */
+  --z-topbar: 55;               /* app top toolbar (native sticky bar) */
+  --z-drawer: 80;               /* side drawers, collapsed sidebar */
+  --z-modal: 100;               /* page-level modal dialogs (colour labels) */
+  --z-floating-menu: 120;       /* floating menus */
+}
+
 :root {
   color-scheme: light;
   --background: #f7f8fb;
@@ -5231,7 +5257,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   top: 7px;
   bottom: 7px;
-  z-index: 3;
+  z-index: var(--z-content-handle);
   width: 18px;
   cursor: ew-resize;
   touch-action: none;
@@ -8080,7 +8106,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   left: 12px;
   right: 12px;
   bottom: -28px;
-  z-index: 12;
+  z-index: var(--z-content-overlay);
   height: 48px;
 }
 
@@ -8097,7 +8123,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 }
 
 .order-detail-card-frame.is-resizing {
-  z-index: 6;
+  z-index: var(--z-content-active);
 }
 
 .order-detail-card-frame.is-dragging {
@@ -8118,7 +8144,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   top: 13px;
   inset-inline-start: 15px;
-  z-index: 2;
+  z-index: var(--z-content-handle);
   width: 26px;
   height: 26px;
   display: inline-grid;
@@ -8151,7 +8177,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   top: 13px;
   inset-inline-start: 15px;
-  z-index: 2;
+  z-index: var(--z-content-handle);
   width: 26px;
   height: 26px;
   display: inline-grid;
@@ -8198,7 +8224,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   left: 50%;
   bottom: 5px;
-  z-index: 4;
+  z-index: var(--z-content-control);
   width: 92px;
   height: 24px;
   transform: translateX(-50%);
@@ -8231,7 +8257,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   right: 7px;
   bottom: 7px;
-  z-index: 5;
+  z-index: var(--z-content-control-raised);
   width: 28px;
   height: 28px;
   display: grid;
@@ -8273,7 +8299,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   top: 6px;
   inset-inline-end: 10px;
-  z-index: 5;
+  z-index: var(--z-content-control-raised);
   display: flex;
   justify-content: flex-end;
 }
@@ -8347,7 +8373,7 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   position: absolute;
   top: 42px;
   inset-inline-end: 0;
-  z-index: 71;
+  z-index: var(--z-local-popover);
   width: min(320px, calc(100vw - 24px));
   padding: 10px 12px;
   background: var(--surface);
@@ -12464,7 +12490,7 @@ body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-c
   .app-toolbar-native {
     position: sticky;
     top: 0;
-    z-index: 55;
+    z-index: var(--z-topbar);
     display: grid;
     grid-template-columns: minmax(112px, 1fr) auto;
     gap: 8px;
@@ -24748,7 +24774,7 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 .order-library-files > a { font-size: 12px; opacity: 0.75; text-decoration: underline; width: fit-content; }
 .schedule-range-shortcut { font-size: 11.5px; font-weight: 800; padding: 4px 9px; }
 .schedule-drag-preview {
-  position: absolute; top: -26px; left: 6px; z-index: 6; pointer-events: none;
+  position: absolute; top: -26px; left: 6px; z-index: var(--z-content-active); pointer-events: none;
   background: rgba(23, 25, 35, 0.92); color: #fff; border-radius: 7px;
   padding: 3px 9px; font-size: 11px; font-weight: 800; white-space: nowrap;
 }
@@ -24783,7 +24809,7 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
   right: -6px;
 }
 .order-card-size-badge {
-  position: absolute; right: 12px; bottom: 34px; z-index: 6; pointer-events: none;
+  position: absolute; right: 12px; bottom: 34px; z-index: var(--z-content-active); pointer-events: none;
   background: rgba(23, 25, 35, 0.9); color: #fff; border-radius: 7px;
   padding: 3px 9px; font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
 }
@@ -24828,7 +24854,7 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
   display: flex;
   position: sticky;
   top: 0;
-  z-index: 7;
+  z-index: var(--z-sticky-header);
   background: #fff;
   border-bottom: 1px solid var(--border);
 }
@@ -25048,7 +25074,7 @@ body[data-studio-theme="dark"] .order-list-card.multi-selected {
   position: absolute;
   top: 18px;
   inset-inline-end: 54px;
-  z-index: 5;
+  z-index: var(--z-content-control-raised);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.03em;
@@ -26498,10 +26524,12 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 .block-custom-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: var(--z-local-backdrop);
   background: rgba(15, 23, 42, 0.28);
 }
 .block-custom-backdrop.is-modal {
+  /* Rendered at shell level, not inside a card: a real page-level dialog. */
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -26511,7 +26539,7 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   position: absolute;
   top: 42px;
   inset-inline-end: 0;
-  z-index: 71;
+  z-index: var(--z-local-popover);
   width: min(420px, calc(100vw - 24px));
   max-height: min(78vh, 720px);
   overflow-y: auto;
@@ -32798,7 +32826,7 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   max-width: min(320px, calc(100vw - 96px));
   max-height: calc(100vh - 24px);
   overflow: auto;
-  z-index: 120;
+  z-index: var(--z-floating-menu);
 }
 
 .app-sidebar-user-menu button,
@@ -33406,7 +33434,7 @@ body[data-studio-theme="dark"] .app-sidebar-item.is-active {
 .order-detail-head {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: var(--z-sticky-header);
   background: rgba(239, 242, 246, 0.96);
   backdrop-filter: blur(10px);
 }
