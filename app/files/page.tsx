@@ -33,6 +33,7 @@ import {
   type WorkspaceSettingsOverview,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
@@ -422,7 +423,7 @@ export default function FilesPage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "clientFiles")) {
-          router.replace("/orders");
+          router.replace(pageAccessRedirectFor("/files", loadedWorkspace.memberAccess));
           return;
         }
         setWorkspace(loadedWorkspace);

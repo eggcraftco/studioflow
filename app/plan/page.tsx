@@ -16,6 +16,7 @@ import {
 import {
   loadDashboardCounts,
   loadWorkspaceContext,
+  workspaceAccessAllows,
   type DashboardCounts,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
@@ -406,7 +407,9 @@ export default function PlanPage() {
                   Client Files and message attachment files require an active eligible paid plan. When paid access ends, opening, previewing, downloading, uploading and deleting those cloud files stops at the end of the billing period. Download files you need before your subscription ends. Stored files may be retained for up to 90 days to restore access if you resubscribe.
                 </p>
               </div>
-              <Link className="button secondary" href="/export">Open Export</Link>
+              {!workspace || workspaceAccessAllows(workspace.memberAccess, "exportData") ? (
+                <Link className="button secondary" href="/export">Open Export</Link>
+              ) : null}
             </div>
           </section>
 

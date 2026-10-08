@@ -19,6 +19,7 @@ import {
   type WorkspaceCustomRole,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import {
   approveJoinRequest,
   deleteWorkspaceCustomRole,
@@ -147,6 +148,14 @@ export default function TeamPage() {
       setError("");
       try {
         const workspaceContext = await loadWorkspaceContext(user.uid);
+        if (cancelled) return;
+        // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
+        // here so a typed URL cannot reach a screen the sidebar would not offer.
+        // A missing Team plan is different: it stays and shows the plan notice.
+        if (!workspaceAccessAllows(workspaceContext.memberAccess, "teamAccess")) {
+          router.replace(pageAccessRedirectFor("/team", workspaceContext.memberAccess));
+          return;
+        }
         const availableOptions = await loadJoinedWorkspaceOptions(user.uid, workspaceContext.id);
         if (!cancelled) {
           setWorkspace(workspaceContext);
@@ -554,13 +563,14 @@ export default function TeamPage() {
         {canManageTeam ? (
           <CustomRoleManager
             roles={customRoles}
+            members={members}
             disabled={Boolean(actioning)}
             savingKey={actioning}
             language={language}
             onSave={role => runTeamAction(
               role.id ? `custom-role-${role.id}` : "custom-role-new",
               () => saveWorkspaceCustomRole(workspace!, role),
-              t("Role profile saved.")
+              role.id ? t("Saved role {name}").replace("{name}", role.name) : t("Role profile saved.")
             )}
             onDelete={role => runTeamAction(
               `delete-custom-role-${role.id}`,

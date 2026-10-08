@@ -29,7 +29,7 @@ import {
 import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
-import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { ItemDetailPanel } from "./ItemDetailPanel";
 import { ItemLabelModal } from "./ItemLabelModal";
 import { ItemPhotosModal } from "./ItemPhotosModal";
@@ -607,7 +607,9 @@ export function InventoryContent({
           >
             {t("Archive")}
           </button>
-          <button type="button" disabled={bulkBusy} onClick={exportChecked}>{t("Export CSV")}</button>
+          {workspaceAccessAllows(workspace.memberAccess, "exportData") ? (
+            <button type="button" disabled={bulkBusy} onClick={exportChecked}>{t("Export CSV")}</button>
+          ) : null}
           <button type="button" disabled={bulkBusy} onClick={() => setCheckedIds(new Set())}>{t("Clear selection")}</button>
           {bulkBusy ? <span className="inventory-sub">{t("Working…")}</span> : null}
         </div>

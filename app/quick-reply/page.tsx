@@ -18,6 +18,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { studioT } from "@/lib/studioflow/language";
 import { canEditPersonalQuickReplySettingsForRole, generateQuickReply, loadQuickReplyPersonalSettings, saveQuickReplyPersonalSettings } from "@/lib/studioflow/quickReply";
 
@@ -127,7 +128,7 @@ export default function QuickReplyPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "quickReply")) {
-          router.replace("/orders");
+          router.replace(pageAccessRedirectFor("/quick-reply", loadedWorkspace.memberAccess));
           return;
         }
         const [loadedSettings, loadedPersonalSettings, loadedWorkspaceSettings, loadedOrders] = await Promise.all([

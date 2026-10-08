@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -358,7 +359,14 @@ function BankPageContent() {
     (async () => {
       try {
         const context = await loadWorkspaceContext(user.uid);
-        if (!cancelled) setWorkspace(context);
+        if (cancelled) return;
+        // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
+        // here so a typed URL cannot reach a screen the sidebar would not offer.
+        if (!workspaceAccessAllows(context.memberAccess, "bankFeed")) {
+          router.replace(pageAccessRedirectFor("/bank", context.memberAccess));
+          return;
+        }
+        setWorkspace(context);
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the workspace.");
       } finally {
