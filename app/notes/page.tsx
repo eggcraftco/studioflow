@@ -13,6 +13,17 @@ import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
+import {
+  clearNoteDraft,
+  detectNoteConflict,
+  listNoteDrafts,
+  noteDraftIsDirty,
+  notePreviewText,
+  readNoteDraft,
+  writeNoteDraft,
+  type StoredNoteDraft,
+} from "@/lib/studioflow/noteDrafts";
 import {
   colorForNote,
   deleteKeepNote,
@@ -44,6 +55,13 @@ export default function NotesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPhone, setIsPhone] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Unsaved drafts on this device for this workspace + user (noteDrafts.ts).
+  // Refreshed from storage whenever the editor closes, another tab writes, or
+  // a notes snapshot arrives (which also clears drafts the server now matches).
+  const [drafts, setDrafts] = useState<StoredNoteDraft[]>([]);
+  // The last version this device wrote per note id — detectNoteConflict uses
+  // it so our own confirmed write is not mistaken for another device's edit.
+  const lastWrittenRef = useRef<Map<string, StudioKeepNote>>(new Map());
   // Arriving from Home's "Add note" quick action: open the composer straight
   // away rather than dropping the user on a list they then have to act on.
   useQuickActionParam("new", Boolean(user), () => {
@@ -142,6 +160,36 @@ export default function NotesPage() {
     const unsub = listenToKeepNotes(workspace.id, user.uid, setNotes);
     return unsub;
   }, [workspace, user]);
+
+  // A draft is redundant once the server copy carries the same content —
+  // drop it then, and never before (a pending offline write may still be
+  // rejected, in which case the draft is the only copy left).
+  useEffect(() => {
+    if (!workspace || !user) return;
+    const ws = workspace.id;
+    const uid = user.uid;
+    const reconcile = () => {
+      const current = listNoteDrafts(ws, uid);
+      for (const draft of current) {
+        const live = notes.find((n) => n.id === draft.noteId);
+        // updatedAt is null while the copy is only this device's pending
+        // write (serverTimestamp not yet resolved) — not confirmed, not cleared.
+        if (live && live.updatedAtMillis != null && !noteDraftIsDirty(draft.note, live)) clearNoteDraft(ws, uid, draft.noteId);
+      }
+      setDrafts(listNoteDrafts(ws, uid));
+    };
+    reconcile();
+    window.addEventListener("storage", reconcile);
+    return () => window.removeEventListener("storage", reconcile);
+  }, [workspace, user, notes]);
+  function refreshDrafts() {
+    if (!workspace || !user) return;
+    setDrafts(listNoteDrafts(workspace.id, user.uid));
+  }
+  // Drafts of notes that do not exist on the server yet (a new note whose
+  // editor was closed by a reload, a lost tab or a failed save) are offered
+  // as cards at the top of Notes so the typed text is one click away.
+  const orphanDrafts = drafts.filter((d) => !notes.some((n) => n.id === d.noteId) && (d.note.title.trim() || d.note.text.trim()));
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -243,7 +291,7 @@ export default function NotesPage() {
     return out.sort((a, b) => a.dueMs - b.dueMs);
   }, [orders]);
 
-  async function save(note: StudioKeepNote) {
+  async function save(note: StudioKeepNote, options: { quiet?: boolean } = {}) {
     if (!workspace || !user) return;
     const finalized: StudioKeepNote =
       note.ownerUserId.trim() === ""
@@ -261,8 +309,9 @@ export default function NotesPage() {
       });
     } catch (saveError) {
       // A rejected write used to disappear without a trace — the editor closed,
-      // the note looked saved, and the data was gone.
-      alert(`${t("The note could not be saved.")} ${saveError instanceof Error ? saveError.message : ""}`.trim());
+      // the note looked saved, and the data was gone. The editor shows its own
+      // inline error (quiet); every other caller gets the dialog.
+      if (!options.quiet) alert(`${t("The note could not be saved.")} ${saveError instanceof Error ? saveError.message : ""}`.trim());
       throw saveError;
     }
     // Visibility is a separate axis from type: "workspace" fans the note out
@@ -291,6 +340,58 @@ export default function NotesPage() {
         console.warn("note share invite failed:", targetUserId, inviteError);
       }
     }
+  }
+
+  // The editor's save: refuses to overwrite a newer copy from another device
+  // unless told to (force), and does not hang forever when the connection is
+  // gone — Firestore keeps the write queued in its persistent cache, so after
+  // the wait the result is "pending": the editor closes, the draft stays on
+  // this device until the server copy matches it, and the person is told.
+  async function saveFromEditor(note: StudioKeepNote, base: StudioKeepNote, force: boolean): Promise<"saved" | "pending"> {
+    if (!workspace || !user) throw new Error("Workspace is still loading.");
+    if (!force) {
+      const live = notes.find((n) => n.id === note.id);
+      const conflict = detectNoteConflict(base, live, lastWrittenRef.current.get(note.id) ?? null);
+      if (conflict) throw new NoteConflictError(conflict);
+    }
+    lastWrittenRef.current.set(note.id, note);
+    const write = save(note, { quiet: true });
+    const waitMs = typeof navigator !== "undefined" && navigator.onLine === false ? 1500 : 8000;
+    const result = await Promise.race([
+      write.then(() => "saved" as const),
+      new Promise<"pending">((resolve) => window.setTimeout(() => resolve("pending"), waitMs)),
+    ]);
+    if (result === "pending") {
+      dispatchStudioToast({ message: t("Saved on this device. It will sync when you're back online.") });
+      write.catch((lateError) => {
+        dispatchStudioToast({ message: `${t("The note could not be saved.")} ${lateError instanceof Error ? lateError.message : ""}`.trim(), durationMs: 10000 });
+      });
+    }
+    return result;
+  }
+
+  // "Keep both" on a conflict: the other device's version stays as the note,
+  // and this device's text becomes a separate new note (same fields, new id).
+  async function saveDraftAsNewNote(draft: StudioKeepNote) {
+    if (!workspace || !user) return;
+    const copy = newKeepNote(user.uid, user.email ?? "", user.displayName ?? "");
+    const next: StudioKeepNote = {
+      ...copy,
+      title: draft.title,
+      text: draft.text,
+      colorName: draft.colorName,
+      labels: [...draft.labels],
+      links: [...draft.links],
+      collaboratorEmails: [...draft.collaboratorEmails],
+      reminderDateMillis: draft.reminderDateMillis,
+      noteType: draft.noteType,
+      linkedOrderId: draft.linkedOrderId,
+      linkedOrderLabel: draft.linkedOrderLabel,
+      linkedCustomerName: draft.linkedCustomerName,
+      visibility: draft.visibility,
+    };
+    lastWrittenRef.current.set(next.id, next);
+    await save(next, { quiet: true });
   }
 
   async function destroy(id: string) {
@@ -526,6 +627,39 @@ export default function NotesPage() {
               }}
             />
 
+            {/* Unsaved drafts of notes the server does not have yet */}
+            {section === "notes" && !labelFilter && orphanDrafts.length > 0 && (
+              <>
+                <SectionHeader title={t("Unsaved draft").toUpperCase()} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 12, marginBottom: 12 }}>
+                  {orphanDrafts.map((d) => (
+                    <div
+                      key={d.noteId}
+                      onClick={() => setEditing(d.note)}
+                      style={{ position: "relative", background: "#fffbeb", border: "1px dashed #f59e0b", borderRadius: 14, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#92400e", background: "#fde68a", padding: "2px 8px", borderRadius: 999 }}>{t("Unsaved draft")}</span>
+                        <div style={{ flex: 1 }} />
+                        <button
+                          title={t("Discard draft")}
+                          onClick={(e) => { e.stopPropagation(); if (!workspace || !user) return; if (!confirm(t("Discard unsaved changes?"))) return; clearNoteDraft(workspace.id, user.uid, d.noteId); refreshDrafts(); }}
+                          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 14, opacity: 0.6, padding: 2 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {d.note.title.trim() && <div style={{ fontWeight: 800, fontSize: 16, overflowWrap: "anywhere" }}>{d.note.title}</div>}
+                      {d.note.text.trim() && (
+                        <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{notePreviewText(d.note.text, 400)}</div>
+                      )}
+                      <div style={{ fontSize: 11, color: "#6b7280" }}>{new Date(d.savedAtMillis).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* Lists */}
             {pinned.length > 0 && (
               <>
@@ -587,13 +721,15 @@ export default function NotesPage() {
         )}
         {editing && (
           <NoteEditor
+            key={editing.id}
             note={editing}
+            liveNote={notes.find((n) => n.id === editing.id)}
+            workspaceId={workspace.id}
+            userId={user.uid}
             orders={orders}
-            onClose={() => setEditing(null)}
-            onSave={(n) => {
-              void save(n).catch(() => {});
-              setEditing(null);
-            }}
+            onClose={() => { setEditing(null); refreshDrafts(); }}
+            onSave={(n, force) => saveFromEditor(n, editing, force)}
+            onKeepBoth={saveDraftAsNewNote}
             onUploadImage={async (file, draft) => {
               if (!workspace || !user) return;
               try {
@@ -601,6 +737,7 @@ export default function NotesPage() {
                 if (url) {
                   const next = { ...draft, links: [...draft.links, url] };
                   setEditing(next);
+                  lastWrittenRef.current.set(next.id, next);
                   await save(next);
                 }
               } catch (e) {
@@ -837,9 +974,13 @@ function NotesGrid({
   return (
     <div
       style={{
+        // Wide enough to read (280px+), one column at phone width (min(100%)
+        // keeps the track inside a 375px viewport), and each card takes its own
+        // content height instead of stretching to the tallest in the row.
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-        gap: 10,
+        gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))",
+        gap: 12,
+        alignItems: "start",
       }}
     >
       {notes.map((n) => (
@@ -848,6 +989,9 @@ function NotesGrid({
     </div>
   );
 }
+
+// Lines of body text a collapsed card shows before "Show more".
+const PREVIEW_LINES = 8;
 
 function notesIsDark(): boolean {
   return typeof document !== "undefined" && document.body?.dataset?.studioTheme === "dark";
@@ -891,6 +1035,21 @@ function NoteCard({
   const [colorOpen, setColorOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [isPhone, setIsPhone] = useState(false);
+  // Long notes: the body is clamped to PREVIEW_LINES and "Show more" expands
+  // it in place (per card, in memory only — nothing about the note changes).
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const textRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) { setClamped(false); return; }
+    const measure = () => setClamped(!expanded && el.scrollHeight > el.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [expanded, note.text]);
   const longPressTimer = React.useRef<number | undefined>(undefined);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -954,6 +1113,7 @@ function NoteCard({
         flexDirection: "column",
         gap: 6,
         minHeight: 120,
+        minWidth: 0,
         opacity: isDragging ? 0.5 : 1,
         transform: isDragging ? "scale(0.98)" : "none",
         transition: "transform 0.15s, opacity 0.15s, border-color 0.15s",
@@ -989,7 +1149,7 @@ function NoteCard({
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {note.title && (
-          <div style={{ flex: 1, fontWeight: 800, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 16, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflowWrap: "anywhere" }}>
             {note.title}
           </div>
         )}
@@ -1018,9 +1178,32 @@ function NoteCard({
         />
       )}
       {note.text && (
-        <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflow: "hidden", maxHeight: 130 }}>
-          {note.text.length > 220 ? note.text.slice(0, 220) + "…" : note.text}
-        </div>
+        <>
+          <div
+            ref={textRef}
+            style={{
+              fontSize: 13,
+              lineHeight: 1.45,
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              overflow: expanded ? "auto" : "hidden",
+              ...(expanded
+                ? { maxHeight: "min(70vh, 900px)" }
+                : { display: "-webkit-box", WebkitLineClamp: PREVIEW_LINES, WebkitBoxOrient: "vertical" as const }),
+            }}
+          >
+            {expanded ? note.text : notePreviewText(note.text)}
+          </div>
+          {(clamped || expanded) && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+              style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, fontSize: 12, fontWeight: 700, color: "#2D7BF4", cursor: "pointer" }}
+            >
+              {expanded ? t("Show less") : t("Show more")}
+            </button>
+          )}
+        </>
       )}
       {note.labels.length > 0 && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -1158,38 +1341,225 @@ function localDateInputValue(millis: number): string {
   return formatLocalDateInput(new Date(millis));
 }
 
+// Thrown by the page's editor save when another device wrote a newer copy
+// of the note; the editor catches it and asks which version to keep.
+class NoteConflictError extends Error {
+  live: StudioKeepNote;
+  constructor(live: StudioKeepNote) {
+    super("note-conflict");
+    this.live = live;
+  }
+}
+
 function NoteEditor({
   note,
+  liveNote,
+  workspaceId,
+  userId,
   orders,
   onClose,
   onSave,
+  onKeepBoth,
   onUploadImage,
 }: {
   note: StudioKeepNote;
+  /** The note as the live listener currently has it (undefined for a new note). */
+  liveNote: StudioKeepNote | undefined;
+  workspaceId: string;
+  userId: string;
   orders: OrderListItem[];
   onClose: () => void;
-  onSave: (n: StudioKeepNote) => void;
+  /** Resolves "saved" on server confirmation, "pending" when the write is queued offline. */
+  onSave: (n: StudioKeepNote, force: boolean) => Promise<"saved" | "pending">;
+  /** Conflict → "Keep both": this device's version becomes a separate new note. */
+  onKeepBoth: (n: StudioKeepNote) => Promise<void>;
   onUploadImage: (file: File, draft: StudioKeepNote) => Promise<void>;
 }) {
-  const [title, setTitle] = useState(note.title);
-  const [text, setText] = useState(note.text);
-  const [colorName, setColorName] = useState(note.colorName);
-  const [noteType, setNoteType] = useState<StudioKeepNote["noteType"]>(note.noteType);
-  const [linkedOrderId, setLinkedOrderId] = useState(note.linkedOrderId);
+  // A draft left on this device (closed tab, reload, lost connection, failed
+  // save) is picked up when it still differs from the note. For a never-saved
+  // note the note prop IS the draft, so nothing is "restored" in that case.
+  const restored = useMemo(() => {
+    const stored = readNoteDraft(workspaceId, userId, note.id);
+    if (!stored) return null;
+    if (!noteDraftIsDirty(stored.note, note)) return null;
+    return stored;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const initial = restored ? restored.note : note;
+  const [title, setTitle] = useState(initial.title);
+  const [text, setText] = useState(initial.text);
+  const [colorName, setColorName] = useState(initial.colorName);
+  const [noteType, setNoteType] = useState<StudioKeepNote["noteType"]>(initial.noteType);
+  const [linkedOrderId, setLinkedOrderId] = useState(initial.linkedOrderId);
   const [orderSearch, setOrderSearch] = useState("");
-  const [customerName, setCustomerName] = useState(note.linkedCustomerName);
-  const [visibility, setVisibility] = useState<StudioKeepNote["visibility"]>(note.visibility);
-  const [labels, setLabels] = useState<string[]>(note.labels);
+  const [customerName, setCustomerName] = useState(initial.linkedCustomerName);
+  const [visibility, setVisibility] = useState<StudioKeepNote["visibility"]>(initial.visibility);
+  const [labels, setLabels] = useState<string[]>(initial.labels);
   const [labelInput, setLabelInput] = useState("");
-  const [collabs, setCollabs] = useState<string[]>(note.collaboratorEmails);
+  const [collabs, setCollabs] = useState<string[]>(initial.collaboratorEmails);
   const [collabInput, setCollabInput] = useState("");
-  const [reminderMillis, setReminderMillis] = useState<number | null>(note.reminderDateMillis);
+  const [reminderMillis, setReminderMillis] = useState<number | null>(initial.reminderDateMillis);
+  const [restoredHint, setRestoredHint] = useState(Boolean(restored));
+  // The restored draft was based on an older server copy than the one that is
+  // live now: saving it blindly would overwrite the other device's change, so
+  // the first Save goes through the conflict choice instead.
+  const [staleDraft, setStaleDraft] = useState(
+    Boolean(restored && liveNote && liveNote.updatedAtMillis != null && restored.baseUpdatedAtMillis != null && liveNote.updatedAtMillis > restored.baseUpdatedAtMillis && noteDraftIsDirty(restored.note, liveNote))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [conflict, setConflict] = useState<StudioKeepNote | null>(null);
+  // The server stamp the current edits are based on. A restored draft keeps
+  // ITS older base, so the staleness survives a reload; "Use theirs" and
+  // "Discard draft" move it to the copy they load.
+  const baseUpdatedAtRef = useRef<number | null>(restored ? restored.baseUpdatedAtMillis : note.updatedAtMillis);
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  const isNew = !liveNote;
+
+  // What Save writes — one builder for the Save button, the backdrop click,
+  // the draft mirror and the interim save that stores an image.
+  function buildDraft(): StudioKeepNote {
+    const linkedOrder = noteType === "order" && linkedOrderId ? orders.find((o) => o.id === linkedOrderId) : undefined;
+    return {
+      ...note,
+      title: title.trim(),
+      text: text.trim(),
+      colorName,
+      labels,
+      collaboratorEmails: collabs,
+      reminderDateMillis: reminderMillis,
+      noteType,
+      linkedOrderId: noteType === "order" ? linkedOrderId : "",
+      linkedOrderLabel: linkedOrder ? `${linkedOrder.customerName}${linkedOrder.designName && linkedOrder.designName !== "Untitled design" ? ` · ${linkedOrder.designName}` : ""}` : (noteType === "order" ? note.linkedOrderLabel : ""),
+      linkedCustomerName: noteType === "customer" ? customerName.trim() : "",
+      visibility,
+    };
+  }
+  const draft = buildDraft();
+  const dirty = isNew ? !isNoteEmpty(draft) : noteDraftIsDirty(draft, note);
+
+  // Mirror every change to the device (memory + localStorage) while editing.
+  // Untouched again → the mirror goes; a never-saved note keeps its draft for
+  // as long as it has any content.
+  const draftSignature = JSON.stringify([title, text, colorName, labels, collabs, reminderMillis, noteType, linkedOrderId, customerName, visibility]);
+  useEffect(() => {
+    if (saving) return;
+    // Untrimmed title/text: the draft restores exactly what was typed.
+    if (dirty) writeNoteDraft(workspaceId, userId, { ...draft, title, text }, baseUpdatedAtRef.current);
+    else clearNoteDraft(workspaceId, userId, note.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftSignature]);
+
+  // Closing the tab with unsaved typing: the draft is already on disk, but a
+  // browser prompt still costs nothing and catches the accidental close.
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [dirty, saving]);
+
+  async function submit(force = false) {
+    if (saving) return;
+    if (!dirty) { closeKeepingDraftIfNew(); return; }
+    if (!force && staleDraft && liveNote) { setConflict(liveNote); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const result = await onSave(draft, force);
+      if (result === "saved") clearNoteDraft(workspaceId, userId, note.id);
+      // "pending": the write is queued offline; the draft stays on this device
+      // until the server copy matches it (the page reconciles on each snapshot).
+      setStaleDraft(false);
+      onClose();
+    } catch (saveError) {
+      if (saveError instanceof NoteConflictError) {
+        setConflict(saveError.live);
+      } else {
+        // The editor stays open and the draft stays on the device.
+        setError(saveError instanceof Error && saveError.message ? saveError.message : t("The note could not be saved."));
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Not dirty: an existing note just closes. A never-saved note with no
+  // content closes too; one that only carries a restored draft keeps it.
+  function closeKeepingDraftIfNew() {
+    if (!isNew) clearNoteDraft(workspaceId, userId, note.id);
+    onClose();
+  }
+
+  function discardAndClose() {
+    if (dirty && !confirm(t("Discard unsaved changes?"))) return;
+    clearNoteDraft(workspaceId, userId, note.id);
+    onClose();
+  }
+
+  function discardDraft() {
+    const base = liveNote ?? note;
+    setTitle(base.title);
+    setText(base.text);
+    setColorName(base.colorName);
+    setNoteType(base.noteType);
+    setLinkedOrderId(base.linkedOrderId);
+    setCustomerName(base.linkedCustomerName);
+    setVisibility(base.visibility);
+    setLabels(base.labels);
+    setCollabs(base.collaboratorEmails);
+    setReminderMillis(base.reminderDateMillis);
+    setRestoredHint(false);
+    setStaleDraft(false);
+    baseUpdatedAtRef.current = base.updatedAtMillis;
+    clearNoteDraft(workspaceId, userId, note.id);
+  }
+
+  // Conflict choices. "Use theirs" loads the other device's version into the
+  // editor (and drops this device's draft); "Keep mine" overwrites; "Keep
+  // both" leaves theirs as the note and saves mine as a new one.
+  function takeTheirs() {
+    if (!conflict) return;
+    const theirs = conflict;
+    setConflict(null);
+    setTitle(theirs.title);
+    setText(theirs.text);
+    setColorName(theirs.colorName);
+    setNoteType(theirs.noteType);
+    setLinkedOrderId(theirs.linkedOrderId);
+    setCustomerName(theirs.linkedCustomerName);
+    setVisibility(theirs.visibility);
+    setLabels(theirs.labels);
+    setCollabs(theirs.collaboratorEmails);
+    setReminderMillis(theirs.reminderDateMillis);
+    setRestoredHint(false);
+    setStaleDraft(false);
+    baseUpdatedAtRef.current = theirs.updatedAtMillis;
+    clearNoteDraft(workspaceId, userId, note.id);
+  }
+  async function keepBoth() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onKeepBoth(draft);
+      clearNoteDraft(workspaceId, userId, note.id);
+      setConflict(null);
+      onClose();
+    } catch (saveError) {
+      setError(saveError instanceof Error && saveError.message ? saveError.message : t("The note could not be saved."));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div
-      onClick={onClose}
+      // Clicking the empty space used to close the editor and drop the typed
+      // text. Now it saves first (or simply closes when nothing changed); while
+      // a save is running the click is ignored.
+      onClick={() => { if (!saving && !conflict) void submit(); }}
       style={{
         position: "fixed",
         inset: 0,
@@ -1211,18 +1581,31 @@ function NoteEditor({
           overflow: "auto",
         }}
       >
-        <h2 style={{ margin: "0 0 14px", fontWeight: 800 }}>
-          {isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
-        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 14px" }}>
+          <h2 style={{ margin: 0, fontWeight: 800, flex: 1 }}>
+            {isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
+          </h2>
+          <span aria-live="polite" style={{ fontSize: 11, fontWeight: 700, color: saving ? "#2D7BF4" : "#92400e", background: saving ? "rgba(45,123,244,0.08)" : (dirty ? "#fef3c7" : "transparent"), padding: "2px 8px", borderRadius: 999, visibility: saving || dirty ? "visible" : "hidden" }}>
+            {saving ? t("Saving...") : t("Unsaved changes")}
+          </span>
+        </div>
+        {restoredHint && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px", marginBottom: 10, fontSize: 12, color: "#92400e" }}>
+            <span style={{ flex: 1 }}>{t("An unsaved draft of this note was restored.")}</span>
+            <button type="button" onClick={discardDraft} style={{ border: "1px solid #fde68a", background: "white", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#92400e" }}>{t("Discard draft")}</button>
+          </div>
+        )}
         <input
           type="text"
           value={title}
+          disabled={saving}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={t("Title")}
           style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10 }}
         />
         <textarea
           value={text}
+          disabled={saving}
           onChange={(e) => setText(e.target.value)}
           placeholder={t("Note")}
           rows={6}
@@ -1369,15 +1752,7 @@ function NoteEditor({
                 const f = e.target.files?.[0];
                 // The interim save that stores the image must carry the CURRENT
                 // draft — saving the stale prop used to wipe an unsaved reminder.
-                if (f) onUploadImage(f, {
-                  ...note,
-                  title: title.trim(),
-                  text: text.trim(),
-                  colorName,
-                  labels,
-                  collaboratorEmails: collabs,
-                  reminderDateMillis: reminderMillis,
-                });
+                if (f) onUploadImage(f, buildDraft());
                 e.target.value = "";
               }}
             />
@@ -1449,31 +1824,37 @@ function NoteEditor({
           </div>
         )}
 
+        {error && (
+          <div role="alert" style={{ marginBottom: 10, fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 10px" }}>
+            {t("The note could not be saved.")} {error !== t("The note could not be saved.") ? error : ""}
+          </div>
+        )}
+        {conflict && (
+          <div role="alertdialog" onClick={(e) => e.stopPropagation()} style={{ marginBottom: 12, border: "1px solid #fdba74", background: "#fff7ed", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#9a3412", marginBottom: 8 }}>
+              {t("This note was changed on another device while you were editing. Which version do you want to keep?")}
+            </div>
+            <div style={{ fontSize: 12, color: "#374151", whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 120, overflow: "auto", background: "white", border: "1px solid #fed7aa", borderRadius: 8, padding: 8, marginBottom: 10 }}>
+              {conflict.title ? `${conflict.title}\n` : ""}{notePreviewText(conflict.text, 600)}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button type="button" disabled={saving} onClick={takeTheirs} style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Use theirs")}</button>
+              <button type="button" disabled={saving} onClick={() => { void keepBoth(); }} style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Keep both")}</button>
+              <button type="button" disabled={saving} onClick={() => { setConflict(null); void submit(true); }} style={{ padding: "6px 14px", border: "none", background: "#2D7BF4", color: "white", borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{t("Keep mine")}</button>
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ padding: "8px 16px", background: "white", border: "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer" }}>
-            Cancel
+          <button type="button" disabled={saving} onClick={discardAndClose} style={{ padding: "8px 16px", background: "white", border: "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer" }}>
+            {t("Cancel")}
           </button>
           <button
-            onClick={() => {
-              const linkedOrder = noteType === "order" && linkedOrderId ? orders.find((o) => o.id === linkedOrderId) : undefined;
-              onSave({
-                ...note,
-                title: title.trim(),
-                text: text.trim(),
-                colorName,
-                labels,
-                collaboratorEmails: collabs,
-                reminderDateMillis: reminderMillis,
-                noteType,
-                linkedOrderId: noteType === "order" ? linkedOrderId : "",
-                linkedOrderLabel: linkedOrder ? `${linkedOrder.customerName}${linkedOrder.designName && linkedOrder.designName !== "Untitled design" ? ` · ${linkedOrder.designName}` : ""}` : (noteType === "order" ? note.linkedOrderLabel : ""),
-                linkedCustomerName: noteType === "customer" ? customerName.trim() : "",
-                visibility,
-              });
-            }}
-            style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: "pointer" }}
+            type="button"
+            disabled={saving || Boolean(conflict)}
+            onClick={() => { void submit(); }}
+            style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: saving ? "progress" : "pointer", opacity: saving || conflict ? 0.7 : 1 }}
           >
-            {t("Save")}
+            {saving ? t("Saving...") : t("Save")}
           </button>
         </div>
       </div>

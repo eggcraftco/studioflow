@@ -32,7 +32,8 @@
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
-    "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs"
+    "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
+    "test:notes": "node scripts/check-notes-editor.mjs && npx tsx scripts/check-notes-roundtrip.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
