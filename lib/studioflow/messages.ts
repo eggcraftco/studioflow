@@ -630,15 +630,20 @@ export async function leaveMessageThread(workspace: WorkspaceContext, threadId: 
 
 /**
  * Who may delete a group (owner decision, 8 Oct 2026): the person who opened it,
- * or the workspace owner. Never Team Chat, never a direct conversation. The
- * server's `canDelete` wins when present; deleteMessageThread decides again.
+ * or the workspace owner. Never Team Chat, never a direct conversation, and
+ * never a role the server's write gate refuses (Workflow Only / View Only —
+ * requireMessagesWriteAccess; no delete right for Workflow). The server's
+ * `canDelete` (listMessageThreads, same rule) wins when present;
+ * deleteMessageThread decides again.
  */
 export function canDeleteMessageThread(
   thread: StudioMessageThread,
   currentUid: string,
   viewerIsOwner: boolean,
+  roleCanWrite = true,
 ): boolean {
   if (thread.id === "team" || thread.type !== "group") return false;
+  if (!viewerIsOwner && !roleCanWrite) return false;
   if (typeof thread.canDelete === "boolean") return thread.canDelete;
   return viewerIsOwner || (!!currentUid && thread.createdByUid === currentUid);
 }

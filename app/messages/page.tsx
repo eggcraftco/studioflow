@@ -131,6 +131,9 @@ export default function MessagesPage() {
   // Deleting team messages: the workspace owner any message, others their own
   // (canDeleteTeamMessage; the server's deleteThreadMessage decides again).
   const viewerIsOwner = messageRole === "owner";
+  // The server's Messages write gate (requireMessagesWriteAccess): Workflow Only
+  // and View Only read and send, but do not change or delete conversations.
+  const canChangeConversations = ["owner", "admin", "member"].includes(messageRole);
   const canCreateConversations = ["owner", "admin", "member", "workflow"].includes(messageRole);
   const canSendMessageAttachments = ["owner", "admin", "member", "workflow"].includes(messageRole);
   // Posting into the team-wide thread is its own permission; the server
@@ -961,7 +964,7 @@ export default function MessagesPage() {
           onRename={() => { setInfoOpen(false); setRenameOpen(true); }}
           onAddMembers={() => { setInfoOpen(false); setAddMembersOpen(true); }}
           onLeave={() => void handleLeave()}
-          canDeleteGroup={canDeleteMessageThread(selectedThread, user.uid, viewerIsOwner)}
+          canDeleteGroup={canDeleteMessageThread(selectedThread, user.uid, viewerIsOwner, canChangeConversations)}
           onDeleteGroup={() => { setInfoOpen(false); setDeleteGroupOpen(true); }}
           onRemoveMember={(uid) => void handleRemoveMember(uid)}
         />
@@ -1903,7 +1906,7 @@ function ThreadInfoDialog({
   onRename: () => void;
   onAddMembers: () => void;
   onLeave: () => void;
-  /** canDeleteMessageThread: the group's creator or the workspace owner; never Team Chat or a DM. */
+  /** canDeleteMessageThread: the group's creator or the workspace owner, in a role that may change conversations; never Team Chat or a DM. */
   canDeleteGroup: boolean;
   onDeleteGroup: () => void;
   onRemoveMember: (uid: string) => void;

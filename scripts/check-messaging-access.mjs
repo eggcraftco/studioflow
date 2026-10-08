@@ -113,6 +113,19 @@ else {
   for (const [got, want, what] of cases) check(got === want, `${what}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
 }
 
+// 5. Delete group follows the server's write gate (listMessageThreads canDelete =
+//    requireMessagesWriteAccess roles + owner/creator): Workflow Only / View Only never see it.
+{
+  const messagesSrc = read("lib/studioflow/messages.ts");
+  const fn = messagesSrc.slice(messagesSrc.indexOf("export function canDeleteMessageThread("), messagesSrc.indexOf("export async function deleteMessageThread("));
+  const gate = fn.indexOf("if (!viewerIsOwner && !roleCanWrite) return false;");
+  const serverFlag = fn.indexOf('if (typeof thread.canDelete === "boolean") return thread.canDelete;');
+  check(gate > 0 && serverFlag > gate, "canDeleteMessageThread: the role gate comes before the server flag");
+  const page = read("app/messages/page.tsx");
+  check(/const canChangeConversations = \["owner", "admin", "member"\]\.includes\(messageRole\);/.test(page), "page: canChangeConversations = owner/admin/member (the server's write roles)");
+  check(page.includes("canDeleteMessageThread(selectedThread, user.uid, viewerIsOwner, canChangeConversations)"), "page: Delete group passes canChangeConversations");
+}
+
 if (failures.length) {
   console.error(`check-messaging-access: ${failures.length} failure(s) at ${root}`);
   for (const f of failures) console.error(`  - ${f}`);
