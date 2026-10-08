@@ -20,6 +20,7 @@ import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/q
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
+import { messagesNavHref } from "@/lib/studioflow/messagingAccess";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { auth, db, clearFirestoreLocalCache } from "@/lib/firebase/client";
@@ -166,16 +167,16 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/production": "orders",
   "/dashboard": "dashboard",
   "/bank": "bankFeed",
-  // Inventory rides the orders permission: someone who cannot see orders has no
-  // reason to see what the workshop owns.
-  "/inventory": "orders",
+  // Inventory has its own key since the 8 Oct 2026 addendum.
+  "/inventory": "inventory",
   "/schedule": "schedule",
   "/team-schedule": "schedule",
   "/customers": "customers",
-  "/messages": "messages",
-  // The customer inbox rides the same access key as Messages rather than
-  // introducing a new one: it is a messages surface, so a role change moves
-  // both together instead of leaving one reachable when the other is not.
+  // Two messaging surfaces, two keys: the team's own messages ride `teamChat`,
+  // the customer inbox rides `messages`. The one sidebar item that serves both
+  // is decided in navItemHidden (visible when either is allowed) and its href
+  // in the render (messagesNavHref: the allowed tab).
+  "/messages": "teamChat",
   "/inbox": "messages",
   "/notes": "notes",
   "/quick-reply": "quickReply",
@@ -1956,6 +1957,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   function navItemHidden(item: NavItem) {
     if (item.href === "/dashboard" && !canSeeToolbarFinance) return true;
     if (item.href === "/inbox" && workspace?.entitlements.features.messages !== true) return true;
+    // The Messages item serves two tabs: it stays while either the customer
+    // inbox (`messages`) or team messages (`teamChat`) is allowed.
+    if (item.href === "/inbox") return workspace ? messagesNavHref(workspace.memberAccess) === null : false;
     if (item.href === "/quick-reply" && workspace?.quickReplyMenuEnabled === false) return true;
     if (item.href === "/admin" && !isNivaDeskAdminEmail(user?.email)) return true;
     if (
@@ -3046,7 +3050,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      // Messages opens the tab this member may use: the
+                      // customer inbox when allowed, else team messages.
+                      href={item.href === "/inbox" ? (messagesNavHref(workspace?.memberAccess) ?? item.href) : item.href}
                       className={active ? "app-sidebar-item is-active" : "app-sidebar-item"}
                       aria-current={active ? "page" : undefined}
                       title={t(item.label)}

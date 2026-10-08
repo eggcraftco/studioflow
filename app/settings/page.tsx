@@ -409,17 +409,20 @@ function baseRoleMatrixAccess(baseRole: string): WorkspaceMemberAccess {
 /**
  * Read-only matrix rows. Every row derives from something the app actually
  * enforces: either a workspace access flag (WORKSPACE_*_ACCESS_OPTIONS keys)
- * or a base-role capability helper (canXxxForRole). Inventory intentionally
- * has no row of its own — the inventory page shares the "orders" gate.
+ * or a base-role capability helper (canXxxForRole).
  */
 const PERMISSION_MATRIX_ROWS: PermissionMatrixRow[] = [
   { key: "viewOrders", label: "View orders", value: column => column.access.orders !== false },
   { key: "editOrders", label: "Edit orders & workflow", value: column => canEditOrderStatusForRole(column.baseRole) },
   { key: "deleteOrders", label: "Delete orders", value: column => canDeleteOrdersForRole(column.baseRole) },
+  { key: "inventory", label: "Inventory", value: column => column.access.inventory !== false },
   { key: "dashboard", label: "Dashboard", value: column => column.access.dashboard !== false },
   { key: "financialInfo", label: "Financial Info", value: column => column.access.financialInfo !== false },
   { key: "customers", label: "Customers", value: column => column.access.customers !== false },
-  { key: "messages", label: "Messages", value: column => column.access.messages !== false },
+  // Two rows for two surfaces: the customer inbox and the team's own messaging
+  // are separate permissions (docs/messaging-access-contract-2026-10-08.md).
+  { key: "messages", label: "Customer messages (WhatsApp, Instagram)", value: column => column.access.messages !== false },
+  { key: "teamChat", label: "Team messages", value: column => column.access.teamChat !== false },
   { key: "clientFiles", label: "Client Files", value: column => column.access.clientFiles !== false },
   {
     key: "deleteClientFiles",

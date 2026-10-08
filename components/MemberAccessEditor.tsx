@@ -169,7 +169,7 @@ export function MemberAccessEditor({
                       type="button"
                       aria-pressed={enabled}
                       disabled={disabled || ownerLocked}
-                      title={option.description}
+                      title={t(option.description)}
                       onClick={() => toggleAccess(option.key)}
                     >
                       <span className="member-access-switch" aria-hidden="true" />

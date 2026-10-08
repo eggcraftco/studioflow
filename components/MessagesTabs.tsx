@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
+import { messagingAccessFrom, type MessagingAccessLike } from "@/lib/studioflow/messagingAccess";
 import { loadCustomerInboxConversations } from "@/lib/studioflow/customerInbox";
 
 export function MessagesTabs({
@@ -20,7 +21,8 @@ export function MessagesTabs({
   companyId,
   customerUnread,
   teamUnread,
-  customerChannels
+  customerChannels,
+  access
 }: {
   active: "customers" | "team";
   language: string | null | undefined;
@@ -30,7 +32,11 @@ export function MessagesTabs({
   teamUnread?: number;
   /** The channels the page knows the workspace has ("whatsapp", "instagram"): connected, or a conversation from them in its list. */
   customerChannels?: string[];
+  /** The member's access flags: a tab whose surface is closed (`messages` for
+   *  Customers, `teamChat` for Team) is not offered. Absent = both shown. */
+  access?: MessagingAccessLike;
 }) {
+  const allowed = messagingAccessFrom(access);
   const t = (text: string) => studioT(text, language);
   const [loadedCustomerUnread, setLoadedCustomerUnread] = useState<number | null>(null);
   const [loadedChannels, setLoadedChannels] = useState<string[]>([]);
@@ -64,6 +70,7 @@ export function MessagesTabs({
 
   return (
     <nav className="msg-tabs" aria-label={t("Messages")}>
+      {allowed.customers ? (
       <Link
         href="/inbox"
         className={active === "customers" ? "msg-tab is-active" : "msg-tab"}
@@ -73,6 +80,8 @@ export function MessagesTabs({
         {channels.size === 1 ? <span className="msg-tab-channel">WhatsApp</span> : null}
         {customers > 0 ? <span className="msg-tab-count" aria-label={t("Unread")}>{customers > 99 ? "99+" : customers}</span> : null}
       </Link>
+      ) : null}
+      {allowed.team ? (
       <Link
         href="/messages"
         className={active === "team" ? "msg-tab is-active" : "msg-tab"}
@@ -81,6 +90,7 @@ export function MessagesTabs({
         <span>{t("Team")}</span>
         {team > 0 ? <span className="msg-tab-count" aria-label={t("Unread")}>{team > 99 ? "99+" : team}</span> : null}
       </Link>
+      ) : null}
     </nav>
   );
 }

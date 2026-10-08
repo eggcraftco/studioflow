@@ -184,7 +184,11 @@ function threadFromDoc(id: string, data: Record<string, unknown>, currentUid: st
 function itemFromDoc(id: string, data: Record<string, unknown>, threadId: string, currentUid: string): StudioMessageItem | null {
   const hiddenForUids = stringList(data.hiddenForUids ?? data.deletedForUids ?? data.hiddenFor);
   if (currentUid && hiddenForUids.includes(currentUid)) return null;
-  const deletedForEveryone = (data.deletedForEveryone as boolean | undefined) ?? (data.isDeleted as boolean | undefined) ?? false;
+  // `deleted` is what deleteThreadMessage writes (owner any / author own); the
+  // older flags are kept so earlier deletions still render as the placeholder.
+  const deletedForEveryone =
+    data.deleted === true ||
+    ((data.deletedForEveryone as boolean | undefined) ?? (data.isDeleted as boolean | undefined) ?? false);
   const rawType = stringValue(data.type, "text");
   const type = deletedForEveryone ? "deleted" : rawType;
   return {
@@ -434,6 +438,22 @@ export async function deleteMessageForMe(
 ): Promise<void> {
   if (!workspace.id || !threadId || !messageId) return;
   await call("deleteMessageForMe", { companyId: workspace.id, threadId, messageId });
+}
+
+/**
+ * Soft-deletes a team message (team thread, DM or group) for everyone. The
+ * server allows the workspace owner on any message and everyone else only on
+ * their own (`permission-denied`, reason `not_author`); it blanks the text,
+ * drops attachments and sets `deleted: true`, which the reader shows as the
+ * "Message deleted" placeholder. Contract: docs/messaging-access-contract-2026-10-08.md.
+ */
+export async function deleteThreadMessage(
+  workspace: WorkspaceContext,
+  threadId: string,
+  messageId: string,
+): Promise<void> {
+  if (!workspace.id || !threadId || !messageId) throw new Error("Message is not ready.");
+  await call("deleteThreadMessage", { companyId: workspace.id, threadId, messageId });
 }
 
 export async function deleteMessageForEveryone(

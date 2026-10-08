@@ -42,6 +42,12 @@ export default function InventoryPage() {
       try {
         const context = await loadWorkspaceContext(user.uid);
         if (cancelled) return;
+        // The same key the nav uses, checked again here so a typed URL cannot
+        // reach a screen the sidebar would not have offered.
+        if (!workspaceAccessAllows(context.memberAccess, "inventory")) {
+          router.replace("/dashboard");
+          return;
+        }
         setWorkspace(context);
         const overview = await loadWorkspaceSettingsOverview(context.id).catch(() => null);
         if (!cancelled) setSettings(overview);
@@ -52,7 +58,7 @@ export default function InventoryPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [authLoading, user]);
+  }, [authLoading, user, router]);
 
   if (authLoading || loading) return <LoadingScreen />;
   if (!user) return null;

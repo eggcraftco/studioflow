@@ -40,7 +40,8 @@
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
     "test:upload-progress": "node scripts/check-upload-progress.mjs",
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
-    "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs"
+    "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs",
+    "test:messaging-access": "node scripts/check-messaging-access.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

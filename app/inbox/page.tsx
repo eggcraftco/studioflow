@@ -18,6 +18,7 @@ import {
   workspaceAccessAllows,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
+import { messagingRedirectFor } from "@/lib/studioflow/messagingAccess";
 import { studioT } from "@/lib/studioflow/language";
 import { InboxContent } from "./InboxContent";
 
@@ -42,7 +43,7 @@ export default function InboxPage() {
         // The same key the nav uses, checked again here so a typed URL cannot
         // reach a screen the sidebar would not have offered.
         if (!workspaceAccessAllows(context.memberAccess, "messages")) {
-          router.replace("/dashboard");
+          router.replace(messagingRedirectFor("customers", context.memberAccess));
           return;
         }
         setWorkspace(context);

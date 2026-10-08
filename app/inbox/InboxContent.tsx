@@ -1127,6 +1127,7 @@ export function InboxContent({
               : undefined}
             companyId={workspace.id}
             customerChannels={[...statusChannels, ...(rows ?? []).map((row) => row.channelMedium || "")]}
+            access={workspace.memberAccess}
           />
           <header className="inbox-head">
             <h1>{t("Customers")}</h1>

@@ -90,11 +90,17 @@ export type WorkspaceContext = {
 
 export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "orders", label: "Orders", description: "Order list, order detail and order edits." },
+  // Inventory menu and pages (8 Oct 2026 contract addendum). The order card
+  // "Materials & Inventory" stays on cardMaterials.
+  { key: "inventory", label: "Inventory", description: "Inventory menu and pages." },
   { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
   { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
   { key: "customers", label: "Customers", description: "Customer list and contact directory." },
-  { key: "messages", label: "Messages", description: "Messages navigation and conversations area." },
-  { key: "teamChat", label: "Team Chat posting", description: "Post in the team-wide chat thread. Reading it stays under Messages." },
+  // Two messaging surfaces, two keys (docs/messaging-access-contract-2026-10-08.md):
+  // `messages` is the CUSTOMER inbox and its notifications, `teamChat` is the
+  // team's own messaging and its notifications. Neither implies the other.
+  { key: "messages", label: "Customer messages (WhatsApp, Instagram)", description: "The WhatsApp and Instagram customer inbox: reading, replying and assigning conversations. Customer message notifications (push and bell) follow this permission." },
+  { key: "teamChat", label: "Team messages", description: "Team chat, direct messages and group threads: reading, posting and the conversation list. Team message notifications (push and bell) follow this permission." },
   { key: "notes", label: "Notes", description: "Personal Notes navigation area." },
   { key: "quickReply", label: "Quick Reply", description: "Quick Reply page and AI reply tools." },
   { key: "settings", label: "Settings", description: "Main Settings navigation." },

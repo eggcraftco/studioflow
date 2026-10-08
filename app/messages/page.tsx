@@ -12,11 +12,12 @@ import { studioT } from "@/lib/studioflow/language";
 import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { canDeleteTeamMessage, messagingRedirectFor } from "@/lib/studioflow/messagingAccess";
 import {
   addMembersToMessageThread,
   createMessageThread,
-  deleteMessageForEveryone,
   deleteMessageForMe,
+  deleteThreadMessage,
   displayThreadTitle,
   editThreadMessage,
   getMessageWorkspaceSettings,
@@ -115,6 +116,9 @@ export default function MessagesPage() {
   const [viewerImage, setViewerImage] = useState<StudioMessageItem | null>(null);
   const messageRole = normalizeWorkspaceRole(workspace?.role);
   const canEditWorkspace = messageRole === "owner" || messageRole === "admin";
+  // Deleting team messages: the workspace owner any message, others their own
+  // (canDeleteTeamMessage; the server's deleteThreadMessage decides again).
+  const viewerIsOwner = messageRole === "owner";
   const canCreateConversations = ["owner", "admin", "member", "workflow"].includes(messageRole);
   const canSendMessageAttachments = ["owner", "admin", "member", "workflow"].includes(messageRole);
   // Posting into the team-wide thread is its own permission; the server
@@ -146,6 +150,13 @@ export default function MessagesPage() {
     (async () => {
       const ws = await loadWorkspaceContext(user.uid);
       if (cancelled) return;
+      // Team messages are their own permission (`teamChat`): a typed URL cannot
+      // reach a screen the sidebar would not have offered. The inbox page does
+      // the same for `messages`.
+      if (!workspaceAccessAllows(ws.memberAccess, "teamChat")) {
+        router.replace(messagingRedirectFor("team", ws.memberAccess));
+        return;
+      }
       setWorkspace(ws);
       setLoadingWorkspace(false);
 
@@ -339,11 +350,11 @@ export default function MessagesPage() {
     }
   };
 
-  const handleDeleteForEveryone = async (messageId: string) => {
+  const handleDeleteMessage = async (messageId: string) => {
     if (!workspace || !selectedThread) return;
-    if (!window.confirm(t("Delete this message for everyone? It disappears from everyone's conversation."))) return;
+    if (!window.confirm(t("Delete this message? It disappears for everyone in this conversation."))) return;
     try {
-      await deleteMessageForEveryone(workspace, selectedThread.id, messageId);
+      await deleteThreadMessage(workspace, selectedThread.id, messageId);
     } catch (err) {
       setErrorMessage(friendlyErrorMessage(err, t) || t("Could not delete message."));
     }
@@ -646,7 +657,7 @@ export default function MessagesPage() {
     <AppShell>
       <div className={`messages-shell${isPhoneLayout ? (phoneShowingConversation ? " phone-show-conv" : " phone-show-list") : ""}`}>
         <aside className="thread-panel">
-          <MessagesTabs active="team" language={language} companyId={workspace?.id} teamUnread={unreadCount} />
+          <MessagesTabs active="team" language={language} companyId={workspace?.id} teamUnread={unreadCount} access={workspace?.memberAccess} />
           <div className="thread-panel__header">
             <h1>{t("Team")}</h1>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -791,7 +802,8 @@ export default function MessagesPage() {
                 onReply={(m) => setReplyingTo(m)}
                 onEdit={(m) => setEditingMessage(m)}
                 onDeleteForMe={(m) => void handleDeleteForMe(m.id)}
-                onDeleteForEveryone={(m) => void handleDeleteForEveryone(m.id)}
+                onDeleteMessage={(m) => void handleDeleteMessage(m.id)}
+                viewerIsOwner={viewerIsOwner}
                 onToggleReaction={(m, emoji) => void handleToggleReaction(m.id, emoji)}
                 onTogglePin={(m) => void handleTogglePin(m.id, m.pinned)}
                 onToggleSaved={(m) => handleToggleSaved(m.id)}
@@ -952,7 +964,8 @@ function ConversationBody({
   onReply,
   onEdit,
   onDeleteForMe,
-  onDeleteForEveryone,
+  onDeleteMessage,
+  viewerIsOwner,
   onToggleReaction,
   onTogglePin,
   onToggleSaved,
@@ -966,7 +979,8 @@ function ConversationBody({
   onReply: (m: StudioMessageItem) => void;
   onEdit: (m: StudioMessageItem) => void;
   onDeleteForMe: (m: StudioMessageItem) => void;
-  onDeleteForEveryone: (m: StudioMessageItem) => void;
+  onDeleteMessage: (m: StudioMessageItem) => void;
+  viewerIsOwner: boolean;
   onToggleReaction: (m: StudioMessageItem, emoji: string) => void;
   onTogglePin: (m: StudioMessageItem) => void;
   onToggleSaved: (m: StudioMessageItem) => void;
@@ -1011,7 +1025,8 @@ function ConversationBody({
           onReply={() => onReply(item)}
           onEdit={() => onEdit(item)}
           onDeleteForMe={() => onDeleteForMe(item)}
-          onDeleteForEveryone={() => onDeleteForEveryone(item)}
+          canDelete={canDeleteTeamMessage({ viewerUid: currentUid, viewerIsOwner, senderUid: item.senderUid, deleted: item.deletedForEveryone })}
+          onDeleteMessage={() => onDeleteMessage(item)}
           onToggleReaction={(emoji) => onToggleReaction(item, emoji)}
           onTogglePin={() => onTogglePin(item)}
           onToggleSaved={() => onToggleSaved(item)}
@@ -1310,7 +1325,8 @@ function MessageBubble({
   onReply,
   onEdit,
   onDeleteForMe,
-  onDeleteForEveryone,
+  canDelete,
+  onDeleteMessage,
   onToggleReaction,
   onTogglePin,
   onToggleSaved,
@@ -1326,7 +1342,9 @@ function MessageBubble({
   onReply: () => void;
   onEdit: () => void;
   onDeleteForMe: () => void;
-  onDeleteForEveryone: () => void;
+  /** Owner on any message, the sender on their own (canDeleteTeamMessage). */
+  canDelete: boolean;
+  onDeleteMessage: () => void;
   onToggleReaction: (emoji: string) => void;
   onTogglePin: () => void;
   onToggleSaved: () => void;
@@ -1367,7 +1385,7 @@ function MessageBubble({
           setMenuOpen(true);
         }}
       >
-        {item.replyToMessageId && (
+        {item.replyToMessageId && !item.deletedForEveryone && (
           <div className="reply-quote">
             <div className="reply-quote__sender">
               {item.replyToSenderName || t("Someone")}
@@ -1378,7 +1396,7 @@ function MessageBubble({
           </div>
         )}
         {item.deletedForEveryone ? (
-          <em className="bubble__deleted">Message deleted</em>
+          <em className="bubble__deleted">{t("Message deleted")}</em>
         ) : (
           <>
             {item.fileURL && (
@@ -1506,9 +1524,9 @@ function MessageBubble({
             <button type="button" onClick={() => { setMenuOpen(false); onDeleteForMe(); }}>
               Delete for me
             </button>
-            {isMine && (
-              <button type="button" onClick={() => { setMenuOpen(false); onDeleteForEveryone(); }}>
-                Delete for everyone
+            {canDelete && (
+              <button type="button" onClick={() => { setMenuOpen(false); onDeleteMessage(); }}>
+                {t("Delete message")}
               </button>
             )}
           </div>

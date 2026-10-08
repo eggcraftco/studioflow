@@ -147,6 +147,8 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     icon: "shippingBox",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
+    // Same key as the sidebar item and the page (8 Oct 2026 addendum).
+    access: "inventory",
     href: "/inventory",
     linkLabel: "Open Inventory",
   },
