@@ -406,6 +406,11 @@ function BankPageContent() {
             lastSyncError: String(data.lastSyncError || "")
           };
         }));
+      },
+      () => {
+        // Permission lost (access revoked, plan ended, member suspended): the
+        // rows the cache already painted must not stay on screen.
+        setConnections([]);
       }
     );
     const unsubTransactions = onSnapshot(
@@ -454,6 +459,10 @@ function BankPageContent() {
             importedAt: toDate(data.importedAt)
           };
         }));
+      },
+      () => {
+        // Permission lost: drop the rows the cache already painted.
+        setTransactions([]);
       }
     );
     const unsubCategories = onSnapshot(
