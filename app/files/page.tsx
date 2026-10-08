@@ -15,10 +15,12 @@ import {
   clientFileSizeLabel,
   clientFileTypeLabel,
   deleteClientFileForOrder,
+  deleteClientFilesBatchForOrders,
   downloadClientFilesZip,
   isClientFileImage,
   renameClientFileForOrder,
-  uploadClientFileForOrder
+  uploadClientFileForOrder,
+  type ClientFileBatchDeleteRow
 } from "@/lib/studioflow/clientFiles";
 import {
   loadWorkspaceClientFiles,
@@ -246,6 +248,13 @@ export default function FilesPage() {
   const [fileSearch, setFileSearch] = useState("");
   const [fileSort, setFileSort] = useState<"newest" | "name" | "size">("newest");
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  // "Delete selected" (owner request, 8 Oct 2026): rows are ticked one by one
+  // (or a whole order at once) and go in one confirmed call to the server's
+  // deleteClientFilesBatch; every refused row comes back by name. The ids are
+  // the list rows' ids (orderId + fileId), so a refresh prunes what is gone.
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(() => new Set());
+  const [deletingSelection, setDeletingSelection] = useState(false);
+  const [selectionFailures, setSelectionFailures] = useState<ClientFileBatchDeleteRow[]>([]);
   // "classic" is the original per-order upload/browse experience; everything
   // else is a view over the central library registry.
   const [pageView, setPageView] = useState<LibraryView | "classic">("all");
@@ -277,6 +286,83 @@ export default function FilesPage() {
       setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
     } finally {
       setDownloadingOrderId(null);
+    }
+  }
+
+  function toggleFileSelected(fileId: string, selected: boolean) {
+    setSelectedFileIds(previous => {
+      const next = new Set(previous);
+      if (selected) next.add(fileId); else next.delete(fileId);
+      return next;
+    });
+  }
+
+  function toggleOrderSelected(group: FilesByOrder, selected: boolean) {
+    setSelectedFileIds(previous => {
+      const next = new Set(previous);
+      for (const file of group.files) {
+        if (selected) next.add(file.id); else next.delete(file.id);
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedFileIds(new Set());
+    setSelectionFailures([]);
+  }
+
+  async function handleDeleteSelection() {
+    if (!workspace || deletingSelection || deletingOrderId) return;
+    setActionError(null);
+    setActionStatus(null);
+    setSelectionFailures([]);
+    if (!canDeleteClientFiles) {
+      setActionError("Client Files delete is available to editable Pro and Team workspace members.");
+      return;
+    }
+    const chosen = files.filter(file => selectedFileIds.has(file.id));
+    if (chosen.length === 0) return;
+    const confirmed = window.confirm(
+      t("Delete {count} files? This cannot be undone.").replace("{count}", String(chosen.length))
+    );
+    if (!confirmed) return;
+
+    setDeletingSelection(true);
+    setActionStatus(t("Deleting {count} files…").replace("{count}", String(chosen.length)));
+    try {
+      const outcome = await deleteClientFilesBatchForOrders({
+        workspace,
+        items: chosen.map(file => ({ orderId: file.orderId, fileId: file.fileId }))
+      });
+      const failedRows = outcome.results.filter(row => !row.ok).map(row => {
+        const match = chosen.find(file => file.orderId === row.orderId && file.fileId === row.fileId);
+        return { ...row, fileName: row.fileName || match?.fileName || row.fileId };
+      });
+      setSelectionFailures(failedRows);
+      // Keep only the rows that did not go, so the person can retry or clear.
+      const failedIds = new Set(failedRows.map(row => chosen.find(file => file.orderId === row.orderId && file.fileId === row.fileId)?.id ?? ""));
+      setSelectedFileIds(new Set([...selectedFileIds].filter(id => failedIds.has(id))));
+      if (failedRows.length > 0) {
+        setActionStatus(null);
+        setActionError(
+          t("{failed} of {total} files could not be deleted.")
+            .replace("{failed}", String(failedRows.length))
+            .replace("{total}", String(outcome.requested))
+        );
+      } else {
+        setActionStatus(t("Deleted {count} files.").replace("{count}", String(outcome.deleted)));
+      }
+    } catch (deleteFailure) {
+      setActionStatus(null);
+      setActionError(deleteFailure instanceof Error ? deleteFailure.message : "Delete failed. Please try again.");
+    } finally {
+      try {
+        await refreshFiles(workspace);
+      } catch {
+        /* refresh best-effort */
+      }
+      setDeletingSelection(false);
     }
   }
 
@@ -386,6 +472,14 @@ export default function FilesPage() {
   }, [files, fileSearch, fileSort]);
 
   const groupedFiles = useMemo(() => groupFilesByOrder(filteredSortedFiles), [filteredSortedFiles]);
+  useEffect(() => {
+    setSelectedFileIds(previous => {
+      const present = new Set(files.map(file => file.id));
+      const kept = [...previous].filter(id => present.has(id));
+      return kept.length === previous.size ? previous : new Set(kept);
+    });
+  }, [files]);
+  const selectedCount = selectedFileIds.size;
   const canUseClientFiles = Boolean(workspace?.entitlements.features.client_files);
   const previewFiles = useMemo(
     () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
@@ -711,6 +805,39 @@ export default function FilesPage() {
           </div>
         </div>
 
+        {canDeleteClientFiles && (selectedCount > 0 || selectionFailures.length > 0) ? (
+          <div className="files-selection-bar" role="region" aria-label={t("Selected files")}>
+            <div className="files-selection-bar-row">
+              <strong>{t("{count} selected").replace("{count}", String(selectedCount))}</strong>
+              <span style={{ flex: 1 }} />
+              <button
+                className="button"
+                type="button"
+                style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                disabled={deletingSelection || selectedCount === 0}
+                onClick={handleDeleteSelection}
+              >
+                {deletingSelection ? t("Deleting…") : t("Delete selected")}
+              </button>
+              <button className="button secondary" type="button" disabled={deletingSelection} onClick={clearSelection}>
+                {t("Clear selection")}
+              </button>
+            </div>
+            {selectionFailures.length > 0 ? (
+              <ul className="files-selection-failures">
+                {selectionFailures.map(row => (
+                  <li key={`${row.orderId}:${row.fileId}`}>
+                    <strong>{row.fileName || row.fileId}</strong>
+                    {" — "}
+                    {row.message ? t(row.message) : t("Could not be deleted.")}
+                    {row.reason ? <span className="muted-copy"> ({row.reason})</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
         {files.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No client files found for this workspace yet.</p>
         ) : (
@@ -735,6 +862,21 @@ export default function FilesPage() {
                   <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
                     {group.files.length} file{group.files.length === 1 ? "" : "s"}
                   </span>
+                  {canDeleteClientFiles ? (() => {
+                    const allSelected = group.files.every(file => selectedFileIds.has(file.id));
+                    return (
+                      <label className="files-select-order" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          disabled={deletingSelection}
+                          onChange={event => toggleOrderSelected(group, event.target.checked)}
+                          aria-label={t("Select all in this order")}
+                        />
+                        {t("Select all in this order")}
+                      </label>
+                    );
+                  })() : null}
                   <span style={{ flex: 1 }} />
                   {canUseClientFiles ? (
                     <button
@@ -766,7 +908,18 @@ export default function FilesPage() {
                     const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
                     const showThumb = canUseClientFiles && Boolean(file.downloadURL) && isClientFileImage(file);
                     return (
-                      <article key={file.id} className="client-file-list-row">
+                      <article key={file.id} className={selectedFileIds.has(file.id) ? "client-file-list-row is-selected" : "client-file-list-row"}>
+                        {canDeleteClientFiles ? (
+                          <label className="client-file-select">
+                            <input
+                              type="checkbox"
+                              checked={selectedFileIds.has(file.id)}
+                              disabled={deletingSelection}
+                              onChange={event => toggleFileSelected(file.id, event.target.checked)}
+                              aria-label={t("Select file")}
+                            />
+                          </label>
+                        ) : null}
                         <button
                           className="client-file-preview-trigger"
                           type="button"

@@ -369,3 +369,73 @@ export async function deleteClientFileForOrder({
     fileId
   });
 }
+
+// Files page "Delete selected" (8 Oct 2026). The server's deleteClientFilesBatch
+// takes at most DELETE_CLIENT_FILES_BATCH_LIMIT rows per call and answers one
+// row per requested file; a bigger selection goes over in chunks and the rows
+// are joined back so nothing a chunk refused is lost.
+export const DELETE_CLIENT_FILES_BATCH_LIMIT = 50;
+export const DELETE_CLIENT_FILES_BATCH_CALLABLE = "deleteClientFilesBatch";
+
+export type ClientFileDeleteItem = { orderId: string; fileId: string };
+
+export type ClientFileBatchDeleteRow = {
+  orderId: string;
+  fileId: string;
+  ok: boolean;
+  fileName?: string;
+  reason?: string;
+  message?: string;
+  storageDeleted?: boolean;
+  storageCleanupError?: string;
+};
+
+export type ClientFileBatchDeleteResult = {
+  requested: number;
+  deleted: number;
+  failed: number;
+  results: ClientFileBatchDeleteRow[];
+};
+
+/** Pure: splits the selection into server-sized chunks, dropping blanks and duplicates, keeping order. */
+export function chunkClientFileDeleteItems(items: ClientFileDeleteItem[], size = DELETE_CLIENT_FILES_BATCH_LIMIT): ClientFileDeleteItem[][] {
+  const limit = Math.max(1, Math.floor(size));
+  const seen = new Set<string>();
+  const clean: ClientFileDeleteItem[] = [];
+  for (const item of items) {
+    const orderId = (item?.orderId ?? "").trim();
+    const fileId = (item?.fileId ?? "").trim();
+    if (!orderId || !fileId) continue;
+    const key = `${orderId}\u0000${fileId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push({ orderId, fileId });
+  }
+  const chunks: ClientFileDeleteItem[][] = [];
+  for (let index = 0; index < clean.length; index += limit) chunks.push(clean.slice(index, index + limit));
+  return chunks;
+}
+
+export async function deleteClientFilesBatchForOrders({
+  workspace,
+  items
+}: {
+  workspace: WorkspaceContext;
+  items: ClientFileDeleteItem[];
+}): Promise<ClientFileBatchDeleteResult> {
+  if (!workspace.entitlements.features.client_files) {
+    throw new Error("Client Files management is available on Pro Monthly and Team Monthly plans.");
+  }
+  const results: ClientFileBatchDeleteRow[] = [];
+  for (const chunk of chunkClientFileDeleteItems(items)) {
+    const response = await callClientFileFunction(DELETE_CLIENT_FILES_BATCH_CALLABLE, { companyId: workspace.id, items: chunk });
+    const rows = Array.isArray(response.results) ? (response.results as ClientFileBatchDeleteRow[]) : [];
+    // A chunk that came back short still reports every row it was asked for.
+    for (const item of chunk) {
+      const row = rows.find(candidate => candidate.orderId === item.orderId && candidate.fileId === item.fileId);
+      results.push(row ?? { ...item, ok: false, reason: "no_answer", message: "The server did not answer for this file." });
+    }
+  }
+  const deleted = results.filter(row => row.ok).length;
+  return { requested: results.length, deleted, failed: results.length - deleted, results };
+}

@@ -33928,3 +33928,25 @@ body[data-studio-theme="dark"] .upload-queue-track {
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+/* Files page: "Delete selected" (8 Oct 2026). The bar sticks under the page
+   header while the person scrolls a long list; the row grid gains a leading
+   checkbox column only when the member may delete. */
+.files-selection-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+.files-selection-bar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.files-selection-failures { margin: 10px 0 0; padding-left: 18px; color: var(--danger); font-size: 13px; }
+.files-selection-failures li { margin: 2px 0; }
+.client-file-list-row:has(> .client-file-select) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.client-file-list-row.is-selected { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
+.client-file-select { display: inline-flex; align-items: center; padding: 6px; cursor: pointer; }
+.client-file-select input { width: 18px; height: 18px; cursor: pointer; }
