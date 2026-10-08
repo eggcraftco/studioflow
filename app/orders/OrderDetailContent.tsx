@@ -66,6 +66,7 @@ import {
   type OrderDetailCardId,
   type OrderDetailCardLayout
 } from "@/lib/studioflow/cardLayouts";
+import { orderActionCardVisible, visibleActionCardsFor } from "@/lib/studioflow/orderActionCards";
 import { ORDER_CARD_PURPOSES, ORDER_CARD_PURPOSE_TOGGLE, orderCardPurposeId } from "@/lib/studioflow/orderCardPurposes";
 import {
   loadWorkspaceBlockHeadings,
@@ -106,7 +107,6 @@ import {
   type TeamMemberDetail,
   type ToDoDetail,
   type WorkSessionDetail,
-  type WorkspaceMemberAccessKey,
   type WorkspaceContext,
   type WorkspaceSettingsOverview,
   ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE,
@@ -1327,28 +1327,6 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   historyLog: "History / Log"
 };
 
-const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
-  preview: "cardPreview",
-  repairIntake: "cardSummary",
-  estimate: "cardFinancial",
-  customerPortal: "cardCustomer",
-  summary: "cardSummary",
-  customer: "cardCustomer",
-  invoiceItems: "cardCustomer",
-  materials: "cardMaterials",
-  priority: "cardPriority",
-  delivery: "cardDelivery",
-  notes: "cardNotes",
-  clientFiles: "cardClientFiles",
-  todo: "cardTodo",
-  workTime: "cardWorkTime",
-  financial: "cardFinancial",
-  status: "cardStatus",
-  shipping: "cardShipping",
-  schedule: "cardSchedule",
-  historyLog: "cardHistoryLog"
-};
-
 // Decision 3B: every card color carries a fixed, translated meaning, shown
 // in the menu and as a chip on the colored card — the color stops being a
 // private code only its author understands.
@@ -2522,9 +2500,11 @@ export function OrderDetailContent({
     || showCommunicationCustomerNotes;
 
   function canShowOrderCard(cardId: OrderDetailCardId) {
-    if (!workspaceAccessAllows(workspace.memberAccess, CARD_ACCESS_KEYS[cardId])) return false;
+    // The member's card* keys (plus clientFiles / financialInfo) decide; the
+    // same helper feeds every list that names cards, so a hidden card is
+    // absent from the Customize list and the templates, not merely disabled.
+    if (!orderActionCardVisible(workspace.memberAccess, cardId)) return false;
     if (cardId === "financial") return canSeeFinance;
-    if (cardId === "clientFiles") return workspaceAccessAllows(workspace.memberAccess, "clientFiles");
     return true;
   }
 
@@ -3003,7 +2983,7 @@ export function OrderDetailContent({
     });
   }, [canSeeFinance, cardLayout, workspace.memberAccess, guideRestrictsToCustomerOnly, guideForcesCustomerVisible, guideHighlightsCustomer, guideForcesFinancialVisible]);
   const allCardsHidden = visibleMobileCards.length === 0;
-  const customizeCardOrder = [...(isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder)]
+  const customizeCardOrder = visibleActionCardsFor(workspace.memberAccess, isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
     .filter(cardId => canShowOrderCard(cardId))
     .sort((first, second) => cardLabel(first).localeCompare(cardLabel(second), undefined, { sensitivity: "base" }));
 
@@ -9099,6 +9079,9 @@ export function OrderDetailContent({
             <button
               className="button secondary order-actions-button"
               type="button"
+              aria-haspopup="dialog"
+              aria-expanded={orderActionsOpen}
+              aria-controls="order-actions-menu"
               onClick={event => {
                 event.stopPropagation();
                 setOrderActionsOpen(open => !open);
@@ -9176,7 +9159,7 @@ export function OrderDetailContent({
               </span>
             ) : null}
             {orderActionsOpen ? (
-              <div className="order-actions-menu-panel" style={{ zIndex: 130 }}>
+              <div id="order-actions-menu" className="order-actions-menu-panel" role="dialog" aria-label={t("Actions")} style={{ zIndex: 130 }}>
                 {/* Grouped per the card report: what the header shows, the
                     documents you can export, and the layout tools. */}
                 <div className="order-actions-menu-section-title">{t("Header display")}</div>
