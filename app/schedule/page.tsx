@@ -29,6 +29,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import {
   ORDER_QUICK_FILTERS,
@@ -537,7 +538,7 @@ export default function SchedulePage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "schedule")) {
-          router.replace("/orders");
+          router.replace(pageAccessRedirectFor("/schedule", loadedWorkspace.memberAccess));
           return;
         }
         setWorkspace(loadedWorkspace);

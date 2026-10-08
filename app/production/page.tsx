@@ -17,6 +17,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { studioT } from "@/lib/studioflow/language";
 import { ProductionContent } from "./ProductionContent";
 
@@ -40,7 +41,7 @@ export default function ProductionPage() {
         const context = await loadWorkspaceContext(user.uid);
         if (cancelled) return;
         if (!workspaceAccessAllows(context.memberAccess, "orders")) {
-          router.replace("/dashboard");
+          router.replace(pageAccessRedirectFor("/production", context.memberAccess));
           return;
         }
         setWorkspace(context);

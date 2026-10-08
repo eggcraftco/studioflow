@@ -19,6 +19,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import {
@@ -235,7 +236,7 @@ export default function CustomersPage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "customers")) {
-          router.replace("/orders");
+          router.replace(pageAccessRedirectFor("/customers", loadedWorkspace.memberAccess));
           return;
         }
         setWorkspace(loadedWorkspace);

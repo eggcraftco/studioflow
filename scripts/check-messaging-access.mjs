@@ -58,8 +58,12 @@ check(/key: "messages", label: "Customer messages \(WhatsApp, Instagram\)"/.test
 check(/key: "inventory", label: "Inventory", value: column => column\.access\.inventory !== false/.test(settings), "permission matrix has no inventory row");
 
 // 2. Nav mapping + page redirects.
+// Since 8 Oct 2026 the href table lives in lib/studioflow/pageAccess.ts
+// (PAGE_ACCESS_BY_PATH); AppShell aliases it as NAV_ACCESS_BY_HREF.
 const shell = read("components/AppShell.tsx");
-const navMap = shell.slice(shell.indexOf("const NAV_ACCESS_BY_HREF"), shell.indexOf("};", shell.indexOf("const NAV_ACCESS_BY_HREF")));
+check(shell.includes("const NAV_ACCESS_BY_HREF = PAGE_ACCESS_BY_PATH;"), "AppShell does not read PAGE_ACCESS_BY_PATH");
+const pageAccess = read("lib/studioflow/pageAccess.ts");
+const navMap = pageAccess.slice(pageAccess.indexOf("export const PAGE_ACCESS_BY_PATH"), pageAccess.indexOf("};", pageAccess.indexOf("export const PAGE_ACCESS_BY_PATH")));
 check(/"\/messages": "teamChat"/.test(navMap), "NAV_ACCESS_BY_HREF: /messages is not teamChat");
 check(/"\/inbox": "messages"/.test(navMap), "NAV_ACCESS_BY_HREF: /inbox is not messages");
 check(/"\/inventory": "inventory"/.test(navMap), "NAV_ACCESS_BY_HREF: /inventory is not inventory");
@@ -71,7 +75,7 @@ check(/workspaceAccessAllows\(ws\.memberAccess, "teamChat"\)\) \{\s*router\.repl
 const inboxPage = read("app/inbox/page.tsx");
 check(/workspaceAccessAllows\(context\.memberAccess, "messages"\)\) \{\s*router\.replace\(messagingRedirectFor\("customers", context\.memberAccess\)\)/.test(inboxPage), "app/inbox does not redirect to the allowed surface");
 const inventoryPage = read("app/inventory/page.tsx");
-check(/workspaceAccessAllows\(context\.memberAccess, "inventory"\)\) \{\s*router\.replace\("\/dashboard"\)/.test(inventoryPage), "app/inventory does not redirect when inventory is false");
+check(/workspaceAccessAllows\(context\.memberAccess, "inventory"\)\) \{\s*router\.replace\(pageAccessRedirectFor\("\/inventory", context\.memberAccess\)\)/.test(inventoryPage), "app/inventory does not redirect when inventory is false");
 const tabs = read("components/MessagesTabs.tsx");
 check(tabs.includes("{allowed.customers ? (") && tabs.includes("{allowed.team ? ("), "MessagesTabs does not hide a disallowed tab");
 check(read("app/inbox/InboxContent.tsx").includes("access={workspace.memberAccess}"), "inbox tabs get no access");

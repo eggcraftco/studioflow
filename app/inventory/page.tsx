@@ -17,6 +17,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { moneySymbol } from "@/lib/studioflow/money";
 import { InventoryContent } from "./InventoryContent";
 
@@ -45,7 +46,7 @@ export default function InventoryPage() {
         // The same key the nav uses, checked again here so a typed URL cannot
         // reach a screen the sidebar would not have offered.
         if (!workspaceAccessAllows(context.memberAccess, "inventory")) {
-          router.replace("/dashboard");
+          router.replace(pageAccessRedirectFor("/inventory", context.memberAccess));
           return;
         }
         setWorkspace(context);

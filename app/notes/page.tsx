@@ -8,7 +8,8 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioT } from "@/lib/studioflow/language";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
-import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, loadRecentOrders, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -143,6 +144,12 @@ export default function NotesPage() {
     (async () => {
       const ws = await loadWorkspaceContext(uid);
       if (cancelled) return;
+      // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
+      // here so a typed URL cannot reach a screen the sidebar would not offer.
+      if (!workspaceAccessAllows(ws.memberAccess, "notes")) {
+        router.replace(pageAccessRedirectFor("/notes", ws.memberAccess));
+        return;
+      }
       setWorkspace(ws);
       setLoading(false);
       try {

@@ -7,6 +7,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, safeFileDate } from "@/lib/studioflow/export";
 import { loadWorkspaceContext, loadWorkspaceExportData, workspaceAccessAllows, type WorkspaceContext, type WorkspaceExportData } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { ExportOrdersPanel } from "@/components/ExportOrdersPanel";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
@@ -45,6 +46,12 @@ export default function ExportPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
+        // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
+        // here so a typed URL cannot reach a screen the sidebar would not offer.
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "exportData")) {
+          router.replace(pageAccessRedirectFor("/export", loadedWorkspace.memberAccess));
+          return;
+        }
         setWorkspace(loadedWorkspace);
         const loadedExportData = await loadWorkspaceExportData(loadedWorkspace);
         if (cancelled) return;

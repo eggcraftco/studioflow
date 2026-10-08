@@ -21,8 +21,19 @@ type EditableRole = {
   access: WorkspaceMemberAccess;
 };
 
+/** The part of a workspace member a role card needs: who uses the role. */
+export type CustomRoleMemberLike = {
+  id: string;
+  displayName?: string;
+  email?: string;
+  /** The stored role value — a custom role's id when the member uses one. */
+  role: string;
+};
+
 type CustomRoleManagerProps = {
   roles: WorkspaceCustomRole[];
+  /** Workspace members, so each card can say who is affected by a save. */
+  members?: CustomRoleMemberLike[];
   disabled?: boolean;
   savingKey?: string;
   language?: string;
@@ -73,7 +84,17 @@ function roleDescription(role: WorkspaceCustomRole, t: (text: string) => string)
     : `${t(base)} ${t("with")} ${hiddenParts.join(" · ")}${assignedScope}${assignmentControl}`;
 }
 
-export function CustomRoleManager({ roles, disabled = false, savingKey = "", language = "English", onSave, onDelete }: CustomRoleManagerProps) {
+/** Members using a role, by the role id stored on the member. */
+export function membersUsingRole(members: CustomRoleMemberLike[] | undefined, roleId: string): CustomRoleMemberLike[] {
+  if (!members || !roleId) return [];
+  return members.filter(member => member.role === roleId);
+}
+
+export function memberDisplayLabel(member: CustomRoleMemberLike): string {
+  return member.displayName?.trim() || member.email?.trim() || member.id;
+}
+
+export function CustomRoleManager({ roles, members, disabled = false, savingKey = "", language = "English", onSave, onDelete }: CustomRoleManagerProps) {
   const t = (text: string) => studioT(text, language);
   const [newRole, setNewRole] = useState<EditableRole>(() => defaultRole());
   const [drafts, setDrafts] = useState<Record<string, EditableRole>>({});
@@ -96,6 +117,9 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
       {
         id: role.id,
         name: role.name,
+        // Carried so a save sends the stored description back unless it was
+        // edited — the draft used to omit it and every save wiped it.
+        description: role.description ?? "",
         baseRole: role.baseRole,
         access: normalizeAccess(role.access)
       }
@@ -223,7 +247,10 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
           const deleteKey = `delete-custom-role-${role.id}`;
           const cleanDraftName = draft.name.trim();
           const hasNameConflict = roleNameExists(cleanDraftName, role.id);
+          const roleMembers = membersUsingRole(members, role.id);
+          const memberNames = roleMembers.map(memberDisplayLabel);
           const dirty = draft.name.trim() !== role.name || draft.baseRole !== role.baseRole ||
+            (draft.description ?? "") !== (role.description ?? "") ||
             Object.keys(WORKSPACE_MEMBER_ACCESS_DEFAULTS).some(key => draft.access[key as keyof WorkspaceMemberAccess] !== roleAccess[key as keyof WorkspaceMemberAccess]);
           const expanded = expandedRoleId === role.id;
           return (
@@ -231,7 +258,13 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
               <button
                 className="custom-role-summary-button"
                 type="button"
-                onClick={() => setExpandedRoleId(current => current === role.id ? null : role.id)}
+                onClick={() => {
+                  // One open card at a time: expanding this role collapses every
+                  // other card (and the new-role form), so the permissions on
+                  // screen can only belong to the role named in the sticky bar.
+                  setExpandedRoleId(current => current === role.id ? null : role.id);
+                  setNewRoleExpanded(false);
+                }}
                 aria-expanded={expanded}
               >
                 <div>
@@ -240,12 +273,21 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
                   <small>{roleDescription(role, t)}</small>
                 </div>
                 <span className="custom-role-summary-meta">
+                  <span className="studio-pill">{t("{count} members").replace("{count}", String(roleMembers.length))}</span>
                   <span className="studio-pill">{role.id}</span>
                   <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
                 </span>
               </button>
               {expanded ? (
                 <>
+                  <div className="custom-role-editing-bar" role="status" aria-live="polite">
+                    <strong>{t("Editing role: {name}").replace("{name}", role.name)} · {t("{count} members").replace("{count}", String(roleMembers.length))}</strong>
+                    <small>
+                      {memberNames.length > 0
+                        ? t("Members with this role: {names}").replace("{names}", memberNames.join(", "))
+                        : t("No members use this role yet.")}
+                    </small>
+                  </div>
                   <div className="custom-role-form-row">
                     <label>
                       <span>{t("Role name")}</span>
@@ -282,7 +324,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
                     access={draft.access}
                     disabled={disabled || Boolean(savingKey)}
                     saving={savingKey === saveKey}
-                    heading={t("Role permissions")}
+                    heading={`${role.name} — ${t("Role permissions")}`}
                     note={t("Changes apply to every member using this role.")}
                     language={language}
                     onChange={access => updateDraft(role.id, { access })}
@@ -294,7 +336,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
                       disabled={!dirty || !cleanDraftName || hasNameConflict || disabled || Boolean(savingKey)}
                       onClick={() => onSave({ ...draft, id: role.id, name: cleanDraftName, access: normalizeAccess(draft.access) })}
                     >
-                      {savingKey === saveKey ? t("Saving...") : t("Save role")}
+                      {savingKey === saveKey ? t("Saving...") : t("Save {name}").replace("{name}", role.name)}
                     </button>
                     {hasNameConflict ? <span className="muted-inline">{t("Name already used.")}</span> : null}
                     <button

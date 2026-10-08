@@ -82,6 +82,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, testQuickReplyApiKey, type QuickReplyContributionItem, type QuickReplyKeyTestResult } from "@/lib/studioflow/quickReply";
 import {
   loadWorkspaceBlockHeadings,
@@ -681,6 +682,12 @@ export default function SettingsPage() {
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
         mark("workspace");
         if (cancelled) return;
+        // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
+        // here so a typed URL cannot reach a screen the sidebar would not offer.
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "settings")) {
+          router.replace(pageAccessRedirectFor("/settings", loadedWorkspace.memberAccess));
+          return;
+        }
         workspaceLoadedRef.current = true;
         setWorkspace(loadedWorkspace);
         setLoadingSettings(false);
@@ -2790,11 +2797,15 @@ function PdfExportSettingsSection({
     observer.observe(node);
     return () => observer.disconnect();
   }, [draft === null]);
+  // The Export page link rides the exportData key (audit gap 10).
+  const canOpenExport = workspaceAccessAllows(workspace.memberAccess, "exportData");
   useSettingsHeaderActions(
-    <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
-      {t("Open Export page")}
-    </Link>,
-    [language]
+    canOpenExport ? (
+      <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
+        {t("Open Export page")}
+      </Link>
+    ) : null,
+    [language, canOpenExport]
   );
 
   if (!draft) {
@@ -6413,7 +6424,9 @@ function DataManagementSection({
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const exportAllowed = workspace.entitlements.features.export_data;
+  // Plan feature AND the member's exportData key: the server checks both, so
+  // the buttons are not offered to a member the server would refuse.
+  const exportAllowed = workspace.entitlements.features.export_data && workspaceAccessAllows(workspace.memberAccess, "exportData");
   const canImport = canEditWorkspaceSettingsForRole(workspace.role);
   const canDelete = canDeleteWorkspaceDataForRole(workspace.role);
   const isWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
@@ -6822,7 +6835,7 @@ function DataManagementSection({
               {deleting ? t("Deleting...") : t("Delete Data")}
             </button>
             {!canDelete ? <p className="settings-field-hint">{t("Only workspace Owner or Admin can delete workspace data.")}</p> : null}
-            <Link className="settings-inline-link" href="/export">{t("Open full Export page")} ↗</Link>
+            {exportAllowed ? <Link className="settings-inline-link" href="/export">{t("Open full Export page")} ↗</Link> : null}
           </div>
         </div>
       </section>
@@ -7659,13 +7672,14 @@ function TeamAccessSection({
         {canManageTeam ? (
           <CustomRoleManager
             roles={customRoles}
+            members={members}
             disabled={Boolean(actioning)}
             savingKey={actioning}
             language={language}
             onSave={role => runTeamAction(
               role.id ? `custom-role-${role.id}` : "custom-role-new",
               () => saveWorkspaceCustomRole(workspace, role),
-              t("Role profile saved.")
+              role.id ? t("Saved role {name}").replace("{name}", role.name) : t("Role profile saved.")
             )}
             onDelete={role => runTeamAction(
               `delete-custom-role-${role.id}`,

@@ -31,6 +31,7 @@ import {
   type WorkspaceSettingsOverview,
   canCreateOrders
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import {
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
@@ -227,7 +228,7 @@ export default function OrdersPage() {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
         if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
-          router.replace("/settings?section=account");
+          router.replace(pageAccessRedirectFor("/orders", loadedWorkspace.memberAccess));
           return;
         }
         setWorkspace(loadedWorkspace);
@@ -954,6 +955,7 @@ export default function OrdersPage() {
                 </span>
               ) : null}
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}
+              {workspace && workspaceAccessAllows(workspace.memberAccess, "exportData") ? (
               <button
                 type="button"
                 className="studio-pill"
@@ -963,6 +965,7 @@ export default function OrdersPage() {
               >
                 {t("Export")}
               </button>
+              ) : null}
               <button
                 className="sidebar-toggle-button"
                 type="button"

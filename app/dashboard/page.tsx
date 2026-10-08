@@ -21,6 +21,7 @@ import {
   type WorkspaceSettingsOverview,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
+import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
@@ -643,7 +644,7 @@ export default function DashboardPage() {
           !workspaceAccessAllows(loadedWorkspace.memberAccess, "dashboard") ||
           !workspaceAccessAllows(loadedWorkspace.memberAccess, "financialInfo")
         ) {
-          router.replace("/orders");
+          router.replace(pageAccessRedirectFor("/dashboard", loadedWorkspace.memberAccess));
           return;
         }
         const [loadedCounts, loadedFinanceOrders, loadedSettings] = await Promise.all([
@@ -682,6 +683,9 @@ export default function DashboardPage() {
   }, [workspace?.id]);
 
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
+  // Export entry points sit behind the exportData key (audit gap 10): the
+  // server refuses anyway, so the button is not shown to a member it refuses.
+  const canExportData = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "exportData"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
   // Store-channel filter (dashboard report): every money view can be scoped to
   // one connected shop or to manually created orders. The pills only render
@@ -892,6 +896,7 @@ export default function DashboardPage() {
               <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Open the orders list")}>{t("Orders")} {counts.orderCount}</button>
               <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/customers")} title={t("Open the customer directory")}>{t("Customers")} {counts.customerCount}</button>
               <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Delivery due within the next 14 days, excluding closed orders.")}>{t("Due soon")} {counts.dueSoonCount}</button>
+              {canExportData ? (
               <button
                 type="button"
                 className="studio-pill"
@@ -904,6 +909,7 @@ export default function DashboardPage() {
               >
                 {t("Export CSV")}
               </button>
+              ) : null}
             </div>
           </section>
 
@@ -1185,7 +1191,7 @@ export default function DashboardPage() {
               ) : null}
 
               {canSeeAdvancedFinance && (
-                <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} pageRange={range} />
+                <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} pageRange={range} canExportData={canExportData} />
               )}
 
               <section className="card app-card dashboard-chart-card">
@@ -1984,10 +1990,13 @@ function ExtraSpendingSection({
   settings,
   hideNumbers,
   pageRange,
+  canExportData = true,
 }: {
   orders: DashboardFinanceOrder[];
   settings: WorkspaceSettingsOverview | null;
   hideNumbers: boolean;
+  /** exportData key — the CSV button is not drawn without it. */
+  canExportData?: boolean;
   /** The dashboard's active range — this section follows it by default so the
    * two never silently show different periods (the report's §15). */
   pageRange?: RangeKey;
@@ -2169,9 +2178,11 @@ function ExtraSpendingSection({
       <div className="extra-spending-header">
         <CardTitle icon="finance" eyebrow={t("Spending")} title={t("Extra Spending Summary")} />
         <div className="extra-spending-header-actions">
-          <button className="ghost-button" type="button" onClick={exportCsv}>
-            {t("Export CSV")}
-          </button>
+          {canExportData ? (
+            <button className="ghost-button" type="button" onClick={exportCsv}>
+              {t("Export CSV")}
+            </button>
+          ) : null}
           <button className="ghost-button" type="button" onClick={() => setExpanded(false)}>
             {t("Close")}
           </button>

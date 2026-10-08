@@ -21,6 +21,7 @@ import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { messagesNavHref } from "@/lib/studioflow/messagingAccess";
+import { PAGE_ACCESS_BY_PATH } from "@/lib/studioflow/pageAccess";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { auth, db, clearFirestoreLocalCache } from "@/lib/firebase/client";
@@ -162,28 +163,9 @@ const NAV_LOWER_ITEMS: NavItem[] = [
   { href: "/admin", label: "Insights", icon: "insights" },
 ];
 
-const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
-  "/orders": "orders",
-  // Production is a view of the same work Orders holds, so it rides the same
-  // permission: no orders access, no board.
-  "/production": "orders",
-  "/dashboard": "dashboard",
-  "/bank": "bankFeed",
-  // Inventory has its own key since the 8 Oct 2026 addendum.
-  "/inventory": "inventory",
-  "/schedule": "schedule",
-  "/team-schedule": "schedule",
-  "/customers": "customers",
-  // Two messaging surfaces, two keys: the team's own messages ride `teamChat`,
-  // the customer inbox rides `messages`. The one sidebar item that serves both
-  // is decided in navItemHidden (visible when either is allowed) and its href
-  // in the render (messagesNavHref: the allowed tab).
-  "/messages": "teamChat",
-  "/inbox": "messages",
-  "/notes": "notes",
-  "/quick-reply": "quickReply",
-  "/settings": "settings",
-};
+// The sidebar keys live beside the page checks (lib/studioflow/pageAccess.ts)
+// so one table hides the item AND redirects the typed URL.
+const NAV_ACCESS_BY_HREF = PAGE_ACCESS_BY_PATH;
 
 let cachedAppShellUserId = "";
 let cachedWorkspace: WorkspaceContext | null = null;
