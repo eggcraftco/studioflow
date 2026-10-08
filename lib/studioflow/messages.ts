@@ -260,6 +260,11 @@ export function listenToMessageThreads(
         .map((d) => threadFromDoc(d.id, d.data() as Record<string, unknown>, currentUid))
         .filter((t) => t.id === "team" || t.memberUids.includes(currentUid));
       callback(sortThreads(list));
+    }, (error) => {
+      // A refused listener must not surface as an uncaught error on every page:
+      // the callable above already delivered the authorised threads, so the
+      // screen keeps that snapshot and simply stops receiving live updates.
+      console.warn("messageThreads listener stopped:", error instanceof Error ? error.message : String(error));
     });
   };
   // The callable synchronises Team Chat membership and returns authorised
