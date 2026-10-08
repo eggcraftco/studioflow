@@ -21,6 +21,18 @@ import {
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
 import {
+  UPLOAD_POLICY_BUILTIN_SENTENCE,
+  type UploadPolicyAcceptance,
+  type UploadPolicyStamp,
+  clearUploadPolicyAcceptance,
+  readUploadPolicyAcceptance,
+  uploadPolicyAllows,
+  uploadPolicyStamp,
+  uploadPolicyVersion,
+  uploadPolicyWording,
+  writeUploadPolicyAcceptance
+} from "@/lib/studioflow/uploadPolicy";
+import {
   loadWorkspaceClientFiles,
   loadWorkspaceContext,
   loadWorkspaceOrderOptions,
@@ -43,14 +55,6 @@ function formatDate(date: Date | null) {
 
 function orderOptionLabel(order: OrderOptionItem) {
   return `${order.customerName} - ${order.designName}`;
-}
-
-function uploadSafetyAcceptanceKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted:${workspaceId}`;
-}
-
-function uploadSafetyAcceptanceAtKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
 }
 
 function isFilePdf(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
@@ -200,7 +204,9 @@ export default function FilesPage() {
   const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [uploadSafetySettings, setUploadSafetySettings] = useState<WorkspaceSettingsOverview | null>(null);
-  const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
+  // Acceptance is per workspace AND per policy version (lib/studioflow/uploadPolicy.ts).
+  const [browserUploadPolicyAcceptance, setBrowserUploadPolicyAcceptance] = useState<UploadPolicyAcceptance | null>(null);
+  const browserAcceptedUploadPolicy = browserUploadPolicyAcceptance !== null;
   const [files, setFiles] = useState<ClientFileListItem[]>([]);
   const [orders, setOrders] = useState<OrderOptionItem[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -219,7 +225,7 @@ export default function FilesPage() {
   // Uploads run through a queue, two at a time; each row shows the storage
   // task's own bytes, can be cancelled, and retries on the same file id and
   // path. The order each file belongs to is fixed when it is queued.
-  const uploadQueue = useUploadQueue<{ orderId: string; policyAccepted: boolean; maxSizeMB: number }>(
+  const uploadQueue = useUploadQueue<{ orderId: string; policy: UploadPolicyStamp; maxSizeMB: number }>(
     async (file, slot, hooks, context) => {
       if (!workspace || !user) throw new Error("Sign in again before uploading a client file.");
       await uploadClientFileForOrder({
@@ -229,7 +235,7 @@ export default function FilesPage() {
         user,
         slot,
         progress: hooks,
-        uploadSafety: { policyAccepted: context.policyAccepted, maxSizeMB: context.maxSizeMB }
+        uploadSafety: { policy: context.policy, maxSizeMB: context.maxSizeMB }
       });
       await refreshFiles(workspace);
     }
@@ -350,7 +356,6 @@ export default function FilesPage() {
         setFiles(loadedFiles);
         setOrders(loadedOrders);
         setUploadSafetySettings(loadedUploadSafetySettings);
-        setBrowserAcceptedUploadPolicy(window.localStorage.getItem(uploadSafetyAcceptanceKey(loadedWorkspace.id)) === "accepted");
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : "Could not load client files.");
@@ -399,16 +404,38 @@ export default function FilesPage() {
   const canDeleteClientFiles = Boolean(canManageClientFiles && workspace?.memberAccess?.deleteClientFiles !== false);
   const maxUploadSizeMB = Math.min(Math.max(Math.round(uploadSafetySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const requireUploadPolicyAcceptance = uploadSafetySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
+  const uploadPolicyVersionId = uploadPolicyVersion(uploadSafetySettings);
+  const workspaceId = workspace?.id ?? "";
+
+  // Read for this workspace and this version only; a changed policy unticks the box.
+  useEffect(() => {
+    if (!workspaceId) {
+      setBrowserUploadPolicyAcceptance(null);
+      return;
+    }
+    try {
+      setBrowserUploadPolicyAcceptance(readUploadPolicyAcceptance(window.localStorage, workspaceId, uploadPolicyVersionId));
+    } catch {
+      setBrowserUploadPolicyAcceptance(null);
+    }
+  }, [workspaceId, uploadPolicyVersionId]);
 
   function updateBrowserUploadPolicyAccepted(accepted: boolean) {
     if (!workspace) return;
-    setBrowserAcceptedUploadPolicy(accepted);
-    const key = uploadSafetyAcceptanceKey(workspace.id);
-    if (accepted) {
-      window.localStorage.setItem(key, "accepted");
-      window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    setUploadError(null);
+    try {
+      if (accepted) {
+        setBrowserUploadPolicyAcceptance(writeUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId));
+      } else {
+        clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+        setBrowserUploadPolicyAcceptance(null);
+      }
+    } catch {
+      if (accepted) {
+        setUploadError("This browser could not save the upload policy acceptance. Please try again.");
+        setBrowserUploadPolicyAcceptance(null);
+      }
     }
-    else window.localStorage.removeItem(key);
   }
 
   async function refreshFiles(currentWorkspace: WorkspaceContext) {
@@ -440,7 +467,7 @@ export default function FilesPage() {
       setUploadError("Choose a file to upload.");
       return;
     }
-    if (requireUploadPolicyAcceptance && !browserAcceptedUploadPolicy) {
+    if (!uploadPolicyAllows(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance)) {
       setUploadError("Accept the upload policy in this browser before uploading.");
       return;
     }
@@ -452,7 +479,7 @@ export default function FilesPage() {
 
     uploadQueue.enqueue(selectedFiles, {
       orderId: selectedOrderId,
-      policyAccepted: !requireUploadPolicyAcceptance || browserAcceptedUploadPolicy,
+      policy: uploadPolicyStamp(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance),
       maxSizeMB: maxUploadSizeMB
     });
     setSelectedFiles([]);
@@ -594,11 +621,11 @@ export default function FilesPage() {
                 <span className="studio-pill">PDF, image, PSD, PSB, ZIP</span>
                 {requireUploadPolicyAcceptance ? (
                   <>
-                    {uploadSafetySettings?.uploadSafetyPolicyText ? (
-                      <p className="muted-copy" style={{ flexBasis: "100%", margin: 0 }}>
-                        {uploadSafetySettings.uploadSafetyPolicyText}
-                      </p>
-                    ) : null}
+                    {/* The workspace's own text, else the built-in sentence — the
+                        box is never shown without the sentence it refers to. */}
+                    <p className="muted-copy upload-safety-policy-text" style={{ flexBasis: "100%", margin: 0 }}>
+                      {uploadPolicyWording(uploadSafetySettings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}
+                    </p>
                     <label className="upload-safety-check">
                       <input
                         type="checkbox"
@@ -606,7 +633,7 @@ export default function FilesPage() {
                         onChange={event => updateBrowserUploadPolicyAccepted(event.target.checked)}
                         disabled={uploading}
                       />
-                      <span>I understand and accept the upload policy for this browser.</span>
+                      <span>{t("I understand and accept the upload policy for this browser.")}</span>
                     </label>
                   </>
                 ) : null}

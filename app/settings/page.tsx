@@ -82,6 +82,12 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import {
+  clearUploadPolicyAcceptance,
+  readUploadPolicyAcceptance,
+  uploadPolicyVersion,
+  writeUploadPolicyAcceptance
+} from "@/lib/studioflow/uploadPolicy";
 import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, testQuickReplyApiKey, type QuickReplyContributionItem, type QuickReplyKeyTestResult } from "@/lib/studioflow/quickReply";
 import {
   loadWorkspaceBlockHeadings,
@@ -1588,9 +1594,15 @@ function WorkspaceBrandingSection({
     setIdentityError("");
   }, [settings?.appSubtitle]);
 
+  // The same per-workspace, per-version acceptance the Client Files uploads use.
+  const uploadPolicyVersionId = uploadPolicyVersion(settings);
   useEffect(() => {
-    setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
-  }, [workspace.id]);
+    try {
+      setPolicyAccepted(readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId) !== null);
+    } catch {
+      setPolicyAccepted(false);
+    }
+  }, [workspace.id, uploadPolicyVersionId]);
 
   // Only the two fields the Save button writes. The logo upload is its own
   // action and the policy checkbox writes to localStorage on the spot, so
@@ -1695,8 +1707,12 @@ function WorkspaceBrandingSection({
 
   async function handleAcceptPolicyAndUpload() {
     if (!pendingLogoFile) return;
-    window.localStorage.setItem(uploadSafetyAcceptanceKey(workspace.id), "accepted");
-    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    try {
+      writeUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      setLogoError(t("This browser could not save the upload policy acceptance. Please try again."));
+      return;
+    }
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
@@ -1852,6 +1868,7 @@ function WorkspaceBrandingSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
+            {settings?.uploadSafetyPolicyText?.trim() ? <p className="upload-safety-policy-text">{settings.uploadSafetyPolicyText.trim()}</p> : null}
             <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
@@ -3781,24 +3798,34 @@ function SafetyUploadsSection({
     setPolicyText(settings.uploadSafetyPolicyText || "");
   }, [settings]);
 
+  // The acceptance shown here is the one for the CURRENT policy version
+  // (lib/studioflow/uploadPolicy.ts); after a save the version moves on, so
+  // "Accepted" turns into "Not accepted" until the browser accepts again.
+  const policyVersion = uploadPolicyVersion(settings);
   useEffect(() => {
-    const accepted = window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted";
-    setBrowserAccepted(accepted);
-    const atRaw = window.localStorage.getItem(uploadSafetyAcceptanceAtKey(workspace.id));
-    setAcceptedAtMs(accepted && atRaw ? Number(atRaw) || 0 : 0);
-  }, [workspace.id]);
+    try {
+      const acceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
+      setBrowserAccepted(acceptance !== null);
+      setAcceptedAtMs(acceptance ? Date.parse(acceptance.acceptedAt) || 0 : 0);
+    } catch {
+      setBrowserAccepted(false);
+      setAcceptedAtMs(0);
+    }
+  }, [workspace.id, policyVersion]);
 
   function updateBrowserAccepted(nextAccepted: boolean) {
-    setBrowserAccepted(nextAccepted);
-    const key = uploadSafetyAcceptanceKey(workspace.id);
-    const atKey = uploadSafetyAcceptanceAtKey(workspace.id);
-    if (nextAccepted) {
-      window.localStorage.setItem(key, "accepted");
-      window.localStorage.setItem(atKey, String(Date.now()));
-      setAcceptedAtMs(Date.now());
-    } else {
-      window.localStorage.removeItem(key);
-      window.localStorage.removeItem(atKey);
+    try {
+      if (nextAccepted) {
+        const acceptance = writeUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
+        setBrowserAccepted(true);
+        setAcceptedAtMs(Date.parse(acceptance.acceptedAt) || 0);
+      } else {
+        clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+        setBrowserAccepted(false);
+        setAcceptedAtMs(0);
+      }
+    } catch {
+      setBrowserAccepted(false);
       setAcceptedAtMs(0);
     }
   }
@@ -3823,11 +3850,15 @@ function SafetyUploadsSection({
         uploadSafetyMaxFileSizeMB: maxFileSizeMB,
         uploadSafetyPolicyText: policyText
       });
+      // The server stamps uploadSafetySettingsUpdatedAt on every save; that
+      // stamp is the policy version, so read it back rather than guess it.
+      const refreshed = await loadWorkspaceSettingsOverview(workspace.id).catch(() => null);
       onSaved({
         ...settings,
         uploadSafetyRequirePolicyAcceptance: result.settings?.uploadSafetyRequirePolicyAcceptance ?? requirePolicy,
         uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB,
-        uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText
+        uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText,
+        uploadSafetySettingsUpdatedAtMs: refreshed?.uploadSafetySettingsUpdatedAtMs ?? settings.uploadSafetySettingsUpdatedAtMs
       });
       markSafetySaved();
       setStatus(result.message || "Upload Safety settings saved.");
@@ -4007,16 +4038,6 @@ function SafetyUploadsSection({
   );
 }
 
-function uploadSafetyAcceptanceKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted:${workspaceId}`;
-}
-
-// The acceptance flag stays the literal "accepted" for compatibility with every
-// existing reader; the WHEN lives beside it under its own key.
-function uploadSafetyAcceptanceAtKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
-}
-
 function AccountSection({
   workspace,
   settings,
@@ -4092,9 +4113,15 @@ function AccountSection({
     setEmailDraft(userEmail);
   }, [userEmail]);
 
+  // The same per-workspace, per-version acceptance the Client Files uploads use.
+  const uploadPolicyVersionId = uploadPolicyVersion(settings);
   useEffect(() => {
-    setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
-  }, [workspace.id]);
+    try {
+      setPolicyAccepted(readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId) !== null);
+    } catch {
+      setPolicyAccepted(false);
+    }
+  }, [workspace.id, uploadPolicyVersionId]);
 
   async function handleChangeEmail() {
     const cleanEmail = emailDraft.trim().toLowerCase();
@@ -4339,9 +4366,12 @@ function AccountSection({
 
   async function handleAcceptPolicyAndUpload() {
     if (!pendingLogoFile) return;
-    const key = uploadSafetyAcceptanceKey(workspace.id);
-    window.localStorage.setItem(key, "accepted");
-    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    try {
+      writeUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      setError(t("This browser could not save the upload policy acceptance. Please try again."));
+      return;
+    }
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
@@ -4586,6 +4616,7 @@ function AccountSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
+            {settings?.uploadSafetyPolicyText?.trim() ? <p className="upload-safety-policy-text">{settings.uploadSafetyPolicyText.trim()}</p> : null}
             <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>

@@ -11800,17 +11800,17 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "I Agree and Upload"
   },
   "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.": {
-    "Türkçe": "Yüklemeden önce bu dosyanın yasal, güvenli, gerekirse müşteri onaylı ve bu workspace için uygun olduğunu onaylayın.",
-    "Deutsch": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "Français": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "Italiano": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "Español (Spanish)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "Português": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "Русский (Russian)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "日本語 (Japanese)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "中文 (Chinese)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "العربية (Arabic)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace.",
-    "हिन्दी (Hindi)": "Before uploading, confirm that this file is legal, safe, client-approved when needed, and suitable for this workspace."
+    "Türkçe": "Yüklemeden önce bu dosyanın yasal, güvenli, gerektiğinde müşteri onaylı ve bu çalışma alanına uygun olduğunu doğrulayın.",
+    "Deutsch": "Bestätigen Sie vor dem Hochladen, dass diese Datei legal, sicher, bei Bedarf vom Kunden freigegeben und für diesen Arbeitsbereich geeignet ist.",
+    "Français": "Avant d'envoyer, confirmez que ce fichier est légal, sûr, approuvé par le client si nécessaire et adapté à cet espace de travail.",
+    "Italiano": "Prima di caricare, conferma che questo file è legale, sicuro, approvato dal cliente quando necessario e adatto a questo spazio di lavoro.",
+    "Español (Spanish)": "Antes de subir, confirma que este archivo es legal, seguro, aprobado por el cliente cuando sea necesario y adecuado para este espacio de trabajo.",
+    "Português": "Antes de enviar, confirme que este ficheiro é legal, seguro, aprovado pelo cliente quando necessário e adequado a este espaço de trabalho.",
+    "Русский (Russian)": "Перед загрузкой подтвердите, что этот файл законен, безопасен, при необходимости одобрен клиентом и подходит для этого рабочего пространства.",
+    "日本語 (Japanese)": "アップロードする前に、このファイルが合法で安全であり、必要に応じて顧客の承認を得ており、このワークスペースに適していることを確認してください。",
+    "中文 (Chinese)": "上传前，请确认此文件合法、安全、在需要时已获客户批准，并适合此工作区。",
+    "العربية (Arabic)": "قبل الرفع، تأكد من أن هذا الملف قانوني وآمن ومعتمد من العميل عند الحاجة ومناسب لمساحة العمل هذه.",
+    "हिन्दी (Hindi)": "अपलोड करने से पहले पुष्टि करें कि यह फ़ाइल वैध, सुरक्षित, ज़रूरत पड़ने पर ग्राहक-स्वीकृत और इस कार्यक्षेत्र के लिए उपयुक्त है।"
   },
   "Upload blocked": {
     "Türkçe": "Yükleme engellendi",
