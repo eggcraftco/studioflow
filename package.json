@@ -32,7 +32,9 @@
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
-    "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs"
+    "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
+    "test:upload-progress": "node scripts/check-upload-progress.mjs",
+    "test:upload-translations": "node scripts/check-upload-translations.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

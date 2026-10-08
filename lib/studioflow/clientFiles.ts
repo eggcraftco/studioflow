@@ -1,10 +1,13 @@
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { getDownloadURL, ref } from "firebase/storage";
 import { auth, db, functions, storage } from "@/lib/firebase/client";
 import { requireWorkspacePlanAction } from "@/lib/studioflow/planActions";
 import { normalizeWorkspaceRole, type ClientFileDetail, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { browserUploadDeps } from "@/lib/studioflow/storageUploadDeps";
+import { newUploadSlot, type UploadScanState, type UploadSlot } from "@/lib/studioflow/uploadProgress";
+import { awaitScanVerdict, throwIfCancelled, transferTracked, type TrackedUploadHooks } from "@/lib/studioflow/uploadRunner";
 
 const DOWNLOAD_ZIP_ENDPOINT = "https://europe-west2-eggcraft-studio.cloudfunctions.net/downloadClientFilesZip";
 
@@ -136,11 +139,17 @@ function safeOrderId(orderId: string) {
   return orderId.replaceAll("/", "_");
 }
 
-function newFileId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+/**
+ * Whether the order already lists this file id — the retry check. An earlier
+ * attempt may have failed after appendClientFile had already written the
+ * record (a timeout on the way back); appending again would log a second
+ * "Client file uploaded" entry for the same file.
+ */
+async function clientFileRecordExists(orderRef: ReturnType<typeof doc>, fileId: string) {
+  const snapshot = await getDoc(orderRef);
+  if (!snapshot.exists()) return false;
+  const files = snapshot.data().clientFiles;
+  return Array.isArray(files) && files.some(entry => entry && typeof entry === "object" && (entry as { id?: unknown }).id === fileId);
 }
 
 function callableError(error: unknown) {
@@ -182,12 +191,28 @@ async function requireOrderInWorkspace(workspace: WorkspaceContext, orderId: str
   return orderRef;
 }
 
+/**
+ * Uploads one client file to the order. The storage path, metadata, Firestore
+ * record and scan flags are what they always were; what is new is optional:
+ *
+ *  - `progress` reports the stages (preparing → uploading → processing) with
+ *    the task's measured bytes, honours its AbortSignal as a cancel, and waits
+ *    for the safety scan's verdict before resolving.
+ *  - `slot` fixes the file's identity across retries. The same slot gives the
+ *    same file id and storage path, so a retry after a failure never creates
+ *    a second object or a second record: bytes already at the path are not
+ *    sent again, and a record already on the order is not appended again.
+ *
+ * Without either, the call behaves as before (one attempt, no scan wait).
+ */
 export async function uploadClientFileForOrder({
   workspace,
   orderId,
   file,
   user,
-  uploadSafety
+  uploadSafety,
+  slot,
+  progress
 }: {
   workspace: WorkspaceContext;
   orderId: string;
@@ -197,29 +222,37 @@ export async function uploadClientFileForOrder({
     policyAccepted: boolean;
     maxSizeMB: number;
   };
-}): Promise<UploadedClientFile> {
+  slot?: UploadSlot;
+  progress?: TrackedUploadHooks;
+}): Promise<UploadedClientFile & { scan: UploadScanState }> {
+  const hooks: TrackedUploadHooks = progress ?? {};
+  hooks.onStage?.("preparing");
   if (!workspace.entitlements.features.client_files) {
     throw new Error("Client Files upload is available on Pro Monthly and Team Monthly plans.");
   }
 
-  await requireOrderInWorkspace(workspace, orderId);
+  const orderRef = await requireOrderInWorkspace(workspace, orderId);
   const extension = extensionForFile(file);
   const contentType = contentTypeForFile(file, extension);
+  throwIfCancelled(hooks.signal);
 
   await requireWorkspacePlanAction(workspace.id, "upload_client_file", {
     fileSizeBytes: file.size,
     orderId
   });
+  throwIfCancelled(hooks.signal);
 
-  const fileId = newFileId();
+  const identity = slot ?? newUploadSlot();
+  const isRetry = identity.attempt > 1;
+  const fileId = identity.id;
   const storedFileName = `${fileId}.${extension}`;
   const storageRef = ref(storage, `companies/${workspace.id}/client_files/${safeOrderId(orderId)}/${storedFileName}`);
   const uploadedAt = new Date();
   const uploadedByEmail = user.email ?? "";
   const uploadedBy = uploadedByEmail || user.displayName || user.uid;
 
-  return withWebSyncStatus(async () => {
-    await uploadBytes(storageRef, file, {
+  const stored = await withWebSyncStatus(async () => {
+    const deps = browserUploadDeps(file, {
       contentType,
       customMetadata: {
         companyId: workspace.id,
@@ -239,6 +272,7 @@ export async function uploadClientFileForOrder({
         uploadMaxSizeMB: uploadSafety ? String(uploadSafety.maxSizeMB) : ""
       }
     });
+    await transferTracked(deps, storageRef.fullPath, hooks, { skipIfExists: isRetry });
 
     const downloadURL = await getDownloadURL(storageRef);
     const clientFile = {
@@ -259,20 +293,33 @@ export async function uploadClientFileForOrder({
       pendingQueueId: ""
     };
 
-    await callClientFileFunction("appendClientFile", {
-      companyId: workspace.id,
-      orderId,
-      fileId,
-      fileSizeBytes: file.size,
-      clientFile
-    });
+    // appendClientFile replaces an entry with the same id rather than adding a
+    // second one; the read before it on a retry only spares the order a
+    // duplicate history line when the record is already there.
+    if (!(isRetry && await clientFileRecordExists(orderRef, fileId))) {
+      await callClientFileFunction("appendClientFile", {
+        companyId: workspace.id,
+        orderId,
+        fileId,
+        fileSizeBytes: file.size,
+        clientFile
+      });
+    }
 
-    return {
-      ...clientFile,
-      uploadedAt,
-      source: "web"
-    };
+    return { clientFile, deps };
   }, "Uploading client file to cloud.");
+
+  // Only a tracked upload waits for the scanner — outside the sync-status
+  // wrapper, because the record is written and the file is on the order; the
+  // wait is for the row's "Processing" stage alone.
+  const scan: UploadScanState = progress ? await awaitScanVerdict(stored.deps, storageRef.fullPath, hooks) : "none";
+
+  return {
+    ...stored.clientFile,
+    uploadedAt,
+    source: "web",
+    scan
+  };
 }
 
 export async function renameClientFileForOrder({

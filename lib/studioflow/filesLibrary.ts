@@ -4,9 +4,12 @@
 // portal; only the explicit share flow can.
 
 import { httpsCallable } from "firebase/functions";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { getDownloadURL, ref as storageRef } from "firebase/storage";
 import { functions, storage } from "@/lib/firebase/client";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { browserUploadDeps } from "@/lib/studioflow/storageUploadDeps";
+import { newUploadSlot, type UploadScanState, type UploadSlot } from "@/lib/studioflow/uploadProgress";
+import { awaitScanVerdict, throwIfCancelled, transferTracked, type TrackedUploadHooks } from "@/lib/studioflow/uploadRunner";
 
 export type LibraryLinkKind = "order" | "inventoryItem" | "purchase" | "bankTransaction" | "supplier";
 
@@ -135,26 +138,77 @@ export async function setLibraryFileActiveVersion(workspace: WorkspaceContext, f
 // allows read and create only (objects are immutable; deletion is the server's
 // trash-first job). Older records may still point at the client_files/library
 // squat until the one-off migration has swept them.
-export async function uploadLibraryFile(workspace: WorkspaceContext, file: File): Promise<{ fileId?: string }> {
+//
+// The timestamp in the path comes from the upload's slot, not from the clock
+// at call time: a retry with the same slot targets the same path, so the
+// object already there is reused and the server's sha1(path) record id is the
+// same one — a retry can never register a second file.
+type LibraryUploadOptions = { slot?: UploadSlot; progress?: TrackedUploadHooks };
+
+function libraryStoragePath(workspace: WorkspaceContext, file: File, slot: UploadSlot) {
   const safeName = (file.name || "file").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
-  const storagePath = `companies/${workspace.id}/library/${Date.now()}-${safeName}`;
-  await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type || "application/octet-stream" });
-  return call<{ ok?: boolean; fileId?: string }>(
+  return { safeName, storagePath: `companies/${workspace.id}/library/${slot.createdAtMs}-${safeName}` };
+}
+
+async function transferLibraryFile(workspace: WorkspaceContext, file: File, options: LibraryUploadOptions) {
+  const hooks: TrackedUploadHooks = options.progress ?? {};
+  hooks.onStage?.("preparing");
+  const slot = options.slot ?? newUploadSlot();
+  const { safeName, storagePath } = libraryStoragePath(workspace, file, slot);
+  throwIfCancelled(hooks.signal);
+  const deps = browserUploadDeps(file, { contentType: file.type || "application/octet-stream" });
+  await transferTracked(deps, storagePath, hooks, { skipIfExists: slot.attempt > 1 });
+  return { slot, safeName, storagePath, deps, hooks };
+}
+
+async function settleLibraryScan(deps: ReturnType<typeof browserUploadDeps>, storagePath: string, options: LibraryUploadOptions, hooks: TrackedUploadHooks) {
+  const scan: UploadScanState = options.progress ? await awaitScanVerdict(deps, storagePath, hooks) : "none";
+  return scan;
+}
+
+export async function uploadLibraryFile(
+  workspace: WorkspaceContext,
+  file: File,
+  options: LibraryUploadOptions = {}
+): Promise<{ fileId?: string; scan: UploadScanState }> {
+  const { safeName, storagePath, deps, hooks } = await transferLibraryFile(workspace, file, options);
+  // registerLibraryFile answers { existed: true } for a path it already knows.
+  const registered = await call<{ ok?: boolean; fileId?: string }>(
     "registerLibraryFile",
     { companyId: workspace.id, storagePath, fileName: file.name || safeName, fileType: file.type || "", fileSize: file.size },
     "The file could not be registered."
   );
+  const scan = await settleLibraryScan(deps, storagePath, options, hooks);
+  return { fileId: registered.fileId, scan };
 }
 
-export async function addLibraryFileVersion(workspace: WorkspaceContext, fileId: string, file: File, note = "") {
-  const safeName = (file.name || "file").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
-  const storagePath = `companies/${workspace.id}/library/${Date.now()}-${safeName}`;
-  await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type || "application/octet-stream" });
-  return call<{ ok?: boolean }>(
-    "addLibraryFileVersion",
-    { companyId: workspace.id, fileId, storagePath, fileName: file.name || safeName, fileSize: file.size, note },
-    "The new version could not be saved."
-  );
+/** Whether the record already carries a version at this path — the retry check. */
+async function libraryVersionExists(workspace: WorkspaceContext, fileId: string, storagePath: string) {
+  const result = await listLibraryFiles(workspace, {});
+  const record = (result.files ?? []).find(entry => entry.id === fileId);
+  return Boolean(record && record.versions.some(version => version.storagePath === storagePath));
+}
+
+export async function addLibraryFileVersion(
+  workspace: WorkspaceContext,
+  fileId: string,
+  file: File,
+  note = "",
+  options: LibraryUploadOptions = {}
+): Promise<{ ok?: boolean; scan: UploadScanState }> {
+  const { slot, safeName, storagePath, deps, hooks } = await transferLibraryFile(workspace, file, options);
+  // addLibraryFileVersion pushes a version every time it is called, so a
+  // retry asks first whether the earlier attempt already got that far.
+  const alreadyThere = slot.attempt > 1 && await libraryVersionExists(workspace, fileId, storagePath);
+  const result = alreadyThere
+    ? { ok: true }
+    : await call<{ ok?: boolean }>(
+      "addLibraryFileVersion",
+      { companyId: workspace.id, fileId, storagePath, fileName: file.name || safeName, fileSize: file.size, note },
+      "The new version could not be saved."
+    );
+  const scan = await settleLibraryScan(deps, storagePath, options, hooks);
+  return { ...result, scan };
 }
 
 export async function libraryFileUrl(storagePath: string) {

@@ -7,6 +7,8 @@ import OrderPaymentLinks from "@/components/OrderPaymentLinks";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
+import { UploadQueuePanel } from "@/components/UploadQueuePanel";
+import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import {
@@ -2098,6 +2100,29 @@ export function OrderDetailContent({
   }, [workspace.id, user, order.id]);
   const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Client file uploads run through a queue: two at a time, each row with the
+  // storage task's measured bytes, a cancel, and a retry that keeps the same
+  // file id and path. The order reloads after every finished file.
+  const clientFileUploads = useUploadQueue<undefined>(async (file, slot, hooks) => {
+    if (!user) throw new Error("Sign in again before uploading a client file.");
+    await uploadClientFileForOrder({
+      workspace,
+      orderId: order.id,
+      file,
+      slot,
+      progress: hooks,
+      uploadSafety: {
+        policyAccepted: !clientFileRequiresPolicyAcceptance || browserAcceptedUploadPolicy,
+        maxSizeMB: clientFileMaxUploadSizeMB
+      },
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName
+      }
+    });
+    await onReloadOrder();
+  });
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [customizeSearch, setCustomizeSearch] = useState("");
@@ -3893,8 +3918,9 @@ export function OrderDetailContent({
     }
   }
 
-  async function handleClientFileUpload(file: File | null | undefined) {
-    if (!file) return;
+  function handleClientFileUploads(files: (File | null | undefined)[]) {
+    const selectedFiles = files.filter((file): file is File => Boolean(file));
+    if (selectedFiles.length === 0) return;
 
     setFileActionError(null);
     setFileActionStatus(null);
@@ -3910,51 +3936,23 @@ export function OrderDetailContent({
 
     const maxUploadSizeMB = clientFileMaxUploadSizeMB;
     const requirePolicyAcceptance = clientFileRequiresPolicyAcceptance;
-    if (file.size > maxUploadSizeMB * 1024 * 1024) {
-      setFileActionError(`This file is larger than the ${maxUploadSizeMB} MB workspace upload limit.`);
-      return;
-    }
-
     const policyAccepted = !requirePolicyAcceptance || browserAcceptedUploadPolicy;
     if (!policyAccepted) {
       setFileActionError("Accept the upload policy below before choosing or dropping a client file.");
       return;
     }
 
-    setActioningFileId("upload");
-    setFileActionStatus("Uploading file...");
-    try {
-      const uploadedFile = await uploadClientFileForOrder({
-        workspace,
-        orderId: order.id,
-        file,
-        uploadSafety: {
-          policyAccepted,
-          maxSizeMB: maxUploadSizeMB
-        },
-        user: {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName
-        }
-      });
-      await onReloadOrder();
-      setFileActionStatus(`Uploaded ${uploadedFile.fileName}.`);
-    } catch (uploadFailure) {
-      setFileActionStatus(null);
-      setFileActionError(uploadFailure instanceof Error ? uploadFailure.message : "Upload failed. Please try again.");
-    } finally {
-      setActioningFileId(null);
-      if (clientFileInputRef.current) clientFileInputRef.current.value = "";
+    // Files over the workspace limit are refused here, before any byte moves;
+    // the rest go into the queue.
+    const tooLarge = selectedFiles.filter(file => file.size > maxUploadSizeMB * 1024 * 1024);
+    const accepted = selectedFiles.filter(file => file.size <= maxUploadSizeMB * 1024 * 1024);
+    if (tooLarge.length > 0) {
+      setFileActionError(`This file is larger than the ${maxUploadSizeMB} MB workspace upload limit.`);
     }
-  }
-
-  async function handleClientFileUploads(files: File[]) {
-    const selectedFiles = files.filter(Boolean);
-    if (selectedFiles.length === 0) return;
-    for (const file of selectedFiles) {
-      await handleClientFileUpload(file);
+    if (accepted.length > 0) {
+      clientFileUploads.enqueue(accepted, undefined);
     }
+    if (clientFileInputRef.current) clientFileInputRef.current.value = "";
   }
 
   function handleClientFileDragOver(event: DragEvent<HTMLDivElement>) {
@@ -8187,10 +8185,10 @@ export function OrderDetailContent({
                     <button
                       className="button app-upload-button"
                       type="button"
-                      disabled={actioningFileId === "upload" || (clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy)}
+                      disabled={clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy}
                       onClick={() => clientFileInputRef.current?.click()}
                     >
-                      {actioningFileId === "upload" ? "Uploading..." : "⇧ Upload File"}
+                      {clientFileUploads.isActive ? "Uploading..." : "⇧ Upload File"}
                     </button>
                   </>
                 ) : null}
@@ -8221,7 +8219,7 @@ export function OrderDetailContent({
                           type="checkbox"
                           checked={browserAcceptedUploadPolicy}
                           onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
-                          disabled={actioningFileId === "upload"}
+                          disabled={clientFileUploads.isActive}
                         />
                         <span>I understand and accept the upload policy for this browser.</span>
                       </label>
@@ -8232,6 +8230,13 @@ export function OrderDetailContent({
               {!canUseClientFiles ? <ClientFilesUpgradeHint /> : null}
               {fileActionStatus ? <p className="file-action-status">{t(fileActionStatus)}</p> : null}
               {fileActionError ? <p className="file-action-error">{t(fileActionError)}</p> : null}
+              <UploadQueuePanel
+                items={clientFileUploads.items}
+                onCancel={clientFileUploads.cancel}
+                onRetry={clientFileUploads.retry}
+                onRemove={clientFileUploads.remove}
+                onClearFinished={clientFileUploads.clearFinished}
+              />
               {clientFileItems.length === 0 ? (
                 <div className="app-client-files-empty">
                   <span>▱</span>

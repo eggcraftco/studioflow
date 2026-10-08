@@ -33,6 +33,8 @@ import {
 } from "@/lib/studioflow/firestore";
 import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
+import { UploadQueuePanel } from "@/components/UploadQueuePanel";
+import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -202,7 +204,7 @@ export default function FilesPage() {
   const [files, setFiles] = useState<ClientFileListItem[]>([]);
   const [orders, setOrders] = useState<OrderOptionItem[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   // Arriving from Home's "Upload file" quick action. The upload form is always
@@ -214,7 +216,25 @@ export default function FilesPage() {
     uploadInputRef.current?.focus();
   });
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // Uploads run through a queue, two at a time; each row shows the storage
+  // task's own bytes, can be cancelled, and retries on the same file id and
+  // path. The order each file belongs to is fixed when it is queued.
+  const uploadQueue = useUploadQueue<{ orderId: string; policyAccepted: boolean; maxSizeMB: number }>(
+    async (file, slot, hooks, context) => {
+      if (!workspace || !user) throw new Error("Sign in again before uploading a client file.");
+      await uploadClientFileForOrder({
+        workspace,
+        orderId: context.orderId,
+        file,
+        user,
+        slot,
+        progress: hooks,
+        uploadSafety: { policyAccepted: context.policyAccepted, maxSizeMB: context.maxSizeMB }
+      });
+      await refreshFiles(workspace);
+    }
+  );
+  const uploading = uploadQueue.isActive;
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -402,7 +422,7 @@ export default function FilesPage() {
     setOrders(loadedOrders);
   }
 
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
+  function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace || !user) return;
     setUploadError(null);
@@ -416,7 +436,7 @@ export default function FilesPage() {
       setUploadError("Choose an order before uploading.");
       return;
     }
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       setUploadError("Choose a file to upload.");
       return;
     }
@@ -424,35 +444,20 @@ export default function FilesPage() {
       setUploadError("Accept the upload policy in this browser before uploading.");
       return;
     }
-    if (selectedFile.size > maxUploadSizeMB * 1024 * 1024) {
+    const tooLarge = selectedFiles.filter(file => file.size > maxUploadSizeMB * 1024 * 1024);
+    if (tooLarge.length > 0) {
       setUploadError(`This file is larger than the ${maxUploadSizeMB} MB workspace upload limit.`);
       return;
     }
 
-    setUploading(true);
-    setUploadStatus("Checking plan and uploading...");
-    try {
-      await uploadClientFileForOrder({
-        workspace,
-        orderId: selectedOrderId,
-        file: selectedFile,
-        user,
-        uploadSafety: {
-          policyAccepted: !requireUploadPolicyAcceptance || browserAcceptedUploadPolicy,
-          maxSizeMB: maxUploadSizeMB
-        }
-      });
-      setUploadStatus(`Uploaded ${selectedFile.name}.`);
-      setSelectedFile(null);
-      setSelectedOrderId("");
-      setFileInputKey(value => value + 1);
-      await refreshFiles(workspace);
-    } catch (uploadFailure) {
-      setUploadStatus(null);
-      setUploadError(uploadFailure instanceof Error ? uploadFailure.message : "Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
-    }
+    uploadQueue.enqueue(selectedFiles, {
+      orderId: selectedOrderId,
+      policyAccepted: !requireUploadPolicyAcceptance || browserAcceptedUploadPolicy,
+      maxSizeMB: maxUploadSizeMB
+    });
+    setSelectedFiles([]);
+    setSelectedOrderId("");
+    setFileInputKey(value => value + 1);
   }
 
   async function handleRename(file: ClientFileListItem) {
@@ -635,8 +640,9 @@ export default function FilesPage() {
                     className="input"
                     type="file"
                     accept={CLIENT_FILE_ACCEPT}
+                    multiple
                     onChange={event => {
-                      setSelectedFile(event.target.files?.[0] ?? null);
+                      setSelectedFiles(Array.from(event.target.files ?? []));
                       setUploadError(null);
                       setUploadStatus(null);
                     }}
@@ -647,7 +653,7 @@ export default function FilesPage() {
                 <button
                   className="button"
                   type="submit"
-                  disabled={uploading || !selectedOrderId || !selectedFile || orders.length === 0 || (requireUploadPolicyAcceptance && !browserAcceptedUploadPolicy)}
+                  disabled={uploading || !selectedOrderId || selectedFiles.length === 0 || orders.length === 0 || (requireUploadPolicyAcceptance && !browserAcceptedUploadPolicy)}
                 >
                   {uploading ? "Uploading..." : "Upload"}
                 </button>
@@ -661,6 +667,13 @@ export default function FilesPage() {
 
           {uploadStatus ? <p style={{ color: "var(--muted)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadStatus)}</p> : null}
           {uploadError ? <p style={{ color: "var(--danger)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadError)}</p> : null}
+          <UploadQueuePanel
+            items={uploadQueue.items}
+            onCancel={uploadQueue.cancel}
+            onRetry={uploadQueue.retry}
+            onRemove={uploadQueue.remove}
+            onClearFinished={uploadQueue.clearFinished}
+          />
         </section>
       ) : null}
 

@@ -26,6 +26,8 @@ import {
 } from "@/lib/studioflow/filesLibrary";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { openSharedFile } from "@/lib/studioflow/fileMask";
+import { UploadQueuePanel } from "@/components/UploadQueuePanel";
+import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 
 export type LibraryView =
   | "all" | "recent" | "sharedClients" | "internalOnly" | "unlinked"
@@ -138,6 +140,20 @@ export function FilesLibraryView({
     [files, selectedId]
   );
 
+  // Library uploads and new versions go through the queue: measured progress
+  // per file, cancel, and a retry that lands on the same storage path (so the
+  // server's sha1(path) record is the same one). The list reloads after each.
+  const uploads = useUploadQueue<{ kind: "new" } | { kind: "version"; fileId: string }>(
+    async (file, slot, hooks, context) => {
+      if (context.kind === "new") {
+        await uploadLibraryFile(workspace, file, { slot, progress: hooks });
+      } else {
+        await addLibraryFileVersion(workspace, context.fileId, file, "", { slot, progress: hooks });
+      }
+      await reload();
+    }
+  );
+
   async function run(action: () => Promise<unknown>, failText: string) {
     setBusy(true);
     setNotice("");
@@ -178,13 +194,15 @@ export function FilesLibraryView({
                 {t("Upload to library")}
                 <input
                   type="file"
+                  multiple
                   style={{ display: "none" }}
                   disabled={busy}
                   onChange={event => {
-                    const file = event.target.files?.[0];
+                    const files = Array.from(event.target.files ?? []);
                     event.target.value = "";
-                    if (!file) return;
-                    void run(() => uploadLibraryFile(workspace, file), "The file could not be registered.");
+                    if (files.length === 0) return;
+                    setNotice("");
+                    uploads.enqueue(files, { kind: "new" });
                   }}
                 />
               </label>
@@ -202,6 +220,13 @@ export function FilesLibraryView({
         </div>
 
         {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
+        <UploadQueuePanel
+          items={uploads.items}
+          onCancel={uploads.cancel}
+          onRetry={uploads.retry}
+          onRemove={uploads.remove}
+          onClearFinished={uploads.clearFinished}
+        />
 
         {files === null ? (
           <p className="inventory-sub">{t("Loading…")}</p>
@@ -343,7 +368,8 @@ export function FilesLibraryView({
                       const file = event.target.files?.[0];
                       event.target.value = "";
                       if (!file) return;
-                      void run(() => addLibraryFileVersion(workspace, selected.id, file), "The new version could not be saved.");
+                      setNotice("");
+                      uploads.enqueue([file], { kind: "version", fileId: selected.id });
                     }}
                   />
                 </label>
