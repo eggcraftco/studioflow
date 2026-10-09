@@ -86,7 +86,12 @@ import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import {
   clearUploadPolicyAcceptance,
   readUploadPolicyAcceptance,
+  UPLOAD_POLICY_BUILTIN_SENTENCE,
+  uploadPolicyAllows,
+  uploadPolicyStamp,
   uploadPolicyVersion,
+  uploadPolicyVersionShort,
+  uploadPolicyWording,
   writeUploadPolicyAcceptance
 } from "@/lib/studioflow/uploadPolicy";
 import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, testQuickReplyApiKey, type QuickReplyContributionItem, type QuickReplyKeyTestResult } from "@/lib/studioflow/quickReply";
@@ -1360,6 +1365,63 @@ function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS 
   );
 }
 
+function UploadPolicyBrowserStatusCard({
+  workspace,
+  settings,
+  language,
+  t
+}: {
+  workspace: WorkspaceContext;
+  settings: WorkspaceSettingsOverview | null;
+  language: string;
+  t: (text: string) => string;
+}) {
+  const policyVersion = uploadPolicyVersion(settings);
+  const [acceptance, setAcceptance] = useState<{ version: string; acceptedAt: string } | null>(null);
+  useEffect(() => {
+    try {
+      setAcceptance(readUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion));
+    } catch {
+      setAcceptance(null);
+    }
+  }, [workspace.id, policyVersion]);
+  const acceptedDate = acceptance ? new Date(acceptance.acceptedAt).toLocaleDateString(studioLocaleTag(language)) : "";
+  return (
+    <section className="card app-card" data-testid="upload-policy-browser-status">
+      <SettingsCardHead
+        icon={<CardIconGlyph icon="check" />}
+        title={t("Upload Policy")}
+        aside={<span className="settings-tag">{t("This browser")}</span>}
+      />
+      <p className="settings-field-hint">
+        <strong>{acceptance ? t("Accepted") : t("Not accepted")}</strong>
+        {" — "}
+        {acceptance
+          ? `${t("Uploads will not ask again until you reset it.")}${acceptedDate ? ` (${acceptedDate}, ${uploadPolicyVersionShort(acceptance.version)})` : ""}`
+          : t("The next upload will ask for acceptance.")}
+      </p>
+      {acceptance ? (
+        <div className="settings-action-row">
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => {
+              try {
+                clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+              } catch {
+                /* the stored acceptance stays; the status below re-reads it */
+              }
+              setAcceptance(null);
+            }}
+          >
+            {t("Reset for this browser")}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreferencesSection({
   workspace,
   settings,
@@ -1555,6 +1617,11 @@ function PreferencesSection({
         <p className="settings-field-hint">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
       </section>
 
+      {/* Every user's own acceptance in this browser (status + reset; contract §2): Preferences is personal, so a
+          member without the Safety & Uploads screen still sees and can forget their acceptance. Nothing here
+          creates an acceptance and nothing here edits a workspace setting. */}
+      <UploadPolicyBrowserStatusCard workspace={workspace} settings={settings} language={language} t={t} />
+
       <div className="settings-save-row">
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
@@ -1662,8 +1729,22 @@ function WorkspaceBrandingSection({
     setLogoStatus(result.message || t("Workspace logo saved."));
   }
 
-  async function uploadLogo(file: File, acceptedPolicy: boolean) {
+  async function uploadLogo(file: File) {
     if (!settings || !user) return;
+    // The workspace policy, exactly as for a client file (contract §6, 9 Oct 2026): the stamp says required and
+    // accepted separately; "true" + policyAcceptedAt + policyVersion only with a real acceptance of the current
+    // version in this browser. Not required and never accepted is "false" — no manufactured acceptance.
+    let logoPolicyAcceptance = null;
+    try {
+      logoPolicyAcceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      logoPolicyAcceptance = null;
+    }
+    if (!uploadPolicyAllows(requirePolicy, logoPolicyAcceptance)) {
+      setPendingLogoFile(file);
+      return;
+    }
+    const logoPolicy = uploadPolicyStamp(requirePolicy, logoPolicyAcceptance);
     setUploadingLogo(true);
     setLogoStatus("");
     setLogoError("");
@@ -1672,7 +1753,7 @@ function WorkspaceBrandingSection({
         workspace,
         file,
         user: { uid: user.uid, email: user.email, displayName: user.displayName },
-        policyAccepted: acceptedPolicy,
+        policy: logoPolicy,
         maxSizeMB
       });
       await saveLogoResult(result);
@@ -1701,7 +1782,7 @@ function WorkspaceBrandingSection({
       setLogoError("");
       return;
     }
-    void uploadLogo(file, policyAccepted || !requirePolicy);
+    void uploadLogo(file);
   }
 
   function openLogoPicker() {
@@ -1729,7 +1810,7 @@ function WorkspaceBrandingSection({
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
-    await uploadLogo(file, true);
+    await uploadLogo(file);
   }
 
   async function handleRemoveLogo() {
@@ -1881,8 +1962,8 @@ function WorkspaceBrandingSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
-            {settings?.uploadSafetyPolicyText?.trim() ? <p className="upload-safety-policy-text">{settings.uploadSafetyPolicyText.trim()}</p> : null}
-            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
+            {/* Exactly the wording the current version stands for: the workspace's text, else the built-in sentence. */}
+            <p className="upload-safety-policy-text">{uploadPolicyWording(settings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
               <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>
@@ -4326,8 +4407,22 @@ function AccountSection({
     setStatus(result.message || t("Workspace logo saved."));
   }
 
-  async function uploadLogo(file: File, acceptedPolicy: boolean) {
+  async function uploadLogo(file: File) {
     if (!settings || !user) return;
+    // The workspace policy, exactly as for a client file (contract §6, 9 Oct 2026): the stamp says required and
+    // accepted separately; "true" + policyAcceptedAt + policyVersion only with a real acceptance of the current
+    // version in this browser. Not required and never accepted is "false" — no manufactured acceptance.
+    let logoPolicyAcceptance = null;
+    try {
+      logoPolicyAcceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      logoPolicyAcceptance = null;
+    }
+    if (!uploadPolicyAllows(requirePolicy, logoPolicyAcceptance)) {
+      setPendingLogoFile(file);
+      return;
+    }
+    const logoPolicy = uploadPolicyStamp(requirePolicy, logoPolicyAcceptance);
     setUploadingLogo(true);
     setStatus("");
     setError("");
@@ -4340,7 +4435,7 @@ function AccountSection({
           email: user.email,
           displayName: user.displayName
         },
-        policyAccepted: acceptedPolicy,
+        policy: logoPolicy,
         maxSizeMB
       });
       await saveLogoResult(result);
@@ -4369,7 +4464,7 @@ function AccountSection({
       setError("");
       return;
     }
-    void uploadLogo(file, policyAccepted || !requirePolicy);
+    void uploadLogo(file);
   }
 
   function openLogoPicker() {
@@ -4397,7 +4492,7 @@ function AccountSection({
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
-    await uploadLogo(file, true);
+    await uploadLogo(file);
   }
 
   async function handleRemoveLogo() {
@@ -4638,8 +4733,8 @@ function AccountSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
-            {settings?.uploadSafetyPolicyText?.trim() ? <p className="upload-safety-policy-text">{settings.uploadSafetyPolicyText.trim()}</p> : null}
-            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
+            {/* Exactly the wording the current version stands for: the workspace's text, else the built-in sentence. */}
+            <p className="upload-safety-policy-text">{uploadPolicyWording(settings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
               <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>

@@ -231,7 +231,7 @@ export function writeUploadPolicyAcceptance(
   version: string,
   now: Date = new Date()
 ): UploadPolicyAcceptance {
-  const acceptance: UploadPolicyAcceptance = { version, acceptedAt: now.toISOString() };
+  const acceptance: UploadPolicyAcceptance = { version, acceptedAt: uploadPolicyIsoSeconds(now) };
   for (const key of workspaceKeys(store, workspaceId)) store.removeItem(key);
   store.setItem(uploadPolicyAcceptanceKey(workspaceId, version), JSON.stringify(acceptance));
   return acceptance;
@@ -256,12 +256,20 @@ export type UploadPolicyStamp = {
   policyVersion?: string;
 };
 
+/** Contract §2: policyAcceptedAt is ISO-8601 UTC in whole seconds ("YYYY-MM-DDTHH:MM:SSZ"), as iOS and
+ *  Android write it. toISOString() carried milliseconds; a stored value with them is cut to seconds. */
+export function uploadPolicyIsoSeconds(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const iso = Number.isFinite(date.getTime()) ? date.toISOString() : String(value);
+  return iso.replace(/\.\d+Z$/, "Z");
+}
+
 export function uploadPolicyStamp(required: boolean, acceptance: UploadPolicyAcceptance | null | undefined): UploadPolicyStamp {
   if (acceptance) {
     return {
       policyRequired: required ? "true" : "false",
       policyAccepted: "true",
-      policyAcceptedAt: acceptance.acceptedAt,
+      policyAcceptedAt: uploadPolicyIsoSeconds(acceptance.acceptedAt),
       policyVersion: acceptance.version
     };
   }

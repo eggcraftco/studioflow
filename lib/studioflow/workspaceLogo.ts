@@ -4,6 +4,7 @@ import { functions, storage } from "@/lib/firebase/client";
 import { requireWorkspacePlanAction } from "@/lib/studioflow/planActions";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { uploadPolicyMetadata, type UploadPolicyStamp } from "@/lib/studioflow/uploadPolicy";
 
 const WORKSPACE_LOGO_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 
@@ -90,13 +91,14 @@ export async function uploadWorkspaceLogo({
   workspace,
   file,
   user,
-  policyAccepted,
+  policy,
   maxSizeMB
 }: {
   workspace: WorkspaceContext;
   file: File;
   user: UploadUser;
-  policyAccepted: boolean;
+  /** uploadPolicyStamp(required, acceptance) — the same stamp a client file carries. */
+  policy: UploadPolicyStamp;
   maxSizeMB: number;
 }) {
   if (!canManageWorkspaceLogoForRole(workspace.role)) {
@@ -137,7 +139,9 @@ export async function uploadWorkspaceLogo({
           fileType: contentType,
           fileSize: String(file.size),
           storagePath: storageRef.fullPath,
-          policyAccepted: policyAccepted ? "true" : "false",
+          // policyRequired / policyAccepted (+ policyAcceptedAt / policyVersion only with a real acceptance):
+          // an audit note no server rule reads, not a security control.
+          ...uploadPolicyMetadata(policy),
           maxSizeMB: String(Math.round(maxSizeMB))
         }
       });

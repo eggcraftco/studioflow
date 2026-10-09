@@ -114,11 +114,53 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
   expect("version: no timestamp source (an unrelated save never re-asks)", uploadPolicyVersion({ uploadSafetySettingsUpdatedAtMs: 1759900000000, uploadSafetyPolicyText: "Studio rule." }), textVersion);
   expect("version: the module has no ts- source at all", /`ts-\$\{/.test(read("lib/studioflow/uploadPolicy.ts")), false);
 
+  // 1b. The cross-platform stamp + gate vectors (docs/native/upload-policy-stamp-vectors.json, 9 Oct 2026) —
+  //     the same file iOS and Android assert. Required and accepted separate; required=false never manufactures
+  //     an acceptance; at + version only with a real acceptance of the current version, at in whole seconds.
+  {
+    const stampVectors = JSON.parse(read("scripts/fixtures/upload-policy-stamp-vectors.json"));
+    const docStamp = path.join(root, "..", "docs", "native", "upload-policy-stamp-vectors.json");
+    if (fs.existsSync(docStamp)) expect("stamp vectors: fixture equals docs/native copy", stampVectors, JSON.parse(fs.readFileSync(docStamp, "utf8")));
+    expect("stamp vectors: 7 stamp + 5 resolve", [stampVectors.filter(v => v.kind === "stamp").length, stampVectors.filter(v => v.kind === "resolve").length], [7, 5]);
+    for (const v of stampVectors) {
+      if (v.kind === "resolve") {
+        expect(`resolve "${v.case}"`, uploadPolicyVersion({ uploadSafetyPolicyVersion: v.serverVersion, uploadSafetyPolicyText: v.text }), v.version);
+        continue;
+      }
+      const vstore = fakeStorage();
+      if (v.storedVersion) writeUploadPolicyAcceptance(vstore, "ws-vec", v.storedVersion, new Date(Number(v.storedAtMillis)));
+      const acc = readUploadPolicyAcceptance(vstore, "ws-vec", v.currentVersion);
+      const required = v.required === "true";
+      expect(`stamp "${v.case}": allowed`, uploadPolicyAllows(required, acc), v.allowed === "true");
+      const meta = uploadPolicyMetadata(uploadPolicyStamp(required, acc));
+      const wanted = { policyRequired: v.policyRequired, policyAccepted: v.policyAccepted };
+      if (v.policyAcceptedAt) wanted.policyAcceptedAt = v.policyAcceptedAt;
+      if (v.policyVersion) wanted.policyVersion = v.policyVersion;
+      expect(`stamp "${v.case}": metadata`, meta, wanted);
+    }
+    // A value stored before this change carries milliseconds; the stamp still writes whole seconds.
+    expect("stamp: a stored millisecond value is written in whole seconds",
+      uploadPolicyStamp(true, { version: "v", acceptedAt: "2026-10-09T01:02:03.456Z" }).policyAcceptedAt, "2026-10-09T01:02:03Z");
+  }
+
+  // 1c. The workspace logo goes through the same policy (contract §6, 9 Oct 2026): no fixed sentence, no
+  //     "accepted || !required", the prompt shows the versioned wording, the stamp is uploadPolicyStamp.
+  {
+    const logo = read("lib/studioflow/workspaceLogo.ts");
+    const settingsPage = read("app/settings/page.tsx");
+    expect("logo: metadata from uploadPolicyMetadata(policy)", /\.\.\.uploadPolicyMetadata\(policy\)/.test(logo), true);
+    expect("logo: no raw policyAccepted flag", /policyAccepted:\s*policyAccepted/.test(logo), false);
+    expect("logo: settings never passes accepted || !required", /policyAccepted \|\| !requirePolicy/.test(settingsPage), false);
+    expect("logo: both logo uploads stamp through uploadPolicyStamp", (settingsPage.match(/const logoPolicy = uploadPolicyStamp\(requirePolicy, logoPolicyAcceptance\)/g) || []).length, 2);
+    expect("logo: both prompts show the versioned wording", (settingsPage.match(/uploadPolicyWording\(settings\?\.uploadSafetyPolicyText, t\(UPLOAD_POLICY_BUILTIN_SENTENCE\)\)/g) || []).length, 2);
+    expect("logo: the fixed sentence is gone", settingsPage.includes("Only upload legal, safe and work-related images that belong in this workspace."), false);
+  }
+
   // 2. An acceptance of an older version does not count.
   const store = fakeStorage();
   const now = new Date("2026-10-08T12:34:56.000Z");
   const first = writeUploadPolicyAcceptance(store, "ws1", "v-old", now);
-  expect("accept: records version and ISO-8601 UTC time", first, { version: "v-old", acceptedAt: "2026-10-08T12:34:56.000Z" });
+  expect("accept: records version and ISO-8601 UTC time in whole seconds (contract §2)", first, { version: "v-old", acceptedAt: "2026-10-08T12:34:56Z" });
   expect("accept: key is workspace + version", Object.keys(store.dump()), ["studioflow-upload-policy-acceptance:ws1:v-old"]);
   expect("read: the current version is accepted", readUploadPolicyAcceptance(store, "ws1", "v-old"), first);
   expect("read: a newer version is NOT accepted (re-ask)", readUploadPolicyAcceptance(store, "ws1", "v-new"), null);
@@ -150,12 +192,12 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
   const acceptance = { version: "v-new", acceptedAt: "2026-10-09T00:00:00.000Z" };
   expect("required + accepted: gate opens", uploadPolicyAllows(true, acceptance), true);
   expect("required + accepted: metadata", uploadPolicyMetadata(uploadPolicyStamp(true, acceptance)),
-    { policyRequired: "true", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "v-new" });
+    { policyRequired: "true", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00Z", policyVersion: "v-new" });
   expect("required + none: gate blocks", uploadPolicyAllows(true, null), false);
   expect("required + none: metadata (no At / Version keys)", uploadPolicyMetadata(uploadPolicyStamp(true, null)), { policyRequired: "true", policyAccepted: "false" });
   expect("not required + accepted: gate opens", uploadPolicyAllows(false, acceptance), true);
   expect("not required + accepted: a real acceptance is still recorded", uploadPolicyMetadata(uploadPolicyStamp(false, acceptance)),
-    { policyRequired: "false", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00.000Z", policyVersion: "v-new" });
+    { policyRequired: "false", policyAccepted: "true", policyAcceptedAt: "2026-10-09T00:00:00Z", policyVersion: "v-new" });
   expect("not required + none: gate opens (false must not block)", uploadPolicyAllows(false, null), true);
   expect("not required + none: no manufactured acceptance", uploadPolicyMetadata(uploadPolicyStamp(false, null)), { policyRequired: "false", policyAccepted: "false" });
   expect("not required + none: At / Version absent, not empty strings",

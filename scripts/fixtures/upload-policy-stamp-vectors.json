@@ -1,0 +1,128 @@
+[
+  {
+    "kind": "stamp",
+    "case": "not required, nothing accepted: allowed, no manufactured acceptance (the old logo bug)",
+    "required": "false",
+    "storedVersion": "",
+    "storedAtMillis": "",
+    "currentVersion": "builtin-1",
+    "allowed": "true",
+    "policyRequired": "false",
+    "policyAccepted": "false",
+    "policyAcceptedAt": "",
+    "policyVersion": ""
+  },
+  {
+    "kind": "stamp",
+    "case": "required, nothing accepted: blocked",
+    "required": "true",
+    "storedVersion": "",
+    "storedAtMillis": "",
+    "currentVersion": "builtin-1",
+    "allowed": "false",
+    "policyRequired": "true",
+    "policyAccepted": "false",
+    "policyAcceptedAt": "",
+    "policyVersion": ""
+  },
+  {
+    "kind": "stamp",
+    "case": "required, accepted this version: allowed, stamped with at + version",
+    "required": "true",
+    "storedVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "storedAtMillis": "1791507723456",
+    "currentVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "allowed": "true",
+    "policyRequired": "true",
+    "policyAccepted": "true",
+    "policyAcceptedAt": "2026-10-09T01:02:03Z",
+    "policyVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba"
+  },
+  {
+    "kind": "stamp",
+    "case": "not required but really accepted this version: the real acceptance is stamped",
+    "required": "false",
+    "storedVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "storedAtMillis": "1791507723456",
+    "currentVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "allowed": "true",
+    "policyRequired": "false",
+    "policyAccepted": "true",
+    "policyAcceptedAt": "2026-10-09T01:02:03Z",
+    "policyVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba"
+  },
+  {
+    "kind": "stamp",
+    "case": "required, accepted an older wording: blocked, asks again",
+    "required": "true",
+    "storedVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "storedAtMillis": "1791507723456",
+    "currentVersion": "sha256-f3e64bcd3e8f4cf44a3bf869ae2e454333ba5267889b442a19ccf0adeca6b264",
+    "allowed": "false",
+    "policyRequired": "true",
+    "policyAccepted": "false",
+    "policyAcceptedAt": "",
+    "policyVersion": ""
+  },
+  {
+    "kind": "stamp",
+    "case": "not required, accepted an older wording: allowed, not accepted, no version",
+    "required": "false",
+    "storedVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "storedAtMillis": "1791507723456",
+    "currentVersion": "sha256-f3e64bcd3e8f4cf44a3bf869ae2e454333ba5267889b442a19ccf0adeca6b264",
+    "allowed": "true",
+    "policyRequired": "false",
+    "policyAccepted": "false",
+    "policyAcceptedAt": "",
+    "policyVersion": ""
+  },
+  {
+    "kind": "stamp",
+    "case": "required, builtin-1 accepted, workspace still empty text: allowed",
+    "required": "true",
+    "storedVersion": "builtin-1",
+    "storedAtMillis": "1791507723456",
+    "currentVersion": "builtin-1",
+    "allowed": "true",
+    "policyRequired": "true",
+    "policyAccepted": "true",
+    "policyAcceptedAt": "2026-10-09T01:02:03Z",
+    "policyVersion": "builtin-1"
+  },
+  {
+    "kind": "resolve",
+    "case": "no server version: computed from text",
+    "serverVersion": "",
+    "text": "Only upload files you own or are allowed to share.",
+    "version": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba"
+  },
+  {
+    "kind": "resolve",
+    "case": "server version equals text: same",
+    "serverVersion": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba",
+    "text": "Only upload files you own or are allowed to share.",
+    "version": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba"
+  },
+  {
+    "kind": "resolve",
+    "case": "server version disagrees with text: server wins",
+    "serverVersion": "sha256-f3e64bcd3e8f4cf44a3bf869ae2e454333ba5267889b442a19ccf0adeca6b264",
+    "text": "Only upload files you own or are allowed to share.",
+    "version": "sha256-f3e64bcd3e8f4cf44a3bf869ae2e454333ba5267889b442a19ccf0adeca6b264"
+  },
+  {
+    "kind": "resolve",
+    "case": "empty text, no server version: builtin-1",
+    "serverVersion": "",
+    "text": "",
+    "version": "builtin-1"
+  },
+  {
+    "kind": "resolve",
+    "case": "same text after an unrelated save (size/switch) and a language switch: version unchanged",
+    "serverVersion": "",
+    "text": "Only upload files you own or are allowed to share.  \r\n",
+    "version": "sha256-9a1a0c809b934cde35bfb64fbf6d273365d45577ec6f72e2cf9f9daa9fbeb2ba"
+  }
+]
