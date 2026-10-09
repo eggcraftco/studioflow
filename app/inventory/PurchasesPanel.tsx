@@ -175,7 +175,7 @@ export function PurchasesPanel({
         </div>
         {canEdit ? (
           <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
-            + New Purchase
+            {t("+ New Purchase")}
           </button>
         ) : null}
       </div>
@@ -202,8 +202,7 @@ export function PurchasesPanel({
         <div className="inventory-empty">
           <strong>{t("No purchases yet")}</strong>
           <p>
-            Record what you buy here and the stock is created for you — held as
-            incoming until you mark it received.
+            {t("Record what you buy here and the stock is created for you — held as incoming until you mark it received.")}
           </p>
         </div>
       ) : (
@@ -465,7 +464,7 @@ function NewPurchaseModal({
             <div className="inventory-section-head">
               <h3>{t("Items")}</h3>
               <button type="button" className="inventory-link" onClick={() => setLines(current => [...current, emptyLine()])}>
-                + Add line
+                {t("+ Add line")}
               </button>
             </div>
 
@@ -549,8 +548,7 @@ function NewPurchaseModal({
           <div className="inventory-section">
             <h3>{t("Shipping and fees")}</h3>
             <p className="inventory-hint">
-              Kept out of the item prices on purpose. Each item&apos;s purchase price stays exactly what
-              you paid for the goods, and its share of these costs is recorded separately against it.
+              {t("Kept out of the item prices on purpose. Each item's purchase price stays exactly what you paid for the goods, and its share of these costs is recorded separately against it.")}
             </p>
             <div className="inventory-form">
               <label className="inventory-field">
@@ -580,8 +578,10 @@ function NewPurchaseModal({
 
         <div className="inventory-modal-foot">
           <p className="inventory-hint">
-            The items are created as <strong>incoming</strong> — they become available stock when you mark
-            the purchase received.
+            {(() => {
+              const [before, after = ""] = t("The items are created as {status} — they become available stock when you mark the purchase received.").split("{status}");
+              return <>{before}<strong>{t("incoming")}</strong>{after}</>;
+            })()}
           </p>
           <div className="inventory-modal-actions">
             <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>

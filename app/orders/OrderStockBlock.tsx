@@ -125,7 +125,7 @@ export function OrderStockBlock({
         {canEdit ? (
           <span className="order-stock-actions">
             <button type="button" className="inventory-link" onClick={() => setPicking(true)}>
-              + Reserve stock
+              {t("+ Reserve stock")}
             </button>
             <button type="button" className="inventory-link" onClick={() => setRecipePicking(true)}>
               {t("Use a recipe…")}

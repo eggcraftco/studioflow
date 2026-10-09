@@ -187,28 +187,28 @@ export function VerifyEmailScreen({ user }: { user: User }) {
     <main className="page-shell" style={{ display: "grid", placeItems: "center", minHeight: "100vh", padding: 20 }}>
       <section className="card" style={{ maxWidth: 440, width: "100%", textAlign: "center", padding: "34px 28px" }}>
         <div style={{ fontSize: 40 }} aria-hidden="true">📬</div>
-        <h1 style={{ fontSize: 24, margin: "14px 0 8px" }}>Verify your email</h1>
+        <h1 style={{ fontSize: 24, margin: "14px 0 8px" }}>{t("Verify your email")}</h1>
         <p style={{ color: "var(--muted)", margin: "0 0 6px" }}>
-          We sent a verification link to:
+          {t("We sent a verification link to:")}
         </p>
         <p style={{ fontWeight: 800, margin: "0 0 18px" }}>{user.email}</p>
         <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 20px" }}>
-          Click the link in that email, then come back here.
+          {t("Click the link in that email, then come back here.")}
         </p>
         {status ? <p style={{ fontSize: 13, fontWeight: 650, margin: "0 0 14px" }}>{t(status)}</p> : null}
         <div style={{ display: "grid", gap: 10 }}>
           <button className="button" type="button" onClick={() => void checkVerified()} disabled={busy}>
-            I&apos;ve verified, continue
+            {t("I've verified, continue")}
           </button>
           <button className="button secondary" type="button" onClick={() => void resend()} disabled={busy}>
-            Resend email
+            {t("Resend email")}
           </button>
           <button
             type="button"
             onClick={() => { clearDeviceLocalWorkspaceCache(); void signOut(auth).then(() => clearFirestoreLocalCache()).then(() => window.location.replace("/login")); }}
             style={{ background: "none", border: 0, color: "var(--muted)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 8 }}
           >
-            Sign out
+            {t("Sign out")}
           </button>
         </div>
       </section>

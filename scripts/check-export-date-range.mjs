@@ -83,7 +83,7 @@ const compile = (rel, name) => {
     .replace(/from "\.\/(\w+)"/g, 'from "./$1.mjs"');
   fs.writeFileSync(path.join(tmp, `${name}.mjs`), js);
 };
-for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
+for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
 const { studioT, SUPPORTED_STUDIO_LANGUAGES } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
 const languages = SUPPORTED_STUDIO_LANGUAGES.filter((language) => language !== "English");
 expect("eleven languages besides English", languages.length, 11);

@@ -36,6 +36,7 @@
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
     "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
     "test:count-labels": "npx tsx scripts/check-count-labels.ts",
+    "test:i18n-gaps": "npx tsx scripts/i18n-gap-report.ts --fail-on-placeholders",
     "test:notes": "node scripts/check-notes-editor.mjs && npx tsx scripts/check-notes-roundtrip.ts",
     "test:pdf-export-preview": "node scripts/check-pdf-export-preview.mjs",
     "test:export-date-range": "node scripts/check-export-date-range.mjs",

@@ -61,7 +61,7 @@ export function SuppliersPanel({
         </div>
         {canEdit ? (
           <button type="button" className="inventory-primary" onClick={() => setCreating(true)}>
-            + New Supplier
+            {t("+ New Supplier")}
           </button>
         ) : null}
       </div>
@@ -117,8 +117,7 @@ export function SuppliersPanel({
               </div>
               {supplier.stats?.count > 0 && supplier.stats.matched < supplier.stats.count ? (
                 <p className="inventory-sub inventory-sub-warn">
-                  {supplier.stats.count - supplier.stats.matched} purchase
-                  {supplier.stats.count - supplier.stats.matched === 1 ? "" : "s"} with no payment matched
+                  {t("Purchases with no payment matched: {count}").replace("{count}", String(supplier.stats.count - supplier.stats.matched))}
                 </p>
               ) : null}
             </div>

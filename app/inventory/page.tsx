@@ -19,11 +19,13 @@ import {
 } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { moneySymbol } from "@/lib/studioflow/money";
+import { studioT } from "@/lib/studioflow/language";
 import { InventoryContent } from "./InventoryContent";
 
 export default function InventoryPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,8 +70,8 @@ export default function InventoryPage() {
     return (
       <AppShell>
         <div className="inventory-page">
-          <h1>Inventory</h1>
-          <p className="inventory-notice">{error || "Workspace could not be loaded."}</p>
+          <h1>{t("Inventory")}</h1>
+          <p className="inventory-notice">{t(error || "Workspace could not be loaded.")}</p>
         </div>
       </AppShell>
     );

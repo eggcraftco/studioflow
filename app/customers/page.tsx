@@ -1521,6 +1521,8 @@ function CustomerDetailsForm({
   saving: boolean;
   onSave: (patch: CustomerUpdatePatch) => Promise<void>;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [draft, setDraft] = useState<CustomerFormInput>(() => formFromCustomer(customer));
 
   useEffect(() => {
@@ -1580,7 +1582,7 @@ function CustomerDetailsForm({
     <form className="customer-detail-form" onSubmit={submit}>
       {fields.map(item => (
         <label className="customer-detail-input-row" key={item.field}>
-          <span>{item.label}</span>
+          <span>{t(item.label)}</span>
           <input
             type={item.type || "text"}
             value={(draft[item.field] as string) || ""}
@@ -1595,11 +1597,11 @@ function CustomerDetailsForm({
       {disabled ? null : (
         <div className="customer-detail-save-row">
           <button className="button" type="submit" disabled={saving || !isDirty}>
-            {saving ? "Saving..." : "Save Customer Details"}
+            {saving ? t("Saving...") : t("Save Customer Details")}
           </button>
           {isDirty ? (
             <button className="button secondary" type="button" disabled={saving} onClick={() => setDraft(saved)}>
-              Reset
+              {t("Reset")}
             </button>
           ) : null}
         </div>
@@ -1621,6 +1623,8 @@ function CustomerInlineTitle({
   editHint: string;
   onSave: (value: string) => Promise<void>;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -1658,7 +1662,7 @@ function CustomerInlineTitle({
           }}
         />
         <button className="button" type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("Saving...") : t("Save")}
         </button>
       </form>
     );
@@ -1698,6 +1702,8 @@ function CustomerInlineValueRow({
   saving: boolean;
   onSave: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -1736,12 +1742,12 @@ function CustomerInlineValueRow({
             }}
           />
           <span className="customer-inline-actions">
-            <button className="button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+            <button className="button" type="submit" disabled={saving}>{saving ? t("Saving...") : t("Save")}</button>
             <button className="button secondary" type="button" disabled={saving} onClick={() => {
               setEditing(false);
               setDraft(value);
             }}>
-              Cancel
+              {t("Cancel")}
             </button>
           </span>
         </form>
@@ -1767,6 +1773,8 @@ function CustomerInlineNotes({
   saving: boolean;
   onSave: (value: string) => Promise<void>;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -1803,12 +1811,12 @@ function CustomerInlineNotes({
           }}
         />
         <span className="customer-inline-actions">
-          <button className="button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Notes"}</button>
+          <button className="button" type="submit" disabled={saving}>{saving ? t("Saving...") : t("Save Notes")}</button>
           <button className="button secondary" type="button" disabled={saving} onClick={() => {
             setEditing(false);
             setDraft(value);
           }}>
-            Cancel
+            {t("Cancel")}
           </button>
         </span>
       </form>
@@ -1886,41 +1894,41 @@ function CustomerFormModal({
   });
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={mode === "create" ? "Add customer" : "Edit customer"}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={mode === "create" ? t("Add customer") : t("Edit customer")}>
       <section className="add-order-modal customer-form-modal">
         <div className="add-order-header">
           <div>
-            <p className="orders-kicker">{mode === "create" ? "New Customer" : "Edit Customer"}</p>
-            <h2>{mode === "create" ? "Add customer" : customerDisplayName(form.name)}</h2>
-            <p>These fields match the NivaDesk app customer profile.</p>
+            <p className="orders-kicker">{mode === "create" ? t("New Customer") : t("Edit Customer")}</p>
+            <h2>{mode === "create" ? t("Add customer") : customerDisplayName(form.name)}</h2>
+            <p>{t("These fields match the NivaDesk app customer profile.")}</p>
           </div>
-          <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>Close</button>
+          <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>{t("Close")}</button>
         </div>
 
         <form className="add-order-form" onSubmit={onSubmit}>
           <label>
-            Customer name
+            {t("Customer name")}
             <input className="input" value={form.name} onChange={event => updateField("name", event.target.value)} disabled={saving} />
           </label>
 
           <div className="add-order-two-col">
             <label>
-              Email
+              {t("Email")}
               <input className="input" type="email" value={form.email} onChange={event => updateField("email", event.target.value)} disabled={saving} />
             </label>
             <label>
-              Primary Phone
+              {t("Primary Phone")}
               <input className="input" value={form.primaryPhone} onChange={event => updateField("primaryPhone", event.target.value)} disabled={saving} />
             </label>
           </div>
 
           <div className="add-order-two-col">
             <label>
-              WhatsApp Number
+              {t("WhatsApp Number")}
               <input className="input" value={form.whatsappNumber} onChange={event => updateField("whatsappNumber", event.target.value)} disabled={saving} />
             </label>
             <label>
-              Phone (from orders)
+              {t("Phone (from orders)")}
               <input className="input" value={form.phone} onChange={event => updateField("phone", event.target.value)} disabled={saving} />
             </label>
             <label>
@@ -1928,13 +1936,13 @@ function CustomerFormModal({
               <input className="input" value={form.instagram} onChange={event => updateField("instagram", event.target.value)} disabled={saving} />
             </label>
             <label>
-              Company
+              {t("Company")}
               <input className="input" value={form.company} onChange={event => updateField("company", event.target.value)} disabled={saving} />
             </label>
           </div>
 
           <label>
-            Address
+            {t("Address")}
             <input
               className="input"
               value={form.streetAddress || form.address}
@@ -1945,31 +1953,31 @@ function CustomerFormModal({
 
           <div className="add-order-two-col">
             <label>
-              City
+              {t("City")}
               <input className="input" value={form.city} onChange={event => updateField("city", event.target.value)} disabled={saving} />
             </label>
             <label>
-              Postal Code
+              {t("Postal Code")}
               <input className="input" value={form.postalCode} onChange={event => updateField("postalCode", event.target.value)} disabled={saving} />
             </label>
           </div>
 
           <label>
-            Country
+            {t("Country")}
             <input className="input" value={form.country} onChange={event => updateField("country", event.target.value)} disabled={saving} list="studio-country-options" />
             <CountryDatalist />
           </label>
 
           <label>
-            Notes
+            {t("Notes")}
             <textarea className="input add-order-notes" value={form.notes} onChange={event => updateField("notes", event.target.value)} disabled={saving} />
           </label>
 
           {error ? <p className="layout-error" style={{ margin: 0 }}>{t(error)}</p> : null}
 
           <div className="add-order-actions">
-            <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>Cancel</button>
-            <button className="button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Customer"}</button>
+            <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>{t("Cancel")}</button>
+            <button className="button" type="submit" disabled={saving}>{saving ? t("Saving...") : t("Save Customer")}</button>
           </div>
         </form>
       </section>

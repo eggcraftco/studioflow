@@ -355,13 +355,13 @@ export function OrderListCard({
       }}
       onClick={event => event.stopPropagation()}
     >
-      <div style={{ fontSize: 12, fontWeight: 800, color: "#2563eb", marginBottom: 6 }}>Step 2 of 6</div>
-      <strong style={{ display: "block", marginBottom: 6 }}>This is your project card.</strong>
+      <div style={{ fontSize: 12, fontWeight: 800, color: "#2563eb", marginBottom: 6 }}>{studioT("Step 2 of 6", displayLanguage)}</div>
+      <strong style={{ display: "block", marginBottom: 6 }}>{studioT("This is your project card.", displayLanguage)}</strong>
       <p style={{ margin: "0 0 12px", color: "var(--muted)", lineHeight: 1.4 }}>
-        Each project appears in this list. Select a card to open its workspace on the right.
+        {studioT("Each project appears in this list. Select a card to open its workspace on the right.", displayLanguage)}
       </p>
       <button className="button" type="button" onClick={onFirstProjectGuideProjectNext}>
-        Next
+        {studioT("Next", displayLanguage)}
       </button>
     </div>
   ) : null;

@@ -256,7 +256,7 @@ expect("preview image object: same stamp keys", orders.includes("...uploadPolicy
 // ---------------------------------------------------------------------------
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português",
   "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
-const tables = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"]
+const tables = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"]
   .filter((name) => exists(`lib/studioflow/${name}.ts`));
 for (const name of tables) compile(`lib/studioflow/${name}.ts`, name);
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);

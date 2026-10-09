@@ -10,6 +10,7 @@ import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
@@ -716,16 +717,16 @@ export default function MessagesPage() {
     return (
       <AppShell>
         <section className="card" style={{ padding: 28, maxWidth: 760 }}>
-          <div className="pill">Available on Team</div>
+          <div className="pill">{t("Available on Team")}</div>
           <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 10px" }}>
-            Messages is not included in {workspace.billingPlanName}.
+            {t("Messages is not included in {plan}.").replace("{plan}", workspace.billingPlanName)}
           </h1>
           <p style={{ color: "var(--muted)", margin: "0 0 18px" }}>
-            Internal team conversations, direct messages and shared message attachments are available on NivaDesk Team. Quick Reply remains separate for solo workflow use.
+            {t("Internal team conversations, direct messages and shared message attachments are available on NivaDesk Team. Quick Reply remains separate for solo workflow use.")}
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link className="button" href="/plan">View Team plan</Link>
-            <Link className="button secondary" href="/dashboard">Back to dashboard</Link>
+            <Link className="button" href="/plan">{t("View Team plan")}</Link>
+            <Link className="button secondary" href="/dashboard">{t("Back to dashboard")}</Link>
           </div>
         </section>
       </AppShell>
@@ -750,7 +751,7 @@ export default function MessagesPage() {
             </div>
           </div>
           {threads.length === 0 ? (
-            <div className="thread-panel__empty">No conversations yet.</div>
+            <div className="thread-panel__empty">{t("No conversations yet.")}</div>
           ) : (
             <ul className="thread-list">
               {activeThreads.map((thread) => (
@@ -769,7 +770,7 @@ export default function MessagesPage() {
               {archivedThreads.length > 0 && (
                 <li className="archived-header">
                   <button type="button" onClick={() => setArchivedExpanded((v) => !v)}>
-                    🗄️ Archived ({archivedThreads.length}) {archivedExpanded ? "▴" : "▾"}
+                    🗄️ {t("Archived ({count})").replace("{count}", String(archivedThreads.length))} {archivedExpanded ? "▴" : "▾"}
                   </button>
                 </li>
               )}
@@ -792,7 +793,7 @@ export default function MessagesPage() {
 
         <section className="conversation-panel">
           {!selectedThread ? (
-            <div className="conversation-panel__empty">Select a conversation to view messages.</div>
+            <div className="conversation-panel__empty">{t("Select a conversation to view messages.")}</div>
           ) : (
             <>
               <header className="conversation-panel__header">
@@ -801,7 +802,7 @@ export default function MessagesPage() {
                     type="button"
                     className="header-icon-btn"
                     onClick={() => setPhoneShowingConversation(false)}
-                    title="Back"
+                    title={t("Back")}
                     style={{ fontSize: 18, padding: "6px 8px" }}
                   >
                     ‹
@@ -810,7 +811,7 @@ export default function MessagesPage() {
                 <ThreadAvatar thread={selectedThread} currentUid={user.uid} members={teamMembers} />
                 <div style={{ flex: 1 }}>
                   <h2>{displayThreadTitle(selectedThread, user.uid, teamMembers)}</h2>
-                  <p>{conversationSubtitle(selectedThread, t)}</p>
+                  <p>{conversationSubtitle(selectedThread, t, language)}</p>
                 </div>
                 <div className="header-actions">
                   <button type="button" className={`header-icon-btn${showSavedOnly ? " active" : ""}`} title={t("Saved")} onClick={() => setShowSavedOnly((v) => !v)}>
@@ -820,19 +821,19 @@ export default function MessagesPage() {
                     <HeaderIcon name="search" />
                   </button>
                   <div style={{ position: "relative" }}>
-                    <button type="button" className="header-icon-btn" title="Mute" onClick={() => setMuteMenuOpen((v) => !v)}>
+                    <button type="button" className="header-icon-btn" title={t("Mute")} onClick={() => setMuteMenuOpen((v) => !v)}>
                       <HeaderIcon name="bellSlash" />
                     </button>
                     {muteMenuOpen && (
                       <div className="header-menu" onMouseLeave={() => setMuteMenuOpen(false)}>
-                        <button type="button" onClick={() => void handleSetMute("oneHour")}>Mute 1 hour</button>
-                        <button type="button" onClick={() => void handleSetMute("today")}>Mute today</button>
-                        <button type="button" onClick={() => void handleSetMute("forever")}>Mute until I unmute</button>
-                        <button type="button" onClick={() => void handleSetMute("unmute")}>Unmute</button>
+                        <button type="button" onClick={() => void handleSetMute("oneHour")}>{t("Mute 1 hour")}</button>
+                        <button type="button" onClick={() => void handleSetMute("today")}>{t("Mute today")}</button>
+                        <button type="button" onClick={() => void handleSetMute("forever")}>{t("Mute until I unmute")}</button>
+                        <button type="button" onClick={() => void handleSetMute("unmute")}>{t("Unmute")}</button>
                       </div>
                     )}
                   </div>
-                  <button type="button" className="header-icon-btn" title="Info" onClick={() => setInfoOpen(true)}>
+                  <button type="button" className="header-icon-btn" title={t("Info")} onClick={() => setInfoOpen(true)}>
                     <HeaderIcon name="info" />
                   </button>
                 </div>
@@ -844,12 +845,12 @@ export default function MessagesPage() {
                     <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("Search messages…")} autoFocus style={{ flex: 1 }} />
                     {searchQuery.trim() && (() => {
                       const matches = items.filter((m) => !m.deletedForEveryone && m.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
-                      if (matches.length === 0) return <span style={{ fontSize: 12, color: "#9ca3af" }}>No results</span>;
+                      if (matches.length === 0) return <span style={{ fontSize: 12, color: "#9ca3af" }}>{t("No results")}</span>;
                       const goNext = () => { handleJumpToMessage(matches[matches.length - 1].id); };
                       const goPrev = () => { handleJumpToMessage(matches[0].id); };
                       return (
                         <>
-                          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>{matches.length} match{matches.length === 1 ? "" : "es"}</span>
+                          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>{t("Matches: {count}").replace("{count}", String(matches.length))}</span>
                           <button type="button" onClick={goPrev} title={t("Oldest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
                           <button type="button" onClick={goNext} title={t("Latest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
                         </>
@@ -1085,7 +1086,7 @@ function ConversationBody({
   }, [items.length]);
 
   if (items.length === 0) {
-    return <div className="conversation-panel__empty">No messages yet.</div>;
+    return <div className="conversation-panel__empty">{t("No messages yet.")}</div>;
   }
   return (
     <div className="conversation-panel__body">
@@ -1231,7 +1232,7 @@ function Composer({
       {replyingTo && (
         <div className="reply-chip">
           <div className="reply-chip__body">
-            <div className="reply-chip__title">Replying to {senderLabel(replyingTo)}</div>
+            <div className="reply-chip__title">{t("Replying to {name}").replace("{name}", senderLabel(replyingTo))}</div>
             <div className="reply-chip__preview">
               {replyingTo.text.trim() || replyingTo.fileName || t("Attachment")}
             </div>
@@ -1513,7 +1514,7 @@ function MessageBubble({
                   {parsed.forwardedFrom && (
                     <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 4, fontStyle: "italic" }}>
                       <span>↪</span>
-                      <span>Forwarded from {parsed.forwardedFrom}</span>
+                      <span>{t("Forwarded from {name}").replace("{name}", parsed.forwardedFrom)}</span>
                     </div>
                   )}
                   {parsed.body && <span className="bubble__text">{renderMessageText(parsed.body)}</span>}
@@ -1529,9 +1530,9 @@ function MessageBubble({
           {saved && <span className="bubble__pin">🔖</span>}
           {item.pinned && <span className="bubble__pin">📌</span>}
           {formatTime(item.createdAtMillis)}
-          {item.edited && !item.deletedForEveryone && <em> · edited</em>}
+          {item.edited && !item.deletedForEveryone && <em> · {t("edited")}</em>}
           {isMine && totalReaderCount > 0 && (
-            <span title={`Read by ${readByCount} of ${totalReaderCount}`} style={{ marginLeft: 4, color: readByCount > 0 ? "#2D7BF4" : "#9ca3af", fontWeight: 700 }}>
+            <span title={t("Read by {count} of {total}").replace("{count}", String(readByCount)).replace("{total}", String(totalReaderCount))} style={{ marginLeft: 4, color: readByCount > 0 ? "#2D7BF4" : "#9ca3af", fontWeight: 700 }}>
               {readByCount > 0 ? "✓✓" : "✓"}{readByCount > 0 && totalReaderCount > 1 ? ` ${readByCount}` : ""}
             </span>
           )}
@@ -1570,16 +1571,16 @@ function MessageBubble({
         {menuOpen && (
           <div className="bubble-menu" onMouseLeave={() => setMenuOpen(false)}>
             <button type="button" onClick={() => { setMenuOpen(false); setReactionPickerOpen(true); }}>
-              React
+              {t("React")}
             </button>
             <button type="button" onClick={() => { setMenuOpen(false); onReply(); }}>
-              Reply
+              {t("Reply")}
             </button>
             <button type="button" onClick={() => { setMenuOpen(false); onForward(); }}>
-              Forward
+              {t("Forward")}
             </button>
             <button type="button" onClick={() => { setMenuOpen(false); onToggleSaved(); }}>
-              {saved ? "Unsave" : t("Save")}
+              {saved ? t("Unsave") : t("Save")}
             </button>
             {item.text && (
               <button
@@ -1589,7 +1590,7 @@ function MessageBubble({
                   setMenuOpen(false);
                 }}
               >
-                Copy text
+                {t("Copy text")}
               </button>
             )}
             {item.fileURL && (
@@ -1600,19 +1601,19 @@ function MessageBubble({
                   setMenuOpen(false);
                 }}
               >
-                Copy attachment link
+                {t("Copy attachment link")}
               </button>
             )}
             <button type="button" onClick={() => { setMenuOpen(false); onTogglePin(); }}>
-              {item.pinned ? "Unpin" : t("Pin")}
+              {item.pinned ? t("Unpin") : t("Pin")}
             </button>
             {canEdit && (
               <button type="button" onClick={() => { setMenuOpen(false); onEdit(); }}>
-                Edit
+                {t("Edit")}
               </button>
             )}
             <button type="button" onClick={() => { setMenuOpen(false); onDeleteForMe(); }}>
-              Delete for me
+              {t("Delete for me")}
             </button>
             {canDelete && (
               <button type="button" onClick={() => { setMenuOpen(false); onDeleteMessage(); }}>
@@ -1709,7 +1710,7 @@ function ImageViewerModal({
           type="button"
           onClick={(e) => { e.stopPropagation(); goNext(); }}
           style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.18)", color: "white", border: "none", borderRadius: "50%", width: 44, height: 44, fontSize: 22, cursor: "pointer", zIndex: 1 }}
-          aria-label="Next"
+          aria-label={t("Next")}
         >›</button>
       )}
       {scale !== 1 && (
@@ -1721,7 +1722,7 @@ function ImageViewerModal({
             border: "none", color: "white", borderRadius: 16, padding: "6px 12px",
             fontSize: 12, cursor: "pointer", fontWeight: 700, zIndex: 1,
           }}
-        >Reset zoom</button>
+        >{t("Reset zoom")}</button>
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -1787,12 +1788,12 @@ function EditDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h3>Edit message</h3>
+        <h3>{t("Edit message")}</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} autoFocus />
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
           <button type="button" disabled={!dirty} onClick={() => onSave(text.trim())} className="primary">
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>
@@ -1826,8 +1827,8 @@ function NewConversationDialog({
         <h3>{groupMode ? t("New group") : t("New direct message")}</h3>
         {allowDirect && allowGroup && (
           <div className="dialog-tabs">
-            <button type="button" className={!groupMode ? "active" : ""} onClick={() => { setGroupMode(false); setSelected(new Set()); }}>Direct</button>
-            <button type="button" className={groupMode ? "active" : ""} onClick={() => setGroupMode(true)}>Group</button>
+            <button type="button" className={!groupMode ? "active" : ""} onClick={() => { setGroupMode(false); setSelected(new Set()); }}>{t("Direct")}</button>
+            <button type="button" className={groupMode ? "active" : ""} onClick={() => setGroupMode(true)}>{t("Group")}</button>
           </div>
         )}
         {groupMode && (
@@ -1866,7 +1867,7 @@ function NewConversationDialog({
           })}
         </div>
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
           {groupMode ? (
             <button
               type="button"
@@ -1874,10 +1875,10 @@ function NewConversationDialog({
               disabled={selected.size < 2}
               onClick={() => onCreateGroup(Array.from(selected), title.trim())}
             >
-              Create
+              {t("Create")}
             </button>
           ) : (
-            <span style={{ color: "#6b7280", fontSize: 12 }}>Select a person to start messaging.</span>
+            <span style={{ color: "#6b7280", fontSize: 12 }}>{t("Select a person to start messaging.")}</span>
           )}
         </div>
       </div>
@@ -2002,11 +2003,11 @@ function RenameDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h3>Rename group</h3>
+        <h3>{t("Rename group")}</h3>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d1d5db" }} />
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" disabled={!title.trim()} onClick={() => onSave(title.trim())}>Save</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
+          <button type="button" className="primary" disabled={!title.trim()} onClick={() => onSave(title.trim())}>{t("Save")}</button>
         </div>
       </div>
     </div>
@@ -2028,7 +2029,7 @@ function AddMembersDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card dialog-card--wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Add people</h3>
+        <h3>{t("Add people")}</h3>
         <div className="member-list">
           {available.map((m) => {
             const checked = selected.has(m.id);
@@ -2054,8 +2055,8 @@ function AddMembersDialog({
           })}
         </div>
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" disabled={selected.size === 0} onClick={() => onAdd(Array.from(selected))}>Add</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
+          <button type="button" className="primary" disabled={selected.size === 0} onClick={() => onAdd(Array.from(selected))}>{t("Add")}</button>
         </div>
       </div>
     </div>
@@ -2080,7 +2081,7 @@ function ForwardDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card dialog-card--wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Forward to…</h3>
+        <h3>{t("Forward to…")}</h3>
         <div className="member-list">
           {threads.map((t) => (
             <button key={t.id} type="button" className="member-row" onClick={() => onForward(t.id)}>
@@ -2090,7 +2091,7 @@ function ForwardDialog({
           ))}
         </div>
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
         </div>
       </div>
     </div>
@@ -2118,40 +2119,40 @@ function MessageSettingsDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h3>Message settings (admin)</h3>
+        <h3>{t("Message settings (admin)")}</h3>
         <p style={{ color: "#6b7280", fontSize: 12, margin: "4px 0 16px" }}>
-          Control workspace-wide messaging permissions for the team.
+          {t("Control workspace-wide messaging permissions for the team.")}
         </p>
         <label className="setting-row">
           <input type="checkbox" checked={direct} onChange={(e) => setDirect(e.target.checked)} />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Allow Direct Messages</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>Team members can start one-to-one conversations.</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow Direct Messages")}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can start one-to-one conversations.")}</div>
           </div>
         </label>
         <label className="setting-row">
           <input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Allow Group Conversations</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>Team members can add people and create group chats.</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow Group Conversations")}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can add people and create group chats.")}</div>
           </div>
         </label>
         <label className="setting-row">
           <input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Allow File &amp; Image Sending</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>Team members can send images and files in Messages.</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow File & Image Sending")}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can send images and files in Messages.")}</div>
           </div>
         </label>
         <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
+          <button type="button" onClick={onCancel}>{t("Cancel")}</button>
           <button
             type="button"
             className="primary"
             disabled={!dirty}
             onClick={() => onSave({ directMessagesEnabled: direct, groupConversationsEnabled: group, attachmentsEnabled: attachments })}
           >
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>
@@ -2209,10 +2210,10 @@ function ThreadRow({
       {menuOpen && thread.id !== "team" && (
         <div className="thread-row__menu" onMouseLeave={() => setMenuOpen(false)}>
           <button type="button" onClick={() => { setMenuOpen(false); onToggleArchive(); }}>
-            {archived ? "Unarchive" : t("Archive")}
+            {archived ? t("Unarchive") : t("Archive")}
           </button>
           <button type="button" onClick={() => { setMenuOpen(false); onDeleteForMe(); }}>
-            Delete Conversation
+            {t("Delete Conversation")}
           </button>
         </div>
       )}
@@ -2242,10 +2243,10 @@ function ThreadAvatar({
   return <div className="avatar-circle">{initials}</div>;
 }
 
-function conversationSubtitle(thread: StudioMessageThread, t: (s: string) => string): string {
+function conversationSubtitle(thread: StudioMessageThread, t: (s: string) => string, language: string): string {
   if (thread.id === "team" || thread.type === "team") return t("Workspace broadcast channel");
   if (thread.type === "direct") return t("Direct message");
-  if (thread.type === "group") return `${thread.memberUids.length} members`;
+  if (thread.type === "group") return studioCountLabel(thread.memberUids.length, "member", language);
   return "";
 }
 

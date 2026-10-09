@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import {
   getInventoryReport,
   type InventoryReport,
@@ -112,7 +113,7 @@ export function ReportsPanel({
               <span className="inventory-stat-label">{t("Stock on the shelf")}</span>
               <strong>{money(currencySymbol, report.valuation.totalValue)}</strong>
               <span className="inventory-stat-sub">
-                {report.valuation.onShelfCount} {t("items")}
+                {studioCountLabel(report.valuation.onShelfCount, "item", language)}
               </span>
             </div>
             <div className="inventory-stat">

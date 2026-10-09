@@ -52,7 +52,7 @@ const compile = (rel, name) => {
   fs.writeFileSync(path.join(tmp, `${name}.mjs`), js);
 };
 compile("lib/studioflow/pdfDocumentOptions.ts", "pdfDocumentOptions");
-for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
+for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
 const options = await import(pathToFileURL(path.join(tmp, "pdfDocumentOptions.mjs")).href);
 const { studioT, SUPPORTED_STUDIO_LANGUAGES } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
 const {

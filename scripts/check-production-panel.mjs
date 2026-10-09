@@ -172,11 +172,13 @@ const importsFixed = (js) => js
   .replace(/from "\.\/macTranslations"/g, 'from "./macTranslations.mjs"')
   .replace(/from "\.\/settingsContentTranslations"/g, 'from "./settingsContentTranslations.mjs"')
   .replace(/from "\.\/shippingTranslations"/g, 'from "./shippingTranslations.mjs"')
-  .replace(/from "\.\/trackingEmailTranslations"/g, 'from "./trackingEmailTranslations.mjs"');
+  .replace(/from "\.\/trackingEmailTranslations"/g, 'from "./trackingEmailTranslations.mjs"')
+  .replace(/from "\.\/screenGapTranslations"/g, 'from "./screenGapTranslations.mjs"');
 compile("lib/studioflow/macTranslations.ts", "macTranslations.mjs", importsFixed);
 compile("lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs", importsFixed);
 compile("lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs", importsFixed);
 compile("lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs", importsFixed);
+compile("lib/studioflow/screenGapTranslations.ts", "screenGapTranslations.mjs", importsFixed);
 const languageFile = compile("lib/studioflow/language.ts", "language.mjs", importsFixed);
 const { studioT } = await import(pathToFileURL(languageFile).href);
 expect("studioT answers English as is", studioT("Open order", "English"), "Open order");

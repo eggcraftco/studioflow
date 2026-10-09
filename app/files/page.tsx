@@ -8,7 +8,8 @@ import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -51,9 +52,9 @@ import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 
-function formatDate(date: Date | null) {
+function formatDate(date: Date | null, language: string) {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(studioLocaleTag(language), { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function orderOptionLabel(order: OrderOptionItem) {
@@ -145,7 +146,7 @@ function FilesPreviewModal({
             <h2>{activeFile.fileName}</h2>
             <p>
               {currentIndex + 1} / {files.length} · {clientFileSizeLabel(activeFile.fileSize)}
-              {uploaderLabel(activeFile) ? ` · Added by ${uploaderLabel(activeFile)}` : ""}
+              {uploaderLabel(activeFile) ? ` · ${t("Added by {name}").replace("{name}", uploaderLabel(activeFile))}` : ""}
             </p>
           </div>
           <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label={t("Close file preview")}>
@@ -161,8 +162,8 @@ function FilesPreviewModal({
           ) : (
             <div className="client-file-preview-unavailable">
               <span>{fileBadgeLabel(activeFile)}</span>
-              <strong>Preview is not available for this file type.</strong>
-              <p>Use Open / Download to view this file in another app.</p>
+              <strong>{t("Preview is not available for this file type.")}</strong>
+              <p>{t("Use Open / Download to view this file in another app.")}</p>
             </div>
           )}
         </div>
@@ -174,7 +175,7 @@ function FilesPreviewModal({
             disabled={currentIndex <= 0}
             onClick={() => onSelect(files[currentIndex - 1].id)}
           >
-            Previous
+            {t("Previous")}
           </button>
           {activeFile.downloadURL ? (
             <a
@@ -184,7 +185,7 @@ function FilesPreviewModal({
               rel="noreferrer"
               onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}
             >
-              Open / Download
+              {t("Open / Download")}
             </a>
           ) : null}
           <button
@@ -193,7 +194,7 @@ function FilesPreviewModal({
             disabled={currentIndex >= files.length - 1}
             onClick={() => onSelect(files[currentIndex + 1].id)}
           >
-            Next
+            {t("Next")}
           </button>
         </footer>
       </section>
@@ -700,7 +701,7 @@ export default function FilesPage() {
         <section className="card locked-panel" style={{ padding: 22, marginBottom: 18 }}>
           <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Open and download require Pro or Team")} />
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            File metadata is listed for reference, but full Client Files cloud access stays locked on Free and NivaDesk Starter. Data export remains available separately.
+            {t("File metadata is listed for reference, but full Client Files cloud access stays locked on Free and NivaDesk Starter. Data export remains available separately.")}
           </p>
         </section>
       ) : null}
@@ -712,7 +713,7 @@ export default function FilesPage() {
           {canUploadClientFiles ? (
             <>
               <div className="upload-safety-panel">
-                <span className="studio-pill">Max {maxUploadSizeMB} MB</span>
+                <span className="studio-pill">{t("Max {size} MB").replace("{size}", String(maxUploadSizeMB))}</span>
                 <span className="studio-pill">PDF, image, PSD, PSB, ZIP</span>
                 {requireUploadPolicyAcceptance ? (
                   <>
@@ -736,7 +737,7 @@ export default function FilesPage() {
 
               <form onSubmit={handleUpload} className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", alignItems: "end" }}>
                 <label style={{ display: "grid", gap: 8, fontWeight: 800 }}>
-                  Order
+                  {t("Order")}
                   <select
                     className="input"
                     value={selectedOrderId}
@@ -747,7 +748,7 @@ export default function FilesPage() {
                     }}
                     disabled={uploading}
                   >
-                    <option value="">Choose order</option>
+                    <option value="">{t("Choose order")}</option>
                     {orders.map(order => (
                       <option key={order.id} value={order.id}>{orderOptionLabel(order)}</option>
                     ))}
@@ -755,7 +756,7 @@ export default function FilesPage() {
                 </label>
 
                 <label style={{ display: "grid", gap: 8, fontWeight: 800 }}>
-                  File
+                  {t("File")}
                   <input
                     ref={uploadInputRef}
                     key={fileInputKey}
@@ -777,13 +778,13 @@ export default function FilesPage() {
                   type="submit"
                   disabled={uploading || !selectedOrderId || selectedFiles.length === 0 || orders.length === 0 || (requireUploadPolicyAcceptance && !browserAcceptedUploadPolicy)}
                 >
-                  {uploading ? "Uploading..." : "Upload"}
+                  {uploading ? t("Uploading...") : t("Upload")}
                 </button>
               </form>
             </>
           ) : (
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Your current role can view Client Files but cannot upload new files.
+              {t("Your current role can view Client Files but cannot upload new files.")}
             </p>
           )}
 
@@ -802,9 +803,9 @@ export default function FilesPage() {
       <section className="card" style={{ padding: 22 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
           <div>
-            <CardTitle icon="files" eyebrow={`${files.length} files`} title={t("Workspace client files")} />
+            <CardTitle icon="files" eyebrow={studioCountLabel(files.length, "file", language)} title={t("Workspace client files")} />
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              Total listed size: {clientFileSizeLabel(totalSize)}
+              {t("Total listed size: {size}").replace("{size}", clientFileSizeLabel(totalSize))}
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
               <input
@@ -815,9 +816,9 @@ export default function FilesPage() {
                 onChange={event => setFileSearch(event.target.value)}
               />
               <select className="input" style={{ maxWidth: 170 }} value={fileSort} onChange={event => setFileSort(event.target.value as "newest" | "name" | "size")}>
-                <option value="newest">Newest first</option>
-                <option value="name">Name A–Z</option>
-                <option value="size">Largest first</option>
+                <option value="newest">{t("Newest first")}</option>
+                <option value="name">{t("Name A–Z")}</option>
+                <option value="size">{t("Largest first")}</option>
               </select>
             </div>
             {actionStatus ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 800 }}>{t(actionStatus)}</p> : null}
@@ -826,10 +827,10 @@ export default function FilesPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {canUseClientFiles && files.length > 0 ? (
               <button className="button" onClick={handleDownloadAll} disabled={downloadingAll}>
-                {downloadingAll ? "Preparing…" : "Download all (ZIP)"}
+                {downloadingAll ? t("Preparing…") : t("Download all (ZIP)")}
               </button>
             ) : null}
-            <Link className="button secondary" href="/orders">Open orders</Link>
+            <Link className="button secondary" href="/orders">{t("Open orders")}</Link>
           </div>
         </div>
 
@@ -867,7 +868,7 @@ export default function FilesPage() {
         ) : null}
 
         {files.length === 0 ? (
-          <p style={{ color: "var(--muted)" }}>No client files found for this workspace yet.</p>
+          <p style={{ color: "var(--muted)" }}>{t("No client files found for this workspace yet.")}</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             {groupedFiles.map(group => (
@@ -884,11 +885,11 @@ export default function FilesPage() {
                   }}
                 >
                   <Link href={`/orders/${group.orderId}`} style={{ fontWeight: 900, fontSize: 14 }}>
-                    {group.customerName || "Order"}{group.designName ? ` · ${group.designName}` : ""}
+                    {group.customerName || t("Order")}{group.designName ? ` · ${group.designName}` : ""}
                   </Link>
                   {group.orderStatus ? <span className="pill">{group.orderStatus}</span> : null}
                   <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
-                    {group.files.length} file{group.files.length === 1 ? "" : "s"}
+                    {studioCountLabel(group.files.length, "file", language)}
                   </span>
                   {canDeleteClientFiles ? (() => {
                     const allSelected = group.files.every(file => selectedFileIds.has(file.id));
@@ -914,7 +915,7 @@ export default function FilesPage() {
                       disabled={downloadingOrderId === group.orderId}
                       onClick={() => handleDownloadOrderGroup(group.orderId)}
                     >
-                      {downloadingOrderId === group.orderId ? "Preparing…" : "⬇ ZIP"}
+                      {downloadingOrderId === group.orderId ? t("Preparing…") : "⬇ ZIP"}
                     </button>
                   ) : null}
                   {canDeleteClientFiles ? (
@@ -927,7 +928,7 @@ export default function FilesPage() {
                       disabled={deletingOrderId === group.orderId}
                       onClick={() => handleDeleteOrderGroup(group)}
                     >
-                      {deletingOrderId === group.orderId ? "Deleting…" : "Delete all"}
+                      {deletingOrderId === group.orderId ? t("Deleting…") : t("Delete all")}
                     </button>
                   ) : null}
                 </div>
@@ -953,7 +954,7 @@ export default function FilesPage() {
                           type="button"
                           disabled={!canOpenPreview}
                           onClick={() => setPreviewingFileId(file.id)}
-                          title={canOpenPreview ? "Preview file" : "Preview is locked for this plan."}
+                          title={canOpenPreview ? t("Preview file") : t("Preview is locked for this plan.")}
                         >
                           {showThumb ? (
                             <img src={file.downloadURL} alt={file.fileName} className="file-preview compact-file-preview" />
@@ -963,10 +964,10 @@ export default function FilesPage() {
                           <div className="client-file-main">
                             <strong>{file.fileName}</strong>
                             <p className="muted-copy">
-                              {clientFileTypeLabel(file)} · {clientFileSizeLabel(file.fileSize)} · {formatDate(file.uploadedAt)}
+                              {clientFileTypeLabel(file)} · {clientFileSizeLabel(file.fileSize)} · {formatDate(file.uploadedAt, language)}
                             </p>
                             {uploaderLabel(file) ? (
-                              <p className="muted-copy">Added by {uploaderLabel(file)}</p>
+                              <p className="muted-copy">{t("Added by {name}").replace("{name}", uploaderLabel(file))}</p>
                             ) : null}
                           </div>
                         </button>
@@ -974,17 +975,17 @@ export default function FilesPage() {
                         <div className="client-file-icon-actions">
                           {canUseClientFiles ? (
                             file.downloadURL ? (
-                              <a className="button secondary" href={maskFileUrl(file.downloadURL, workspace?.clientPortalHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, workspace?.clientPortalHost); }}>Open</a>
+                              <a className="button secondary" href={maskFileUrl(file.downloadURL, workspace?.clientPortalHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, workspace?.clientPortalHost); }}>{t("Open")}</a>
                             ) : (
-                              <span className="pill">No URL</span>
+                              <span className="pill">{t("No URL")}</span>
                             )
                           ) : (
-                            <span className="pill">Locked</span>
+                            <span className="pill">{t("Locked")}</span>
                           )}
                           {canManageClientFiles ? (
                             <>
                               <button className="button secondary" type="button" onClick={() => handleRename(file)} disabled={Boolean(actioningFileId)}>
-                                {actioningFileId === file.id ? "..." : "Rename"}
+                                {actioningFileId === file.id ? "..." : t("Rename")}
                               </button>
                               {canDeleteClientFiles ? (
                                 <button
@@ -994,7 +995,7 @@ export default function FilesPage() {
                                   disabled={Boolean(actioningFileId)}
                                   style={{ color: "var(--danger)" }}
                                 >
-                                  Delete
+                                  {t("Delete")}
                                 </button>
                               ) : null}
                             </>

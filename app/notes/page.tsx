@@ -7,6 +7,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { loadWorkspaceContext, loadRecentOrders, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
@@ -528,16 +529,16 @@ export default function NotesPage() {
         {selectedIds.size > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 14px", marginBottom: 12 }}>
             <button onClick={clearSelection} title={t("Cancel")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#374151" }}>✕</button>
-            <span style={{ fontWeight: 700, color: "#374151" }}>{selectedIds.size} selected</span>
+            <span style={{ fontWeight: 700, color: "#374151" }}>{t("{count} selected").replace("{count}", String(selectedIds.size))}</span>
             <div style={{ flex: 1 }} />
             {section === "trash" ? (
               <>
-                <button onClick={bulkRestoreFromTrash} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Restore to Notes</button>
+                <button onClick={bulkRestoreFromTrash} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Restore to Notes")}</button>
                 <button onClick={bulkDeleteForever} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Delete forever")}</button>
               </>
             ) : section === "archive" ? (
               <>
-                <button onClick={bulkUnarchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>Unarchive</button>
+                <button onClick={bulkUnarchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Unarchive")}</button>
                 <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
               </>
             ) : (
@@ -553,7 +554,7 @@ export default function NotesPage() {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingInlineStart: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>{(topTab === "project" ? projectNoteCount : visible.length)} {(topTab === "project" ? projectNoteCount : visible.length) === 1 ? t("note") : t("notes")}</div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>{studioCountLabel(topTab === "project" ? projectNoteCount : visible.length, "note", language)}</div>
           </div>
           <button
             onClick={() =>
@@ -594,7 +595,7 @@ export default function NotesPage() {
           <>
             {false && allLabels.length > 0 && (
               <div style={{ display: "none" }}>
-                <button onClick={() => setLabelFilter(null)}>All</button>
+                <button onClick={() => setLabelFilter(null)}>{t("All")}</button>
                 {allLabels.map((l) => (
                   <button
                     key={l}
@@ -616,7 +617,7 @@ export default function NotesPage() {
                   }}
                   style={{ background: "none", border: "none", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}
                 >
-                  Empty Trash
+                  {t("Empty Trash")}
                 </button>
               </div>
             )}
@@ -1315,7 +1316,7 @@ function NoteCard({
               {allLabels.length > 0 && (
                 <>
                   <div style={{ borderTop: "1px solid #f3f4f6", margin: "4px 0" }} />
-                  <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "4px 10px" }}>LABELS</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "4px 10px" }}>{t("LABELS")}</div>
                   {allLabels.map((l) => (
                     <button key={l} onClick={() => { onToggleLabel(note, l); }} style={menuItemStyle}>
                       {note.labels.includes(l) ? "✓ " : ""}{l}

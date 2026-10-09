@@ -29,6 +29,7 @@ import {
 import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { ItemDetailPanel } from "./ItemDetailPanel";
 import { ItemLabelModal } from "./ItemLabelModal";
@@ -419,15 +420,15 @@ export function InventoryContent({
           hint: t("Counted stock lines (SKUs, not units), and their purchase cost on hand.")
         },
         {
-          label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items`,
+          label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: studioCountLabel(summary.reservedCount, "item", language),
           hint: t("Purchase cost of items currently held for orders, and how many lines are held.")
         },
         {
-          label: t("Incoming"), value: `${summary.incomingCount} items`, sub: money(currencySymbol, summary.incomingValue),
+          label: t("Incoming"), value: studioCountLabel(summary.incomingCount, "item", language), sub: money(currencySymbol, summary.incomingValue),
           hint: t("Purchased but not yet received. Counted apart — not in Total Inventory Value until it arrives.")
         },
         {
-          label: t("Low Stock"), value: `${summary.lowStockCount} items`, tone: summary.lowStockCount > 0 ? "warn" : undefined,
+          label: t("Low Stock"), value: studioCountLabel(summary.lowStockCount, "item", language), tone: summary.lowStockCount > 0 ? "warn" : undefined,
           hint: t("Stock lines at or below their reorder point — lines, not missing units.")
         }
       ]
@@ -555,9 +556,7 @@ export function InventoryContent({
 
       {summary && summary.customerOwnedCount > 0 ? (
         <p className="inventory-note">
-          {summary.customerOwnedCount} customer-owned item
-          {summary.customerOwnedCount === 1 ? " is" : "s are"} held here and deliberately valued at zero —
-          they are the customer&apos;s property, not stock.
+          {t("Customer-owned items held here: {count}. They are deliberately valued at zero — they are the customer's property, not stock.").replace("{count}", String(summary.customerOwnedCount))}
         </p>
       ) : null}
 
@@ -719,7 +718,7 @@ export function InventoryContent({
                 </td>
                 <td className="r">
                   {item.ownership === "customer"
-                    ? <span className="inventory-sub">Customer&apos;s</span>
+                    ? <span className="inventory-sub">{t("Customer's")}</span>
                     : money(currencySymbol, inventoryLineValue(item))}
                 </td>
                 <td>{item.location || "—"}</td>
@@ -770,7 +769,7 @@ export function InventoryContent({
         {visible.length > 0 ? (
           <div className="inventory-pager">
             <span className="inventory-sub">
-              {t("Showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, visible.length)} {t("of")} {visible.length} {t("items")}
+              {t("Showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, visible.length)} {t("of")} {studioCountLabel(visible.length, "item", language)}
             </span>
             <div className="inventory-pager-controls">
               <button type="button" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>‹</button>
@@ -1019,8 +1018,8 @@ function NewItemModal({
               className={`inventory-type-option ${draft.trackingType === option.type ? "is-on" : ""}`}
               onClick={() => chooseType(option.type)}
             >
-              <strong>{option.title}</strong>
-              <span>{option.body}</span>
+              <strong>{t(option.title)}</strong>
+              <span>{t(option.body)}</span>
             </button>
           ))}
         </div>

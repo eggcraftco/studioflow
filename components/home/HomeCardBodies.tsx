@@ -16,6 +16,7 @@ import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { nextSetupStep, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 
 /**
@@ -39,6 +40,8 @@ export type CardBodyProps = {
    *  locale is a different question and answers it wrong for anyone whose
    *  laptop is not set to their working language. */
   locale: string;
+  /** The app language name, for count labels ("1 item" / "2 items"). */
+  language?: string;
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
@@ -645,7 +648,7 @@ function BankActivityChart({ transactions, t, symbol }: {
 
 /* -------------------------------------------------------------- Inventory */
 
-export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+export function InventoryCardBody({ size, data, t, language, moneySettings, hideNumbers }: CardBodyProps) {
   const summary = data.inventory;
   if (!summary) return null;
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
@@ -740,7 +743,7 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
             <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="reserved" /></span>
             <span className="home-holding-name">
               <strong>{t("Reserved")}</strong>
-              <em>{summary.reservedCount} {t("items")}</em>
+              <em>{studioCountLabel(summary.reservedCount, "item", language)}</em>
             </span>
             <b>{money(summary.reservedValue)}</b>
           </li>
@@ -748,7 +751,7 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
             <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="incomingStock" /></span>
             <span className="home-holding-name">
               <strong>{t("incoming")}</strong>
-              <em>{summary.incomingCount} {t("items")}</em>
+              <em>{studioCountLabel(summary.incomingCount, "item", language)}</em>
             </span>
             <b>{money(summary.incomingValue)}</b>
           </li>
@@ -832,7 +835,7 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
                 <span className="home-status-mark" aria-hidden="true"><HomeTileIcon name={row.icon} /></span>
                 <span className="home-status-name">
                   <strong>{row.label}</strong>
-                  <em>{row.count} {t("items")}</em>
+                  <em>{studioCountLabel(row.count, "item", language)}</em>
                 </span>
                 {row.value ? <b>{row.value}</b> : null}
               </li>

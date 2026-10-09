@@ -1,0 +1,687 @@
+{
+ "1 min": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "15 min": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "5 min": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Aa": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Action": [
+  "Français"
+ ],
+ "Actions": [
+  "Français"
+ ],
+ "Admin": [
+  "Deutsch",
+  "Français",
+  "Italiano"
+ ],
+ "Amazon": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "App": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "App Store": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Apple On-Device": [
+  "Deutsch"
+ ],
+ "Audit": [
+  "Français"
+ ],
+ "Automotive": [
+  "Italiano"
+ ],
+ "Badge 1": [
+  "Français",
+  "Italiano"
+ ],
+ "Badge 2": [
+  "Français",
+  "Italiano"
+ ],
+ "Bank": [
+  "Deutsch"
+ ],
+ "Banking": [
+  "Deutsch"
+ ],
+ "Branding": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "Bug": [
+  "Français",
+  "Italiano"
+ ],
+ "CTA": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Chargeback": [
+  "Italiano"
+ ],
+ "ChatGPT": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Checklist": [
+  "Italiano"
+ ],
+ "Client ID": [
+  "Русский (Russian)"
+ ],
+ "Color": [
+  "Español (Spanish)"
+ ],
+ "Communication": [
+  "Français"
+ ],
+ "Compact": [
+  "Français"
+ ],
+ "Contact": [
+  "Français"
+ ],
+ "Conv.": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Conversation": [
+  "Français"
+ ],
+ "Conversations": [
+  "Français"
+ ],
+ "DESI": [
+  "Deutsch",
+  "Français",
+  "Italiano"
+ ],
+ "DHL EXPRESS": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "DHL production": [
+  "Français"
+ ],
+ "Dashboard": [
+  "Italiano"
+ ],
+ "Date": [
+  "Français"
+ ],
+ "Description": [
+  "Français"
+ ],
+ "Design": [
+  "Deutsch",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Designer": [
+  "Deutsch",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Desktop": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "Details": [
+  "Deutsch"
+ ],
+ "Direct": [
+  "Français"
+ ],
+ "Document": [
+  "Français"
+ ],
+ "Documents": [
+  "Français"
+ ],
+ "Email": [
+  "Italiano"
+ ],
+ "Emoji": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Italiano",
+  "Português",
+  "Türkçe"
+ ],
+ "File": [
+  "Italiano"
+ ],
+ "Follow-up": [
+  "Italiano"
+ ],
+ "General": [
+  "Español (Spanish)"
+ ],
+ "Google Play": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Highlight 1": [
+  "Deutsch"
+ ],
+ "Highlight 2": [
+  "Deutsch"
+ ],
+ "Home": [
+  "Italiano"
+ ],
+ "Image": [
+  "Français"
+ ],
+ "Impr.": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Impressions": [
+  "Français"
+ ],
+ "Incoterm": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Info": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "Invitations": [
+  "Français"
+ ],
+ "Legal": [
+  "Español (Spanish)"
+ ],
+ "Limit": [
+  "Deutsch"
+ ],
+ "Link": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "Links": [
+  "Deutsch"
+ ],
+ "Local": [
+  "Español (Spanish)",
+  "Français",
+  "Português"
+ ],
+ "Logos": [
+  "Deutsch",
+  "Français"
+ ],
+ "Marketing": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Maximum": [
+  "Français"
+ ],
+ "Media": [
+  "Italiano"
+ ],
+ "Menu": [
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "Message": [
+  "Français"
+ ],
+ "Messages": [
+  "Français"
+ ],
+ "Name": [
+  "Deutsch"
+ ],
+ "Navigation": [
+  "Deutsch",
+  "Français"
+ ],
+ "Net": [
+  "Français",
+  "Türkçe"
+ ],
+ "No": [
+  "Español (Spanish)",
+  "Italiano"
+ ],
+ "Normal": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Português",
+  "Türkçe"
+ ],
+ "Note": [
+  "Français"
+ ],
+ "Notes": [
+  "Français"
+ ],
+ "Notification": [
+  "Français"
+ ],
+ "Notifications": [
+  "Français"
+ ],
+ "Num...": [
+  "Italiano"
+ ],
+ "OK": [
+  "Deutsch",
+  "Français",
+  "Italiano",
+  "Português",
+  "日本語 (Japanese)"
+ ],
+ "Offline": [
+  "Deutsch",
+  "Italiano",
+  "Português"
+ ],
+ "Online": [
+  "Deutsch",
+  "Italiano",
+  "Português"
+ ],
+ "Optional": [
+  "Deutsch"
+ ],
+ "Orange": [
+  "Deutsch",
+  "Français"
+ ],
+ "Page": [
+  "Français"
+ ],
+ "Password": [
+  "Italiano"
+ ],
+ "Personal": [
+  "Español (Spanish)"
+ ],
+ "Photo": [
+  "Français"
+ ],
+ "Photos": [
+  "Français"
+ ],
+ "Plan": [
+  "Español (Spanish)",
+  "Türkçe"
+ ],
+ "Platform": [
+  "Türkçe"
+ ],
+ "Position": [
+  "Deutsch",
+  "Français"
+ ],
+ "Powered by NivaDesk": [
+  "日本語 (Japanese)"
+ ],
+ "Pro & Team": [
+  "Deutsch"
+ ],
+ "Production": [
+  "Français"
+ ],
+ "Property: {property}": [
+  "Deutsch"
+ ],
+ "QR / Barcode": [
+  "Deutsch"
+ ],
+ "Referral": [
+  "Italiano"
+ ],
+ "Roles": [
+  "Español (Spanish)"
+ ],
+ "SF": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "SMS": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "हिन्दी (Hindi)",
+  "日本語 (Japanese)"
+ ],
+ "Sandbox": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe"
+ ],
+ "Score": [
+  "Français"
+ ],
+ "Secret": [
+  "Deutsch",
+  "Français",
+  "Italiano"
+ ],
+ "Segments": [
+  "Français"
+ ],
+ "Social Media": [
+  "Deutsch"
+ ],
+ "Source": [
+  "Français"
+ ],
+ "Square Online": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Status": [
+  "Deutsch"
+ ],
+ "Studio": [
+  "Deutsch",
+  "Français",
+  "Italiano"
+ ],
+ "Subtotal": [
+  "Español (Spanish)",
+  "Português"
+ ],
+ "Suggestion": [
+  "Français"
+ ],
+ "Support": [
+  "Deutsch"
+ ],
+ "Support / Tickets": [
+  "Deutsch"
+ ],
+ "System": [
+  "Deutsch"
+ ],
+ "TOTAL": [
+  "Español (Spanish)",
+  "Français",
+  "Português"
+ ],
+ "Tablet": [
+  "Deutsch",
+  "Italiano",
+  "Português",
+  "Türkçe"
+ ],
+ "Tags": [
+  "Deutsch"
+ ],
+ "Team": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "Test": [
+  "Deutsch",
+  "Français",
+  "Italiano",
+  "Türkçe"
+ ],
+ "TikTok": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "Total": [
+  "Español (Spanish)",
+  "Français",
+  "Português"
+ ],
+ "Transaction": [
+  "Français"
+ ],
+ "Type": [
+  "Français"
+ ],
+ "Uploads": [
+  "Deutsch"
+ ],
+ "Urgent": [
+  "Français"
+ ],
+ "VAT (": [
+  "हिन्दी (Hindi)",
+  "日本語 (Japanese)"
+ ],
+ "Version": [
+  "Deutsch",
+  "Français"
+ ],
+ "Versions": [
+  "Français"
+ ],
+ "Visible": [
+  "Español (Spanish)",
+  "Français"
+ ],
+ "Web": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe"
+ ],
+ "Webhooks": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Português"
+ ],
+ "Website": [
+  "Deutsch"
+ ],
+ "Workspace": [
+  "Deutsch"
+ ],
+ "YYYY-MM-DD": [
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "_comment": "Cells where the English text is the correct translation (cognates, brand names). The gap report does not count them as falling back to English.",
+ "code": [
+  "Français"
+ ],
+ "eBay": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Türkçe",
+  "Русский (Russian)",
+  "العربية (Arabic)",
+  "हिन्दी (Hindi)",
+  "中文 (Chinese)",
+  "日本語 (Japanese)"
+ ],
+ "in": [
+  "Deutsch",
+  "Italiano"
+ ],
+ "incl.": [
+  "Español (Spanish)",
+  "Português"
+ ],
+ "min": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português"
+ ],
+ "note": [
+  "Français"
+ ],
+ "notes": [
+  "Français"
+ ],
+ "notifications ▾": [
+  "Français"
+ ],
+ "page": [
+  "Français"
+ ],
+ "photos.": [
+  "Français"
+ ],
+ "suggestions": [
+  "Français"
+ ],
+ "test": [
+  "Français",
+  "Italiano",
+  "Türkçe"
+ ],
+ "transactions": [
+  "Français"
+ ],
+ "{count} media": [
+  "Italiano"
+ ],
+ "{count} transactions": [
+  "Français"
+ ]
+}

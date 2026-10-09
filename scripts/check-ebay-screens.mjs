@@ -314,7 +314,7 @@ expect("filter bar: the source counts are within the chosen filter", bar.include
 expect("filter bar: no source section without a choice to make", bar.includes('onSourceChange && (sourcesPresent.length > 1 || source !== "all")'), true);
 
 // ---- 5. every sentence, in all eleven languages
-for (const rel of ["lib/studioflow/macTranslations.ts", "lib/studioflow/settingsContentTranslations.ts", "lib/studioflow/shippingTranslations.ts", "lib/studioflow/trackingEmailTranslations.ts"]) compile(rel);
+for (const rel of ["lib/studioflow/macTranslations.ts", "lib/studioflow/settingsContentTranslations.ts", "lib/studioflow/shippingTranslations.ts", "lib/studioflow/trackingEmailTranslations.ts", "lib/studioflow/screenGapTranslations.ts"]) compile(rel);
 const { studioT } = await load("lib/studioflow/language.ts");
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const BRANDS = new Set(["eBay", "Shopify", "WooCommerce", "Etsy", "Square", "Amazon"]);

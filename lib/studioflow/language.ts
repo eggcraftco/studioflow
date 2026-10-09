@@ -2,6 +2,7 @@ import { MAC_TRANSLATIONS } from "./macTranslations";
 import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
+import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -8989,3 +8990,17 @@ mergeIntoTranslations({
   "note": {"Türkçe": "not", "Deutsch": "Notiz", "Français": "note", "Italiano": "nota", "Español (Spanish)": "nota", "Português": "nota", "Русский (Russian)": "заметка", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظة", "हिन्दी (Hindi)": "नोट"},
   "notes": {"Türkçe": "not", "Deutsch": "Notizen", "Français": "notes", "Italiano": "note", "Español (Spanish)": "notas", "Português": "notas", "Русский (Russian)": "заметок", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظات", "हिन्दी (Hindi)": "नोट"},
 });
+
+// Owner item 6 (9 Oct 2026): the in-use screens' missing and same-as-English cells. Deep merge,
+// placed after every table above so none of them can hide these cells (see screenGapTranslations.ts).
+mergeIntoTranslations(I18N_GAP_TRANSLATIONS as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+/** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
+export function studioTranslationKeys(): string[] {
+  return Object.keys(TRANSLATIONS);
+}
+
+/** The merged row for one source text (undefined when the table has none). */
+export function studioTranslationRow(text: string): Partial<Record<StudioLanguage, string>> | undefined {
+  return TRANSLATIONS[text];
+}

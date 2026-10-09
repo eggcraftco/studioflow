@@ -104,6 +104,7 @@ import {
 import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
 import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings, getSettingsAuditLog } from "@/lib/studioflow/settingsActions";
@@ -1861,7 +1862,7 @@ function WorkspaceBrandingSection({
                 className="input"
                 value={appSubtitle}
                 disabled={!canEditBranding || savingIdentity || !settings}
-                placeholder="Bespoke Hand-Painted Dials"
+                placeholder={t("Bespoke Hand-Painted Dials")}
                 onChange={event => {
                   setAppSubtitle(event.target.value);
                   setIdentityStatus("");
@@ -1923,7 +1924,7 @@ function WorkspaceBrandingSection({
           <span className="settings-field-hint">
             {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
             {" "}
-            {t("Maximum")} {maxSizeMB} MB.
+            {t("Maximum {size} MB.").replace("{size}", String(maxSizeMB))}
           </span>
         </div>
         <div className="workspace-logo-actions">
@@ -4691,7 +4692,7 @@ function AccountSection({
             <p className="muted-copy">
               {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
               {" "}
-              {t("Maximum")} {maxSizeMB} MB.
+              {t("Maximum {size} MB.").replace("{size}", String(maxSizeMB))}
             </p>
             <p className="muted-copy">
               {t("Choosing a logo uploads and saves it immediately — it is separate from the Save Branding button, which saves only the name and subtitle.")}
@@ -7380,7 +7381,7 @@ function TeamAccessSection({
     canViewTeamManagement ? (
       <span className="settings-header-chip">
         <CardIconGlyph icon="team" />
-        {seatsUnlimited ? `${members.length} ${t("members")}` : `${members.length} ${t("of")} ${seatLimit} ${t("seats used")}`}
+        {seatsUnlimited ? studioCountLabel(members.length, "member", language) : t("{used} of {limit} seats used").replace("{used}", String(members.length)).replace("{limit}", String(seatLimit))}
       </span>
     ) : null,
     [canViewTeamManagement, members.length, seatLimit, language]
@@ -7891,7 +7892,7 @@ function TeamAccessSection({
               const affected = members.filter(member => member.role === role.id).length;
               return (
                 <p className="settings-field-hint" key={role.id}>
-                  <strong>{role.name}</strong>: {t("Editing this role affects")} {affected} {affected === 1 ? t("member") : t("members")}.
+                  <strong>{role.name}</strong>: {t("Editing this role affects {count}.").replace("{count}", studioCountLabel(affected, "member", language))}
                 </p>
               );
             })}
