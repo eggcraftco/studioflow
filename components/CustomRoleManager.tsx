@@ -140,10 +140,13 @@ export function CustomRoleManager({ roles, members, disabled = false, savingKey 
   async function submitNewRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreate) return;
-    await onSave({
+    const saved = await onSave({
       ...newRole,
       name: newRole.name.trim()
     });
+    // The pages' runTeamAction answers false when the server refused (no permission, no connection, ...):
+    // the typed role stays so it can be sent again.
+    if (saved === false) return;
     setNewRole(defaultRole());
     setNewRoleExpanded(false);
   }
