@@ -1616,7 +1616,10 @@ function NoteEditor({
         aria-labelledby="note-editor-title"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "white",
+          // Theme tokens, not literal white: in dark mode the panel, chips and
+          // buttons were white with white text (9 Oct isolated check).
+          background: "var(--surface)",
+          color: "var(--text)",
           borderRadius: 14,
           padding: 20,
           width: "min(560px, 92vw)",
@@ -1635,7 +1638,7 @@ function NoteEditor({
         {restoredHint && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px", marginBottom: 10, fontSize: 12, color: "#92400e" }}>
             <span style={{ flex: 1 }}>{t("An unsaved draft of this note was restored.")}</span>
-            <button type="button" onClick={discardDraft} style={{ border: "1px solid #fde68a", background: "white", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#92400e" }}>{t("Discard draft")}</button>
+            <button type="button" onClick={discardDraft} style={{ border: "1px solid #fde68a", background: "var(--surface)", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#92400e" }}>{t("Discard draft")}</button>
           </div>
         )}
         <input
@@ -1644,7 +1647,7 @@ function NoteEditor({
           disabled={saving}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={t("Title")}
-          style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10 }}
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 10 }}
         />
         <textarea
           value={text}
@@ -1652,7 +1655,7 @@ function NoteEditor({
           onChange={(e) => setText(e.target.value)}
           placeholder={t("Note")}
           rows={6}
-          style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
         />
 
         <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
@@ -1664,7 +1667,7 @@ function NoteEditor({
                 setNoteType(value);
                 if (value === "team") setVisibility("workspace");
               }}
-              style={{ padding: "5px 14px", borderRadius: 999, border: noteType === value ? "2px solid #2D7BF4" : "1px solid #e5e7eb", background: noteType === value ? "rgba(45,123,244,0.08)" : "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              style={{ padding: "5px 14px", borderRadius: 999, border: noteType === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: noteType === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >
               {t(label)}
             </button>
@@ -1677,12 +1680,12 @@ function NoteEditor({
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
               placeholder={t("Search orders")}
-              style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6, marginBottom: 6, fontSize: 12 }}
+              style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6, fontSize: 12 }}
             />
             <select
               value={linkedOrderId}
               onChange={(e) => setLinkedOrderId(e.target.value)}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
             >
               <option value="">{t("Not linked")}</option>
               {orders
@@ -1703,7 +1706,7 @@ function NoteEditor({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder={t("Customer name")}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
             />
             <datalist id="note-customer-names">
               {Array.from(new Set(orders.map((o) => o.customerName).filter(Boolean))).slice(0, 100).map((name) => (
@@ -1718,7 +1721,7 @@ function NoteEditor({
             <button
               key={value}
               onClick={() => setVisibility(value)}
-              style={{ padding: "5px 14px", borderRadius: 999, border: visibility === value ? "2px solid #2D7BF4" : "1px solid #e5e7eb", background: visibility === value ? "rgba(45,123,244,0.08)" : "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              style={{ padding: "5px 14px", borderRadius: 999, border: visibility === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: visibility === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
             >
               {t(label)}
             </button>
@@ -1742,7 +1745,7 @@ function NoteEditor({
                 height: 28,
                 borderRadius: "50%",
                 background: colorForNote(c),
-                border: colorName === c ? "2px solid #2D7BF4" : "1px solid #e5e7eb",
+                border: colorName === c ? "2px solid #2D7BF4" : "1px solid var(--border)",
                 cursor: "pointer",
               }}
             />
@@ -1769,10 +1772,10 @@ function NoteEditor({
               if (!picked) return;
               setReminderMillis(picked.getTime());
             }}
-            style={{ padding: 6, border: "1px solid #e5e7eb", borderRadius: 6 }}
+            style={{ padding: 6, border: "1px solid var(--border)", borderRadius: 6 }}
           />
           {reminderMillis && (
-            <button onClick={() => setReminderMillis(null)} style={{ padding: "4px 10px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, cursor: "pointer" }}>
+            <button onClick={() => setReminderMillis(null)} style={{ padding: "4px 10px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, cursor: "pointer" }}>
               {t("Clear")}
             </button>
           )}
@@ -1784,7 +1787,7 @@ function NoteEditor({
             style={{
               display: "inline-block",
               padding: "6px 14px",
-              border: "1px solid #e5e7eb",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               position: "relative",
               cursor: upload ? "progress" : "pointer",
@@ -1821,7 +1824,7 @@ function NoteEditor({
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
               {links.map((url) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={url} src={url} alt={t("Note image")} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }} />
+                <img key={url} src={url} alt={t("Note image")} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
               ))}
             </div>
           )}
@@ -1834,7 +1837,7 @@ function NoteEditor({
             value={labelInput}
             onChange={(e) => setLabelInput(e.target.value)}
             placeholder={t("Add label")}
-            style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+            style={{ flex: 1, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
           />
           <button
             onClick={() => {
@@ -1842,7 +1845,7 @@ function NoteEditor({
               if (v && !labels.includes(v)) setLabels([...labels, v]);
               setLabelInput("");
             }}
-            style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
+            style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
           >
             {t("Add")}
           </button>
@@ -1864,7 +1867,7 @@ function NoteEditor({
             value={collabInput}
             onChange={(e) => setCollabInput(e.target.value)}
             placeholder={t("Email")}
-            style={{ flex: 1, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+            style={{ flex: 1, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
           />
           <button
             onClick={() => {
@@ -1872,7 +1875,7 @@ function NoteEditor({
               if (v && v.includes("@") && !collabs.includes(v)) setCollabs([...collabs, v]);
               setCollabInput("");
             }}
-            style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
+            style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
           >
             {t("Add")}
           </button>
@@ -1897,18 +1900,18 @@ function NoteEditor({
             <div style={{ fontSize: 13, fontWeight: 700, color: "#9a3412", marginBottom: 8 }}>
               {t("This note was changed on another device while you were editing. Which version do you want to keep?")}
             </div>
-            <div style={{ fontSize: 12, color: "#374151", whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 120, overflow: "auto", background: "white", border: "1px solid #fed7aa", borderRadius: 8, padding: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#374151", whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 120, overflow: "auto", background: "var(--surface)", border: "1px solid #fed7aa", borderRadius: 8, padding: 8, marginBottom: 10 }}>
               {conflict.title ? `${conflict.title}\n` : ""}{notePreviewText(conflict.text, 600)}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <button type="button" disabled={saving} onClick={takeTheirs} style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Use theirs")}</button>
-              <button type="button" disabled={saving} onClick={() => { void keepBoth(); }} style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Keep both")}</button>
+              <button type="button" disabled={saving} onClick={takeTheirs} style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Use theirs")}</button>
+              <button type="button" disabled={saving} onClick={() => { void keepBoth(); }} style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{t("Keep both")}</button>
               <button type="button" disabled={saving} onClick={() => { setConflict(null); void submit(true); }} style={{ padding: "6px 14px", border: "none", background: "#2D7BF4", color: "white", borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{t("Keep mine")}</button>
             </div>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" disabled={saving} onClick={discardAndClose} style={{ padding: "8px 16px", background: "white", border: "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer" }}>
+          <button type="button" disabled={saving} onClick={discardAndClose} style={{ padding: "8px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}>
             {t("Cancel")}
           </button>
           <button
