@@ -45,7 +45,9 @@ export default function InventoryPage() {
         if (cancelled) return;
         // The same key the nav uses, checked again here so a typed URL cannot
         // reach a screen the sidebar would not have offered.
-        if (!workspaceAccessAllows(context.memberAccess, "inventory")) {
+        // Inventory callables need Orders on the server (requireInventoryAccess, area "orders"), so the page
+        // needs both keys, as on iOS/Android (inventoryVisible) — workflow orders contract, 9 Oct 2026.
+        if (!workspaceAccessAllows(context.memberAccess, "inventory") || !workspaceAccessAllows(context.memberAccess, "orders")) {
           router.replace(pageAccessRedirectFor("/inventory", context.memberAccess));
           return;
         }

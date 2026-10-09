@@ -22,6 +22,7 @@ const checks = [
   ["detail: progress edits open for the Workflow lane", /\(canAccessOrders \|\| workflowOrdersLaneOpen\(workspace\)\) && canEditOrderStatusForRole/.test(read("app/orders/OrderDetailContent.tsx"))],
   ["production board still follows Orders", /if \(!workspaceAccessAllows\(context\.memberAccess, "orders"\)\)/.test(read("app/production/page.tsx"))],
   ["export needs Orders", /workspaceAccessAllows\(loadedWorkspace\.memberAccess, "orders"\)/.test(read("app/export/page.tsx"))],
+  ["inventory page and nav need Orders too", /workspaceAccessAllows\(context\.memberAccess, "orders"\)/.test(read("app/inventory/page.tsx")) && /item\.href === "\/inventory" && !memberCanAccess\(workspace, "orders"\)/.test(read("components/AppShell.tsx"))],
   ["settings matrix shows Workflow Orders off, no contact/notes cards", /access\.orders = false;/.test(matrix) && /access\.cardCustomer = false;/.test(matrix) && /access\.cardNotes = false;/.test(matrix)]
 ];
 let failed = 0;

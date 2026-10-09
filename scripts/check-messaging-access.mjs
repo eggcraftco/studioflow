@@ -75,7 +75,8 @@ check(/workspaceAccessAllows\(ws\.memberAccess, "teamChat"\)\) \{\s*router\.repl
 const inboxPage = read("app/inbox/page.tsx");
 check(/workspaceAccessAllows\(context\.memberAccess, "messages"\)\) \{\s*router\.replace\(messagingRedirectFor\("customers", context\.memberAccess\)\)/.test(inboxPage), "app/inbox does not redirect to the allowed surface");
 const inventoryPage = read("app/inventory/page.tsx");
-check(/workspaceAccessAllows\(context\.memberAccess, "inventory"\)\) \{\s*router\.replace\(pageAccessRedirectFor\("\/inventory", context\.memberAccess\)\)/.test(inventoryPage), "app/inventory does not redirect when inventory is false");
+// Workflow orders contract (9 Oct 2026): the page also needs Orders (the server's inventory callables check it).
+check(/workspaceAccessAllows\(context\.memberAccess, "inventory"\)( \|\| !workspaceAccessAllows\(context\.memberAccess, "orders"\))?\) \{\s*router\.replace\(pageAccessRedirectFor\("\/inventory", context\.memberAccess\)\)/.test(inventoryPage), "app/inventory does not redirect when inventory is false");
 const tabs = read("components/MessagesTabs.tsx");
 check(tabs.includes("{allowed.customers ? (") && tabs.includes("{allowed.team ? ("), "MessagesTabs does not hide a disallowed tab");
 check(read("app/inbox/InboxContent.tsx").includes("access={workspace.memberAccess}"), "inbox tabs get no access");
