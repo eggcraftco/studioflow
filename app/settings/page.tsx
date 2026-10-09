@@ -99,6 +99,7 @@ import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAl
 import { PDF_TOGGLE_DOCUMENTS, canViewInvoiceDocument, createPdfPreviewSequencer, pdfPreviewKindAfterToggle, pdfRenderSettings, pdfToggleMaskReason, pdfViewerAccess, type PdfDocumentKind, type PdfToggleKey as SharedPdfToggleKey, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
+import { describedByFor, TeamActionNotice, type TeamActionOutcome } from "@/components/TeamActionNotice";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
 import { canManageClientFilesForRole } from "@/lib/studioflow/clientFiles";
@@ -7098,6 +7099,7 @@ function TeamAccessSection({
   const [actioning, setActioning] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [actionOutcome, setActionOutcome] = useState<TeamActionOutcome | null>(null);
   const [copied, setCopied] = useState("");
   const [requestOwnerIdentifier, setRequestOwnerIdentifier] = useState("");
   const [joinedWorkspaces, setJoinedWorkspaces] = useState<JoinedWorkspaceOption[]>([]);
@@ -7267,15 +7269,17 @@ function TeamAccessSection({
   async function runTeamAction(key: string, action: () => Promise<unknown>, success: string): Promise<boolean> {
     setActioning(key);
     let succeeded = false;
-    setError("");
     setStatus("");
+    setActionOutcome(null);
     try {
       await action();
       succeeded = true;
       setStatus(success);
+      setActionOutcome({ key, text: success, isError: false });
       await onRefreshTeamAccess();
     } catch (actionError) {
-      setError(teamRefusalMessage(actionError, "Team action failed."));
+      // Next to the control that was used (TeamActionNotice); `error` is left to loading problems.
+      setActionOutcome({ key, text: teamRefusalMessage(actionError, "Team action failed."), isError: true });
     } finally {
       setActioning("");
     }
@@ -7376,11 +7380,13 @@ function TeamAccessSection({
               onChange={event => setRequestOwnerIdentifier(event.target.value)}
               placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
+              aria-describedby={describedByFor(actionOutcome, "request-access")}
             />
             <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
               {actioning === "request-access" ? t("Sending...") : t("Send request")}
             </button>
           </div>
+          <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
         </form>
       </div>
     );
@@ -7436,11 +7442,13 @@ function TeamAccessSection({
               onChange={event => setRequestOwnerIdentifier(event.target.value)}
               placeholder={t("Owner email or Company ID")}
               disabled={Boolean(actioning)}
+              aria-describedby={describedByFor(actionOutcome, "request-access")}
             />
             <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
               {actioning === "request-access" ? t("Sending...") : t("Send request")}
             </button>
           </div>
+          <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
         </form>
       </div>
     );
@@ -7540,11 +7548,13 @@ function TeamAccessSection({
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
                 placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
+                aria-describedby={describedByFor(actionOutcome, "request-access")}
               />
               <button className="button secondary" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
                 {actioning === "request-access" ? t("Sending...") : t("Send request")}
               </button>
             </div>
+            <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
           </form>
         </div>
       </section>
@@ -7588,6 +7598,7 @@ function TeamAccessSection({
                       className="button"
                       type="button"
                       disabled={!canManageTeam || Boolean(actioning)}
+                      aria-describedby={describedByFor(actionOutcome, approveKey, declineKey)}
                       onClick={() => void runTeamAction(
                         approveKey,
                         () => approveJoinRequest(workspace, request, selectedRole),
@@ -7605,6 +7616,7 @@ function TeamAccessSection({
                       {actioning === declineKey ? t("Declining...") : t("Decline")}
                     </button>
                   </div>
+                  <TeamActionNotice outcome={actionOutcome} keys={[approveKey, declineKey]} translate={t} />
                 </article>
               );
             })}
@@ -7638,6 +7650,7 @@ function TeamAccessSection({
                     <select
                       className="input"
                       aria-label={t("Role")}
+                      aria-describedby={describedByFor(actionOutcome, changingKey)}
                       value={roleOptions.some(option => option.value === member.role) ? member.role : "member"}
                       disabled={Boolean(actioning)}
                       onChange={event => {
@@ -7668,6 +7681,7 @@ function TeamAccessSection({
                     </button>
                   ) : null}
                 </div>
+                <TeamActionNotice outcome={actionOutcome} keys={[changingKey, removeKey]} translate={t} />
               </article>
             );
           })}
@@ -7694,6 +7708,7 @@ function TeamAccessSection({
               () => deleteWorkspaceCustomRole(workspace, role),
               t("Role profile deleted.")
             )}
+            renderNotice={key => <TeamActionNotice outcome={actionOutcome} keys={[key]} translate={t} />}
           />
         ) : (
           <p className="settings-field-hint">{t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}</p>

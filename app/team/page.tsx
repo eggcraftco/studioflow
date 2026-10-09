@@ -33,6 +33,7 @@ import {
   WEB_TEAM_ROLES
 } from "@/lib/studioflow/teamActions";
 import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
+import { describedByFor, TeamActionNotice, type TeamActionOutcome } from "@/components/TeamActionNotice";
 import { studioT } from "@/lib/studioflow/language";
 import {
   inviteWorkspaceMember,
@@ -84,6 +85,9 @@ export default function TeamPage() {
   const [actioning, setActioning] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  // The outcome of the last Team Access action, shown under the control that started it (TeamActionNotice).
+  // `error` above is now only for loading the page.
+  const [actionOutcome, setActionOutcome] = useState<TeamActionOutcome | null>(null);
   const [copied, setCopied] = useState("");
   const [joinedWorkspaces, setJoinedWorkspaces] = useState<JoinedWorkspaceOption[]>([]);
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState("");
@@ -231,15 +235,19 @@ export default function TeamPage() {
   async function runTeamAction(key: string, action: () => Promise<unknown>, success: string): Promise<boolean> {
     setActioning(key);
     let succeeded = false;
-    setError("");
     setMessage("");
+    setActionOutcome(null);
     try {
       await action();
       succeeded = true;
+      // Said next to the action; the banner below the forms keeps it too for a row that leaves the list
+      // (approved request, removed member).
       setMessage(success);
+      setActionOutcome({ key, text: success, isError: false });
       await refreshTeam();
     } catch (actionError) {
-      setError(teamRefusalMessage(actionError, "Team action failed."));
+      // The refusal goes under the control that was used, not into the page-level "Team error" card.
+      setActionOutcome({ key, text: teamRefusalMessage(actionError, "Team action failed."), isError: true });
     } finally {
       setActioning("");
     }
@@ -323,11 +331,13 @@ export default function TeamPage() {
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
                 placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
+                aria-describedby={describedByFor(actionOutcome, "request-access")}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
                 {actioning === "request-access" ? t("Sending...") : t("Send request")}
               </button>
             </div>
+            <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
           </form>
           {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{t(message)}</p> : null}
           {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{t(error)}</p> : null}
@@ -380,11 +390,13 @@ export default function TeamPage() {
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
                 placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
+                aria-describedby={describedByFor(actionOutcome, "request-access")}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
                 {actioning === "request-access" ? t("Sending...") : t("Send request")}
               </button>
             </div>
+            <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
           </form>
           {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{t(message)}</p> : null}
           {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{t(error)}</p> : null}
@@ -459,6 +471,7 @@ export default function TeamPage() {
               value={inviteEmail}
               onChange={event => setInviteEmail(event.target.value)}
               disabled={!canManageTeam || Boolean(actioning)}
+              aria-describedby={describedByFor(actionOutcome, "invite")}
             />
             <select
               className="input"
@@ -473,6 +486,7 @@ export default function TeamPage() {
             <button className="button" type="submit" disabled={!canManageTeam || !inviteEmail.trim() || Boolean(actioning)}>
               {actioning === "invite" ? t("Sending...") : t("Send Invitation")}
             </button>
+            <TeamActionNotice outcome={actionOutcome} keys={["invite"]} translate={t} />
             {inviteLink ? (
               <div className="team-access-id-box">
                 <code>{inviteLink}</code>
@@ -514,11 +528,13 @@ export default function TeamPage() {
                 onChange={event => setRequestOwnerIdentifier(event.target.value)}
                 placeholder={t("Owner email or Company ID")}
                 disabled={Boolean(actioning)}
+                aria-describedby={describedByFor(actionOutcome, "request-access")}
               />
               <button className="button" type="submit" disabled={!requestOwnerIdentifier.trim() || Boolean(actioning)}>
                 {actioning === "request-access" ? t("Sending...") : t("Send")}
               </button>
             </div>
+            <TeamActionNotice outcome={actionOutcome} keys={["request-access"]} translate={t} />
           </form>
         </div>
       </section>
@@ -582,6 +598,7 @@ export default function TeamPage() {
               () => deleteWorkspaceCustomRole(workspace!, role),
               t("Role profile deleted.")
             )}
+            renderNotice={key => <TeamActionNotice outcome={actionOutcome} keys={[key]} translate={t} />}
           />
         ) : (
           <p style={{ color: "var(--muted)", margin: 0 }}>
@@ -638,6 +655,7 @@ export default function TeamPage() {
                       {actioning === `revoke-${invitation.id}` ? <span className="pill">{t("Updating...")}</span> : null}
                     </div>
                   ) : null}
+                  <TeamActionNotice outcome={actionOutcome} keys={[`revoke-${invitation.id}`]} translate={t} />
                 </article>
               ))}
             </div>
@@ -705,6 +723,7 @@ export default function TeamPage() {
                             );
                           }}
                           disabled={Boolean(actioning)}
+                          aria-describedby={describedByFor(actionOutcome, changingKey)}
                           style={{ maxWidth: 170 }}
                         >
                           {roleOptions.map(option => (
@@ -753,6 +772,7 @@ export default function TeamPage() {
                       </>
                     ) : null}
                   </div>
+                  <TeamActionNotice outcome={actionOutcome} keys={[changingKey, removeKey, seatKey]} translate={t} />
                 </article>
               );
             })}
@@ -799,6 +819,7 @@ export default function TeamPage() {
                       <button
                         className="button"
                         disabled={!canManageTeam || Boolean(actioning)}
+                        aria-describedby={describedByFor(actionOutcome, approveKey, declineKey)}
                         onClick={() => runTeamAction(
                           approveKey,
                           () => approveJoinRequest(workspace!, request, selectedRole),
@@ -819,6 +840,7 @@ export default function TeamPage() {
                         {actioning === declineKey ? t("Declining...") : t("Decline")}
                       </button>
                     </div>
+                    <TeamActionNotice outcome={actionOutcome} keys={[approveKey, declineKey]} translate={t} />
                     {!hasTeamPlan ? (
                       <p style={{ color: "var(--muted)", margin: "12px 0 0" }}>
                         {t("Approving new team members requires NivaDesk Team. Decline remains available for cleanup.")}

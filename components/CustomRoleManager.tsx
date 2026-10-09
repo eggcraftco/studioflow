@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { MemberAccessEditor } from "@/components/MemberAccessEditor";
 import {
   WORKSPACE_CARD_ACCESS_OPTIONS,
@@ -39,6 +39,8 @@ type CustomRoleManagerProps = {
   language?: string;
   onSave: (role: EditableRole) => Promise<unknown>;
   onDelete: (role: WorkspaceCustomRole) => Promise<unknown>;
+  /** The outcome of a save/delete under its own button (TeamActionNotice), by the action key the page used. */
+  renderNotice?: (key: string) => ReactNode;
 };
 
 function defaultAccess(): WorkspaceMemberAccess {
@@ -94,7 +96,7 @@ export function memberDisplayLabel(member: CustomRoleMemberLike): string {
   return member.displayName?.trim() || member.email?.trim() || member.id;
 }
 
-export function CustomRoleManager({ roles, members, disabled = false, savingKey = "", language = "English", onSave, onDelete }: CustomRoleManagerProps) {
+export function CustomRoleManager({ roles, members, disabled = false, savingKey = "", language = "English", onSave, onDelete, renderNotice }: CustomRoleManagerProps) {
   const t = (text: string) => studioT(text, language);
   const [newRole, setNewRole] = useState<EditableRole>(() => defaultRole());
   const [drafts, setDrafts] = useState<Record<string, EditableRole>>({});
@@ -237,6 +239,7 @@ export function CustomRoleManager({ roles, members, disabled = false, savingKey 
           </button>
           <span className="muted-inline">{roleNameExists(newRole.name) ? t("A role with this name already exists.") : t("Assign this role to members after creating it.")}</span>
         </div>
+        {renderNotice?.("custom-role-new")}
       </form>
 
       <div className="custom-role-list">
@@ -354,6 +357,8 @@ export function CustomRoleManager({ roles, members, disabled = false, savingKey 
                       {savingKey === deleteKey ? t("Deleting...") : t("Delete")}
                     </button>
                   </div>
+                  {renderNotice?.(saveKey)}
+                  {renderNotice?.(deleteKey)}
                 </>
               ) : null}
             </article>
