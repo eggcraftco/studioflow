@@ -1,0 +1,5539 @@
+# Çeviri boşlukları raporu — 9 Ekim 2026 (sahip maddesi 6)
+
+Sahip maddesi 6. Dallar: web `web-i18n-gaps-2026-10-09` (hostinger main `ba83c1de` üstü), native `native-31-i18n-gaps-2026-10-09` (`adbcadbe` üstü). Önce = taban commit'te, sonra = dal ucunda, AYNI betiklerle ve aynı izin listesiyle ölçüldü (karşılaştırma elma-elma). 12 dil: English + 11 çeviri dili.
+
+## Kategoriler ve ölçüm
+
+- **(a) gerçekten eksik** — çeviri çağrısına (`t()`/`studioT`/`lt`) verilen sabit anahtarın, o çağrının okuduğu tabloda o dil için satırı/hücresi yok.
+- **(b) İngilizceye düşüyor** — b1: satır var ama değer İngilizceyle aynı (doğru olan aynılar `scripts/i18n-same-as-english-ok.json`'da, sayılmaz); b2: ekrana `t()` olmadan basılan metin (web JSX metni/placeholder/title/aria-label/alt; SwiftUI Text/Button/Label/…; Compose Text/contentDescription/title=…) ve web'de etiket eşlemesi / durum-hata metni (`label:`/`title:` değerleri, `setError("…")`) için tabloda satır olmayanlar; b3: Cloud Functions `HttpsError` kullanıcı metni (functions/*.js) tabloda yok — sunucu metni.
+- **(c) kullanılmayan** — tablodaki anahtarı hiçbir kaynak dosya (uygulama + functions/) sabit olarak anmıyor. Yalnız liste; hiçbiri silinmedi. Çalışma zamanında kurulan anahtarlar (eşleme değerleri) burada yanlışlıkla 'kullanılmayan' görünebilir.
+- **@kullanım** — anahtarın en az bir çağrı yeri sahibin listelediği ekranlarda: Home, Orders, Order detail, Customers, Schedule, Messages, Files, Team, Settings, Notes, Inventory, Bank, upload diyalogları (+ kabuk: menü, bildirim çekmecesi, toast, yükleme/doğrulama kapıları). Eşleme: dosya yolu (büyük Swift dosyalarında kapsayan `struct`).
+- Araçlar: web `scripts/i18n-gap-report.ts` (TypeScript derleyicisiyle ayrıştırır, birleşik tabloyu `studioT` ile çalışma zamanında yoklar, yalnız bir sayfanın içe aktardığı dosyalar); native `scripts/i18n-gap-report.py` (Android + Apple, statik). İkisi de `--json` ile listeleri yazar; `--check` / `--fail-on-placeholders` yer tutucu bozulmasında 1 ile çıkar.
+- Önceki sayılar (ui09: web TR 577 / DE 696 / AR 646, Android 400–433, Apple 436) **(a) ile (b1)'in toplamı** idi ve web'de erişilemeyen dosyaları da sayıyordu; aşağıda ayrıldı.
+
+## Sayılar — önce → sonra
+
+### Web
+
+Çağrı anahtarı: 4283 → 4542; tablo anahtarı: 6311 → 6649; (c) kullanılmayan: 1210 → 1158.
+
+| Dil | (a) tümü | (a) @kullanım | (b) tümü | (b) @kullanım | b1 aynı | b2 sabit/etiket | b3 sunucu |
+|---|---|---|---|---|---|---|---|
+| TR | 483 → **390** | 94 → **1** | 1181 → **728** | 454 → **33** | 4 → **1** | 1190 → **738** | 527 → **525** |
+| DE | 554 → **397** | 158 → **1** | 1205 → **731** | 475 → **33** | 31 → **4** | 1190 → **738** | 528 → **526** |
+| FR | 554 → **397** | 158 → **1** | 1207 → **731** | 478 → **34** | 32 → **2** | 1190 → **740** | 528 → **526** |
+| IT | 543 → **397** | 147 → **1** | 1201 → **728** | 475 → **33** | 26 → **2** | 1188 → **737** | 528 → **526** |
+| ES | 543 → **397** | 147 → **1** | 1203 → **728** | 475 → **32** | 24 → **1** | 1192 → **738** | 528 → **526** |
+| PT | 543 → **397** | 147 → **1** | 1205 → **728** | 477 → **32** | 30 → **1** | 1190 → **738** | 528 → **526** |
+| RU | 543 → **397** | 147 → **1** | 1202 → **727** | 475 → **32** | 22 → **0** | 1193 → **738** | 528 → **526** |
+| JA | 543 → **397** | 147 → **1** | 1201 → **727** | 474 → **32** | 24 → **0** | 1190 → **738** | 528 → **526** |
+| ZH | 543 → **397** | 147 → **1** | 1200 → **727** | 473 → **32** | 23 → **0** | 1190 → **738** | 528 → **526** |
+| AR | 543 → **397** | 147 → **1** | 1201 → **727** | 474 → **32** | 23 → **0** | 1191 → **738** | 528 → **526** |
+| HI | 543 → **397** | 147 → **1** | 1213 → **729** | 484 → **32** | 36 → **2** | 1191 → **738** | 528 → **526** |
+
+### Android
+
+Çağrı anahtarı: 2684 → 2790; tablo anahtarı: 3417 → 3897; (c) kullanılmayan: 560 → 568.
+
+| Dil | (a) tümü | (a) @kullanım | (b) tümü | (b) @kullanım | b1 aynı | b2 sabit/etiket | b3 sunucu |
+|---|---|---|---|---|---|---|---|
+| TR | 401 → **21** | 380 → **0** | 210 → **49** | 185 → **33** | 5 → **1** | 205 → **48** | 545 → **545** |
+| DE | 434 → **40** | 394 → **0** | 212 → **51** | 185 → **33** | 7 → **3** | 205 → **48** | 545 → **545** |
+| FR | 434 → **40** | 394 → **0** | 216 → **50** | 190 → **33** | 11 → **2** | 205 → **48** | 545 → **545** |
+| IT | 434 → **40** | 394 → **0** | 211 → **49** | 186 → **33** | 6 → **1** | 205 → **48** | 545 → **545** |
+| ES | 434 → **40** | 394 → **0** | 211 → **48** | 186 → **32** | 6 → **0** | 205 → **48** | 545 → **545** |
+| PT | 434 → **40** | 394 → **0** | 213 → **48** | 188 → **32** | 8 → **0** | 205 → **48** | 545 → **545** |
+| RU | 434 → **40** | 394 → **0** | 209 → **48** | 184 → **32** | 4 → **0** | 205 → **48** | 545 → **545** |
+| JA | 434 → **40** | 394 → **0** | 209 → **48** | 184 → **32** | 4 → **0** | 205 → **48** | 545 → **545** |
+| ZH | 434 → **40** | 394 → **0** | 208 → **48** | 183 → **32** | 3 → **0** | 205 → **48** | 545 → **545** |
+| AR | 434 → **40** | 394 → **0** | 209 → **48** | 184 → **32** | 4 → **0** | 205 → **48** | 545 → **545** |
+| HI | 434 → **40** | 394 → **0** | 210 → **48** | 185 → **32** | 5 → **0** | 205 → **48** | 545 → **545** |
+
+### Apple (iPhone/iPad/Mac — one table)
+
+Çağrı anahtarı: 2534 → 2610; tablo anahtarı: 4302 → 4779; (c) kullanılmayan: 671 → 684.
+
+| Dil | (a) tümü | (a) @kullanım | (b) tümü | (b) @kullanım | b1 aynı | b2 sabit/etiket | b3 sunucu |
+|---|---|---|---|---|---|---|---|
+| TR | 443 → **10** | 433 → **0** | 185 → **60** | 171 → **46** | 2 → **1** | 183 → **59** | 531 → **528** |
+| DE | 443 → **10** | 433 → **0** | 232 → **62** | 216 → **46** | 50 → **3** | 183 → **59** | 532 → **529** |
+| FR | 443 → **10** | 433 → **0** | 230 → **63** | 215 → **48** | 47 → **4** | 183 → **59** | 532 → **529** |
+| IT | 443 → **10** | 433 → **0** | 227 → **60** | 213 → **46** | 44 → **1** | 183 → **59** | 532 → **529** |
+| ES | 443 → **10** | 433 → **0** | 227 → **59** | 213 → **45** | 44 → **0** | 183 → **59** | 532 → **529** |
+| PT | 443 → **10** | 433 → **0** | 229 → **59** | 215 → **45** | 46 → **0** | 183 → **59** | 532 → **529** |
+| RU | 443 → **10** | 433 → **0** | 225 → **59** | 211 → **45** | 42 → **0** | 183 → **59** | 532 → **529** |
+| JA | 443 → **10** | 433 → **0** | 224 → **59** | 210 → **45** | 41 → **0** | 183 → **59** | 532 → **529** |
+| ZH | 443 → **10** | 433 → **0** | 224 → **59** | 210 → **45** | 41 → **0** | 183 → **59** | 532 → **529** |
+| AR | 443 → **10** | 433 → **0** | 224 → **59** | 210 → **45** | 41 → **0** | 183 → **59** | 532 → **529** |
+| HI | 443 → **10** | 433 → **0** | 225 → **59** | 211 → **45** | 42 → **0** | 183 → **59** | 532 → **529** |
+
+b2 dile bağlı değildir (çağrı yoksa her dilde İngilizce). b3 bu turda doldurulmadı (aşağıda gerekçe).
+
+## Yapılanlar
+
+- Çeviri: web 625, Android 612, Apple 596 tam satır (yaklaşık 1.200 ayrı İngilizce metin × 11 dil). Önce diğer platformların mevcut çevirisi yeniden kullanıldı (tutarlılık), kalanlar insan kalitesinde çevrildi; terim listesi (Auftrag, Çalışma alanı, ficheiro/palavra-passe Avrupa Portekizcesi vb.) uygulandı.
+- Yeni dosyalara yazıldı (birleşme çakışması az): web `lib/studioflow/screenGapTranslations.ts`; Android `StudioTranslationsI18nGaps.kt` + `…Gaps1-3.kt`; Apple `I18nGapTranslations.swift`. Ortak dosyalara tek satır: `language.ts` (import + mergeIntoTranslations), `StudioTranslations.kt` TRANSLATIONS satırının sonuna `+ I18N_GAP_TRANSLATIONS`, `DilMotoru.swift` zincirine bir `.merging` + `siparisDetayText` İngilizceden önce uygulama tablosuna düşer.
+- Kod: kullanımdaki ekranlarda t()'siz basılan metinler t()'den geçirildi (web ~385, Android ~200, Apple ~170); parçalı cümleler yer tutuculu tek anahtar oldu ("Replying to {name}", "Archived ({count})", "Messages is not included in {plan}."). Saklanan/karşılaştırılan değerler değişmedi (seçenek `value=` İngilizce kalır).
+- Çoğul: web countLabel.ts'e file/item/note/member (Intl.PluralRules); Android `StudioCountLabel.kt` (android.icu PluralRules; JVM testinde elle CLDR) + test; Apple `StudioCountLabel.swift` (elle CLDR tamsayı kuralları). Siparişler/Müşteriler/Takvim/Dosyalar/Notlar/Envanter sayıları bunu kullanır (AR ikil 'ملاحظتان', RU few/many).
+- Tarih/para: kullanımdaki ekranlarda sabit yerel ayarlı tarih biçimleyicileri uygulama diline bağlandı (web Dosyalar, bildirim saati, sipariş detayı tarihleri; Android Notlar hatırlatıcı, destek tarihi; iOS Notlar 'Edited', müşteri dosya/geçmiş tarihleri). Türkçe büyük harf: Android ayar başlıkları `uppercase(studioLocale)` ('KİŞİSEL'). Para biçimi değiştirilmedi (çalışma alanı sembolü + ondalık ayarı korunur).
+- Arapça: web `dir=rtl lang=ar` ile aynalanıyor (ekran görüntüsü). iOS/Android metin Arapça, düzen bilinçli LTR (ürün kararı, bu işte değiştirilmedi).
+- Kontroller: web `npm run test:i18n-gaps` (yer tutucu bozulursa 1), native `python3 -I scripts/i18n-gap-report.py --check` (yer tutucu + tek Swift sözlüğünde yinelenen anahtar). İkisi de PASS, 0 sorun.
+- b3 (sunucu HttpsError metni, ~525/dil) bu turda doldurulmadı: metinlerin çoğu yönetici/geliştirici hatası ve hangi ekranda görüneceği eşlenemedi; listesi aşağıda. Önerim: sunucu `supportMessageKey` benzeri anahtar döndürsün, istemci çevirsin.
+
+## Doğrulama (9 Eki 2026)
+
+- **Web** (`50d181c4`): `tsc --noEmit` temiz; `next build` ✓ Compiled successfully; `test:i18n-gaps` PASS (0 yer tutucu sorunu);
+  39 `test:*` betiğinden 35'i geçer — kalan 4'ü taban `ba83c1de`'de de kırmızı (finance: functions/finance/vectors.json yok;
+  customer-card: tabandaki aynı 2 kontrol; team-schedule-key: TEAM_SCHEDULE_SERVER_INDEX ortamı; notes: düzeltildi, geçer).
+- **Android** (`a6d0a5ad`): `:app:testDebugUnitTest :app:assembleDebug --rerun-tasks` BUILD SUCCESSFUL, 432 birim testi, 0 hata
+  (StudioCountLabelTest 8 dahil).
+- **iOS/macOS**: QA derlemeleri (Debug + NIVADESK_QA) iOS Simulator ve macOS ** BUILD SUCCEEDED **, 0 `error:`; Mac .app derlemeden
+  sonra silindi + lsregister -u.
+- **Ekran kabulü** — izole `demo-nivadesk-i18n09` (auth 9810 / firestore 8810 / storage 9820, functions 5830 = reddeden dinleyici,
+  e-posta/SMS yok), dil `personalInterfaceSettings` + `companySettings` üzerinden. Üretime yazım yok; Android ve iOS günlüğü
+  "Presence heartbeat OFF"; iOS "[NIVADESK-QA-LAUNCH-GUARD-1] accepted demo-nivadesk-i18n09".
+  - Web (yerleşik tarayıcı, 3811): sipariş detayı EN/TR/DE/AR (AR `dir=rtl` aynalı), Notlar AR (ikil çoğul).
+  - iPhone (NivaDesk-I18N09-iPhone, iOS 26.5): Ana sayfa/Menü/Siparişler/Sipariş detayı TR, sipariş detayı DE/AR/EN, Notlar DE.
+  - Android (Pixel_9 AVD emulator-5634, `scripts/qa-android-launch.sh`): Ana sayfa, Siparişler, Sipariş detayı, Müşteriler, Notlar,
+    Takvim, Dosyalar, Banka, Envanter, Mesajlar, Ayarlar TR; Ana sayfa/Siparişler/Sipariş detayı DE; Sipariş detayı AR/EN.
+  - Görüntüler: scratchpad `i18n/shots/` (web-*.jpg, ios-*.png, and-*.png).
+
+## Ekranda görülüp açık kalanlar (bilinçli / sonraki tur)
+
+- Sipariş kartı rozetleri `DESI`/`PAIN` (Android+iOS) kısaltma; çevirisi var ama kod onları kod gibi basıyor — ürün kararı.
+- Android Ana sayfa "Aktualisiert 1 Min. her": parça birleştirme ("Updated" + süre + "ago") — tek anahtara çevrilmeli.
+- Sunucu hata kodu ham basılıyor (`UNAVAILABLE`, Android Envanter/Mesajlar, functions kapalıyken) — b3 ile aynı aile.
+- "Bestellungen" (menü/geri) ile "Aufträge" (liste) Almancada karışık — eski satırlar; terim birliği ayrı karar.
+- iOS Notlar başlığı "Notize n" satır kırılması (dar başlık), çeviriden bağımsız düzen sorunu.
+- Kalan (b)@kullanım: marka/kod/birim/örnek veri (Pro, GBP, CNAME, MB, PAINT-BLK, DELETE DATA …) ve Swift/Kotlin'de
+  enterpolasyonlu birleşik satırlar (listeler yukarıda).
+
+## Emin olunmayan / işaretli çeviriler
+
+- `Add Remaining` — Button in financial-headings editor: adds a 'Remaining / Pending' row heading.
+- `Add spending headings and extra remaining or pending headings for this order. Tick "Set as default" to also apply them t` — Quoted checkbox label "Set as default" translated here; must match the checkbox string translation.
+- `Card layout customisation is locked on the Free plan. You can use the cards, but moving, resizing and colour/layout chan` — Source still says 'Lite'; the £9 plan is now called Starter. Kept 'Lite' as in English — update source and translations together.
+- `Card profile` — Concatenated in Android code as name-or-'Card profile' + ' loaded.' (untranslated suffix); the label itself is fine.
+- `Clear the category on {count} transactions?` — No plural handling; RU uses '({count})' to avoid case agreement.
+- `DESI` — Badge abbreviation of 'Design' status on Android order cards (pair with 'PAIN' = Painting); shortened forms per language.
+- `Delete "{name}" from Customers? Related orders will stay in Orders, but their customer name will reset to "New Project".` — "New Project" kept in English (matches existing Türkçe; looks like the literal default value written to orders). Translate if the code localizes it.
+- `Editing this role affects {count}.` — {count} is a counted noun phrase, e.g. '3 members'.
+- `Following {name}` — Means using a teammate's card layout on the order board (not social follow).
+- `Forwarded from` — Fragment followed by the forwarder's name in code ('Forwarded from {name}'); TR/HI use a trailing colon to stay grammatical before the name.
+- `In Safari, open Safari → Settings → Websites → Notifications, find {site} and choose Allow.` — Hindi keeps Safari menu names in English (Safari UI often English); others use localized macOS menu names.
+- `Messages is not included in` — Fragment followed by the plan name and "." (web/app/messages/page.tsx:721). Several languages add plan/tariff noun or a colon to stay grammatical.
+- `Messages is not included in {plan}.` — 'Messages' = feature name; {plan} = plan name
+- `Num...` — Placeholder 'Num...' for a value field next to a title field; read as 'Number...'.
+- `Overall landing view → completed signup:` — Followed in code by ' ' + a rate; arrow kept; AR uses ← for RTL direction.
+- `PAIN` — Abbreviation of 'Painting' status shown beside 'DESI' (design) on Android order cards; given as 4-letter-ish abbreviations, may need native review for length.
+- `Powered by NivaDesk` — JA kept as 'Powered by NivaDesk' (common in Japanese UIs).
+- `Property: {property}` — Google Search Console property (admin screen); TR could also stay 'Mülk' per GSC Turkish UI
+- `Referral` — Traffic-source slice (Direct/Organic/Social/Referral) in website stats; translated as the analytics 'referral traffic' term.
+- `Replying to` — Label before the quoted person/message; HI/TR phrasing is a fragment that reads correctly only with the name following.
+- `Reporting from` — Concatenated: label + ' <date> — older data is hidden…'. A colon was added in TR/JA/HI so the date reads naturally after it.
+- `SF` — Placeholder initials (StudioFlow) shown when an order has no preview image; kept as-is in all languages.
+- `Set: {date}` — Notes reminder date chip; rendered as 'Reminder: {date}'
+- `Team only` — Badge next to 'Assign' when the team_access feature is off; 'Team' kept as the plan name (= Team plan only).
+- `Texts arrive from` — Concatenated: t(key) + ' ' + senderId + '.'; TR/JA/ZH/HI end with a colon so the sender ID reads naturally.
+- `Texts go out from` — Concatenated: t(key) + ' ' + senderId + '.'; TR/JA/ZH/HI end with a colon so the sender ID reads naturally.
+- `The items are created as` — Fragment followed by <strong>incoming</strong> and the rest of the sentence in JSX; cannot be grammatical in TR/JA/HI (verb-final) — rendered with a colon; better to move the whole sentence into one t() key.
+- `The term \u201CEtsy\u201D is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certifi` — Source string holds literal \u201C/\u201D Kotlin escapes; kept the same escape sequences around Etsy in every language (other quote styles used in the web twin).
+- `attachment(s) selected` — Count is prefixed; no plural handling, so (s)-style forms used in some languages.
+- `code` — FR reads "Pandle code" (brand first, fixed by code); natural FR would be "code Pandle".
+- `customer-owned item` — Code concatenates hardcoded English " is"/"s are" between this and the next string; sentence cannot be grammatical until the JSX is one t() call with {count}.
+- `grouped notifications` — Follows hardcoded English "Showing {n}" (NotificationsDrawer.tsx:520); fragment.
+- `held here and deliberately valued at zero — they are the customer's property, not stock.` — Fragment after hardcoded English " is"/"s are" (InventoryContent.tsx:558-560); plural agreement guessed; needs a single template string.
+- `notifications ▾` — Follows hardcoded English "Tap to show {count}" (NotificationsDrawer.tsx:660); fragment.
+- `projects` — Count noun after a number ("3 projects"); Russian 2–4 would need проекта — this header should move to studioCountLabel.
+- `waitingForUser` — Raw status id; display text chosen as "Waiting for user" (support ticket waiting on the requester's reply).
+- `with no payment matched` — Follows hardcoded English "{n} purchase(s)" (SuppliersPanel.tsx:120); fragment only.
+- `your-studio` — URL slug placeholder kept ASCII/romanized like existing RU 'vasha-studiya'.
+- `{count} completed` — Subtitle under archived order count; gendered langs agree with orders (FR feminine 'commandes').
+- `{count} late` — Orders implied; FR/AR feminine (commandes/طلبات).
+- `{count} pinned` — Pinned messages; PT/FR agree with 'mensagens'/'messages' implied.
+- `{percent}% categorised` — TR uses %{percent} (Turkish percent sign before number); placeholder intact.
+
+## Açık kalanlar (sonra) — listeler
+
+Her satır: anahtar · eksik diller (hepsi ise 'tümü') · alanlar · ilk yer.
+
+<details><summary>Web — (a) gerçekten eksik: 397 anahtar (1 @kullanım)</summary>
+
+- `Pro` · tümü · Other/Shell · app/dashboard/page.tsx:1052
+- `accent.body` · tümü · Other · components/PublicMarketing.tsx:1591
+- `accent.cta.customise` · tümü · Other · components/PublicMarketing.tsx:1596
+- `accent.cta.explore` · tümü · Other · components/PublicMarketing.tsx:1594
+- `accent.eyebrow` · tümü · Other · components/PublicMarketing.tsx:1588
+- `accent.title` · tümü · Other · components/PublicMarketing.tsx:1590
+- `accent.trust1` · tümü · Other · components/PublicMarketing.tsx:1601
+- `accent.trust2` · tümü · Other · components/PublicMarketing.tsx:1605
+- `accent.trust3` · tümü · Other · components/PublicMarketing.tsx:1609
+- `acceptableUse.body` · tümü · Other · components/PublicMarketing.tsx:4690
+- `acceptableUse.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4688
+- `acceptableUse.title` · tümü · Other · components/PublicMarketing.tsx:4689
+- `accountDeletion.body` · tümü · Other · components/PublicMarketing.tsx:4217
+- `accountDeletion.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4215
+- `accountDeletion.title` · tümü · Other · components/PublicMarketing.tsx:4216
+- `aiPage.ai.body` · tümü · Other · components/PublicMarketing.tsx:3884
+- `aiPage.ai.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3882
+- `aiPage.ai.title` · tümü · Other · components/PublicMarketing.tsx:3883
+- `aiPage.ask.body` · tümü · Other · components/PublicMarketing.tsx:3836
+- `aiPage.ask.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3834
+- `aiPage.ask.title` · tümü · Other · components/PublicMarketing.tsx:3835
+- `aiPage.cta.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3926
+- `aiPage.cta.title` · tümü · Other · components/PublicMarketing.tsx:3927
+- `aiPage.hero.body` · tümü · Other · components/PublicMarketing.tsx:3780
+- `aiPage.hero.note` · tümü · Other · components/PublicMarketing.tsx:3795
+- `aiPage.hero.title` · tümü · Other · components/PublicMarketing.tsx:3779
+- `aiPage.learnMore` · tümü · Other · components/PublicMarketing.tsx:2447
+- `aiPage.receipts.body` · tümü · Other · components/PublicMarketing.tsx:3865
+- `aiPage.receipts.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3863
+- `aiPage.receipts.note` · tümü · Other · components/PublicMarketing.tsx:3866
+- `aiPage.receipts.title` · tümü · Other · components/PublicMarketing.tsx:3864
+- `aiPage.securityLink` · tümü · Other · components/PublicMarketing.tsx:2450
+- `aiPage.setup.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3903
+- `aiPage.setup.note` · tümü · Other · components/PublicMarketing.tsx:3918
+- `aiPage.setup.title` · tümü · Other · components/PublicMarketing.tsx:3904
+- `aiPage.tools.body` · tümü · Other · components/PublicMarketing.tsx:3806
+- `aiPage.tools.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3804
+- `aiPage.tools.title` · tümü · Other · components/PublicMarketing.tsx:3805
+- `Ask how something in NivaDesk works — where a button lives, what a card is for, how to set something up. This assistant reads the guide, not your workspace, so ` · tümü · Other · components/AppHelpAssistant.tsx:125
+- `auth.apple` · tümü · Other · app/login/page.tsx:170
+- `auth.appleUnavailable` · tümü · Other · app/login/page.tsx:172
+- `auth.continueWithEmail` · tümü · Other · app/login/page.tsx:209
+- `auth.createAccount` · tümü · Other · app/login/page.tsx:297
+- `auth.google` · tümü · Other · app/login/page.tsx:171
+- `auth.newHere` · tümü · Other · app/login/page.tsx:297
+- `auth.rotator.prefix` · tümü · Other · app/login/page.tsx:151
+- `auth.rotator.w1` · tümü · Other · app/login/page.tsx:153
+- `auth.rotator.w10` · tümü · Other · app/login/page.tsx:162
+- `auth.rotator.w11` · tümü · Other · app/login/page.tsx:163
+- `auth.rotator.w2` · tümü · Other · app/login/page.tsx:154
+- `auth.rotator.w3` · tümü · Other · app/login/page.tsx:155
+- `auth.rotator.w4` · tümü · Other · app/login/page.tsx:156
+- `auth.rotator.w5` · tümü · Other · app/login/page.tsx:157
+- `auth.rotator.w6` · tümü · Other · app/login/page.tsx:158
+- `auth.rotator.w7` · tümü · Other · app/login/page.tsx:159
+- `auth.rotator.w8` · tümü · Other · app/login/page.tsx:160
+- `auth.rotator.w9` · tümü · Other · app/login/page.tsx:161
+- `billing.notConfigured` · tümü · Other · components/PublicMarketing.tsx:1320
+- `billing.startingCheckout` · tümü · Other · components/PublicMarketing.tsx:1332
+- `brand.footerDescription` · tümü · Other · components/PublicMarketing.tsx:930
+- `brand.full` · tümü · Other · components/PublicMarketing.tsx:929
+- `brand.homeAria` · tümü · Other · components/PublicMarketing.tsx:870
+- `brand.name` · tümü · Other · app/login/page.tsx:116
+- `Came for` · tümü · Other · components/AdminInsightsHub.tsx:3135
+- `chatgptApp.agenda` · tümü · Other · components/PublicMarketing.tsx:2327
+- `chatgptApp.answer` · tümü · Other · components/PublicMarketing.tsx:2354
+- `chatgptApp.body` · tümü · Other · components/PublicMarketing.tsx:2258
+- `chatgptApp.bridge` · tümü · Other · components/PublicMarketing.tsx:2222
+- `chatgptApp.composerPlaceholder` · tümü · Other · components/PublicMarketing.tsx:2408
+- `chatgptApp.connectedBadge` · tümü · Other · components/PublicMarketing.tsx:2311
+- `chatgptApp.eyebrow` · tümü · Other · components/PublicMarketing.tsx:2220
+- `chatgptApp.highlightsLabel` · tümü · Other · components/PublicMarketing.tsx:2378
+- `chatgptApp.perm.title` · tümü · Other · components/PublicMarketing.tsx:2437
+- `chatgptApp.perm1` · tümü · Other · components/PublicMarketing.tsx:2439
+- `chatgptApp.perm2` · tümü · Other · components/PublicMarketing.tsx:2440
+- `chatgptApp.perm3` · tümü · Other · components/PublicMarketing.tsx:2441
+- `chatgptApp.perm4` · tümü · Other · components/PublicMarketing.tsx:2442
+- `chatgptApp.prompt` · tümü · Other · components/PublicMarketing.tsx:2338
+- `chatgptApp.sectionTitle` · tümü · Other · components/PublicMarketing.tsx:2227
+- `chatgptApp.titleAccent` · tümü · Other · components/PublicMarketing.tsx:2257
+- `chatgptApp.titleLead` · tümü · Other · components/PublicMarketing.tsx:2257
+- `chatgptApp.windowTitle` · tümü · Other · components/PublicMarketing.tsx:2319
+- `chatgptImport.body` · tümü · Other · components/PublicMarketing.tsx:2237
+- `chatgptImport.note` · tümü · Other · components/PublicMarketing.tsx:2251
+- `chatgptImport.title` · tümü · Other · components/PublicMarketing.tsx:2236
+- `chatWidget.assistantName` · tümü · Other · components/SupportChatWidget.tsx:248
+- `chatWidget.chipFeatures` · tümü · Other · components/SupportChatWidget.tsx:143
+- `chatWidget.chipMigrating` · tümü · Other · components/SupportChatWidget.tsx:143
+- `chatWidget.chipPlans` · tümü · Other · components/SupportChatWidget.tsx:142
+- `chatWidget.chipTeam` · tümü · Other · components/SupportChatWidget.tsx:137
+- `chatWidget.close` · tümü · Other · components/SupportChatWidget.tsx:189
+- `chatWidget.emailPrompt` · tümü · Other · components/SupportChatWidget.tsx:258
+- `chatWidget.greeting` · tümü · Other · components/SupportChatWidget.tsx:201
+- `chatWidget.handedToTeam` · tümü · Other · components/SupportChatWidget.tsx:218
+- `chatWidget.keepChatting` · tümü · Other · components/SupportChatWidget.tsx:271
+- `chatWidget.messagePlaceholder` · tümü · Other · components/SupportChatWidget.tsx:305
+- `chatWidget.open` · tümü · Other · components/SupportChatWidget.tsx:174
+- `chatWidget.privacyLink` · tümü · Other · components/SupportChatWidget.tsx:316
+- `chatWidget.secureNote` · tümü · Other · components/SupportChatWidget.tsx:316
+- `chatWidget.send` · tümü · Other · components/SupportChatWidget.tsx:309
+- `chatWidget.sendToTeam` · tümü · Other · components/SupportChatWidget.tsx:262
+- `chatWidget.subtitle` · tümü · Other · components/SupportChatWidget.tsx:187
+- `chatWidget.talkToPerson` · tümü · Other · components/SupportChatWidget.tsx:285
+- `chatWidget.title` · tümü · Other · components/SupportChatWidget.tsx:183
+- `chatWidget.you` · tümü · Other · components/SupportChatWidget.tsx:228
+- `connected.chipFiles` · tümü · Other · components/PublicMarketing.tsx:2761
+- `connected.chipNotes` · tümü · Other · components/PublicMarketing.tsx:2762
+- `connected.chipTimeline` · tümü · Other · components/PublicMarketing.tsx:2760
+- `connected.status` · tümü · Other · components/PublicMarketing.tsx:2756
+- `contact.body` · tümü · Other · components/PublicMarketing.tsx:4726
+- `contact.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4724
+- `contact.title` · tümü · Other · components/PublicMarketing.tsx:4725
+- `cookies.body` · tümü · Other · components/PublicMarketing.tsx:4181
+- `cookies.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4179
+- `cookies.title` · tümü · Other · components/PublicMarketing.tsx:4180
+- `Could not prepare export data.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · app/export/page.tsx:61
+- `Could not sign in with Google.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:202
+- `Could not sign in.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:190
+- `Could not update the password.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · app/auth/action/page.tsx:128
+- `cta.login` · tümü · Other · components/PublicMarketing.tsx:886
+- `cta.openPortal` · tümü · Other · components/PublicMarketing.tsx:886
+- `cta.startFree` · tümü · Other · app/login/page.tsx:121
+- `cta.viewPricing` · tümü · Other · components/PublicMarketing.tsx:1173
+- `ctaBand.noCard` · tümü · Other · components/PublicMarketing.tsx:3108
+- `ctaBand.readyTitle` · tümü · Other · components/PublicMarketing.tsx:3105
+- `dashboard.body` · tümü · Other · components/PublicMarketing.tsx:2127
+- `dashboard.eyebrow` · tümü · Other · components/PublicMarketing.tsx:2124
+- `dashboard.imageAlt` · tümü · Other · components/PublicMarketing.tsx:2141
+- `dashboard.tagline` · tümü · Other · components/PublicMarketing.tsx:2162
+- `dashboard.title` · tümü · Other · components/PublicMarketing.tsx:2126
+- `dataProcessingAgreement.body` · tümü · Other · components/PublicMarketing.tsx:4654
+- `dataProcessingAgreement.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4652
+- `dataProcessingAgreement.title` · tümü · Other · components/PublicMarketing.tsx:4653
+- `Every figure here is worked out from what each workspace already has — its orders, customers, connections and bank matches. Nothing new is recorded to produce i` · tümü · Other · components/AdminInsightsHub.tsx:3094
+- `faq.body` · tümü · Other · components/PublicMarketing.tsx:3674
+- `faq.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3672
+- `faq.title` · tümü · Other · components/PublicMarketing.tsx:3673
+- `featuresDeep.eyebrow` · tümü · Other · components/PublicMarketing.tsx:1846
+- `featuresDeep.tourBody` · tümü · Other · components/PublicMarketing.tsx:1851
+- `featuresDeep.tourTitleA` · tümü · Other · components/PublicMarketing.tsx:1849
+- `featuresDeep.tourTitleAccent` · tümü · Other · components/PublicMarketing.tsx:1849
+- `featuresDemo.title` · tümü · Other · components/PublicMarketing.tsx:3210
+- `featuresDomain.brandingBody` · tümü · Other · components/PublicMarketing.tsx:3993
+- `featuresDomain.sub1Body` · tümü · Other · components/PublicMarketing.tsx:3985
+- `featuresDomain.sub1Title` · tümü · Other · components/PublicMarketing.tsx:3984
+- `featuresDomain.sub2Body` · tümü · Other · components/PublicMarketing.tsx:3989
+- `featuresDomain.sub2Title` · tümü · Other · components/PublicMarketing.tsx:3988
+- `featuresDomain.sub3Title` · tümü · Other · components/PublicMarketing.tsx:3992
+- `featuresPage.body` · tümü · Other · components/PublicMarketing.tsx:3180
+- `featuresPage.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3177
+- `featuresPage.title` · tümü · Other · components/PublicMarketing.tsx:3179
+- `first real use, not a connection` · tümü · Other · components/AdminInsightsHub.tsx:3102
+- `footer.legal` · tümü · Other · components/PublicMarketing.tsx:951
+- `footer.product` · tümü · Other · components/PublicMarketing.tsx:937
+- `footer.recaptcha.privacy` · tümü · Other · components/PublicMarketing.tsx:981
+- `footer.recaptcha.terms` · tümü · Other · components/PublicMarketing.tsx:983
+- `footer.recaptcha.text` · tümü · Other · components/PublicMarketing.tsx:977
+- `footer.rights` · tümü · Other · components/PublicMarketing.tsx:974
+- `footer.support` · tümü · Other · components/PublicMarketing.tsx:964
+- `Got value` · tümü · Other · components/AdminInsightsHub.tsx:3102
+- `guide.loading` · tümü · Other · components/PublicMarketing.tsx:4416
+- `guide.locked.ask` · tümü · Other · components/PublicMarketing.tsx:4434
+- `guide.locked.body` · tümü · Other · components/PublicMarketing.tsx:4433
+- `guide.locked.plansCta` · tümü · Other · components/PublicMarketing.tsx:4437
+- `guide.locked.signedOut.body` · tümü · Other · components/PublicMarketing.tsx:4433
+- `guide.locked.signedOut.title` · tümü · Other · components/PublicMarketing.tsx:4432
+- `guide.locked.signInCta` · tümü · Other · components/PublicMarketing.tsx:4441
+- `guide.locked.title` · tümü · Other · components/PublicMarketing.tsx:4432
+- `Have a customer` · tümü · Other · components/AdminInsightsHub.tsx:3103
+- `Have an order` · tümü · Other · components/AdminInsightsHub.tsx:3104
+- `hero.body` · tümü · Other · components/PublicMarketing.tsx:3017
+- `hero.demoFallback` · tümü · Other · components/PublicMarketing.tsx:3073
+- `hero.seeFullSize` · tümü · Other · components/PublicMarketing.tsx:1102
+- `hero.shotCaption` · tümü · Other · components/PublicMarketing.tsx:1123
+- `hero.titleAccent` · tümü · Other · components/PublicMarketing.tsx:3013
+- `hero.titleLead` · tümü · Other · components/PublicMarketing.tsx:3013
+- `hero.titleTail` · tümü · Other · components/PublicMarketing.tsx:3013
+- `hero.watchDemo` · tümü · Other · components/PublicMarketing.tsx:3036
+- `heroChips.title` · tümü · Other · components/PublicMarketing.tsx:1037
+- `heroFloat.ordersSub` · tümü · Other · components/PublicMarketing.tsx:1136
+- `heroFloat.ordersTitle` · tümü · Other · components/PublicMarketing.tsx:1136
+- `heroFloat.receivedSub` · tümü · Other · components/PublicMarketing.tsx:1142
+- `heroFloat.receivedTitle` · tümü · Other · components/PublicMarketing.tsx:1142
+- `heroStat.tasksSub` · tümü · Other · components/PublicMarketing.tsx:1154
+- `heroStat.tasksTitle` · tümü · Other · components/PublicMarketing.tsx:1154
+- `heroStat.transitSub` · tümü · Other · components/PublicMarketing.tsx:1148
+- `heroStat.transitTitle` · tümü · Other · components/PublicMarketing.tsx:1148
+- `homeFaq.more` · tümü · Other · components/PublicMarketing.tsx:2908
+- `homeFaq.title` · tümü · Other · components/PublicMarketing.tsx:2898
+- `homePricing.cta` · tümü · Other · components/PublicMarketing.tsx:2881
+- `homePricing.forever` · tümü · Other · components/PublicMarketing.tsx:2866
+- `homePricing.freeSub` · tümü · Other · components/PublicMarketing.tsx:2865
+- `homePricing.perMonth` · tümü · Other · components/PublicMarketing.tsx:2872
+- `homePricing.proSub` · tümü · Other · components/PublicMarketing.tsx:2871
+- `homePricing.simpleTitle` · tümü · Other · components/PublicMarketing.tsx:2861
+- `homePricing.teamSub` · tümü · Other · components/PublicMarketing.tsx:2876
+- `integrations.action.amazonPage` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:149
+- `integrations.action.chatgpt` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:150
+- `integrations.action.connect` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:152
+- `integrations.legend.checked` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:146
+- `integrations.legend.comingSoon` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:144
+- `integrations.legend.limited` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:143
+- `integrations.legend.live` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:142
+- `integrations.legend.title` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:139
+- `integrations.state.comingSoon` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:144
+- `integrations.state.limited` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:143
+- `integrations.state.live` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:142
+- `kanban.caption` · tümü · Other · components/PublicMarketing.tsx:2814
+- `kanban.priMedium` · tümü · Other · components/PublicMarketing.tsx:2811
+- `kanban.task5` · tümü · Other · components/PublicMarketing.tsx:2810
+- `language.label` · tümü · Other · app/login/page.tsx:36
+- `language.selectorLabel` · tümü · Other · app/login/page.tsx:38
+- `Last activity` · tümü · Other · components/AdminInsightsHub.tsx:3138
+- `login.emailPlaceholder` · tümü · Other · app/login/page.tsx:226
+- `login.nav.publicNavigation` · tümü · Other · app/login/page.tsx:114
+- `login.or` · tümü · Other · app/login/page.tsx:218
+- `login.passwordPlaceholder` · tümü · Other · app/login/page.tsx:234
+- `login.signIn` · tümü · Other · app/login/page.tsx:264
+- `login.title` · tümü · Other · app/login/page.tsx:167
+- `nav.acceptableUse` · tümü · Other · components/PublicMarketing.tsx:957
+- `nav.accountDeletion` · tümü · Other · components/PublicMarketing.tsx:967
+- `nav.changelog` · tümü · Other · components/PublicMarketing.tsx:945
+- `nav.chatgpt` · tümü · Other · components/PublicMarketing.tsx:940
+- `nav.contact` · tümü · Other · components/PublicMarketing.tsx:966
+- `nav.cookiePreferences` · tümü · Other · components/PublicMarketing.tsx:956
+- `nav.cookies` · tümü · Other · components/PublicMarketing.tsx:955
+- `nav.dataProcessingAgreement` · tümü · Other · components/PublicMarketing.tsx:958
+- `nav.faq` · tümü · Other · app/login/page.tsx:141
+- `nav.features` · tümü · Other · app/login/page.tsx:139
+- `nav.footer` · tümü · Other · components/PublicMarketing.tsx:935
+- `nav.guide` · tümü · Other · components/PublicMarketing.tsx:943
+- `nav.home` · tümü · Other · app/login/page.tsx:138
+- `nav.integrations` · tümü · Other · components/PublicMarketing.tsx:877
+- `nav.pricing` · tümü · Other · app/login/page.tsx:120
+- `nav.privacy` · tümü · Other · components/PublicMarketing.tsx:953
+- `nav.publicPages` · tümü · Other · app/login/page.tsx:125
+- `nav.refundCancellation` · tümü · Other · components/PublicMarketing.tsx:968
+- `nav.security` · tümü · Other · components/PublicMarketing.tsx:880
+- `nav.skipToContent` · tümü · Other · components/PublicMarketing.tsx:1007
+- `nav.subprocessors` · tümü · Other · components/PublicMarketing.tsx:959
+- `nav.terms` · tümü · Other · components/PublicMarketing.tsx:954
+- `orderCards.aria` · tümü · Other · components/PublicMarketing.tsx:1233
+- `orderCards.group.order` · tümü · Other · components/PublicMarketing.tsx:2749
+- `plan.limit.activeOrders` · tümü · Other · components/PublicMarketing.tsx:1416
+- `plan.limit.clientFiles` · tümü · Other · components/PublicMarketing.tsx:1430
+- `plan.limit.customers` · tümü · Other · components/PublicMarketing.tsx:1420
+- `plan.limit.notIncluded` · tümü · Other · components/PublicMarketing.tsx:1431
+- `plan.limit.orders` · tümü · Other · components/PublicMarketing.tsx:1415
+- `plan.limit.seats` · tümü · Other · components/PublicMarketing.tsx:1425
+- `plan.limit.teamIncluded` · tümü · Other · components/PublicMarketing.tsx:1426
+- `plan.limit.unlimited` · tümü · Other · components/PublicMarketing.tsx:1416
+- `plan.limit.users` · tümü · Other · components/PublicMarketing.tsx:1425
+- `plan.pro.badge` · tümü · Other · components/PublicMarketing.tsx:2869
+- `planBridge.body` · tümü · Other · components/PublicMarketing.tsx:1918
+- `planBridge.eyebrow` · tümü · Other · components/PublicMarketing.tsx:1916
+- `planBridge.featureColumn` · tümü · Other · components/PublicMarketing.tsx:1924
+- `planBridge.included` · tümü · Other · components/PublicMarketing.tsx:1961
+- `planBridge.matrixAria` · tümü · Other · components/PublicMarketing.tsx:1921
+- `planBridge.notIncluded` · tümü · Other · components/PublicMarketing.tsx:1961
+- `planBridge.popular` · tümü · Other · components/PublicMarketing.tsx:1935
+- `planBridge.title` · tümü · Other · components/PublicMarketing.tsx:1917
+- `platform.android.qrAlt` · tümü · Other · components/PublicMarketing.tsx:2629
+- `platform.android.scan` · tümü · Other · components/PublicMarketing.tsx:2619
+- `platform.android.scanHint` · tümü · Other · components/PublicMarketing.tsx:2638
+- `platform.apple.qrAlt` · tümü · Other · components/PublicMarketing.tsx:2550
+- `platform.apple.scan` · tümü · Other · components/PublicMarketing.tsx:2540
+- `platform.apple.scanHint` · tümü · Other · components/PublicMarketing.tsx:2559
+- `platform.eyebrow` · tümü · Other · components/PublicMarketing.tsx:2684
+- `platform.gridAria` · tümü · Other · components/PublicMarketing.tsx:2688
+- `platform.subtitle` · tümü · Other · components/PublicMarketing.tsx:2686
+- `platform.title` · tümü · Other · components/PublicMarketing.tsx:2685
+- `platform.windows.hint` · tümü · Other · components/PublicMarketing.tsx:2702
+- `Please sign in again.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · lib/studioflow/friendlyError.ts:92
+- `pricing.freeForever` · tümü · Other · components/PublicMarketing.tsx:1408
+- `pricing.mostValue` · tümü · Other · components/PublicMarketing.tsx:1546
+- `pricing.perMonth` · tümü · Other · components/PublicMarketing.tsx:1383
+- `pricing.perMonthEquivalent` · tümü · Other · components/PublicMarketing.tsx:1394
+- `pricing.perYear` · tümü · Other · components/PublicMarketing.tsx:1383
+- `pricing.saveWord` · tümü · Other · components/PublicMarketing.tsx:1509
+- `pricing.toggleMonthly` · tümü · Other · components/PublicMarketing.tsx:1539
+- `pricing.togglePayAsYouGo` · tümü · Other · components/PublicMarketing.tsx:1540
+- `pricing.toggleYearly` · tümü · Other · components/PublicMarketing.tsx:1544
+- `pricing.twoMonthsFree` · tümü · Other · components/PublicMarketing.tsx:1396
+- `pricing.yearlyBanner.body` · tümü · Other · components/PublicMarketing.tsx:1520
+- `pricing.yearlyBanner.title` · tümü · Other · components/PublicMarketing.tsx:1502
+- `pricing.yearlyHandNote` · tümü · Other · components/PublicMarketing.tsx:1503
+- `pricing.yearlySave` · tümü · Other · components/PublicMarketing.tsx:1403
+- `pricingHero.card.billing.body` · tümü · Other · components/PublicMarketing.tsx:3350
+- `pricingHero.card.billing.title` · tümü · Other · components/PublicMarketing.tsx:3350
+- `pricingHero.card.demo.body` · tümü · Other · components/PublicMarketing.tsx:3338
+- `pricingHero.card.demo.title` · tümü · Other · components/PublicMarketing.tsx:3338
+- `pricingHero.card.team.body` · tümü · Other · components/PublicMarketing.tsx:3342
+- `pricingHero.card.team.title` · tümü · Other · components/PublicMarketing.tsx:3342
+- `pricingHero.card.upgrade` · tümü · Other · components/PublicMarketing.tsx:3346
+- `pricingHero.compare` · tümü · Other · components/PublicMarketing.tsx:3316
+- `pricingHero.mini.change.body` · tümü · Other · components/PublicMarketing.tsx:3360
+- `pricingHero.mini.change.title` · tümü · Other · components/PublicMarketing.tsx:3360
+- `pricingHero.mini.fees.body` · tümü · Other · components/PublicMarketing.tsx:3356
+- `pricingHero.mini.fees.title` · tümü · Other · components/PublicMarketing.tsx:3356
+- `pricingHero.mini.support.body` · tümü · Other · components/PublicMarketing.tsx:3364
+- `pricingHero.mini.support.title` · tümü · Other · components/PublicMarketing.tsx:3364
+- `pricingHero.trust.billing` · tümü · Other · components/PublicMarketing.tsx:3329
+- `pricingHero.trust.cancel` · tümü · Other · components/PublicMarketing.tsx:3325
+- `pricingHero.trust.checkout` · tümü · Other · components/PublicMarketing.tsx:3321
+- `pricingPage.addon.label` · tümü · Other · components/PublicMarketing.tsx:3390
+- `pricingPage.addon100.body` · tümü · Other · components/PublicMarketing.tsx:3393
+- `pricingPage.addon100.title` · tümü · Other · components/PublicMarketing.tsx:3391
+- `pricingPage.addon200.body` · tümü · Other · components/PublicMarketing.tsx:3400
+- `pricingPage.addon200.title` · tümü · Other · components/PublicMarketing.tsx:3398
+- `pricingPage.body` · tümü · Other · components/PublicMarketing.tsx:3311
+- `pricingPage.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3309
+- `pricingPage.title` · tümü · Other · components/PublicMarketing.tsx:3310
+- `privacy.body` · tümü · Other · components/PublicMarketing.tsx:4107
+- `privacy.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4105
+- `privacy.title` · tümü · Other · components/PublicMarketing.tsx:4106
+- `refundCancellation.body` · tümü · Other · components/PublicMarketing.tsx:4253
+- `refundCancellation.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4251
+- `refundCancellation.title` · tümü · Other · components/PublicMarketing.tsx:4252
+- `schedule.body` · tümü · Other · components/PublicMarketing.tsx:2059
+- `schedule.eyebrow` · tümü · Other · components/PublicMarketing.tsx:2056
+- `schedule.imageAlt` · tümü · Other · components/PublicMarketing.tsx:2073
+- `schedule.tagline` · tümü · Other · components/PublicMarketing.tsx:2094
+- `schedule.title` · tümü · Other · components/PublicMarketing.tsx:2058
+- `scrollStory.context` · tümü · Other · components/PublicMarketing.tsx:1681
+- `section.backoffice.body` · tümü · Other · components/PublicMarketing.tsx:2957
+- `section.backoffice.eyebrow` · tümü · Other · components/PublicMarketing.tsx:2955
+- `section.backoffice.portalLink` · tümü · Other · components/PublicMarketing.tsx:2968
+- `section.backoffice.title` · tümü · Other · components/PublicMarketing.tsx:2956
+- `section.flow.title` · tümü · Other · components/PublicMarketing.tsx:2723
+- `security.body` · tümü · Other · components/PublicMarketing.tsx:4582
+- `security.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4580
+- `security.title` · tümü · Other · components/PublicMarketing.tsx:4581
+- `shippingStrip.link` · tümü · Other · components/PublicMarketing.tsx:2846
+- `shippingStrip.title` · tümü · Other · components/PublicMarketing.tsx:2826
+- `Sign in` · tümü · Other · app/invite/[token]/InviteAcceptContent.tsx:229
+- `Signed up` · tümü · Other · components/AdminInsightsHub.tsx:3138
+- `signup.body` · tümü · Other · components/PublicMarketing.tsx:3567
+- `signup.error.disposableEmail` · tümü · Other · components/PublicMarketing.tsx:3432
+- `signup.error.emailExists` · tümü · Other · components/PublicMarketing.tsx:3427
+- `signup.error.generic` · tümü · Other · components/PublicMarketing.tsx:3438
+- `signup.error.invalidEmail` · tümü · Other · components/PublicMarketing.tsx:3429
+- `signup.error.network` · tümü · Other · components/PublicMarketing.tsx:3430
+- `signup.error.passwordMismatch` · tümü · Other · components/PublicMarketing.tsx:3490
+- `signup.error.passwordStrength` · tümü · Other · components/PublicMarketing.tsx:3486
+- `signup.error.required` · tümü · Other · components/PublicMarketing.tsx:3482
+- `signup.error.terms` · tümü · Other · components/PublicMarketing.tsx:3494
+- `signup.error.weakPassword` · tümü · Other · components/PublicMarketing.tsx:3428
+- `signup.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3565
+- `signup.form.agreeAnd` · tümü · Other · components/PublicMarketing.tsx:3641
+- `signup.form.agreePrefix` · tümü · Other · components/PublicMarketing.tsx:3641
+- `signup.form.body` · tümü · Other · components/PublicMarketing.tsx:3595
+- `signup.form.confirmPassword` · tümü · Other · components/PublicMarketing.tsx:3634
+- `signup.form.creating` · tümü · Other · components/PublicMarketing.tsx:3646
+- `signup.form.email` · tümü · Other · components/PublicMarketing.tsx:3625
+- `signup.form.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3593
+- `signup.form.fullName` · tümü · Other · components/PublicMarketing.tsx:3617
+- `signup.form.haveAccount` · tümü · Other · components/PublicMarketing.tsx:3649
+- `signup.form.password` · tümü · Other · components/PublicMarketing.tsx:3630
+- `signup.form.submit` · tümü · Other · components/PublicMarketing.tsx:3646
+- `signup.form.title` · tümü · Other · components/PublicMarketing.tsx:3594
+- `signup.form.workspaceName` · tümü · Other · components/PublicMarketing.tsx:3621
+- `signup.includes.bullet1` · tümü · Other · components/PublicMarketing.tsx:3571
+- `signup.includes.bullet2` · tümü · Other · components/PublicMarketing.tsx:3572
+- `signup.includes.bullet3` · tümü · Other · components/PublicMarketing.tsx:3573
+- `signup.includes.title` · tümü · Other · components/PublicMarketing.tsx:3569
+- `signup.signedIn.body` · tümü · Other · components/PublicMarketing.tsx:3551
+- `signup.signedIn.eyebrow` · tümü · Other · components/PublicMarketing.tsx:3549
+- `signup.signedIn.title` · tümü · Other · components/PublicMarketing.tsx:3550
+- `signup.title` · tümü · Other · components/PublicMarketing.tsx:3566
+- `subprocessors.body` · tümü · Other · components/PublicMarketing.tsx:4618
+- `subprocessors.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4616
+- `subprocessors.title` · tümü · Other · components/PublicMarketing.tsx:4617
+- `terms.body` · tümü · Other · components/PublicMarketing.tsx:4144
+- `terms.eyebrow` · tümü · Other · components/PublicMarketing.tsx:4142
+- `terms.title` · tümü · Other · components/PublicMarketing.tsx:4143
+- `The server is busy. Please try again.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · lib/studioflow/friendlyError.ts:93
+- `These leave no record on any document, so a workspace that did them still reads as though it did not. Somebody opening a connect screen and giving up is the cle` · tümü · Other · components/AdminInsightsHub.tsx:3174
+- `trackCard.autoDetect` · tümü · Other · components/PublicMarketing.tsx:1712
+- `trackCard.carrier` · tümü · Other · components/PublicMarketing.tsx:1730
+- `trackCard.checkpoint` · tümü · Other · components/PublicMarketing.tsx:1751
+- `trackCard.courier` · tümü · Other · components/PublicMarketing.tsx:1710
+- `trackCard.delivered` · tümü · Other · components/PublicMarketing.tsx:1768
+- `trackCard.dispatched` · tümü · Other · components/PublicMarketing.tsx:1702
+- `trackCard.estDelivery` · tümü · Other · components/PublicMarketing.tsx:1744
+- `trackCard.estDeliveryValue` · tümü · Other · components/PublicMarketing.tsx:1746
+- `trackCard.lastChecked` · tümü · Other · components/PublicMarketing.tsx:1755
+- `trackCard.lastUpdate` · tümü · Other · components/PublicMarketing.tsx:1737
+- `trackCard.lastUpdateValue` · tümü · Other · components/PublicMarketing.tsx:1739
+- `trackCard.no` · tümü · Other · components/PublicMarketing.tsx:1705
+- `trackCard.refresh` · tümü · Other · components/PublicMarketing.tsx:1760
+- `trackCard.title` · tümü · Other · components/PublicMarketing.tsx:1695
+- `trackCard.trackingNo` · tümü · Other · components/PublicMarketing.tsx:1717
+- `trackCard.yes` · tümü · Other · components/PublicMarketing.tsx:1704
+- `workflow.eyebrow` · tümü · Other · components/PublicMarketing.tsx:1810
+- `workflow.title` · tümü · Other · components/PublicMarketing.tsx:1811
+- `Working it out…` · tümü · Other · components/AdminFeedbackInbox.tsx:111
+- `You don't have permission for this.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · lib/studioflow/friendlyError.ts:84
+
+</details>
+
+<details><summary>Web — (b) İngilizceye düşen: 742 anahtar (37 @kullanım)</summary>
+
+- `         .notif-bell-btn { position: relative; }         .notif-bell-badge { position: absolute; top: -4px; right: -4px; background: #ef4444; color: white; font` · tümü · Shell · components/AppShell.tsx:3377
+- `       /* The drawer is a solid panel: without a background of its own, the page behind showed through          between the cards, under the day labels and thro` · tümü · Shell · components/NotificationsDrawer.tsx:735
+- `Add` · tümü · Order detail · app/orders/OrderDetailContent.tsx:10295
+- `Amount` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:219
+- `Cancel` · tümü · Order detail/Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:380
+- `CNAME` · tümü · Settings · app/settings/ClientDomainSection.tsx:246
+- `Delete` · tümü · Order detail · app/orders/OrderDetailContent.tsx:8255
+- `DELETE DATA` · tümü · Settings · app/settings/page.tsx:6958
+- `DHL Express` · tümü · Order detail/Other/Settings · app/orders/OrderShipmentsPanel.tsx:170
+- `Dial Paint — Black` · tümü · Inventory · app/inventory/InventoryContent.tsx:1031
+- `Email` · tümü · Order detail/Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:315
+- `Estimate` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:179
+- `GBP` · tümü · Order detail · app/orders/ShipmentDraftDialog.tsx:487
+- `GBP, EUR…` · tümü · Inventory · app/inventory/SuppliersPanel.tsx:228
+- `Item` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:218
+- `Max {size} MB` · IT · Files/Order detail · app/files/page.tsx:716
+- `MB` · tümü · Settings · app/settings/page.tsx:3995
+- `Model` · TR · Inventory · app/inventory/InventoryContent.tsx:1057
+- `Name	On hand	Purchase price Dial blank	40	2.25` · tümü · Inventory · app/inventory/OpeningStockModal.tsx:220
+- `Name A–Z` · DE · Files · app/files/page.tsx:820
+- `Next.js + Firebase` · tümü · Settings · app/settings/page.tsx:8744
+- `Open` · tümü · Order detail/Other · app/orders/OrderDetailContent.tsx:11650
+- `PAINT-BLK` · tümü · Inventory · app/inventory/InventoryContent.tsx:1073
+- `PDF, image, PSD, PSB, ZIP` · FR · Files · app/files/page.tsx:717
+- `Powered by NivaDesk` · tümü · Other/Settings · app/e/[token]/EstimateApprovalContent.tsx:319
+- `Pro` · tümü · Order detail/Other · app/orders/OrderDetailContent.tsx:11712
+- `Question` · FR · Settings · app/settings/page.tsx:8517
+- `Rolex Air-King 5500` · tümü · Inventory · app/inventory/InventoryContent.tsx:1031
+- `Starter` · tümü · Schedule · app/schedule/page.tsx:1321
+- `Subtotal` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:237
+- `Team` · tümü · Other/Schedule · app/schedule/page.tsx:1321
+- `The term &ldquo;Etsy&rdquo; is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.` · tümü · Other/Settings · app/integrations/IntegrationsDirectory.tsx:154
+- `Total` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:247
+- `VAT (` · tümü · Order detail/Other · app/e/[token]/EstimateApprovalContent.tsx:242
+- `{ "orderId": "1001", "total": 120.50 }` · tümü · Settings · app/settings/page.tsx:6328
+- `· Square-Version` · tümü · Settings · app/settings/SquareIntegrationSection.tsx:131
+- `⬇ ZIP` · tümü · Files · app/files/page.tsx:918
+- `% of total ·` · tümü · Other · components/AdminInsightsHub.tsx:2185
+- `% used` · tümü · Other · app/plan/page.tsx:375
+- `&nbsp;` · tümü · Other · app/integrations/amazon/AmazonSellerPage.tsx:78
+- `(optional)` · DE · Other · components/FeedbackCenter.tsx:234
+- `(or Restricted) user:` · tümü · Other · components/AdminInsightsHub.tsx:1160
+- `(service account email unavailable — check function logs)` · tümü · Other · components/AdminInsightsHub.tsx:1165
+- `, add this service account as a` · tümü · Other · components/AdminInsightsHub.tsx:1160
+- `, so changing or cancelling it happens in` · tümü · Other · app/plan/page.tsx:444
+- `. Buying again here would charge this workspace twice, so nothing is sold on this page while that subscription is live.` · tümü · Other · app/plan/page.tsx:445
+- `. If you were not expecting that address, close this page.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:297
+- `. No cookies that identify a person, no email, name or IP — event counts, an anonymous random visitor id (used only to size unique counts), device class and cam` · tümü · Other · components/AdminInsightsHub.tsx:509
+- `. Only this one is current.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:211
+- `. Your highest verified plan is active; manage any duplicate subscriptions to avoid duplicate billing.` · tümü · Other · app/plan/page.tsx:367
+- `. ▲ green = moved up toward #1.` · tümü · Other · components/AdminInsightsHub.tsx:1243
+- `100 GB / 200 GB packages` · tümü · Other · app/plan/page.tsx:524
+- `100 GB Extra Storage` · tümü · Other · app/plan/page.tsx:61
+- `200 GB Extra Storage` · tümü · Other · app/plan/page.tsx:68
+- `30 days ·` · tümü · Other · components/AdminInsightsHub.tsx:2351
+- `A FEW USEFUL DETAILS` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:156
+- `A new order comes in` · tümü · Other · components/CustomOrderLanding.tsx:109
+- `A place for the tools` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:138
+- `Activation` · tümü · Other · components/AdminInsightsHub.tsx:3218
+- `Active 30d` · tümü · Other · components/AdminInsightsHub.tsx:2244
+- `active 30d · +` · tümü · Other · components/AdminInsightsHub.tsx:2185
+- `Active OAuth tokens` · tümü · Other · components/AdminInsightsHub.tsx:2930
+- `Active users` · tümü · Other · components/AdminInsightsHub.tsx:306
+- `Active users this week` · tümü · Other · components/AdminInsightsHub.tsx:1527
+- `Active Workspaces by Feature (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2362
+- `Add more team members` · tümü · Other · app/plan/page.tsx:584
+- `Admin Insights` · tümü · Other · components/AdminInsightsHub.tsx:1473
+- `After NivaDesk` · tümü · Other · components/CustomOrderLanding.tsx:293
+- `After you allow it, NivaDesk will send the authorization to` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:296
+- `again — the link it opens brings you right back here.` · tümü · Other · app/connect/shopify/page.tsx:176
+- `All paid workspaces created an order in the last 30 days. ✓` · tümü · Other · components/AdminInsightsHub.tsx:2962
+- `All time` · tümü · Other · components/AdminInsightsHub.tsx:2939
+- `All-time adoption: how far workspaces get after signing up.` · tümü · Other · components/AdminInsightsHub.tsx:2413
+- `all-time —` · tümü · Other · components/AdminInsightsHub.tsx:2351
+- `Allow ChatGPT` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:382
+- `Allow this role to assign and reassign projects from the order card menu.` · tümü · Other · lib/studioflow/firestore.ts:152
+- `Allow this role to delete client files. Uploading and viewing follow Client Files access above.` · tümü · Other · lib/studioflow/firestore.ts:156
+- `Amazon Customer` · tümü · Other · app/integrations/amazon/AmazonSellerPage.tsx:106
+- `Analyze plan performance, features and limits.` · tümü · Other · components/AdminInsightsHub.tsx:2175
+- `Anonymous visitor counts from nivadesk.app. No cookies or personal data are collected.` · tümü · Other · components/AdminInsightsHub.tsx:851
+- `Anonymous, aggregate-only stats for` · tümü · Other · components/AdminInsightsHub.tsx:509
+- `Anything you would like to say? (optional)` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:267
+- `App Store` · tümü · Other · components/PublicMarketing.tsx:946
+- `Appearance, language and profile/security settings area.` · tümü · Other · lib/studioflow/firestore.ts:119
+- `Approved` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:160
+- `Average position over time` · tümü · Other · components/AdminInsightsHub.tsx:1190
+- `Avg workspaces per user` · tümü · Other · components/AdminInsightsHub.tsx:1524
+- `Avg. CTR` · tümü · Other · components/AdminInsightsHub.tsx:1180
+- `Avg. Position` · tümü · Other · components/AdminInsightsHub.tsx:1181
+- `Avg. Session Duration` · tümü · Other · components/AdminInsightsHub.tsx:882
+- `Back` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:299
+- `Base` · tümü · Other · components/AdminInsightsHub.tsx:1931
+- `Before NivaDesk` · tümü · Other · components/CustomOrderLanding.tsx:280
+- `Before you connect.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:156
+- `Biggest ranking movers` · tümü · Other · components/AdminInsightsHub.tsx:1196
+- `Billing` · tümü · Other · app/plan/page.tsx:418
+- `Billing error` · tümü · Other · app/plan/page.tsx:309
+- `Billing provider:` · tümü · Other · app/plan/page.tsx:363
+- `billing providers` · tümü · Other · app/plan/page.tsx:367
+- `Billing setup coming soon` · tümü · Other · app/plan/page.tsx:563
+- `Blocker` · DE · Other · app/production/ProductionContent.tsx:927
+- `Board` · DE · Other · app/production/ProductionContent.tsx:440
+- `Bounce Rate` · tümü · Other · components/AdminInsightsHub.tsx:883
+- `Bring every order into one calm workspace.` · tümü · Other · components/CustomOrderLanding.tsx:379
+- `Built around the way small businesses work.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `Built for small studios, workshops and service businesses.` · tümü · Other · components/CustomOrderLanding.tsx:387
+- `By approving you confirm the work and the total above. Your name, the time and your signature are recorded with the estimate.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:289
+- `Campaign` · tümü · Other · components/AdminInsightsHub.tsx:626
+- `Card Customization` · tümü · Other · components/PlanComparisonCard.tsx:40
+- `Change this plan from NivaDesk inside your Shopify admin.` · tümü · Other · app/plan/page.tsx:461
+- `Change this plan in` · tümü · Other · app/plan/page.tsx:463
+- `ChatGPT App Review` · tümü · Other · app/review-demo/page.tsx:41
+- `ChatGPT App Usage` · tümü · Other · components/AdminInsightsHub.tsx:2927
+- `ChatGPT connection` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:279
+- `ChatGPT will be able to:` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:371
+- `chatgptApp.metricNotesLabel` · tümü · Other · components/PublicMarketing.tsx:2197
+- `chatgptApp.resultMetric1Label` · tümü · Other · components/PublicMarketing.tsx:2195
+- `chatgptApp.resultMetric2Label` · tümü · Other · components/PublicMarketing.tsx:2196
+- `Checking your secure link.` · tümü · Other · app/auth/action/page.tsx:148
+- `Checking your session...` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:307
+- `Choose a new password` · tümü · Other · app/auth/action/page.tsx:163
+- `Choose a plan in Shopify` · tümü · Other · app/connect/shopify/page.tsx:210
+- `Choose the workspace` · tümü · Other · app/connect/shopify/page.tsx:242
+- `Clear` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:274
+- `Clear filters` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:153
+- `Clear scope, without the guesswork.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Clicks` · tümü · Other · components/AdminInsightsHub.tsx:1011
+- `Clicks & impressions over time` · tümü · Other · components/AdminInsightsHub.tsx:1185
+- `Client file upload, rename and delete.` · tümü · Other · lib/studioflow/firestore.ts:112
+- `Client Files` · tümü · Other · app/plan/page.tsx:337
+- `Client Files and message attachment files require an active eligible paid plan. When paid access ends, opening, previewing, downloading, uploading and deleting ` · tümü · Other · app/plan/page.tsx:407
+- `Client files card inside project detail.` · tümü · Other · lib/studioflow/firestore.ts:140
+- `Client Files storage` · tümü · Other · app/plan/page.tsx:337
+- `Client Files usage across all workspaces.` · tümü · Other · components/AdminInsightsHub.tsx:2508
+- `Close` · tümü · Other · components/PublicMarketing.tsx:1116
+- `Cloud file storage and file management are available on NivaDesk Pro and Team.` · tümü · Other · app/plan/page.tsx:391
+- `Coming soon` · tümü · Other · app/plan/page.tsx:512
+- `Comma ( , )` · tümü · Other · components/ExportOrdersPanel.tsx:205
+- `Company website` · tümü · Other · components/PublicMarketing.tsx:3582
+- `Compare access levels, review your workspace allowance and manage a connected subscription securely.` · tümü · Other · app/plan/page.tsx:303
+- `Compare plans` · tümü · Other · app/plan/page.tsx:393
+- `Confirm decline` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:302
+- `Confirm new password` · tümü · Other · app/auth/action/page.tsx:178
+- `Connect` · tümü · Other · app/connect/shopify/page.tsx:176
+- `Connect ChatGPT to the selected NivaDesk workspace. ChatGPT will only work inside the workspace you choose and access is still limited by your NivaDesk plan, ro` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:286
+- `Connect Google Search Console` · tümü · Other · components/AdminInsightsHub.tsx:1155
+- `Connect NivaDesk` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:281
+- `Connect store` · tümü · Other · app/connect/shopify/page.tsx:317
+- `Connect your Shopify store` · tümü · Other · app/connect/shopify/page.tsx:334
+- `CONNECTED WORKFLOW` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:121
+- `Connected working` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Connected workspaces` · tümü · Other · components/AdminInsightsHub.tsx:2929
+- `Connecting` · tümü · Other · app/connect/shopify/page.tsx:225
+- `Connecting QuickBooks…` · tümü · Other · app/quickbooks/callback/page.tsx:18
+- `Connecting Xero…` · tümü · Other · app/xero/callback/page.tsx:18
+- `Connecting...` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:382
+- `Connecting…` · tümü · Other · app/connect/shopify/page.tsx:317
+- `Contact` · tümü · Other · components/CustomOrderLanding.tsx:399
+- `contact@nivadesk.co.uk` · tümü · Other · components/PublicMarketing.tsx:932
+- `Continue to NivaDesk` · tümü · Other · app/auth/action/page.tsx:136
+- `Continue with Google` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:330
+- `Conv.` · tümü · Other · components/AdminInsightsHub.tsx:631
+- `Conversion, upgrade and downgrade columns will activate once live billing events are tracked.` · tümü · Other · components/AdminInsightsHub.tsx:2265
+- `Cookie su NivaDesk` · tümü · Other · components/CookieConsent.tsx:76
+- `Cookies bei NivaDesk` · tümü · Other · components/CookieConsent.tsx:56
+- `Cookies en NivaDesk` · tümü · Other · components/CookieConsent.tsx:86
+- `Cookies no NivaDesk` · tümü · Other · components/CookieConsent.tsx:96
+- `Cookies on NivaDesk` · tümü · Other · components/CookieConsent.tsx:36
+- `Cookies sur NivaDesk` · tümü · Other · components/CookieConsent.tsx:66
+- `Could not load plan information` · tümü · Other · app/plan/page.tsx:310
+- `Could not prepare export` · tümü · Other · app/export/page.tsx:123
+- `Couldn&apos;t load your workspaces.` · tümü · Other · app/connect/shopify/page.tsx:250
+- `Create a NivaDesk account` · tümü · Other · app/connect/shopify/page.tsx:233
+- `Created` · tümü · Other · components/AdminInsightsHub.tsx:1740
+- `Created date, delivery due date and remaining time.` · tümü · Other · lib/studioflow/firestore.ts:138
+- `Creative studios & freelancers` · tümü · Other · components/CustomOrderLanding.tsx:121
+- `CTA click-through rate` · tümü · Other · components/AdminInsightsHub.tsx:569
+- `CTA clicks` · tümü · Other · components/AdminInsightsHub.tsx:628
+- `CTA-driven signup visits` · tümü · Other · components/AdminInsightsHub.tsx:572
+- `CTR` · tümü · Other · components/AdminInsightsHub.tsx:1222
+- `Cumulative registered users, last 60 days.` · tümü · Other · components/AdminInsightsHub.tsx:1513
+- `Current add-on` · tümü · Other · app/plan/page.tsx:553
+- `Current plan` · tümü · Other · app/plan/page.tsx:319
+- `Current seat allowance` · tümü · Other · app/plan/page.tsx:332
+- `Current status` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:132
+- `Currently visible properties:` · tümü · Other · components/AdminInsightsHub.tsx:1170
+- `Custom & bespoke makers` · tümü · Other · components/CustomOrderLanding.tsx:118
+- `Custom Leather Duffle Bag` · tümü · Other · components/PublicMarketing.tsx:2755
+- `Custom Order Landing Page` · tümü · Other · components/AdminInsightsHub.tsx:3216
+- `Customer details, channels and contact fields.` · tümü · Other · lib/studioflow/firestore.ts:135
+- `Customer list and contact directory.` · tümü · Other · lib/studioflow/firestore.ts:102
+- `Customers` · tümü · Other · components/AdminInsightsHub.tsx:2729
+- `Customers CSV` · tümü · Other · app/export/page.tsx:142
+- `Daily breakdown` · tümü · Other · components/AdminInsightsHub.tsx:654
+- `Dashboard and workspace analytics.` · tümü · Other · lib/studioflow/firestore.ts:96
+- `Dashboard time range` · HI · Other · app/dashboard/page.tsx:926
+- `Data export` · tümü · Other · app/export/page.tsx:113
+- `Date` · tümü · Other · components/AdminInsightsHub.tsx:659
+- `Decline` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:308
+- `Declined` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:160
+- `Delivered and paid in full` · tümü · Other · components/CustomOrderLanding.tsx:114
+- `Delivery progress` · tümü · Other · components/CustomOrderLanding.tsx:105
+- `Demo plays · landing page` · tümü · Other · components/AdminInsightsHub.tsx:575
+- `Demo plays · main site` · tümü · Other · components/AdminInsightsHub.tsx:577
+- `Demo video for the NivaDesk ChatGPT App review.` · tümü · Other · app/review-demo/page.tsx:5
+- `Demo watched to end · landing` · tümü · Other · components/AdminInsightsHub.tsx:576
+- `Demo watched to end · main site` · tümü · Other · components/AdminInsightsHub.tsx:578
+- `Deposits & payments` · tümü · Other · components/CustomOrderLanding.tsx:103
+- `Device breakdown` · tümü · Other · components/AdminInsightsHub.tsx:687
+- `Devices` · tümü · Other · components/AdminInsightsHub.tsx:897
+- `Dispatch, courier and tracking fields.` · tümü · Other · lib/studioflow/firestore.ts:145
+- `Download CSV` · tümü · Other · components/ExportOrdersPanel.tsx:218
+- `Download NivaDesk on the App Store` · tümü · Other · components/PublicMarketing.tsx:2500
+- `Download on the` · tümü · Other · components/PublicMarketing.tsx:2506
+- `Drop in the files` · tümü · Other · components/CustomOrderLanding.tsx:110
+- `EGGCRAFT LIMITED · Registered in England and Wales No. 16566512 · VAT GB 514512621 · 141 Randolph Avenue, London W9 1DN, United Kingdom` · tümü · Other · components/PublicMarketing.tsx:990
+- `Email (optional)` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:261
+- `Email restored` · tümü · Other · app/auth/action/page.tsx:204
+- `Email verified` · tümü · Other · app/auth/action/page.tsx:155
+- `Email, name or workspace...` · tümü · Other · components/AdminInsightsHub.tsx:2759
+- `End` · tümü · Other · components/AdminInsightsHub.tsx:865
+- `Est. MRR by Plan` · tümü · Other · components/AdminInsightsHub.tsx:1709
+- `Est. Revenue by Plan` · tümü · Other · components/AdminInsightsHub.tsx:1858
+- `Est. £/mo` · tümü · Other · components/AdminInsightsHub.tsx:1739
+- `Estimate unavailable` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:149
+- `Every card carries one of three labels, measured against what is actually running today. Availability can also depend on your plan, your provider account and yo` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:138
+- `Everything a custom-order business needs to stay on top of work.` · tümü · Other · components/CustomOrderLanding.tsx:318
+- `Everything you need for each order, from client details and files to deposits, tasks and delivery progress, all in one place.` · tümü · Other · components/CustomOrderLanding.tsx:307
+- `Excel-friendly (UTF-8 BOM)` · tümü · Other · components/ExportOrdersPanel.tsx:194
+- `Exclude my own visits from these stats` · tümü · Other · components/AdminInsightsHub.tsx:534
+- `Expected` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:147
+- `Expired subscriptions fall back to Free/Demo` · tümü · Other · app/plan/page.tsx:402
+- `Explore how NivaDesk connects your shop, accounts and customer communication. Every integration is labelled live, limited access or coming soon, as measured aga` · tümü · Other · app/integrations/page.tsx:6
+- `Explore integrations` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `Export Backup` · tümü · Other · app/export/page.tsx:151
+- `Export error` · tümü · Other · app/export/page.tsx:122
+- `Export invoices to CSV` · tümü · Other · components/ExportOrdersPanel.tsx:127
+- `Export your workspace data` · tümü · Other · app/export/page.tsx:114
+- `Export-first rule` · tümü · Other · app/export/page.tsx:129
+- `Exports stay available on Free` · tümü · Other · app/export/page.tsx:130
+- `Extra Seat Buyers` · tümü · Other · components/AdminInsightsHub.tsx:1877
+- `Feature` · tümü · Other · app/plan/page.tsx:502
+- `Feature / Limit` · tümü · Other · components/AdminInsightsHub.tsx:2208
+- `Feature Adoption Funnel` · tümü · Other · components/AdminInsightsHub.tsx:2397
+- `Feature matrix` · tümü · Other · app/plan/page.tsx:496
+- `Feature Usage` · tümü · Other · components/AdminInsightsHub.tsx:3211
+- `Feature Usage by Plan (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2368
+- `Feature Usage by Time of Day` · tümü · Other · components/AdminInsightsHub.tsx:2418
+- `Feature Usage Distribution (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2358
+- `Files` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:193
+- `Files, deposits and deadlines getting lost.` · tümü · Other · components/CustomOrderLanding.tsx:65
+- `Finance settings menu when financial access is also enabled.` · tümü · Other · lib/studioflow/firestore.ts:124
+- `Financial card inside project detail.` · tümü · Other · lib/studioflow/firestore.ts:143
+- `Find a connection that fits your business.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Find an integration` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:148
+- `FIND YOUR CONNECTION` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:138
+- `Follow one order from first message to delivered.` · tümü · Other · components/CustomOrderLanding.tsx:338
+- `Footer` · tümü · Other · components/CustomOrderLanding.tsx:395
+- `for project` · tümü · Other · components/AdminInsightsHub.tsx:1158
+- `For small custom-order businesses` · tümü · Other · components/CustomOrderLanding.tsx:183
+- `Free` · tümü · Other · components/PublicMarketing.tsx:2864
+- `From` · tümü · Other · components/AdminInsightsHub.tsx:522
+- `From scattered to one calm workspace.` · tümü · Other · components/CustomOrderLanding.tsx:275
+- `Full` · tümü · Other · components/AdminInsightsHub.tsx:1160
+- `GB` · tümü · Other · app/plan/page.tsx:535
+- `Get it on` · tümü · Other · components/PublicMarketing.tsx:2585
+- `Get NivaDesk on Google Play` · tümü · Other · components/PublicMarketing.tsx:2579
+- `Global Statistics` · tümü · Other · components/AdminInsightsHub.tsx:3214
+- `Google Play` · tümü · Other · components/PublicMarketing.tsx:947
+- `Google Search` · tümü · Other · components/AdminInsightsHub.tsx:3215
+- `Google Search Console API` · tümü · Other · components/AdminInsightsHub.tsx:1158
+- `Google Search rankings` · tümü · Other · components/AdminInsightsHub.tsx:1141
+- `Guide` · FR · Other · components/AppHelpAssistant.tsx:134
+- `Higher line = better rank (closer to #1). Best` · tümü · Other · components/AdminInsightsHub.tsx:1044
+- `Home` · tümü · Other · components/CustomOrderLanding.tsx:396
+- `Home page` · tümü · Other · components/AdminInsightsHub.tsx:1270
+- `How each paid plan was assigned. Stripe / Apple / Google payment methods will appear here once live billing is connected.` · tümü · Other · components/AdminInsightsHub.tsx:1716
+- `How it works` · tümü · Other · components/AdminInsightsHub.tsx:663
+- `How setup finished` · tümü · Other · components/AdminInsightsHub.tsx:2015
+- `How they chose to start` · tümü · Other · components/AdminInsightsHub.tsx:2014
+- `How they work` · tümü · Other · components/AdminInsightsHub.tsx:2008
+- `If a Starter, Pro or Team subscription expires, the workspace falls back to Free access. Existing orders, customers and permitted basic data remain viewable and` · tümü · Other · app/plan/page.tsx:404
+- `If a subscription expires, the workspace can fall back to Free, but existing orders and customers can still be downloaded. Uploading files, creating new team da` · tümü · Other · app/export/page.tsx:132
+- `If you&apos;re running orders through WhatsApp, email, spreadsheets and folders today, NivaDesk is built for you.` · tümü · Other · components/CustomOrderLanding.tsx:371
+- `Import, export and backup screens inside Settings.` · tümü · Other · lib/studioflow/firestore.ts:126
+- `Important details buried in chats and threads.` · tümü · Other · components/CustomOrderLanding.tsx:61
+- `Important rule` · tümü · Other · app/plan/page.tsx:401
+- `Impr.` · tümü · Other · components/AdminInsightsHub.tsx:1220
+- `Impressions` · tümü · Other · components/AdminInsightsHub.tsx:1010
+- `In Google Cloud Console, enable the` · tümü · Other · components/AdminInsightsHub.tsx:1158
+- `In progress` · tümü · Other · components/AdminInsightsHub.tsx:2938
+- `In Repair` · tümü · Other · lib/studioflow/onboardingWizard.ts:460
+- `In Search Console →` · tümü · Other · components/AdminInsightsHub.tsx:1160
+- `Include trashed invoices` · tümü · Other · components/ExportOrdersPanel.tsx:189
+- `Included` · tümü · Other · app/plan/page.tsx:512
+- `Intake` · tümü · Other · lib/studioflow/onboardingWizard.ts:459
+- `Integration category` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:148
+- `Integrations for your workshop \| NivaDesk` · tümü · Other · app/integrations/page.tsx:5
+- `Invoices` · tümü · Other · components/ExportOrdersPanel.tsx:23
+- `is now connected` · tümü · Other · app/connect/shopify/page.tsx:185
+- `Its Shopify store is connected with the NivaDesk app from the Shopify App Store, so its plan is chosen, charged and cancelled in Shopify — on your Shopify invoi` · tümü · Other · app/plan/page.tsx:421
+- `Join a workspace` · tümü · Other · app/invite/[token]/page.tsx:7
+- `Keep the work together` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Key metrics` · tümü · Other · components/AdminInsightsHub.tsx:565
+- `Know what is supported` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Landing page views` · tümü · Other · components/AdminInsightsHub.tsx:567
+- `Landing views` · tümü · Other · components/AdminInsightsHub.tsx:497
+- `Landing → signup conversion` · tümü · Other · components/AdminInsightsHub.tsx:574
+- `Landing → signup funnel` · tümü · Other · components/AdminInsightsHub.tsx:588
+- `Last Active` · tümü · Other · components/AdminInsightsHub.tsx:1549
+- `Last order` · tümü · Other · components/AdminInsightsHub.tsx:2726
+- `Last order created` · tümü · Other · components/AdminInsightsHub.tsx:2980
+- `Last sign-in` · tümü · Other · components/AdminInsightsHub.tsx:1585
+- `Last site visit` · tümü · Other · components/AdminInsightsHub.tsx:2981
+- `Last support ticket` · tümü · Other · components/AdminInsightsHub.tsx:2982
+- `Legal document language` · tümü · Other · components/PublicMarketing.tsx:4066
+- `Less switching.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:162
+- `Let’s find the right connections for your business.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:162
+- `Limit this role to projects assigned to the current member.` · tümü · Other · lib/studioflow/firestore.ts:151
+- `Line items` · tümü · Other · components/ExportOrdersPanel.tsx:24
+- `Link problem` · tümü · Other · app/auth/action/page.tsx:213
+- `Link unavailable` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:103
+- `Litres` · FR · Other · lib/studioflow/shipping.ts:454
+- `Live` · tümü · Other · components/AdminInsightsHub.tsx:301
+- `Live overview across all NivaDesk users and workspaces. Generated` · tümü · Other · components/AdminInsightsHub.tsx:2902
+- `Loading details...` · tümü · Other · components/AdminInsightsHub.tsx:1484
+- `Loading insights...` · tümü · Other · components/AdminInsightsHub.tsx:2864
+- `Loading search rankings…` · tümü · Other · components/AdminInsightsHub.tsx:1149
+- `Loading statistics...` · tümü · Other · components/AdminInsightsHub.tsx:871
+- `Loading workspaces...` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:357
+- `Loading workspaces…` · tümü · Other · app/connect/shopify/page.tsx:269
+- `Loading workspace…` · tümü · Other · app/export/page.tsx:116
+- `Loading your estimate…` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:143
+- `Loading...` · tümü · Other · components/AdminInsightsHub.tsx:2829
+- `Loading…` · tümü · Other · app/connect/shopify/page.tsx:170
+- `Locked` · tümü · Other · app/plan/page.tsx:512
+- `Looking for something else?` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:148
+- `Made for businesses that build to order.` · tümü · Other · components/CustomOrderLanding.tsx:360
+- `Main notes and custom note sections.` · tümü · Other · lib/studioflow/firestore.ts:139
+- `Main Settings navigation.` · tümü · Other · lib/studioflow/firestore.ts:110
+- `MAKE ROOM FOR THE WORK` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:162
+- `Make sure the` · tümü · Other · components/AdminInsightsHub.tsx:1167
+- `Manage Billing` · tümü · Other · app/plan/page.tsx:344
+- `Manage orders from inside ChatGPT.` · tümü · Other · components/CustomOrderLanding.tsx:224
+- `Manage seats` · tümü · Other · app/plan/page.tsx:633
+- `Manual` · ES,PT · Other · app/dashboard/page.tsx:948
+- `Material checklist and inventory notes.` · tümü · Other · lib/studioflow/firestore.ts:136
+- `Material unavailable` · tümü · Other · lib/studioflow/production.ts:47
+- `MB used of` · tümü · Other · app/plan/page.tsx:377
+- `Medium` · tümü · Other · components/AdminInsightsHub.tsx:625
+- `Members` · tümü · Other · components/AdminInsightsHub.tsx:2724
+- `Membership, storage and access` · tümü · Other · app/plan/page.tsx:301
+- `Messages` · tümü · Other · components/AdminInsightsHub.tsx:2730
+- `Messages sent via Contact NivaDesk Support appear in the Support / Tickets section — as an admin you see every user&apos;s tickets there.` · tümü · Other · components/AdminInsightsHub.tsx:925
+- `Monitor plan assignments and estimated billing performance.` · tümü · Other · components/AdminInsightsHub.tsx:1691
+- `Monthly` · tümü · Other · app/plan/page.tsx:620
+- `Monthly GBP at list prices.` · tümü · Other · components/AdminInsightsHub.tsx:1864
+- `More making.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:162
+- `Most Active Pages` · tümü · Other · components/AdminInsightsHub.tsx:316
+- `Move it through your stages` · tümü · Other · components/CustomOrderLanding.tsx:112
+- `Multiple active subscriptions detected across` · tümü · Other · app/plan/page.tsx:367
+- `Name` · tümü · Other · components/AdminInsightsHub.tsx:1583
+- `Never logged in` · tümü · Other · components/AdminInsightsHub.tsx:1528
+- `New` · tümü · Other · components/AdminInsightsHub.tsx:1061
+- `New password` · tümü · Other · app/auth/action/page.tsx:169
+- `New This Month` · tümü · Other · components/AdminInsightsHub.tsx:2245
+- `New users this week` · tümü · Other · components/AdminInsightsHub.tsx:1526
+- `Newest first (latest 50).` · tümü · Other · components/AdminInsightsHub.tsx:1605
+- `Newest Workspaces` · tümü · Other · components/AdminInsightsHub.tsx:2944
+- `Next, choose a plan in the NivaDesk app in your Shopify admin. It is billed through Shopify.` · tümü · Other · app/connect/shopify/page.tsx:201
+- `NivaDesk ChatGPT App Review Demo` · tümü · Other · app/review-demo/page.tsx:4
+- `NivaDesk connects the tools around your business` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:120
+- `NivaDesk Demo Video` · tümü · Other · app/review-demo/page.tsx:44
+- `NivaDesk for Amazon sellers: features, pricing and data handling \| NivaDesk` · tümü · Other · app/integrations/amazon/page.tsx:5
+- `NivaDesk helps small custom-order businesses manage clients, orders, files, payments and team tasks in one calm workspace.` · tümü · Other · components/CustomOrderLanding.tsx:186
+- `NIVADESK INTEGRATIONS` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `NivaDesk order management workspace showing client details, files, payments and delivery progress` · tümü · Other · components/CustomOrderLanding.tsx:198
+- `NivaDesk order workspace` · tümü · Other · components/PublicMarketing.tsx:1097
+- `NivaDesk Pro` · tümü · Other · lib/studioflow/onboardingWizard.ts:86
+- `NivaDesk Starter` · tümü · Other · lib/studioflow/onboardingWizard.ts:85
+- `NivaDesk Team` · tümü · Other · lib/studioflow/onboardingWizard.ts:87
+- `NivaDesk の Cookie` · tümü · Other · components/CookieConsent.tsx:116
+- `NivaDesk 上的 Cookie` · tümü · Other · components/CookieConsent.tsx:126
+- `NivaDesk'te çerezler` · tümü · Other · components/CookieConsent.tsx:46
+- `No accessible workspace was found for this account.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:359
+- `No activity in the last 30 days.` · tümü · Other · components/AdminInsightsHub.tsx:2359
+- `No campaign data yet. Tag your ad URLs with utm_source / utm_medium / utm_campaign.` · tümü · Other · components/AdminInsightsHub.tsx:618
+- `No credit card required. Set up your first order in minutes.` · tümü · Other · components/CustomOrderLanding.tsx:192
+- `No data yet.` · tümü · Other · components/AdminInsightsHub.tsx:219
+- `No data.` · tümü · Other · components/AdminInsightsHub.tsx:1484
+- `No files yet.` · tümü · Other · components/AdminInsightsHub.tsx:2524
+- `No matches` · tümü · Other · components/PublicMarketing.tsx:4490
+- `No matching integrations` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:153
+- `No matching users.` · tümü · Other · components/AdminInsightsHub.tsx:2779
+- `No matching workspaces.` · tümü · Other · components/AdminInsightsHub.tsx:2800
+- `No one is on the site right now.` · tümü · Other · components/AdminInsightsHub.tsx:327
+- `no orders in 30 days` · tümü · Other · components/AdminInsightsHub.tsx:2970
+- `No pages have search impressions in this period yet.` · tümü · Other · components/AdminInsightsHub.tsx:1249
+- `No paid subscriptions yet.` · tümü · Other · components/AdminInsightsHub.tsx:1706
+- `No paid workspaces yet.` · tümü · Other · components/AdminInsightsHub.tsx:1921
+- `No recent signups.` · tümü · Other · components/AdminInsightsHub.tsx:1575
+- `No referrer data yet.` · tümü · Other · components/AdminInsightsHub.tsx:719
+- `No search impressions in this period yet.` · tümü · Other · components/AdminInsightsHub.tsx:1212
+- `No uploads yet.` · tümü · Other · components/AdminInsightsHub.tsx:2597
+- `No utm_content data.` · tümü · Other · components/AdminInsightsHub.tsx:749
+- `No utm_term data.` · tümü · Other · components/AdminInsightsHub.tsx:737
+- `No workspace activity in the last 30 days.` · tümü · Other · components/AdminInsightsHub.tsx:1536
+- `No workspace has purchased a storage add-on yet.` · tümü · Other · components/AdminInsightsHub.tsx:1899
+- `No workspace has purchased extra seats yet.` · tümü · Other · components/AdminInsightsHub.tsx:1879
+- `No workspace is above 80% of its storage limit. ✓` · tümü · Other · components/AdminInsightsHub.tsx:2536
+- `No workspace memberships found.` · tümü · Other · components/AdminInsightsHub.tsx:2696
+- `No workspaces found for this account.` · tümü · Other · app/connect/shopify/page.tsx:271
+- `No workspaces yet.` · tümü · Other · components/AdminInsightsHub.tsx:2956
+- `Nobody has answered this yet.` · tümü · Other · components/AdminInsightsHub.tsx:2091
+- `not connected` · tümü · Other · app/plan/page.tsx:363
+- `Not Connected Yet` · tümü · Other · components/AdminInsightsHub.tsx:1719
+- `Not enough days to chart yet.` · tümü · Other · components/AdminInsightsHub.tsx:995
+- `Not enough ranked days to chart yet.` · tümü · Other · components/AdminInsightsHub.tsx:1031
+- `Not included` · tümü · Other · app/plan/page.tsx:389
+- `Nous utilisons uniquement des cookies essentiels et le stockage local pour vous garder connecté, sécurisé et mémoriser vos préférences. Nous n'utilisons pas de ` · tümü · Other · components/CookieConsent.tsx:67
+- `of 10.` · tümü · Other · app/plan/page.tsx:587
+- `Of Limit` · tümü · Other · components/AdminInsightsHub.tsx:2566
+- `On Site Now` · tümü · Other · components/AdminInsightsHub.tsx:298
+- `One connected` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `One moment…` · tümü · Other · app/auth/action/page.tsx:147
+- `One place for client details, order status, files, payments and delivery progress.` · tümü · Other · components/CustomOrderLanding.tsx:204
+- `One row per invoice with accountant columns (revenue, cost, VAT, net profit).` · tümü · Other · components/ExportOrdersPanel.tsx:26
+- `One row per invoice — status, dates, contact and totals.` · tümü · Other · components/ExportOrdersPanel.tsx:23
+- `One row per payment received — the cash ledger.` · tümü · Other · components/ExportOrdersPanel.tsx:25
+- `One row per product/service line on each invoice.` · tümü · Other · components/ExportOrdersPanel.tsx:24
+- `Only the workspace owner can manage billing or add-ons.` · tümü · Other · app/plan/page.tsx:572
+- `Only the workspace owner can manage seats.` · tümü · Other · app/plan/page.tsx:593
+- `Only what you allow is synced: orders, customer contact details and product info from this store. You can disconnect at any time from either side.` · tümü · Other · app/connect/shopify/page.tsx:320
+- `Open Export` · tümü · Other · app/plan/page.tsx:411
+- `Opening billing...` · tümü · Other · app/plan/page.tsx:344
+- `Opening checkout...` · tümü · Other · app/plan/page.tsx:472
+- `Order creation activity by weekday and hour (last 30 days, UK time).` · tümü · Other · components/AdminInsightsHub.tsx:1443
+- `Order list, order detail and order edits.` · tümü · Other · lib/studioflow/firestore.ts:92
+- `Order reminders, calendar and alerts card.` · tümü · Other · lib/studioflow/firestore.ts:146
+- `Order status` · tümü · Other · components/CustomOrderLanding.tsx:101
+- `Orders (30d)` · tümü · Other · components/AdminInsightsHub.tsx:1547
+- `Orders (total)` · tümü · Other · components/AdminInsightsHub.tsx:1548
+- `Orders 30d` · tümü · Other · components/AdminInsightsHub.tsx:2246
+- `Orders a month` · tümü · Other · components/AdminInsightsHub.tsx:2011
+- `Orders and day-to-day work share a home.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Orders Created by Plan (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2197
+- `Orders scattered across WhatsApp, email and notes.` · tümü · Other · components/CustomOrderLanding.tsx:60
+- `Organic Search` · tümü · Other · components/AdminInsightsHub.tsx:117
+- `Overall landing view → completed signup:` · tümü · Other · components/AdminInsightsHub.tsx:611
+- `Owner` · tümü · Other · components/AdminInsightsHub.tsx:1544
+- `owner only` · tümü · Other · app/connect/shopify/page.tsx:300
+- `Owner only` · tümü · Other · app/plan/page.tsx:358
+- `Page` · tümü · Other · components/AdminInsightsHub.tsx:1256
+- `Page Views` · tümü · Other · components/AdminInsightsHub.tsx:881
+- `Paid` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:169
+- `Password` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:323
+- `Password updated` · tümü · Other · app/auth/action/page.tsx:195
+- `Payment` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:167
+- `Payment failures, trials and storage limits will appear here once live billing and storage metering are connected.` · tümü · Other · components/AdminInsightsHub.tsx:2975
+- `PDF export settings menu.` · tümü · Other · lib/studioflow/firestore.ts:120
+- `PDF, backup and data export actions.` · tümü · Other · lib/studioflow/firestore.ts:114
+- `Personal Notes navigation area.` · tümü · Other · lib/studioflow/firestore.ts:108
+- `Photos` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:181
+- `Plan` · tümü · Other · components/AdminInsightsHub.tsx:1545
+- `Plan & Billing` · tümü · Other · app/plan/page.tsx:300
+- `Plan Comparison` · tümü · Other · components/AdminInsightsHub.tsx:2203
+- `Plan Distribution` · tümü · Other · components/AdminInsightsHub.tsx:2193
+- `Plan Performance` · tümü · Other · components/AdminInsightsHub.tsx:2237
+- `Plan Source Distribution` · tümü · Other · components/AdminInsightsHub.tsx:1714
+- `Plan, limits and billing screens. Owner-only edits remain protected server-side.` · tümü · Other · lib/studioflow/firestore.ts:128
+- `Plans` · tümü · Other · components/AdminInsightsHub.tsx:3210
+- `Play the NivaDesk demo video` · tümü · Other · components/CustomOrderLanding.tsx:33
+- `Please sign in the box before approving.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:114
+- `Please type your name.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:110
+- `Position` · tümü · Other · components/AdminInsightsHub.tsx:1223
+- `Premium studio management for artists, custom studios and order-based creative businesses.` · tümü · Other · app/layout.tsx:30
+- `Preparing…` · tümü · Other · components/ExportOrdersPanel.tsx:218
+- `Preview image and visual reference card.` · tümü · Other · lib/studioflow/firestore.ts:133
+- `Preview of the NivaDesk demo video` · tümü · Other · components/CustomOrderLanding.tsx:36
+- `Prices, profit, dashboard finance and finance cards.` · tümü · Other · lib/studioflow/firestore.ts:113
+- `Priority, risk and blocker context.` · tümü · Other · lib/studioflow/firestore.ts:137
+- `Privacy` · tümü · Other · components/CustomOrderLanding.tsx:397
+- `Production stages and status toggles.` · tümü · Other · lib/studioflow/firestore.ts:144
+- `Project audit trail and change history.` · tümü · Other · lib/studioflow/firestore.ts:147
+- `Project summary, value-safe overview and due status.` · tümü · Other · lib/studioflow/firestore.ts:134
+- `Project task list and task controls.` · tümü · Other · lib/studioflow/firestore.ts:141
+- `property is verified, then reload this page.` · tümü · Other · components/AdminInsightsHub.tsx:1167
+- `Property:` · tümü · Other · components/AdminInsightsHub.tsx:1148
+- `Public website statistics` · tümü · Other · components/AdminInsightsHub.tsx:850
+- `Query` · tümü · Other · components/AdminInsightsHub.tsx:1219
+- `Quick Reply page and AI reply tools.` · tümü · Other · lib/studioflow/firestore.ts:109
+- `Quick Reply settings menu, subject to OpenAI owner-only controls.` · tümü · Other · lib/studioflow/firestore.ts:121
+- `Quick Stats` · tümü · Other · components/AdminInsightsHub.tsx:1522
+- `Ready for Collection` · tümü · Other · lib/studioflow/onboardingWizard.ts:463
+- `Real activity timestamps — if these stop moving, the matching pipeline needs a look.` · tümü · Other · components/AdminInsightsHub.tsx:2984
+- `Recent signups` · tümü · Other · components/AdminInsightsHub.tsx:1572
+- `Recent Subscriptions` · tümü · Other · components/AdminInsightsHub.tsx:1728
+- `Recent Uploads` · tümü · Other · components/AdminInsightsHub.tsx:2595
+- `Record the deposit` · tümü · Other · components/CustomOrderLanding.tsx:111
+- `Recorded at` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:174
+- `Recorded for` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:170
+- `Recording…` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:311
+- `Reference files` · tümü · Other · components/CustomOrderLanding.tsx:102
+- `Reference files, payments and dates become hard to track.` · tümü · Other · components/CustomOrderLanding.tsx:66
+- `Referral` · TR,DE,FR,ES,PT,RU,JA,ZH,AR,HI · Other · components/AdminInsightsHub.tsx:119
+- `Referrer hostname` · tümü · Other · components/AdminInsightsHub.tsx:717
+- `Refresh Subscription Access` · tümü · Other · app/plan/page.tsx:353
+- `Refreshing access...` · tümü · Other · app/plan/page.tsx:353
+- `Remaining` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:173
+- `Repair & service businesses` · tümü · Other · components/CustomOrderLanding.tsx:120
+- `Repair estimate` · tümü · Other · app/e/[token]/page.tsx:8
+- `Repeated updates take time away from the work.` · tümü · Other · components/CustomOrderLanding.tsx:71
+- `Reply to tickets from the Support / Tickets section.` · tümü · Other · components/AdminInsightsHub.tsx:2941
+- `Return to the Shopify tab — it updates to Connected automatically. New orders will start syncing right away. You can close this tab.` · tümü · Other · app/connect/shopify/page.tsx:216
+- `Revenue` · tümü · Other · components/AdminInsightsHub.tsx:1813
+- `Revenue Breakdown` · tümü · Other · components/AdminInsightsHub.tsx:1862
+- `Revenue over time, billing sources (Stripe / Apple / Google), currencies, countries, transactions and refunds require live billing. These cards will activate he` · tümü · Other · components/AdminInsightsHub.tsx:1869
+- `Review account: review@nivadesk.app. The account uses a Team plan demo workspace with sample orders and data for review. No MFA, SMS verification or extra email` · tümü · Other · app/review-demo/page.tsx:85
+- `Role locked` · HI · Other · app/dashboard/page.tsx:1068
+- `Running every order from your phone and memory is costing you.` · tümü · Other · components/CustomOrderLanding.tsx:238
+- `Same orders. Far less chaos.` · tümü · Other · components/CustomOrderLanding.tsx:276
+- `Save new password` · tümü · Other · app/auth/action/page.tsx:186
+- `Saving…` · tümü · Other · app/auth/action/page.tsx:186
+- `Search` · tümü · Other · components/AdminInsightsHub.tsx:2769
+- `Search any user or workspace by email or name and inspect their statistics.` · tümü · Other · components/AdminInsightsHub.tsx:2752
+- `Search by country` · tümü · Other · components/AdminInsightsHub.tsx:1286
+- `Search by device` · tümü · Other · components/AdminInsightsHub.tsx:1307
+- `Search Console access is not configured yet.` · tümü · Other · components/AdminInsightsHub.tsx:1156
+- `Search tools…` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:148
+- `Searching...` · tümü · Other · components/AdminInsightsHub.tsx:2769
+- `Seats` · tümü · Other · app/plan/page.tsx:608
+- `See How It Works` · tümü · Other · components/CustomOrderLanding.tsx:190
+- `See How It Works clicks` · tümü · Other · components/AdminInsightsHub.tsx:570
+- `See how NivaDesk keeps one custom order organised from first message to final delivery.` · tümü · Other · components/CustomOrderLanding.tsx:215
+- `See it in action` · tümü · Other · components/CustomOrderLanding.tsx:212
+- `Select a report and date range. The file opens cleanly in Excel, Numbers or Google Sheets.` · tümü · Other · components/ExportOrdersPanel.tsx:129
+- `Semicolon ( ; )` · tümü · Other · components/ExportOrdersPanel.tsx:206
+- `Sending…` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:302
+- `Seni oturumda ve güvende tutmak, tercihlerini hatırlamak için yalnızca zorunlu çerezler ve yerel depolama kullanırız. Reklam veya üçüncü taraf analitik izleyici` · tümü · Other · components/CookieConsent.tsx:47
+- `Separator` · tümü · Other · components/ExportOrdersPanel.tsx:198
+- `Service Heartbeat` · tümü · Other · components/AdminInsightsHub.tsx:2978
+- `Set up your first client and order in a few minutes. Keep customer details, files, deposits, tasks and delivery progress together — and start for free.` · tümü · Other · components/CustomOrderLanding.tsx:381
+- `Sets` · DE · Other · lib/studioflow/shipping.ts:446
+- `Settings → Users and permissions` · tümü · Other · components/AdminInsightsHub.tsx:1160
+- `Setup Answers` · tümü · Other · components/AdminInsightsHub.tsx:3217
+- `should sync into. Signed in as` · tümü · Other · app/connect/shopify/page.tsx:242
+- `Show all history` · tümü · Other · components/AdminInsightsHub.tsx:549
+- `Showing all stored history.` · tümü · Other · components/AdminInsightsHub.tsx:553
+- `Sign here` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:273
+- `Sign in and continue` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:327
+- `Sign in to NivaDesk` · tümü · Other · app/connect/shopify/page.tsx:230
+- `Signed in as` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:336
+- `Signed up` · tümü · Other · components/AdminInsightsHub.tsx:1584
+- `Signing in...` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:327
+- `Signup page visits` · tümü · Other · components/AdminInsightsHub.tsx:499
+- `Signup visits` · tümü · Other · components/AdminInsightsHub.tsx:629
+- `Signup visits may include users who reached /signup after being attributed to this landing page, including refreshes or direct return visits — so they can excee` · tümü · Other · components/AdminInsightsHub.tsx:581
+- `Signups` · tümü · Other · components/AdminInsightsHub.tsx:630
+- `Signups completed` · tümü · Other · components/AdminInsightsHub.tsx:500
+- `Six simple tools that replace the spreadsheets, chats and folders you use today.` · tümü · Other · components/CustomOrderLanding.tsx:319
+- `Small workshops & studios` · tümü · Other · components/CustomOrderLanding.tsx:119
+- `Social Media` · TR,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · components/AdminInsightsHub.tsx:118
+- `Solo usamos cookies esenciales y almacenamiento local para mantenerte conectado, seguro y recordar tus preferencias. No usamos rastreadores publicitarios ni de ` · tümü · Other · components/CookieConsent.tsx:87
+- `Something else, in their words` · tümü · Other · components/AdminInsightsHub.tsx:2101
+- `Source` · tümü · Other · components/AdminInsightsHub.tsx:624
+- `Start` · tümü · Other · components/AdminInsightsHub.tsx:861
+- `Start Free Trial` · tümü · Other · components/CustomOrderLanding.tsx:189
+- `Start Free Trial clicks` · tümü · Other · components/AdminInsightsHub.tsx:498
+- `Start fresh from today` · tümü · Other · components/AdminInsightsHub.tsx:544
+- `Start with your tools` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:137
+- `Stats →` · tümü · Other · components/AdminInsightsHub.tsx:2705
+- `Status` · tümü · Other · app/plan/page.tsx:325
+- `Stop losing client orders in WhatsApp, spreadsheets and folders.` · tümü · Other · components/CustomOrderLanding.tsx:184
+- `Storage` · tümü · Other · components/AdminInsightsHub.tsx:1933
+- `Storage Add-on Buyers` · tümü · Other · components/AdminInsightsHub.tsx:1897
+- `Storage add-ons` · tümü · Other · app/plan/page.tsx:523
+- `Storage add-ons increase your Client Files allowance on top of the base plan without changing your plan. They require a plan that includes Client Files (Pro or ` · tümü · Other · app/plan/page.tsx:526
+- `Storage Warnings` · tümü · Other · components/AdminInsightsHub.tsx:2534
+- `Studio owner at a desk, buried in scattered WhatsApp messages, emails, files and an overdue payment` · tümü · Other · components/CustomOrderLanding.tsx:248
+- `Subscriptions` · tümü · Other · components/AdminInsightsHub.tsx:1660
+- `Subscriptions by Plan` · tümü · Other · components/AdminInsightsHub.tsx:1705
+- `Supplier delay` · tümü · Other · lib/studioflow/production.ts:48
+- `Support and ticket area.` · tümü · Other · lib/studioflow/firestore.ts:129
+- `Support inbox` · tümü · Other · components/AdminInsightsHub.tsx:924
+- `Support tickets` · tümü · Other · components/AdminInsightsHub.tsx:2691
+- `Support Tickets` · tümü · Other · components/AdminInsightsHub.tsx:2935
+- `switch account` · tümü · Other · app/connect/shopify/page.tsx:245
+- `Talk to us` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:162
+- `Team includes 5 seats. Add extra seats for £5/month or £50/year each, up to 10 users in total. Your current allowance is` · tümü · Other · app/plan/page.tsx:586
+- `Team members and access controls.` · tümü · Other · lib/studioflow/firestore.ts:111
+- `Team seats` · tümü · Other · app/plan/page.tsx:583
+- `Team tasks` · tümü · Other · components/CustomOrderLanding.tsx:104
+- `Technical problem` · tümü · Other · lib/studioflow/production.ts:49
+- `Tell us what you use ↗` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:148
+- `Terms` · tümü · Other · components/CustomOrderLanding.tsx:398
+- `Thank you — that's approved` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:162
+- `Thank you — that's recorded` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:162
+- `The current authoritative version of this legal document is provided in English. The public site navigation may be displayed in your selected language, but the ` · tümü · Other · components/PublicMarketing.tsx:4068
+- `The fix` · tümü · Other · components/CustomOrderLanding.tsx:274
+- `The NivaDesk Amazon connection reads your Amazon orders into NivaDesk every 30 minutes, read-only, so made-to-order, handmade and repair sellers can plan and tr` · tümü · Other · app/integrations/amazon/page.tsx:6
+- `The problem` · tümü · Other · components/CustomOrderLanding.tsx:236
+- `The server did not answer for this file.` · tümü · Other · lib/studioflow/clientFiles.ts:444
+- `The tools around your work, in one place.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:134
+- `This browser IS being counted.` · tümü · Other · components/AdminInsightsHub.tsx:537
+- `This browser is NOT counted.` · tümü · Other · components/AdminInsightsHub.tsx:537
+- `This ChatGPT connection request is missing required OAuth parameters. Please start the connection again from ChatGPT.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:304
+- `This demo shows the NivaDesk ChatGPT App connected to a Team plan review workspace. It demonstrates using ChatGPT to view dashboard information, search orders, ` · tümü · Other · app/review-demo/page.tsx:55
+- `This estimate uses file metadata from loaded orders.` · tümü · Other · app/plan/page.tsx:383
+- `This is how a single custom order flows through NivaDesk — calm and in order, every time.` · tümü · Other · components/CustomOrderLanding.tsx:339
+- `This link is no longer available.` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:104
+- `this month` · tümü · Other · components/AdminInsightsHub.tsx:2185
+- `This page needs a valid connect link. Open the NivaDesk app inside your Shopify admin and press` · tümü · Other · app/connect/shopify/page.tsx:175
+- `This replaces estimate` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:211
+- `This workspace is billed through` · tümü · Other · app/plan/page.tsx:442
+- `This workspace is billed through Shopify` · tümü · Other · app/plan/page.tsx:419
+- `Timeline and schedule planning.` · tümü · Other · lib/studioflow/firestore.ts:97
+- `to NivaDesk. Sign in to your NivaDesk account — or create one in a minute — to choose which workspace this store syncs into.` · tümü · Other · app/connect/shopify/page.tsx:225
+- `Tokens issued (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2931
+- `Top Pages` · tümü · Other · components/AdminInsightsHub.tsx:910
+- `Top pages` · tümü · Other · components/AdminInsightsHub.tsx:1247
+- `Top Paying Workspaces (Est.)` · tümü · Other · components/AdminInsightsHub.tsx:1919
+- `Top search queries` · tümü · Other · components/AdminInsightsHub.tsx:1210
+- `Top Traffic Sources` · tümü · Other · components/AdminInsightsHub.tsx:893
+- `Top Workspaces by Activity` · tümü · Other · components/AdminInsightsHub.tsx:1534
+- `Top Workspaces by Storage` · tümü · Other · components/AdminInsightsHub.tsx:2553
+- `Total Clicks` · tümü · Other · components/AdminInsightsHub.tsx:1178
+- `Total Visitors` · tümü · Other · components/AdminInsightsHub.tsx:880
+- `Track estimated financial performance across NivaDesk.` · tümü · Other · components/AdminInsightsHub.tsx:1844
+- `Track how features are used across all workspaces (last 30 days).` · tümü · Other · components/AdminInsightsHub.tsx:2343
+- `Track user growth, activity and workspace statistics across NivaDesk.` · tümü · Other · components/AdminInsightsHub.tsx:1499
+- `Track your order` · tümü · Other · app/track/[token]/page.tsx:8
+- `Traffic Sources (hosts)` · tümü · Other · components/AdminInsightsHub.tsx:918
+- `Trials, cancellations, expirations, failed payments, billing cycles and plan-change history require live billing. When Stripe / App Store / Play billing is enab` · tümü · Other · components/AdminInsightsHub.tsx:1721
+- `Trigger` · IT · Other · components/AdminFeedbackInbox.tsx:124
+- `Try again` · tümü · Other · app/connect/shopify/page.tsx:265
+- `Try another name or explore all categories.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:153
+- `Unique` · tümü · Other · components/AdminInsightsHub.tsx:661
+- `Unknown action. Open the link from the email again.` · tümü · Other · app/auth/action/page.tsx:59
+- `Upgrade to Pro or Team (which include Client Files) to add extra storage.` · tümü · Other · app/plan/page.tsx:576
+- `Upload safety settings menu.` · tümü · Other · lib/studioflow/firestore.ts:125
+- `Uploads by Time of Day (30d)` · tümü · Other · components/AdminInsightsHub.tsx:2615
+- `Usage by File Type` · tümü · Other · components/AdminInsightsHub.tsx:2521
+- `Usage by Plan` · tümü · Other · components/AdminInsightsHub.tsx:2527
+- `Usamos apenas cookies essenciais e armazenamento local para manter você conectado, seguro e lembrar suas preferências. Não usamos rastreadores de publicidade ou` · tümü · Other · components/CookieConsent.tsx:97
+- `Used` · tümü · Other · components/AdminInsightsHub.tsx:2565
+- `User Activity Overview` · tümü · Other · components/AdminInsightsHub.tsx:1609
+- `User Growth` · tümü · Other · components/AdminInsightsHub.tsx:1511
+- `User Lookup` · tümü · Other · components/AdminInsightsHub.tsx:3213
+- `User Statistics` · tümü · Other · components/AdminInsightsHub.tsx:2828
+- `Users` · tümü · Other · app/plan/page.tsx:332
+- `Users & Workspaces` · tümü · Other · components/AdminInsightsHub.tsx:3207
+- `Users in multiple workspaces` · tümü · Other · components/AdminInsightsHub.tsx:1525
+- `Usiamo solo cookie essenziali e archiviazione locale per mantenerti connesso, sicuro e ricordare le tue preferenze. Non usiamo tracker pubblicitari o di analisi` · tümü · Other · components/CookieConsent.tsx:77
+- `UTM / campaign breakdown` · tümü · Other · components/AdminInsightsHub.tsx:616
+- `Values come from the live entitlement constants used by the apps.` · tümü · Other · components/AdminInsightsHub.tsx:2233
+- `Values in GBP/month, from plan list prices.` · tümü · Other · components/AdminInsightsHub.tsx:1711
+- `Values in MB.` · tümü · Other · components/AdminInsightsHub.tsx:2531
+- `View Pricing` · tümü · Other · app/plan/page.tsx:356
+- `View the Open Banking spending feed (read-only). Connecting banks and Pandle stay with the owner.` · tümü · Other · lib/studioflow/firestore.ts:115
+- `Views` · tümü · Other · components/AdminInsightsHub.tsx:627
+- `Visitor Languages` · tümü · Other · components/AdminInsightsHub.tsx:914
+- `Visitor Trend` · tümü · Other · components/AdminInsightsHub.tsx:887
+- `Visitors by Country` · tümü · Other · components/AdminInsightsHub.tsx:906
+- `vs previous period` · tümü · Other · components/AdminInsightsHub.tsx:261
+- `Waiting for customer approval` · tümü · Other · lib/studioflow/production.ts:46
+- `Watch NivaDesk run a real order, start to finish.` · tümü · Other · components/CustomOrderLanding.tsx:213
+- `We use only essential cookies and local storage to keep you signed in, secure and to remember your preferences. We don't use advertising or third-party analytic` · tümü · Other · components/CookieConsent.tsx:37
+- `Web JSON backup` · tümü · Other · app/export/page.tsx:160
+- `What each plan unlocks` · tümü · Other · app/plan/page.tsx:497
+- `What people search to find NivaDesk on Google, where we rank, and how positions changed vs the previous period. Data from Google Search Console (≈3-day lag).` · tümü · Other · components/AdminInsightsHub.tsx:1142
+- `What they make` · tümü · Other · components/AdminInsightsHub.tsx:2007
+- `What they want first` · tümü · Other · components/AdminInsightsHub.tsx:2009
+- `What this cannot see` · tümü · Other · components/AdminInsightsHub.tsx:3172
+- `What to expect` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:149
+- `What you get` · tümü · Other · components/CustomOrderLanding.tsx:317
+- `When each order lives in a different place, things slip. Messages get buried, deposits get forgotten, and clients wait for answers.` · tümü · Other · components/CustomOrderLanding.tsx:240
+- `Where they stopped` · tümü · Other · components/AdminInsightsHub.tsx:3111
+- `Who it&apos;s for` · tümü · Other · components/CustomOrderLanding.tsx:359
+- `Wir verwenden nur essenzielle Cookies und lokalen Speicher, um Sie angemeldet und sicher zu halten und Ihre Einstellungen zu speichern. Wir nutzen keine Werbe- ` · tümü · Other · components/CookieConsent.tsx:57
+- `Work session timer and time log.` · tümü · Other · lib/studioflow/firestore.ts:142
+- `working day.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `Workspace` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:342
+- `Workspace message preferences when the base role permits editing.` · tümü · Other · lib/studioflow/firestore.ts:122
+- `Workspace Statistics` · tümü · Other · components/AdminInsightsHub.tsx:2828
+- `Workspace viewing and switching area; owner-only member management remains protected.` · tümü · Other · lib/studioflow/firestore.ts:127
+- `Workspace workflow settings menu.` · tümü · Other · lib/studioflow/firestore.ts:123
+- `Workspace:` · tümü · Other · app/plan/page.tsx:322
+- `Workspaces` · tümü · Other · components/AdminInsightsHub.tsx:2243
+- `Workspaces by Plan` · tümü · Other · components/AdminInsightsHub.tsx:1518
+- `Workspaces Requiring Attention` · tümü · Other · components/AdminInsightsHub.tsx:2960
+- `Yearly` · tümü · Other · app/plan/page.tsx:621
+- `You` · tümü · Other · components/PublicMarketing.tsx:2324
+- `you already know.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:138
+- `You can now sign in with your new password.` · tümü · Other · app/auth/action/page.tsx:196
+- `You&apos;ve reached the maximum of 10 users. For larger teams, contact contact@nivadesk.co.uk.` · tümü · Other · app/plan/page.tsx:598
+- `your account` · tümü · Other · app/connect/shopify/page.tsx:243
+- `Your address is confirmed. Welcome to NivaDesk!` · tümü · Other · app/auth/action/page.tsx:156
+- `Your browser does not support the video tag.` · tümü · Other · app/review-demo/page.tsx:73
+- `Your business, connected.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:131
+- `Your item` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:126
+- `Your jeweller has been told and can start the work.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:165
+- `Your jeweller has been told and will be in touch.` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:166
+- `Your name` · tümü · Other · app/e/[token]/EstimateApprovalContent.tsx:257
+- `Your NivaDesk plan is charged by` · tümü · Other · app/plan/page.tsx:444
+- `Your NivaDesk plan stays billed where it is today — nothing changes on your invoice.` · tümü · Other · app/connect/shopify/page.tsx:189
+- `Your order` · tümü · Other · app/track/[token]/CustomerPortalContent.tsx:123
+- `Your previous email address has been restored. We recommend changing your password.` · tümü · Other · app/auth/action/page.tsx:205
+- `Your shop, your accounts, your customer conversations. Bring the tools around your workshop closer to the work at its heart.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `Your team asking the same questions all day long.` · tümü · Other · components/CustomOrderLanding.tsx:70
+- `Your team picks up tasks` · tümü · Other · components/CustomOrderLanding.tsx:113
+- `Your tools.` · tümü · Other · app/integrations/IntegrationsDirectory.tsx:119
+- `Your workspace is using this plan.` · tümü · Other · app/plan/page.tsx:457
+- `£15 / month` · tümü · Other · app/plan/page.tsx:71
+- `£15 / month · £150 / year` · tümü · Other · components/PublicMarketing.tsx:3399
+- `£150 / year` · tümü · Other · app/plan/page.tsx:72
+- `£19 monthly` · tümü · Other · app/plan/page.tsx:85
+- `£190 yearly` · tümü · Other · app/plan/page.tsx:86
+- `£49 monthly` · tümü · Other · app/plan/page.tsx:89
+- `£490 yearly` · tümü · Other · app/plan/page.tsx:90
+- `£9 / month` · tümü · Other · app/plan/page.tsx:64
+- `£9 / month · £90 / year` · tümü · Other · components/PublicMarketing.tsx:3392
+- `£9 monthly` · tümü · Other · app/plan/page.tsx:81
+- `£90 / year` · tümü · Other · app/plan/page.tsx:65
+- `£90 yearly` · tümü · Other · app/plan/page.tsx:82
+- `© EGGCRAFT LIMITED · Registered in England and Wales No. 16566512` · tümü · Other · components/CustomOrderLanding.tsx:401
+- `· last sign-in` · tümü · Other · components/AdminInsightsHub.tsx:2790
+- `· Role:` · tümü · Other · app/plan/page.tsx:322
+- `· Source:` · tümü · Other · app/plan/page.tsx:322
+- `· Subscription:` · tümü · Other · app/plan/page.tsx:363
+- `· worst` · tümü · Other · components/AdminInsightsHub.tsx:1044
+- `Δ shows the average-position change vs the previous` · tümü · Other · components/AdminInsightsHub.tsx:1243
+- `Δ vs prev.` · tümü · Other · components/AdminInsightsHub.tsx:1224
+- `Мы используем только необходимые файлы cookie и локальное хранилище, чтобы вы оставались в системе и в безопасности, и чтобы запоминать ваши настройки. Мы не ис` · tümü · Other · components/CookieConsent.tsx:107
+- `Файлы cookie в NivaDesk` · tümü · Other · components/CookieConsent.tsx:106
+- `• Create new orders, add order notes, add personal notes and update order status after your request.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:374
+- `• It will not access other workspaces unless you connect them separately.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:376
+- `• Read messages and quick replies only when your plan and role allow access.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:375
+- `• Search and summarise orders, tasks, timelines and dashboard information in the selected workspace.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:372
+- `• View financial summaries only when your NivaDesk plan and role allow financial access.` · tümü · Other · app/chatgpt/connect/ChatGPTConnectClient.tsx:373
+- `← Results` · tümü · Other · components/AdminInsightsHub.tsx:2826
+- `ログイン状態の維持、セキュリティ、設定の記憶のために、必須の Cookie とローカルストレージのみを使用します。広告や第三者の分析トラッカーは使用しません。` · tümü · Other · components/CookieConsent.tsx:117
+- `我们仅使用必要的 Cookie 和本地存储，以保持您的登录状态、安全并记住您的偏好。我们不使用广告或第三方分析跟踪器。` · tümü · Other · components/CookieConsent.tsx:127
+
+</details>
+
+<details><summary>Web — (b3) sunucu metni: 526 anahtar (0 @kullanım)</summary>
+
+- `A blocked job needs a reason.` · tümü · Server · functions/production.js:310
+- `A board is capped at 12 columns.` · tümü · Server · functions/production.js:233
+- `A board needs at least one column.` · tümü · Server · functions/production.js:232
+- `A buyer and a customer are both required.` · tümü · Server · functions/etsySync.js:905
+- `A category with this name already exists.` · tümü · Server · functions/bankFeed.js:1415
+- `A committed count cannot be cancelled — it already changed the shelf.` · tümü · Server · functions/inventory.js:1398
+- `A customer cannot be merged into itself.` · tümü · Server · functions/index.js:14879
+- `A customer's own item is not stock and cannot be reserved.` · tümü · Server · functions/inventory.js:1923
+- `A feedback id is required.` · tümü · Server · functions/feedback.js:92
+- `A group must keep at least two members.` · tümü · Server · functions/index.js:22993
+- `A location name is required.` · tümü · Server · functions/inventory.js:2386
+- `A Pandle sync with this request id is already running.` · tümü · Server · functions/pandle.js:787
+- `A portal link is required.` · tümü · Server · functions/index.js:28572
+- `A received purchase cannot be deleted — its stock is on the shelf.` · tümü · Server · functions/inventory.js:1743
+- `A received purchase cannot be edited — the stock it created is already on the shelf.` · tümü · Server · functions/inventory.js:1502
+- `A recipe line points at an item that no longer exists.` · tümü · Server · functions/inventory.js:2588
+- `A recipe name is required.` · tümü · Server · functions/inventory.js:2533
+- `A recipe needs at least one line.` · tümü · Server · functions/inventory.js:2534
+- `A shop domain and connect code are required.` · tümü · Server · functions/index.js:33296
+- `A split line points at an order that is not in this workspace.` · tümü · Server · functions/bankFeed.js:1100
+- `A split needs at least two lines.` · tümü · Server · functions/bankFeed.js:1107
+- `A sync is already running for this account.` · tümü · Server · functions/ebayConnector.js:1362
+- `A sync is already running for this store.` · tümü · Server · functions/wooConnector.js:439
+- `A valid kind and id are required.` · tümü · Server · functions/filesLibrary.js:294
+- `A valid NivaDesk billing item key is required.` · tümü · Server · functions/stripeBilling.js:239
+- `A valid signed Apple purchase payload is required.` · tümü · Server · functions/stripeBilling.js:424
+- `A work timer is already running.` · tümü · Server · functions/index.js:14028
+- `Accounting connection not found.` · tümü · Server · functions/accountingFunctions.js:221
+- `Accounting connections are managed by the workspace owner.` · tümü · Server · functions/accountingFunctions.js:132
+- `Accounting is visible to the owner and members with bank access.` · tümü · Server · functions/accountingFunctions.js:144
+- `action must be resolve or ignore.` · tümü · Server · functions/accountingFunctions.js:1058
+- `Add at least one line to the estimate.` · tümü · Server · functions/index.js:29364
+- `Add at least one line.` · tümü · Server · functions/inventory.js:1489
+- `Add the domain first, then verify it.` · tümü · Server · functions/clientDomains.js:279
+- `Adding team members requires NivaDesk Team.` · tümü · Server · functions/index.js:17885
+- `Admin insights are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:31037
+- `Advanced financial fields are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:12712
+- `Advanced Financial Settings are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:9029
+- `AI replies are turned off for orders from this marketplace, because its terms do not allow the buyer's details to be sent to an outside AI service. You can stil` · tümü · Server · functions/index.js:8780
+- `Amazon connection status is not available right now.` · tümü · Server · functions/index.js:35146
+- `Amazon could not be disconnected right now.` · tümü · Server · functions/index.js:35159
+- `An active workspace is required.` · tümü · Server · functions/index.js:2794
+- `An item name is required.` · tümü · Server · functions/inventory.js:360
+- `An item that has been sold or used can be archived, not deleted.` · tümü · Server · functions/inventory.js:502
+- `An order does not belong to the active workspace.` · tümü · Server · functions/index.js:15772
+- `Another rule already uses that keyword.` · tümü · Server · functions/bankFeed.js:1506
+- `Apple On-Device AI replies are only available in the Swift app on Apple Intelligence-capable devices. Use OpenAI Online or Offline Template on web.` · tümü · Server · functions/index.js:8758
+- `Apple purchase app identifier does not match NivaDesk.` · tümü · Server · functions/stripeBilling.js:2262
+- `Apple purchase verification failed.` · tümü · Server · functions/stripeBilling.js:451
+- `At least one merchant key is required.` · tümü · Server · functions/bankFeed.js:1540
+- `Bank and payment feeds are part of NivaDesk Pro. Choose a plan to connect an account.` · tümü · Server · functions/bankFeed.js:159
+- `Bank connection not found.` · tümü · Server · functions/bankFeed.js:487
+- `Bank data secrets are not configured yet.` · tümü · Server · functions/bankFeed.js:171
+- `Bank Spending is not enabled for your role. Ask the workspace owner to grant it in Team Access.` · tümü · Server · functions/index.js:25081
+- `Bank transaction not found.` · tümü · Server · functions/inventory.js:1783
+- `category is required.` · tümü · Server · functions/bankFeed.js:1485
+- `Category not found.` · tümü · Server · functions/bankFeed.js:1420
+- `Changing team access requires NivaDesk Team.` · tümü · Server · functions/index.js:18065
+- `Changing team member profiles requires NivaDesk Team.` · tümü · Server · functions/index.js:17960
+- `Changing team roles requires NivaDesk Team.` · tümü · Server · functions/index.js:18009
+- `Choose a category to move these items into.` · tümü · Server · functions/inventory.js:2317
+- `Choose a different target order to merge into.` · tümü · Server · functions/index.js:9558
+- `Choose a valid NivaDesk backup JSON file.` · tümü · Server · functions/index.js:11129
+- `Choose the Pandle bank account first.` · tümü · Server · functions/pandle.js:672
+- `Choose two different categories.` · tümü · Server · functions/inventory.js:2351
+- `Client file download URL is required.` · tümü · Server · functions/index.js:16671
+- `Client file not found.` · tümü · Server · functions/index.js:16640
+- `Client file Storage path is not valid for this order.` · tümü · Server · functions/index.js:16666
+- `Client Files management requires NivaDesk Pro or Team.` · tümü · Server · functions/index.js:16595
+- `code and state are required.` · tümü · Server · functions/pandle.js:546
+- `Contribution is missing.` · tümü · Server · functions/index.js:8676
+- `Contribution text is empty.` · tümü · Server · functions/index.js:8658
+- `Conversation not found.` · tümü · Server · functions/index.js:3746
+- `Could not read an amount or date from the document. Tell me the total amount, the date and the merchant, and share the file again.` · tümü · Server · functions/index.js:25431
+- `Created date must be a valid date.` · tümü · Server · functions/index.js:13445
+- `Created date must be on or before the delivery due date.` · tümü · Server · functions/index.js:24248
+- `Custom role not found.` · tümü · Server · functions/index.js:17442
+- `Custom roles require NivaDesk Team.` · tümü · Server · functions/index.js:17374
+- `Customer feedback is restricted to NivaDesk admins.` · tümü · Server · functions/feedback.js:87
+- `Customer message is empty. Please paste a message.` · tümü · Server · functions/index.js:8769
+- `Customer name is required.` · tümü · Server · functions/index.js:14294
+- `Customer not found in this workspace.` · tümü · Server · functions/index.js:14845
+- `Customer not found.` · tümü · Server · functions/index.js:14660
+- `Deleted messages cannot be edited.` · tümü · Server · functions/index.js:23254
+- `Deleted messages cannot be pinned.` · tümü · Server · functions/index.js:22597
+- `Deleted messages cannot receive reactions.` · tümü · Server · functions/index.js:22664
+- `Delivery due date must be a valid date.` · tümü · Server · functions/index.js:13457
+- `Delivery due date must be in YYYY-MM-DD format.` · tümü · Server · functions/index.js:24233
+- `Delivery time must be a valid number.` · tümü · Server · functions/index.js:13451
+- `Enter how much was lost.` · tümü · Server · functions/inventory.js:2095
+- `Estimate not found.` · tümü · Server · functions/index.js:29505
+- `Etsy is not configured on this server yet.` · tümü · Server · functions/etsyConnect.js:265
+- `Every split line needs a category.` · tümü · Server · functions/bankFeed.js:1088
+- `Every split line needs an amount.` · tümü · Server · functions/bankFeed.js:1087
+- `Feedback is not enabled for this workspace yet.` · tümü · Server · functions/feedback.js:71
+- `Feedback is not enabled on this server yet.` · tümü · Server · functions/feedback.js:70
+- `File name is required.` · tümü · Server · functions/index.js:11610
+- `File name is too long.` · tümü · Server · functions/index.js:11613
+- `File record not found.` · tümü · Server · functions/filesLibrary.js:272
+- `File sharing is disabled for this workspace.` · tümü · Server · functions/index.js:23149
+- `Financial Info is not enabled for your workspace account.` · tümü · Server · functions/index.js:16301
+- `Full name and workspace name are required.` · tümü · Server · functions/index.js:10433
+- `Group conversations are disabled for this workspace.` · tümü · Server · functions/index.js:22261
+- `id is required.` · tümü · Server · functions/bankFeed.js:1832
+- `Ignoring needs a reason.` · tümü · Server · functions/accountingFunctions.js:1060
+- `Import would exceed this workspace customer limit.` · tümü · Server · functions/index.js:11208
+- `Import would exceed this workspace order limit. Delivered orders do not count; mark finished orders as delivered to free slots.` · tümü · Server · functions/index.js:11205
+- `Invalid date range.` · tümü · Server · functions/index.js:30431
+- `Invalid Firebase ID token.` · tümü · Server · functions/index.js:23475
+- `Invalid To Do order.` · tümü · Server · functions/index.js:13870
+- `Inventory item not found.` · tümü · Server · functions/inventory.js:353
+- `Invitation is missing note source information.` · tümü · Server · functions/index.js:1792
+- `Invitation not found.` · tümü · Server · functions/index.js:1773
+- `item is required.` · tümü · Server · functions/inventory.js:343
+- `items is required.` · tümü · Server · functions/pandle.js:764
+- `Join request not found.` · tümü · Server · functions/index.js:17019
+- `kind must be customer_refund or chargeback.` · tümü · Server · functions/bankFeed.js:2020
+- `kind must be woocommerce or shopify.` · tümü · Server · functions/index.js:20448
+- `Landing-page statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30417
+- `Location not found.` · tümü · Server · functions/inventory.js:2393
+- `mappings is required.` · tümü · Server · functions/pandle.js:657
+- `Materials & Inventory is available from NivaDesk Starter.` · tümü · Server · functions/index.js:16305
+- `Message not found.` · tümü · Server · functions/index.js:22591
+- `Message thread not found.` · tümü · Server · functions/index.js:22190
+- `Messages is available on NivaDesk Team.` · tümü · Server · functions/index.js:2378
+- `Missing Authorization: Bearer <Firebase ID token>.` · tümü · Server · functions/index.js:23469
+- `mode must be primary_write, shadow_read, migration_read or disabled.` · tümü · Server · functions/accountingFunctions.js:880
+- `mode must be suggest, link or unlink.` · tümü · Server · functions/bankFeed.js:2018
+- `More than one order matches this request. Please specify the order more precisely.` · tümü · Server · functions/index.js:23768
+- `Move the file to trash first.` · tümü · Server · functions/filesLibrary.js:396
+- `name is required.` · tümü · Server · functions/bankFeed.js:1402
+- `nivadesk.app subdomains are claimed with the subdomain field, not as a custom domain.` · tümü · Server · functions/clientDomains.js:146
+- `No items to import.` · tümü · Server · functions/inventory.js:859
+- `No order matching that name or customer was found in the connected workspace.` · tümü · Server · functions/index.js:23753
+- `No protected buyer details for this order.` · tümü · Server · functions/ebayConnector.js:1877
+- `No running work timer found.` · tümü · Server · functions/index.js:14054
+- `No stored store data for this customer yet — it fills in on the next webhook.` · tümü · Server · functions/index.js:14850
+- `No such Amazon connection.` · tümü · Server · functions/index.js:35158
+- `No such event in this workspace.` · tümü · Server · functions/index.js:34791
+- `No such feedback.` · tümü · Server · functions/feedback.js:227
+- `No such review item in this workspace.` · tümü · Server · functions/index.js:34901
+- `No such Square connection in this workspace.` · tümü · Server · functions/squareConnector.js:165
+- `No such version.` · tümü · Server · functions/filesLibrary.js:448
+- `No such WooCommerce connection in this workspace.` · tümü · Server · functions/wooConnector.js:96
+- `No Xero sign-in is waiting for an organisation choice.` · tümü · Server · functions/accountingFunctions.js:454
+- `None of the selected orders could be merged.` · tümü · Server · functions/index.js:9711
+- `Note not found.` · tümü · Server · functions/index.js:24586
+- `Nothing is reserved for this order on that item.` · tümü · Server · functions/inventory.js:2676
+- `Nothing to update.` · tümü · Server · functions/bankFeed.js:1320
+- `Notification not found.` · tümü · Server · functions/index.js:882
+- `One of the orders no longer exists.` · tümü · Server · functions/index.js:9566
+- `Only assigned-project roles can request deletion for their assigned order.` · tümü · Server · functions/index.js:15489
+- `Only group conversations can be left.` · tümü · Server · functions/index.js:22991
+- `Only group conversations can be managed.` · tümü · Server · functions/index.js:23057
+- `Only group conversations can be renamed.` · tümü · Server · functions/index.js:22938
+- `Only incoming transactions can be matched to order payments.` · tümü · Server · functions/bankFeed.js:1134
+- `Only NivaDesk support admins can assign these tickets.` · tümü · Server · functions/index.js:5568
+- `Only NivaDesk support admins can change the website assistant.` · tümü · Server · functions/index.js:4612
+- `Only NivaDesk support admins can update app support ticket status.` · tümü · Server · functions/index.js:5107
+- `Only outgoing transactions can be linked as expenses.` · tümü · Server · functions/bankFeed.js:1008
+- `Only outgoing transactions can be recorded as refunds.` · tümü · Server · functions/bankFeed.js:1968
+- `Only QuickBooks connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:864
+- `Only the note owner can invite collaborators.` · tümü · Server · functions/index.js:1572
+- `Only the note owner can remove collaborators.` · tümü · Server · functions/index.js:1499
+- `Only the note owner or an existing collaborator can share this note.` · tümü · Server · functions/index.js:1370
+- `Only the owner or the author can delete this contribution.` · tümü · Server · functions/index.js:8682
+- `Only the person who created this project can undo it.` · tümü · Server · functions/index.js:16007
+- `Only the workspace owner can anonymize a customer.` · tümü · Server · functions/index.js:14743
+- `Only the workspace owner can approve order deletion requests.` · tümü · Server · functions/index.js:15560
+- `Only the workspace owner can change bank feed data.` · tümü · Server · functions/index.js:25078
+- `Only the workspace owner can change SMS settings.` · tümü · Server · functions/index.js:28265
+- `Only the workspace owner can change webhook security.` · tümü · Server · functions/index.js:20666
+- `Only the workspace owner can disconnect ChatGPT.` · tümü · Server · functions/index.js:17553
+- `Only the workspace owner can manage billing.` · tümü · Server · functions/stripeBilling.js:457
+- `Only the workspace owner can manage the OpenAI key and Company Knowledge Base.` · tümü · Server · functions/index.js:8350
+- `Only the workspace owner can reject order deletion requests.` · tümü · Server · functions/index.js:15628
+- `Only the workspace owner can run this billing action.` · tümü · Server · functions/index.js:2810
+- `Only the workspace owner can see ChatGPT connections.` · tümü · Server · functions/index.js:17544
+- `Only the workspace owner or admins can manage support managers.` · tümü · Server · functions/index.js:5057
+- `Only the workspace owner or admins can remove group members.` · tümü · Server · functions/index.js:23065
+- `Only the workspace owner or admins can update message settings.` · tümü · Server · functions/index.js:22153
+- `Only the workspace owner, admins or support managers can assign workspace tickets.` · tümü · Server · functions/index.js:5638
+- `Only the workspace owner, admins or support managers can update workspace ticket status.` · tümü · Server · functions/index.js:5143
+- `Only workspace members can be added to a conversation.` · tümü · Server · functions/index.js:22853
+- `Only workspace members can be added to a private group.` · tümü · Server · functions/index.js:22268
+- `Only Xero connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:871
+- `Open this page once so a delivery URL is created, then try again.` · tümü · Server · functions/index.js:20405
+- `OpenAI API Key is missing. Add it in Settings > Quick Reply Settings.` · tümü · Server · functions/index.js:8766
+- `Order already exists.` · tümü · Server · functions/index.js:16153
+- `order is required.` · tümü · Server · functions/index.js:15920
+- `Order not found in this workspace.` · tümü · Server · functions/bankFeed.js:1162
+- `Order not found.` · tümü · Server · functions/bankFeed.js:1020
+- `Order-type layouts are managed by the workspace owner.` · tümü · Server · functions/index.js:7124
+- `Orders are not enabled for your workspace account.` · tümü · Server · functions/index.js:16295
+- `Owner email or Company ID is required.` · tümü · Server · functions/index.js:17280
+- `Pandle is not configured yet — the app credentials are missing.` · tümü · Server · functions/pandle.js:160
+- `Pandle is not connected — connect it first.` · tümü · Server · functions/pandle.js:243
+- `Parent location not found.` · tümü · Server · functions/inventory.js:2398
+- `PayPal accepted the credentials but the app may not search transactions. In the PayPal Developer dashboard, enable Transaction Search on the app and try again.` · tümü · Server · functions/bankFeed.js:1888
+- `PayPal client ID and secret are required.` · tümü · Server · functions/bankFeed.js:1879
+- `PayPal feed is not available.` · tümü · Server · functions/bankFeed.js:684
+- `PayPal feed is not configured on the server yet.` · tümü · Server · functions/bankFeed.js:1881
+- `PayPal rejected the client ID or secret. Check both in the PayPal Developer dashboard (Live and Sandbox have separate credentials).` · tümü · Server · functions/bankFeed.js:1887
+- `Pick a different category.` · tümü · Server · functions/inventory.js:2318
+- `Pick a different item to swap to.` · tümü · Server · functions/inventory.js:2745
+- `Please add a subject and message.` · tümü · Server · functions/index.js:3491
+- `Please choose a message to pin.` · tümü · Server · functions/index.js:22577
+- `Please choose a team member.` · tümü · Server · functions/index.js:22235
+- `Please choose a valid message reaction.` · tümü · Server · functions/index.js:22648
+- `Please choose at least one team member.` · tümü · Server · functions/index.js:22266
+- `Please sign before approving.` · tümü · Server · functions/index.js:29262
+- `Please sign in before sending a workspace access request.` · tümü · Server · functions/index.js:17309
+- `Please sign up with a permanent email address — temporary/disposable email domains are not allowed.` · tümü · Server · functions/index.js:11998
+- `Please type your name.` · tümü · Server · functions/index.js:29655
+- `Please write a message or attach a file.` · tümü · Server · functions/index.js:23134
+- `Please write a message.` · tümü · Server · functions/index.js:4673
+- `Please write a question.` · tümü · Server · functions/index.js:4468
+- `Profile photo URL must be a valid URL.` · tümü · Server · functions/index.js:10176
+- `Profile photo URL must use HTTPS.` · tümü · Server · functions/index.js:10179
+- `purchase is required.` · tümü · Server · functions/inventory.js:1485
+- `Purchase not found.` · tümü · Server · functions/inventory.js:1499
+- `Recipe not found.` · tümü · Server · functions/inventory.js:2569
+- `Reminder date is required.` · tümü · Server · functions/index.js:13711
+- `Reminder not found.` · tümü · Server · functions/index.js:13731
+- `Reminder title is required.` · tümü · Server · functions/index.js:13709
+- `Schedule is not enabled for your workspace account.` · tümü · Server · functions/index.js:16298
+- `Search statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30780
+- `Select a primary order and at least one other order to merge.` · tümü · Server · functions/index.js:9644
+- `Select a workspace member for this project.` · tümü · Server · functions/index.js:16318
+- `Settlement matching is not available.` · tümü · Server · functions/bankFeed.js:1930
+- `Show the user what you read from the photo — name, category, how many, unit price — ask them to confirm or correct it, then call again with confirmed:true.` · tümü · Server · functions/index.js:24989
+- `Sign in first.` · tümü · Server · functions/index.js:10385
+- `Sign in is required before creating a workspace.` · tümü · Server · functions/index.js:10427
+- `Sign in required.` · tümü · Server · functions/index.js:27678
+- `Sign in to accept this invitation.` · tümü · Server · functions/index.js:17766
+- `Sign in to read the user guide.` · tümü · Server · functions/index.js:4583
+- `Site statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30595
+- `SMS notifications are available on NivaDesk Pro and above.` · tümü · Server · functions/index.js:28269
+- `state is required.` · tümü · Server · functions/accountingFunctions.js:451
+- `state must be active, paused or unlinked.` · tümü · Server · functions/index.js:33379
+- `Stocktake not found.` · tümü · Server · functions/inventory.js:1227
+- `Stripe test billing is restricted to authorised internal test accounts.` · tümü · Server · functions/stripeBilling.js:199
+- `Subscription access was recently refreshed. Please wait one minute before trying again.` · tümü · Server · functions/stripeBilling.js:1863
+- `Support ticket not found.` · tümü · Server · functions/index.js:5119
+- `Task not found.` · tümü · Server · functions/index.js:13881
+- `Team Chat already includes the workspace team.` · tümü · Server · functions/index.js:22838
+- `Team Chat cannot be renamed here.` · tümü · Server · functions/index.js:22933
+- `Team Chat members cannot be removed here.` · tümü · Server · functions/index.js:23051
+- `Team member not found.` · tümü · Server · functions/index.js:17965
+- `Tell NivaDesk what the item is (name).` · tümü · Server · functions/index.js:24987
+- `Text messages cannot be empty.` · tümü · Server · functions/index.js:23259
+- `That column no longer exists.` · tümü · Server · functions/production.js:288
+- `That file does not belong to a workspace.` · tümü · Server · functions/index.js:27694
+- `That file is in the library trash.` · tümü · Server · functions/bankFeed.js:960
+- `That file was not found in the library.` · tümü · Server · functions/bankFeed.js:959
+- `That hostname belongs to another workspace.` · tümü · Server · functions/clientDomains.js:344
+- `That import has already been undone.` · tümü · Server · functions/index.js:11363
+- `That import is no longer available to undo.` · tümü · Server · functions/index.js:11360
+- `That invitation does not belong to this workspace.` · tümü · Server · functions/index.js:17717
+- `That invitation has already been used. Remove the member instead.` · tümü · Server · functions/index.js:17720
+- `That is not a file link.` · tümü · Server · functions/index.js:27728
+- `That item has already left the shelf.` · tümü · Server · functions/inventory.js:2071
+- `That item is already reserved for another order.` · tümü · Server · functions/inventory.js:1935
+- `That item is no longer available to reserve.` · tümü · Server · functions/inventory.js:1926
+- `That item is reserved for an order — release it first.` · tümü · Server · functions/inventory.js:2077
+- `That library file has no stored object.` · tümü · Server · functions/bankFeed.js:963
+- `That looks like an invoice or receipt, not a stock item. Use attach_bank_receipt to file it against a bank transaction. If it really is a physical item, name it` · tümü · Server · functions/index.js:24980
+- `That NivaDesk bank account was not found.` · tümü · Server · functions/pandle.js:639
+- `That order is not in your workspace.` · tümü · Server · functions/index.js:8719
+- `That organisation is not part of this sign-in.` · tümü · Server · functions/accountingFunctions.js:470
+- `That Pandle bank account was not found — refresh the Pandle data.` · tümü · Server · functions/pandle.js:631
+- `That payment entry was not found on the order.` · tümü · Server · functions/bankFeed.js:1197
+- `That payment is already matched to another bank transaction.` · tümü · Server · functions/bankFeed.js:1198
+- `That payment is already matched to another purchase.` · tümü · Server · functions/inventory.js:1787
+- `That person is not a member of this workspace.` · tümü · Server · functions/index.js:18197
+- `That recipe has no lines.` · tümü · Server · functions/inventory.js:2572
+- `That rule no longer exists.` · tümü · Server · functions/bankFeed.js:1501
+- `That run has already been undone.` · tümü · Server · functions/index.js:9511
+- `That run is no longer available to undo.` · tümü · Server · functions/index.js:9509
+- `That run is not a backup import.` · tümü · Server · functions/index.js:11362
+- `That signature is too large.` · tümü · Server · functions/index.js:29264
+- `That store address does not resolve. Check the domain and try again.` · tümü · Server · functions/wooConnector.js:106
+- `That store address must be a public website.` · tümü · Server · functions/wooConnector.js:108
+- `That user is not in this workspace.` · tümü · Server · functions/index.js:22236
+- `That workspace no longer exists.` · tümü · Server · functions/index.js:17791
+- `The access log could not be written; the details were not revealed.` · tümü · Server · functions/ebayConnector.js:1901
+- `The activation funnel is restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30300
+- `The app was uninstalled from this store.` · tümü · Server · functions/index.js:33387
+- `The bank connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/bankFeed.js:281
+- `The board needs at least one in-production column.` · tümü · Server · functions/production.js:242
+- `The change history is available to the workspace owner.` · tümü · Server · functions/settingsAudit.js:170
+- `The Etsy connection is being refreshed. Try again shortly.` · tümü · Server · functions/etsyConnect.js:178
+- `The file is larger than 15MB.` · tümü · Server · functions/index.js:25361
+- `The file path does not belong to this workspace.` · tümü · Server · functions/filesLibrary.js:75
+- `The full user guide is part of Starter, Pro and Team. On the Free plan you can ask the chat on nivadesk.app.` · tümü · Server · functions/index.js:4589
+- `The help assistant is not switched on yet.` · tümü · Server · functions/index.js:4473
+- `The image is too large for OCR (max 15MB).` · tümü · Server · functions/bankFeed.js:1601
+- `The in-app help assistant is available on Starter, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.` · tümü · Server · functions/index.js:4462
+- `The link returned an empty document.` · tümü · Server · functions/index.js:25362
+- `The linked record no longer exists.` · tümü · Server · functions/filesLibrary.js:158
+- `The NivaDesk app is no longer installed on this Shopify store.` · tümü · Server · functions/index.js:33310
+- `The note is not available for the signed-in user.` · tümü · Server · functions/index.js:1976
+- `The order belongs to a different workspace.` · tümü · Server · functions/bankFeed.js:1023
+- `The organisation choice expired. Connect Xero again.` · tümü · Server · functions/accountingFunctions.js:455
+- `The organisation for this sign-in was already chosen.` · tümü · Server · functions/accountingFunctions.js:456
+- `The original note is no longer available.` · tümü · Server · functions/index.js:1798
+- `The owner role cannot be changed here.` · tümü · Server · functions/index.js:18004
+- `The Pandle connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/pandle.js:199
+- `The Pandle connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/pandle.js:224
+- `The Pandle connection is managed by the workspace owner.` · tümü · Server · functions/pandle.js:151
+- `The Pandle session expired — reconnect Pandle.` · tümü · Server · functions/pandle.js:248
+- `The primary order no longer exists.` · tümü · Server · functions/index.js:9657
+- `The rule keyword must be at least 2 characters.` · tümü · Server · functions/bankFeed.js:1484
+- `The selected user is not a member of this workspace.` · tümü · Server · functions/index.js:1357
+- `The signature could not be read.` · tümü · Server · functions/index.js:29260
+- `The signature must be a PNG image.` · tümü · Server · functions/index.js:29268
+- `The signing secret must be 8-128 characters, or empty to turn signature checks off.` · tümü · Server · functions/index.js:20670
+- `The workspace owner always keeps a seat.` · tümü · Server · functions/index.js:18192
+- `The workspace owner always keeps full access.` · tümü · Server · functions/index.js:18060
+- `The workspace owner cannot be removed here.` · tümü · Server · functions/index.js:18273
+- `The workspace owner is already a member.` · tümü · Server · functions/index.js:17196
+- `The workspace owner profile is managed from Account.` · tümü · Server · functions/index.js:17955
+- `There is nothing on the shelf to count.` · tümü · Server · functions/inventory.js:1192
+- `These customers do not belong to the active workspace.` · tümü · Server · functions/index.js:14901
+- `These orders are not in your workspace.` · tümü · Server · functions/index.js:9571
+- `This account already has an active workspace. Open the portal instead.` · tümü · Server · functions/index.js:10458
+- `This account does not use assigned project views.` · tümü · Server · functions/index.js:11717
+- `This App Store purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:836
+- `This App Store purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:754
+- `This App Store purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2259
+- `This assigned-project role must request owner approval before deleting an order.` · tümü · Server · functions/index.js:15665
+- `This bank connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/bankFeed.js:302
+- `This bank connection has no stored consent — reconnect the bank.` · tümü · Server · functions/bankFeed.js:313
+- `This connect link has expired. Open Connect again from the Shopify app.` · tümü · Server · functions/index.js:33307
+- `This connection attempt is not yours or has expired.` · tümü · Server · functions/wooConnector.js:187
+- `This conversation cannot be opened with that link.` · tümü · Server · functions/index.js:3750
+- `This count is already closed.` · tümü · Server · functions/inventory.js:1230
+- `This customer does not belong to the active workspace.` · tümü · Server · functions/index.js:14664
+- `This deletion request is no longer pending.` · tümü · Server · functions/index.js:15572
+- `This email address is already used by another account.` · tümü · Server · functions/index.js:10281
+- `This estimate can no longer be decided.` · tümü · Server · functions/index.js:29674
+- `This estimate has already been decided.` · tümü · Server · functions/index.js:29511
+- `This estimate has been replaced by a newer one.` · tümü · Server · functions/index.js:29612
+- `This estimate has been replaced.` · tümü · Server · functions/index.js:29512
+- `This estimate has changed. Please ask for a fresh link.` · tümü · Server · functions/index.js:29677
+- `This estimate is no longer available.` · tümü · Server · functions/index.js:29290
+- `This estimate link was withdrawn by the business. Please ask them for a new one.` · tümü · Server · functions/index.js:29283
+- `This Etsy connection belongs to another workspace.` · tümü · Server · functions/etsyConnect.js:114
+- `This Etsy connection no longer exists.` · tümü · Server · functions/etsyConnect.js:109
+- `This Etsy shop is disconnected.` · tümü · Server · functions/etsyConnect.js:147
+- `This export is too large to download at once. Please choose a narrower date range.` · tümü · Server · functions/index.js:10024
+- `This file already has the maximum number of links.` · tümü · Server · functions/filesLibrary.js:299
+- `This Google Play purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:2540
+- `This Google Play purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:2481
+- `This Google Play purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2652
+- `This invitation is not for the signed-in user.` · tümü · Server · functions/index.js:1782
+- `This is already your own workspace.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Server · functions/index.js:17315
+- `This join request does not belong to this workspace.` · tümü · Server · functions/index.js:17023
+- `This join request is no longer pending.` · tümü · Server · functions/index.js:17027
+- `This link does not belong to this domain.` · tümü · Server · functions/index.js:28835
+- `This link has been replaced by a newer one.` · tümü · Server · functions/index.js:28588
+- `This link has been turned off by the business.` · tümü · Server · functions/index.js:28578
+- `This link has expired. Please ask for a new one.` · tümü · Server · functions/index.js:29285
+- `This link is no longer available.` · tümü · Server · functions/index.js:28575
+- `This link is not valid.` · tümü · Server · functions/index.js:29277
+- `This notification is not assigned to your account.` · tümü · Server · functions/index.js:887
+- `This order belongs to another workspace.` · tümü · Server · functions/index.js:23783
+- `This order does not belong to the active workspace.` · tümü · Server · functions/index.js:6996
+- `This Pandle sign-in link is stale — start again from the Bank page.` · tümü · Server · functions/pandle.js:550
+- `This Pandle user has no company to connect.` · tümü · Server · functions/pandle.js:563
+- `This project has been worked on. Move it to the Trash instead.` · tümü · Server · functions/index.js:16024
+- `This project is no longer new enough to undo. Move it to the Trash instead.` · tümü · Server · functions/index.js:16011
+- `This refund is recorded on another order; unlink it first.` · tümü · Server · functions/bankFeed.js:2038
+- `This request was already approved. Ask the owner to refresh Team Access if the workspace is missing.` · tümü · Server · functions/index.js:17347
+- `This role can access only projects assigned to the current member.` · tümü · Server · functions/index.js:11667
+- `This role is assigned to a member. Move those members to another role first.` · tümü · Server · functions/index.js:17451
+- `This row is linked to an order as an expense; unlink that first.` · tümü · Server · functions/bankFeed.js:2021
+- `This row is not recorded as a refund.` · tümü · Server · functions/bankFeed.js:1997
+- `This row is recorded as a refund on an order; remove that first if it was an expense after all.` · tümü · Server · functions/bankFeed.js:1011
+- `This Shopify store has not installed the NivaDesk app yet.` · tümü · Server · functions/index.js:33301
+- `This Square account is not connected.` · tümü · Server · functions/squareConnector.js:806
+- `This store is not connected to your workspace.` · tümü · Server · functions/index.js:33384
+- `This store is not connected.` · tümü · Server · functions/wooConnector.js:438
+- `This transaction is already confirmed in Pandle.` · tümü · Server · functions/pandle.js:974
+- `This user is not in the group.` · tümü · Server · functions/index.js:23059
+- `This workspace is not accepting members because it does not have an active NivaDesk Team plan.` · tümü · Server · functions/index.js:17330
+- `Ticket not found.` · tümü · Server · functions/index.js:5579
+- `Tickets can only be assigned to the owner, admins or support managers.` · tümü · Server · functions/index.js:5681
+- `title or text is required.` · tümü · Server · functions/index.js:24537
+- `To Do assignment is available on NivaDesk Team.` · tümü · Server · functions/index.js:13838
+- `Too many address reveals. Try again later.` · tümü · Server · functions/ebayConnector.js:1891
+- `Too many feedback messages in a short time. Please try again later.` · tümü · Server · functions/feedback.js:195
+- `Too many orders selected to merge at once.` · tümü · Server · functions/index.js:9647
+- `Tool name is required.` · tümü · Server · functions/index.js:27429
+- `Transaction not found.` · tümü · Server · functions/bankFeed.js:948
+- `Type DELETE DATA to confirm this action.` · tümü · Server · functions/index.js:11578
+- `Type DELETE to confirm this action.` · tümü · Server · functions/index.js:32376
+- `uid is required.` · tümü · Server · functions/index.js:32300
+- `Unknown bespoke policy.` · tümü · Server · functions/accountingFunctions.js:974
+- `Unknown feedback prompt.` · tümü · Server · functions/feedback.js:124
+- `Unknown feedback status.` · tümü · Server · functions/feedback.js:204
+- `Unknown feedback type.` · tümü · Server · functions/feedback.js:206
+- `Unknown incoming kind.` · tümü · Server · functions/bankFeed.js:1313
+- `Unknown integration.` · tümü · Server · functions/index.js:20220
+- `Unknown inventory policy.` · tümü · Server · functions/accountingFunctions.js:978
+- `Unknown mode.` · tümü · Server · functions/bankFeed.js:1229
+- `Unknown payout provider.` · tümü · Server · functions/bankFeed.js:1921
+- `Unknown purchase line.` · tümü · Server · functions/inventory.js:1634
+- `Unknown review status.` · tümü · Server · functions/bankFeed.js:1308
+- `Unknown VAT code.` · tümü · Server · functions/bankFeed.js:1090
+- `Unsupported file URL.` · tümü · Server · functions/index.js:27682
+- `Unsupported financial field.` · tümü · Server · functions/index.js:12706
+- `Unsupported order detail field.` · tümü · Server · functions/index.js:13036
+- `Unsupported Schedule action.` · tümü · Server · functions/index.js:13690
+- `Unsupported To Do action.` · tümü · Server · functions/index.js:13817
+- `Unsupported To Do move.` · tümü · Server · functions/index.js:13907
+- `Unsupported Work Time action.` · tümü · Server · functions/index.js:14018
+- `Use Leave Group to remove yourself.` · tümü · Server · functions/index.js:23052
+- `User not found.` · tümü · Server · functions/index.js:32306
+- `View Only members can send text messages but cannot upload message attachments.` · tümü · Server · functions/index.js:23143
+- `Which category?` · tümü · Server · functions/inventory.js:2297
+- `Which order?` · tümü · Server · functions/production.js:284
+- `Work session not found.` · tümü · Server · functions/index.js:14068
+- `Workflow Only members can access only orders assigned to them.` · tümü · Server · functions/index.js:23366
+- `Workspace logo must be an uploaded Firebase Storage file.` · tümü · Server · functions/index.js:10125
+- `Workspace logo upload is available on Monthly Pro and Team plans.` · tümü · Server · functions/index.js:10140
+- `Workspace logo URL is invalid.` · tümü · Server · functions/index.js:10117
+- `Workspace logo URL is too long.` · tümü · Server · functions/index.js:10111
+- `Workspace not found.` · tümü · Server · functions/accountingFunctions.js:123
+- `Workspace owner could not be identified.` · tümü · Server · functions/index.js:15504
+- `Workspace ticket not found.` · tümü · Server · functions/index.js:5155
+- `Xero is not configured on the server yet.` · tümü · Server · functions/accountingFunctions.js:373
+- `Xero no longer accepts this sign-in. Connect again.` · tümü · Server · functions/accountingFunctions.js:472
+- `You already have access to this workspace.` · tümü · Server · functions/index.js:17337
+- `You are not a member of this group.` · tümü · Server · functions/index.js:22992
+- `You can change your email again on ` · tümü · Server · functions/index.js:10216
+- `You can only delete your own messages for everyone.` · tümü · Server · functions/index.js:22789
+- `You can only edit your own messages.` · tümü · Server · functions/index.js:23251
+- `You cannot leave Team Chat.` · tümü · Server · functions/index.js:22986
+- `You do not have access to financial information in this workspace.` · tümü · Server · functions/index.js:23572
+- `You do not have access to protected buyer details.` · tümü · Server · functions/ebayConnector.js:1883
+- `You do not have access to reply to this support ticket.` · tümü · Server · functions/index.js:5344
+- `You do not have access to reply to this workspace ticket.` · tümü · Server · functions/index.js:5467
+- `You do not have access to that file.` · tümü · Server · functions/index.js:27699
+- `You do not have access to the dashboard in this workspace.` · tümü · Server · functions/index.js:23578
+- `You do not have access to this conversation.` · tümü · Server · functions/index.js:22196
+- `You do not have access to this support ticket.` · tümü · Server · functions/index.js:5304
+- `You do not have access to this workspace ticket.` · tümü · Server · functions/index.js:5428
+- `You do not have access to this workspace.` · tümü · Server · functions/index.js:845
+- `You have reached today's limit for the help assistant. Contact NivaDesk Support for anything urgent.` · tümü · Server · functions/index.js:4448
+- `You must be a member of this conversation to add people.` · tümü · Server · functions/index.js:22844
+- `You must be a member of this group.` · tümü · Server · functions/index.js:22939
+- `You must be signed in to add people to a conversation.` · tümü · Server · functions/index.js:22824
+- `You must be signed in to assign a ticket.` · tümü · Server · functions/index.js:5565
+- `You must be signed in to assign workspace tickets.` · tümü · Server · functions/index.js:5632
+- `You must be signed in to create a message thread.` · tümü · Server · functions/index.js:22213
+- `You must be signed in to delete messages.` · tümü · Server · functions/index.js:22748
+- `You must be signed in to edit messages.` · tümü · Server · functions/index.js:23230
+- `You must be signed in to leave a group.` · tümü · Server · functions/index.js:22980
+- `You must be signed in to manage support managers.` · tümü · Server · functions/index.js:5051
+- `You must be signed in to mark messages read.` · tümü · Server · functions/index.js:22337
+- `You must be signed in to mark support tickets as read.` · tümü · Server · functions/index.js:5741
+- `You must be signed in to mark workspace tickets as read.` · tümü · Server · functions/index.js:5775
+- `You must be signed in to mute a conversation.` · tümü · Server · functions/index.js:22425
+- `You must be signed in to pin messages.` · tümü · Server · functions/index.js:22570
+- `You must be signed in to react to messages.` · tümü · Server · functions/index.js:22640
+- `You must be signed in to read message settings.` · tümü · Server · functions/index.js:22135
+- `You must be signed in to read messages.` · tümü · Server · functions/index.js:22296
+- `You must be signed in to read support managers.` · tümü · Server · functions/index.js:5027
+- `You must be signed in to read support ticket unread counts.` · tümü · Server · functions/index.js:5810
+- `You must be signed in to read support tickets.` · tümü · Server · functions/index.js:4952
+- `You must be signed in to read ticket messages.` · tümü · Server · functions/index.js:5288
+- `You must be signed in to read workspace billing limits.` · tümü · Server · functions/index.js:2783
+- `You must be signed in to read workspace ticket messages.` · tümü · Server · functions/index.js:5411
+- `You must be signed in to read workspace tickets.` · tümü · Server · functions/index.js:5084
+- `You must be signed in to remove a group member.` · tümü · Server · functions/index.js:23044
+- `You must be signed in to rename a group.` · tümü · Server · functions/index.js:22926
+- `You must be signed in to reply to support tickets.` · tümü · Server · functions/index.js:5325
+- `You must be signed in to reply to workspace tickets.` · tümü · Server · functions/index.js:5448
+- `You must be signed in to send a support ticket.` · tümü · Server · functions/index.js:3654
+- `You must be signed in to send a workspace ticket.` · tümü · Server · functions/index.js:4982
+- `You must be signed in to send messages.` · tümü · Server · functions/index.js:23120
+- `You must be signed in to update conversation presence.` · tümü · Server · functions/index.js:22398
+- `You must be signed in to update message settings.` · tümü · Server · functions/index.js:22149
+- `You must be signed in to update support tickets.` · tümü · Server · functions/index.js:5103
+- `You must be signed in to update typing status.` · tümü · Server · functions/index.js:22699
+- `You must be signed in to update workspace tickets.` · tümü · Server · functions/index.js:5137
+- `You must be signed in to use the help assistant.` · tümü · Server · functions/index.js:4456
+- `You must be signed in.` · tümü · Server · functions/accountingFunctions.js:128
+- `Your current plan has reached its customer limit. Upgrade the workspace plan to add more customers.` · tümü · Server · functions/index.js:14607
+- `Your current plan has reached its order limit. Mark finished orders as delivered to free a slot, or upgrade the workspace plan.` · tümü · Server · functions/index.js:15238
+- `Your current role is Workflow Only and cannot edit finance fields.` · tümü · Server · functions/index.js:16524
+- `Your role cannot create or update orders.` · tümü · Server · functions/index.js:23529
+- `Your workspace access does not include deleting files.` · tümü · Server · functions/index.js:6379
+- `Your workspace access does not include Orders.` · tümü · Server · functions/index.js:23548
+- `Your workspace role can read Messages but cannot change conversations or messages.` · tümü · Server · functions/index.js:2401
+- `Your workspace role cannot access Messages.` · tümü · Server · functions/index.js:2392
+- `Your workspace role cannot add inventory items.` · tümü · Server · functions/index.js:24940
+- `Your workspace role cannot add Knowledge Base contributions.` · tümü · Server · functions/index.js:8655
+- `Your workspace role cannot change files.` · tümü · Server · functions/index.js:6376
+- `Your workspace role cannot change inventory.` · tümü · Server · functions/index.js:5944
+- `Your workspace role cannot change the customer portal.` · tümü · Server · functions/index.js:28598
+- `Your workspace role cannot create customers.` · tümü · Server · functions/index.js:14599
+- `Your workspace role cannot create or send estimates.` · tümü · Server · functions/index.js:29350
+- `Your workspace role cannot delete Client Files.` · tümü · Server · functions/index.js:16835
+- `Your workspace role cannot edit dashboard settings.` · tümü · Server · functions/index.js:7932
+- `Your workspace role cannot edit Financial Settings.` · tümü · Server · functions/index.js:9024
+- `Your workspace role cannot edit Integration settings.` · tümü · Server · functions/index.js:10096
+- `Your workspace role cannot edit Language & Labels.` · tümü · Server · functions/index.js:9076
+- `Your workspace role cannot edit order card settings.` · tümü · Server · functions/index.js:7908
+- `Your workspace role cannot edit orders.` · tümü · Server · functions/index.js:9552
+- `Your workspace role cannot edit PDF Export settings.` · tümü · Server · functions/index.js:8982
+- `Your workspace role cannot edit Theme & Branding.` · tümü · Server · functions/index.js:9104
+- `Your workspace role cannot edit Upload Safety settings.` · tümü · Server · functions/index.js:10061
+- `Your workspace role cannot export financial data.` · tümü · Server · functions/index.js:9833
+- `Your workspace role cannot import orders.` · tümü · Server · functions/index.js:15024
+- `Your workspace role cannot manage Client Files.` · tümü · Server · functions/index.js:16604
+- `Your workspace role cannot manage personal Quick Reply settings.` · tümü · Server · functions/index.js:8569
+- `Your workspace role cannot merge customers.` · tümü · Server · functions/index.js:14873
+- `Your workspace role cannot merge orders.` · tümü · Server · functions/index.js:9632
+- `Your workspace role cannot move production work.` · tümü · Server · functions/index.js:6279
+- `Your workspace role cannot recalculate Financial Settings.` · tümü · Server · functions/index.js:9220
+- `Your workspace role cannot restore orders.` · tümü · Server · functions/index.js:15722
+- `Your workspace role cannot send messages.` · tümü · Server · functions/index.js:2410
+- `Your workspace role cannot start or manage private conversations.` · tümü · Server · functions/index.js:2419
+- `Your workspace role cannot test the API key.` · tümü · Server · functions/index.js:8301
+
+</details>
+
+<details><summary>Web — (c) kullanılmayan: 1158 anahtar (silinmedi)</summary>
+
+- `%d file(s) uploading`
+- `%d file(s) waiting to upload`
+- `%d shared file(s) added to this order.`
+- `%d shared file(s) waiting`
+- `A Shopify, Etsy or WooCommerce app already writes sales into QuickBooks`
+- `A clean workspace, set up your way.`
+- `A friend or colleague`
+- `A payment looks missed`
+- `A payment request is required.`
+- `A preset only flips the section toggles below — nothing prints internal cost or profit unless you turn Internal Financials on yourself. Review the result, previ`
+- `A read-only bank feed, receipt matching and spending categories are available on NivaDesk Pro and Team. NivaDesk can never move money.`
+- `A search engine`
+- `A short text at the moments a customer is waiting on: an estimate to approve, a piece ready to collect. One-way, and always about an order they already have wit`
+- `A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working.`
+- `AI Reply`
+- `AI reply`
+- `Accepted in browser`
+- `Accepted on this browser. Uploads will not ask again until you reset it.`
+- `Access Level`
+- `Access denied. Ask the workspace owner to add your User ID again.`
+- `Access denied. Ask the workspace owner to add your User ID first, then try again.`
+- `Access is revoked at Intuit and the tokens are forgotten. Imported records and mappings stay unless you choose to remove them too.`
+- `Access request approved. The user will now see this workspace in Available Workspaces.`
+- `Access request sent. The workspace owner can approve it from their Account screen.`
+- `Access restricted`
+- `Account / Login`
+- `Account and VAT mappings live under the Mappings tab. The dry run — a bespoke invoice with a deposit, a channel sale, a refund with its fee, a supplier bill and`
+- `Active. NivaDesk listens to Firestore orders for the current companyId.`
+- `Add Base Cost`
+- `Add Channel`
+- `Add Field`
+- `Add Heading`
+- `Add Note Field`
+- `Add Order`
+- `Add People`
+- `Add Step`
+- `Add Task`
+- `Add Task / Order`
+- `Add Team Member`
+- `Add Toggle`
+- `Add Yes / No`
+- `Add a cost`
+- `Add a webhook with event 'Order payment' (recommended) or 'Order creation', and format JSON.`
+- `Add another item`
+- `Add attachment`
+- `Add customer note...`
+- `Add here`
+- `Add notes or supplier details...`
+- `Add quick button`
+- `Add receipt`
+- `Add these shared files to this order, or clear them.`
+- `Add to Calendar`
+- `Add to an order's expenses`
+- `Add to this order`
+- `Add your first item`
+- `Add your first item, or import your opening stock.`
+- `Additional Knowledge for OpenAI`
+- `Advanced finance locked`
+- `Advanced schedule filters are available on Pro and Team.`
+- `Advanced: add member manually`
+- `After 1 hour`
+- `After 1 minute`
+- `After 15 minutes`
+- `After 5 minutes`
+- `All Spending Entries`
+- `All orders and customers will be permanently deleted.`
+- `Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. Plan guards still keep cloud file upload on Pro and Team.`
+- `Allowed image types only`
+- `Allowed: PDF, JPG, PNG, HEIC, HEIF and WEBP. The size limit follows Settings > Safety & Uploads.`
+- `Already have an account? Sign In`
+- `Already in this workspace`
+- `Always apply to`
+- `Amount on hand`
+- `Amounts differ`
+- `An advert`
+- `An order is required.`
+- `Another payment link is already open for this order. Cancel it, or ask for less.`
+- `Anything else?`
+- `App Logo URL`
+- `App Store Purchases`
+- `App information.`
+- `App real-time listener`
+- `Appearance, language, profile and security.`
+- `Apple Calendar is not available on this device.`
+- `Apple On-Device`
+- `Apple On-Device AI`
+- `Apple Reminders is not available on this device.`
+- `Apply Template`
+- `Approval request`
+- `Approve NivaDesk at Square in the browser, then come back here; the connection completes on its own.`
+- `Approve NivaDesk at your store in the browser, then come back here and press Finish connection.`
+- `Approve the connection in your browser, then come back and press Check now.`
+- `Approved workspaces will appear here.`
+- `Archive Conversation`
+- `Archive note`
+- `Are you sure?`
+- `Ask the assistant something`
+- `Assign to me`
+- `Attach File`
+- `Audit Log`
+- `Authentication is the secret token inside the Delivery URL. Add your WooCommerce webhook Secret below and every delivery's signature is verified as well — witho`
+- `Authentication is the secret token inside the Delivery URL. WooCommerce's own webhook signature is not checked, so treat the URL like a password and replace it `
+- `Available from`
+- `Available now`
+- `Avg. Platform Fee (%)`
+- `Back to notes`
+- `Bank disconnected.`
+- `Bank fee`
+- `Banking is not included in {plan}.`
+- `Base Cost Label`
+- `Base cost field is hidden.`
+- `Bill payment`
+- `Billing / Plan`
+- `Billing security`
+- `Bookkeeping`
+- `Books start in QuickBooks on`
+- `Bring Shopify or WooCommerce orders in automatically.`
+- `Bring your store's orders and customers in.`
+- `Bug / Something is not working`
+- `Build a saved-template reply from customer details.`
+- `Business description cleared.`
+- `Business description saved.`
+- `Business-based quick reminders applied.`
+- `Button text`
+- `COLLABORATION INVITATIONS`
+- `Calendar event could not be removed.`
+- `Calendar event could not be saved.`
+- `Calendar event removed.`
+- `Calendar event saved.`
+- `Calling code`
+- `Camera`
+- `Cancel reply`
+- `Cancel selection`
+- `Cancel the payment links that are still open before disconnecting Stripe. A link already sent can still be paid, and after disconnecting nothing here would reco`
+- `Card actions`
+- `Card moving, resizing and colours are available from NivaDesk Starter.`
+- `Card payment`
+- `Card positions, widths, heights, visibility and colors are saved only for your user. Order content stays shared for the whole workspace.`
+- `Card profile added`
+- `Card profile deleted`
+- `Cards are locked`
+- `Cards stay locked on Free. Card moving, resizing and colours are available from NivaDesk Starter.`
+- `Change colour`
+- `Changed in QuickBooks`
+- `Changes made in QuickBooks to documents NivaDesk posted, deleted records and mapping gaps will appear here with a safe way to resolve each one.`
+- `Channel button names can be added, removed, or renamed. Telephone and Email stay as their own fields and can be shown or hidden above.`
+- `Channel button names can be added, removed, or renamed. Telephone, Email and Address stay as their own fields and can be shown or hidden above.`
+- `Check delivery`
+- `Check delivery status`
+- `Check dial arrival`
+- `Check materials`
+- `Check remaining payment`
+- `Checking plan and uploading...`
+- `Checklist`
+- `Choose Backup File`
+- `Choose a JPG, PNG, HEIC, HEIF or WEBP image for your account avatar.`
+- `Choose a PDF or image file for this order.`
+- `Choose a file`
+- `Choose a team member`
+- `Choose monthly or yearly in App Store Purchases below.`
+- `Choose order for shared files`
+- `Choose the date QuickBooks takes over the books.`
+- `Choose the moments`
+- `Choose the product and rule for this reply.`
+- `Choose the shortcut titles shown in Schedule & Alerts. Date, priority and note are set in the card.`
+- `Choose where to add the client file from.`
+- `Choose whether this is an internal workspace request or a NivaDesk app support ticket.`
+- `Choose which blocks are visible and manage the layout for this order.`
+- `Choose which communication fields are visible and edit the channel button names.`
+- `Choose which two production statuses appear on the small order cards.`
+- `Choose your currency before taking card payments.`
+- `Click Actions in the top-right corner, then choose Customize.`
+- `Click the green Add Project button to create your first project.`
+- `Click the three-dot button to hide this card, edit its block headings, export when available, and change the card colour.`
+- `Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB, while previews, logos and avatars stay image-only.`
+- `Client Files are locked`
+- `Client file deleted`
+- `Client file queued`
+- `Client file uploaded`
+- `Cloud Function converts the data`
+- `Cloud listener stopped.`
+- `Cloud webhook function`
+- `Collaboration invitations`
+- `Compact View`
+- `Company ID copied.`
+- `Company Knowledge Base (For Apple On-Device AI)`
+- `Company numbers with no value are left out of the PDF — an empty VAT or EORI line never prints.`
+- `Compare`
+- `Compare plans`
+- `Confirm appointment`
+- `Connect QuickBooks`
+- `Connect QuickBooks Online`
+- `Connect Shopify`
+- `Connect Shopify (manual webhook)`
+- `Connect Stripe before asking a customer to pay.`
+- `Connect real App Store products to NivaDesk plans.`
+- `Connect your accounting`
+- `Connected accounts`
+- `Connection Check`
+- `Contact`
+- `Contact Workspace Owner`
+- `Continue with Google`
+- `Control currency, fees and tax calculations for this workspace.`
+- `Conversation updated`
+- `Copy Attachment Link`
+- `Copy Message`
+- `Copy project note`
+- `Corporation Tax Rate (%)`
+- `Could not add reminder`
+- `Could not approve access request.`
+- `Could not create a new project.`
+- `Could not create the order. Please try again.`
+- `Could not decline access request.`
+- `Could not delete custom role.`
+- `Could not open the invoice.`
+- `Could not read camera photo.`
+- `Could not read selected photo.`
+- `Could not request access.`
+- `Could not save custom role.`
+- `Create Account`
+- `Create First Order`
+- `Create a backup before importing or deleting data.`
+- `Create a new scheduled order`
+- `Create a new webhook`
+- `Create a new webhook for NivaDesk orders.`
+- `Create a new workspace`
+- `Create an order webhook`
+- `Create first profile`
+- `Create new label`
+- `Create rules from a transaction's category picker or the suggestions on the right.`
+- `Create this product ID in App Store Connect.`
+- `Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you.`
+- `Creates an all-day Apple Calendar event from the created date to the delivery due date.`
+- `Creating orders is not available on this workspace plan.`
+- `Currency Symbol`
+- `Current plan access`
+- `Custom Status Menus`
+- `Custom Tax Rule Names`
+- `Customer Channels`
+- `Customer Details Fields`
+- `Customer Notes stays linked to the customer profile. Add, remove or rename the Special Notes sections shown below it.`
+- `Customer approved design`
+- `Customer deleted`
+- `Customer information`
+- `Customer owned`
+- `Customer page branding`
+- `Customer pages`
+- `Customer profile not found to show notes.`
+- `Customers hidden`
+- `Customise these quick buttons for the selected business type, language and workflow.`
+- `DNS cannot route paths like yourdomain.com/track — use a subdomain such as track.yourdomain.com instead.`
+- `Dashboard Highlights`
+- `Dashboard hidden`
+- `Default Reply Style`
+- `Default Tax Rate (%)`
+- `Default VAT Rate (%)`
+- `Default delivery time for new orders (days)`
+- `Delete Selected Order`
+- `Delete for Everyone`
+- `Delete for Me`
+- `Delete for everyone`
+- `Delete role profile?`
+- `Delete this message for everyone? It disappears from everyone's conversation.`
+- `Delivery URL: the endpoint above`
+- `Deposit marked as paid`
+- `Design Mockup`
+- `Design Status`
+- `Design mockup sent`
+- `Design update`
+- `Dial arrival`
+- `Direct Messages`
+- `Direct Transfer`
+- `Direction`
+- `Disconnect QuickBooks`
+- `Disconnect this bank and remove its imported transactions?`
+- `Disputed`
+- `Don't have an account? Create one`
+- `Download backup is the one to keep — it restores into NivaDesk on any device. Full web archive is a raw copy for support. The two CSV files are for spreadsheets`
+- `Drag blocks to move dates. Pull the edges to resize.`
+- `Drag to reorder`
+- `Drag to resize the customers list. Double-click to reset.`
+- `Drag to resize the orders list. Double-click to reset.`
+- `Each upload records the company, user, file type, file size, upload date and related order when available.`
+- `Earlier this week`
+- `Edit Name / Email`
+- `Edit Notes Headings`
+- `Edit Quick Reminder Headings`
+- `Edit Team Member`
+- `Edit customer fields, visible contact fields and the channel button names.`
+- `Edit labels`
+- `Edit project note`
+- `Editing this role affects`
+- `Email Address`
+- `Email updated. You can change it again after 10 days.`
+- `Email, optional`
+- `Emoji`
+- `Empty trash`
+- `Enter a full hostname like track.yourdomain.com — a subdomain of a domain you own.`
+- `Enter the owner’s Company ID and send a request.`
+- `Etsy, or a sellers' group`
+- `Every client file in this workspace`
+- `Everyone in this workspace`
+- `Everything is reviewed.`
+- `Example`
+- `Exempt / 0%`
+- `Existing data`
+- `Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected NivaDe`
+- `Export Orders CSV`
+- `Export Studio Backup`
+- `Export and backup`
+- `Extra Yes / No Checks`
+- `Face ID / device passcode unlock disabled.`
+- `Face ID / device passcode unlock enabled.`
+- `Field Name`
+- `File deleted`
+- `File uploaded`
+- `Files larger than the selected limit are blocked before upload.`
+- `Files larger than this are blocked before upload.`
+- `Finance-free PDF preferences`
+- `Financial Info helps you track order value, paid amount, remaining balance and costs.`
+- `Find`
+- `Finish connection`
+- `Firestore saves it securely`
+- `Follow up`
+- `For internal project, task, customer or approval questions.`
+- `For spreadsheets. Cannot be imported back.`
+- `Forward Message`
+- `Forward message`
+- `Full View`
+- `Full payment received`
+- `Generated automatically from NivaDesk`
+- `Give every card in this column this card's height`
+- `Give the assistant your data`
+- `Grid view`
+- `Group Info`
+- `Group name`
+- `Headings`
+- `Hide Block`
+- `Hide Search`
+- `Hide Status Options`
+- `Hide prices`
+- `History Log PDF`
+- `Hours`
+- `How can we help?`
+- `How do you mainly work?`
+- `How familiar are you with stock tracking?`
+- `How long have you been in business?`
+- `How many people will use NivaDesk?`
+- `How members join`
+- `If an image belongs to a client or third party, the user should have permission to use it for the order.`
+- `Image link added`
+- `Image uploaded`
+- `Import Finished`
+- `Import adds the selected backup into this workspace. It does not delete your existing data, but duplicate orders may be created if the same backup is imported m`
+- `Import all`
+- `Import and delete`
+- `Import failed`
+- `Import orders automatically.`
+- `Import will add the backup into the current workspace. It will not clear existing orders automatically.`
+- `Import your first order`
+- `Importing shared files...`
+- `In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).`
+- `In WordPress, open WooCommerce > Settings > Advanced > Webhooks.`
+- `In {count}d`
+- `In {count}h`
+- `Included Costs`
+- `Included in this build. Deploy Firebase Functions after replacing index.js.`
+- `Incoming website orders`
+- `Information Received`
+- `Instagram did not accept the reply.`
+- `Instagram is not connected for this workspace, so the reply was not sent.`
+- `Instagram needs the account connected again before NivaDesk can reply. Open Settings, Customer Channels.`
+- `Internal workflow`
+- `Inventory Labels`
+- `Invitation created, but the email could not be sent. Copy the link and send it yourself.`
+- `Invite`
+- `Invite People`
+- `Invited`
+- `Invited collaborators`
+- `Invoice Numbers`
+- `Invoice preview`
+- `It answers from your own orders and figures.`
+- `It cannot answer about work it cannot see.`
+- `Item 1`
+- `Item 2`
+- `Item 3`
+- `Item 4`
+- `JOB SHEET`
+- `Job sheet preview`
+- `Keep Pandle as primary; connect QuickBooks read-only`
+- `Keep your records complete — match missing receipts to stay audit-ready.`
+- `Kept apart on purpose. Repairs, parts and shipping do not belong in the purchase price used for the VAT margin scheme, and once they are blended into one number`
+- `Labels, comma separated`
+- `Language & Labels`
+- `Language & Region`
+- `Language & currency`
+- `Language settings are read-only`
+- `Language settings could not be saved.`
+- `Language settings saved.`
+- `Language, currency and label text.`
+- `Last attempt`
+- `Last delivery`
+- `Last full check`
+- `Last message`
+- `Last reply`
+- `Last sync: %@`
+- `Latest`
+- `Latest charge differs from usual`
+- `Latest transactions`
+- `Layout Profiles`
+- `Leave Group`
+- `Link a payment to the job it paid for.`
+- `Link attached`
+- `Linked To`
+- `Links, comma separated`
+- `List view`
+- `Live sync`
+- `Live website orders and webhook setup.`
+- `Load a team member’s layout to follow it live. When they save their card profile, your layout updates too. If you edit your own layout, sync stops.`
+- `Load another team member’s current layout only to view or copy it. Saving still updates your own card profiles.`
+- `Load my profile`
+- `Load products`
+- `Loading app-compatible workspace block settings...`
+- `Loading support managers...`
+- `Locations nest at most 4 levels deep.`
+- `Lock NivaDesk after a period of inactivity, then unlock with your password. This applies to this browser only.`
+- `Logo could not be loaded`
+- `Logo uploaded`
+- `Logo uploads use the same upload safety rules and audit log.`
+- `Logo, theme and branding.`
+- `Long Range Schedule`
+- `Look around with example orders before adding your own.`
+- `Main Material`
+- `Make Offline`
+- `Manage recurring rules`
+- `Manage your NivaDesk profile, company details and sign-in security.`
+- `Manage your personal appearance, language, profile and sign-in security in one place.`
+- `Manual order`
+- `Margin scheme: VAT is due on the selling price less what you paid for the item, and nothing else comes off it.`
+- `Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.`
+- `Match your first transaction`
+- `Matches`
+- `Matches the app’s Business Type template flow. Saving updates these headings for everyone in the workspace, on every device.`
+- `Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.`
+- `Matches the app’s Materials & Inventory notes/supplier field visibility.`
+- `Materials Cards`
+- `Max file size`
+- `Maximum`
+- `Maximum image size`
+- `Member: can edit`
+- `Members must be moved away from this role before it can be deleted.`
+- `Mention`
+- `Migrate to QuickBooks from a selected date (Pandle keeps the books until the day before)`
+- `Mode`
+- `Month Net`
+- `Monthly equivalent of active subscriptions`
+- `Move Block`
+- `Move to bottom`
+- `Move to top`
+- `Move what you already track into NivaDesk.`
+- `Must be enabled in WooCommerce using the Delivery URL above.`
+- `Mute for 1 hour`
+- `Mute for today`
+- `Mute until I turn it back on`
+- `My card profiles`
+- `Needs linking`
+- `Net profit analysis is available from NivaDesk Starter.`
+- `New NivaDesk Support Ticket`
+- `New Order`
+- `New Supplier`
+- `New Workspace Ticket`
+- `New project added to schedule.`
+- `New user's Firebase UID`
+- `New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.`
+- `Next step`
+- `NivaDesk 1.0.0`
+- `NivaDesk VAT treatment → QuickBooks tax code`
+- `NivaDesk customers that may already exist in QuickBooks, by email or name. A name alone is a reason to look, not to merge; linking arrives with the posting phas`
+- `NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.`
+- `NivaDesk never moves money.`
+- `NivaDesk reminder`
+- `No SMS provider is connected yet`
+- `No active conversations.`
+- `No archived notes`
+- `No channel buttons yet. Add one below if you want another platform.`
+- `No collaborators yet`
+- `No collaborators yet.`
+- `No company numbers added yet.`
+- `No conversations available`
+- `No custom rows yet.`
+- `No default Apple Reminders list was found on this device.`
+- `No description`
+- `No direct conversations yet.`
+- `No document`
+- `No email address found for this account.`
+- `No extra Yes / No headings yet. Use Add Yes / No below.`
+- `No extra pending headings yet. Use + Remaining below.`
+- `No extra spending headings yet. Use + Spending below.`
+- `No headings yet. Use Add Heading below.`
+- `No history yet. Important changes will appear here.`
+- `No items match these filters`
+- `No joined workspace members found.`
+- `No labels yet`
+- `No logo uploaded`
+- `No logo uploaded yet.`
+- `No matching orders found.`
+- `No matching orders.`
+- `No matching tickets found.`
+- `No matching transaction found — you can attach it manually from the Receipt column on a row.`
+- `No members match your search.`
+- `No messages yet`
+- `No more team members to add.`
+- `No orders`
+- `No orders found.`
+- `No pinned messages yet.`
+- `No prices`
+- `No project notes found`
+- `No reminder`
+- `No reminders`
+- `No saved messages yet. Use Save Message from any message menu.`
+- `No saved messages.`
+- `No shared attachments yet.`
+- `No shared files were imported.`
+- `No spending found for this period.`
+- `No support tickets yet.`
+- `No team members found yet. Add members from Team Access first.`
+- `No team members yet.`
+- `No team profiles yet`
+- `No transactions in this period yet.`
+- `No unsaved changes`
+- `Not accepted on this browser. The next upload will ask you to accept the upload policy.`
+- `Not available`
+- `Note Heading`
+- `Note added`
+- `Notes you add appear here`
+- `Nothing here.`
+- `Nothing in inventory yet`
+- `Nothing in inventory yet. Add your first item, or import your opening stock.`
+- `OK`
+- `Offline. %d change(s) waiting to sync%@.`
+- `Offline. File saved locally and will upload when online.`
+- `Older`
+- `Once a sale arrives, everything else follows it.`
+- `One file, multiple links — no duplicates.`
+- `One import is capped at 500 records. These will NOT be imported:`
+- `One material or product to count.`
+- `One physical object with its own identity — a specific watch, a serialled movement.`
+- `Online. Syncing %d waiting change(s)%@.`
+- `Only image files can be used in Preview.`
+- `Only one provider may write the books for a period. Pandle and QuickBooks never post the same sale.`
+- `Only the workspace owner can add team members.`
+- `Only the workspace owner can approve this request.`
+- `Only the workspace owner can change team access.`
+- `Only the workspace owner can change team roles.`
+- `Only the workspace owner can connect Etsy.`
+- `Only the workspace owner can connect QuickBooks.`
+- `Only the workspace owner can decline this request.`
+- `Only the workspace owner can delete a customer conversation.`
+- `Only the workspace owner can disconnect Etsy.`
+- `Only the workspace owner can import orders.`
+- `Only the workspace owner can manage the plan.`
+- `Only the workspace owner can remove team members.`
+- `Only upload legal, safe and work-related files that belong in this workspace.`
+- `Only upload legal, safe and work-related images that belong in this workspace.`
+- `Only workspace owner or admins can change support manager assignments.`
+- `Only workspace owners can approve join requests, change roles or remove members.`
+- `Open Actions`
+- `Open Actions, then choose Customize cards. This is where you decide which workspace cards are visible.`
+- `Open Attachment`
+- `Open Settings`
+- `Open Shopify webhooks`
+- `Open WooCommerce webhooks`
+- `Open full Plan & Billing page`
+- `Open local file`
+- `Open project`
+- `Opening NivaDesk`
+- `Optional note`
+- `Optional, recommended`
+- `Or start another way`
+- `Order Card Details`
+- `Order Details`
+- `Order Entries`
+- `Order List Badges`
+- `Order Status`
+- `Order completed`
+- `Order created`
+- `Order due`
+- `Order previews, logos and avatars accept image files. Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP.`
+- `Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.`
+- `Order quick filter`
+- `Order sort`
+- `Other Note`
+- `Others`
+- `Overdue {count}d`
+- `Overdue {count}h`
+- `Owner Company ID`
+- `Owner and admins can delegate ticket management to trusted team members.`
+- `Owner testing controls`
+- `PDF and image files for this order.`
+- `PDF, image, PSD and PSB files for this order.`
+- `Painting started`
+- `Pandle confirms rows already waiting in its own bank feed; QuickBooks does not offer that, so the two are never asked to do the same job.`
+- `Pandle is connected. After connecting QuickBooks you will choose which one keeps the books, so nothing is ever written twice.`
+- `Password changes are handled securely by Firebase. We send a reset link to your account email instead of storing or editing your password inside the app.`
+- `Password reset email sent to`
+- `Paste the Delivery URL`
+- `Paste the copied Delivery URL as the webhook URL and save it.`
+- `Paste the copied Delivery URL, save the webhook, then place a test order.`
+- `Paste the same Secret you set on the WooCommerce webhook. Every delivery is then verified with its signature, and a wrong signature is rejected even alongside a`
+- `Paying on schedule`
+- `Payment matched`
+- `Pending client file removed`
+- `Pending upload removed`
+- `Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone. Memberships in other`
+- `Personal for workflow-only roles; shared otherwise`
+- `Photo Library`
+- `Photo library`
+- `Pick an existing supplier`
+- `Pick as many as apply.`
+- `Pick date`
+- `Pick reminder`
+- `Pin Message`
+- `Pin note`
+- `Pinned Messages`
+- `Pinned message`
+- `Pinned messages`
+- `Place a paid test order in your store; it appears in Orders within seconds.`
+- `Place a test order`
+- `Plan Matrix`
+- `Plan action`
+- `Plan changes are protected and will be managed through verified subscriptions.`
+- `Plan limit`
+- `Plan limit reached`
+- `Plan storage`
+- `Please accept the Upload Policy before importing shared files.`
+- `Please add Products/Services in Settings.`
+- `Please allow Calendar access in system settings and try again.`
+- `Please allow Reminders access in system settings and try again.`
+- `Please enter a Company ID.`
+- `Please enter the new user's Firebase UID.`
+- `Please enter the workspace owner's Company ID.`
+- `Please enter your email address and password.`
+- `Please sign in again before joining a company.`
+- `Please sign in again before sending a request.`
+- `Please sign in again before switching workspace.`
+- `Please sign in again before updating your profile.`
+- `Portal turned off. The customer's link no longer opens.`
+- `Possible cancellations`
+- `Post in the team-wide chat thread. Reading it stays under Messages.`
+- `Post orders to NivaDesk from Etsy through an automation.`
+- `Prepare shipment`
+- `Preparing photo...`
+- `Preparing your workspace...`
+- `Preview Attachment`
+- `Previous image`
+- `Price changed`
+- `Pro and Team: connect a subdomain of your own website — track.yourdomain.com — and customer links carry your brand end to end.`
+- `Product ID`
+- `Product not loaded`
+- `Product/Service`
+- `Production Toggles`
+- `Production Toggles (Yes/No)`
+- `Profile & Company`
+- `Profile & Workspace`
+- `Profile and security`
+- `Profile and sign-in security.`
+- `Profile updated. Company details can only be changed by the workspace owner.`
+- `Profile, security and team access.`
+- `Profile, workspace and security`
+- `Profile, workspace logo and sign-in security.`
+- `Profit of revenue`
+- `Progress`
+- `Project / Order question`
+- `Project card`
+- `Protected Actions`
+- `Purchase confirmed. Verifying subscription access.`
+- `Purchase date (YYYY-MM-DD)`
+- `Purchase restored. Your workspace plan is active.`
+- `Purchase verified. Your workspace plan is active.`
+- `Quality check`
+- `Question / How do I use this?`
+- `Quick Reply hidden`
+- `Quick reminder settings`
+- `Quick reminder settings saved.`
+- `Quick reply templates.`
+- `QuickBooks account`
+- `QuickBooks connected. Importing the chart of accounts, VAT codes, customers and items…`
+- `QuickBooks could not be connected. Try again in a minute.`
+- `QuickBooks did not accept the authorisation. Check the app's Client ID and Secret.`
+- `QuickBooks is primary from`
+- `QuickBooks is the primary accounting provider from a selected date`
+- `QuickBooks or Xero, so the books stay in step.`
+- `QuickBooks read.`
+- `QuickBooks returned a different company than the one you authorised. Try again.`
+- `QuickBooks sections`
+- `QuickBooks stays read-only. Pandle remains the primary accounting provider.`
+- `QuickBooks tax code`
+- `Rather not say`
+- `Read live from QuickBooks. NivaDesk proposes; you or your accountant confirm. Nothing posts while a mapping it needs is empty.`
+- `Read-only bank connection. NivaDesk never moves money.`
+- `Read-only phase: nothing is posted to QuickBooks yet.`
+- `Read-only schedule view`
+- `Reading QuickBooks…`
+- `Recalculate VAT and platform fees for existing projects using these Financial Settings?`
+- `Recently updated`
+- `Recommended WooCommerce webhook settings`
+- `Recorded so you can find it, valued at zero, and never counted as your stock.`
+- `Recurring payments`
+- `Redelivering the same order never creates a copy: the order number is the identity, and a redelivery only updates what the shop owns — production status and tra`
+- `Redo`
+- `Refresh workspaces`
+- `Registered - waiting for 17TRACK update`
+- `Reload`
+- `Reload re-fetches what is saved for the workspace and discards unsaved edits. Save applies your changes to everyone.`
+- `Remaining / Pending Headings`
+- `Reminder added`
+- `Reminder completed.`
+- `Reminder deleted.`
+- `Reminder saved and Apple Reminder added.`
+- `Reminder saved and notification scheduled.`
+- `Reminder saved, but Apple Reminder could not be added.`
+- `Reminder saved, but notification permission was not granted.`
+- `Reminder saved. Adding Apple Reminder...`
+- `Reminder snoozed.`
+- `Reminders permission is not enabled for this app.`
+- `Remove Calendar`
+- `Remove offline copy`
+- `Remove the last item`
+- `Remove this amount from the order's expenses?`
+- `Removed from the order's expenses.`
+- `Removing Apple Calendar event...`
+- `Replace YOUR_COMPANY_ID with the Company ID shown in Settings > Account > Team Access.`
+- `Reply Engine`
+- `Require Face ID / device passcode on app launch`
+- `Require upload policy acceptance before upload`
+- `Reserved for your workspace — serving your links on this domain is being rolled out, and existing nivadesk.app links keep working.`
+- `Reset defaults`
+- `Restore Purchases`
+- `Review spending`
+- `Roughly how many orders a month?`
+- `Rule 1 (Revenue)`
+- `Rule 2 (Profit)`
+- `Run Business Setup`
+- `Safe PDF access`
+- `Safe access`
+- `Save Appearance`
+- `Save Branding`
+- `Save Financial Settings`
+- `Save History Log PDF`
+- `Save Language Settings`
+- `Save Profile`
+- `Save Theme & Branding`
+- `Save Upload Safety`
+- `Save Workflow Settings`
+- `Save and load different card layout presets for this order area.`
+- `Save as personal note`
+- `Save different card layouts for your own user. Card content stays shared for the whole workspace; only positions, sizes, visibility and colors change.`
+- `Save my profile`
+- `Save quick buttons`
+- `Save reminder`
+- `Save role`
+- `Save secret`
+- `Save shared`
+- `Save this order`
+- `Saved Messages`
+- `Saved message`
+- `Saved messages`
+- `Saved values write to the same app-compatible companySettings block heading fields used by Mac, iPad, iPhone and web.`
+- `Saved. You can open the same design on Mac and iPad.`
+- `Saving`
+- `Saving to cloud...`
+- `Schedule Filters`
+- `Search Tasks`
+- `Search members`
+- `Search messages or files`
+- `Search notes`
+- `Search orders...`
+- `Search tickets`
+- `Security`
+- `See each team member's assigned work.`
+- `See who is doing what and when.`
+- `Select Details`
+- `Select Industry`
+- `Select Language`
+- `Select a customer to view details.`
+- `Select a joined member to invite as collaborator.`
+- `Select an order to view details.`
+- `Select an order, then add an Apple Reminder for its due date.`
+- `Select at least one order to import.`
+- `Select the order that should receive the shared PDF or image.`
+- `Select which statuses should appear in the dropdown menus of an order.`
+- `Send Password Reset Email`
+- `Send a request to your workspace owner or admins.`
+- `Send access request`
+- `Send approved estimates to QuickBooks (no accounting effect)`
+- `Send client update`
+- `Send invoice`
+- `Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. Amounts are shown in your workspace currency.`
+- `Serving rollout`
+- `Set Status to Active and Topic to Order created.`
+- `Set aside this year`
+- `Set it active`
+- `Settings hidden`
+- `Share email or Company ID`
+- `Share your Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.`
+- `Share your account email or Company ID with the person you want to invite. They send a request, then you approve it from Join Requests.`
+- `Share your account email or Company ID with the person you want to invite. They will send a request, then you approve it here.`
+- `Shared Files & Media`
+- `Shared PDF settings`
+- `Shared client files imported`
+- `Shared file is ready. Open the correct order and tap Add here.`
+- `Shared files cleared.`
+- `Shared workflow settings`
+- `Shopify Integration`
+- `Shopify webhook steps`
+- `Shopify, Etsy, WooCommerce or Square.`
+- `Show Block`
+- `Show Status Options`
+- `Show more goals`
+- `Show or hide the cards you want to see in the order detail workspace.`
+- `Show prices`
+- `Shrink the card to exactly its content`
+- `Sign In`
+- `Sign in to your workspace`
+- `Sign out of NivaDesk?`
+- `Signature check`
+- `Signature checks are off — the URL token is the only lock.`
+- `Signature checks are on.`
+- `Site`
+- `Skipped as likely duplicates`
+- `Small Order Card Badges`
+- `Smart Business Description`
+- `Smart template applied.`
+- `Social media`
+- `Some of these look like orders you already have. Importing anyway will create a second copy of each.`
+- `Something you count — screws, lacquer, boxes. Tracked as an amount with a reorder point.`
+- `Special Note Headings`
+- `Special Notes 1`
+- `Special Notes 2`
+- `Standard template applied.`
+- `Standing Order`
+- `Start by entering the customer and design details here. This card keeps contact details, channels and notes together.`
+- `Start painting`
+- `Start with the thing you actually do.`
+- `Status Dropdown Headings`
+- `Status Menu Options`
+- `Status changed`
+- `Status: Active`
+- `Step Name`
+- `Stop sync`
+- `Storage (total)`
+- `Store`
+- `Stored server-side and never shared with workspace members.`
+- `Stripe could not close that link. Try again in a moment.`
+- `Stripe did not return an account.`
+- `Stripe did not return an onboarding link.`
+- `Subscribe`
+- `Summary rows and small order badges`
+- `Support Manager`
+- `Support Managers`
+- `Support managers can review, reply to and update workspace support tickets without getting full workspace admin access.`
+- `Switch on Financial Info to add pricing, paid amount and remaining balance to this project workspace.`
+- `Switched to your own workspace.`
+- `Synced with team card profile`
+- `Take a note...`
+- `Tap + to create your first note.`
+- `Tap to preview`
+- `Tap to start a private chat`
+- `Task / Assignment`
+- `Task added`
+- `Task due date updated`
+- `Task order updated`
+- `Task priority updated`
+- `Task reminder added`
+- `Tax / VAT Settings`
+- `Tax Amount`
+- `Tax Rate (%)`
+- `Tax Rule`
+- `Tax codes are read from this company, never assumed from a name. Refunds keep the original treatment.`
+- `Tax recalculation completed!`
+- `Tax rule label — calculated on eligible profit`
+- `Tax rule label — calculated on revenue`
+- `Team Chat posting`
+- `Team Contributions`
+- `Team access is locked`
+- `Team card profiles`
+- `Team card sync stopped`
+- `Team member added. They will now see this workspace in Available Workspaces after refreshing.`
+- `Team members will appear here.`
+- `Team profile is no longer available`
+- `Team role updated.`
+- `Tell me when it drops to`
+- `Tell us what you'd like help with`
+- `Template applied successfully!`
+- `Text options`
+- `That amount cannot be charged.`
+- `That currency cannot be charged yet.`
+- `That is fine if you built it deliberately. Applying the standard template replaces them.`
+- `That is more than this order still owes.`
+- `That payment has already been made.`
+- `That payment link no longer exists.`
+- `That reply window belongs to a different workspace.`
+- `The Firebase function receives the WooCommerce payload and converts it into the NivaDesk order format.`
+- `The PayPal app inside QuickBooks is active`
+- `The QuickBooks connection was cancelled.`
+- `The Shopify App Store`
+- `The Square app inside QuickBooks is active`
+- `The app listens to Firebase in real time, so the new website order appears without refreshing.`
+- `The app only accepts common image files such as JPG, PNG, HEIC and WEBP for order previews and workspace logos.`
+- `The app only accepts common image files such as JPG, PNG, HEIC and WEBP for order previews.`
+- `The app updates live`
+- `The bank feed is connected in QuickBooks`
+- `The customer has not written in the last 24 hours, so WhatsApp only allows an approved template now.`
+- `The figure you enter is what the customer pays. £120 at 20% is £20 of VAT on £100.`
+- `The first upload will ask the user to accept the upload policy.`
+- `The first upload will ask this browser to accept the upload policy.`
+- `The items are created as incoming — they become available stock when you mark the purchase received.`
+- `The moment the shelf and the work meet.`
+- `The name your text arrives from`
+- `The new language applies immediately after you save — no reload needed.`
+- `The order is saved with your companyId, so it appears only inside the correct workspace.`
+- `The payment does not match the purchase total. If this was a deposit or a part payment that is fine — otherwise check the purchase.`
+- `The person the work is for.`
+- `The reminder was added to Apple Reminders. It will sync to your Apple devices if iCloud Reminders is enabled.`
+- `The reply could not be recorded, so it was not sent.`
+- `The workspace owner has turned off Messages for you.`
+- `Theme & Brand`
+- `Theme & Branding`
+- `Theme & Branding is read-only`
+- `Theme & Branding settings could not be saved.`
+- `Theme & Branding settings saved.`
+- `Theme selector`
+- `These controls sync with Quick Reply Settings across web, Mac, iPad and iPhone.`
+- `These fields match the app’s Order Summary status rows and the shortened badges on the small order cards.`
+- `These headings are shared by your whole workspace: every teammate and every device — Mac, iPhone, iPad, Android and web — sees the same list, on new and existin`
+- `These options match the app’s status menu pool and control the dropdowns used in web order cards.`
+- `These settings help protect your workspace when users upload images and client PDFs.`
+- `These settings help protect your workspace when users upload images.`
+- `This account can follow the work progress, but financial details and editing tools are hidden.`
+- `This belongs to a customer`
+- `This block does not have editable headings yet.`
+- `This browser has accepted the upload policy`
+- `This device has accepted the upload policy`
+- `This does not automatically judge the content of an image. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything`
+- `This file could not be imported. Please choose a valid NivaDesk backup JSON file.`
+- `This file is saved on this device and will upload automatically when online.`
+- `This invitation has already been used.`
+- `This invitation has expired. Ask for a new one.`
+- `This invitation was withdrawn.`
+- `This is the default base cost field. Extra spending headings can be added below.`
+- `This language is personal to your account and synchronises across your devices.`
+- `This layout follows a team member live. Any manual change will stop sync and save to your own profile.`
+- `This logo is used in the app header on Mac, iPad and iPhone.`
+- `This manual webhook authenticates with the secret token inside the Delivery URL; Shopify's HMAC signature is verified only on the official app connection.`
+- `This message was deleted`
+- `This month's spending`
+- `This order has nothing left to pay.`
+- `This remains local to this browser, matching the app’s device-level acceptance behavior.`
+- `This reply window cannot be checked right now, so the reply was not sent. Try again in a moment.`
+- `This reply window cannot be opened. It was sealed with a key this server no longer has, so the conversation has to start again.`
+- `This saves to the same app-compatible language key used by NivaDesk: seciliDil.`
+- `This section explains the live website order connection. It does not change your WooCommerce settings inside the app.`
+- `This setting is saved in the cloud, so the assigned support managers have the same access on Mac, iPhone, iPad, web and Android.`
+- `This setup only needs to be done once in WooCommerce.`
+- `This small card is your project summary. Use it to switch projects and check delivery, status and payment at a glance.`
+- `This small card represents the project you just created. You can select projects from this list and open their workspace on the right.`
+- `This theme is personal to your account and synchronises across your devices.`
+- `This workspace has no Stripe account yet.`
+- `This workspace is no longer available. Switched to your own workspace.`
+- `This workspace is view-only for your account. You can review orders and customer information, but saving changes may be blocked by the workspace permissions.`
+- `This workspace is workflow-only for your account. You can follow order progress, but prices, dashboard and editing tools are hidden.`
+- `Tick what is already writing into this QuickBooks company. Anything ticked stays out of NivaDesk's posting, and the answers are kept in the audit trail.`
+- `Title (A–Z)`
+- `To Do PDF`
+- `To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders appear in Orders and Schedule aut`
+- `To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders appear in Orders and Schedule autom`
+- `To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace autom`
+- `Toggle Name`
+- `Topic/Rule`
+- `Topic: Order created or Order updated`
+- `Total Extra Spending`
+- `Total Logs`
+- `Total Spent`
+- `Total inflow this period`
+- `Tracking number added`
+- `Trash is empty`
+- `Turn on Financial Info`
+- `Unarchive Conversation`
+- `Unarchive note`
+- `Unassign`
+- `Unit (pcs, ml, g)`
+- `Unlock NivaDesk`
+- `Unpin Message`
+- `Unpin note`
+- `Unsave Message`
+- `Untitled order`
+- `Up to two more. Optional.`
+- `Upcoming deadlines`
+- `Update Calendar`
+- `Updated image`
+- `Updating Apple Calendar...`
+- `Upload PDFs or images that belong to this client order.`
+- `Upload PDFs, images, PSD or PSB files that belong to this client order.`
+- `Upload a logo or paste a logo URL. Uploaded logos are stored under this workspace and recorded in the upload audit log.`
+- `Upload blocked`
+- `Upload blocked. Please check Upload Safety settings and try again.`
+- `Upload must finish before this image can be used in Preview.`
+- `Upload or paste the logo used in the app header for this workspace. Logo uploads follow the same upload safety policy and audit log as order images.`
+- `Upload policy acceptance`
+- `Upload policy is accepted on this browser.`
+- `Upload policy is accepted on this device.`
+- `Upload rules are set in Safety & Uploads.`
+- `Upload safety policy`
+- `Upload your first file`
+- `Uploading file...`
+- `Use Add Project to create your first workspace project. We will keep the guide simple and show one card at a time.`
+- `Use Download or Open to view this file in another app.`
+- `Use Face ID, Touch ID or your device passcode to continue.`
+- `Use business suggestions`
+- `Use in Preview Card`
+- `Use stock on a job`
+- `Use the official NivaDesk app OR this manual webhook for a store — never both. Running both delivers every order twice, and the two copies arrive under differen`
+- `Use the three-dot card menu to hide this card, edit block headings, export when available or change the card colour.`
+- `Use this endpoint as the WooCommerce webhook Delivery URL:`
+- `Use this for app bugs, sync issues, billing, account problems or feature requests.`
+- `Use this for project questions, task requests, missing customer details or internal workflow issues.`
+- `Use this only if the owner has already approved your account and the workspace does not appear above.`
+- `Use this only if you already know the user's Firebase UID.`
+- `Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in this workspace.`
+- `Use this section to explain the upload rules to your team and reduce the risk of illegal, unsafe or unsuitable files being stored in your company workspace.`
+- `User ID copied.`
+- `Users must only upload legal, safe and work-related images that belong in this workspace.`
+- `Uses Business Type and Smart Business Description from Settings.`
+- `Using your card profile`
+- `VAT 20%`
+- `VAT 5%`
+- `VAT, EORI, company number or any reference you want to show on PDF invoices.`
+- `Verify`
+- `Verify the company`
+- `Version 1.0.0`
+- `View Only and Workflow Only roles cannot create full orders.`
+- `View all files`
+- `View all notes`
+- `View all orders`
+- `View customers`
+- `View inventory`
+- `Viewing team card profile`
+- `Visible PDF sections`
+- `Waiting for DNS`
+- `Waiting for account workspace...`
+- `Waiting to upload`
+- `Warning: This will overwrite your current workflow steps and inventory labels. Are you sure?`
+- `Web JSON Backup`
+- `Web portal`
+- `Webhook Setup`
+- `Website orders can flow into this workspace.`
+- `Weekly / Monthly`
+- `What QuickBooks and NivaDesk know about each other`
+- `What for`
+- `What happens when it is active`
+- `What kind of thing is this?`
+- `What kind of work do you do?`
+- `What this means`
+- `WhatsApp did not accept the reply.`
+- `WhatsApp is not connected for this workspace, so the reply was not sent.`
+- `When a customer completes an order on your website, WooCommerce sends the order data to NivaDesk. NivaDesk saves it into the correct company workspace and the a`
+- `When a text goes out`
+- `When enabled, NivaDesk asks for Face ID, Touch ID or your device passcode whenever the app opens with an existing session.`
+- `When enabled, this browser asks the user to accept the upload policy before Client Files upload.`
+- `Where should this ticket go?`
+- `WooCommerce Integration`
+- `WooCommerce sends the new order`
+- `WooCommerce webhook Secret`
+- `WooCommerce webhook steps`
+- `WooCommerce website setup`
+- `Workflow & cards`
+- `Workflow Only can update production, priority and delivery workflow fields.`
+- `Workflow View`
+- `Workspace Inbox`
+- `Workspace Messages`
+- `Workspace area hidden`
+- `Workspace connected.`
+- `Workspace data backup restores your settings, orders and customers into NivaDesk on any device — it does not include uploaded files. Full web archive is a raw c`
+- `Workspace details`
+- `Workspace logo is managed from Account > Workspace Logo.`
+- `Workspace messaging permissions`
+- `Workspace name & subtitle`
+- `Workspace ticket sent to the workspace owner.`
+- `Workspace · Owner managed`
+- `Workspace-shared`
+- `Wrong company? Disconnect under Settings and connect again with the right QuickBooks login.`
+- `Year Net`
+- `Yearly Basic Finance`
+- `Yes, Delete All`
+- `You are already the owner of this workspace.`
+- `You can keep viewing cached orders and customers. Changes will wait until the connection returns.`
+- `You can load another team member’s layout to view it, but saving only updates your own profile.`
+- `You can review this order, including prices and customer information, but editing tools are locked for this account.`
+- `You can sign back in with your email and password.`
+- `You can view tasks, but your role cannot edit them.`
+- `You can view work time, but your role cannot edit it.`
+- `You're set up`
+- `Your AI-generated reply will appear here...`
+- `Your API key is encrypted and stored securely.`
+- `Your Default Reply Style`
+- `Your NivaDesk setup`
+- `Your NivaDesk subdomain`
+- `Your access to this workspace changed. Switched to your own workspace.`
+- `Your access to this workspace has been removed. Switched to your own workspace.`
+- `Your account has no email address, so this invitation cannot be matched to it.`
+- `Your card profile`
+- `Your card profile was saved`
+- `Your current role does not include access to this settings section.`
+- `Your current workspace role cannot edit Theme & Branding.`
+- `Your current workspace role does not include Quick Reply access.`
+- `Your current workspace role does not include customer access.`
+- `Your current workspace role does not include dashboard or financial access.`
+- `Your current workspace role does not include settings access.`
+- `Your customer links`
+- `Your customers' links — order tracking, estimates and every future customer page — can carry YOUR name instead of ours.`
+- `Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.`
+- `Your latest layout and color changes are being saved.`
+- `Your offline changes are being sent to the cloud.`
+- `Your own domain`
+- `Your personal language preference.`
+- `Your personal light or dark theme.`
+- `Your plan or role cannot create orders`
+- `Your project card`
+- `Your website webhook sends customer, product and payment details when an order is created or completed.`
+- `Your workspace access was removed. Switched to your own workspace.`
+- `Your workspace is using this plan.`
+- `Your workspace role is read-only.`
+- `Zoom presets`
+- `account(s)`
+- `accounted for`
+- `active statuses selected`
+- `at`
+- `bank(s)`
+- `checking_tracking`
+- `customer-owned items are held here and deliberately valued at zero — they are the customer's property, not stock.`
+- `firebase_functions_missing`
+- `join requests`
+- `last`
+- `members`
+- `orders moved.`
+- `possibly cancelled`
+- `price changed`
+- `purchases with no payment matched`
+- `save_order_first`
+- `seats used`
+- `spending`
+- `spending mix`
+- `to review`
+- `tracking_request_sent`
+- `tracking_updated`
+- `{count} receipt missing`
+- `{count} receipts missing`
+- `Çalışma alanı hatası`
+
+</details>
+
+<details><summary>Android — (a) gerçekten eksik: 40 anahtar (0 @kullanım)</summary>
+
+- `AI Assistant` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:635
+- `Already have an account? Sign In` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:300
+- `An account already exists for that email.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:58
+- `Analytics` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:635
+- `Ask how something in NivaDesk works — where a button lives, what a card is for, how to set something up. This assistant reads the guide, not your workspace, so ` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/help/AppHelpAssistant.kt:87
+- `Click the link in that email, then come back here.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:439
+- `Confirm Password` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:253
+- `Create a new workspace` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:116
+- `Create Account` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:287
+- `Don't have an account? Create one` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:300
+- `Email is required.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:341
+- `Enter your email and we'll send you a link to reset your password.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:314
+- `Forgot password?` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:232
+- `Full Name` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:193
+- `Keep full access by verifying within a few days. Accounts with no data that stay unverified are removed after 30 days.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:619
+- `No account was found for that email.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:56
+- `No internet connection.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:61
+- `Not verified yet — click the link in the email first.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:418
+- `Notes you add appear here` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/widgets/WidgetSummaryBridge.kt:61
+- `Password must be at least 8 characters and include a letter and a number.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:77
+- `Passwords do not match.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:76
+- `Please choose a stronger password.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:59
+- `Please sign in again to continue.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:63
+- `Please sign in again.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:77
+- `Reset password` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:311
+- `Send reset link` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:365
+- `Studio / Workspace Name` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:200
+- `Test` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/payments/PaymentLinksGateUi.kt:52
+- `That email address doesn't look right.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:57
+- `The email or password is incorrect.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:55
+- `The server is busy. Please try again.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:76
+- `This account has been disabled.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:62
+- `Too many attempts. Please wait a moment and try again.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:60
+- `VAT / Tax` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1596
+- `Verification email sent. Check your inbox.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:419
+- `Verify your email` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:435
+- `We sent a password reset link to {email}.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:355
+- `We sent a verification link to:` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/auth/LoginScreen.kt:436
+- `You don't have permission for this.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/util/FriendlyErrors.kt:69
+- `Your own orders and figures live in the NivaDesk ChatGPT app, which connects to your workspace with your permission.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/help/AppHelpAssistant.kt:101
+
+</details>
+
+<details><summary>Android — (b) İngilizceye düşen: 54 anahtar (35 @kullanım)</summary>
+
+- `+$gb GB` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:5700
+- `Aa` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrderDetailScreen.kt:9398
+- `Add` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrderDetailScreen.kt:8936
+- `Add products/services in Settings → Quick Reply Settings to enable picker.` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:532
+- `Customer's Email / Message` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:613
+- `Delete` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:7708
+- `DESI` · tümü · Orders · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrdersScreen.kt:1525
+- `Detected: $detectedIntent` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:633
+- `DHL Express` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/DhlOrderPanel.kt:283
+- `DHL EXPRESS` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/DhlIntegrationDetail.kt:453
+- `e.g. John` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:518
+- `GBP` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/DhlShipmentDialog.kt:673
+- `GBP, EUR…` · tümü · Inventory · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/inventory/InventoryDialogs.kt:921
+- `Mobile` · FR,IT · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:9510
+- `Model` · TR · Inventory · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/inventory/InventoryDialogs.kt:271
+- `Name A–Z` · DE · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:9883
+- `New` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:9212
+- `NivaDesk ${BuildConfig.VERSION_NAME}` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:945
+- `NivaDesk: ${order.displayCustomerName}` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrderDetailScreen.kt:12146
+- `Open` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:568
+- `PAIN` · tümü · Orders · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrdersScreen.kt:1526
+- `Paste the customer's email or message here...` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:626
+- `Paste the full email or message. The AI will detect the context.` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:614
+- `PDF export failed.` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrderDetailScreen.kt:13542
+- `Pro` · tümü · Order detail/Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:232
+- `Product / Service` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:526
+- `Property: $property` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:9356
+- `Save` · tümü · Notes · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/notes/NotesScreen.kt:1205
+- `SF` · tümü · Order detail · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/orders/OrderDetailScreen.kt:1307
+- `sidebarWidth` · tümü · Shell · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/shell/WorkspaceShell.kt:158
+- `Team Schedule` · tümü · Schedule · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/schedule/ScheduleScreen.kt:480
+- `The term \u201CEtsy\u201D is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:2086
+- `Tip: Include as much context as possible for the best reply.` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:629
+- `Topic / Rule` · tümü · Messages · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/quickreply/QuickReplyScreen.kt:540
+- `YYYY-MM-DD` · tümü · Settings · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/settings/SettingsScreen.kt:1753
+- `$entryCount entries` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1511
+- `${stats.orderCount} orders in view · ${stats.lateCount} late · ${stats.readyToShipCount} ready to ship` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:282
+- `(optional)` · DE · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/feedback/FeedbackDialog.kt:112
+- `1Y / 3Y Compare` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:229
+- `1Y / 3Y compare is available for Month and Year views.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:275
+- `Blocker` · DE · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/production/ProductionScreen.kt:483
+- `Cancel` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1665
+- `Close` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1538
+- `Compare` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:436
+- `CSV export failed.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1322
+- `Dashboard cards` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:455
+- `Extra Spending Summary` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1501
+- `Guide` · FR · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/help/AppHelpAssistant.kt:97
+- `Net: ${money(values.getOrNull(idx) ?: 0.0, currency, decimalSeparator, hideNumbers)}` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:753
+- `Next` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1650
+- `No extra spending in this period.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1609
+- `Open a detailed page for monthly, yearly and order-based extra spending with descriptions.` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1502
+- `Previous` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:1648
+- `Time range` · tümü · Other · studioflow-android/app/src/main/java/uk/co/eggcraft/studioflow/features/dashboard/DashboardScreen.kt:417
+
+</details>
+
+<details><summary>Android — (b3) sunucu metni: 545 anahtar (0 @kullanım)</summary>
+
+- `A blocked job needs a reason.` · tümü · Server · functions/production.js:310
+- `A board is capped at 12 columns.` · tümü · Server · functions/production.js:233
+- `A board needs at least one column.` · tümü · Server · functions/production.js:232
+- `A buyer and a customer are both required.` · tümü · Server · functions/etsySync.js:905
+- `A category with this name already exists.` · tümü · Server · functions/bankFeed.js:1415
+- `A committed count cannot be cancelled — it already changed the shelf.` · tümü · Server · functions/inventory.js:1398
+- `A customer cannot be merged into itself.` · tümü · Server · functions/index.js:14879
+- `A customer's own item is not stock and cannot be reserved.` · tümü · Server · functions/inventory.js:1923
+- `A feedback id is required.` · tümü · Server · functions/feedback.js:92
+- `A group must keep at least two members.` · tümü · Server · functions/index.js:22993
+- `A location name is required.` · tümü · Server · functions/inventory.js:2386
+- `A Pandle sync with this request id is already running.` · tümü · Server · functions/pandle.js:787
+- `A portal link is required.` · tümü · Server · functions/index.js:28572
+- `A received purchase cannot be deleted — its stock is on the shelf.` · tümü · Server · functions/inventory.js:1743
+- `A received purchase cannot be edited — the stock it created is already on the shelf.` · tümü · Server · functions/inventory.js:1502
+- `A recipe line points at an item that no longer exists.` · tümü · Server · functions/inventory.js:2588
+- `A recipe name is required.` · tümü · Server · functions/inventory.js:2533
+- `A recipe needs at least one line.` · tümü · Server · functions/inventory.js:2534
+- `A shop domain and connect code are required.` · tümü · Server · functions/index.js:33296
+- `A split line points at an order that is not in this workspace.` · tümü · Server · functions/bankFeed.js:1100
+- `A split needs at least two lines.` · tümü · Server · functions/bankFeed.js:1107
+- `A subdomain is 3–40 characters: letters, numbers and hyphens, starting and ending with a letter or number.` · tümü · Server · functions/clientDomains.js:120
+- `A supplier name is required.` · tümü · Server · functions/inventory.js:1814
+- `A sync is already running for this account.` · tümü · Server · functions/ebayConnector.js:1362
+- `A sync is already running for this store.` · tümü · Server · functions/wooConnector.js:439
+- `A valid kind and id are required.` · tümü · Server · functions/filesLibrary.js:294
+- `A valid NivaDesk billing item key is required.` · tümü · Server · functions/stripeBilling.js:239
+- `A valid signed Apple purchase payload is required.` · tümü · Server · functions/stripeBilling.js:424
+- `A work timer is already running.` · tümü · Server · functions/index.js:14028
+- `Accounting connection not found.` · tümü · Server · functions/accountingFunctions.js:221
+- `Accounting connections are managed by the workspace owner.` · tümü · Server · functions/accountingFunctions.js:132
+- `Accounting is visible to the owner and members with bank access.` · tümü · Server · functions/accountingFunctions.js:144
+- `action must be resolve or ignore.` · tümü · Server · functions/accountingFunctions.js:1058
+- `Add at least one line to the estimate.` · tümü · Server · functions/index.js:29364
+- `Add at least one line.` · tümü · Server · functions/inventory.js:1489
+- `Add the domain first, then verify it.` · tümü · Server · functions/clientDomains.js:279
+- `Admin insights are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:31037
+- `Advanced financial fields are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:12712
+- `Advanced Financial Settings are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:9029
+- `AI replies are turned off for orders from this marketplace, because its terms do not allow the buyer's details to be sent to an outside AI service. You can stil` · tümü · Server · functions/index.js:8780
+- `Amazon connection status is not available right now.` · tümü · Server · functions/index.js:35146
+- `Amazon could not be disconnected right now.` · tümü · Server · functions/index.js:35159
+- `An active workspace is required.` · tümü · Server · functions/index.js:2794
+- `An item name is required.` · tümü · Server · functions/inventory.js:360
+- `An item that has been sold or used can be archived, not deleted.` · tümü · Server · functions/inventory.js:502
+- `An order does not belong to the active workspace.` · tümü · Server · functions/index.js:15772
+- `Another rule already uses that keyword.` · tümü · Server · functions/bankFeed.js:1506
+- `Apple Calendar and Reminders are available from NivaDesk Starter.` · tümü · Server · functions/index.js:13703
+- `Apple On-Device AI replies are only available in the Swift app on Apple Intelligence-capable devices. Use OpenAI Online or Offline Template on web.` · tümü · Server · functions/index.js:8758
+- `Apple purchase app identifier does not match NivaDesk.` · tümü · Server · functions/stripeBilling.js:2262
+- `Apple purchase verification failed.` · tümü · Server · functions/stripeBilling.js:451
+- `At least one merchant key is required.` · tümü · Server · functions/bankFeed.js:1540
+- `Bank and payment feeds are part of NivaDesk Pro. Choose a plan to connect an account.` · tümü · Server · functions/bankFeed.js:159
+- `Bank connection not found.` · tümü · Server · functions/bankFeed.js:487
+- `Bank data secrets are not configured yet.` · tümü · Server · functions/bankFeed.js:171
+- `Bank Spending is not enabled for your role. Ask the workspace owner to grant it in Team Access.` · tümü · Server · functions/index.js:25081
+- `Bank transaction not found.` · tümü · Server · functions/inventory.js:1783
+- `Block heading editing for this card is not available on web yet.` · tümü · Server · functions/index.js:7776
+- `Card customization is available from NivaDesk Starter.` · tümü · Server · functions/index.js:6705
+- `category is required.` · tümü · Server · functions/bankFeed.js:1485
+- `Category not found.` · tümü · Server · functions/bankFeed.js:1420
+- `Changing team access requires NivaDesk Team.` · tümü · Server · functions/index.js:18065
+- `Choose a category to move these items into.` · tümü · Server · functions/inventory.js:2317
+- `Choose a different target order to merge into.` · tümü · Server · functions/index.js:9558
+- `Choose a valid NivaDesk backup JSON file.` · tümü · Server · functions/index.js:11129
+- `Choose the Pandle bank account first.` · tümü · Server · functions/pandle.js:672
+- `Choose two different categories.` · tümü · Server · functions/inventory.js:2351
+- `Client file download URL is required.` · tümü · Server · functions/index.js:16671
+- `Client file not found.` · tümü · Server · functions/index.js:16640
+- `Client file Storage path is not valid for this order.` · tümü · Server · functions/index.js:16666
+- `Client Files management requires NivaDesk Pro or Team.` · tümü · Server · functions/index.js:16595
+- `code and state are required.` · tümü · Server · functions/pandle.js:546
+- `Contribution is missing.` · tümü · Server · functions/index.js:8676
+- `Contribution text is empty.` · tümü · Server · functions/index.js:8658
+- `Conversation not found.` · tümü · Server · functions/index.js:3746
+- `Could not read an amount or date from the document. Tell me the total amount, the date and the merchant, and share the file again.` · tümü · Server · functions/index.js:25431
+- `Created date must be a valid date.` · tümü · Server · functions/index.js:13445
+- `Created date must be on or before the delivery due date.` · tümü · Server · functions/index.js:24248
+- `Custom domains are part of the Pro and Team plans.` · tümü · Server · functions/clientDomains.js:241
+- `Custom role not found.` · tümü · Server · functions/index.js:17442
+- `Custom roles require NivaDesk Team.` · tümü · Server · functions/index.js:17374
+- `Customer feedback is restricted to NivaDesk admins.` · tümü · Server · functions/feedback.js:87
+- `Customer message is empty. Please paste a message.` · tümü · Server · functions/index.js:8769
+- `Customer name is required.` · tümü · Server · functions/index.js:14294
+- `Customer not found in this workspace.` · tümü · Server · functions/index.js:14845
+- `Customer not found.` · tümü · Server · functions/index.js:14660
+- `Deleted messages cannot be edited.` · tümü · Server · functions/index.js:23254
+- `Deleted messages cannot be pinned.` · tümü · Server · functions/index.js:22597
+- `Deleted messages cannot receive reactions.` · tümü · Server · functions/index.js:22664
+- `Delivery due date is required.` · tümü · Server · functions/index.js:16407
+- `Delivery due date must be a valid date.` · tümü · Server · functions/index.js:13457
+- `Delivery due date must be in YYYY-MM-DD format.` · tümü · Server · functions/index.js:24233
+- `Delivery time must be a valid number.` · tümü · Server · functions/index.js:13451
+- `Design name is required.` · tümü · Server · functions/index.js:16370
+- `Direct messages are disabled for this workspace.` · tümü · Server · functions/index.js:22232
+- `Enter a valid email address.` · tümü · Server · functions/index.js:10200
+- `Enter at least 2 characters.` · tümü · Server · functions/index.js:32174
+- `Enter how much was lost.` · tümü · Server · functions/inventory.js:2095
+- `Estimate not found.` · tümü · Server · functions/index.js:29505
+- `Etsy is not configured on this server yet.` · tümü · Server · functions/etsyConnect.js:265
+- `Every split line needs a category.` · tümü · Server · functions/bankFeed.js:1088
+- `Every split line needs an amount.` · tümü · Server · functions/bankFeed.js:1087
+- `Feedback is not enabled for this workspace yet.` · tümü · Server · functions/feedback.js:71
+- `Feedback is not enabled on this server yet.` · tümü · Server · functions/feedback.js:70
+- `File name is required.` · tümü · Server · functions/index.js:11610
+- `File name is too long.` · tümü · Server · functions/index.js:11613
+- `File record not found.` · tümü · Server · functions/filesLibrary.js:272
+- `File sharing is disabled for this workspace.` · tümü · Server · functions/index.js:23149
+- `Financial Info is not enabled for your workspace account.` · tümü · Server · functions/index.js:16301
+- `Full name and workspace name are required.` · tümü · Server · functions/index.js:10433
+- `Group conversations are disabled for this workspace.` · tümü · Server · functions/index.js:22261
+- `id is required.` · tümü · Server · functions/bankFeed.js:1832
+- `Ignoring needs a reason.` · tümü · Server · functions/accountingFunctions.js:1060
+- `Import would exceed this workspace customer limit.` · tümü · Server · functions/index.js:11208
+- `Import would exceed this workspace order limit. Delivered orders do not count; mark finished orders as delivered to free slots.` · tümü · Server · functions/index.js:11205
+- `Invalid date range.` · tümü · Server · functions/index.js:30431
+- `Invalid Firebase ID token.` · tümü · Server · functions/index.js:23475
+- `Invalid To Do order.` · tümü · Server · functions/index.js:13870
+- `Inventory item not found.` · tümü · Server · functions/inventory.js:353
+- `Invitation is missing note source information.` · tümü · Server · functions/index.js:1792
+- `Invitation not found.` · tümü · Server · functions/index.js:1773
+- `Inviting people requires NivaDesk Team.` · tümü · Server · functions/index.js:17580
+- `item is required.` · tümü · Server · functions/inventory.js:343
+- `items is required.` · tümü · Server · functions/pandle.js:764
+- `Join request not found.` · tümü · Server · functions/index.js:17019
+- `kind must be customer_refund or chargeback.` · tümü · Server · functions/bankFeed.js:2020
+- `kind must be woocommerce or shopify.` · tümü · Server · functions/index.js:20448
+- `Landing-page statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30417
+- `Location not found.` · tümü · Server · functions/inventory.js:2393
+- `mappings is required.` · tümü · Server · functions/pandle.js:657
+- `Materials & Inventory is available from NivaDesk Starter.` · tümü · Server · functions/index.js:16305
+- `Message not found.` · tümü · Server · functions/index.js:22591
+- `Message thread not found.` · tümü · Server · functions/index.js:22190
+- `Messages is available on NivaDesk Team.` · tümü · Server · functions/index.js:2378
+- `Missing Authorization: Bearer <Firebase ID token>.` · tümü · Server · functions/index.js:23469
+- `mode must be primary_write, shadow_read, migration_read or disabled.` · tümü · Server · functions/accountingFunctions.js:880
+- `mode must be suggest, link or unlink.` · tümü · Server · functions/bankFeed.js:2018
+- `More than one order matches this request. Please specify the order more precisely.` · tümü · Server · functions/index.js:23768
+- `Move the file to trash first.` · tümü · Server · functions/filesLibrary.js:396
+- `name is required.` · tümü · Server · functions/bankFeed.js:1402
+- `nivadesk.app subdomains are claimed with the subdomain field, not as a custom domain.` · tümü · Server · functions/clientDomains.js:146
+- `No items to import.` · tümü · Server · functions/inventory.js:859
+- `No order matching that name or customer was found in the connected workspace.` · tümü · Server · functions/index.js:23753
+- `No protected buyer details for this order.` · tümü · Server · functions/ebayConnector.js:1877
+- `No running work timer found.` · tümü · Server · functions/index.js:14054
+- `No stored store data for this customer yet — it fills in on the next webhook.` · tümü · Server · functions/index.js:14850
+- `No such Amazon connection.` · tümü · Server · functions/index.js:35158
+- `No such event in this workspace.` · tümü · Server · functions/index.js:34791
+- `No such feedback.` · tümü · Server · functions/feedback.js:227
+- `No such review item in this workspace.` · tümü · Server · functions/index.js:34901
+- `No such Square connection in this workspace.` · tümü · Server · functions/squareConnector.js:165
+- `No such version.` · tümü · Server · functions/filesLibrary.js:448
+- `No such WooCommerce connection in this workspace.` · tümü · Server · functions/wooConnector.js:96
+- `No Xero sign-in is waiting for an organisation choice.` · tümü · Server · functions/accountingFunctions.js:454
+- `None of the selected orders could be merged.` · tümü · Server · functions/index.js:9711
+- `Note not found.` · tümü · Server · functions/index.js:24586
+- `Nothing is reserved for this order on that item.` · tümü · Server · functions/inventory.js:2676
+- `Nothing to update.` · tümü · Server · functions/bankFeed.js:1320
+- `Notification not found.` · tümü · Server · functions/index.js:882
+- `One of the orders no longer exists.` · tümü · Server · functions/index.js:9566
+- `Only assigned-project roles can request deletion for their assigned order.` · tümü · Server · functions/index.js:15489
+- `Only group conversations can be left.` · tümü · Server · functions/index.js:22991
+- `Only group conversations can be managed.` · tümü · Server · functions/index.js:23057
+- `Only group conversations can be renamed.` · tümü · Server · functions/index.js:22938
+- `Only incoming transactions can be matched to order payments.` · tümü · Server · functions/bankFeed.js:1134
+- `Only NivaDesk support admins can assign these tickets.` · tümü · Server · functions/index.js:5568
+- `Only NivaDesk support admins can change the website assistant.` · tümü · Server · functions/index.js:4612
+- `Only NivaDesk support admins can update app support ticket status.` · tümü · Server · functions/index.js:5107
+- `Only outgoing transactions can be linked as expenses.` · tümü · Server · functions/bankFeed.js:1008
+- `Only outgoing transactions can be recorded as refunds.` · tümü · Server · functions/bankFeed.js:1968
+- `Only QuickBooks connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:864
+- `Only the note owner can invite collaborators.` · tümü · Server · functions/index.js:1572
+- `Only the note owner can remove collaborators.` · tümü · Server · functions/index.js:1499
+- `Only the note owner or an existing collaborator can share this note.` · tümü · Server · functions/index.js:1370
+- `Only the owner or the author can delete this contribution.` · tümü · Server · functions/index.js:8682
+- `Only the person who created this project can undo it.` · tümü · Server · functions/index.js:16007
+- `Only the workspace owner can anonymize a customer.` · tümü · Server · functions/index.js:14743
+- `Only the workspace owner can approve order deletion requests.` · tümü · Server · functions/index.js:15560
+- `Only the workspace owner can change bank feed data.` · tümü · Server · functions/index.js:25078
+- `Only the workspace owner can change SMS settings.` · tümü · Server · functions/index.js:28265
+- `Only the workspace owner can change webhook security.` · tümü · Server · functions/index.js:20666
+- `Only the workspace owner can disconnect ChatGPT.` · tümü · Server · functions/index.js:17553
+- `Only the workspace owner can manage billing.` · tümü · Server · functions/stripeBilling.js:457
+- `Only the workspace owner can manage the OpenAI key and Company Knowledge Base.` · tümü · Server · functions/index.js:8350
+- `Only the workspace owner can reject order deletion requests.` · tümü · Server · functions/index.js:15628
+- `Only the workspace owner can run this billing action.` · tümü · Server · functions/index.js:2810
+- `Only the workspace owner can see ChatGPT connections.` · tümü · Server · functions/index.js:17544
+- `Only the workspace owner or admins can manage support managers.` · tümü · Server · functions/index.js:5057
+- `Only the workspace owner or admins can remove group members.` · tümü · Server · functions/index.js:23065
+- `Only the workspace owner or admins can update message settings.` · tümü · Server · functions/index.js:22153
+- `Only the workspace owner or an admin can change this.` · tümü · Server · functions/sales/index.js:156
+- `Only the workspace owner or an admin with Team Access can invite people.` · tümü · Server · functions/index.js:17482
+- `Only the workspace owner, admins or support managers can assign workspace tickets.` · tümü · Server · functions/index.js:5638
+- `Only the workspace owner, admins or support managers can update workspace ticket status.` · tümü · Server · functions/index.js:5143
+- `Only workspace members can be added to a conversation.` · tümü · Server · functions/index.js:22853
+- `Only workspace members can be added to a private group.` · tümü · Server · functions/index.js:22268
+- `Only Xero connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:871
+- `Open this page once so a delivery URL is created, then try again.` · tümü · Server · functions/index.js:20405
+- `OpenAI API Key is missing. Add it in Settings > Quick Reply Settings.` · tümü · Server · functions/index.js:8766
+- `Order already exists.` · tümü · Server · functions/index.js:16153
+- `order is required.` · tümü · Server · functions/index.js:15920
+- `Order not found in this workspace.` · tümü · Server · functions/bankFeed.js:1162
+- `Order not found.` · tümü · Server · functions/bankFeed.js:1020
+- `Order-type layouts are managed by the workspace owner.` · tümü · Server · functions/index.js:7124
+- `Orders are not enabled for your workspace account.` · tümü · Server · functions/index.js:16295
+- `Owner email or Company ID is required.` · tümü · Server · functions/index.js:17280
+- `Pandle is not configured yet — the app credentials are missing.` · tümü · Server · functions/pandle.js:160
+- `Pandle is not connected — connect it first.` · tümü · Server · functions/pandle.js:243
+- `Parent location not found.` · tümü · Server · functions/inventory.js:2398
+- `PayPal accepted the credentials but the app may not search transactions. In the PayPal Developer dashboard, enable Transaction Search on the app and try again.` · tümü · Server · functions/bankFeed.js:1888
+- `PayPal client ID and secret are required.` · tümü · Server · functions/bankFeed.js:1879
+- `PayPal feed is not available.` · tümü · Server · functions/bankFeed.js:684
+- `PayPal feed is not configured on the server yet.` · tümü · Server · functions/bankFeed.js:1881
+- `PayPal rejected the client ID or secret. Check both in the PayPal Developer dashboard (Live and Sandbox have separate credentials).` · tümü · Server · functions/bankFeed.js:1887
+- `Pick a different category.` · tümü · Server · functions/inventory.js:2318
+- `Pick a different item to swap to.` · tümü · Server · functions/inventory.js:2745
+- `Please choose a message to pin.` · tümü · Server · functions/index.js:22577
+- `Please choose a team member.` · tümü · Server · functions/index.js:22235
+- `Please choose a valid message reaction.` · tümü · Server · functions/index.js:22648
+- `Please choose at least one team member.` · tümü · Server · functions/index.js:22266
+- `Please sign before approving.` · tümü · Server · functions/index.js:29262
+- `Please sign in before sending a workspace access request.` · tümü · Server · functions/index.js:17309
+- `Please sign up with a permanent email address — temporary/disposable email domains are not allowed.` · tümü · Server · functions/index.js:11998
+- `Please type your name.` · tümü · Server · functions/index.js:29655
+- `Please write a message or attach a file.` · tümü · Server · functions/index.js:23134
+- `Please write a message.` · tümü · Server · functions/index.js:4673
+- `Please write a question.` · tümü · Server · functions/index.js:4468
+- `Profile photo URL must be a valid URL.` · tümü · Server · functions/index.js:10176
+- `Profile photo URL must use HTTPS.` · tümü · Server · functions/index.js:10179
+- `purchase is required.` · tümü · Server · functions/inventory.js:1485
+- `Purchase not found.` · tümü · Server · functions/inventory.js:1499
+- `Recipe not found.` · tümü · Server · functions/inventory.js:2569
+- `Reminder date is required.` · tümü · Server · functions/index.js:13711
+- `Reminder not found.` · tümü · Server · functions/index.js:13731
+- `Reminder title is required.` · tümü · Server · functions/index.js:13709
+- `Sales is not open for this workspace yet.` · tümü · Server · functions/sales/index.js:155
+- `Say whether Sales should be visible.` · tümü · Server · functions/sales/index.js:157
+- `Schedule is not enabled for your workspace account.` · tümü · Server · functions/index.js:16298
+- `Search statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30780
+- `Select a primary order and at least one other order to merge.` · tümü · Server · functions/index.js:9644
+- `Select a workspace member for this project.` · tümü · Server · functions/index.js:16318
+- `Settlement matching is not available.` · tümü · Server · functions/bankFeed.js:1930
+- `Show the user what you read from the photo — name, category, how many, unit price — ask them to confirm or correct it, then call again with confirmed:true.` · tümü · Server · functions/index.js:24989
+- `Sign in first.` · tümü · Server · functions/index.js:10385
+- `Sign in is required before creating a workspace.` · tümü · Server · functions/index.js:10427
+- `Sign in required.` · tümü · Server · functions/index.js:27678
+- `Sign in to accept this invitation.` · tümü · Server · functions/index.js:17766
+- `Sign in to read the user guide.` · tümü · Server · functions/index.js:4583
+- `Site statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30595
+- `SMS notifications are available on NivaDesk Pro and above.` · tümü · Server · functions/index.js:28269
+- `state is required.` · tümü · Server · functions/accountingFunctions.js:451
+- `state must be active, paused or unlinked.` · tümü · Server · functions/index.js:33379
+- `Stocktake not found.` · tümü · Server · functions/inventory.js:1227
+- `Stripe test billing is restricted to authorised internal test accounts.` · tümü · Server · functions/stripeBilling.js:199
+- `Subscription access was recently refreshed. Please wait one minute before trying again.` · tümü · Server · functions/stripeBilling.js:1863
+- `Support ticket not found.` · tümü · Server · functions/index.js:5119
+- `Task not found.` · tümü · Server · functions/index.js:13881
+- `Task title is required.` · tümü · Server · functions/index.js:13832
+- `Team Chat already includes the workspace team.` · tümü · Server · functions/index.js:22838
+- `Team Chat cannot be renamed here.` · tümü · Server · functions/index.js:22933
+- `Team Chat members cannot be removed here.` · tümü · Server · functions/index.js:23051
+- `Tell NivaDesk what the item is (name).` · tümü · Server · functions/index.js:24987
+- `Text messages cannot be empty.` · tümü · Server · functions/index.js:23259
+- `That column no longer exists.` · tümü · Server · functions/production.js:288
+- `That does not look like an email address.` · tümü · Server · functions/index.js:17575
+- `That file does not belong to a workspace.` · tümü · Server · functions/index.js:27694
+- `That file is in the library trash.` · tümü · Server · functions/bankFeed.js:960
+- `That file was not found in the library.` · tümü · Server · functions/bankFeed.js:959
+- `That hostname belongs to another workspace.` · tümü · Server · functions/clientDomains.js:344
+- `That hostname is already connected to another workspace.` · tümü · Server · functions/clientDomains.js:252
+- `That import has already been undone.` · tümü · Server · functions/index.js:11363
+- `That import is no longer available to undo.` · tümü · Server · functions/index.js:11360
+- `That invitation does not belong to this workspace.` · tümü · Server · functions/index.js:17717
+- `That invitation has already been used. Remove the member instead.` · tümü · Server · functions/index.js:17720
+- `That is not a file link.` · tümü · Server · functions/index.js:27728
+- `That item has already left the shelf.` · tümü · Server · functions/inventory.js:2071
+- `That item is already reserved for another order.` · tümü · Server · functions/inventory.js:1935
+- `That item is no longer available to reserve.` · tümü · Server · functions/inventory.js:1926
+- `That item is reserved for an order — release it first.` · tümü · Server · functions/inventory.js:2077
+- `That library file has no stored object.` · tümü · Server · functions/bankFeed.js:963
+- `That looks like an invoice or receipt, not a stock item. Use attach_bank_receipt to file it against a bank transaction. If it really is a physical item, name it` · tümü · Server · functions/index.js:24980
+- `That NivaDesk bank account was not found.` · tümü · Server · functions/pandle.js:639
+- `That order belongs to another workspace.` · tümü · Server · functions/filesLibrary.js:160
+- `That order is not in your workspace.` · tümü · Server · functions/index.js:8719
+- `That organisation is not part of this sign-in.` · tümü · Server · functions/accountingFunctions.js:470
+- `That Pandle bank account was not found — refresh the Pandle data.` · tümü · Server · functions/pandle.js:631
+- `That payment entry was not found on the order.` · tümü · Server · functions/bankFeed.js:1197
+- `That payment is already matched to another bank transaction.` · tümü · Server · functions/bankFeed.js:1198
+- `That payment is already matched to another purchase.` · tümü · Server · functions/inventory.js:1787
+- `That person is already in this workspace.` · tümü · Server · functions/index.js:17601
+- `That person is not a member of this workspace.` · tümü · Server · functions/index.js:18197
+- `That recipe has no lines.` · tümü · Server · functions/inventory.js:2572
+- `That rule no longer exists.` · tümü · Server · functions/bankFeed.js:1501
+- `That run has already been undone.` · tümü · Server · functions/index.js:9511
+- `That run is no longer available to undo.` · tümü · Server · functions/index.js:9509
+- `That run is not a backup import.` · tümü · Server · functions/index.js:11362
+- `That signature is too large.` · tümü · Server · functions/index.js:29264
+- `That store address does not resolve. Check the domain and try again.` · tümü · Server · functions/wooConnector.js:106
+- `That store address must be a public website.` · tümü · Server · functions/wooConnector.js:108
+- `That subdomain is already taken.` · tümü · Server · functions/clientDomains.js:213
+- `That subdomain is reserved.` · tümü · Server · functions/clientDomains.js:123
+- `That user is not in this workspace.` · tümü · Server · functions/index.js:22236
+- `That workspace no longer exists.` · tümü · Server · functions/index.js:17791
+- `The access log could not be written; the details were not revealed.` · tümü · Server · functions/ebayConnector.js:1901
+- `The activation funnel is restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30300
+- `The app was uninstalled from this store.` · tümü · Server · functions/index.js:33387
+- `The bank connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/bankFeed.js:281
+- `The board needs at least one in-production column.` · tümü · Server · functions/production.js:242
+- `The change history is available to the workspace owner.` · tümü · Server · functions/settingsAudit.js:170
+- `The Etsy connection is being refreshed. Try again shortly.` · tümü · Server · functions/etsyConnect.js:178
+- `The file is larger than 15MB.` · tümü · Server · functions/index.js:25361
+- `The file path does not belong to this workspace.` · tümü · Server · functions/filesLibrary.js:75
+- `The full user guide is part of Starter, Pro and Team. On the Free plan you can ask the chat on nivadesk.app.` · tümü · Server · functions/index.js:4589
+- `The help assistant is not switched on yet.` · tümü · Server · functions/index.js:4473
+- `The image is too large for OCR (max 15MB).` · tümü · Server · functions/bankFeed.js:1601
+- `The in-app help assistant is available on Starter, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.` · tümü · Server · functions/index.js:4462
+- `The link returned an empty document.` · tümü · Server · functions/index.js:25362
+- `The linked record no longer exists.` · tümü · Server · functions/filesLibrary.js:158
+- `The NivaDesk app is no longer installed on this Shopify store.` · tümü · Server · functions/index.js:33310
+- `The note is not available for the signed-in user.` · tümü · Server · functions/index.js:1976
+- `The order belongs to a different workspace.` · tümü · Server · functions/bankFeed.js:1023
+- `The organisation choice expired. Connect Xero again.` · tümü · Server · functions/accountingFunctions.js:455
+- `The organisation for this sign-in was already chosen.` · tümü · Server · functions/accountingFunctions.js:456
+- `The original note is no longer available.` · tümü · Server · functions/index.js:1798
+- `The Pandle connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/pandle.js:199
+- `The Pandle connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/pandle.js:224
+- `The Pandle connection is managed by the workspace owner.` · tümü · Server · functions/pandle.js:151
+- `The Pandle session expired — reconnect Pandle.` · tümü · Server · functions/pandle.js:248
+- `The primary order no longer exists.` · tümü · Server · functions/index.js:9657
+- `The rule keyword must be at least 2 characters.` · tümü · Server · functions/bankFeed.js:1484
+- `The selected user is not a member of this workspace.` · tümü · Server · functions/index.js:1357
+- `The signature could not be read.` · tümü · Server · functions/index.js:29260
+- `The signature must be a PNG image.` · tümü · Server · functions/index.js:29268
+- `The signing secret must be 8-128 characters, or empty to turn signature checks off.` · tümü · Server · functions/index.js:20670
+- `The workspace owner always keeps a seat.` · tümü · Server · functions/index.js:18192
+- `The workspace owner always keeps full access.` · tümü · Server · functions/index.js:18060
+- `There is nothing on the shelf to count.` · tümü · Server · functions/inventory.js:1192
+- `These customers do not belong to the active workspace.` · tümü · Server · functions/index.js:14901
+- `These orders are not in your workspace.` · tümü · Server · functions/index.js:9571
+- `This account already has an active workspace. Open the portal instead.` · tümü · Server · functions/index.js:10458
+- `This account does not use assigned project views.` · tümü · Server · functions/index.js:11717
+- `This App Store purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:836
+- `This App Store purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:754
+- `This App Store purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2259
+- `This assigned-project role must request owner approval before deleting an order.` · tümü · Server · functions/index.js:15665
+- `This bank connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/bankFeed.js:302
+- `This bank connection has no stored consent — reconnect the bank.` · tümü · Server · functions/bankFeed.js:313
+- `This connect link has expired. Open Connect again from the Shopify app.` · tümü · Server · functions/index.js:33307
+- `This connection attempt is not yours or has expired.` · tümü · Server · functions/wooConnector.js:187
+- `This conversation cannot be opened with that link.` · tümü · Server · functions/index.js:3750
+- `This count is already closed.` · tümü · Server · functions/inventory.js:1230
+- `This customer does not belong to the active workspace.` · tümü · Server · functions/index.js:14664
+- `This deletion request is no longer pending.` · tümü · Server · functions/index.js:15572
+- `This email address is already used by another account.` · tümü · Server · functions/index.js:10281
+- `This estimate can no longer be decided.` · tümü · Server · functions/index.js:29674
+- `This estimate has already been decided.` · tümü · Server · functions/index.js:29511
+- `This estimate has been replaced by a newer one.` · tümü · Server · functions/index.js:29612
+- `This estimate has been replaced.` · tümü · Server · functions/index.js:29512
+- `This estimate has changed. Please ask for a fresh link.` · tümü · Server · functions/index.js:29677
+- `This estimate is no longer available.` · tümü · Server · functions/index.js:29290
+- `This estimate link was withdrawn by the business. Please ask them for a new one.` · tümü · Server · functions/index.js:29283
+- `This Etsy connection belongs to another workspace.` · tümü · Server · functions/etsyConnect.js:114
+- `This Etsy connection no longer exists.` · tümü · Server · functions/etsyConnect.js:109
+- `This Etsy shop is disconnected.` · tümü · Server · functions/etsyConnect.js:147
+- `This export is too large to download at once. Please choose a narrower date range.` · tümü · Server · functions/index.js:10024
+- `This file already has the maximum number of links.` · tümü · Server · functions/filesLibrary.js:299
+- `This Google Play purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:2540
+- `This Google Play purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:2481
+- `This Google Play purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2652
+- `This invitation is not for the signed-in user.` · tümü · Server · functions/index.js:1782
+- `This join request does not belong to this workspace.` · tümü · Server · functions/index.js:17023
+- `This join request is no longer pending.` · tümü · Server · functions/index.js:17027
+- `This link does not belong to this domain.` · tümü · Server · functions/index.js:28835
+- `This link has been replaced by a newer one.` · tümü · Server · functions/index.js:28588
+- `This link has been turned off by the business.` · tümü · Server · functions/index.js:28578
+- `This link has expired. Please ask for a new one.` · tümü · Server · functions/index.js:29285
+- `This link is no longer available.` · tümü · Server · functions/index.js:28575
+- `This link is not valid.` · tümü · Server · functions/index.js:29277
+- `This notification is not assigned to your account.` · tümü · Server · functions/index.js:887
+- `This order belongs to another workspace.` · tümü · Server · functions/index.js:23783
+- `This order does not belong to the active workspace.` · tümü · Server · functions/index.js:6996
+- `This Pandle sign-in link is stale — start again from the Bank page.` · tümü · Server · functions/pandle.js:550
+- `This Pandle user has no company to connect.` · tümü · Server · functions/pandle.js:563
+- `This project has been worked on. Move it to the Trash instead.` · tümü · Server · functions/index.js:16024
+- `This project is no longer new enough to undo. Move it to the Trash instead.` · tümü · Server · functions/index.js:16011
+- `This refund is recorded on another order; unlink it first.` · tümü · Server · functions/bankFeed.js:2038
+- `This request was already approved. Ask the owner to refresh Team Access if the workspace is missing.` · tümü · Server · functions/index.js:17347
+- `This role can access only projects assigned to the current member.` · tümü · Server · functions/index.js:11667
+- `This role is assigned to a member. Move those members to another role first.` · tümü · Server · functions/index.js:17451
+- `This row is linked to an order as an expense; unlink that first.` · tümü · Server · functions/bankFeed.js:2021
+- `This row is not recorded as a refund.` · tümü · Server · functions/bankFeed.js:1997
+- `This row is recorded as a refund on an order; remove that first if it was an expense after all.` · tümü · Server · functions/bankFeed.js:1011
+- `This Shopify store has not installed the NivaDesk app yet.` · tümü · Server · functions/index.js:33301
+- `This Square account is not connected.` · tümü · Server · functions/squareConnector.js:806
+- `This store is not connected to your workspace.` · tümü · Server · functions/index.js:33384
+- `This store is not connected.` · tümü · Server · functions/wooConnector.js:438
+- `This transaction is already confirmed in Pandle.` · tümü · Server · functions/pandle.js:974
+- `This user is not in the group.` · tümü · Server · functions/index.js:23059
+- `This workspace is not accepting members because it does not have an active NivaDesk Team plan.` · tümü · Server · functions/index.js:17330
+- `Ticket not found.` · tümü · Server · functions/index.js:5579
+- `Tickets can only be assigned to the owner, admins or support managers.` · tümü · Server · functions/index.js:5681
+- `title or text is required.` · tümü · Server · functions/index.js:24537
+- `To Do assignment is available on NivaDesk Team.` · tümü · Server · functions/index.js:13838
+- `Too many address reveals. Try again later.` · tümü · Server · functions/ebayConnector.js:1891
+- `Too many feedback messages in a short time. Please try again later.` · tümü · Server · functions/feedback.js:195
+- `Too many orders selected to merge at once.` · tümü · Server · functions/index.js:9647
+- `Tool name is required.` · tümü · Server · functions/index.js:27429
+- `Transaction not found.` · tümü · Server · functions/bankFeed.js:948
+- `Type DELETE DATA to confirm this action.` · tümü · Server · functions/index.js:11578
+- `Type DELETE to confirm this action.` · tümü · Server · functions/index.js:32376
+- `uid is required.` · tümü · Server · functions/index.js:32300
+- `Unknown bespoke policy.` · tümü · Server · functions/accountingFunctions.js:974
+- `Unknown feedback prompt.` · tümü · Server · functions/feedback.js:124
+- `Unknown feedback status.` · tümü · Server · functions/feedback.js:204
+- `Unknown feedback type.` · tümü · Server · functions/feedback.js:206
+- `Unknown incoming kind.` · tümü · Server · functions/bankFeed.js:1313
+- `Unknown integration.` · tümü · Server · functions/index.js:20220
+- `Unknown inventory policy.` · tümü · Server · functions/accountingFunctions.js:978
+- `Unknown mode.` · tümü · Server · functions/bankFeed.js:1229
+- `Unknown payout provider.` · tümü · Server · functions/bankFeed.js:1921
+- `Unknown purchase line.` · tümü · Server · functions/inventory.js:1634
+- `Unknown review status.` · tümü · Server · functions/bankFeed.js:1308
+- `Unknown VAT code.` · tümü · Server · functions/bankFeed.js:1090
+- `Unsupported file URL.` · tümü · Server · functions/index.js:27682
+- `Unsupported financial field.` · tümü · Server · functions/index.js:12706
+- `Unsupported order detail field.` · tümü · Server · functions/index.js:13036
+- `Unsupported Schedule action.` · tümü · Server · functions/index.js:13690
+- `Unsupported To Do action.` · tümü · Server · functions/index.js:13817
+- `Unsupported To Do move.` · tümü · Server · functions/index.js:13907
+- `Unsupported Work Time action.` · tümü · Server · functions/index.js:14018
+- `Use Leave Group to remove yourself.` · tümü · Server · functions/index.js:23052
+- `User not found.` · tümü · Server · functions/index.js:32306
+- `View Only members can send text messages but cannot upload message attachments.` · tümü · Server · functions/index.js:23143
+- `Which category?` · tümü · Server · functions/inventory.js:2297
+- `Which order?` · tümü · Server · functions/production.js:284
+- `Work session not found.` · tümü · Server · functions/index.js:14068
+- `Workflow Only members can access only orders assigned to them.` · tümü · Server · functions/index.js:23366
+- `Workspace logo must be an uploaded Firebase Storage file.` · tümü · Server · functions/index.js:10125
+- `Workspace logo upload is available on Monthly Pro and Team plans.` · tümü · Server · functions/index.js:10140
+- `Workspace logo URL is invalid.` · tümü · Server · functions/index.js:10117
+- `Workspace logo URL is too long.` · tümü · Server · functions/index.js:10111
+- `Workspace owner could not be identified.` · tümü · Server · functions/index.js:15504
+- `Workspace ticket not found.` · tümü · Server · functions/index.js:5155
+- `Xero is not configured on the server yet.` · tümü · Server · functions/accountingFunctions.js:373
+- `Xero no longer accepts this sign-in. Connect again.` · tümü · Server · functions/accountingFunctions.js:472
+- `You already have access to this workspace.` · tümü · Server · functions/index.js:17337
+- `You are not a member of this group.` · tümü · Server · functions/index.js:22992
+- `You can change your email again on ` · tümü · Server · functions/index.js:10216
+- `You can only delete your own messages for everyone.` · tümü · Server · functions/index.js:22789
+- `You can only edit your own messages.` · tümü · Server · functions/index.js:23251
+- `You cannot leave Team Chat.` · tümü · Server · functions/index.js:22986
+- `You do not have access to financial information in this workspace.` · tümü · Server · functions/index.js:23572
+- `You do not have access to protected buyer details.` · tümü · Server · functions/ebayConnector.js:1883
+- `You do not have access to reply to this support ticket.` · tümü · Server · functions/index.js:5344
+- `You do not have access to reply to this workspace ticket.` · tümü · Server · functions/index.js:5467
+- `You do not have access to that file.` · tümü · Server · functions/index.js:27699
+- `You do not have access to the dashboard in this workspace.` · tümü · Server · functions/index.js:23578
+- `You do not have access to this conversation.` · tümü · Server · functions/index.js:22196
+- `You do not have access to this support ticket.` · tümü · Server · functions/index.js:5304
+- `You do not have access to this workspace ticket.` · tümü · Server · functions/index.js:5428
+- `You have reached today's limit for the help assistant. Contact NivaDesk Support for anything urgent.` · tümü · Server · functions/index.js:4448
+- `You must be a member of this conversation to add people.` · tümü · Server · functions/index.js:22844
+- `You must be a member of this group.` · tümü · Server · functions/index.js:22939
+- `You must be signed in to add people to a conversation.` · tümü · Server · functions/index.js:22824
+- `You must be signed in to assign a ticket.` · tümü · Server · functions/index.js:5565
+- `You must be signed in to assign workspace tickets.` · tümü · Server · functions/index.js:5632
+- `You must be signed in to create a message thread.` · tümü · Server · functions/index.js:22213
+- `You must be signed in to delete messages.` · tümü · Server · functions/index.js:22748
+- `You must be signed in to edit messages.` · tümü · Server · functions/index.js:23230
+- `You must be signed in to leave a group.` · tümü · Server · functions/index.js:22980
+- `You must be signed in to manage support managers.` · tümü · Server · functions/index.js:5051
+- `You must be signed in to mark messages read.` · tümü · Server · functions/index.js:22337
+- `You must be signed in to mark support tickets as read.` · tümü · Server · functions/index.js:5741
+- `You must be signed in to mark workspace tickets as read.` · tümü · Server · functions/index.js:5775
+- `You must be signed in to mute a conversation.` · tümü · Server · functions/index.js:22425
+- `You must be signed in to pin messages.` · tümü · Server · functions/index.js:22570
+- `You must be signed in to react to messages.` · tümü · Server · functions/index.js:22640
+- `You must be signed in to read message settings.` · tümü · Server · functions/index.js:22135
+- `You must be signed in to read messages.` · tümü · Server · functions/index.js:22296
+- `You must be signed in to read support managers.` · tümü · Server · functions/index.js:5027
+- `You must be signed in to read support ticket unread counts.` · tümü · Server · functions/index.js:5810
+- `You must be signed in to read support tickets.` · tümü · Server · functions/index.js:4952
+- `You must be signed in to read ticket messages.` · tümü · Server · functions/index.js:5288
+- `You must be signed in to read workspace billing limits.` · tümü · Server · functions/index.js:2783
+- `You must be signed in to read workspace ticket messages.` · tümü · Server · functions/index.js:5411
+- `You must be signed in to read workspace tickets.` · tümü · Server · functions/index.js:5084
+- `You must be signed in to remove a group member.` · tümü · Server · functions/index.js:23044
+- `You must be signed in to rename a group.` · tümü · Server · functions/index.js:22926
+- `You must be signed in to reply to support tickets.` · tümü · Server · functions/index.js:5325
+- `You must be signed in to reply to workspace tickets.` · tümü · Server · functions/index.js:5448
+- `You must be signed in to send a support ticket.` · tümü · Server · functions/index.js:3654
+- `You must be signed in to send a workspace ticket.` · tümü · Server · functions/index.js:4982
+- `You must be signed in to send messages.` · tümü · Server · functions/index.js:23120
+- `You must be signed in to update conversation presence.` · tümü · Server · functions/index.js:22398
+- `You must be signed in to update message settings.` · tümü · Server · functions/index.js:22149
+- `You must be signed in to update support tickets.` · tümü · Server · functions/index.js:5103
+- `You must be signed in to update typing status.` · tümü · Server · functions/index.js:22699
+- `You must be signed in to update workspace tickets.` · tümü · Server · functions/index.js:5137
+- `You must be signed in to use the help assistant.` · tümü · Server · functions/index.js:4456
+- `You must be signed in.` · tümü · Server · functions/accountingFunctions.js:128
+- `Your current plan has reached its customer limit. Upgrade the workspace plan to add more customers.` · tümü · Server · functions/index.js:14607
+- `Your current plan has reached its order limit. Mark finished orders as delivered to free a slot, or upgrade the workspace plan.` · tümü · Server · functions/index.js:15238
+- `Your current role is Workflow Only and cannot edit finance fields.` · tümü · Server · functions/index.js:16524
+- `Your role cannot create or update orders.` · tümü · Server · functions/index.js:23529
+- `Your workspace access does not include deleting files.` · tümü · Server · functions/index.js:6379
+- `Your workspace access does not include Orders.` · tümü · Server · functions/index.js:23548
+- `Your workspace account does not include orders.` · tümü · Server · functions/sales/index.js:169
+- `Your workspace role can read Messages but cannot change conversations or messages.` · tümü · Server · functions/index.js:2401
+- `Your workspace role cannot access Messages.` · tümü · Server · functions/index.js:2392
+- `Your workspace role cannot add inventory items.` · tümü · Server · functions/index.js:24940
+- `Your workspace role cannot add Knowledge Base contributions.` · tümü · Server · functions/index.js:8655
+- `Your workspace role cannot assign projects.` · tümü · Server · functions/index.js:16308
+- `Your workspace role cannot change files.` · tümü · Server · functions/index.js:6376
+- `Your workspace role cannot change inventory.` · tümü · Server · functions/index.js:5944
+- `Your workspace role cannot change the customer portal.` · tümü · Server · functions/index.js:28598
+- `Your workspace role cannot create customers.` · tümü · Server · functions/index.js:14599
+- `Your workspace role cannot create or send estimates.` · tümü · Server · functions/index.js:29350
+- `Your workspace role cannot create orders.` · tümü · Server · functions/index.js:15230
+- `Your workspace role cannot delete Client Files.` · tümü · Server · functions/index.js:16835
+- `Your workspace role cannot delete customers.` · tümü · Server · functions/index.js:14693
+- `Your workspace role cannot delete orders.` · tümü · Server · functions/index.js:15668
+- `Your workspace role cannot edit block headings.` · tümü · Server · functions/index.js:7855
+- `Your workspace role cannot edit customers.` · tümü · Server · functions/index.js:14644
+- `Your workspace role cannot edit dashboard settings.` · tümü · Server · functions/index.js:7932
+- `Your workspace role cannot edit Financial Settings.` · tümü · Server · functions/index.js:9024
+- `Your workspace role cannot edit Integration settings.` · tümü · Server · functions/index.js:10096
+- `Your workspace role cannot edit Language & Labels.` · tümü · Server · functions/index.js:9076
+- `Your workspace role cannot edit order card settings.` · tümü · Server · functions/index.js:7908
+- `Your workspace role cannot edit orders.` · tümü · Server · functions/index.js:9552
+- `Your workspace role cannot edit PDF Export settings.` · tümü · Server · functions/index.js:8982
+- `Your workspace role cannot edit Theme & Branding.` · tümü · Server · functions/index.js:9104
+- `Your workspace role cannot edit Upload Safety settings.` · tümü · Server · functions/index.js:10061
+- `Your workspace role cannot edit Workspace Logo.` · tümü · Server · functions/index.js:10133
+- `Your workspace role cannot export financial data.` · tümü · Server · functions/index.js:9833
+- `Your workspace role cannot import orders.` · tümü · Server · functions/index.js:15024
+- `Your workspace role cannot manage Client Files.` · tümü · Server · functions/index.js:16604
+- `Your workspace role cannot manage personal Quick Reply settings.` · tümü · Server · functions/index.js:8569
+- `Your workspace role cannot merge customers.` · tümü · Server · functions/index.js:14873
+- `Your workspace role cannot merge orders.` · tümü · Server · functions/index.js:9632
+- `Your workspace role cannot move production work.` · tümü · Server · functions/index.js:6279
+- `Your workspace role cannot recalculate Financial Settings.` · tümü · Server · functions/index.js:9220
+- `Your workspace role cannot restore orders.` · tümü · Server · functions/index.js:15722
+- `Your workspace role cannot send messages.` · tümü · Server · functions/index.js:2410
+- `Your workspace role cannot start or manage private conversations.` · tümü · Server · functions/index.js:2419
+- `Your workspace role cannot test the API key.` · tümü · Server · functions/index.js:8301
+
+</details>
+
+<details><summary>Android — (c) kullanılmayan: 568 anahtar (silinmedi)</summary>
+
+- `+ Add cost`
+- `A payment request is required.`
+- `A record of what changed on this order, when and by whom.`
+- `AI reply`
+- `Abandon this count? Nothing on the shelf will change.`
+- `About NivaDesk`
+- `Activity & sync`
+- `Add Inventory Item`
+- `Add Payment`
+- `Add Row`
+- `Add at least one line with a name and a quantity.`
+- `Add column`
+- `Add production order`
+- `Add receipt`
+- `Add your first item`
+- `Added by`
+- `Adjusted`
+- `All Categories`
+- `All Orders`
+- `All Status`
+- `All Types`
+- `All assignees`
+- `All changes saved`
+- `All due dates`
+- `All priorities`
+- `All statuses`
+- `Already in NivaDesk`
+- `Already in this workspace`
+- `Already on the shelf as`
+- `Amounts differ`
+- `An item carries at most`
+- `An order is required.`
+- `Another payment link is already open for this order. Cancel it, or ask for less.`
+- `Anything before that is not missing — it was never watched.`
+- `Anything else?`
+- `App`
+- `Appearance, language, profile and workspace identity.`
+- `Apple On-Device`
+- `Apple On-Device Quick Reply`
+- `Apply`
+- `Appointments, reminders and alerts linked to this order.`
+- `Approve NivaDesk at your store, then you will be sent back here.`
+- `Arrival`
+- `As orders`
+- `Ask the assistant something`
+- `Asked for a person`
+- `Assignee`
+- `At 0% — would move to the default rate`
+- `At Square`
+- `At the store`
+- `Attach file`
+- `Audit`
+- `Awaiting Delivery`
+- `Back to checklist`
+- `Bank Transaction`
+- `Bank data`
+- `Bank row`
+- `Based on the last`
+- `Behaves as`
+- `Bespoke work`
+- `Blocker`
+- `Board`
+- `Bring Shopify or WooCommerce orders in automatically.`
+- `Bring your store's orders and customers in.`
+- `By`
+- `Capacity`
+- `Card profile`
+- `Categories could not be loaded.`
+- `Categories could not be merged.`
+- `Categories could not be saved.`
+- `Categories saved`
+- `Categorise`
+- `Category could not be removed.`
+- `Changes apply immediately after saving.`
+- `Checking`
+- `Choose a CSV file`
+- `Choose a file`
+- `Choose a section to edit.`
+- `Choose the app theme and workspace subtitle.`
+- `Choose the order`
+- `Choose where they should go — nothing is deleted.`
+- `Choose where you sell. Orders and customers will import automatically.`
+- `Choose your currency before taking card payments.`
+- `Chosen:`
+- `Clear the choice`
+- `Column`
+- `Column name`
+- `Confidence`
+- `Confirmed in Pandle`
+- `Connect Shopify`
+- `Connect Stripe before asking a customer to pay.`
+- `Connect your accounting`
+- `Connect your first sales channel`
+- `Connected accounts`
+- `Consent renews by`
+- `Corporation Tax`
+- `Could not add team member.`
+- `Could not move that job.`
+- `Could not save the board.`
+- `Could not save your setup.`
+- `Could not undo that move.`
+- `Could not update team member profile.`
+- `Count`
+- `Create your first project`
+- `Created`
+- `Created date`
+- `Currency Symbol`
+- `Current operation`
+- `Current page`
+- `Customer Channels`
+- `Customer owned`
+- `Customers in this file`
+- `DHL Express connected.`
+- `DHL refused the question.`
+- `DHL refused the shipment. Nothing was created.`
+- `DHL said:`
+- `DHL shipment`
+- `DNS changes can take up to an hour to spread.`
+- `Data & Backups`
+- `Date`
+- `Dead letters`
+- `Delete Group`
+- `Delete for everyone`
+- `Delete for everyone?`
+- `Delete this note?`
+- `Delivery due within the next 14 days, excluding closed orders.`
+- `Detected`
+- `Detected from`
+- `Device unlock, password reset and sign out.`
+- `Dial feet solder`
+- `Difference`
+- `Direct Debit`
+- `Domain verified`
+- `Edit Repair Intake Rows`
+- `End`
+- `Estimated delivery`
+- `Every channel`
+- `Excludes Done, Completed and Cancelled orders.`
+- `Existing projects could not be recalculated.`
+- `Expected`
+- `Files & Security`
+- `Files attached to this order, such as designs, documents and photos shared with the customer.`
+- `Finance only`
+- `Finished`
+- `Fit the whole range on screen`
+- `Found`
+- `Found at DHL and linked. Waybill`
+- `Fulfilled`
+- `Fulfilment`
+- `Give the assistant your data`
+- `Go to Orders`
+- `Good, Fair, Needs service…`
+- `Goods`
+- `Gross`
+- `Grouped as`
+- `Guide`
+- `Header preview`
+- `How do you mainly work?`
+- `How many people will use NivaDesk?`
+- `How the order is sent and where the parcel is: carrier, tracking number and delivery progress.`
+- `How urgent the order is and which risks could delay it.`
+- `Icon`
+- `Idle`
+- `Import duty, fees`
+- `Import orders automatically.`
+- `Import your first order`
+- `Import your opening stock`
+- `In`
+- `Inbox`
+- `Include bespoke work`
+- `Info`
+- `Internal notes about this order for your team; the customer does not see them.`
+- `Inventory could not be loaded.`
+- `Inventory value`
+- `Issues`
+- `It answers from your own orders and figures.`
+- `It cannot answer about work it cannot see.`
+- `Item details`
+- `Keep your records complete.`
+- `Label created. Waybill`
+- `Language & Labels`
+- `Last`
+- `Last 7 days`
+- `Last attempt`
+- `Last full check`
+- `Last quarter`
+- `Last sync`
+- `Last synced from eBay`
+- `Last used`
+- `Last webhook`
+- `Likely related to this order`
+- `Lines`
+- `Link a payment to the job it paid for.`
+- `Link to existing`
+- `List`
+- `List controls`
+- `Listings`
+- `Live preview`
+- `Live website orders and webhook setup.`
+- `Load more`
+- `Loading categories…`
+- `Loading production…`
+- `Loading purchases…`
+- `Loading reserved stock…`
+- `Loading stock…`
+- `Loading suppliers…`
+- `Locations nest at most 4 levels deep.`
+- `Logo uploaded`
+- `Look like they are already here`
+- `Manage your profile and studio identity.`
+- `Marked as recurring`
+- `Match missing receipts to stay audit-ready.`
+- `Match this payment`
+- `Match to`
+- `Match your first transaction`
+- `Matching transactions`
+- `Messages and calls with the customer about this order.`
+- `Messages your customers sent to the workshop.`
+- `Missed-event recovery`
+- `Move to`
+- `Moved to`
+- `Movements are only recorded from`
+- `Needs a look`
+- `Needs attention only`
+- `Net`
+- `New Row`
+- `New message from a customer`
+- `New purchase`
+- `New step`
+- `New supplier`
+- `New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.`
+- `Next 7 days`
+- `Next step`
+- `NivaDesk 1.0.0`
+- `NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel.`
+- `No CNAME record found yet.`
+- `No Payment Matched`
+- `No estimate yet. Create one on the web portal and the customer's approval appears here.`
+- `No items match these filters.`
+- `No jobs match these filters.`
+- `No logo uploaded`
+- `No orders yet`
+- `No production steps configured.`
+- `No purchase recorded for this item. Items created before purchasing existed, or added by hand, have no purchase trail.`
+- `No receipt`
+- `No rows yet.`
+- `No sales match these filters.`
+- `No supplier`
+- `No unsaved changes`
+- `None yet`
+- `Not confirmed`
+- `Not selected`
+- `Notes and requests that came from the customer about this order.`
+- `Nothing assigned`
+- `Nothing expected in the next 30 days.`
+- `Nothing has happened to these for`
+- `Nothing in inventory yet.`
+- `Nothing in inventory yet. Add your first item, or import your opening stock.`
+- `On (Events API, 28 days)`
+- `Once a sale arrives, everything else follows it.`
+- `One file, multiple links — no duplicates.`
+- `One import carries at most 500 items.`
+- `One material or product to count.`
+- `One real job, so the board has something to hold.`
+- `Only the most recent 3,000 movements are counted in this period.`
+- `Only the workspace owner can change team member profiles.`
+- `Only upload legal, safe and work-related images that belong in this workspace.`
+- `Open Banking page`
+- `Open in`
+- `Open in Shopify`
+- `Open on eBay`
+- `Orders in this file`
+- `Out`
+- `Over capacity`
+- `Owner testing controls`
+- `Pandle transaction ID`
+- `Parcel`
+- `Part of a recurring payment`
+- `Parts ready`
+- `PayPal connected.`
+- `PayPal fee`
+- `Payouts`
+- `Pending retries`
+- `Photo library`
+- `Pick as many as apply.`
+- `Pick two dates`
+- `Platform status`
+- `Possible duplicates`
+- `Post orders to NivaDesk from Etsy through an automation.`
+- `Print`
+- `Print Label (QR)`
+- `Processor payout`
+- `Product information, helpful resources and workspace diagnostics.`
+- `Product sale`
+- `Production could not be loaded.`
+- `Production progress`
+- `Production settings`
+- `Profile & Workspace`
+- `Profile, workspace logo and sign-in security.`
+- `Profit after VAT`
+- `Projects that would change`
+- `Purchase price (per unit)`
+- `Purchase price and additional costs are kept apart on purpose — the VAT margin scheme uses the price of the item alone.`
+- `Purchases could not be loaded.`
+- `QuickBooks or Xero, so the books stay in step.`
+- `Rather not say`
+- `Read only`
+- `Read-only. NivaDesk can never move money.`
+- `Reading the bank feed…`
+- `Reading the receipt…`
+- `Receipt matched`
+- `Record a NEW payment on this order?`
+- `Refund`
+- `Refund or chargeback`
+- `Refunded order`
+- `Remove column`
+- `Remove from group`
+- `Remove offline copy`
+- `Remove this member from the group?`
+- `Remove this photo?`
+- `Rename the columns to match how your workshop actually works. The capacity number is a warning, never a wall — you can always move one more job.`
+- `Repair intake rows`
+- `Reply on Instagram`
+- `Reply on WhatsApp`
+- `Request an integration`
+- `Resynced from store data.`
+- `Resyncing from store data…`
+- `Reverses a PayPal payment that is not matched to an order yet.`
+- `Reverses the PayPal payment recorded on this order`
+- `Review now`
+- `Review receipts`
+- `Review spending`
+- `Rolex 1601 silver dial`
+- `Roughly how many orders a month?`
+- `Rows per page`
+- `Rows without a type column are`
+- `Rule`
+- `Rule suggestion`
+- `Safe, drawer 3`
+- `Sales found`
+- `Sales hidden`
+- `Same amount, another day.`
+- `Save board`
+- `Save purchase`
+- `Save supplier`
+- `Saved`
+- `Score`
+- `Search Tasks`
+- `Search notes…`
+- `Search schedule`
+- `See your tickets`
+- `Send reset link to`
+- `Sent from NivaDesk`
+- `Service, shipping, restoration…`
+- `Set by hand`
+- `Set the workspace language used across NivaDesk.`
+- `Set up your workspace`
+- `Shipment`
+- `Shop ID`
+- `Shopify, Etsy, WooCommerce or Square.`
+- `Show in the sidebar`
+- `Show more goals`
+- `Showing`
+- `Showing the first 50 of`
+- `Site`
+- `Skipped — tax came from your shop`
+- `Sort by`
+- `Spent this year`
+- `Split`
+- `Split this transaction into several categories or orders`
+- `Split transaction`
+- `Square ID`
+- `Square account connected.`
+- `Square connection cancelled. Nothing was changed.`
+- `Square merchant`
+- `Stage`
+- `Start from a trade`
+- `Started`
+- `Step`
+- `Steps`
+- `Stock status`
+- `Store`
+- `Stripe could not close that link. Try again in a moment.`
+- `Suppliers could not be loaded.`
+- `Switch this row between Unique and Quantity`
+- `Tax Amount`
+- `Tax year`
+- `Team Chat posting`
+- `Text messages`
+- `That amount cannot be charged.`
+- `That currency cannot be charged yet.`
+- `That file could not be read.`
+- `That list could not be read.`
+- `That order no longer exists.`
+- `That payment has already been made.`
+- `That payment link no longer exists.`
+- `The bank feed could not be read. Connect a bank account first.`
+- `The code carries only the item number. Scan it with any phone and paste it into the inventory search — a label outlives links.`
+- `The count could not be applied.`
+- `The count could not be cancelled.`
+- `The count could not be started.`
+- `The counts could not be loaded.`
+- `The counts could not be saved.`
+- `The customer's own view of this order: the link they open to follow progress and respond.`
+- `The delivery date, how many days remain and whether the order is running late.`
+- `The item taken in for repair: its description, condition on arrival and the fault reported.`
+- `The lines on the invoice: items, quantities and prices.`
+- `The materials, parts and stock this order uses, and what still has to be sourced.`
+- `The moment the shelf and the work meet.`
+- `The note and everything in it will be removed.`
+- `The note could not be saved.`
+- `The note was saved, but sharing with the team failed.`
+- `The opening stock could not be imported.`
+- `The order at a glance: what it is, its number, type and current status.`
+- `The order's money: price, costs, deposits, payments received and the balance still owed.`
+- `The order's reference photos and design images, so everyone can see what is being made.`
+- `The order's task list: what still needs doing and who is doing it.`
+- `The payment could not be matched.`
+- `The person the work is for.`
+- `The photo could not be removed.`
+- `The photo could not be uploaded.`
+- `The purchase could not be deleted.`
+- `The purchase could not be received.`
+- `The purchase could not be saved.`
+- `The quote sent to the customer and whether they have approved it.`
+- `The receipt file is only accessible to the workspace owner.`
+- `The report could not be built.`
+- `The supplier could not be saved.`
+- `This belongs to a customer, not the business. It will be held and findable, but valued at zero and left out of inventory value.`
+- `This column is part of how the board works and cannot be removed.`
+- `This connection attempt has expired. Start again.`
+- `This order has nothing left to pay.`
+- `This order is not loaded on this device, so the file could not be listed on it.`
+- `This transaction doesn't appear to repeat.`
+- `This workspace has no Stripe account yet.`
+- `Time logged on this order, so you know how long the work took.`
+- `Times are in the sender's time zone:`
+- `To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace autom`
+- `Total files`
+- `Total inflow this period`
+- `Transaction details`
+- `Transactions auto-categorised`
+- `Truncated`
+- `Turn them on to get push alerts for new messages.`
+- `Unfulfilled`
+- `Unsaved changes`
+- `Untitled`
+- `Up to two more. Optional.`
+- `Upcoming deadlines`
+- `Update status`
+- `Upload the logo shown in the app header.`
+- `Upload your first file`
+- `Use an example`
+- `Use as default`
+- `Use stock on a job`
+- `Used in the app header and shared workspace surfaces.`
+- `VAT total after`
+- `VAT total before`
+- `View activity`
+- `View all incoming`
+- `View all transactions`
+- `View category breakdown`
+- `View customers`
+- `View in Shopify`
+- `View inventory`
+- `View matching transactions`
+- `View missing`
+- `View raw store data`
+- `View recurring`
+- `View transactions`
+- `Waiting for the bank`
+- `Waybill`
+- `We've set up a`
+- `Webhooks`
+- `Webhooks are healthy`
+- `What`
+- `What is inside`
+- `What kind of work do you do?`
+- `Where the order is in production: the steps done and the ones still ahead.`
+- `Who the order is for and how to reach them: name, contact details and the messages exchanged.`
+- `WooCommerce Integration`
+- `WooCommerce connection cancelled. Nothing was changed.`
+- `Workspace Design`
+- `Workspace broadcast channel`
+- `Workspace could not be loaded.`
+- `Workspace details`
+- `Would become orders`
+- `Write a message…`
+- `You started one — add the customer, what it is worth or what it contains, and it counts.`
+- `You will be sent to Square to approve NivaDesk, then back here.`
+- `Your role can read the inbox but cannot change what a conversation is linked to.`
+- `Your trial ends in`
+- `Your workspace role is read-only.`
+- `and`
+- `are waiting for room on your plan.`
+- `around`
+- `around the`
+- `attachment(s)`
+- `bank connection needs reconnecting`
+- `but orders are holding`
+- `cancelled or refunded`
+- `categorised`
+- `could not be imported. The sync log below says why.`
+- `customer added`
+- `customer price`
+- `customers added`
+- `day`
+- `days or more.`
+- `days remaining`
+- `days waiting`
+- `differences`
+- `eBay order`
+- `eBay payment`
+- `eBay seller`
+- `est.`
+- `for`
+- `incl.`
+- `is held until the plan has room`
+- `is waiting for the first import`
+- `is yours.`
+- `item is filed here.`
+- `items are filed here.`
+- `items filed`
+- `items here`
+- `items moved`
+- `items renamed`
+- `jobs`
+- `last`
+- `line`
+- `marked`
+- `matches`
+- `ml, g, pcs`
+- `more`
+- `next`
+- `no email left`
+- `of`
+- `of these are already in NivaDesk and will be updated, not duplicated.`
+- `order organised`
+- `orders imported`
+- `orders organised`
+- `orders synced`
+- `payments received`
+- `pcs, ml, g`
+- `photos.`
+- `possible duplicates`
+- `possibly cancelled`
+- `price changed`
+- `receipts are waiting for your first import`
+- `receipts attached.`
+- `receipts waiting for the bank`
+- `received an older update, which was ignored`
+- `rows match stock you already have`
+- `rows will be skipped`
+- `rule suggestions`
+- `selected orders`
+- `spending mix`
+- `to review`
+- `transactions`
+- `trial`
+- `uncategorised`
+- `unmatched payments`
+- `visible`
+- `vs last month`
+- `vs last year`
+- `vs the same length before`
+- `was not imported`
+- `with receipt`
+- `★ is the template suggested for your business type.`
+
+</details>
+
+<details><summary>Apple (iPhone/iPad/Mac — one table) — (a) gerçekten eksik: 10 anahtar (0 @kullanım)</summary>
+
+- `1 Yr Compare` · tümü · Other · EGGcraft/DashboardView.swift:830
+- `3 Yrs Compare` · tümü · Other · EGGcraft/DashboardView.swift:832
+- `Export Extra Spending` · tümü · Other · EGGcraft/DashboardView.swift:1798
+- `more order entries` · tümü · Other · EGGcraft/DashboardView.swift:1642
+- `Production stage changed` · tümü · Other · EGGcraft/ProductionView.swift:554
+- `Received minus Base Cost only. Detailed profit and comparisons are available on Pro.` · tümü · Other · EGGcraft/DashboardView.swift:1833
+- `Received minus Base Cost only. Upgrade to NivaDesk Pro for VAT, shipping, platform fees, custom expenses, detailed profit and financial comparisons.` · tümü · Other · EGGcraft/DashboardView.swift:1239
+- `Shows every extra spending entry in one clear list, grouped by order with descriptions.` · tümü · Other · EGGcraft/DashboardView.swift:1406
+- `Try another period, choose a custom date range, enable additional cost types, or add values inside the Financial Info card of an order.` · tümü · Other · EGGcraft/DashboardView.swift:1322
+- `Unknown Order` · tümü · Other · EGGcraft/DashboardView.swift:388
+
+</details>
+
+<details><summary>Apple (iPhone/iPad/Mac — one table) — (b) İngilizceye düşen: 67 anahtar (50 @kullanım)</summary>
+
+- `! \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2149
+- `+\(gb) GB` · tümü · Orders · EGGcraft/ContentView.swift:15627
+- `/ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:1497
+- `\(badgeCount) new support tickets` · tümü · Settings · EGGcraft/AyarlarView.swift:7866
+- `\(c.label) — \(tr(` · tümü · Inventory · EGGcraft/EbayInventoryScreens.swift:329
+- `\(c.label) — SKU` · tümü · Inventory · EGGcraft/EbayInventoryScreens.swift:328
+- `\(currentIndex + 1) / \(items.count) • \(currentItem.fileSize >= 1024 * 1024 ? String(format: ` · tümü · Order detail · EGGcraft/SiparisDetayView.swift:297
+- `\(entry.log.oldValue.isEmpty ? ` · tümü · Customers · EGGcraft/MusterilerView.swift:2217
+- `\(entry.siparis.invoiceNumber.isEmpty ? entry.siparis.designName : entry.siparis.invoiceNumber) • \(entry.log.createdAt.formatted(.dateTime.day().month(.abbrevi` · tümü · Customers · EGGcraft/MusterilerView.swift:2220
+- `\(fileSizeText(file.fileSize)) • \(file.uploadedAt.formatted(.dateTime.day().month(.abbreviated).year().locale(studioLocale(seciliDil))))` · tümü · Customers · EGGcraft/MusterilerView.swift:2145
+- `\(fmt.t(item.cadence == .weekly ? ` · tümü · Bank · EGGcraft/BankSpendingView.swift:1493
+- `\(formatQuantity(line.expected))\(line.unit.isEmpty ? ` · tümü · Inventory · EGGcraft/StocktakeView.swift:114
+- `\(formatQuantity(row.onHand))\(row.unit.isEmpty ? ` · tümü · Inventory · EGGcraft/StocktakeView.swift:373
+- `\(Int(uploadSafetyMaxFileSizeMB)) MB` · tümü · Settings · EGGcraft/AyarlarView.swift:6509
+- `\(item.number.isEmpty ? ` · tümü · Inventory · EGGcraft/EbayInventoryScreens.swift:331
+- `\(line.title.isEmpty ? (line.sku.isEmpty ? line.lineItemId : line.sku) : line.title) × \(line.quantity == line.quantity.rounded() ? String(Int(line.quantity)) :` · tümü · Inventory · EGGcraft/EbayInventoryScreens.swift:767
+- `\(purchase.number) · \(purchase.supplierName.isEmpty ? ` · tümü · Inventory · EGGcraft/InventorySheets.swift:683
+- `\(row.lines) \(t(row.lines == 1 ? ` · tümü · Inventory · EGGcraft/StocktakeView.swift:360
+- `\(t(isEstimate ? ` · tümü · Order detail · EGGcraft/SiparisDetayView.swift:16270
+- `\(target) · \(studioCountLabel(noteCount(for: ` · tümü · Orders · EGGcraft/ContentView.swift:2571
+- `\(tr(pair.1)) \(ebayFilterRows(all, pair.0).count)` · tümü · Inventory · EGGcraft/EbayInventoryScreens.swift:227
+- `AI replies are generated securely and are not stored.` · tümü · Messages · EGGcraft/AutoReplyView.swift:430
+- `CNAME  \(domain.host.split(separator: ` · tümü · Settings · EGGcraft/ClientDomainSettingsView.swift:274
+- `companyId: \(cleanCompanyId)` · tümü · Orders · EGGcraft/ContentView.swift:4637
+- `Customer Name` · tümü · Messages · EGGcraft/AutoReplyView.swift:518
+- `Done` · tümü · Messages · EGGcraft/StudioMessagesView.swift:2791
+- `e.g. John` · tümü · Messages · EGGcraft/AutoReplyView.swift:523
+- `GBP, EUR…` · tümü · Inventory · EGGcraft/InventorySheets.swift:902
+- `Generate Template` · tümü · Messages · EGGcraft/AutoReplyView.swift:578
+- `Mobile` · FR,IT · Settings · EGGcraft/AyarlarView.swift:8822
+- `Model` · TR · Inventory · EGGcraft/InventorySheets.swift:159
+- `Name A–Z` · DE · Settings · EGGcraft/AyarlarView.swift:10100
+- `Options` · FR · Settings · EGGcraft/AyarlarView.swift:8152
+- `Please add Products/Services in Settings.` · tümü · Messages · EGGcraft/AutoReplyView.swift:555
+- `Pro` · tümü · Order detail/Other · EGGcraft/DashboardView.swift:866
+- `Product/Service` · tümü · Messages · EGGcraft/AutoReplyView.swift:541
+- `Question` · FR · Settings · EGGcraft/AyarlarView.swift:2300
+- `Tip: Include as much context as possible for the best reply.` · tümü · Messages · EGGcraft/AutoReplyView.swift:479
+- `Topic/Rule` · tümü · Messages · EGGcraft/AutoReplyView.swift:561
+- `· \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:1707
+- `· \(isDispatched ? t(` · tümü · Order detail · EGGcraft/SiparisDetayView.swift:19220
+- `↩ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2512
+- `⇥ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2660
+- `−\(fmt.money(abs(tx.amount), tx.currency))` · tümü · Bank · EGGcraft/BankSpendingView.swift:3034
+- `≈ \(fmt.money(item.monthlyEquivalent, item.currency)) / \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2935
+- `⑃ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2340
+- `⚡ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:1978
+- `⛓ \(tx.linkedOrderLabel.isEmpty ? fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:1998
+- `✓ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2042
+- `✦ \(fmt.t(` · tümü · Bank · EGGcraft/BankSpendingView.swift:2100
+- `#\(card.order.watchRef.isEmpty ? String((card.order.id ?? ` · tümü · Other · EGGcraft/ProductionView.swift:463
+- `#\(row.orderNumber.isEmpty ? row.externalId : row.orderNumber)\(!canSeeOrders \|\| row.customerName.isEmpty ? ` · tümü · Other · EGGcraft/CommerceSyncHealthView.swift:114
+- `(optional)` · DE · Other · EGGcraft/FeedbackCenterView.swift:195
+- `-1 Yr: \(seciliParaBirimi)\(d1.kar.toCurrencyString())` · tümü · Other · EGGcraft/DashboardView.swift:1912
+- `-2 Yrs: \(seciliParaBirimi)\(d2.kar.toCurrencyString())` · tümü · Other · EGGcraft/DashboardView.swift:1913
+- `-3 Yrs: \(seciliParaBirimi)\(d3.kar.toCurrencyString())` · tümü · Other · EGGcraft/DashboardView.swift:1914
+- `\(abs(buyumeYuzdesi), specifier: ` · tümü · Other · EGGcraft/DashboardView.swift:908
+- `\(negative && !hideSensitiveNumbers ? ` · tümü · Other · EGGcraft/DashboardView.swift:1145
+- `\(preview.alreadyImported) \(tr(` · tümü · Other · EGGcraft/EtsyIntegrationView.swift:538
+- `\(row.eventType)\(row.externalId.isEmpty ? ` · tümü · Other · EGGcraft/CommerceSyncHealthView.swift:131
+- `\(t(canSeeAdvancedFinance ? ` · tümü · Other · EGGcraft/DashboardView.swift:1911
+- `Blocker` · DE · Other · EGGcraft/ProductionView.swift:700
+- `Guide` · FR · Other · EGGcraft/AppHelpAssistantView.swift:274
+- `Sign Out` · tümü · Other · EGGcraft/EGGcraftApp.swift:511
+- `Starter` · tümü · Other · EGGcraft/DashboardView.swift:1822
+- `The term \u{201C}Etsy\u{201D} is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.` · tümü · Other · EGGcraft/EtsyIntegrationView.swift:299
+- `✓ \(tr(` · tümü · Other · EGGcraft/SquareIntegrationView.swift:505
+
+</details>
+
+<details><summary>Apple (iPhone/iPad/Mac — one table) — (b3) sunucu metni: 529 anahtar (0 @kullanım)</summary>
+
+- `A blocked job needs a reason.` · tümü · Server · functions/production.js:310
+- `A board is capped at 12 columns.` · tümü · Server · functions/production.js:233
+- `A board needs at least one column.` · tümü · Server · functions/production.js:232
+- `A buyer and a customer are both required.` · tümü · Server · functions/etsySync.js:905
+- `A category with this name already exists.` · tümü · Server · functions/bankFeed.js:1415
+- `A committed count cannot be cancelled — it already changed the shelf.` · tümü · Server · functions/inventory.js:1398
+- `A customer cannot be merged into itself.` · tümü · Server · functions/index.js:14879
+- `A customer's own item is not stock and cannot be reserved.` · tümü · Server · functions/inventory.js:1923
+- `A feedback id is required.` · tümü · Server · functions/feedback.js:92
+- `A group must keep at least two members.` · tümü · Server · functions/index.js:22993
+- `A location name is required.` · tümü · Server · functions/inventory.js:2386
+- `A Pandle sync with this request id is already running.` · tümü · Server · functions/pandle.js:787
+- `A portal link is required.` · tümü · Server · functions/index.js:28572
+- `A received purchase cannot be deleted — its stock is on the shelf.` · tümü · Server · functions/inventory.js:1743
+- `A received purchase cannot be edited — the stock it created is already on the shelf.` · tümü · Server · functions/inventory.js:1502
+- `A recipe line points at an item that no longer exists.` · tümü · Server · functions/inventory.js:2588
+- `A recipe name is required.` · tümü · Server · functions/inventory.js:2533
+- `A recipe needs at least one line.` · tümü · Server · functions/inventory.js:2534
+- `A shop domain and connect code are required.` · tümü · Server · functions/index.js:33296
+- `A split line points at an order that is not in this workspace.` · tümü · Server · functions/bankFeed.js:1100
+- `A split needs at least two lines.` · tümü · Server · functions/bankFeed.js:1107
+- `A subdomain is 3–40 characters: letters, numbers and hyphens, starting and ending with a letter or number.` · tümü · Server · functions/clientDomains.js:120
+- `A supplier name is required.` · tümü · Server · functions/inventory.js:1814
+- `A sync is already running for this account.` · tümü · Server · functions/ebayConnector.js:1362
+- `A sync is already running for this store.` · tümü · Server · functions/wooConnector.js:439
+- `A valid kind and id are required.` · tümü · Server · functions/filesLibrary.js:294
+- `A valid NivaDesk billing item key is required.` · tümü · Server · functions/stripeBilling.js:239
+- `A valid signed Apple purchase payload is required.` · tümü · Server · functions/stripeBilling.js:424
+- `Accounting connection not found.` · tümü · Server · functions/accountingFunctions.js:221
+- `Accounting connections are managed by the workspace owner.` · tümü · Server · functions/accountingFunctions.js:132
+- `Accounting is visible to the owner and members with bank access.` · tümü · Server · functions/accountingFunctions.js:144
+- `action must be resolve or ignore.` · tümü · Server · functions/accountingFunctions.js:1058
+- `Add at least one line.` · tümü · Server · functions/inventory.js:1489
+- `Add the domain first, then verify it.` · tümü · Server · functions/clientDomains.js:279
+- `Admin insights are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:31037
+- `Advanced financial fields are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:12712
+- `Advanced Financial Settings are available on NivaDesk Pro and Team.` · tümü · Server · functions/index.js:9029
+- `AI replies are turned off for orders from this marketplace, because its terms do not allow the buyer's details to be sent to an outside AI service. You can stil` · tümü · Server · functions/index.js:8780
+- `Amazon connection status is not available right now.` · tümü · Server · functions/index.js:35146
+- `Amazon could not be disconnected right now.` · tümü · Server · functions/index.js:35159
+- `An active workspace is required.` · tümü · Server · functions/index.js:2794
+- `An item name is required.` · tümü · Server · functions/inventory.js:360
+- `An item that has been sold or used can be archived, not deleted.` · tümü · Server · functions/inventory.js:502
+- `An order does not belong to the active workspace.` · tümü · Server · functions/index.js:15772
+- `Another rule already uses that keyword.` · tümü · Server · functions/bankFeed.js:1506
+- `Apple On-Device AI replies are only available in the Swift app on Apple Intelligence-capable devices. Use OpenAI Online or Offline Template on web.` · tümü · Server · functions/index.js:8758
+- `Apple purchase app identifier does not match NivaDesk.` · tümü · Server · functions/stripeBilling.js:2262
+- `Apple purchase verification failed.` · tümü · Server · functions/stripeBilling.js:451
+- `At least one merchant key is required.` · tümü · Server · functions/bankFeed.js:1540
+- `Bank and payment feeds are part of NivaDesk Pro. Choose a plan to connect an account.` · tümü · Server · functions/bankFeed.js:159
+- `Bank connection not found.` · tümü · Server · functions/bankFeed.js:487
+- `Bank data secrets are not configured yet.` · tümü · Server · functions/bankFeed.js:171
+- `Bank Spending is not enabled for your role. Ask the workspace owner to grant it in Team Access.` · tümü · Server · functions/index.js:25081
+- `Bank transaction not found.` · tümü · Server · functions/inventory.js:1783
+- `Block heading editing for this card is not available on web yet.` · tümü · Server · functions/index.js:7776
+- `Card customization is available from NivaDesk Starter.` · tümü · Server · functions/index.js:6705
+- `category is required.` · tümü · Server · functions/bankFeed.js:1485
+- `Category not found.` · tümü · Server · functions/bankFeed.js:1420
+- `Changing team access requires NivaDesk Team.` · tümü · Server · functions/index.js:18065
+- `Choose a category to move these items into.` · tümü · Server · functions/inventory.js:2317
+- `Choose a different target order to merge into.` · tümü · Server · functions/index.js:9558
+- `Choose a valid NivaDesk backup JSON file.` · tümü · Server · functions/index.js:11129
+- `Choose the Pandle bank account first.` · tümü · Server · functions/pandle.js:672
+- `Choose two different categories.` · tümü · Server · functions/inventory.js:2351
+- `Client file download URL is required.` · tümü · Server · functions/index.js:16671
+- `Client file not found.` · tümü · Server · functions/index.js:16640
+- `Client file Storage path is not valid for this order.` · tümü · Server · functions/index.js:16666
+- `Client Files management requires NivaDesk Pro or Team.` · tümü · Server · functions/index.js:16595
+- `code and state are required.` · tümü · Server · functions/pandle.js:546
+- `Contribution is missing.` · tümü · Server · functions/index.js:8676
+- `Contribution text is empty.` · tümü · Server · functions/index.js:8658
+- `Conversation not found.` · tümü · Server · functions/index.js:3746
+- `Could not read an amount or date from the document. Tell me the total amount, the date and the merchant, and share the file again.` · tümü · Server · functions/index.js:25431
+- `Created date must be a valid date.` · tümü · Server · functions/index.js:13445
+- `Created date must be on or before the delivery due date.` · tümü · Server · functions/index.js:24248
+- `Custom domains are part of the Pro and Team plans.` · tümü · Server · functions/clientDomains.js:241
+- `Custom role not found.` · tümü · Server · functions/index.js:17442
+- `Custom roles require NivaDesk Team.` · tümü · Server · functions/index.js:17374
+- `Customer feedback is restricted to NivaDesk admins.` · tümü · Server · functions/feedback.js:87
+- `Customer message is empty. Please paste a message.` · tümü · Server · functions/index.js:8769
+- `Customer name is required.` · tümü · Server · functions/index.js:14294
+- `Customer not found in this workspace.` · tümü · Server · functions/index.js:14845
+- `Customer not found.` · tümü · Server · functions/index.js:14660
+- `Deleted messages cannot be edited.` · tümü · Server · functions/index.js:23254
+- `Deleted messages cannot be pinned.` · tümü · Server · functions/index.js:22597
+- `Deleted messages cannot receive reactions.` · tümü · Server · functions/index.js:22664
+- `Delivery due date is required.` · tümü · Server · functions/index.js:16407
+- `Delivery due date must be a valid date.` · tümü · Server · functions/index.js:13457
+- `Delivery due date must be in YYYY-MM-DD format.` · tümü · Server · functions/index.js:24233
+- `Delivery time must be a valid number.` · tümü · Server · functions/index.js:13451
+- `Design name is required.` · tümü · Server · functions/index.js:16370
+- `Enter a valid email address.` · tümü · Server · functions/index.js:10200
+- `Enter how much was lost.` · tümü · Server · functions/inventory.js:2095
+- `Etsy is not configured on this server yet.` · tümü · Server · functions/etsyConnect.js:265
+- `Every split line needs a category.` · tümü · Server · functions/bankFeed.js:1088
+- `Every split line needs an amount.` · tümü · Server · functions/bankFeed.js:1087
+- `Feedback is not enabled for this workspace yet.` · tümü · Server · functions/feedback.js:71
+- `Feedback is not enabled on this server yet.` · tümü · Server · functions/feedback.js:70
+- `File name is required.` · tümü · Server · functions/index.js:11610
+- `File name is too long.` · tümü · Server · functions/index.js:11613
+- `File record not found.` · tümü · Server · functions/filesLibrary.js:272
+- `File sharing is disabled for this workspace.` · tümü · Server · functions/index.js:23149
+- `Financial Info is not enabled for your workspace account.` · tümü · Server · functions/index.js:16301
+- `Full name and workspace name are required.` · tümü · Server · functions/index.js:10433
+- `id is required.` · tümü · Server · functions/bankFeed.js:1832
+- `Ignoring needs a reason.` · tümü · Server · functions/accountingFunctions.js:1060
+- `Import would exceed this workspace customer limit.` · tümü · Server · functions/index.js:11208
+- `Import would exceed this workspace order limit. Delivered orders do not count; mark finished orders as delivered to free slots.` · tümü · Server · functions/index.js:11205
+- `Invalid date range.` · tümü · Server · functions/index.js:30431
+- `Invalid Firebase ID token.` · tümü · Server · functions/index.js:23475
+- `Invalid To Do order.` · tümü · Server · functions/index.js:13870
+- `Inventory item not found.` · tümü · Server · functions/inventory.js:353
+- `Invitation is missing note source information.` · tümü · Server · functions/index.js:1792
+- `Invitation not found.` · tümü · Server · functions/index.js:1773
+- `Inviting people requires NivaDesk Team.` · tümü · Server · functions/index.js:17580
+- `item is required.` · tümü · Server · functions/inventory.js:343
+- `items is required.` · tümü · Server · functions/pandle.js:764
+- `Join request not found.` · tümü · Server · functions/index.js:17019
+- `kind must be customer_refund or chargeback.` · tümü · Server · functions/bankFeed.js:2020
+- `kind must be woocommerce or shopify.` · tümü · Server · functions/index.js:20448
+- `Landing-page statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30417
+- `Location not found.` · tümü · Server · functions/inventory.js:2393
+- `mappings is required.` · tümü · Server · functions/pandle.js:657
+- `Materials & Inventory is available from NivaDesk Starter.` · tümü · Server · functions/index.js:16305
+- `Message not found.` · tümü · Server · functions/index.js:22591
+- `Message thread not found.` · tümü · Server · functions/index.js:22190
+- `Messages is available on NivaDesk Team.` · tümü · Server · functions/index.js:2378
+- `Missing Authorization: Bearer <Firebase ID token>.` · tümü · Server · functions/index.js:23469
+- `mode must be primary_write, shadow_read, migration_read or disabled.` · tümü · Server · functions/accountingFunctions.js:880
+- `mode must be suggest, link or unlink.` · tümü · Server · functions/bankFeed.js:2018
+- `More than one order matches this request. Please specify the order more precisely.` · tümü · Server · functions/index.js:23768
+- `Move the file to trash first.` · tümü · Server · functions/filesLibrary.js:396
+- `name is required.` · tümü · Server · functions/bankFeed.js:1402
+- `nivadesk.app subdomains are claimed with the subdomain field, not as a custom domain.` · tümü · Server · functions/clientDomains.js:146
+- `No items to import.` · tümü · Server · functions/inventory.js:859
+- `No order matching that name or customer was found in the connected workspace.` · tümü · Server · functions/index.js:23753
+- `No protected buyer details for this order.` · tümü · Server · functions/ebayConnector.js:1877
+- `No running work timer found.` · tümü · Server · functions/index.js:14054
+- `No stored store data for this customer yet — it fills in on the next webhook.` · tümü · Server · functions/index.js:14850
+- `No such Amazon connection.` · tümü · Server · functions/index.js:35158
+- `No such event in this workspace.` · tümü · Server · functions/index.js:34791
+- `No such feedback.` · tümü · Server · functions/feedback.js:227
+- `No such review item in this workspace.` · tümü · Server · functions/index.js:34901
+- `No such Square connection in this workspace.` · tümü · Server · functions/squareConnector.js:165
+- `No such version.` · tümü · Server · functions/filesLibrary.js:448
+- `No such WooCommerce connection in this workspace.` · tümü · Server · functions/wooConnector.js:96
+- `No Xero sign-in is waiting for an organisation choice.` · tümü · Server · functions/accountingFunctions.js:454
+- `None of the selected orders could be merged.` · tümü · Server · functions/index.js:9711
+- `Note not found.` · tümü · Server · functions/index.js:24586
+- `Nothing is reserved for this order on that item.` · tümü · Server · functions/inventory.js:2676
+- `Nothing to update.` · tümü · Server · functions/bankFeed.js:1320
+- `Notification not found.` · tümü · Server · functions/index.js:882
+- `One of the orders no longer exists.` · tümü · Server · functions/index.js:9566
+- `Only assigned-project roles can request deletion for their assigned order.` · tümü · Server · functions/index.js:15489
+- `Only group conversations can be left.` · tümü · Server · functions/index.js:22991
+- `Only group conversations can be managed.` · tümü · Server · functions/index.js:23057
+- `Only group conversations can be renamed.` · tümü · Server · functions/index.js:22938
+- `Only incoming transactions can be matched to order payments.` · tümü · Server · functions/bankFeed.js:1134
+- `Only NivaDesk support admins can assign these tickets.` · tümü · Server · functions/index.js:5568
+- `Only NivaDesk support admins can change the website assistant.` · tümü · Server · functions/index.js:4612
+- `Only NivaDesk support admins can update app support ticket status.` · tümü · Server · functions/index.js:5107
+- `Only outgoing transactions can be linked as expenses.` · tümü · Server · functions/bankFeed.js:1008
+- `Only outgoing transactions can be recorded as refunds.` · tümü · Server · functions/bankFeed.js:1968
+- `Only QuickBooks connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:864
+- `Only the note owner can invite collaborators.` · tümü · Server · functions/index.js:1572
+- `Only the note owner can remove collaborators.` · tümü · Server · functions/index.js:1499
+- `Only the note owner or an existing collaborator can share this note.` · tümü · Server · functions/index.js:1370
+- `Only the owner or the author can delete this contribution.` · tümü · Server · functions/index.js:8682
+- `Only the person who created this project can undo it.` · tümü · Server · functions/index.js:16007
+- `Only the workspace owner can anonymize a customer.` · tümü · Server · functions/index.js:14743
+- `Only the workspace owner can approve order deletion requests.` · tümü · Server · functions/index.js:15560
+- `Only the workspace owner can change bank feed data.` · tümü · Server · functions/index.js:25078
+- `Only the workspace owner can change SMS settings.` · tümü · Server · functions/index.js:28265
+- `Only the workspace owner can change webhook security.` · tümü · Server · functions/index.js:20666
+- `Only the workspace owner can disconnect ChatGPT.` · tümü · Server · functions/index.js:17553
+- `Only the workspace owner can manage billing.` · tümü · Server · functions/stripeBilling.js:457
+- `Only the workspace owner can manage the OpenAI key and Company Knowledge Base.` · tümü · Server · functions/index.js:8350
+- `Only the workspace owner can reject order deletion requests.` · tümü · Server · functions/index.js:15628
+- `Only the workspace owner can run this billing action.` · tümü · Server · functions/index.js:2810
+- `Only the workspace owner can see ChatGPT connections.` · tümü · Server · functions/index.js:17544
+- `Only the workspace owner or admins can manage support managers.` · tümü · Server · functions/index.js:5057
+- `Only the workspace owner or admins can remove group members.` · tümü · Server · functions/index.js:23065
+- `Only the workspace owner or admins can update message settings.` · tümü · Server · functions/index.js:22153
+- `Only the workspace owner or an admin can change this.` · tümü · Server · functions/sales/index.js:156
+- `Only the workspace owner or an admin with Team Access can invite people.` · tümü · Server · functions/index.js:17482
+- `Only the workspace owner, admins or support managers can assign workspace tickets.` · tümü · Server · functions/index.js:5638
+- `Only the workspace owner, admins or support managers can update workspace ticket status.` · tümü · Server · functions/index.js:5143
+- `Only workspace members can be added to a conversation.` · tümü · Server · functions/index.js:22853
+- `Only workspace members can be added to a private group.` · tümü · Server · functions/index.js:22268
+- `Only Xero connections disconnect here.` · tümü · Server · functions/accountingFunctions.js:871
+- `Open this page once so a delivery URL is created, then try again.` · tümü · Server · functions/index.js:20405
+- `OpenAI API Key is missing. Add it in Settings > Quick Reply Settings.` · tümü · Server · functions/index.js:8766
+- `Order already exists.` · tümü · Server · functions/index.js:16153
+- `order is required.` · tümü · Server · functions/index.js:15920
+- `Order not found in this workspace.` · tümü · Server · functions/bankFeed.js:1162
+- `Order-type layouts are managed by the workspace owner.` · tümü · Server · functions/index.js:7124
+- `Orders are not enabled for your workspace account.` · tümü · Server · functions/index.js:16295
+- `Owner email or Company ID is required.` · tümü · Server · functions/index.js:17280
+- `Pandle is not configured yet — the app credentials are missing.` · tümü · Server · functions/pandle.js:160
+- `Pandle is not connected — connect it first.` · tümü · Server · functions/pandle.js:243
+- `Parent location not found.` · tümü · Server · functions/inventory.js:2398
+- `PayPal accepted the credentials but the app may not search transactions. In the PayPal Developer dashboard, enable Transaction Search on the app and try again.` · tümü · Server · functions/bankFeed.js:1888
+- `PayPal client ID and secret are required.` · tümü · Server · functions/bankFeed.js:1879
+- `PayPal feed is not available.` · tümü · Server · functions/bankFeed.js:684
+- `PayPal feed is not configured on the server yet.` · tümü · Server · functions/bankFeed.js:1881
+- `PayPal rejected the client ID or secret. Check both in the PayPal Developer dashboard (Live and Sandbox have separate credentials).` · tümü · Server · functions/bankFeed.js:1887
+- `Pick a different category.` · tümü · Server · functions/inventory.js:2318
+- `Pick a different item to swap to.` · tümü · Server · functions/inventory.js:2745
+- `Please add a subject and message.` · tümü · Server · functions/index.js:3491
+- `Please choose a message to pin.` · tümü · Server · functions/index.js:22577
+- `Please choose a team member.` · tümü · Server · functions/index.js:22235
+- `Please choose a valid message reaction.` · tümü · Server · functions/index.js:22648
+- `Please choose at least one team member.` · tümü · Server · functions/index.js:22266
+- `Please sign before approving.` · tümü · Server · functions/index.js:29262
+- `Please sign in before sending a workspace access request.` · tümü · Server · functions/index.js:17309
+- `Please sign up with a permanent email address — temporary/disposable email domains are not allowed.` · tümü · Server · functions/index.js:11998
+- `Please type your name.` · tümü · Server · functions/index.js:29655
+- `Please write a message or attach a file.` · tümü · Server · functions/index.js:23134
+- `Please write a message.` · tümü · Server · functions/index.js:4673
+- `Please write a question.` · tümü · Server · functions/index.js:4468
+- `Profile photo URL must be a valid URL.` · tümü · Server · functions/index.js:10176
+- `Profile photo URL must use HTTPS.` · tümü · Server · functions/index.js:10179
+- `purchase is required.` · tümü · Server · functions/inventory.js:1485
+- `Purchase not found.` · tümü · Server · functions/inventory.js:1499
+- `Recipe not found.` · tümü · Server · functions/inventory.js:2569
+- `Reminder date is required.` · tümü · Server · functions/index.js:13711
+- `Reminder not found.` · tümü · Server · functions/index.js:13731
+- `Reminder title is required.` · tümü · Server · functions/index.js:13709
+- `Sales is not open for this workspace yet.` · tümü · Server · functions/sales/index.js:155
+- `Say whether Sales should be visible.` · tümü · Server · functions/sales/index.js:157
+- `Schedule is not enabled for your workspace account.` · tümü · Server · functions/index.js:16298
+- `Search statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30780
+- `Select a primary order and at least one other order to merge.` · tümü · Server · functions/index.js:9644
+- `Select a workspace member for this project.` · tümü · Server · functions/index.js:16318
+- `Settlement matching is not available.` · tümü · Server · functions/bankFeed.js:1930
+- `Show the user what you read from the photo — name, category, how many, unit price — ask them to confirm or correct it, then call again with confirmed:true.` · tümü · Server · functions/index.js:24989
+- `Sign in first.` · tümü · Server · functions/index.js:10385
+- `Sign in is required before creating a workspace.` · tümü · Server · functions/index.js:10427
+- `Sign in required.` · tümü · Server · functions/index.js:27678
+- `Sign in to accept this invitation.` · tümü · Server · functions/index.js:17766
+- `Sign in to read the user guide.` · tümü · Server · functions/index.js:4583
+- `Site statistics are restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30595
+- `SMS notifications are available on NivaDesk Pro and above.` · tümü · Server · functions/index.js:28269
+- `state is required.` · tümü · Server · functions/accountingFunctions.js:451
+- `state must be active, paused or unlinked.` · tümü · Server · functions/index.js:33379
+- `Stocktake not found.` · tümü · Server · functions/inventory.js:1227
+- `Stripe test billing is restricted to authorised internal test accounts.` · tümü · Server · functions/stripeBilling.js:199
+- `Subscription access was recently refreshed. Please wait one minute before trying again.` · tümü · Server · functions/stripeBilling.js:1863
+- `Support ticket not found.` · tümü · Server · functions/index.js:5119
+- `Task not found.` · tümü · Server · functions/index.js:13881
+- `Task title is required.` · tümü · Server · functions/index.js:13832
+- `Team Chat already includes the workspace team.` · tümü · Server · functions/index.js:22838
+- `Team Chat cannot be renamed here.` · tümü · Server · functions/index.js:22933
+- `Team Chat members cannot be removed here.` · tümü · Server · functions/index.js:23051
+- `Tell NivaDesk what the item is (name).` · tümü · Server · functions/index.js:24987
+- `Text messages cannot be empty.` · tümü · Server · functions/index.js:23259
+- `That column no longer exists.` · tümü · Server · functions/production.js:288
+- `That file does not belong to a workspace.` · tümü · Server · functions/index.js:27694
+- `That file is in the library trash.` · tümü · Server · functions/bankFeed.js:960
+- `That file was not found in the library.` · tümü · Server · functions/bankFeed.js:959
+- `That hostname belongs to another workspace.` · tümü · Server · functions/clientDomains.js:344
+- `That hostname is already connected to another workspace.` · tümü · Server · functions/clientDomains.js:252
+- `That import has already been undone.` · tümü · Server · functions/index.js:11363
+- `That import is no longer available to undo.` · tümü · Server · functions/index.js:11360
+- `That invitation does not belong to this workspace.` · tümü · Server · functions/index.js:17717
+- `That invitation has already been used. Remove the member instead.` · tümü · Server · functions/index.js:17720
+- `That is not a file link.` · tümü · Server · functions/index.js:27728
+- `That item has already left the shelf.` · tümü · Server · functions/inventory.js:2071
+- `That item is already reserved for another order.` · tümü · Server · functions/inventory.js:1935
+- `That item is no longer available to reserve.` · tümü · Server · functions/inventory.js:1926
+- `That item is reserved for an order — release it first.` · tümü · Server · functions/inventory.js:2077
+- `That library file has no stored object.` · tümü · Server · functions/bankFeed.js:963
+- `That looks like an invoice or receipt, not a stock item. Use attach_bank_receipt to file it against a bank transaction. If it really is a physical item, name it` · tümü · Server · functions/index.js:24980
+- `That NivaDesk bank account was not found.` · tümü · Server · functions/pandle.js:639
+- `That order is not in your workspace.` · tümü · Server · functions/index.js:8719
+- `That organisation is not part of this sign-in.` · tümü · Server · functions/accountingFunctions.js:470
+- `That Pandle bank account was not found — refresh the Pandle data.` · tümü · Server · functions/pandle.js:631
+- `That payment entry was not found on the order.` · tümü · Server · functions/bankFeed.js:1197
+- `That payment is already matched to another bank transaction.` · tümü · Server · functions/bankFeed.js:1198
+- `That payment is already matched to another purchase.` · tümü · Server · functions/inventory.js:1787
+- `That person is already in this workspace.` · tümü · Server · functions/index.js:17601
+- `That person is not a member of this workspace.` · tümü · Server · functions/index.js:18197
+- `That recipe has no lines.` · tümü · Server · functions/inventory.js:2572
+- `That rule no longer exists.` · tümü · Server · functions/bankFeed.js:1501
+- `That run has already been undone.` · tümü · Server · functions/index.js:9511
+- `That run is no longer available to undo.` · tümü · Server · functions/index.js:9509
+- `That run is not a backup import.` · tümü · Server · functions/index.js:11362
+- `That signature is too large.` · tümü · Server · functions/index.js:29264
+- `That store address does not resolve. Check the domain and try again.` · tümü · Server · functions/wooConnector.js:106
+- `That store address must be a public website.` · tümü · Server · functions/wooConnector.js:108
+- `That subdomain is already taken.` · tümü · Server · functions/clientDomains.js:213
+- `That subdomain is reserved.` · tümü · Server · functions/clientDomains.js:123
+- `That user is not in this workspace.` · tümü · Server · functions/index.js:22236
+- `That workspace no longer exists.` · tümü · Server · functions/index.js:17791
+- `The access log could not be written; the details were not revealed.` · tümü · Server · functions/ebayConnector.js:1901
+- `The activation funnel is restricted to NivaDesk admins.` · tümü · Server · functions/index.js:30300
+- `The app was uninstalled from this store.` · tümü · Server · functions/index.js:33387
+- `The bank connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/bankFeed.js:281
+- `The board needs at least one in-production column.` · tümü · Server · functions/production.js:242
+- `The change history is available to the workspace owner.` · tümü · Server · functions/settingsAudit.js:170
+- `The Etsy connection is being refreshed. Try again shortly.` · tümü · Server · functions/etsyConnect.js:178
+- `The file is larger than 15MB.` · tümü · Server · functions/index.js:25361
+- `The file path does not belong to this workspace.` · tümü · Server · functions/filesLibrary.js:75
+- `The full user guide is part of Starter, Pro and Team. On the Free plan you can ask the chat on nivadesk.app.` · tümü · Server · functions/index.js:4589
+- `The help assistant is not switched on yet.` · tümü · Server · functions/index.js:4473
+- `The image is too large for OCR (max 15MB).` · tümü · Server · functions/bankFeed.js:1601
+- `The in-app help assistant is available on Starter, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.` · tümü · Server · functions/index.js:4462
+- `The link returned an empty document.` · tümü · Server · functions/index.js:25362
+- `The linked record no longer exists.` · tümü · Server · functions/filesLibrary.js:158
+- `The NivaDesk app is no longer installed on this Shopify store.` · tümü · Server · functions/index.js:33310
+- `The note is not available for the signed-in user.` · tümü · Server · functions/index.js:1976
+- `The order belongs to a different workspace.` · tümü · Server · functions/bankFeed.js:1023
+- `The organisation choice expired. Connect Xero again.` · tümü · Server · functions/accountingFunctions.js:455
+- `The organisation for this sign-in was already chosen.` · tümü · Server · functions/accountingFunctions.js:456
+- `The original note is no longer available.` · tümü · Server · functions/index.js:1798
+- `The Pandle connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/pandle.js:199
+- `The Pandle connection could not be stored securely because the server's token key is not configured. Nothing was saved.` · tümü · Server · functions/pandle.js:224
+- `The Pandle connection is managed by the workspace owner.` · tümü · Server · functions/pandle.js:151
+- `The Pandle session expired — reconnect Pandle.` · tümü · Server · functions/pandle.js:248
+- `The primary order no longer exists.` · tümü · Server · functions/index.js:9657
+- `The rule keyword must be at least 2 characters.` · tümü · Server · functions/bankFeed.js:1484
+- `The selected user is not a member of this workspace.` · tümü · Server · functions/index.js:1357
+- `The signature could not be read.` · tümü · Server · functions/index.js:29260
+- `The signature must be a PNG image.` · tümü · Server · functions/index.js:29268
+- `The signing secret must be 8-128 characters, or empty to turn signature checks off.` · tümü · Server · functions/index.js:20670
+- `The workspace owner always keeps a seat.` · tümü · Server · functions/index.js:18192
+- `The workspace owner always keeps full access.` · tümü · Server · functions/index.js:18060
+- `There is nothing on the shelf to count.` · tümü · Server · functions/inventory.js:1192
+- `These customers do not belong to the active workspace.` · tümü · Server · functions/index.js:14901
+- `These orders are not in your workspace.` · tümü · Server · functions/index.js:9571
+- `This account already has an active workspace. Open the portal instead.` · tümü · Server · functions/index.js:10458
+- `This account does not use assigned project views.` · tümü · Server · functions/index.js:11717
+- `This App Store purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:836
+- `This App Store purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:754
+- `This App Store purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2259
+- `This assigned-project role must request owner approval before deleting an order.` · tümü · Server · functions/index.js:15665
+- `This bank connection cannot be read because the server's token key is not configured.` · tümü · Server · functions/bankFeed.js:302
+- `This bank connection has no stored consent — reconnect the bank.` · tümü · Server · functions/bankFeed.js:313
+- `This connect link has expired. Open Connect again from the Shopify app.` · tümü · Server · functions/index.js:33307
+- `This connection attempt is not yours or has expired.` · tümü · Server · functions/wooConnector.js:187
+- `This conversation cannot be opened with that link.` · tümü · Server · functions/index.js:3750
+- `This count is already closed.` · tümü · Server · functions/inventory.js:1230
+- `This customer does not belong to the active workspace.` · tümü · Server · functions/index.js:14664
+- `This deletion request is no longer pending.` · tümü · Server · functions/index.js:15572
+- `This email address is already used by another account.` · tümü · Server · functions/index.js:10281
+- `This estimate can no longer be decided.` · tümü · Server · functions/index.js:29674
+- `This estimate has been replaced by a newer one.` · tümü · Server · functions/index.js:29612
+- `This estimate has changed. Please ask for a fresh link.` · tümü · Server · functions/index.js:29677
+- `This estimate is no longer available.` · tümü · Server · functions/index.js:29290
+- `This estimate link was withdrawn by the business. Please ask them for a new one.` · tümü · Server · functions/index.js:29283
+- `This Etsy connection belongs to another workspace.` · tümü · Server · functions/etsyConnect.js:114
+- `This Etsy connection no longer exists.` · tümü · Server · functions/etsyConnect.js:109
+- `This Etsy shop is disconnected.` · tümü · Server · functions/etsyConnect.js:147
+- `This export is too large to download at once. Please choose a narrower date range.` · tümü · Server · functions/index.js:10024
+- `This file already has the maximum number of links.` · tümü · Server · functions/filesLibrary.js:299
+- `This Google Play purchase is not a supported NivaDesk storage add-on.` · tümü · Server · functions/stripeBilling.js:2540
+- `This Google Play purchase is not a supported NivaDesk subscription.` · tümü · Server · functions/stripeBilling.js:2481
+- `This Google Play purchase is not linked to the current NivaDesk workspace.` · tümü · Server · functions/stripeBilling.js:2652
+- `This invitation is not for the signed-in user.` · tümü · Server · functions/index.js:1782
+- `This is already your own workspace.` · DE,FR,IT,ES,PT,RU,JA,ZH,AR,HI · Server · functions/index.js:17315
+- `This join request does not belong to this workspace.` · tümü · Server · functions/index.js:17023
+- `This join request is no longer pending.` · tümü · Server · functions/index.js:17027
+- `This link does not belong to this domain.` · tümü · Server · functions/index.js:28835
+- `This link has been replaced by a newer one.` · tümü · Server · functions/index.js:28588
+- `This link has been turned off by the business.` · tümü · Server · functions/index.js:28578
+- `This link has expired. Please ask for a new one.` · tümü · Server · functions/index.js:29285
+- `This link is no longer available.` · tümü · Server · functions/index.js:28575
+- `This link is not valid.` · tümü · Server · functions/index.js:29277
+- `This notification is not assigned to your account.` · tümü · Server · functions/index.js:887
+- `This order belongs to another workspace.` · tümü · Server · functions/index.js:23783
+- `This Pandle sign-in link is stale — start again from the Bank page.` · tümü · Server · functions/pandle.js:550
+- `This Pandle user has no company to connect.` · tümü · Server · functions/pandle.js:563
+- `This project has been worked on. Move it to the Trash instead.` · tümü · Server · functions/index.js:16024
+- `This project is no longer new enough to undo. Move it to the Trash instead.` · tümü · Server · functions/index.js:16011
+- `This refund is recorded on another order; unlink it first.` · tümü · Server · functions/bankFeed.js:2038
+- `This request was already approved. Ask the owner to refresh Team Access if the workspace is missing.` · tümü · Server · functions/index.js:17347
+- `This role can access only projects assigned to the current member.` · tümü · Server · functions/index.js:11667
+- `This role is assigned to a member. Move those members to another role first.` · tümü · Server · functions/index.js:17451
+- `This row is linked to an order as an expense; unlink that first.` · tümü · Server · functions/bankFeed.js:2021
+- `This row is not recorded as a refund.` · tümü · Server · functions/bankFeed.js:1997
+- `This row is recorded as a refund on an order; remove that first if it was an expense after all.` · tümü · Server · functions/bankFeed.js:1011
+- `This Shopify store has not installed the NivaDesk app yet.` · tümü · Server · functions/index.js:33301
+- `This Square account is not connected.` · tümü · Server · functions/squareConnector.js:806
+- `This store is not connected to your workspace.` · tümü · Server · functions/index.js:33384
+- `This store is not connected.` · tümü · Server · functions/wooConnector.js:438
+- `This transaction is already confirmed in Pandle.` · tümü · Server · functions/pandle.js:974
+- `This user is not in the group.` · tümü · Server · functions/index.js:23059
+- `This workspace is not accepting members because it does not have an active NivaDesk Team plan.` · tümü · Server · functions/index.js:17330
+- `Ticket not found.` · tümü · Server · functions/index.js:5579
+- `Tickets can only be assigned to the owner, admins or support managers.` · tümü · Server · functions/index.js:5681
+- `title or text is required.` · tümü · Server · functions/index.js:24537
+- `To Do assignment is available on NivaDesk Team.` · tümü · Server · functions/index.js:13838
+- `Too many address reveals. Try again later.` · tümü · Server · functions/ebayConnector.js:1891
+- `Too many feedback messages in a short time. Please try again later.` · tümü · Server · functions/feedback.js:195
+- `Too many orders selected to merge at once.` · tümü · Server · functions/index.js:9647
+- `Tool name is required.` · tümü · Server · functions/index.js:27429
+- `Transaction not found.` · tümü · Server · functions/bankFeed.js:948
+- `Type DELETE DATA to confirm this action.` · tümü · Server · functions/index.js:11578
+- `Type DELETE to confirm this action.` · tümü · Server · functions/index.js:32376
+- `uid is required.` · tümü · Server · functions/index.js:32300
+- `Unknown bespoke policy.` · tümü · Server · functions/accountingFunctions.js:974
+- `Unknown feedback prompt.` · tümü · Server · functions/feedback.js:124
+- `Unknown feedback status.` · tümü · Server · functions/feedback.js:204
+- `Unknown feedback type.` · tümü · Server · functions/feedback.js:206
+- `Unknown incoming kind.` · tümü · Server · functions/bankFeed.js:1313
+- `Unknown integration.` · tümü · Server · functions/index.js:20220
+- `Unknown inventory policy.` · tümü · Server · functions/accountingFunctions.js:978
+- `Unknown mode.` · tümü · Server · functions/bankFeed.js:1229
+- `Unknown payout provider.` · tümü · Server · functions/bankFeed.js:1921
+- `Unknown purchase line.` · tümü · Server · functions/inventory.js:1634
+- `Unknown review status.` · tümü · Server · functions/bankFeed.js:1308
+- `Unknown VAT code.` · tümü · Server · functions/bankFeed.js:1090
+- `Unsupported file URL.` · tümü · Server · functions/index.js:27682
+- `Unsupported financial field.` · tümü · Server · functions/index.js:12706
+- `Unsupported order detail field.` · tümü · Server · functions/index.js:13036
+- `Unsupported Schedule action.` · tümü · Server · functions/index.js:13690
+- `Unsupported To Do action.` · tümü · Server · functions/index.js:13817
+- `Unsupported To Do move.` · tümü · Server · functions/index.js:13907
+- `Unsupported Work Time action.` · tümü · Server · functions/index.js:14018
+- `Use Leave Group to remove yourself.` · tümü · Server · functions/index.js:23052
+- `User not found.` · tümü · Server · functions/index.js:32306
+- `View Only members can send text messages but cannot upload message attachments.` · tümü · Server · functions/index.js:23143
+- `Which category?` · tümü · Server · functions/inventory.js:2297
+- `Which order?` · tümü · Server · functions/production.js:284
+- `Work session not found.` · tümü · Server · functions/index.js:14068
+- `Workflow Only members can access only orders assigned to them.` · tümü · Server · functions/index.js:23366
+- `Workspace logo must be an uploaded Firebase Storage file.` · tümü · Server · functions/index.js:10125
+- `Workspace logo upload is available on Monthly Pro and Team plans.` · tümü · Server · functions/index.js:10140
+- `Workspace logo URL is invalid.` · tümü · Server · functions/index.js:10117
+- `Workspace logo URL is too long.` · tümü · Server · functions/index.js:10111
+- `Workspace owner could not be identified.` · tümü · Server · functions/index.js:15504
+- `Workspace ticket not found.` · tümü · Server · functions/index.js:5155
+- `Xero is not configured on the server yet.` · tümü · Server · functions/accountingFunctions.js:373
+- `Xero no longer accepts this sign-in. Connect again.` · tümü · Server · functions/accountingFunctions.js:472
+- `You already have access to this workspace.` · tümü · Server · functions/index.js:17337
+- `You are not a member of this group.` · tümü · Server · functions/index.js:22992
+- `You can change your email again on ` · tümü · Server · functions/index.js:10216
+- `You can only delete your own messages for everyone.` · tümü · Server · functions/index.js:22789
+- `You can only edit your own messages.` · tümü · Server · functions/index.js:23251
+- `You cannot leave Team Chat.` · tümü · Server · functions/index.js:22986
+- `You do not have access to financial information in this workspace.` · tümü · Server · functions/index.js:23572
+- `You do not have access to protected buyer details.` · tümü · Server · functions/ebayConnector.js:1883
+- `You do not have access to reply to this support ticket.` · tümü · Server · functions/index.js:5344
+- `You do not have access to reply to this workspace ticket.` · tümü · Server · functions/index.js:5467
+- `You do not have access to that file.` · tümü · Server · functions/index.js:27699
+- `You do not have access to the dashboard in this workspace.` · tümü · Server · functions/index.js:23578
+- `You do not have access to this conversation.` · tümü · Server · functions/index.js:22196
+- `You do not have access to this support ticket.` · tümü · Server · functions/index.js:5304
+- `You do not have access to this workspace ticket.` · tümü · Server · functions/index.js:5428
+- `You have reached today's limit for the help assistant. Contact NivaDesk Support for anything urgent.` · tümü · Server · functions/index.js:4448
+- `You must be a member of this conversation to add people.` · tümü · Server · functions/index.js:22844
+- `You must be a member of this group.` · tümü · Server · functions/index.js:22939
+- `You must be signed in to add people to a conversation.` · tümü · Server · functions/index.js:22824
+- `You must be signed in to assign a ticket.` · tümü · Server · functions/index.js:5565
+- `You must be signed in to assign workspace tickets.` · tümü · Server · functions/index.js:5632
+- `You must be signed in to create a message thread.` · tümü · Server · functions/index.js:22213
+- `You must be signed in to delete messages.` · tümü · Server · functions/index.js:22748
+- `You must be signed in to edit messages.` · tümü · Server · functions/index.js:23230
+- `You must be signed in to leave a group.` · tümü · Server · functions/index.js:22980
+- `You must be signed in to manage support managers.` · tümü · Server · functions/index.js:5051
+- `You must be signed in to mark messages read.` · tümü · Server · functions/index.js:22337
+- `You must be signed in to mark support tickets as read.` · tümü · Server · functions/index.js:5741
+- `You must be signed in to mark workspace tickets as read.` · tümü · Server · functions/index.js:5775
+- `You must be signed in to mute a conversation.` · tümü · Server · functions/index.js:22425
+- `You must be signed in to pin messages.` · tümü · Server · functions/index.js:22570
+- `You must be signed in to react to messages.` · tümü · Server · functions/index.js:22640
+- `You must be signed in to read message settings.` · tümü · Server · functions/index.js:22135
+- `You must be signed in to read messages.` · tümü · Server · functions/index.js:22296
+- `You must be signed in to read support managers.` · tümü · Server · functions/index.js:5027
+- `You must be signed in to read support ticket unread counts.` · tümü · Server · functions/index.js:5810
+- `You must be signed in to read support tickets.` · tümü · Server · functions/index.js:4952
+- `You must be signed in to read ticket messages.` · tümü · Server · functions/index.js:5288
+- `You must be signed in to read workspace billing limits.` · tümü · Server · functions/index.js:2783
+- `You must be signed in to read workspace ticket messages.` · tümü · Server · functions/index.js:5411
+- `You must be signed in to read workspace tickets.` · tümü · Server · functions/index.js:5084
+- `You must be signed in to remove a group member.` · tümü · Server · functions/index.js:23044
+- `You must be signed in to rename a group.` · tümü · Server · functions/index.js:22926
+- `You must be signed in to reply to support tickets.` · tümü · Server · functions/index.js:5325
+- `You must be signed in to reply to workspace tickets.` · tümü · Server · functions/index.js:5448
+- `You must be signed in to send a support ticket.` · tümü · Server · functions/index.js:3654
+- `You must be signed in to send a workspace ticket.` · tümü · Server · functions/index.js:4982
+- `You must be signed in to send messages.` · tümü · Server · functions/index.js:23120
+- `You must be signed in to update conversation presence.` · tümü · Server · functions/index.js:22398
+- `You must be signed in to update message settings.` · tümü · Server · functions/index.js:22149
+- `You must be signed in to update support tickets.` · tümü · Server · functions/index.js:5103
+- `You must be signed in to update typing status.` · tümü · Server · functions/index.js:22699
+- `You must be signed in to update workspace tickets.` · tümü · Server · functions/index.js:5137
+- `You must be signed in to use the help assistant.` · tümü · Server · functions/index.js:4456
+- `You must be signed in.` · tümü · Server · functions/accountingFunctions.js:128
+- `Your current plan has reached its order limit. Mark finished orders as delivered to free a slot, or upgrade the workspace plan.` · tümü · Server · functions/index.js:15238
+- `Your current role is Workflow Only and cannot edit finance fields.` · tümü · Server · functions/index.js:16524
+- `Your role cannot create or update orders.` · tümü · Server · functions/index.js:23529
+- `Your workspace access does not include deleting files.` · tümü · Server · functions/index.js:6379
+- `Your workspace access does not include Orders.` · tümü · Server · functions/index.js:23548
+- `Your workspace role can read Messages but cannot change conversations or messages.` · tümü · Server · functions/index.js:2401
+- `Your workspace role cannot access Messages.` · tümü · Server · functions/index.js:2392
+- `Your workspace role cannot add inventory items.` · tümü · Server · functions/index.js:24940
+- `Your workspace role cannot add Knowledge Base contributions.` · tümü · Server · functions/index.js:8655
+- `Your workspace role cannot assign projects.` · tümü · Server · functions/index.js:16308
+- `Your workspace role cannot change files.` · tümü · Server · functions/index.js:6376
+- `Your workspace role cannot create customers.` · tümü · Server · functions/index.js:14599
+- `Your workspace role cannot create orders.` · tümü · Server · functions/index.js:15230
+- `Your workspace role cannot delete Client Files.` · tümü · Server · functions/index.js:16835
+- `Your workspace role cannot delete customers.` · tümü · Server · functions/index.js:14693
+- `Your workspace role cannot delete orders.` · tümü · Server · functions/index.js:15668
+- `Your workspace role cannot edit block headings.` · tümü · Server · functions/index.js:7855
+- `Your workspace role cannot edit customers.` · tümü · Server · functions/index.js:14644
+- `Your workspace role cannot edit dashboard settings.` · tümü · Server · functions/index.js:7932
+- `Your workspace role cannot edit Financial Settings.` · tümü · Server · functions/index.js:9024
+- `Your workspace role cannot edit Integration settings.` · tümü · Server · functions/index.js:10096
+- `Your workspace role cannot edit Language & Labels.` · tümü · Server · functions/index.js:9076
+- `Your workspace role cannot edit order card settings.` · tümü · Server · functions/index.js:7908
+- `Your workspace role cannot edit orders.` · tümü · Server · functions/index.js:9552
+- `Your workspace role cannot edit PDF Export settings.` · tümü · Server · functions/index.js:8982
+- `Your workspace role cannot edit Theme & Branding.` · tümü · Server · functions/index.js:9104
+- `Your workspace role cannot edit Upload Safety settings.` · tümü · Server · functions/index.js:10061
+- `Your workspace role cannot edit Workspace Logo.` · tümü · Server · functions/index.js:10133
+- `Your workspace role cannot export financial data.` · tümü · Server · functions/index.js:9833
+- `Your workspace role cannot import orders.` · tümü · Server · functions/index.js:15024
+- `Your workspace role cannot manage Client Files.` · tümü · Server · functions/index.js:16604
+- `Your workspace role cannot manage personal Quick Reply settings.` · tümü · Server · functions/index.js:8569
+- `Your workspace role cannot merge customers.` · tümü · Server · functions/index.js:14873
+- `Your workspace role cannot merge orders.` · tümü · Server · functions/index.js:9632
+- `Your workspace role cannot move production work.` · tümü · Server · functions/index.js:6279
+- `Your workspace role cannot recalculate Financial Settings.` · tümü · Server · functions/index.js:9220
+- `Your workspace role cannot restore orders.` · tümü · Server · functions/index.js:15722
+- `Your workspace role cannot send messages.` · tümü · Server · functions/index.js:2410
+- `Your workspace role cannot start or manage private conversations.` · tümü · Server · functions/index.js:2419
+- `Your workspace role cannot test the API key.` · tümü · Server · functions/index.js:8301
+
+</details>
+
+<details><summary>Apple (iPhone/iPad/Mac — one table) — (c) kullanılmayan: 684 anahtar (silinmedi)</summary>
+
+- `+ Add cost`
+- `A payment request is required.`
+- `A record of what changed on this order, when and by whom.`
+- `AI reply`
+- `Abandon this count? Nothing on the shelf will change.`
+- `About NivaDesk`
+- `Access Level`
+- `Access request sent. The workspace owner can approve it from their Account screen.`
+- `Active. NivaDesk listens to Firestore orders for the current companyId.`
+- `Add Field`
+- `Add Inventory Item`
+- `Add Order`
+- `Add Project`
+- `Add Task`
+- `Add Task / Order`
+- `Add Team Member`
+- `Add at least one line with a name and a quantity.`
+- `Add category`
+- `Add column`
+- `Add image…`
+- `Add production order`
+- `Add receipt`
+- `Add segment`
+- `Add your first item`
+- `Added by`
+- `Adjusted`
+- `Advanced: add member manually`
+- `All assignments`
+- `All changes saved`
+- `All due dates`
+- `All orders and customers will be permanently deleted.`
+- `Allowed: PDF, JPG, PNG, HEIC, HEIF and WEBP. The size limit follows Settings > Safety & Uploads.`
+- `Already in NivaDesk`
+- `Already on the shelf as`
+- `An order is required.`
+- `Another payment link is already open for this order. Cancel it, or ask for less.`
+- `Anything before that is not missing — it was never watched.`
+- `Anything else?`
+- `App`
+- `App Logo URL`
+- `App real-time listener`
+- `Apply Template`
+- `Appointments, reminders and alerts linked to this order.`
+- `Approve NivaDesk at your store, then you will be sent back here.`
+- `Are you sure?`
+- `As orders`
+- `Ask the assistant something`
+- `Asked for a person`
+- `Assignee`
+- `At Square`
+- `At the store`
+- `Attach file`
+- `Auction — current bid`
+- `Audit`
+- `Awaiting Delivery`
+- `Back to checklist`
+- `Balance Due`
+- `Bank data`
+- `Bank row`
+- `Based on the last`
+- `Behaves as`
+- `Bespoke work`
+- `Board`
+- `Bring Shopify or WooCommerce orders in automatically.`
+- `Bring your store's orders and customers in.`
+- `By`
+- `COLLABORATION INVITATIONS`
+- `Calculate Tax On`
+- `Cancel reply`
+- `Cancel selection`
+- `Cancelled and refunded orders are not counted.`
+- `Cancelled or refunded`
+- `Capacity`
+- `Card options`
+- `Card payment links are not available for this workspace yet.`
+- `Card positions, widths, heights, visibility and colors are saved only for your user. Order content stays shared for the whole workspace.`
+- `Categories could not be loaded.`
+- `Categories could not be merged.`
+- `Categories could not be saved.`
+- `Categories saved`
+- `Categorise`
+- `Category could not be removed.`
+- `Channel button names can be added, removed, or renamed. Telephone and Email stay as their own fields and can be shown or hidden above.`
+- `Check delivery`
+- `Check dial arrival`
+- `Check remaining payment`
+- `Checking`
+- `Choose`
+- `Choose a CSV file`
+- `Choose a PDF or image file for this order.`
+- `Choose a section to edit.`
+- `Choose a team member`
+- `Choose the order`
+- `Choose where they should go — nothing is deleted.`
+- `Choose where you sell. Orders and customers will import automatically.`
+- `Choose your business type first. NivaDesk can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.`
+- `Choose your currency before taking card payments.`
+- `Clear the choice`
+- `Client Files are locked`
+- `Client file moved to bin`
+- `Cloud Function converts the data`
+- `Cloud webhook function`
+- `Column`
+- `Column name`
+- `Confidence`
+- `Confirmed in Pandle`
+- `Connect Shopify`
+- `Connect Stripe before asking a customer to pay.`
+- `Connect real App Store products to NivaDesk plans.`
+- `Connect your accounting`
+- `Connect your first sales channel`
+- `Connected accounts`
+- `Connected store`
+- `Connection Check`
+- `Consent renews by`
+- `Copy text`
+- `Could not move that job.`
+- `Could not save the board.`
+- `Could not save your setup.`
+- `Could not undo that move.`
+- `Count`
+- `Create a new webhook`
+- `Create a new webhook for NivaDesk orders.`
+- `Create first profile`
+- `Create your first project`
+- `Currency Symbol`
+- `Current page`
+- `Current total storage: %@`
+- `Custom Tax Rule Names`
+- `Customer Channels`
+- `Customer Details Fields`
+- `Customer Notes stays linked to the customer profile. Add, remove or rename the Special Notes sections shown below it.`
+- `Customer deleted`
+- `Customer owned`
+- `Customers in this file`
+- `Customise these quick buttons for the selected business type, language and workflow.`
+- `DHL Express connected.`
+- `DHL refused the question.`
+- `DHL refused the shipment. Nothing was created.`
+- `DHL said:`
+- `DHL shipment`
+- `DNS changes can take up to an hour to spread.`
+- `Data & Backups`
+- `Days`
+- `Dead letters`
+- `Default Tax Rate (%)`
+- `Delete Selected Order`
+- `Delete for Everyone`
+- `Delete for everyone`
+- `Delete for me`
+- `Delivery URL: the endpoint above`
+- `Delivery due within the next 14 days, excluding closed orders.`
+- `Design update`
+- `Detected`
+- `Detected from`
+- `Dial arrival`
+- `Dial feet solder`
+- `Difference`
+- `Direct Debit`
+- `Direct Messages`
+- `Domain verified`
+- `Drag to reorder`
+- `Each upload records the company, user, file type, file size, upload date and related order when available.`
+- `Edit Note`
+- `Edit message`
+- `Email, optional`
+- `Empty Trash`
+- `Enter the owner’s Company ID and send a request.`
+- `Estimate No`
+- `Estimated delivery`
+- `Every channel`
+- `Example: We create custom painted watch dials. We need watch model, dial size, artwork theme, client approval, deposit, painting stage, curing, final photos and`
+- `Excludes Done, Completed and Cancelled orders.`
+- `Expected`
+- `Extra Client Files storage on top of your plan. You can switch tier or billing period anytime.`
+- `Field Name`
+- `File uploaded`
+- `Files & Security`
+- `Files attached to this order, such as designs, documents and photos shared with the customer.`
+- `Finance only`
+- `Finished`
+- `Firestore saves it securely`
+- `Follow up`
+- `Found`
+- `Found at DHL and linked. Waybill`
+- `Fulfilled`
+- `Fulfilment`
+- `Give the assistant your data`
+- `Go to Orders`
+- `Good, Fair, Needs service…`
+- `Goods`
+- `Gross`
+- `Group`
+- `Group title (optional)`
+- `Grouped as`
+- `Guide`
+- `Hours`
+- `How do you mainly work?`
+- `How many people will use NivaDesk?`
+- `How the order is sent and where the parcel is: carrier, tracking number and delivery progress.`
+- `How urgent the order is and which risks could delay it.`
+- `Icon`
+- `Idle`
+- `If an image belongs to a client or third party, the user should have permission to use it for the order.`
+- `Import duty, fees`
+- `Import failed`
+- `Import orders automatically.`
+- `Import your first order`
+- `In WordPress, open WooCommerce > Settings > Advanced > Webhooks.`
+- `In this package`
+- `Inbox`
+- `Include bespoke work`
+- `Included in this build. Deploy Firebase Functions after replacing index.js.`
+- `Info`
+- `Internal notes about this order for your team; the customer does not see them.`
+- `Inventory Labels`
+- `Inventory could not be loaded.`
+- `Invoice Footer / Payment Terms`
+- `Invoice No`
+- `Invoice items heading`
+- `Invoiced order value in this range: paid + still owed (accrual basis).`
+- `Issues`
+- `It answers from your own orders and figures.`
+- `It cannot answer about work it cannot see.`
+- `Item 1`
+- `Item 2`
+- `Item 3`
+- `Item 4`
+- `LABELS`
+- `Label created. Waybill`
+- `Last`
+- `Last attempt`
+- `Last checked by system`
+- `Last full check`
+- `Last read from eBay`
+- `Last sync`
+- `Last used`
+- `Last webhook`
+- `Latest`
+- `Leave`
+- `Likely related to this order`
+- `Lines`
+- `Link a payment to the job it paid for.`
+- `Link to existing`
+- `List`
+- `Listings`
+- `Live Tracking`
+- `Live preview`
+- `Live sync`
+- `Live website orders and webhook setup.`
+- `Load a team member’s layout to follow it live. When they save their card profile, your layout updates too. If you edit your own layout, sync stops.`
+- `Load another team member’s current layout only to view or copy it. Saving still updates your own card profiles.`
+- `Load my profile`
+- `Loading categories…`
+- `Loading production…`
+- `Loading purchases…`
+- `Loading reserved stock…`
+- `Loading stock…`
+- `Loading suppliers…`
+- `Locations nest at most 4 levels deep.`
+- `Logo could not be loaded`
+- `Logo uploaded`
+- `Logo uploads use the same upload safety rules and audit log.`
+- `Look like they are already here`
+- `Manage your NivaDesk profile, company details and sign-in security.`
+- `Manual order`
+- `Marked as recurring`
+- `Match this payment`
+- `Match your first transaction`
+- `Matching transactions`
+- `Maximum image size`
+- `Messages and calls with the customer about this order.`
+- `Messages your customers sent to the workshop.`
+- `Missed-event recovery`
+- `Mode`
+- `Moved to`
+- `Movements are only recorded from`
+- `Must be enabled in WooCommerce using the Delivery URL above.`
+- `Mute`
+- `My card profiles`
+- `Needs attention only`
+- `Net`
+- `New Note`
+- `New direct message`
+- `New group`
+- `New message from a customer`
+- `New purchase`
+- `New step`
+- `New supplier`
+- `New user's Firebase UID`
+- `New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.`
+- `Next 7 days`
+- `Next step`
+- `NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel.`
+- `No CNAME record found yet.`
+- `No Payment Matched`
+- `No archived notes.`
+- `No collaborators yet.`
+- `No estimate yet. Create one on the web portal and the customer's approval appears here.`
+- `No headings yet. Use Add Heading below.`
+- `No items match these filters.`
+- `No jobs match these filters.`
+- `No logo uploaded`
+- `No messages yet.`
+- `No production steps configured.`
+- `No project notes found`
+- `No purchase recorded for this item. Items created before purchasing existed, or added by hand, have no purchase trail.`
+- `No reminders.`
+- `No sales match these filters.`
+- `No saved messages.`
+- `No supplier`
+- `No team profiles yet`
+- `No unsaved changes`
+- `None yet`
+- `Not available`
+- `Not confirmed`
+- `Not covered by the guide — send it from Settings ▸ Support / Tickets ▸ Contact NivaDesk Support.`
+- `Not on this list:`
+- `Not selected`
+- `Notes and requests that came from the customer about this order.`
+- `Nothing assigned`
+- `Nothing has happened to these for`
+- `Nothing in inventory yet.`
+- `Nothing in inventory yet. Add your first item, or import your opening stock.`
+- `Nothing on the shelf.`
+- `OTHERS`
+- `Once a sale arrives, everything else follows it.`
+- `One calm workspace`
+- `One file, multiple links — no duplicates.`
+- `One import carries at most 500 items.`
+- `One material or product to count.`
+- `One real job, so the board has something to hold.`
+- `Only the most recent 3,000 movements are counted in this period.`
+- `Only the workspace owner can manage the plan.`
+- `Only upload legal, safe and work-related files that belong in this workspace.`
+- `Open Banking page`
+- `Open WooCommerce webhooks`
+- `Open in`
+- `Open in Shopify`
+- `Open on 17TRACK`
+- `Optional note`
+- `Optional smart description`
+- `Order Details`
+- `Orders in this file`
+- `Over capacity`
+- `Owner Company ID`
+- `Owner testing controls`
+- `PDF and image files for this order.`
+- `PINNED`
+- `Pandle transaction ID`
+- `Parcel`
+- `Parts ready`
+- `Password reset email sent to`
+- `Paste the Delivery URL`
+- `Paste the copied Delivery URL, save the webhook, then place a test order.`
+- `PayPal connected.`
+- `PayPal fee`
+- `Payment links could not be loaded.`
+- `Payouts`
+- `Pending retries`
+- `Permissions`
+- `Pick as many as apply.`
+- `Pick two dates`
+- `Platform status`
+- `Please enter the workspace owner's Company ID.`
+- `Post orders to NivaDesk from Etsy through an automation.`
+- `Print Label (QR)`
+- `Processor payout`
+- `Product ID`
+- `Product information, helpful resources and workspace diagnostics.`
+- `Product sale`
+- `Production could not be loaded.`
+- `Production settings`
+- `Profile, security and team access.`
+- `Profile, workspace logo and sign-in security.`
+- `Profit after VAT`
+- `Purchase price and additional costs are kept apart on purpose — the VAT margin scheme uses the price of the item alone.`
+- `Purchases could not be loaded.`
+- `Purpose`
+- `QuickBooks or Xero, so the books stay in step.`
+- `Rather not say`
+- `React to this message`
+- `Read-only. NivaDesk can never move money.`
+- `Reading the bank feed…`
+- `Receipt matched`
+- `Recently updated`
+- `Recommended WooCommerce webhook settings`
+- `Record a NEW payment on this order?`
+- `Refund`
+- `Reminder saved and notification scheduled.`
+- `Remove column`
+- `Remove from group`
+- `Remove this photo?`
+- `Rename the columns to match how your workshop actually works. The capacity number is a warning, never a wall — you can always move one more job.`
+- `Replace YOUR_COMPANY_ID with the Company ID shown in Settings > Account > Team Access.`
+- `Reply Engine`
+- `Reply on Instagram`
+- `Reply on WhatsApp`
+- `Restore to Notes`
+- `Reverses the PayPal payment recorded on this order`
+- `Review receipts`
+- `Review spending`
+- `Rolex 1601 silver dial`
+- `Roughly how many orders a month?`
+- `Rows per page`
+- `Rule suggestion`
+- `Safe, drawer 3`
+- `Sale price on eBay`
+- `Sales found`
+- `Save board`
+- `Save different card layouts for your own user. Card content stays shared for the whole workspace; only positions, sizes, visibility and colors change.`
+- `Save my profile`
+- `Save purchase`
+- `Save supplier`
+- `Score`
+- `Search Tasks`
+- `Search messages…`
+- `Search notes…`
+- `See your tickets`
+- `Select an order, then add an Apple Reminder for its due date.`
+- `Send reset link to`
+- `Sent from NivaDesk`
+- `Service, shipping, restoration…`
+- `Set Status to Active and Topic to Order created.`
+- `Set it active`
+- `Set up your workspace`
+- `Share your Company ID with the person you want to invite. They will send a request from their Account screen, then you can approve it here.`
+- `Shipment`
+- `Shop ID`
+- `Shopify, Etsy, WooCommerce or Square.`
+- `Show in the sidebar`
+- `Showing`
+- `Showing the first 50 of`
+- `Similar name (not a match)`
+- `Site`
+- `Something went wrong.`
+- `Special Note Headings`
+- `Special Notes 1`
+- `Special Notes 2`
+- `Split`
+- `Square ID`
+- `Square account connected.`
+- `Square connection cancelled. Nothing was changed.`
+- `Square merchant`
+- `Start painting`
+- `Started`
+- `Status changed`
+- `Status: Active`
+- `Steps`
+- `Stop sync`
+- `Store`
+- `Stripe could not close that link. Try again in a moment.`
+- `Studio`
+- `Suppliers could not be loaded.`
+- `Switch this row between Unique and Quantity`
+- `Tap + to create your first note.`
+- `Tap to start a private chat`
+- `Tap to start the conversation`
+- `Tax / VAT Settings`
+- `Tax Amount`
+- `Tax Rate (%)`
+- `Tax Rule`
+- `Tax recalculation completed!`
+- `Team & Tasks`
+- `Team Chat posting`
+- `Team access is locked`
+- `Team card profiles`
+- `That amount cannot be charged.`
+- `That currency cannot be charged yet.`
+- `That file could not be read.`
+- `That is more than this order still owes.`
+- `That list could not be read.`
+- `That order no longer exists.`
+- `That payment has already been made.`
+- `That payment link cannot be created.`
+- `That payment link no longer exists.`
+- `The Firebase function receives the WooCommerce payload and converts it into the NivaDesk order format.`
+- `The app listens to Firebase in real time, so the new website order appears without refreshing.`
+- `The app only accepts common image files such as JPG, PNG, HEIC and WEBP for order previews.`
+- `The app updates live`
+- `The bank feed could not be read. Connect a bank account first.`
+- `The branding could not be saved.`
+- `The code carries only the item number. Scan it with any phone and paste it into the inventory search — a label outlives links.`
+- `The count could not be applied.`
+- `The count could not be cancelled.`
+- `The count could not be started.`
+- `The counts could not be loaded.`
+- `The counts could not be saved.`
+- `The customer's own view of this order: the link they open to follow progress and respond.`
+- `The delivery date, how many days remain and whether the order is running late.`
+- `The domain settings could not be loaded.`
+- `The item could not be released.`
+- `The item status could not be changed.`
+- `The item taken in for repair: its description, condition on arrival and the fault reported.`
+- `The lines on the invoice: items, quantities and prices.`
+- `The materials, parts and stock this order uses, and what still has to be sourced.`
+- `The moment the shelf and the work meet.`
+- `The note could not be saved.`
+- `The note could not be saved. Your draft is kept on this device.`
+- `The opening stock could not be imported.`
+- `The order at a glance: what it is, its number, type and current status.`
+- `The order is saved with your companyId, so it appears only inside the correct workspace.`
+- `The order's money: price, costs, deposits, payments received and the balance still owed.`
+- `The order's reference photos and design images, so everyone can see what is being made.`
+- `The order's task list: what still needs doing and who is doing it.`
+- `The payment could not be matched.`
+- `The person the work is for.`
+- `The photo could not be removed.`
+- `The photo could not be uploaded.`
+- `The purchase could not be deleted.`
+- `The purchase could not be received.`
+- `The purchase could not be saved.`
+- `The quote sent to the customer and whether they have approved it.`
+- `The receipt file is only accessible to the workspace owner.`
+- `The report could not be built.`
+- `The supplier could not be saved.`
+- `Theme`
+- `Theme & Branding`
+- `These settings help protect your workspace when users upload images.`
+- `This area is not enabled for your workspace account.`
+- `This belongs to a customer, not the business. It will be held and findable, but valued at zero and left out of inventory value.`
+- `This column is part of how the board works and cannot be removed.`
+- `This connection attempt has expired. Start again.`
+- `This device has accepted the upload policy`
+- `This layout follows a team member live. Any manual change will stop sync and save to your own profile.`
+- `This message was deleted`
+- `This order has nothing left to pay.`
+- `This section explains the live website order connection. It does not change your WooCommerce settings inside the app.`
+- `This setup only needs to be done once in WooCommerce.`
+- `This workspace has no Stripe account yet.`
+- `This workspace is no longer available. Switched to your own workspace.`
+- `Time logged on this order, so you know how long the work took.`
+- `Times are in the sender's time zone:`
+- `To activate this connection, create one WooCommerce webhook and paste the Delivery URL below. After that, new website orders will appear in this workspace autom`
+- `Topic: Order created or Order updated`
+- `Total Logs`
+- `Total inflow this period`
+- `Transactions auto-categorised`
+- `Truncated`
+- `Unfulfilled`
+- `Unit cost`
+- `Unknown version`
+- `Unpin`
+- `Unsave`
+- `Unsaved changes`
+- `Untitled`
+- `Up to two more. Optional.`
+- `Upcoming deadlines`
+- `Upload PDFs or images that belong to this client order.`
+- `Upload a logo or paste a logo URL. Uploaded logos are stored under this workspace and recorded in the upload audit log.`
+- `Upload or paste the logo used in the app header for this workspace. Logo uploads follow the same upload safety policy and audit log as order images.`
+- `Upload policy is accepted on this device.`
+- `Use Standard Template`
+- `Use an example`
+- `Use as default`
+- `Use business suggestions`
+- `Use stock on a job`
+- `Use this endpoint as the WooCommerce webhook Delivery URL:`
+- `Use this only if you already know the user's Firebase UID.`
+- `Used in the app header and shared workspace surfaces.`
+- `Users must only upload legal, safe and work-related images that belong in this workspace.`
+- `Uses Business Type and Smart Business Description from Settings.`
+- `Valid Until`
+- `Version`
+- `Version 1.0.0`
+- `View all files`
+- `View all notes`
+- `View all orders`
+- `View all transactions`
+- `View category breakdown`
+- `View customers`
+- `View in Shopify`
+- `View inventory`
+- `View matching transactions`
+- `Viewing team card profile`
+- `Waiting for the bank`
+- `Warning: This will overwrite your current workflow steps and inventory labels. Are you sure?`
+- `We've set up a`
+- `Webhook Setup`
+- `Webhooks`
+- `Weekly / Monthly`
+- `What`
+- `What happens when it is active`
+- `What is inside`
+- `What kind of work do you do?`
+- `When a customer completes an order on your website, WooCommerce sends the order data to NivaDesk. NivaDesk saves it into the correct company workspace and the a`
+- `Where the order is in production: the steps done and the ones still ahead.`
+- `Who the order is for and how to reach them: name, contact details and the messages exchanged.`
+- `WooCommerce connection cancelled. Nothing was changed.`
+- `WooCommerce sends the new order`
+- `WooCommerce website setup`
+- `Workspace Design`
+- `Workspace broadcast channel`
+- `Workspace conversation`
+- `Workspace could not be loaded.`
+- `Workspace details`
+- `Workspace logo is managed from Account > Workspace Logo.`
+- `Would become orders`
+- `Write a message…`
+- `You can change this later from Settings > Workflow > Business Type.`
+- `You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you le`
+- `You can load another team member’s layout to view it, but saving only updates your own profile.`
+- `You started one — add the customer, what it is worth or what it contains, and it counts.`
+- `You will be sent to Square to approve NivaDesk, then back here.`
+- `Your API key is encrypted and stored securely.`
+- `Your access to this workspace changed. Switched to your own workspace.`
+- `Your access to this workspace has been removed. Switched to your own workspace.`
+- `Your card profile`
+- `Your role can read the inbox but cannot change what a conversation is linked to.`
+- `Your studio:`
+- `Your trial ends in`
+- `Your website webhook sends customer, product and payment details when an order is created or completed.`
+- `Your workspace access does not include financial information.`
+- `Your workspace access was removed. Switched to your own workspace.`
+- `Your workspace role is read-only.`
+- `and`
+- `are waiting for room on your plan.`
+- `around`
+- `around the`
+- `attachment(s) selected`
+- `bank connection needs reconnecting`
+- `but orders are holding`
+- `categorised`
+- `could not be imported. The sync log below says why.`
+- `customer added`
+- `customer price`
+- `customers added`
+- `days or more.`
+- `days remaining`
+- `days waiting`
+- `dhl_express_direct`
+- `differences`
+- `est.`
+- `for`
+- `incl.`
+- `is held until the plan has room`
+- `is waiting for the first import`
+- `is yours.`
+- `item is filed here.`
+- `items are filed here.`
+- `items here`
+- `items moved`
+- `items renamed`
+- `last`
+- `last {date}`
+- `line`
+- `marked`
+- `matches`
+- `min`
+- `missing receipts`
+- `ml, g, pcs`
+- `more`
+- `next {date}`
+- `of`
+- `of these are already in NivaDesk and will be updated, not duplicated.`
+- `orders imported`
+- `orders synced`
+- `payments received`
+- `pcs, ml, g`
+- `possible duplicates`
+- `possibly cancelled`
+- `price changed`
+- `projects`
+- `receipts are waiting for your first import`
+- `receipts attached.`
+- `receipts waiting for the bank`
+- `received an older update, which was ignored`
+- `rows match stock you already have`
+- `rows past that will be left out — import them as a second batch.`
+- `rows will be skipped`
+- `rule suggestions`
+- `selected orders`
+- `spending mix`
+- `steps`
+- `to review`
+- `transactions`
+- `trial`
+- `uncategorised`
+- `unmatched payments`
+- `vs the same length before`
+- `was not imported`
+- `weekly`
+- `with receipt`
+- `{count} days late`
+
+</details>
+
