@@ -30,7 +30,7 @@ const progress = await import(pathToFileURL(path.join(tmp, "uploadProgress.mjs")
 const runner = await import(pathToFileURL(path.join(tmp, "uploadRunner.mjs")).href);
 const {
   uploadQueueReducer: reduce, uploadPercent, uploadStageLabel, uploadBytesLabel, nextUploadsToStart,
-  summarizeUploadQueue, newUploadSlot, isUploadActive
+  summarizeUploadQueue, newUploadSlot, isUploadActive, uploadFileKey, uploadDedupeDecision
 } = progress;
 const {
   transferTracked, awaitScanVerdict, UploadCancelledError, UploadBlockedError,
@@ -300,6 +300,31 @@ function recorder() {
     const source = read(screen);
     expect(`${screen}: renders the queue panel and passes slot + progress`, [/<UploadQueuePanel/.test(source), /useUploadQueue</.test(source), /slot,?\s*\n?\s*progress: hooks|\{ slot, progress: hooks \}/.test(source)], [true, true, true]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Double selection (9 Oct 2026): one file, one task, one object, one record.
+// ---------------------------------------------------------------------------
+{
+  const file = { name: "bundle.zip", size: 8_388_608, lastModified: 1_791_507_723_000 };
+  const key = uploadFileKey(file, "order-1");
+  expect("dedupe: same file, same target -> same key", uploadFileKey({ ...file }, "order-1"), key);
+  expect("dedupe: another target -> another key", uploadFileKey(file, "order-2") === key, false);
+  expect("dedupe: another size -> another key", uploadFileKey({ ...file, size: 1 }, "order-1") === key, false);
+  const row = (stage, retryable = true) => ({ id: "r1", key, item: { stage, retryable } });
+  expect("dedupe: nothing yet -> add", uploadDedupeDecision(key, []), { action: "add" });
+  expect("dedupe: picked twice before a render -> skip", uploadDedupeDecision(key, [{ id: "r1", key, item: undefined }]), { action: "skip", id: "r1" });
+  for (const stage of ["queued", "preparing", "uploading", "processing"]) {
+    expect(`dedupe: ${stage} row -> skip`, uploadDedupeDecision(key, [row(stage)]), { action: "skip", id: "r1" });
+  }
+  expect("dedupe: failed retryable row -> retry that row", uploadDedupeDecision(key, [row("error")]), { action: "retry", id: "r1" });
+  expect("dedupe: blocked (not retryable) row -> add", uploadDedupeDecision(key, [row("error", false)]), { action: "add" });
+  expect("dedupe: done row -> add (a new upload on purpose)", uploadDedupeDecision(key, [row("done")]), { action: "add" });
+  expect("dedupe: cancelled row -> add", uploadDedupeDecision(key, [row("cancelled")]), { action: "add" });
+  expect("dedupe: another file's active row -> add", uploadDedupeDecision(key, [{ id: "r2", key: uploadFileKey({ ...file, name: "b.zip" }, "order-1"), item: { stage: "uploading", retryable: true } }]), { action: "add" });
+  const hook = read("lib/studioflow/useUploadQueue.ts");
+  expect("dedupe: the queue's enqueue asks uploadDedupeDecision", /uploadDedupeDecision\(key, rows\)/.test(hook), true);
+  expect("dedupe: a retry decision bumps the slot attempt (same path, skipIfExists)", /attempt: entry\.slot\.attempt \+ 1[\s\S]*dispatch\(\{ type: "retry", id \}\)/.test(hook.slice(hook.indexOf("const enqueue"))), true);
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

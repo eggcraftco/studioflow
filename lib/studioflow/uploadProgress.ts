@@ -207,6 +207,39 @@ export function isUploadActive(item: Pick<UploadQueueItem, "stage">) {
   return item.stage === "queued" || item.stage === "preparing" || item.stage === "uploading" || item.stage === "processing";
 }
 
+/**
+ * The identity of a picked file for the double-selection rule: the same file
+ * (name, size, last-modified) for the same target (`scope`). Two picks of one
+ * file are one upload — one Storage object, one record.
+ */
+export function uploadFileKey(file: { name: string; size: number; lastModified?: number }, scope = ""): string {
+  return JSON.stringify([scope, file.name, file.size, Number(file.lastModified) || 0]);
+}
+
+export type UploadDedupeDecision =
+  | { action: "add" }
+  /** The same file is already queued, moving or being checked: nothing new. */
+  | { action: "skip"; id: string }
+  /** The same file failed and can be retried: retry that row (same slot, same path) instead of a second one. */
+  | { action: "retry"; id: string };
+
+/**
+ * What a new pick of `key` does, given the queue's rows and each row's key.
+ * A row the queue knows but has not rendered yet counts as queued. Done and
+ * cancelled rows do not block: picking a finished file again is a new upload.
+ */
+export function uploadDedupeDecision(
+  key: string,
+  rows: { id: string; key: string; item: Pick<UploadQueueItem, "stage" | "retryable"> | undefined }[]
+): UploadDedupeDecision {
+  for (const row of rows) {
+    if (row.key !== key) continue;
+    if (!row.item || isUploadActive(row.item)) return { action: "skip", id: row.id };
+    if (row.item.stage === "error" && row.item.retryable) return { action: "retry", id: row.id };
+  }
+  return { action: "add" };
+}
+
 export function summarizeUploadQueue(items: UploadQueueItem[]) {
   let active = 0;
   let done = 0;

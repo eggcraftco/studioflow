@@ -13,6 +13,8 @@ import {
   newUploadSlot,
   nextUploadsToStart,
   summarizeUploadQueue,
+  uploadDedupeDecision,
+  uploadFileKey,
   uploadQueueReducer,
   type UploadQueueItem,
   type UploadSlot
@@ -28,6 +30,8 @@ export type UploadQueueRun<TContext> = (
 
 type QueueEntry<TContext> = {
   file: File;
+  /** uploadFileKey(file, context): the double-selection identity. */
+  key: string;
   slot: UploadSlot;
   context: TContext;
   controller: AbortController | null;
@@ -44,16 +48,42 @@ export function useUploadQueue<TContext = undefined>(
   const running = useRef(new Set<string>());
   const runRef = useRef(run);
   runRef.current = run;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
+  // Double selection (9 Oct 2026): picking a file that is already queued,
+  // moving or being checked for the same target adds nothing; picking one whose
+  // row failed retries that row (same slot, same Storage path). One file, one
+  // task, one object, one record — the natives' in-flight rule.
   const enqueue = useCallback((files: File[], context: TContext) => {
     const added: { id: string; fileName: string; totalBytes: number }[] = [];
+    const retried: string[] = [];
+    const scope = JSON.stringify(context ?? null);
     for (const file of files) {
       if (!file) continue;
+      const key = uploadFileKey(file, scope);
+      const rows = Array.from(entries.current.entries()).map(([id, entry]) => ({
+        id,
+        key: entry.key,
+        item: itemsRef.current.find(item => item.id === id)
+      }));
+      const decision = uploadDedupeDecision(key, rows);
+      if (decision.action === "skip") continue;
+      if (decision.action === "retry") {
+        if (!retried.includes(decision.id)) retried.push(decision.id);
+        continue;
+      }
       const id = newUploadId();
-      entries.current.set(id, { file, slot: newUploadSlot(), context, controller: null });
+      entries.current.set(id, { file, key, slot: newUploadSlot(), context, controller: null });
       added.push({ id, fileName: file.name, totalBytes: file.size });
     }
     if (added.length) dispatch({ type: "enqueue", items: added });
+    for (const id of retried) {
+      const entry = entries.current.get(id);
+      if (!entry) continue;
+      entry.slot = { ...entry.slot, attempt: entry.slot.attempt + 1 };
+      dispatch({ type: "retry", id });
+    }
     return added.map(entry => entry.id);
   }, []);
 
