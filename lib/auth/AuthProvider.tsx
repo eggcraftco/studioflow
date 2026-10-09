@@ -6,6 +6,30 @@ import { onAuthStateChanged } from "firebase/auth";
 import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
+import { accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
+
+const ACCESS_RELOADS_KEY = "nv_access_reloads";
+
+/** K2: the page was loaded under an access this member no longer has (or a wider one): load it again. */
+function reloadForAccessChange(companyId: string) {
+  try {
+    const now = Date.now();
+    let previous: number[] = [];
+    try { previous = JSON.parse(sessionStorage.getItem(ACCESS_RELOADS_KEY) || "[]"); } catch { previous = []; }
+    if (!Array.isArray(previous)) previous = [];
+    if (!mayReloadForAccess(previous, now)) {
+      console.warn("[NivaDesk] access changed again — reload cap reached, not reloading");
+      return;
+    }
+    sessionStorage.setItem(ACCESS_RELOADS_KEY, JSON.stringify([...previous.filter(at => now - at < 60_000), now]));
+  } catch {
+    /* sessionStorage unavailable: reload anyway, the baseline after it is the new server value */
+  }
+  console.info(`[NivaDesk] access changed in ${companyId} — the page is loaded again under the new access`);
+  // Nothing read under the old access may stay on screen: hide the page at once, then load it again.
+  try { document.documentElement.style.visibility = "hidden"; } catch { /* not in a browser */ }
+  window.location.reload();
+}
 
 function browserDefaultLanguage(): string {
   return studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
@@ -185,6 +209,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (remembered) setLanguage(remembered);
 
     let unsubPersonal: (() => void) | null = null;
+    let unsubAccess: (() => void) | null = null;
+    let watchedAccessCompanyId = "";
     let lastSeenActiveCompanyId: string | null = null;
 
     const unsubUserDoc = onSnapshot(doc(db, "users", user.uid), snap => {
@@ -195,6 +221,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       lastSeenActiveCompanyId = companyId;
+
+      // K2 (9 Oct 2026): follow this member's own access entry in the active workspace. The first SERVER
+      // snapshot is the access the page was loaded under; a different one later (Assigned Projects Only,
+      // Workflow Only, an area switched off or on, a custom role edited, suspension) or a refused read after it
+      // (removed) reloads the page, so orders, customers and money read under the old access do not stay.
+      if (!unsubAccess || watchedAccessCompanyId !== companyId) {
+        if (unsubAccess) { unsubAccess(); unsubAccess = null; }
+        watchedAccessCompanyId = companyId;
+        let accessBaseline: string | null = null;
+        unsubAccess = onSnapshot(
+          doc(db, "companies", companyId),
+          { includeMetadataChanges: true },
+          companySnap => {
+            const step = accessWatchStep(accessBaseline, {
+              kind: "snapshot",
+              fromCache: companySnap.metadata.fromCache,
+              fingerprint: memberAccessFingerprint(
+                companySnap.exists() ? (companySnap.data() as Record<string, unknown>) : null,
+                companyId,
+                user.uid
+              )
+            });
+            accessBaseline = step.baseline;
+            if (step.action === "reload") reloadForAccessChange(companyId);
+          },
+          () => {
+            const step = accessWatchStep(accessBaseline, { kind: "refused" });
+            if (step.action === "reload") reloadForAccessChange(companyId);
+          }
+        );
+      }
 
       if (unsubPersonal) { unsubPersonal(); unsubPersonal = null; }
       const personalRef = doc(db, "companies", companyId, "personalInterfaceSettings", user.uid);
@@ -214,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubUserDoc();
       if (unsubPersonal) unsubPersonal();
+      if (unsubAccess) unsubAccess();
     };
   }, [user]);
 

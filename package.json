@@ -47,7 +47,8 @@
     "test:card-stacking": "node scripts/check-card-stacking.mjs",
     "test:messaging-access": "node scripts/check-messaging-access.mjs",
     "test:message-uploader-uid": "node scripts/check-message-uploader-uid.mjs",
-    "test:team-schedule-key": "node scripts/check-team-schedule-key.mjs"
+    "test:team-schedule-key": "node scripts/check-team-schedule-key.mjs",
+    "test:access-watch": "node scripts/check-access-watch.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

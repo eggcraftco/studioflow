@@ -964,7 +964,10 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
     merged.cardFinancial = false;
     merged.assignedProjectsOnly = true;
     merged.manageProjectAssignments = false;
-    merged.orders = true;
+    // On unless the owner switched it off: firestore.rules reads workflowOrders only
+    // while memberAccess.<uid>.orders is not the boolean false (memberAreaOpen), so
+    // the Orders entry and the order screens close with it (K1/K2, 9 Oct 2026).
+    merged.orders = rootAccess.orders !== false;
     merged.schedule = true;
     merged.quickReply = true;
     merged.clientFiles = true;
