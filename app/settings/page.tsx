@@ -3891,9 +3891,12 @@ function SafetyUploadsSection({
   language?: string;
 }) {
   const t = (text: string) => studioT(text, language);
-  const [requirePolicy, setRequirePolicy] = useState(true);
-  const [maxFileSizeMB, setMaxFileSizeMB] = useState(10);
-  const [policyText, setPolicyText] = useState("");
+  // Start from the loaded settings, not from defaults: the unsaved-changes baseline is taken on the first render,
+  // and defaults that the effect below then replaced read as an edit nobody made (the Unsaved dot and the leave
+  // prompt, 9 Oct 2026 — seen on the member view, which cannot save at all).
+  const [requirePolicy, setRequirePolicy] = useState(() => settings?.uploadSafetyRequirePolicyAcceptance ?? true);
+  const [maxFileSizeMB, setMaxFileSizeMB] = useState(() => Math.min(Math.max(Math.round(settings?.uploadSafetyMaxFileSizeMB || 10), 1), 50));
+  const [policyText, setPolicyText] = useState(() => settings?.uploadSafetyPolicyText || "");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -3912,7 +3915,8 @@ function SafetyUploadsSection({
   const { dirty: safetyDirty, markSaved: markSafetySaved } = useUnsavedGuard(
     "safety-uploads",
     { requirePolicy, maxFileSizeMB, policyText },
-    Boolean(settings),
+    // The member view has nothing to save, so it never registers an edit.
+    Boolean(settings) && policyAccess.showsAdminControls,
     () => handleSave(true)
   );
 
