@@ -16,7 +16,7 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
   "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 // All four tables that feed studioT: a key the Mac table carries (Cancelled,
 // Remove) is declared there, and the merge order lets that table win.
-const dictionary = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations"]
+const dictionary = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"]
   .map((name) => read(`lib/studioflow/${name}.ts`)).join("\n");
 
 // Keys: t("…") literals in the panel, the stage labels the reducer returns,
@@ -54,7 +54,7 @@ const compile = (rel, name) => {
     .replace(/from "\.\/(\w+)"/g, 'from "./$1.mjs"');
   fs.writeFileSync(path.join(tmp, `${name}.mjs`), js);
 };
-for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
+for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
 fs.rmSync(tmp, { recursive: true, force: true });
 

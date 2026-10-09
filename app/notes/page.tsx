@@ -762,7 +762,8 @@ function SideItem({ icon, label, active, onClick, count }: { icon: "lightbulb" |
         borderRadius: 999,
         fontSize: 14,
         fontWeight: active ? 700 : 500,
-        color: "#374151",
+        // Theme token: #374151 on the dark page was near-invisible (9 Oct).
+        color: active ? "#374151" : "var(--text)",
         cursor: "pointer",
         textAlign: "left",
         marginBottom: 2,
