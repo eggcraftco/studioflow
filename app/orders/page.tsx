@@ -23,7 +23,7 @@ import {
   orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
   workspaceAssignedProjectsOnly,
-  workspaceAccessAllows,
+  workspaceAccessAllows, ordersScreenAllows,
   type OrderDetail,
   type OrderListItem,
   type TeamMemberDetail,
@@ -228,7 +228,8 @@ export default function OrdersPage() {
       try {
         const loadedWorkspace = await loadWorkspaceContext(uid);
         if (cancelled) return;
-        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
+        // Workflow orders contract: the Workflow role keeps its assigned limited list.
+        if (!ordersScreenAllows(loadedWorkspace)) {
           router.replace(pageAccessRedirectFor("/orders", loadedWorkspace.memberAccess));
           return;
         }

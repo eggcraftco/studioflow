@@ -300,8 +300,9 @@ expect("health: review row total follows Orders + Financial Info", health.includ
 expect("health: the eBay review reason has words", health.includes('tax_responsibility_unknown: "Who collects the tax is unknown"'), true);
 const detailPage = read("app/orders/[orderId]/page.tsx");
 const listPage = read("app/orders/page.tsx");
-expect("Orders-off: the order page turns the member away", /if \(!workspaceAccessAllows\(loadedWorkspace\.memberAccess, "orders"\)\) \{[\s\S]{0,120}setOrder\(null\)/.test(detailPage), true);
-expect("Orders-off: the list turns the member away", /if \(!workspaceAccessAllows\(loadedWorkspace\.memberAccess, "orders"\)\) \{\s*router\.replace/.test(listPage), true);
+// Workflow orders contract (9 Oct 2026): Orders off turns away everyone except the Workflow role's limited lane.
+expect("Orders-off: the order page turns the member away", /if \(!ordersScreenAllows\(loadedWorkspace\)\) \{[\s\S]{0,120}setOrder\(null\)/.test(detailPage), true);
+expect("Orders-off: the list turns the member away", /if \(!ordersScreenAllows\(loadedWorkspace\)\) \{\s*router\.replace/.test(listPage), true);
 const screen = read("app/orders/OrderDetailContent.tsx");
 expect("order page: the block gets Financial Info", screen.includes("<EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance}"), true);
 expect("order page: the channel strip leaves eBay to the block", screen.includes('if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;'), true);

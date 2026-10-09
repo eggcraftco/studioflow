@@ -48,7 +48,9 @@ export default function ExportPage() {
         if (cancelled) return;
         // The same key the nav uses (lib/studioflow/pageAccess.ts), checked again
         // here so a typed URL cannot reach a screen the sidebar would not offer.
-        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "exportData")) {
+        // Export reads every order, so it also needs Orders (exportOrders refuses without it,
+        // workflow orders contract 9 Oct 2026).
+        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "exportData") || !workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
           router.replace(pageAccessRedirectFor("/export", loadedWorkspace.memberAccess));
           return;
         }

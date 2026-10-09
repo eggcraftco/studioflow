@@ -104,7 +104,8 @@ if (!/memberAccessFingerprint\(/.test(auth) || !/accessWatchStep\(accessBaseline
 if (!/if \(step\.action === "reload"\) reloadForAccessChange\(companyId\)/.test(auth)) failures.push("AuthProvider does not reload on an access change");
 if (!/if \(unsubAccess\) unsubAccess\(\);/.test(auth)) failures.push("the access listener is not detached on sign-out");
 const fsrc = fs.readFileSync(path.join(root, "lib/studioflow/firestore.ts"), "utf8");
-if (!/merged\.orders = rootAccess\.orders !== false;/.test(fsrc)) failures.push("Workflow Only's Orders entry ignores the owner's switch (forced true)");
+// Workflow orders contract (9 Oct 2026): Workflow's Orders is the stored value (root, then inline, else off), never forced.
+if (!/merged\.orders = typeof rootAccess\.orders === "boolean"/.test(fsrc) || /merged\.orders = true;/.test(fsrc)) failures.push("Workflow Only's Orders entry ignores the owner's switch (forced true)");
 
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) {

@@ -904,7 +904,11 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
     access.cardFinancial = false;
     access.assignedProjectsOnly = true;
     access.manageProjectAssignments = false;
-    access.orders = true;
+    // Workflow orders contract (9 Oct 2026): the role does not grant Orders; the owner does.
+    // The assigned limited view (workflowOrders) is the role's own lane and does not need it.
+    access.orders = false;
+    access.cardCustomer = false;
+    access.cardNotes = false;
     access.schedule = true;
     access.teamSchedule = false;
     access.quickReply = true;
@@ -912,6 +916,21 @@ function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess
     access.cardClientFiles = true;
   }
   return access;
+}
+
+/**
+ * Workflow orders contract (9 Oct 2026): a Workflow member always has the assigned limited lane —
+ * the Orders list and detail drawn from workflowOrders, and progress edits (status, steps, to-dos,
+ * work time) on their own assigned orders — whatever the Orders key says. Full orders (create,
+ * Production board, export, inventory) still follow the key.
+ */
+export function workflowOrdersLaneOpen(workspace: { role?: string | null } | null | undefined) {
+  return normalizeWorkspaceRole(String(workspace?.role ?? ""), "member") === "workflow";
+}
+
+/** The Orders list/detail screens: the Orders key, or the Workflow role's limited lane. */
+export function ordersScreenAllows(workspace: { role?: string | null; memberAccess?: WorkspaceMemberAccess } | null | undefined) {
+  return workflowOrdersLaneOpen(workspace) || workspaceAccessAllows(workspace?.memberAccess, "orders");
 }
 
 export function workspaceAccessAllows(access: WorkspaceMemberAccess | undefined, key: WorkspaceMemberAccessKey) {
@@ -964,10 +983,15 @@ function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string
     merged.cardFinancial = false;
     merged.assignedProjectsOnly = true;
     merged.manageProjectAssignments = false;
-    // On unless the owner switched it off: firestore.rules reads workflowOrders only
-    // while memberAccess.<uid>.orders is not the boolean false (memberAreaOpen), so
-    // the Orders entry and the order screens close with it (K1/K2, 9 Oct 2026).
-    merged.orders = rootAccess.orders !== false;
+    // Workflow orders contract (9 Oct 2026): Orders is what the owner stored — the root map,
+    // then the inline copy, else off (server workspaceMemberAccess, same order). With it off the
+    // member keeps the assigned limited view and its progress edits (workflowOrdersLaneOpen).
+    merged.orders = typeof rootAccess.orders === "boolean"
+      ? rootAccess.orders
+      : typeof inlineAccess.orders === "boolean" ? inlineAccess.orders : false;
+    // The limited view carries no customer contact details and no notes: their cards stay shut.
+    merged.cardCustomer = false;
+    merged.cardNotes = false;
     merged.schedule = true;
     merged.quickReply = true;
     merged.clientFiles = true;

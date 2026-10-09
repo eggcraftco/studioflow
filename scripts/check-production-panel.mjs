@@ -123,7 +123,8 @@ expect("cards are drawn from the view, still draggable", /\{shown\.map\(card => 
 const page = read("app/orders/[orderId]/page.tsx") || "";
 const runAt = page.indexOf("async function run()");
 const decideAt = page.indexOf("orderWorkspaceDecision(workspaceHint, loadedWorkspace.id)");
-const gateAt = page.indexOf('workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")');
+// Workflow orders contract (9 Oct 2026): the gate is the Orders key OR the Workflow role's limited lane.
+const gateAt = page.indexOf('ordersScreenAllows(loadedWorkspace)');
 const setAt = page.indexOf("setWorkspace(loadedWorkspace)");
 const loadAt = page.indexOf("loadOrderDetail(", runAt);
 expect("the order page reads the hint", /orderWorkspaceHint\(searchParams\)/.test(page), true);

@@ -109,7 +109,7 @@ import {
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
   normalizeWorkspaceRole,
-  workspaceAccessAllows,
+  workspaceAccessAllows, workflowOrdersLaneOpen,
   type ClientFileDetail,
   type CompanyNumberSetting,
   type LineItemDetail,
@@ -2493,7 +2493,8 @@ export function OrderDetailContent({
   // Materials & Inventory is open on every plan, including Free.
   const canUseMaterialsCards = true;
   const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));
-  const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));
+  // Workflow orders contract: progress edits on an assigned order are the Workflow lane, Orders key or not.
+  const canEditOrderStatus = Boolean((canAccessOrders || workflowOrdersLaneOpen(workspace)) && canEditOrderStatusForRole(workspace.role));
   const canEditWorkflowFields = canEditOrderStatus;
   const money = (value: number, hidden = false) => orderMoney(value, hidden, moneySettings);
   const corporationTaxEnabled = Boolean(moneySettings?.corporationTaxEnabled);

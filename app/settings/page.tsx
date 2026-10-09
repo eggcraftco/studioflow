@@ -411,7 +411,11 @@ function baseRoleMatrixAccess(baseRole: string): WorkspaceMemberAccess {
     access.cardFinancial = false;
     access.assignedProjectsOnly = true;
     access.manageProjectAssignments = false;
-    access.orders = true;
+    // Workflow orders contract (9 Oct 2026): full Orders is off by default; the assigned limited
+    // view is the role's own lane. No customer contact or notes cards.
+    access.orders = false;
+    access.cardCustomer = false;
+    access.cardNotes = false;
     access.schedule = true;
     access.teamSchedule = false;
     access.quickReply = true;

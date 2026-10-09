@@ -13,7 +13,7 @@ import {
   orderIsAssignedToCurrentUser,
   subscribeOrderDetail,
   switchActiveWorkspace,
-  workspaceAccessAllows,
+  workspaceAccessAllows, ordersScreenAllows,
   workspaceAssignedProjectsOnly,
   type OrderDetail,
   type WorkspaceContext,
@@ -71,7 +71,8 @@ export default function OrderDetailPage() {
         // Orders are a permission of their own: the list and the Production
         // board already turn a member without it away, and the order itself
         // must not open for them either.
-        if (!workspaceAccessAllows(loadedWorkspace.memberAccess, "orders")) {
+        // Workflow orders contract: a Workflow member opens their assigned limited order.
+        if (!ordersScreenAllows(loadedWorkspace)) {
           setWorkspace(null);
           setOrder(null);
           setError("Orders are not available to your role in this workspace.");

@@ -33,7 +33,7 @@ import {
   loadWorkspaceSettingsOverview,
   switchActiveWorkspace,
   normalizeWorkspaceRole,
-  workspaceAccessAllows,
+  workspaceAccessAllows, workflowOrdersLaneOpen,
   type CustomerPickerOption,
   type DashboardFinanceOrder,
   type WorkspaceMemberAccessKey,
@@ -2019,7 +2019,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       // locked on Free and Lite.
       return true;
     const accessKey = NAV_ACCESS_BY_HREF[item.href];
-    if (accessKey && !memberCanAccess(workspace, accessKey)) return true;
+    // Workflow orders contract: the Workflow role keeps Orders (its assigned limited list).
+    if (accessKey && !memberCanAccess(workspace, accessKey) && !(item.href === "/orders" && workflowOrdersLaneOpen(workspace))) return true;
     return false;
   }
   function navItemActive(item: NavItem) {
