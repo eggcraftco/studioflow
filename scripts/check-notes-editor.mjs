@@ -89,6 +89,7 @@ check(/isNew \? \(!isNoteEmpty\(draft\) \|\| draft\.links\.length > 0\)/.test(ed
 check(/uploadBytesResumable\(ref, file/.test(notesLib) && /deleteObject\(storageRef\(storage, url\)\)/.test(notesLib), "notes.ts has the resumable upload and the delete");
 check(/role="dialog"\n        aria-modal="true"\n        aria-labelledby="note-editor-title"/.test(editor), "the editor is a labelled modal dialog");
 check(/if \(event\.key === "Escape"\) escapeRef\.current\(\);/.test(editor) && /escapeRef\.current = \(\) => \{ if \(!saving\) discardAndClose\(\); \};/.test(editor), "Escape is Cancel");
+check(/aria-label=\{`\$\{t\("Color"\)\}: /.test(editor) && /aria-label=\{t\("Reminder"\)\}/.test(editor), "colour swatches and the reminder date have accessible names");
 for (const w of ["COLOR", "REMINDER", "LABELS", "COLLABORATORS", "IMAGE"]) check(!editor.includes(`>${w}</div>`), `${w} goes through t()`);
 check(/=== 1 \? t\("note"\) : t\("notes"\)/.test(page), "the note count goes through t()");
 

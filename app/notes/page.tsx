@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { loadWorkspaceContext, loadRecentOrders, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
@@ -1728,11 +1728,14 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Color").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Color").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {NOTE_COLORS.map((c) => (
             <button
               key={c}
+              type="button"
+              aria-label={`${t("Color")}: ${t(c.charAt(0).toUpperCase() + c.slice(1))}`}
+              aria-pressed={colorName === c}
               onClick={() => setColorName(c)}
               style={{
                 width: 28,
@@ -1746,10 +1749,11 @@ function NoteEditor({
           ))}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Reminder").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Reminder").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
           <input
             type="date"
+            aria-label={t("Reminder")}
             value={reminderMillis != null && Number.isFinite(reminderMillis) ? localDateInputValue(reminderMillis) : ""}
             onChange={(e) => {
               // Parse the yyyy-mm-dd parts as a LOCAL date at noon. new Date(string)
@@ -1774,7 +1778,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Image").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Image").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ marginBottom: 14 }}>
           <label
             style={{
@@ -1823,7 +1827,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Labels").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Labels").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="text"
@@ -1853,7 +1857,7 @@ function NoteEditor({
           </div>
         )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Collaborators").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Collaborators").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="email"
