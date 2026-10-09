@@ -99,6 +99,7 @@ export function useUploadQueue<TContext = undefined>(
       onStage: stage => dispatch({ type: "stage", id, stage }),
       onProgress: (bytesTransferred, totalBytes) => dispatch({ type: "progress", id, bytesTransferred, totalBytes }),
       onPaused: paused => dispatch({ type: "paused", id, paused }),
+      onStalled: stalled => dispatch({ type: "stalled", id, stalled }),
       onScan: scan => dispatch({ type: "scan", id, scan })
     };
     let outcome: Parameters<typeof dispatch>[0];

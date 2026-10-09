@@ -35,6 +35,9 @@ export type UploadQueueItem = {
   stage: UploadStage;
   /** True while the transfer is held for the network to come back. */
   paused: boolean;
+  /** True while the transfer is online, not paused, and has reported nothing for longer than its
+   *  throughput-aware threshold (uploadRunner stallThresholdMs) — "Still uploading…", never "Retrying". */
+  stalled: boolean;
   error: string;
   retryable: boolean;
   attempt: number;
@@ -47,6 +50,7 @@ export type UploadQueueAction =
   | { type: "stage"; id: string; stage: "preparing" | "uploading" | "processing" }
   | { type: "progress"; id: string; bytesTransferred: number; totalBytes: number }
   | { type: "paused"; id: string; paused: boolean }
+  | { type: "stalled"; id: string; stalled: boolean }
   | { type: "scan"; id: string; scan: UploadScanState }
   | { type: "done"; id: string }
   | { type: "error"; id: string; message: string; retryable: boolean }
@@ -93,6 +97,7 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
           bytesTransferred: 0,
           stage: "queued" as const,
           paused: false,
+          stalled: false,
           error: "",
           retryable: false,
           attempt: 1,
@@ -102,11 +107,11 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
     }
     case "start":
       return patch(items, action.id, item =>
-        item.stage === "queued" ? { ...item, stage: "preparing", paused: false, error: "", bytesTransferred: 0 } : item);
+        item.stage === "queued" ? { ...item, stage: "preparing", paused: false, stalled: false, error: "", bytesTransferred: 0 } : item);
     case "stage":
       return patch(items, action.id, item => {
         if (item.stage === "done" || item.stage === "error" || item.stage === "cancelled") return item;
-        return { ...item, stage: action.stage, paused: action.stage === "uploading" ? item.paused : false };
+        return { ...item, stage: action.stage, paused: action.stage === "uploading" ? item.paused : false, stalled: action.stage === "uploading" ? item.stalled : false };
       });
     case "progress":
       return patch(items, action.id, item => {
@@ -115,10 +120,12 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
         if (item.stage !== "preparing" && item.stage !== "uploading") return item;
         const totalBytes = clampBytes(action.totalBytes) || item.totalBytes;
         const bytesTransferred = Math.min(clampBytes(action.bytesTransferred), totalBytes || Number.MAX_SAFE_INTEGER);
-        return { ...item, stage: "uploading", totalBytes, bytesTransferred };
+        return { ...item, stage: "uploading", totalBytes, bytesTransferred, stalled: false };
       });
     case "paused":
-      return patch(items, action.id, item => (item.stage === "uploading" ? { ...item, paused: action.paused } : item));
+      return patch(items, action.id, item => (item.stage === "uploading" ? { ...item, paused: action.paused, stalled: false } : item));
+    case "stalled":
+      return patch(items, action.id, item => (item.stage === "uploading" && !item.paused ? { ...item, stalled: action.stalled } : item));
     case "scan":
       return patch(items, action.id, item => ({ ...item, scan: action.scan }));
     case "done":
@@ -126,6 +133,7 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
         ...item,
         stage: "done",
         paused: false,
+        stalled: false,
         error: "",
         retryable: false,
         bytesTransferred: item.totalBytes
@@ -134,10 +142,10 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
       return patch(items, action.id, item =>
         item.stage === "done" || item.stage === "cancelled"
           ? item
-          : { ...item, stage: "error", paused: false, error: action.message, retryable: action.retryable });
+          : { ...item, stage: "error", paused: false, stalled: false, error: action.message, retryable: action.retryable });
     case "cancelled":
       return patch(items, action.id, item =>
-        item.stage === "done" ? item : { ...item, stage: "cancelled", paused: false, error: "", retryable: true });
+        item.stage === "done" ? item : { ...item, stage: "cancelled", paused: false, stalled: false, error: "", retryable: true });
     case "retry":
       return patch(items, action.id, item => {
         if (item.stage !== "error" && item.stage !== "cancelled") return item;
@@ -146,6 +154,7 @@ export function uploadQueueReducer(items: UploadQueueItem[], action: UploadQueue
           ...item,
           stage: "queued",
           paused: false,
+          stalled: false,
           error: "",
           bytesTransferred: 0,
           attempt: item.attempt + 1,
@@ -174,11 +183,11 @@ export function uploadPercent(item: Pick<UploadQueueItem, "stage" | "bytesTransf
 }
 
 /** The English sentence the row shows for its state; the screen passes it to t(). */
-export function uploadStageLabel(item: Pick<UploadQueueItem, "stage" | "paused" | "scan">): string {
+export function uploadStageLabel(item: Pick<UploadQueueItem, "stage" | "paused" | "scan"> & { stalled?: boolean }): string {
   switch (item.stage) {
     case "queued": return "Queued";
     case "preparing": return "Preparing";
-    case "uploading": return item.paused ? "Waiting for network" : "Uploading";
+    case "uploading": return item.paused ? "Waiting for network" : item.stalled ? "Still uploading…" : "Uploading";
     case "processing": return "Processing";
     case "done": return item.scan === "unknown" ? "Uploaded — safety scan still running" : "Uploaded";
     case "error": return "Failed";

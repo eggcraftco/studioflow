@@ -34,7 +34,7 @@ const {
 } = progress;
 const {
   transferTracked, awaitScanVerdict, UploadCancelledError, UploadBlockedError,
-  scanStateFromMetadata, scanStateFromReadError, isUploadCancelled
+  scanStateFromMetadata, scanStateFromReadError, isUploadCancelled, stallThresholdMs
 } = runner;
 
 // ---------------------------------------------------------------------------
@@ -300,6 +300,47 @@ function recorder() {
     const source = read(screen);
     expect(`${screen}: renders the queue panel and passes slot + progress`, [/<UploadQueuePanel/.test(source), /useUploadQueue</.test(source), /slot,?\s*\n?\s*progress: hooks|\{ slot, progress: hooks \}/.test(source)], [true, true, true]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stall word (9 Oct 2026): "Still uploading…" after a throughput-aware silence; never while paused.
+// ---------------------------------------------------------------------------
+{
+  expect("stall: threshold floor 15 s", stallThresholdMs(null), 15000);
+  expect("stall: 4 x last gap", stallThresholdMs(10000), 40000);
+  expect("stall: ceiling 90 s", stallThresholdMs(60000), 90000);
+  let clock = 0; const timers = new Map(); let seq = 0;
+  const deps = {
+    objectExists: async () => false, readScan: async () => "none",
+    now: () => clock,
+    setTimer: (fn, ms) => { const id = ++seq; timers.set(id, { fn, at: clock + ms }); return id; },
+    clearTimer: (id) => { timers.delete(id); }
+  };
+  const fire = (to) => { clock = to; for (const [id, t] of [...timers]) if (t.at <= clock) { timers.delete(id); t.fn(); } };
+  let next = null, complete = null;
+  const task = { snapshot: { bytesTransferred: 0, totalBytes: 100, state: "running" }, pause() { return true; }, resume() { return true; }, cancel() { return true; },
+    on(_e, n, _er, c) { next = n; complete = c; } };
+  deps.startUpload = () => task;
+  const stalls = [];
+  const run = transferTracked(deps, "p", { onStalled: (v) => stalls.push(v) });
+  await Promise.resolve(); await Promise.resolve();
+  clock = 2000; next({ bytesTransferred: 10, totalBytes: 100, state: "running" });   // gap 2 s -> threshold 15 s
+  fire(16000);
+  expect("stall: not before the threshold (2 s + 15 s)", stalls, []);
+  fire(17000);
+  expect("stall: silence past the threshold says stalled", stalls, [true]);
+  clock = 30000; next({ bytesTransferred: 50, totalBytes: 100, state: "running" });  // progress again
+  expect("stall: progress clears it", stalls, [true, false]);
+  fire(60000); // gap was 28 s -> threshold 90 s from 30 s = 120 s: not yet
+  expect("stall: a slow healthy link (long gaps) is not called stalled early", stalls, [true, false]);
+  complete(); await run;
+  expect("stall: the timer is cleared when the transfer ends", timers.size, 0);
+  let item = reduce(reduce(reduce([], { type: "enqueue", items: [{ id: "s", fileName: "a", totalBytes: 100 }] }), { type: "start", id: "s" }), { type: "progress", id: "s", bytesTransferred: 10, totalBytes: 100 });
+  item = reduce(item, { type: "stalled", id: "s", stalled: true });
+  expect("stall: label", uploadStageLabel(item[0]), "Still uploading…");
+  expect("stall: paused wins (Waiting for network)", uploadStageLabel(reduce(item, { type: "paused", id: "s", paused: true })[0]), "Waiting for network");
+  expect("stall: next progress clears the label", uploadStageLabel(reduce(item, { type: "progress", id: "s", bytesTransferred: 20, totalBytes: 100 })[0]), "Uploading");
+  expect("stall: the queue wires onStalled", /onStalled: stalled => dispatch\(\{ type: "stalled", id, stalled \}\)/.test(read("lib/studioflow/useUploadQueue.ts")), true);
 }
 
 // ---------------------------------------------------------------------------
