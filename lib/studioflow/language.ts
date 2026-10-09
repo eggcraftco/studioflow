@@ -8973,3 +8973,9 @@ mergeIntoTranslations({
   "Image upload failed.": {"Türkçe": "Görsel yüklenemedi.", "Deutsch": "Bild konnte nicht hochgeladen werden.", "Français": "L'envoi de l'image a échoué.", "Italiano": "Caricamento dell'immagine non riuscito.", "Español (Spanish)": "No se pudo subir la imagen.", "Português": "Não foi possível carregar a imagem.", "Русский (Russian)": "Не удалось загрузить изображение.", "日本語 (Japanese)": "画像をアップロードできませんでした。", "中文 (Chinese)": "图片上传失败。", "العربية (Arabic)": "تعذّر رفع الصورة.", "हिन्दी (Hindi)": "छवि अपलोड नहीं हो सकी।"},
   "Note image": {"Türkçe": "Not görseli", "Deutsch": "Notizbild", "Français": "Image de la note", "Italiano": "Immagine della nota", "Español (Spanish)": "Imagen de la nota", "Português": "Imagem da nota", "Русский (Russian)": "Изображение заметки", "日本語 (Japanese)": "メモの画像", "中文 (Chinese)": "便签图片", "العربية (Arabic)": "صورة الملاحظة", "हिन्दी (Hindi)": "नोट की छवि"},
 });
+
+// Notes list count (9 Oct 2026): "1 note" / "3 notes" stayed English.
+mergeIntoTranslations({
+  "note": {"Türkçe": "not", "Deutsch": "Notiz", "Français": "note", "Italiano": "nota", "Español (Spanish)": "nota", "Português": "nota", "Русский (Russian)": "заметка", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظة", "हिन्दी (Hindi)": "नोट"},
+  "notes": {"Türkçe": "not", "Deutsch": "Notizen", "Français": "notes", "Italiano": "note", "Español (Spanish)": "notas", "Português": "notas", "Русский (Russian)": "заметок", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظات", "हिन्दी (Hindi)": "नोट"},
+});

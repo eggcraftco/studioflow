@@ -551,7 +551,7 @@ export default function NotesPage() {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingLeft: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>{(topTab === "project" ? projectNoteCount : visible.length)} note{(topTab === "project" ? projectNoteCount : visible.length) === 1 ? "" : "s"}</div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>{(topTab === "project" ? projectNoteCount : visible.length)} {(topTab === "project" ? projectNoteCount : visible.length) === 1 ? t("note") : t("notes")}</div>
           </div>
           <button
             onClick={() =>
@@ -1463,6 +1463,16 @@ function NoteEditor({
   // Leaving the editor mid-upload aborts it, so no object lands after Cancel.
   useEffect(() => () => { uploadCancelRef.current?.(); }, []);
 
+  // Escape is Cancel wherever focus is (asks first when something was typed,
+  // deletes this editor's uploads); the backdrop click still saves.
+  const escapeRef = useRef<() => void>(() => {});
+  escapeRef.current = () => { if (!saving) discardAndClose(); };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") escapeRef.current(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   function addImage(file: File) {
     if (upload) return;
     setUploadError("");
@@ -1601,6 +1611,9 @@ function NoteEditor({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="note-editor-title"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "white",
@@ -1612,7 +1625,7 @@ function NoteEditor({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 14px" }}>
-          <h2 style={{ margin: 0, fontWeight: 800, flex: 1 }}>
+          <h2 id="note-editor-title" style={{ margin: 0, fontWeight: 800, flex: 1 }}>
             {isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
           </h2>
           <span aria-live="polite" style={{ fontSize: 11, fontWeight: 700, color: saving ? "#2D7BF4" : "#92400e", background: saving ? "rgba(45,123,244,0.08)" : (dirty ? "#fef3c7" : "transparent"), padding: "2px 8px", borderRadius: 999, visibility: saving || dirty ? "visible" : "hidden" }}>
@@ -1715,7 +1728,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>COLOR</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Color").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {NOTE_COLORS.map((c) => (
             <button
@@ -1733,7 +1746,7 @@ function NoteEditor({
           ))}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>REMINDER</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Reminder").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
           <input
             type="date"
@@ -1756,7 +1769,7 @@ function NoteEditor({
           />
           {reminderMillis && (
             <button onClick={() => setReminderMillis(null)} style={{ padding: "4px 10px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, cursor: "pointer" }}>
-              Clear
+              {t("Clear")}
             </button>
           )}
         </div>
@@ -1810,7 +1823,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>LABELS</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Labels").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="text"
@@ -1827,7 +1840,7 @@ function NoteEditor({
             }}
             style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
           >
-            Add
+            {t("Add")}
           </button>
         </div>
         {labels.length > 0 && (
@@ -1840,7 +1853,7 @@ function NoteEditor({
           </div>
         )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>COLLABORATORS</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Collaborators").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="email"
@@ -1857,7 +1870,7 @@ function NoteEditor({
             }}
             style={{ padding: "6px 14px", border: "1px solid #e5e7eb", background: "white", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
           >
-            Add
+            {t("Add")}
           </button>
         </div>
         {collabs.length > 0 && (
