@@ -6,8 +6,8 @@
  *  - seat limit: `failed-precondition` whose details say `reason: plan_limit_reached` with
  *    `limitKey: teamMemberLimit` / `action: add_team_member`, or carry `seatLimit` (restoring a suspended member) —
  *    the server's own sentence for these has the seat numbers in it, so it cannot be translated;
- *  - connection: `unavailable` / `deadline-exceeded`, or the browser is offline (the JS SDK reports a failed fetch as
- *    `functions/internal`).
+ *  - connection: `unavailable` / `deadline-exceeded`, the browser is offline, or a fetch that got no response (the JS
+ *    SDK reports it as `functions/internal` with the bare description "internal").
  * A reason the server names for a role change keeps its own sentence.
  */
 export type TeamRefusalKind = "permission" | "seat_limit" | "connection" | "other";
@@ -63,7 +63,11 @@ export function teamRefusalMessage(error: unknown, fallback: string): string {
   const named = details ? NAMED_REASONS[String(details.reason || "").trim()] : undefined;
   if (named) return named;
   const hasCode = typeof record.code === "string" && record.code.length > 0;
-  const kind = classifyTeamRefusal(record.code, details, offline);
+  // The JS SDK answers a fetch that never got a response (server unreachable, connection dropped) with
+  // code "internal" and the bare lowercase description "internal"; a real server INTERNAL error carries the
+  // server's "INTERNAL". Same reason the native apps give an IOException / NSURLError: no connection.
+  const unreachable = canonicalRefusalCode(record.code) === "internal" && record.message === "internal";
+  const kind = classifyTeamRefusal(record.code, details, offline || unreachable);
   const sentence = teamRefusalSentence(kind);
   if (sentence) return sentence;
   const message = typeof record.message === "string" ? record.message.trim() : "";
