@@ -40,6 +40,7 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
@@ -1653,7 +1654,7 @@ export default function SchedulePage() {
             <div className="schedule-timeline-card-head">
               <strong>{rangeText}</strong>
               <span>
-                {filteredOrders.length} {t("orders")} · {lateCount} {t("late")} · {readyCount} {t("ready to ship")}
+                {studioCountLabel(filteredOrders.length, "order", language)} · {lateCount} {t("late")} · {readyCount} {t("ready to ship")}
               </span>
             </div>
             <div
@@ -1716,7 +1717,7 @@ export default function SchedulePage() {
           )}
 
           <footer className="schedule-summary-footer">
-            <span>{filteredOrders.length} {t("orders")}</span>
+            <span>{studioCountLabel(filteredOrders.length, "order", language)}</span>
             <span>{lateCount} {t("Late")}</span>
             <span>{readyCount} {t("Ready to Ship")}</span>
             <span>{canEditSchedule ? t("Drag bars to move or resize. Double-click opens the order.") : t("Double-click a bar to open the order.")}</span>

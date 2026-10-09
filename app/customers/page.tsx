@@ -35,6 +35,7 @@ import {
   type CustomerFormInput
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import { resyncIntegrationCustomerFromWeb } from "@/lib/studioflow/customers";
 
@@ -78,11 +79,8 @@ function formatDateTime(date: Date | null) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-// "1 order" vs "2 orders". Languages that don't inflect after a numeral
-// (Turkish among them) simply translate both keys to the same word.
-function countLabel(count: number, singularKey: string, pluralKey: string, t: (text: string) => string) {
-  return `${count} ${t(count === 1 ? singularKey : pluralKey)}`;
-}
+// "1 order" vs "2 orders", by each language's own plural rules (Russian and
+// Arabic have more than two forms) — see studioCountLabel.
 
 // Where a customer record came from. Only external origins get a badge —
 // a manual record needs no explanation.
@@ -242,7 +240,9 @@ export default function CustomersPage() {
         setWorkspace(loadedWorkspace);
 
         const [loadedCustomers, loadedMoneySettings] = await Promise.all([
-          loadWorkspaceCustomers(loadedWorkspace.id),
+          // Assigned Projects Only: order history from the orders assigned to this
+          // member (the rules refuse the whole-workspace order query), as Home does.
+          loadWorkspaceCustomers(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
         if (cancelled) return;
@@ -425,7 +425,7 @@ export default function CustomersPage() {
 
   async function refreshCustomers(selectCustomerId?: string) {
     if (!workspace) return;
-    const loadedCustomers = await loadWorkspaceCustomers(workspace.id);
+    const loadedCustomers = await loadWorkspaceCustomers(workspace.id, workspace, user?.uid ?? "");
     setCustomers(loadedCustomers);
     if (selectCustomerId) {
       setSelectedCustomerId(selectCustomerId);
@@ -737,7 +737,7 @@ export default function CustomersPage() {
           <div className="orders-sidebar-toolbar">
             <div>
               <p className="orders-kicker">{t("Customers")}</p>
-              <h1>{countLabel(customers.length, "customer", "customers", t)}</h1>
+              <h1>{studioCountLabel(customers.length, "customer", language)}</h1>
               <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="customers-toolbar-actions">
@@ -1000,7 +1000,7 @@ function CustomerListCard({
           </span>
         ) : null}
         <span className="customer-list-meta">
-          <span className="studio-pill">{countLabel(customer.orderCount, "order", "orders", t)}</span>
+          <span className="studio-pill">{studioCountLabel(customer.orderCount, "order", language)}</span>
           <span className="studio-pill">{t("Last contact")}: {formatDate(customer.lastContactDate)}</span>
           {CUSTOMER_SOURCE_LABEL[customer.source] ? <span className="studio-pill">{CUSTOMER_SOURCE_LABEL[customer.source]}</span> : null}
           {canSeeFinance ? <span className="studio-pill">{money(customer.totalValue, hideNumbers, moneySettings)}</span> : null}
@@ -1116,7 +1116,7 @@ function CustomerDetail({
           />
           <p>
             {canSeeFinance ? `${money(customer.totalValue, hideNumbers, moneySettings)} ${t("total value")} - ` : ""}
-            {countLabel(customer.orderCount, "order", "orders", t)}
+            {studioCountLabel(customer.orderCount, "order", language)}
             {CUSTOMER_SOURCE_LABEL[customer.source] ? <span className="studio-pill" style={{ marginLeft: 8 }}>{CUSTOMER_SOURCE_LABEL[customer.source]}</span> : null}
           </p>
           {(() => {
@@ -1320,7 +1320,7 @@ function CustomerDetail({
         <div className="customer-card-stack">
           <section className="card app-card customer-detail-card">
             <div className="customer-card-head">
-              <CardTitle icon="orders" eyebrow={t("Order History")} title={countLabel(customer.orderCount, "order", "orders", t)} />
+              <CardTitle icon="orders" eyebrow={t("Order History")} title={studioCountLabel(customer.orderCount, "order", language)} />
               {orders.length > 0 ? (
                 <Link href={`/orders?customerName=${encodeURIComponent(customer.name)}`} className="customer-view-all">
                   {t("View All Orders")}
@@ -2057,7 +2057,7 @@ function MergeCustomersModal({
         <strong>{customerDisplayName(customer.name)}</strong>
         <small>{customer.email || customer.phone || t("No contact details")}</small>
         <small>
-          {countLabel(customer.orderCount, "order", "orders", t)}
+          {studioCountLabel(customer.orderCount, "order", language)}
           {canSeeFinance ? ` · ${money(customer.totalValue, hideNumbers, moneySettings)}` : ""}
           {CUSTOMER_SOURCE_LABEL[customer.source] ? ` · ${CUSTOMER_SOURCE_LABEL[customer.source]}` : ""}
         </small>
@@ -2087,7 +2087,7 @@ function MergeCustomersModal({
         {fieldPicker(t("WhatsApp Number"), primary.whatsappNumber, other.whatsappNumber, keepWhatsapp, setKeepWhatsapp)}
 
         <p className="muted-copy customer-merge-summary">
-          {countLabel(other.orderCount, "order", "orders", t)} → <strong>{customerDisplayName(primary.name)}</strong>
+          {studioCountLabel(other.orderCount, "order", language)} → <strong>{customerDisplayName(primary.name)}</strong>
         </p>
 
         {error ? <p className="layout-error">{t(error)}</p> : null}

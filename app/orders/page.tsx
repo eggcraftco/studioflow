@@ -54,6 +54,7 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
@@ -948,7 +949,7 @@ export default function OrdersPage() {
                 (spec §2, Area 2). */}
             <div className="orders-panel-heading">
               <h1>{t("Orders")}</h1>
-              <p>{filteredOrders.length} {t("orders")}</p>
+              <p>{studioCountLabel(filteredOrders.length, "order", language)}</p>
             </div>
             <div className="sidebar-toolbar-actions">
               {workspace ? (
@@ -1463,7 +1464,7 @@ export default function OrdersPage() {
           <div className="orders-mobile-header">
             <div className="orders-mobile-title">
               <h2>{t("Orders")}</h2>
-              <p>{filteredOrders.length} {t("orders")}</p>
+              <p>{studioCountLabel(filteredOrders.length, "order", language)}</p>
             </div>
             <OrderQuickFilterBar
               orders={orders}

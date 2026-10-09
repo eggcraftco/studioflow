@@ -470,11 +470,13 @@ export default function NotesPage() {
   return (
     <AppShell>
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", position: "relative" }}>
-        {/* Phone: hamburger button (top-left) */}
+        {/* Phone: hamburger button (top, at the reading start: left in LTR, right in
+            Arabic). Physical left/paddingLeft kept the title flush against the
+            right edge in RTL with nothing reserved there. */}
         {isPhone && (
           <button
             onClick={() => setDrawerOpen(true)}
-            style={{ position: "absolute", top: 8, left: 8, zIndex: 50, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}
+            style={{ position: "absolute", top: 8, insetInlineStart: 8, zIndex: 50, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}
           >
             ☰
           </button>
@@ -490,12 +492,12 @@ export default function NotesPage() {
           padding: "8px 0",
           position: isPhone ? "fixed" : "sticky",
           top: isPhone ? 0 : 0,
-          left: isPhone ? (drawerOpen ? 0 : -240) : undefined,
+          insetInlineStart: isPhone ? (drawerOpen ? 0 : -240) : undefined,
           bottom: isPhone ? 0 : undefined,
           zIndex: isPhone ? 101 : undefined,
           background: isPhone ? "white" : "transparent",
           boxShadow: isPhone ? "0 0 24px rgba(0,0,0,0.2)" : "none",
-          transition: isPhone ? "left 0.22s ease" : "none",
+          transition: isPhone ? "inset-inline-start 0.22s ease" : "none",
           height: isPhone ? "100vh" : "auto",
           overflowY: "auto",
         }}>
@@ -548,7 +550,7 @@ export default function NotesPage() {
         )}
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingLeft: isPhone ? 56 : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingInlineStart: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
             <div style={{ fontSize: 13, color: "#6b7280" }}>{(topTab === "project" ? projectNoteCount : visible.length)} {(topTab === "project" ? projectNoteCount : visible.length) === 1 ? t("note") : t("notes")}</div>
@@ -932,7 +934,7 @@ function IconBtn({ title, onClick, children }: { title: string; onClick: (e: Rea
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", margin: "12px 4px 6px" }}>
+    <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), margin: "12px 4px 6px" }}>
       {title}
     </div>
   );
@@ -991,6 +993,13 @@ const PREVIEW_LINES = 8;
 
 function notesIsDark(): boolean {
   return typeof document !== "undefined" && document.body?.dataset?.studioTheme === "dark";
+}
+
+// Section headings (PINNED / OTHERS, and TYPE, VISIBILITY, COLOR … in the
+// editor). #6b7280 reads 4.8:1 on white but only ~3.4:1 on the dark panels,
+// under WCAG AA's 4.5:1; #9ca3af is ~6:1 there.
+function notesSectionHeadingColor(): string {
+  return notesIsDark() ? "#9ca3af" : "#6b7280";
 }
 
 function NoteCard({
@@ -1659,7 +1668,7 @@ function NoteEditor({
           style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
         />
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
           {([["personal", "Personal"], ["order", "Order"], ["customer", "Customer"], ["team", "Team"]] as const).map(([value, label]) => (
             <button
@@ -1716,7 +1725,7 @@ function NoteEditor({
             </datalist>
           </div>
         )}
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Visibility").toUpperCase()}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Visibility").toUpperCase()}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
           {([["only_me", "Only me"], ["workspace", "Workspace members"]] as const).map(([value, label]) => (
             <button
@@ -1732,7 +1741,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Color").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Color").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {NOTE_COLORS.map((c) => (
             <button
@@ -1753,7 +1762,7 @@ function NoteEditor({
           ))}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Reminder").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Reminder").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
           <input
             type="date"
@@ -1782,7 +1791,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Image").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Image").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ marginBottom: 14 }}>
           <label
             style={{
@@ -1831,7 +1840,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Labels").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Labels").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="text"
@@ -1861,7 +1870,7 @@ function NoteEditor({
           </div>
         )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Collaborators").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Collaborators").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
             type="email"

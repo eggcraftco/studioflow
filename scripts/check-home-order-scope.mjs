@@ -191,10 +191,18 @@ for (const call of ["loadDashboardCounts(workspaceId, workspace, uid)", "loadDas
 expect("useHomeData no longer calls a loader with the workspace id alone", /load(DashboardCounts|DashboardFinanceOrders|WorkspaceCustomers)\(workspaceId\)/.test(hook), false);
 expect("Home marks its order scope (data-home-order-scope)", read("app/home/page.tsx").includes("data-home-order-scope={data.orderScope}"), true);
 
+// ---- 3. the Customers screen (9 Oct 2026): it called loadWorkspaceCustomers(workspace.id) alone, so an
+// Assigned Projects Only member issued the whole-workspace order query, the rules refused it and the
+// screen said "Could not load customers". The directory is the same; the order history is their own.
+const customersPage = read("app/customers/page.tsx");
+expect("Customers page loads with the workspace and the uid", customersPage.includes("loadWorkspaceCustomers(loadedWorkspace.id, loadedWorkspace, uid)"), true);
+expect("Customers page refresh passes the workspace and the uid", customersPage.includes("loadWorkspaceCustomers(workspace.id, workspace, user?.uid ?? \"\")"), true);
+expect("Customers page never calls the loader with the workspace id alone", /loadWorkspaceCustomers\([a-zA-Z.]+\)/.test(customersPage), false);
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) {
   console.error(`Home order scope: ${failures.length} failure(s) of ${checks} checks`);
   for (const f of failures) console.error(`  FAIL ${f}`);
   process.exit(1);
 }
-console.log(`Home order scope: all ${checks} checks pass — Workflow Only and Assigned Projects Only read only their own orders on Home; Owner, Member, View Only and Orders-off issue the same queries as before`);
+console.log(`Home order scope: all ${checks} checks pass — Workflow Only and Assigned Projects Only read only their own orders on Home; Owner, Member, View Only and Orders-off issue the same queries as before; Customers passes the workspace and the uid`);
