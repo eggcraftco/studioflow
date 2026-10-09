@@ -140,9 +140,17 @@ for (const [f, sf] of sources) {
       const t = ts.isStringLiteral(n.initializer) ? n.initializer.text : null;
       if (t && looksLikeUi(t)) add(hard, t, site(n));
     }
-    if (ts.isJsxExpression(n) && n.expression && ts.isJsxElement(n.parent)) {
-      const t = textOf(n.expression);
-      if (t && looksLikeUi(t)) add(hard, t, site(n));
+    if (ts.isJsxExpression(n) && n.expression && (ts.isJsxElement(n.parent) || ts.isJsxAttribute(n.parent) && ATTRS.has(n.parent.name.getText(sf)))) {
+      // {"Text"}, {busy ? "Saving…" : "Save"}, {value || "Fallback"} drawn straight into the page
+      const lits: ts.Node[] = [];
+      const collect = (e: ts.Expression) => {
+        const x = ts.isParenthesizedExpression(e) ? e.expression : e;
+        if (textOf(x) !== null) lits.push(x);
+        else if (ts.isConditionalExpression(x)) { collect(x.whenTrue); collect(x.whenFalse); }
+        else if (ts.isBinaryExpression(x) && (x.operatorToken.kind === ts.SyntaxKind.BarBarToken || x.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)) collect(x.right);
+      };
+      collect(n.expression);
+      for (const l of lits) { const t = textOf(l)!; if (looksLikeUi(t)) add(hard, t, site(l)); }
     }
     if (ts.isPropertyAssignment(n) && (ts.isIdentifier(n.name) || ts.isStringLiteral(n.name)) && LABEL_PROPS.has(n.name.text)) {
       const t = textOf(n.initializer);

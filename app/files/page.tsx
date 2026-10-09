@@ -661,7 +661,7 @@ export default function FilesPage() {
         <div className="pill">{t("Every file in this workspace, linked to its records")}</div>
         <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>{t("Files")}</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          {workspace ? `${workspace.name} - ${workspace.billingPlanName}` : "Loading workspace..."}
+          {workspace ? `${workspace.name} - ${workspace.billingPlanName}` : t("Loading workspace...")}
         </p>
       </section>
 
@@ -714,7 +714,7 @@ export default function FilesPage() {
             <>
               <div className="upload-safety-panel">
                 <span className="studio-pill">{t("Max {size} MB").replace("{size}", String(maxUploadSizeMB))}</span>
-                <span className="studio-pill">PDF, image, PSD, PSB, ZIP</span>
+                <span className="studio-pill">{t("PDF, image, PSD, PSB, ZIP")}</span>
                 {requireUploadPolicyAcceptance ? (
                   <>
                     {/* The workspace's own text, else the built-in sentence — the

@@ -5377,7 +5377,7 @@ function FinancialSettingsSection({
                 disabled={!canEdit || saving}
                 onClick={() => { updateString("taxCalculationType", "Revenue"); updateString("vatMethod", "standard"); }}
               >
-                <strong>{draft.taxRuleNameRevenue || "Revenue"}</strong>
+                <strong>{draft.taxRuleNameRevenue || t("Revenue")}</strong>
                 <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
               </button>
               <button
@@ -5389,7 +5389,7 @@ function FinancialSettingsSection({
                 disabled={!canEdit || saving}
                 onClick={() => { updateString("taxCalculationType", "Profit"); updateString("vatMethod", "margin"); }}
               >
-                <strong>{draft.taxRuleNameProfit || "Profit"}</strong>
+                <strong>{draft.taxRuleNameProfit || t("Profit")}</strong>
                 <p>{t("Margin scheme: VAT is due on your margin — the selling price less what you paid for the item, and nothing else off it.")}</p>
               </button>
               <button

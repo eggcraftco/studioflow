@@ -210,6 +210,9 @@
  "Details": [
   "Deutsch"
  ],
+ "Dimensions": [
+  "Français"
+ ],
  "Direct": [
   "Français"
  ],
@@ -284,6 +287,10 @@
   "Deutsch",
   "Italiano"
  ],
+ "Instrument": [
+  "Deutsch",
+  "Français"
+ ],
  "Invitations": [
   "Français"
  ],
@@ -316,6 +323,11 @@
   "Italiano",
   "Português"
  ],
+ "Material": [
+  "Deutsch",
+  "Español (Spanish)",
+  "Português"
+ ],
  "Maximum": [
   "Français"
  ],
@@ -332,6 +344,11 @@
  ],
  "Messages": [
   "Français"
+ ],
+ "Metal": [
+  "Español (Spanish)",
+  "Português",
+  "Türkçe"
  ],
  "Name": [
   "Deutsch"
@@ -583,6 +600,14 @@
  "VAT (": [
   "हिन्दी (Hindi)",
   "日本語 (Japanese)"
+ ],
+ "VIN": [
+  "Español (Spanish)",
+  "Français",
+  "Italiano",
+  "Português",
+  "Русский (Russian)",
+  "हिन्दी (Hindi)"
  ],
  "Version": [
   "Deutsch",

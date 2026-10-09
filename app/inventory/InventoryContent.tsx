@@ -709,7 +709,7 @@ export function InventoryContent({
                 <td>
                   <span className={`inventory-status is-${item.status}`}>
                     {isInventoryLowStock(item) && item.status === "available"
-                      ? "Low Stock"
+                      ? t("Low Stock")
                       : t(STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </td>

@@ -801,7 +801,7 @@ function MatchPaymentModal({
         </div>
         <div className="inventory-modal-body">
           <p className="inventory-hint">
-            {purchase.number} · {purchase.supplierName || "No supplier"} · <strong>{money(currencySymbol, purchase.total)}</strong>
+            {purchase.number} · {purchase.supplierName || t("No supplier")} · <strong>{money(currencySymbol, purchase.total)}</strong>
           </p>
 
           {loading ? (
@@ -823,7 +823,7 @@ function MatchPaymentModal({
                     onClick={() => void match(row.id)}
                   >
                     <span className="inventory-match-main">
-                      <strong>{row.counterparty || row.description || "Transaction"}</strong>
+                      <strong>{row.counterparty || row.description || t("Transaction")}</strong>
                       <span className="inventory-sub">{row.bookingDate}</span>
                     </span>
                     <span className="inventory-match-amount">

@@ -1326,7 +1326,7 @@ export default function OrdersPage() {
                 onClick={() => void deleteOrderFromMenu(contextOrder)}
               >
                 <span aria-hidden="true">⌫</span>
-                {canRequestOrderDeletion ? "Request Deletion" : t("Delete")}
+                {canRequestOrderDeletion ? t("Request Deletion") : t("Delete")}
               </button>
               </>) : null}
             </div>
@@ -1385,7 +1385,7 @@ export default function OrdersPage() {
                       >
                         <span aria-hidden="true" style={{ color: isPrimary ? "#2563eb" : "var(--muted)", fontSize: 16 }}>{isPrimary ? "●" : "○"}</span>
                         <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
-                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.customerName.trim() || "New Project"}</strong>
+                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.customerName.trim() || t("New Project")}</strong>
                           <span className="muted-copy" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(candidate.designName || "").trim() || "—"}</span>
                         </span>
                         {isPrimary ? <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 12 }}>{t("Main")}</span> : null}

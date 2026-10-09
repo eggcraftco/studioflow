@@ -865,7 +865,7 @@ export default function MessagesPage() {
                         className={`filter-chip${attachmentFilter === key ? " active" : ""}`}
                         onClick={() => setAttachmentFilter(key)}
                       >
-                        {key === "all" ? "All" : key === "media" ? "Media" : t("Files")}
+                        {key === "all" ? t("All") : key === "media" ? t("Media") : t("Files")}
                       </button>
                     ))}
                   </div>

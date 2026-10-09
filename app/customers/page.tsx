@@ -1824,12 +1824,12 @@ function CustomerInlineNotes({
   }
 
   if (disabled) {
-    return <div className="customer-notes-box">{value ? value : "No customer notes yet."}</div>;
+    return <div className="customer-notes-box">{value ? value : t("No customer notes yet.")}</div>;
   }
 
   return (
     <button className="customer-notes-box customer-notes-button" type="button" onClick={() => setEditing(true)}>
-      {value ? value : "No customer notes yet."}
+      {value ? value : t("No customer notes yet.")}
     </button>
   );
 }

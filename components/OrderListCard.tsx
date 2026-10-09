@@ -408,7 +408,7 @@ export function OrderListCard({
 
           <div className="order-list-detail-line">
             <span aria-hidden="true">✽</span>
-            <span title={order.designName || "Untitled design"}>{order.designName || "Untitled design"}</span>
+            <span title={order.designName || studioT("Untitled design", displayLanguage)}>{order.designName || studioT("Untitled design", displayLanguage)}</span>
           </div>
           <div className="order-list-detail-line order-list-date-line">
             <span aria-hidden="true">▣</span>
