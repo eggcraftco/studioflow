@@ -46,12 +46,17 @@ export type TrackedUploadDeps = {
   subscribeVisible?(onVisible: () => void): () => void;
   sleep?(ms: number): Promise<void>;
   now?(): number;
+  /** Timers for the stall word (injectable so the check drives them); default setTimeout/clearTimeout. */
+  setTimer?(fn: () => void, ms: number): unknown;
+  clearTimer?(handle: unknown): void;
 };
 
 export type TrackedUploadHooks = {
   onStage?(stage: "preparing" | "uploading" | "processing"): void;
   onProgress?(bytesTransferred: number, totalBytes: number): void;
   onPaused?(paused: boolean): void;
+  /** No progress for longer than stallThresholdMs while online and not paused (true), progress again (false). */
+  onStalled?(stalled: boolean): void;
   onScan?(scan: UploadScanState): void;
   signal?: AbortSignal;
   /** How long to wait for the scan verdict before giving the row up as "unknown". */
@@ -85,6 +90,16 @@ export function throwIfCancelled(signal?: AbortSignal) {
 }
 
 const defaultSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+/**
+ * How long silence may last before the row says "Still uploading…" (9 Oct 2026, the natives' F1 rule): the
+ * SDK reports progress per chunk and the chunks grow, so a fixed 15 s called a slow, healthy upload stalled.
+ * Four times the last measured gap between progress reports, never under 15 s and never over 90 s.
+ */
+export function stallThresholdMs(lastGapMs: number | null | undefined): number {
+  const gap = Number(lastGapMs);
+  return Math.min(90_000, Math.max(15_000, Number.isFinite(gap) && gap > 0 ? gap * 4 : 0));
+}
 
 /**
  * Moves the bytes. Progress is the task's own snapshot, forwarded as it
@@ -126,6 +141,30 @@ export async function transferTracked(
   };
   if (deps.isOnline && !deps.isOnline()) hold();
 
+  // The stall word: re-armed on every progress report; silent while paused (that row says "Waiting").
+  const now = deps.now ?? Date.now;
+  const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const clearTimer = deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
+  let stallHandle: unknown = null;
+  let stalled = false;
+  let lastProgressAt = now();
+  let lastGap: number | null = null;
+  const armStall = () => {
+    if (stallHandle !== null) clearTimer(stallHandle);
+    stallHandle = setTimer(() => {
+      stallHandle = null;
+      if (!paused && !stalled) { stalled = true; hooks.onStalled?.(true); }
+    }, stallThresholdMs(lastGap));
+  };
+  const noteProgress = () => {
+    const t = now();
+    lastGap = t - lastProgressAt;
+    lastProgressAt = t;
+    if (stalled) { stalled = false; hooks.onStalled?.(false); }
+    armStall();
+  };
+  armStall();
+
   const unsubscribeConnectivity = deps.subscribeConnectivity?.(online => (online ? release() : hold()));
   // A background tab throttles timers and repaints; when it comes back the row
   // is brought up to the task's real position rather than its last paint.
@@ -139,7 +178,7 @@ export async function transferTracked(
     await new Promise<void>((resolve, reject) => {
       task.on(
         "state_changed",
-        snapshot => { hooks.onProgress?.(snapshot.bytesTransferred, snapshot.totalBytes); },
+        snapshot => { noteProgress(); hooks.onProgress?.(snapshot.bytesTransferred, snapshot.totalBytes); },
         error => { reject(error); },
         () => { resolve(); }
       );
@@ -148,6 +187,7 @@ export async function transferTracked(
     if (hooks.signal?.aborted || isUploadCancelled(error)) throw new UploadCancelledError();
     throw error;
   } finally {
+    if (stallHandle !== null) clearTimer(stallHandle);
     hooks.signal?.removeEventListener("abort", onAbort);
     unsubscribeConnectivity?.();
     unsubscribeVisible?.();

@@ -41,6 +41,7 @@
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
     "test:upload-progress": "node scripts/check-upload-progress.mjs",
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
+    "test:upload-policy": "node scripts/check-upload-policy.mjs",
     "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs",
     "test:card-purposes": "node scripts/check-card-purposes.mjs",
     "test:card-stacking": "node scripts/check-card-stacking.mjs",

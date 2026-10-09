@@ -83,6 +83,17 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
+import {
+  clearUploadPolicyAcceptance,
+  readUploadPolicyAcceptance,
+  UPLOAD_POLICY_BUILTIN_SENTENCE,
+  uploadPolicyAllows,
+  uploadPolicyStamp,
+  uploadPolicyVersion,
+  uploadPolicyVersionShort,
+  uploadPolicyWording,
+  writeUploadPolicyAcceptance
+} from "@/lib/studioflow/uploadPolicy";
 import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, testQuickReplyApiKey, type QuickReplyContributionItem, type QuickReplyKeyTestResult } from "@/lib/studioflow/quickReply";
 import {
   loadWorkspaceBlockHeadings,
@@ -1356,6 +1367,63 @@ function SettingsSectionIcon({ icon }: { icon: keyof typeof SETTINGS_ICON_PATHS 
   );
 }
 
+function UploadPolicyBrowserStatusCard({
+  workspace,
+  settings,
+  language,
+  t
+}: {
+  workspace: WorkspaceContext;
+  settings: WorkspaceSettingsOverview | null;
+  language: string;
+  t: (text: string) => string;
+}) {
+  const policyVersion = uploadPolicyVersion(settings);
+  const [acceptance, setAcceptance] = useState<{ version: string; acceptedAt: string } | null>(null);
+  useEffect(() => {
+    try {
+      setAcceptance(readUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion));
+    } catch {
+      setAcceptance(null);
+    }
+  }, [workspace.id, policyVersion]);
+  const acceptedDate = acceptance ? new Date(acceptance.acceptedAt).toLocaleDateString(studioLocaleTag(language)) : "";
+  return (
+    <section className="card app-card" data-testid="upload-policy-browser-status">
+      <SettingsCardHead
+        icon={<CardIconGlyph icon="check" />}
+        title={t("Upload Policy")}
+        aside={<span className="settings-tag">{t("This browser")}</span>}
+      />
+      <p className="settings-field-hint">
+        <strong>{acceptance ? t("Accepted") : t("Not accepted")}</strong>
+        {" — "}
+        {acceptance
+          ? `${t("Uploads will not ask again until you reset it.")}${acceptedDate ? ` (${acceptedDate}, ${uploadPolicyVersionShort(acceptance.version)})` : ""}`
+          : t("The next upload will ask for acceptance.")}
+      </p>
+      {acceptance ? (
+        <div className="settings-action-row">
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => {
+              try {
+                clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+              } catch {
+                /* the stored acceptance stays; the status below re-reads it */
+              }
+              setAcceptance(null);
+            }}
+          >
+            {t("Reset for this browser")}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreferencesSection({
   workspace,
   settings,
@@ -1551,6 +1619,11 @@ function PreferencesSection({
         <p className="settings-field-hint">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
       </section>
 
+      {/* Every user's own acceptance in this browser (status + reset; contract §2): Preferences is personal, so a
+          member without the Safety & Uploads screen still sees and can forget their acceptance. Nothing here
+          creates an acceptance and nothing here edits a workspace setting. */}
+      <UploadPolicyBrowserStatusCard workspace={workspace} settings={settings} language={language} t={t} />
+
       <div className="settings-save-row">
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{t(error)}</p> : null}
@@ -1603,9 +1676,15 @@ function WorkspaceBrandingSection({
     setIdentityError("");
   }, [settings?.appSubtitle]);
 
+  // The same per-workspace, per-version acceptance the Client Files uploads use.
+  const uploadPolicyVersionId = uploadPolicyVersion(settings);
   useEffect(() => {
-    setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
-  }, [workspace.id]);
+    try {
+      setPolicyAccepted(readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId) !== null);
+    } catch {
+      setPolicyAccepted(false);
+    }
+  }, [workspace.id, uploadPolicyVersionId]);
 
   // Only the two fields the Save button writes. The logo upload is its own
   // action and the policy checkbox writes to localStorage on the spot, so
@@ -1652,8 +1731,22 @@ function WorkspaceBrandingSection({
     setLogoStatus(result.message || t("Workspace logo saved."));
   }
 
-  async function uploadLogo(file: File, acceptedPolicy: boolean) {
+  async function uploadLogo(file: File) {
     if (!settings || !user) return;
+    // The workspace policy, exactly as for a client file (contract §6, 9 Oct 2026): the stamp says required and
+    // accepted separately; "true" + policyAcceptedAt + policyVersion only with a real acceptance of the current
+    // version in this browser. Not required and never accepted is "false" — no manufactured acceptance.
+    let logoPolicyAcceptance = null;
+    try {
+      logoPolicyAcceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      logoPolicyAcceptance = null;
+    }
+    if (!uploadPolicyAllows(requirePolicy, logoPolicyAcceptance)) {
+      setPendingLogoFile(file);
+      return;
+    }
+    const logoPolicy = uploadPolicyStamp(requirePolicy, logoPolicyAcceptance);
     setUploadingLogo(true);
     setLogoStatus("");
     setLogoError("");
@@ -1662,7 +1755,7 @@ function WorkspaceBrandingSection({
         workspace,
         file,
         user: { uid: user.uid, email: user.email, displayName: user.displayName },
-        policyAccepted: acceptedPolicy,
+        policy: logoPolicy,
         maxSizeMB
       });
       await saveLogoResult(result);
@@ -1691,7 +1784,7 @@ function WorkspaceBrandingSection({
       setLogoError("");
       return;
     }
-    void uploadLogo(file, policyAccepted || !requirePolicy);
+    void uploadLogo(file);
   }
 
   function openLogoPicker() {
@@ -1710,12 +1803,16 @@ function WorkspaceBrandingSection({
 
   async function handleAcceptPolicyAndUpload() {
     if (!pendingLogoFile) return;
-    window.localStorage.setItem(uploadSafetyAcceptanceKey(workspace.id), "accepted");
-    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    try {
+      writeUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      setLogoError(t("This browser could not save the upload policy acceptance. Please try again."));
+      return;
+    }
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
-    await uploadLogo(file, true);
+    await uploadLogo(file);
   }
 
   async function handleRemoveLogo() {
@@ -1867,7 +1964,8 @@ function WorkspaceBrandingSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
-            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
+            {/* Exactly the wording the current version stands for: the workspace's text, else the built-in sentence. */}
+            <p className="upload-safety-policy-text">{uploadPolicyWording(settings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
               <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>
@@ -3800,24 +3898,35 @@ function SafetyUploadsSection({
     setPolicyText(settings.uploadSafetyPolicyText || "");
   }, [settings]);
 
+  // The acceptance shown here is the one for the CURRENT policy version
+  // (lib/studioflow/uploadPolicy.ts); after a save that changes the policy
+  // TEXT the version moves on, so "Accepted" turns into "Not accepted" until
+  // the browser accepts again. Saving only the size or the switch keeps it.
+  const policyVersion = uploadPolicyVersion(settings);
   useEffect(() => {
-    const accepted = window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted";
-    setBrowserAccepted(accepted);
-    const atRaw = window.localStorage.getItem(uploadSafetyAcceptanceAtKey(workspace.id));
-    setAcceptedAtMs(accepted && atRaw ? Number(atRaw) || 0 : 0);
-  }, [workspace.id]);
+    try {
+      const acceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
+      setBrowserAccepted(acceptance !== null);
+      setAcceptedAtMs(acceptance ? Date.parse(acceptance.acceptedAt) || 0 : 0);
+    } catch {
+      setBrowserAccepted(false);
+      setAcceptedAtMs(0);
+    }
+  }, [workspace.id, policyVersion]);
 
   function updateBrowserAccepted(nextAccepted: boolean) {
-    setBrowserAccepted(nextAccepted);
-    const key = uploadSafetyAcceptanceKey(workspace.id);
-    const atKey = uploadSafetyAcceptanceAtKey(workspace.id);
-    if (nextAccepted) {
-      window.localStorage.setItem(key, "accepted");
-      window.localStorage.setItem(atKey, String(Date.now()));
-      setAcceptedAtMs(Date.now());
-    } else {
-      window.localStorage.removeItem(key);
-      window.localStorage.removeItem(atKey);
+    try {
+      if (nextAccepted) {
+        const acceptance = writeUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
+        setBrowserAccepted(true);
+        setAcceptedAtMs(Date.parse(acceptance.acceptedAt) || 0);
+      } else {
+        clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+        setBrowserAccepted(false);
+        setAcceptedAtMs(0);
+      }
+    } catch {
+      setBrowserAccepted(false);
       setAcceptedAtMs(0);
     }
   }
@@ -3842,11 +3951,19 @@ function SafetyUploadsSection({
         uploadSafetyMaxFileSizeMB: maxFileSizeMB,
         uploadSafetyPolicyText: policyText
       });
+      // The server writes uploadSafetyPolicyVersion from the saved text on
+      // every save; read it back rather than guess it, so the status card and
+      // the next upload agree with the stored version.
+      const refreshed = await loadWorkspaceSettingsOverview(workspace.id).catch(() => null);
       onSaved({
         ...settings,
         uploadSafetyRequirePolicyAcceptance: result.settings?.uploadSafetyRequirePolicyAcceptance ?? requirePolicy,
         uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB,
-        uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText
+        uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText,
+        uploadSafetySettingsUpdatedAtMs: refreshed?.uploadSafetySettingsUpdatedAtMs ?? settings.uploadSafetySettingsUpdatedAtMs,
+        uploadSafetyPolicyVersion: refreshed?.uploadSafetyPolicyVersion
+          ?? (result.settings as { uploadSafetyPolicyVersion?: string } | undefined)?.uploadSafetyPolicyVersion
+          ?? null
       });
       markSafetySaved();
       setStatus(result.message || "Upload Safety settings saved.");
@@ -4026,16 +4143,6 @@ function SafetyUploadsSection({
   );
 }
 
-function uploadSafetyAcceptanceKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted:${workspaceId}`;
-}
-
-// The acceptance flag stays the literal "accepted" for compatibility with every
-// existing reader; the WHEN lives beside it under its own key.
-function uploadSafetyAcceptanceAtKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
-}
-
 function AccountSection({
   workspace,
   settings,
@@ -4111,9 +4218,15 @@ function AccountSection({
     setEmailDraft(userEmail);
   }, [userEmail]);
 
+  // The same per-workspace, per-version acceptance the Client Files uploads use.
+  const uploadPolicyVersionId = uploadPolicyVersion(settings);
   useEffect(() => {
-    setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
-  }, [workspace.id]);
+    try {
+      setPolicyAccepted(readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId) !== null);
+    } catch {
+      setPolicyAccepted(false);
+    }
+  }, [workspace.id, uploadPolicyVersionId]);
 
   async function handleChangeEmail() {
     const cleanEmail = emailDraft.trim().toLowerCase();
@@ -4296,8 +4409,22 @@ function AccountSection({
     setStatus(result.message || t("Workspace logo saved."));
   }
 
-  async function uploadLogo(file: File, acceptedPolicy: boolean) {
+  async function uploadLogo(file: File) {
     if (!settings || !user) return;
+    // The workspace policy, exactly as for a client file (contract §6, 9 Oct 2026): the stamp says required and
+    // accepted separately; "true" + policyAcceptedAt + policyVersion only with a real acceptance of the current
+    // version in this browser. Not required and never accepted is "false" — no manufactured acceptance.
+    let logoPolicyAcceptance = null;
+    try {
+      logoPolicyAcceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      logoPolicyAcceptance = null;
+    }
+    if (!uploadPolicyAllows(requirePolicy, logoPolicyAcceptance)) {
+      setPendingLogoFile(file);
+      return;
+    }
+    const logoPolicy = uploadPolicyStamp(requirePolicy, logoPolicyAcceptance);
     setUploadingLogo(true);
     setStatus("");
     setError("");
@@ -4310,7 +4437,7 @@ function AccountSection({
           email: user.email,
           displayName: user.displayName
         },
-        policyAccepted: acceptedPolicy,
+        policy: logoPolicy,
         maxSizeMB
       });
       await saveLogoResult(result);
@@ -4339,7 +4466,7 @@ function AccountSection({
       setError("");
       return;
     }
-    void uploadLogo(file, policyAccepted || !requirePolicy);
+    void uploadLogo(file);
   }
 
   function openLogoPicker() {
@@ -4358,13 +4485,16 @@ function AccountSection({
 
   async function handleAcceptPolicyAndUpload() {
     if (!pendingLogoFile) return;
-    const key = uploadSafetyAcceptanceKey(workspace.id);
-    window.localStorage.setItem(key, "accepted");
-    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    try {
+      writeUploadPolicyAcceptance(window.localStorage, workspace.id, uploadPolicyVersionId);
+    } catch {
+      setError(t("This browser could not save the upload policy acceptance. Please try again."));
+      return;
+    }
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
-    await uploadLogo(file, true);
+    await uploadLogo(file);
   }
 
   async function handleRemoveLogo() {
@@ -4605,7 +4735,8 @@ function AccountSection({
         {pendingLogoFile ? (
           <div className="workspace-logo-policy">
             <strong>{t("Upload Policy")}</strong>
-            <p>{t("Only upload legal, safe and work-related images that belong in this workspace.")}</p>
+            {/* Exactly the wording the current version stands for: the workspace's text, else the built-in sentence. */}
+            <p className="upload-safety-policy-text">{uploadPolicyWording(settings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}</p>
             <div className="workspace-logo-actions">
               <button className="button secondary" type="button" disabled={uploadingLogo} onClick={() => setPendingLogoFile(null)}>{t("Cancel")}</button>
               <button className="button" type="button" disabled={uploadingLogo} onClick={handleAcceptPolicyAndUpload}>{t("I Agree and Upload")}</button>

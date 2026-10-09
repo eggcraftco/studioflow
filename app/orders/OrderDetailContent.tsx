@@ -50,6 +50,17 @@ import {
   renameClientFileForOrder,
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
+import {
+  UPLOAD_POLICY_BUILTIN_SENTENCE,
+  type UploadPolicyAcceptance,
+  clearUploadPolicyAcceptance,
+  readUploadPolicyAcceptance,
+  uploadPolicyAllows,
+  uploadPolicyStamp,
+  uploadPolicyVersion,
+  uploadPolicyWording,
+  writeUploadPolicyAcceptance
+} from "@/lib/studioflow/uploadPolicy";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
@@ -236,14 +247,6 @@ function statusCustomToggleValue(values: Record<string, boolean>, toggle: Headin
 function orderMoney(value: number, hidden: boolean, settings: StudioMoneySettings) {
   if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
   return formatStudioMoney(value, settings);
-}
-
-function uploadSafetyAcceptanceKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted:${workspaceId}`;
-}
-
-function uploadSafetyAcceptanceAtKey(workspaceId: string) {
-  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
 }
 
 // LOCAL calendar day, never toISOString: the value round-trips through
@@ -2088,7 +2091,14 @@ export function OrderDetailContent({
       setOrderLinkedNotes(all.filter(note => !note.isDeleted && !note.isArchived && note.linkedOrderId === order.id));
     });
   }, [workspace.id, user, order.id]);
-  const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
+  // The policy version uploaders accept: the server-stored
+  // uploadSafetyPolicyVersion, else the same SHA-256 of the workspace text,
+  // else the built-in version "builtin-1" (lib/studioflow/uploadPolicy.ts). The
+  // acceptance below is read for THIS version only — a changed policy is
+  // asked again (lib/studioflow/uploadPolicy.ts).
+  const clientFileUploadPolicyVersion = uploadPolicyVersion(moneySettings);
+  const [browserUploadPolicyAcceptance, setBrowserUploadPolicyAcceptance] = useState<UploadPolicyAcceptance | null>(null);
+  const browserAcceptedUploadPolicy = browserUploadPolicyAcceptance !== null;
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   // Client file uploads run through a queue: two at a time, each row with the
   // storage task's measured bytes, a cancel, and a retry that keeps the same
@@ -2102,7 +2112,7 @@ export function OrderDetailContent({
       slot,
       progress: hooks,
       uploadSafety: {
-        policyAccepted: !clientFileRequiresPolicyAcceptance || browserAcceptedUploadPolicy,
+        policy: uploadPolicyStamp(clientFileRequiresPolicyAcceptance, browserUploadPolicyAcceptance),
         maxSizeMB: clientFileMaxUploadSizeMB
       },
       user: {
@@ -2300,29 +2310,30 @@ export function OrderDetailContent({
 
   useEffect(() => {
     try {
-      setBrowserAcceptedUploadPolicy(
-        window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted"
+      setBrowserUploadPolicyAcceptance(
+        readUploadPolicyAcceptance(window.localStorage, workspace.id, clientFileUploadPolicyVersion)
       );
     } catch {
-      setBrowserAcceptedUploadPolicy(false);
+      setBrowserUploadPolicyAcceptance(null);
     }
-  }, [workspace.id]);
+  }, [workspace.id, clientFileUploadPolicyVersion]);
 
   function updateClientFileUploadPolicyAccepted(accepted: boolean) {
-    setBrowserAcceptedUploadPolicy(accepted);
     setFileActionError(null);
     setFileActionStatus(accepted ? "Upload policy accepted. Choose a file to upload." : null);
     try {
-      const key = uploadSafetyAcceptanceKey(workspace.id);
       if (accepted) {
-        window.localStorage.setItem(key, "accepted");
-        window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+        setBrowserUploadPolicyAcceptance(
+          writeUploadPolicyAcceptance(window.localStorage, workspace.id, clientFileUploadPolicyVersion)
+        );
+      } else {
+        clearUploadPolicyAcceptance(window.localStorage, workspace.id);
+        setBrowserUploadPolicyAcceptance(null);
       }
-      else window.localStorage.removeItem(key);
     } catch {
       if (accepted) {
         setFileActionError("This browser could not save the upload policy acceptance. Please try again.");
-        setBrowserAcceptedUploadPolicy(false);
+        setBrowserUploadPolicyAcceptance(null);
       }
     }
   }
@@ -4031,8 +4042,7 @@ export function OrderDetailContent({
 
     const maxUploadSizeMB = clientFileMaxUploadSizeMB;
     const requirePolicyAcceptance = clientFileRequiresPolicyAcceptance;
-    const policyAccepted = !requirePolicyAcceptance || browserAcceptedUploadPolicy;
-    if (!policyAccepted) {
+    if (!uploadPolicyAllows(requirePolicyAcceptance, browserUploadPolicyAcceptance)) {
       setFileActionError("Accept the upload policy below before choosing or dropping a client file.");
       return;
     }
@@ -4748,24 +4758,43 @@ export function OrderDetailContent({
       return;
     }
 
-    let policyAccepted = !requirePolicyAcceptance;
-    if (requirePolicyAcceptance) {
-      const key = uploadSafetyAcceptanceKey(workspace.id);
-      policyAccepted = window.localStorage.getItem(key) === "accepted";
-      if (!policyAccepted) {
-        const policyWording = moneySettings?.uploadSafetyPolicyText
-          ? `${moneySettings.uploadSafetyPolicyText}\n\nAccept this upload policy for this browser?`
-          : "Upload Safety: only upload safe, legal, work-related files that belong to this order. Accept this upload policy for this browser?";
-        const acceptedNow = window.confirm(policyWording);
-        if (!acceptedNow) {
-          setInlineError("Accept the upload policy before uploading a preview image.");
-          return;
-        }
-        window.localStorage.setItem(key, "accepted");
-        window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
-        policyAccepted = true;
+    // The same acceptance as the Client Files card, for the same version. The
+    // image's copy is mirrored into Client Files below whenever this member
+    // can manage them, so that path is gated by the card's checkbox — not by a
+    // bare window.confirm. Only when nothing lands in client_files (no Client
+    // Files access: the image goes to design_images alone) does the confirm
+    // stay, and it records a real, versioned acceptance like the checkbox.
+    let policyAcceptance: UploadPolicyAcceptance | null = null;
+    try {
+      policyAcceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, clientFileUploadPolicyVersion);
+    } catch {
+      policyAcceptance = null;
+    }
+    if (!uploadPolicyAllows(requirePolicyAcceptance, policyAcceptance)) {
+      if (canManageClientFiles) {
+        setInlineError("Accept the upload policy in the Client Files card before uploading a preview image.");
+        return;
+      }
+      const policyWording = moneySettings?.uploadSafetyPolicyText
+        ? `${moneySettings.uploadSafetyPolicyText}\n\nAccept this upload policy for this browser?`
+        : "Upload Safety: only upload safe, legal, work-related files that belong to this order. Accept this upload policy for this browser?";
+      const acceptedNow = window.confirm(policyWording);
+      if (!acceptedNow) {
+        setInlineError("Accept the upload policy before uploading a preview image.");
+        return;
+      }
+      try {
+        policyAcceptance = writeUploadPolicyAcceptance(window.localStorage, workspace.id, clientFileUploadPolicyVersion);
+        setBrowserUploadPolicyAcceptance(policyAcceptance);
+      } catch {
+        setInlineError("This browser could not save the upload policy acceptance. Please try again.");
+        return;
       }
     }
+    const uploadSafety = {
+      policy: uploadPolicyStamp(requirePolicyAcceptance, policyAcceptance),
+      maxSizeMB: maxUploadSizeMB
+    };
 
     setPreviewActioning("upload");
     try {
@@ -4773,10 +4802,7 @@ export function OrderDetailContent({
         workspace,
         orderId: order.id,
         file,
-        uploadSafety: {
-          policyAccepted,
-          maxSizeMB: maxUploadSizeMB
-        },
+        uploadSafety,
         user: {
           uid: user.uid,
           email: user.email,
@@ -4798,7 +4824,7 @@ export function OrderDetailContent({
             workspace,
             orderId: order.id,
             file,
-            uploadSafety: { policyAccepted, maxSizeMB: maxUploadSizeMB },
+            uploadSafety,
             user: { uid: user.uid, email: user.email, displayName: user.displayName }
           });
           await onReloadOrder();
@@ -8374,11 +8400,12 @@ export function OrderDetailContent({
                   <span className="studio-pill">Safe work files only</span>
                   {clientFileRequiresPolicyAcceptance ? (
                     <>
-                      {moneySettings?.uploadSafetyPolicyText ? (
-                        <p className="muted-copy" style={{ flexBasis: "100%", margin: 0 }}>
-                          {moneySettings.uploadSafetyPolicyText}
-                        </p>
-                      ) : null}
+                      {/* The sentence the box refers to is always on screen:
+                          the workspace's own text, else the built-in one the
+                          iOS alert and the Android prompt also show. */}
+                      <p className="muted-copy upload-safety-policy-text" style={{ flexBasis: "100%", margin: 0 }}>
+                        {uploadPolicyWording(moneySettings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}
+                      </p>
                       <label className="upload-safety-check">
                         <input
                           type="checkbox"
@@ -8386,7 +8413,7 @@ export function OrderDetailContent({
                           onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
                           disabled={clientFileUploads.isActive}
                         />
-                        <span>I understand and accept the upload policy for this browser.</span>
+                        <span>{t("I understand and accept the upload policy for this browser.")}</span>
                       </label>
                     </>
                   ) : null}

@@ -30,11 +30,11 @@ const progress = await import(pathToFileURL(path.join(tmp, "uploadProgress.mjs")
 const runner = await import(pathToFileURL(path.join(tmp, "uploadRunner.mjs")).href);
 const {
   uploadQueueReducer: reduce, uploadPercent, uploadStageLabel, uploadBytesLabel, nextUploadsToStart,
-  summarizeUploadQueue, newUploadSlot, isUploadActive
+  summarizeUploadQueue, newUploadSlot, isUploadActive, uploadFileKey, uploadDedupeDecision
 } = progress;
 const {
   transferTracked, awaitScanVerdict, UploadCancelledError, UploadBlockedError,
-  scanStateFromMetadata, scanStateFromReadError, isUploadCancelled
+  scanStateFromMetadata, scanStateFromReadError, isUploadCancelled, stallThresholdMs
 } = runner;
 
 // ---------------------------------------------------------------------------
@@ -300,6 +300,72 @@ function recorder() {
     const source = read(screen);
     expect(`${screen}: renders the queue panel and passes slot + progress`, [/<UploadQueuePanel/.test(source), /useUploadQueue</.test(source), /slot,?\s*\n?\s*progress: hooks|\{ slot, progress: hooks \}/.test(source)], [true, true, true]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stall word (9 Oct 2026): "Still uploading…" after a throughput-aware silence; never while paused.
+// ---------------------------------------------------------------------------
+{
+  expect("stall: threshold floor 15 s", stallThresholdMs(null), 15000);
+  expect("stall: 4 x last gap", stallThresholdMs(10000), 40000);
+  expect("stall: ceiling 90 s", stallThresholdMs(60000), 90000);
+  let clock = 0; const timers = new Map(); let seq = 0;
+  const deps = {
+    objectExists: async () => false, readScan: async () => "none",
+    now: () => clock,
+    setTimer: (fn, ms) => { const id = ++seq; timers.set(id, { fn, at: clock + ms }); return id; },
+    clearTimer: (id) => { timers.delete(id); }
+  };
+  const fire = (to) => { clock = to; for (const [id, t] of [...timers]) if (t.at <= clock) { timers.delete(id); t.fn(); } };
+  let next = null, complete = null;
+  const task = { snapshot: { bytesTransferred: 0, totalBytes: 100, state: "running" }, pause() { return true; }, resume() { return true; }, cancel() { return true; },
+    on(_e, n, _er, c) { next = n; complete = c; } };
+  deps.startUpload = () => task;
+  const stalls = [];
+  const run = transferTracked(deps, "p", { onStalled: (v) => stalls.push(v) });
+  await Promise.resolve(); await Promise.resolve();
+  clock = 2000; next({ bytesTransferred: 10, totalBytes: 100, state: "running" });   // gap 2 s -> threshold 15 s
+  fire(16000);
+  expect("stall: not before the threshold (2 s + 15 s)", stalls, []);
+  fire(17000);
+  expect("stall: silence past the threshold says stalled", stalls, [true]);
+  clock = 30000; next({ bytesTransferred: 50, totalBytes: 100, state: "running" });  // progress again
+  expect("stall: progress clears it", stalls, [true, false]);
+  fire(60000); // gap was 28 s -> threshold 90 s from 30 s = 120 s: not yet
+  expect("stall: a slow healthy link (long gaps) is not called stalled early", stalls, [true, false]);
+  complete(); await run;
+  expect("stall: the timer is cleared when the transfer ends", timers.size, 0);
+  let item = reduce(reduce(reduce([], { type: "enqueue", items: [{ id: "s", fileName: "a", totalBytes: 100 }] }), { type: "start", id: "s" }), { type: "progress", id: "s", bytesTransferred: 10, totalBytes: 100 });
+  item = reduce(item, { type: "stalled", id: "s", stalled: true });
+  expect("stall: label", uploadStageLabel(item[0]), "Still uploading…");
+  expect("stall: paused wins (Waiting for network)", uploadStageLabel(reduce(item, { type: "paused", id: "s", paused: true })[0]), "Waiting for network");
+  expect("stall: next progress clears the label", uploadStageLabel(reduce(item, { type: "progress", id: "s", bytesTransferred: 20, totalBytes: 100 })[0]), "Uploading");
+  expect("stall: the queue wires onStalled", /onStalled: stalled => dispatch\(\{ type: "stalled", id, stalled \}\)/.test(read("lib/studioflow/useUploadQueue.ts")), true);
+}
+
+// ---------------------------------------------------------------------------
+// Double selection (9 Oct 2026): one file, one task, one object, one record.
+// ---------------------------------------------------------------------------
+{
+  const file = { name: "bundle.zip", size: 8_388_608, lastModified: 1_791_507_723_000 };
+  const key = uploadFileKey(file, "order-1");
+  expect("dedupe: same file, same target -> same key", uploadFileKey({ ...file }, "order-1"), key);
+  expect("dedupe: another target -> another key", uploadFileKey(file, "order-2") === key, false);
+  expect("dedupe: another size -> another key", uploadFileKey({ ...file, size: 1 }, "order-1") === key, false);
+  const row = (stage, retryable = true) => ({ id: "r1", key, item: { stage, retryable } });
+  expect("dedupe: nothing yet -> add", uploadDedupeDecision(key, []), { action: "add" });
+  expect("dedupe: picked twice before a render -> skip", uploadDedupeDecision(key, [{ id: "r1", key, item: undefined }]), { action: "skip", id: "r1" });
+  for (const stage of ["queued", "preparing", "uploading", "processing"]) {
+    expect(`dedupe: ${stage} row -> skip`, uploadDedupeDecision(key, [row(stage)]), { action: "skip", id: "r1" });
+  }
+  expect("dedupe: failed retryable row -> retry that row", uploadDedupeDecision(key, [row("error")]), { action: "retry", id: "r1" });
+  expect("dedupe: blocked (not retryable) row -> add", uploadDedupeDecision(key, [row("error", false)]), { action: "add" });
+  expect("dedupe: done row -> add (a new upload on purpose)", uploadDedupeDecision(key, [row("done")]), { action: "add" });
+  expect("dedupe: cancelled row -> add", uploadDedupeDecision(key, [row("cancelled")]), { action: "add" });
+  expect("dedupe: another file's active row -> add", uploadDedupeDecision(key, [{ id: "r2", key: uploadFileKey({ ...file, name: "b.zip" }, "order-1"), item: { stage: "uploading", retryable: true } }]), { action: "add" });
+  const hook = read("lib/studioflow/useUploadQueue.ts");
+  expect("dedupe: the queue's enqueue asks uploadDedupeDecision", /uploadDedupeDecision\(key, rows\)/.test(hook), true);
+  expect("dedupe: a retry decision bumps the slot attempt (same path, skipIfExists)", /attempt: entry\.slot\.attempt \+ 1[\s\S]*dispatch\(\{ type: "retry", id \}\)/.test(hook.slice(hook.indexOf("const enqueue"))), true);
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

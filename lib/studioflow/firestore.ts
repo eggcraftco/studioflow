@@ -265,6 +265,15 @@ export type WorkspaceSettingsOverview = {
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
   uploadSafetyPolicyText: string;
+  /** companySettings.uploadSafetySettingsUpdatedAt (the server stamps every
+   *  Safety & Uploads save) as epoch ms; null when the workspace never saved
+   *  the section. Informational only — NOT the policy version. */
+  uploadSafetySettingsUpdatedAtMs: number | null;
+  /** companySettings.uploadSafetyPolicyVersion: the shared policy version the
+   *  server computes from the policy text on every Safety & Uploads save
+   *  ("sha256-<64 hex>" or "builtin-1"). null on records the server has not
+   *  stamped yet; lib/studioflow/uploadPolicy.ts then derives it from the text. */
+  uploadSafetyPolicyVersion: string | null;
   // Who wins when a store updates an existing customer: "store" | "nivadesk".
   integrationCustomerSync: string;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
@@ -1480,6 +1489,8 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
     uploadSafetyPolicyText: stringValue(data.uploadSafetyPolicyText, ""),
+    uploadSafetySettingsUpdatedAtMs: dateValue(data.uploadSafetySettingsUpdatedAt)?.getTime() ?? null,
+    uploadSafetyPolicyVersion: stringValue(data.uploadSafetyPolicyVersion, "") || null,
     integrationCustomerSync: stringValue(data.integrationCustomerSync, "store"),
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
