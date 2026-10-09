@@ -8,7 +8,7 @@ import {
   Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { keepNoteDocumentFields, keepNoteFromDoc, type StudioKeepNote } from "./noteDocument";
 
@@ -89,6 +89,54 @@ export async function uploadKeepNoteImage(
   );
   await uploadBytes(ref, file, { contentType: file.type || "image/jpeg" });
   return await getDownloadURL(ref);
+}
+
+/**
+ * The editor's image upload: resumable, so the editor can show a percentage
+ * and abort it when the person cancels. Nothing is written to the note here —
+ * the URL only reaches the note document when the person presses Save (B1,
+ * 8 Oct 2026: an interim save used to leave an image-only note behind Cancel).
+ */
+export function startKeepNoteImageUpload(
+  companyId: string,
+  userId: string,
+  noteId: string,
+  file: File,
+  onProgress: (percent: number) => void
+): { done: Promise<string>; cancel: () => void } {
+  if (!companyId || !userId || !noteId || !file) return { done: Promise.resolve(""), cancel: () => {} };
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const key = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const ref = storageRef(
+    storage,
+    `companies/${companyId}/personal_notes/${userId}/note_images/${noteId}/${key}`
+  );
+  const task = uploadBytesResumable(ref, file, { contentType: file.type || "image/jpeg" });
+  const done = new Promise<string>((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (snap) => onProgress(snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0),
+      reject,
+      () => { getDownloadURL(ref).then(resolve, reject); }
+    );
+  });
+  return { done, cancel: () => { task.cancel(); } };
+}
+
+/** True when the URL is an image this note's editor uploaded (its own folder). */
+export function isOwnKeepNoteImage(url: string, noteId: string): boolean {
+  if (!url || !noteId) return false;
+  return url.includes(`note_images%2F${encodeURIComponent(noteId)}%2F`) || url.includes(`note_images/${noteId}/`);
+}
+
+/** Best effort: removes an uploaded note image that Cancel discarded. */
+export async function deleteKeepNoteImage(url: string): Promise<void> {
+  if (!url) return;
+  try {
+    await deleteObject(storageRef(storage, url));
+  } catch {
+    // Already gone or not ours: nothing to clean up.
+  }
 }
 
 export async function deleteKeepNote(

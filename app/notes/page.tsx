@@ -32,7 +32,9 @@ import {
   listenToKeepNotes,
   newKeepNote,
   saveKeepNote,
-  uploadKeepNoteImage,
+  startKeepNoteImageUpload,
+  deleteKeepNoteImage,
+  isOwnKeepNoteImage,
   NOTE_COLORS,
   type StudioKeepNote,
 } from "@/lib/studioflow/notes";
@@ -737,20 +739,6 @@ export default function NotesPage() {
             onClose={() => { setEditing(null); refreshDrafts(); }}
             onSave={(n, force) => saveFromEditor(n, editing, force)}
             onKeepBoth={saveDraftAsNewNote}
-            onUploadImage={async (file, draft) => {
-              if (!workspace || !user) return;
-              try {
-                const url = await uploadKeepNoteImage(workspace.id, user.uid, editing.id, file);
-                if (url) {
-                  const next = { ...draft, links: [...draft.links, url] };
-                  setEditing(next);
-                  lastWrittenRef.current.set(next.id, next);
-                  await save(next);
-                }
-              } catch (e) {
-                alert("Image upload failed: " + (e as Error).message);
-              }
-            }}
           />
         )}
         </div>
@@ -1367,7 +1355,6 @@ function NoteEditor({
   onClose,
   onSave,
   onKeepBoth,
-  onUploadImage,
 }: {
   note: StudioKeepNote;
   /** The note as the live listener currently has it (undefined for a new note). */
@@ -1380,7 +1367,6 @@ function NoteEditor({
   onSave: (n: StudioKeepNote, force: boolean) => Promise<"saved" | "pending">;
   /** Conflict → "Keep both": this device's version becomes a separate new note. */
   onKeepBoth: (n: StudioKeepNote) => Promise<void>;
-  onUploadImage: (file: File, draft: StudioKeepNote) => Promise<void>;
 }) {
   // A draft left on this device (closed tab, reload, lost connection, failed
   // save) is picked up when it still differs from the note. For a never-saved
@@ -1406,6 +1392,12 @@ function NoteEditor({
   const [collabs, setCollabs] = useState<string[]>(initial.collaboratorEmails);
   const [collabInput, setCollabInput] = useState("");
   const [reminderMillis, setReminderMillis] = useState<number | null>(initial.reminderDateMillis);
+  // Images live in the editor until Save (B1): an upload adds its URL here,
+  // Save writes it, Cancel deletes the uploaded object and writes nothing.
+  const [links, setLinks] = useState<string[]>(initial.links);
+  const [upload, setUpload] = useState<{ percent: number } | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const uploadCancelRef = useRef<(() => void) | null>(null);
   const [restoredHint, setRestoredHint] = useState(Boolean(restored));
   // The restored draft was based on an older server copy than the one that is
   // live now: saving it blindly would overwrite the other device's change, so
@@ -1441,15 +1433,16 @@ function NoteEditor({
       linkedOrderLabel: linkedOrder ? `${linkedOrder.customerName}${linkedOrder.designName && linkedOrder.designName !== "Untitled design" ? ` · ${linkedOrder.designName}` : ""}` : (noteType === "order" ? note.linkedOrderLabel : ""),
       linkedCustomerName: noteType === "customer" ? customerName.trim() : "",
       visibility,
+      links,
     };
   }
   const draft = buildDraft();
-  const dirty = isNew ? !isNoteEmpty(draft) : noteDraftIsDirty(draft, note);
+  const dirty = isNew ? (!isNoteEmpty(draft) || draft.links.length > 0) : noteDraftIsDirty(draft, note);
 
   // Mirror every change to the device (memory + localStorage) while editing.
   // Untouched again → the mirror goes; a never-saved note keeps its draft for
   // as long as it has any content.
-  const draftSignature = JSON.stringify([title, text, colorName, labels, collabs, reminderMillis, noteType, linkedOrderId, customerName, visibility]);
+  const draftSignature = JSON.stringify([title, text, colorName, labels, collabs, reminderMillis, noteType, linkedOrderId, customerName, visibility, links]);
   useEffect(() => {
     if (saving) return;
     // Untrimmed title/text: the draft restores exactly what was typed.
@@ -1467,8 +1460,36 @@ function NoteEditor({
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty, saving]);
 
+  // Leaving the editor mid-upload aborts it, so no object lands after Cancel.
+  useEffect(() => () => { uploadCancelRef.current?.(); }, []);
+
+  function addImage(file: File) {
+    if (upload) return;
+    setUploadError("");
+    setUpload({ percent: 0 });
+    const job = startKeepNoteImageUpload(workspaceId, userId, note.id, file, (percent) => setUpload({ percent }));
+    uploadCancelRef.current = job.cancel;
+    job.done.then(
+      (url) => { if (url) setLinks((current) => [...current, url]); },
+      (uploadFailure: unknown) => {
+        const code = (uploadFailure as { code?: string } | null)?.code;
+        if (code !== "storage/canceled") setUploadError(t("Image upload failed."));
+      }
+    ).finally(() => { uploadCancelRef.current = null; setUpload(null); });
+  }
+
+  // Images this editor added that the saved note does not carry: Cancel
+  // removes them from Storage (only this note's own folder, never a link).
+  function discardUnsavedImages() {
+    uploadCancelRef.current?.();
+    const kept = new Set((liveNote ?? (isNew ? null : note))?.links ?? []);
+    for (const url of links) {
+      if (!kept.has(url) && isOwnKeepNoteImage(url, note.id)) void deleteKeepNoteImage(url);
+    }
+  }
+
   async function submit(force = false) {
-    if (saving) return;
+    if (saving || upload) return;
     if (!dirty) { closeKeepingDraftIfNew(); return; }
     if (!force && staleDraft && liveNote) { setConflict(liveNote); return; }
     setSaving(true);
@@ -1501,6 +1522,7 @@ function NoteEditor({
 
   function discardAndClose() {
     if (dirty && !confirm(t("Discard unsaved changes?"))) return;
+    discardUnsavedImages();
     clearNoteDraft(workspaceId, userId, note.id);
     onClose();
   }
@@ -1517,6 +1539,7 @@ function NoteEditor({
     setLabels(base.labels);
     setCollabs(base.collaboratorEmails);
     setReminderMillis(base.reminderDateMillis);
+    setLinks(base.links);
     setRestoredHint(false);
     setStaleDraft(false);
     baseUpdatedAtRef.current = base.updatedAtMillis;
@@ -1738,7 +1761,7 @@ function NoteEditor({
           )}
         </div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>IMAGE</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Image").toUpperCase()}</div>
         <div style={{ marginBottom: 14 }}>
           <label
             style={{
@@ -1746,28 +1769,44 @@ function NoteEditor({
               padding: "6px 14px",
               border: "1px solid #e5e7eb",
               borderRadius: 6,
-              cursor: "pointer",
+              position: "relative",
+              cursor: upload ? "progress" : "pointer",
               fontWeight: 700,
+              opacity: upload ? 0.6 : 1,
             }}
           >
-            Add image…
+            {t("Add image…")}
             <input
               type="file"
               accept="image/*"
-              style={{ display: "none" }}
+              disabled={Boolean(upload)}
+              aria-label={t("Add image…")}
+              style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                // The interim save that stores the image must carry the CURRENT
-                // draft — saving the stale prop used to wipe an unsaved reminder.
-                if (f) onUploadImage(f, buildDraft());
+                if (f) addImage(f);
                 e.target.value = "";
               }}
             />
           </label>
-          {note.links.length > 0 && (
-            <span style={{ marginLeft: 10, fontSize: 11, color: "#6b7280" }}>
-              {note.links.length} attachment(s)
+          {upload && (
+            <span role="status" aria-live="polite" style={{ marginInlineStart: 10, fontSize: 12, color: "#2D7BF4", fontWeight: 700 }}>
+              {t("Uploading image…")} {upload.percent}%
             </span>
+          )}
+          {!upload && links.length > 0 && (
+            <span style={{ marginInlineStart: 10, fontSize: 11, color: "#6b7280" }}>
+              {links.length} {t("attachment(s)")}
+            </span>
+          )}
+          {uploadError && <div role="alert" style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{uploadError}</div>}
+          {links.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {links.map((url) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={url} src={url} alt={t("Note image")} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }} />
+              ))}
+            </div>
           )}
         </div>
 
@@ -1857,7 +1896,7 @@ function NoteEditor({
           </button>
           <button
             type="button"
-            disabled={saving || Boolean(conflict)}
+            disabled={saving || Boolean(conflict) || Boolean(upload)}
             onClick={() => { void submit(); }}
             style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: saving ? "progress" : "pointer", opacity: saving || conflict ? 0.7 : 1 }}
           >

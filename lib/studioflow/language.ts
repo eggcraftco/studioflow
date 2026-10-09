@@ -8964,3 +8964,12 @@ mergeIntoTranslations({
     "हिन्दी (Hindi)": "टीम शेड्यूल कैलेंडर में पूरी टीम का सौंपा गया काम देखें — बिना कीमत, संपर्क विवरण, फ़ाइलों या नोट्स के। दूसरे सदस्यों के काम केवल देखने के लिए हैं।"
   }
 });
+
+// Notes editor image (B1, 9 Oct 2026): the upload no longer saves the note,
+// so the editor names the upload state itself.
+mergeIntoTranslations({
+  "Uploading image…": {"Türkçe": "Görsel yükleniyor…", "Deutsch": "Bild wird hochgeladen …", "Français": "Envoi de l'image…", "Italiano": "Caricamento immagine…", "Español (Spanish)": "Subiendo imagen…", "Português": "A carregar imagem…", "Русский (Russian)": "Загрузка изображения…", "日本語 (Japanese)": "画像をアップロード中…", "中文 (Chinese)": "正在上传图片…", "العربية (Arabic)": "جارٍ رفع الصورة…", "हिन्दी (Hindi)": "छवि अपलोड हो रही है…"},
+  "attachment(s)": {"Türkçe": "ek", "Deutsch": "Anhang/Anhänge", "Français": "pièce(s) jointe(s)", "Italiano": "allegato/i", "Español (Spanish)": "adjunto(s)", "Português": "anexo(s)", "Русский (Russian)": "влож.", "日本語 (Japanese)": "件の添付", "中文 (Chinese)": "个附件", "العربية (Arabic)": "مرفق/مرفقات", "हिन्दी (Hindi)": "संलग्नक"},
+  "Image upload failed.": {"Türkçe": "Görsel yüklenemedi.", "Deutsch": "Bild konnte nicht hochgeladen werden.", "Français": "L'envoi de l'image a échoué.", "Italiano": "Caricamento dell'immagine non riuscito.", "Español (Spanish)": "No se pudo subir la imagen.", "Português": "Não foi possível carregar a imagem.", "Русский (Russian)": "Не удалось загрузить изображение.", "日本語 (Japanese)": "画像をアップロードできませんでした。", "中文 (Chinese)": "图片上传失败。", "العربية (Arabic)": "تعذّر رفع الصورة.", "हिन्दी (Hindi)": "छवि अपलोड नहीं हो सकी।"},
+  "Note image": {"Türkçe": "Not görseli", "Deutsch": "Notizbild", "Français": "Image de la note", "Italiano": "Immagine della nota", "Español (Spanish)": "Imagen de la nota", "Português": "Imagem da nota", "Русский (Russian)": "Изображение заметки", "日本語 (Japanese)": "メモの画像", "中文 (Chinese)": "便签图片", "العربية (Arabic)": "صورة الملاحظة", "हिन्दी (Hindi)": "नोट की छवि"},
+});

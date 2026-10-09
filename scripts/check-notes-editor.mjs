@@ -61,13 +61,32 @@ check(/draggable=\{canDrag && !note\.isPinned\}/.test(page) && /e\.dataTransfer\
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const KEYS = ["Unsaved draft", "An unsaved draft of this note was restored.", "Discard draft", "Discard unsaved changes?",
   "This note was changed on another device while you were editing. Which version do you want to keep?", "Use theirs", "Keep both", "Keep mine",
-  "Saved on this device. It will sync when you're back online.", "Show more", "Show less", "Unsaved changes", "The note could not be saved."];
+  "Saved on this device. It will sync when you're back online.", "Show more", "Show less", "Unsaved changes", "The note could not be saved.",
+  "Uploading image…", "attachment(s)", "Image upload failed.", "Note image"];
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 for (const key of KEYS) {
   const rows = [...lang.matchAll(new RegExp(`^\\s*"${escape(key)}": \\{([^\\n]*)\\}`, "gm"))].map((m) => m[1]);
   const covered = LANGUAGES.filter((l) => rows.some((r) => r.includes(`"${l}":`)));
   check(covered.length === LANGUAGES.length, `"${key}" has all 11 translations in language.ts (${covered.length})`);
 }
+
+// 5. B1 (8 Oct 2026 live acceptance): Add image… then Cancel left an image-only
+// note. The upload must not save the note; Cancel deletes what it uploaded.
+const editorStart = page.indexOf("function NoteEditor(");
+const editor = editorStart >= 0 ? page.slice(editorStart) : "";
+check(editorStart >= 0, "the NoteEditor component is found");
+check(!/onUploadImage/.test(page), "no interim save path for images (onUploadImage is gone)");
+check(!/uploadKeepNoteImage\(/.test(page), "the page no longer calls the save-coupled uploader");
+const addImage = (editor.match(/function addImage\(file: File\) \{([\s\S]*?)\n  \}/) || [])[1] || "";
+check(addImage.includes("startKeepNoteImageUpload(") && !/\b(onSave|save|saveKeepNote|submit)\(/.test(addImage), "addImage uploads only; it writes no note");
+check(/links,\n    \};/.test(editor), "buildDraft carries the editor's links (written only by Save)");
+check(/discardUnsavedImages\(\);\n    clearNoteDraft\(workspaceId, userId, note\.id\);\n    onClose\(\);/.test(editor), "Cancel deletes the images this editor uploaded");
+check(/isOwnKeepNoteImage\(url, note\.id\)\) void deleteKeepNoteImage\(url\)/.test(editor), "only this note's own uploads are deleted");
+check(/useEffect\(\(\) => \(\) => \{ uploadCancelRef\.current\?\.\(\); \}, \[\]\);/.test(editor), "closing mid-upload cancels the upload task");
+check(/\{t\("Uploading image…"\)\} \{upload\.percent\}%/.test(editor), "the editor shows upload progress");
+check(/if \(saving \|\| upload\) return;/.test(editor), "Save waits for the upload to finish");
+check(/isNew \? \(!isNoteEmpty\(draft\) \|\| draft\.links\.length > 0\)/.test(editor), "an image-only new note still counts as a change");
+check(/uploadBytesResumable\(ref, file/.test(notesLib) && /deleteObject\(storageRef\(storage, url\)\)/.test(notesLib), "notes.ts has the resumable upload and the delete");
 
 if (failures) { console.error(`${failures} of ${checks} notes-editor checks failed.`); process.exit(1); }
 console.log(`All ${checks} notes-editor checks passed.`);
