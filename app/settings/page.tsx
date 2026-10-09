@@ -88,6 +88,7 @@ import {
   readUploadPolicyAcceptance,
   UPLOAD_POLICY_BUILTIN_SENTENCE,
   uploadPolicyAllows,
+  uploadPolicySettingsAccess,
   uploadPolicyStamp,
   uploadPolicyVersion,
   uploadPolicyVersionShort,
@@ -461,6 +462,18 @@ const PERMISSION_MATRIX_ROWS: PermissionMatrixRow[] = [
   { key: "manageMembers", label: "Manage members & roles", value: column => column.baseRole === "owner" }
 ];
 
+/** Settings ▸ Safety & Uploads for this member (owner decision 9 Oct 2026, 4b): everyone who can upload client
+ *  files sees their own acceptance there; the policy controls stay with the owner and holders of the
+ *  Safety & Uploads permission. lib/studioflow/uploadPolicy.ts holds the rule (vectors kind "card"). */
+function uploadPolicySettingsAccessFor(workspace: WorkspaceContext) {
+  return uploadPolicySettingsAccess({
+    role: workspace.role,
+    clientFilesPlan: Boolean(workspace.entitlements.features.client_files),
+    clientFilesAccess: workspaceAccessAllows(workspace.memberAccess, "clientFiles"),
+    settingsSafetyUploads: workspaceAccessAllows(workspace.memberAccess, "settingsSafetyUploads")
+  });
+}
+
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
   // Message Settings only exists on plans with the Messages feature — hidden from
@@ -486,6 +499,9 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   ) {
     return allowed("settingsGeneral");
   }
+  // Safety & Uploads: not a settings permission alone — anyone who can upload sees their own acceptance there
+  // (workflow-only members included); the controls inside are gated separately.
+  if (sectionId === "safety-uploads") return uploadPolicySettingsAccessFor(workspace).showsSection;
   if (sectionId === "support-tickets") return allowed("settingsSupport");
   if (sectionId === "team-access") return allowed("settingsTeamAccess");
   // Message Settings — workspace messaging toggles, only meaningful on a plan with
@@ -509,7 +525,6 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (sectionId === "quick-reply") return allowed("settingsQuickReply");
   if (sectionId === "financial") return workspace.entitlements.features.financial_advanced && allowed("settingsFinancial");
   if (sectionId === "pdf") return allowed("settingsPdf");
-  if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
   if (sectionId === "data") return allowed("settingsData");
   if (sectionId === "integrations") return allowed("settingsWorkflow");
   // Customer SMS is deliberately NOT hidden on plans without it: a workspace
@@ -1618,11 +1633,6 @@ function PreferencesSection({
         <p className="settings-field-hint">{t("Saved automatically on this browser.")}</p>
         <p className="settings-field-hint">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
       </section>
-
-      {/* Every user's own acceptance in this browser (status + reset; contract §2): Preferences is personal, so a
-          member without the Safety & Uploads screen still sees and can forget their acceptance. Nothing here
-          creates an acceptance and nothing here edits a workspace setting. */}
-      <UploadPolicyBrowserStatusCard workspace={workspace} settings={settings} language={language} t={t} />
 
       <div className="settings-save-row">
         {status ? <p className="success-copy">{status}</p> : null}
@@ -3884,12 +3894,11 @@ function SafetyUploadsSection({
   const [requirePolicy, setRequirePolicy] = useState(true);
   const [maxFileSizeMB, setMaxFileSizeMB] = useState(10);
   const [policyText, setPolicyText] = useState("");
-  const [browserAccepted, setBrowserAccepted] = useState(false);
-  const [acceptedAtMs, setAcceptedAtMs] = useState(0);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  const policyAccess = uploadPolicySettingsAccessFor(workspace);
 
   useEffect(() => {
     if (!settings) return;
@@ -3898,41 +3907,8 @@ function SafetyUploadsSection({
     setPolicyText(settings.uploadSafetyPolicyText || "");
   }, [settings]);
 
-  // The acceptance shown here is the one for the CURRENT policy version
-  // (lib/studioflow/uploadPolicy.ts); after a save that changes the policy
-  // TEXT the version moves on, so "Accepted" turns into "Not accepted" until
-  // the browser accepts again. Saving only the size or the switch keeps it.
-  const policyVersion = uploadPolicyVersion(settings);
-  useEffect(() => {
-    try {
-      const acceptance = readUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
-      setBrowserAccepted(acceptance !== null);
-      setAcceptedAtMs(acceptance ? Date.parse(acceptance.acceptedAt) || 0 : 0);
-    } catch {
-      setBrowserAccepted(false);
-      setAcceptedAtMs(0);
-    }
-  }, [workspace.id, policyVersion]);
-
-  function updateBrowserAccepted(nextAccepted: boolean) {
-    try {
-      if (nextAccepted) {
-        const acceptance = writeUploadPolicyAcceptance(window.localStorage, workspace.id, policyVersion);
-        setBrowserAccepted(true);
-        setAcceptedAtMs(Date.parse(acceptance.acceptedAt) || 0);
-      } else {
-        clearUploadPolicyAcceptance(window.localStorage, workspace.id);
-        setBrowserAccepted(false);
-        setAcceptedAtMs(0);
-      }
-    } catch {
-      setBrowserAccepted(false);
-      setAcceptedAtMs(0);
-    }
-  }
-
-  // browserAccepted is excluded: it writes to localStorage the moment it
-  // changes, so it is never an unsaved edit.
+  // This browser's acceptance (status, date, short version, reset) is UploadPolicyBrowserStatusCard at the top of
+  // the section, for admins and members alike; it is never an unsaved edit (it writes to localStorage at once).
   const { dirty: safetyDirty, markSaved: markSafetySaved } = useUnsavedGuard(
     "safety-uploads",
     { requirePolicy, maxFileSizeMB, policyText },
@@ -3975,10 +3951,24 @@ function SafetyUploadsSection({
     }
   }
 
-  const acceptedDate = acceptedAtMs > 0 ? new Date(acceptedAtMs).toLocaleDateString(studioLocaleTag(language)) : "";
+  // A member who can upload but does not manage the policy: their own acceptance, the wording it stands for, and
+  // nothing that edits the workspace (owner decision 9 Oct 2026, 4b).
+  if (!policyAccess.showsAdminControls) {
+    return (
+      <div className="settings-card-stack settings-safety-page" data-testid="safety-uploads-member-view">
+        <UploadPolicyBrowserStatusCard workspace={workspace} settings={settings} language={language} t={t} />
+        <section className="card app-card">
+          <SettingsCardHead title={t("Workspace upload policy text")} />
+          <p className="upload-safety-policy-text">{uploadPolicyWording(settings?.uploadSafetyPolicyText, t(UPLOAD_POLICY_BUILTIN_SENTENCE))}</p>
+          <p className="settings-field-hint">{t("Only the workspace owner and people with the Safety & Uploads permission can change the upload rules.")}</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="settings-card-stack settings-safety-page">
+      <UploadPolicyBrowserStatusCard workspace={workspace} settings={settings} language={language} t={t} />
       <div className="settings-fact-cards">
         <div className="settings-fact-card">
           <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="check" /></span>
@@ -3992,18 +3982,6 @@ function SafetyUploadsSection({
           <span className="settings-fact-card-copy">
             <small>{t("Maximum file size")}</small>
             <strong>{Math.round(maxFileSizeMB)} MB</strong>
-          </span>
-        </div>
-        <div className={browserAccepted ? "settings-fact-card" : "settings-fact-card is-caution"}>
-          <span className="settings-card-head-icon" aria-hidden="true"><CardIconGlyph icon="warningTriangle" /></span>
-          <span className="settings-fact-card-copy">
-            <small>{t("This browser")}</small>
-            <strong>{browserAccepted ? t("Accepted") : t("Not accepted")}</strong>
-            <em>
-              {browserAccepted
-                ? `${t("Uploads will not ask again until you reset it.")}${acceptedDate ? ` (${acceptedDate})` : ""}`
-                : t("The next upload will ask for acceptance.")}
-            </em>
           </span>
         </div>
       </div>
@@ -4062,14 +4040,7 @@ function SafetyUploadsSection({
                 its own contradiction one after the other. The state is stated
                 once now, and the control is only ever a reset: ticking a box
                 should not count as reading a policy. */}
-            <div className="settings-action-row settings-action-row-split">
-              <span className="settings-field-hint">{t("Acceptance is stored on this browser only, the same way each device accepts separately.")}</span>
-              {browserAccepted ? (
-                <button className="button secondary" type="button" onClick={() => updateBrowserAccepted(false)}>
-                  {t("Reset for this browser")}
-                </button>
-              ) : null}
-            </div>
+            <p className="settings-field-hint">{t("Acceptance is stored on this browser only, the same way each device accepts separately.")}</p>
           </div>
         </section>
 

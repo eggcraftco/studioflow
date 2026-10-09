@@ -58,7 +58,8 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
     UPLOAD_POLICY_BUILTIN_SENTENCE, uploadPolicyVersion, uploadPolicyVersionForText, uploadPolicyVersionShort,
     normalizeUploadPolicyText, uploadPolicyWording,
     readUploadPolicyAcceptance, writeUploadPolicyAcceptance, clearUploadPolicyAcceptance,
-    uploadPolicyAllows, uploadPolicyStamp, uploadPolicyMetadata
+    uploadPolicyAllows, uploadPolicyStamp, uploadPolicyMetadata,
+    uploadPolicyForSource, uploadPolicySettingsAccess
   } = await import(pathToFileURL(path.join(tmp, "uploadPolicy.mjs")).href);
 
   expect("built-in sentence: the natives' wording", UPLOAD_POLICY_BUILTIN_SENTENCE, BUILTIN);
@@ -121,8 +122,42 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
     const stampVectors = JSON.parse(read("scripts/fixtures/upload-policy-stamp-vectors.json"));
     const docStamp = path.join(root, "..", "docs", "native", "upload-policy-stamp-vectors.json");
     if (fs.existsSync(docStamp)) expect("stamp vectors: fixture equals docs/native copy", stampVectors, JSON.parse(fs.readFileSync(docStamp, "utf8")));
-    expect("stamp vectors: 7 stamp + 5 resolve", [stampVectors.filter(v => v.kind === "stamp").length, stampVectors.filter(v => v.kind === "resolve").length], [7, 5]);
+    expect("stamp vectors: 7 stamp + 5 resolve + 6 scope + 9 card",
+      ["stamp", "resolve", "scope", "card"].map(kind => stampVectors.filter(v => v.kind === kind).length), [7, 5, 6, 9]);
     for (const v of stampVectors) {
+      // Scope (owner decision 9 Oct 2026, 4a): the avatar is outside the client-file policy — no prompt, no
+      // acceptance written, no policy keys, whatever the workspace requires or the browser accepted.
+      if (v.kind === "scope") {
+        if (typeof uploadPolicyForSource !== "function") { expect(`scope "${v.case}": uploadPolicyForSource exists`, false, true); continue; }
+        const sstore = fakeStorage();
+        if (v.storedVersion) writeUploadPolicyAcceptance(sstore, "ws-vec", v.storedVersion, new Date(Number(v.storedAtMillis)));
+        const before = JSON.stringify(sstore.dump());
+        const acc = readUploadPolicyAcceptance(sstore, "ws-vec", v.currentVersion);
+        const decision = uploadPolicyForSource(v.source, v.required === "true", acc);
+        expect(`scope "${v.case}": asks`, decision.asks, v.asks === "true");
+        expect(`scope "${v.case}": allowed`, decision.allowed, v.allowed === "true");
+        expect(`scope "${v.case}": policy keys`, Object.keys(decision.metadata).join(","), v.policyKeys);
+        if (v.policyAccepted) expect(`scope "${v.case}": policyAccepted`, decision.metadata.policyAccepted, v.policyAccepted);
+        expect(`scope "${v.case}": no acceptance written`, JSON.stringify(sstore.dump()) !== before, v.writesAcceptance === "true");
+        continue;
+      }
+      // Settings ▸ Safety & Uploads (owner decision 9 Oct 2026, 4b): who sees their own acceptance and who the controls.
+      if (v.kind === "card") {
+        if (typeof uploadPolicySettingsAccess !== "function") { expect(`card "${v.case}": uploadPolicySettingsAccess exists`, false, true); continue; }
+        const got = uploadPolicySettingsAccess({
+          role: v.role,
+          clientFilesPlan: v.clientFilesPlan === "true",
+          clientFilesAccess: v.clientFilesAccess === "true",
+          settingsSafetyUploads: v.settingsSafetyUploads === "true",
+          settingsGeneral: v.settingsGeneral === "true"
+        });
+        expect(`card "${v.case}"`, got, {
+          showsSection: v.showsSection === "true",
+          showsAcceptanceCard: v.showsAcceptanceCard === "true",
+          showsAdminControls: v.showsAdminControls === "true"
+        });
+        continue;
+      }
       if (v.kind === "resolve") {
         expect(`resolve "${v.case}"`, uploadPolicyVersion({ uploadSafetyPolicyVersion: v.serverVersion, uploadSafetyPolicyText: v.text }), v.version);
         continue;
@@ -152,8 +187,35 @@ if (!exists("lib/studioflow/uploadPolicy.ts")) {
     expect("logo: no raw policyAccepted flag", /policyAccepted:\s*policyAccepted/.test(logo), false);
     expect("logo: settings never passes accepted || !required", /policyAccepted \|\| !requirePolicy/.test(settingsPage), false);
     expect("logo: both logo uploads stamp through uploadPolicyStamp", (settingsPage.match(/const logoPolicy = uploadPolicyStamp\(requirePolicy, logoPolicyAcceptance\)/g) || []).length, 2);
-    expect("logo: both prompts show the versioned wording", (settingsPage.match(/uploadPolicyWording\(settings\?\.uploadSafetyPolicyText, t\(UPLOAD_POLICY_BUILTIN_SENTENCE\)\)/g) || []).length, 2);
+    // Two logo prompts + the Safety & Uploads member view (the wording the member's acceptance stands for).
+    expect("logo: both prompts show the versioned wording", (settingsPage.match(/uploadPolicyWording\(settings\?\.uploadSafetyPolicyText, t\(UPLOAD_POLICY_BUILTIN_SENTENCE\)\)/g) || []).length, 3);
     expect("logo: the fixed sentence is gone", settingsPage.includes("Only upload legal, safe and work-related images that belong in this workspace."), false);
+  }
+
+  // 1d. Avatar + Settings wiring (owner decision 9 Oct 2026, item 4).
+  {
+    const profile = read("lib/studioflow/accountProfile.ts");
+    const settingsPage = read("app/settings/page.tsx");
+    const fnBody = (src, name) => {
+      const start = src.indexOf(`function ${name}(`);
+      if (start < 0) return "";
+      const next = src.indexOf("\nfunction ", start + 10);
+      return src.slice(start, next < 0 ? undefined : next);
+    };
+    expect("avatar: decided by uploadPolicyForSource(ACCOUNT_AVATAR_UPLOAD_SOURCE, …)", /uploadPolicyForSource\(ACCOUNT_AVATAR_UPLOAD_SOURCE,/.test(profile), true);
+    expect("avatar: the object gets only that decision's (empty) policy keys", profile.includes("...avatarPolicy.metadata"), true);
+    expect("avatar: never writes an acceptance", /writeUploadPolicyAcceptance|policyAccepted:/.test(profile), false);
+    const avatarHandler = (settingsPage.match(/async function handleAvatarFile[\s\S]*?\n  }\n/) || [""])[0];
+    expect("avatar: the settings handler exists", avatarHandler.includes("uploadAccountAvatar(workspace, file)"), true);
+    expect("avatar: the settings handler opens no policy prompt", /uploadPolicy|policyAccept/i.test(avatarHandler), false);
+    expect("card: not under Preferences any more (no settingsGeneral dependency)", fnBody(settingsPage, "PreferencesSection").includes("<UploadPolicyBrowserStatusCard"), false);
+    expect("card: in Safety & Uploads, for the member view and the admin view", (fnBody(settingsPage, "SafetyUploadsSection").match(/<UploadPolicyBrowserStatusCard /g) || []).length, 2);
+    expect("card: the member view is chosen by showsAdminControls", fnBody(settingsPage, "SafetyUploadsSection").includes("if (!policyAccess.showsAdminControls) {"), true);
+    expect("section: Safety & Uploads visibility comes from uploadPolicySettingsAccess",
+      fnBody(settingsPage, "canSeeSettingsSection").includes('if (sectionId === "safety-uploads") return uploadPolicySettingsAccessFor(workspace).showsSection;'), true);
+    expect("section: no settingsSafetyUploads-only gate left", fnBody(settingsPage, "canSeeSettingsSection").includes('if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");'), false);
+    expect("section: the Safety & Uploads gate runs before the workflow-only cut-off",
+      fnBody(settingsPage, "canSeeSettingsSection").indexOf('"safety-uploads") return uploadPolicySettingsAccessFor') < fnBody(settingsPage, "canSeeSettingsSection").indexOf("if (isWorkflowOnly) {"), true);
   }
 
   // 2. An acceptance of an older version does not count.
@@ -264,7 +326,8 @@ for (const key of [
   BUILTIN,
   "I understand and accept the upload policy for this browser.",
   "Upload policy accepted. Choose a file to upload.",
-  "Accept the upload policy in the Client Files card before uploading a preview image."
+  "Accept the upload policy in the Client Files card before uploading a preview image.",
+  "Only the workspace owner and people with the Safety & Uploads permission can change the upload rules."
 ]) {
   const untranslated = LANGUAGES.filter((language) => studioT(key, language) === key);
   expect(`translations: "${key.slice(0, 48)}…" in all eleven languages`, untranslated, []);
