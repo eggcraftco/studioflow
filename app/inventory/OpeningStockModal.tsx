@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import {
   OPENING_STOCK_FIELDS,
   OPENING_STOCK_MAX_ROWS,
@@ -280,7 +281,7 @@ export function OpeningStockModal({
                 <div className="inventory-section-head">
                   <h3>{t("What will be created")}</h3>
                   <span className="inventory-sub">
-                    {willImport.length} {t("items")}
+                    {studioCountLabel(willImport.length, "item", language)}
                     {totalValue > 0 ? ` · ${money(currencySymbol, totalValue)}` : ""}
                   </span>
                 </div>
@@ -417,7 +418,7 @@ export function OpeningStockModal({
             >
               {busy
                 ? t("Importing…")
-                : `${t("Import")} ${willImport.length} ${t("items")}`}
+                : t("Import {count}").replace("{count}", studioCountLabel(willImport.length, "item", language))}
             </button>
           </div>
         </div>

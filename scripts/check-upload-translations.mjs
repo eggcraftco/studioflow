@@ -18,7 +18,7 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
 // Remove) is declared there, and the merge order lets that table win.
 // language.ts imports every table listed here; one left out breaks the import
 // of the compiled module (trackingEmailTranslations arrived on 8 Oct 2026).
-const TABLES = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations"];
+const TABLES = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"];
 const dictionary = TABLES.map((name) => read(`lib/studioflow/${name}.ts`)).join("\n");
 
 // Keys: t("…") literals in the panel, the stage labels the reducer returns,

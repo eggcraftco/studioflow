@@ -6,6 +6,8 @@
 // lives once in AppShell so every screen gets it for free.
 
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 export type StudioToastInput = {
   message: string;
@@ -24,6 +26,7 @@ export function dispatchStudioToast(toast: StudioToastInput) {
 }
 
 export function StudioToastHost() {
+  const { language } = useAuth();
   const [toasts, setToasts] = useState<StudioToastItem[]>([]);
   const nextIdRef = useRef(1);
 
@@ -63,7 +66,7 @@ export function StudioToastHost() {
           <button
             type="button"
             className="studio-toast-close"
-            aria-label="Dismiss"
+            aria-label={studioT("Dismiss", language)}
             onClick={() => setToasts(current => current.filter(item => item.id !== toast.id))}
           >
             ×

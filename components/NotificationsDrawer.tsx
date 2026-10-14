@@ -20,6 +20,8 @@ import {
 } from "@/lib/studioflow/notifications";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import type { WebPushStatus } from "@/lib/studioflow/pushNotifications";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 
 // What the last press of "Enable notifications" came to, shown in the drawer. "dismissed" is the
 // browser's question closed without an answer; a refusal shows the blocked banner instead.
@@ -73,11 +75,11 @@ function isSafariBrowser() {
   return /Safari\//.test(ua) && !/Chrome\/|Chromium\/|CriOS\/|FxiOS\/|EdgiOS\/|Edg\/|OPR\//.test(ua);
 }
 
-function blockedHelpText() {
+function blockedHelpText(t: (text: string) => string) {
   const site = typeof window !== "undefined" && window.location.hostname ? window.location.hostname : "nivadesk.app";
   return isSafariBrowser()
-    ? `In Safari, open Safari → Settings → Websites → Notifications, find ${site} and choose Allow.`
-    : "Click the padlock (or the site-settings icon) to the left of the web address, set Notifications to Allow, then reload this page.";
+    ? t("In Safari, open Safari → Settings → Websites → Notifications, find {site} and choose Allow.").replace("{site}", site)
+    : t("Click the padlock (or the site-settings icon) to the left of the web address, set Notifications to Allow, then reload this page.");
 }
 
 type Props = {
@@ -101,6 +103,8 @@ export function NotificationsDrawer({
   onClose,
   onLocalDismiss,
 }: Props) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<"all" | "unread">("all");
@@ -329,21 +333,21 @@ export function NotificationsDrawer({
         <div className="notif-card notif-header-card">
           <div className="notif-header-row">
             <div style={{ flex: 1 }}>
-              <h2>Notification Centre</h2>
-              <p>Latest activity and workflow updates</p>
+              <h2>{t("Notification Centre")}</h2>
+              <p>{t("Latest activity and workflow updates")}</p>
             </div>
             {unreadCount > 0 && (
               <button type="button" className="notif-pill-button" onClick={() => void handleMarkAllRead()}>
-                Mark all read
+                {t("Mark all read")}
               </button>
             )}
-            <button type="button" className="notif-icon-button" onClick={onClose} title="Close">›</button>
+            <button type="button" className="notif-icon-button" onClick={onClose} title={t("Close")}>›</button>
           </div>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search notifications"
+            placeholder={t("Search notifications")}
             className="notif-search"
           />
           <div>
@@ -353,7 +357,7 @@ export function NotificationsDrawer({
                 className={`notif-chip${filtersOpen ? " active" : ""}`}
                 onClick={() => setFiltersOpen((v) => !v)}
               >
-                Filters {readFilter === "unread" || typeFilter !== "all" ? "•" : ""}
+                {t("Filters")} {readFilter === "unread" || typeFilter !== "all" ? "•" : ""}
               </button>
               {(readFilter === "unread" || typeFilter !== "all") && (
                 <button
@@ -361,7 +365,7 @@ export function NotificationsDrawer({
                   className="notif-clear"
                   onClick={() => { setReadFilter("all"); setTypeFilter("all"); }}
                 >
-                  Clear
+                  {t("Clear")}
                 </button>
               )}
             </div>
@@ -369,10 +373,10 @@ export function NotificationsDrawer({
               <div className="notif-filters-expanded">
                 <div className="notif-filter-row">
                   <button type="button" className={`notif-chip${readFilter === "all" ? " active" : ""}`} onClick={() => setReadFilter("all")}>
-                    All ({visible.length})
+                    {t("All ({count})").replace("{count}", String(visible.length))}
                   </button>
                   <button type="button" className={`notif-chip${readFilter === "unread" ? " active" : ""}`} onClick={() => setReadFilter("unread")}>
-                    Unread ({visible.filter((n) => computeUnread(n)).length})
+                    {t("Unread ({count})").replace("{count}", String(visible.filter((n) => computeUnread(n)).length))}
                   </button>
                 </div>
                 <div className="notif-filter-row" style={{ flexWrap: "wrap", marginTop: 6 }}>
@@ -383,7 +387,7 @@ export function NotificationsDrawer({
                       className={`notif-chip${typeFilter === key ? " active" : ""}`}
                       onClick={() => setTypeFilter(key)}
                     >
-                      {key === "all" ? "All types" : typeLabel(key)}
+                      {key === "all" ? t("All types") : t(typeLabel(key))}
                     </button>
                   ))}
                 </div>
@@ -395,19 +399,19 @@ export function NotificationsDrawer({
         {showEnableInvitation && (
           <div className="notif-permission-banner is-invite">
             <div style={{ flex: 1 }}>
-              <strong>Turn on notifications</strong>
+              <strong>{t("Turn on notifications")}</strong>
               {pushOutcome === "dismissed" ? (
                 <div role="status" style={{ fontSize: 11, marginTop: 2, fontWeight: 700 }}>
-                  You closed the browser&apos;s question — press Enable notifications to ask again.
+                  {t("You closed the browser's question — press Enable notifications to ask again.")}
                 </div>
               ) : (
                 <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
-                  Get an alert when a message, order or support reply needs you.
+                  {t("Get an alert when a message, order or support reply needs you.")}
                 </div>
               )}
             </div>
             <button type="button" disabled={enablingPush || !workspace} onClick={enableNotifications}>
-              {enablingPush ? "Asking…" : "Enable notifications"}
+              {enablingPush ? t("Asking…") : t("Enable notifications")}
             </button>
           </div>
         )}
@@ -415,7 +419,7 @@ export function NotificationsDrawer({
         {open && pushOutcome === "ok" && (
           <div className="notif-permission-banner is-success" role="status">
             <div style={{ flex: 1 }}>
-              <strong>Notifications are on for this browser.</strong>
+              <strong>{t("Notifications are on for this browser.")}</strong>
             </div>
           </div>
         )}
@@ -423,10 +427,10 @@ export function NotificationsDrawer({
         {unsupportedOutcome && (
           <div className="notif-permission-banner is-info" role="status">
             <div style={{ flex: 1 }}>
-              <strong>This browser can&apos;t show NivaDesk notifications.</strong>
+              <strong>{t("This browser can't show NivaDesk notifications.")}</strong>
               {isAppleMobile() && !isStandaloneApp() ? (
                 <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
-                  Add NivaDesk to your Home Screen (Share → Add to Home Screen) and open it from there to get notifications.
+                  {t("Add NivaDesk to your Home Screen (Share → Add to Home Screen) and open it from there to get notifications.")}
                 </div>
               ) : null}
             </div>
@@ -436,7 +440,7 @@ export function NotificationsDrawer({
         {open && pushOutcome === "not_configured" && (
           <div className="notif-permission-banner is-info" role="status">
             <div style={{ flex: 1 }}>
-              <strong>Notifications aren&apos;t available right now.</strong>
+              <strong>{t("Notifications aren't available right now.")}</strong>
             </div>
           </div>
         )}
@@ -444,10 +448,10 @@ export function NotificationsDrawer({
         {open && pushOutcome === "error" && (
           <div className="notif-permission-banner is-error" role="alert">
             <div style={{ flex: 1 }}>
-              <strong>Notifications could not be turned on. Try again.</strong>
+              <strong>{t("Notifications could not be turned on. Try again.")}</strong>
             </div>
             <button type="button" disabled={enablingPush || !workspace} onClick={enableNotifications}>
-              {enablingPush ? "Asking…" : "Try again"}
+              {enablingPush ? t("Asking…") : t("Try again")}
             </button>
           </div>
         )}
@@ -455,17 +459,17 @@ export function NotificationsDrawer({
         {showPermissionBanner && (
           <div className="notif-permission-banner">
             <div style={{ flex: 1 }}>
-              <strong>Notifications are blocked</strong>
+              <strong>{t("Notifications are blocked")}</strong>
               {/* A page cannot open the browser's settings — the browser blocks it and
                   nothing happens. Say where the switch is instead, for this browser. */}
               <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
                 {permissionHelpOpen
-                  ? blockedHelpText()
-                  : "Allow notifications in your browser settings to get push alerts."}
+                  ? blockedHelpText(t)
+                  : t("Allow notifications in your browser settings to get push alerts.")}
               </div>
             </div>
             <button type="button" onClick={() => setPermissionHelpOpen((open) => !open)}>
-              {permissionHelpOpen ? "Hide" : "How to enable"}
+              {permissionHelpOpen ? t("Hide") : t("How to enable")}
             </button>
           </div>
         )}
@@ -474,16 +478,16 @@ export function NotificationsDrawer({
           <div className="notif-card notif-empty">
             <div style={{ fontSize: 28 }}>{readFilter === "unread" ? "🔕" : "🔔"}</div>
             <div style={{ fontWeight: 700, marginTop: 8 }}>
-              {readFilter === "unread" ? "No unread notifications" : "No notifications yet"}
+              {readFilter === "unread" ? t("No unread notifications") : t("No notifications yet")}
             </div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-              {search ? "No notifications match your search." : "Important updates from messages, support tickets, orders and workflow will appear here."}
+              {search ? t("No notifications match your search.") : t("Important updates from messages, support tickets, orders and workflow will appear here.")}
             </div>
           </div>
         ) : (
           sections.map((section) => (
             <div key={section.id} className="notif-section">
-              <div className="notif-section-title">{section.title}</div>
+              <div className="notif-section-title">{t(section.title)}</div>
               {groupBy(section.items).map((group) => {
                 const groupId = `${section.id}_${group.key}`;
                 const isExpanded = expandedGroups.has(groupId);
@@ -517,10 +521,10 @@ export function NotificationsDrawer({
                 return (
                   <div key={`expanded_${groupId}`}>
                     <div className="notif-stack-banner">
-                      <span>Showing {group.items.length} grouped notifications</span>
+                      <span>{t("Showing {count} grouped notifications").replace("{count}", String(group.items.length))}</span>
                       <button type="button" onClick={() => setExpandedGroups((prev) => {
                         const next = new Set(prev); next.delete(groupId); return next;
-                      })}>Collapse</button>
+                      })}>{t("Collapse")}</button>
                     </div>
                     {group.items.map((item) => (
                       <NotificationCard
@@ -566,6 +570,8 @@ function NotificationCard({
   onReviewDeletion?: (approve: boolean) => void;
   reviewing?: boolean;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const key = typeKeyFor(item);
   const tint = colorForType(key);
   const sender = senderHeader(item);
@@ -581,8 +587,8 @@ function NotificationCard({
       <button
         type="button"
         className="notif-row-dismiss"
-        aria-label="Dismiss this notification"
-        title="Dismiss"
+        aria-label={t("Dismiss this notification")}
+        title={t("Dismiss")}
         onClick={(event) => { event.stopPropagation(); onDismiss(); }}
       >
         ×
@@ -600,18 +606,18 @@ function NotificationCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="notif-card-header">
             <span className="notif-sender">{sender}</span>
-            <span className="notif-time">{timeText(item.createdAtMillis, sectionId)}</span>
+            <span className="notif-time">{timeText(item.createdAtMillis, sectionId, language)}</span>
           </div>
           {(item.message || item.title) && (
             <div className="notif-body">{item.message || item.title}</div>
           )}
           <span className="notif-type-pill" style={{ background: `${tint}1e`, color: tint }}>
-            {typeLabel(key)}
+            {t(typeLabel(key))}
           </span>
           {item.type === "order_deletion_request" && item.status === "pending" && onReviewDeletion ? (
             <div className="notif-review-actions" onClick={(event) => event.stopPropagation()}>
-              <button type="button" disabled={reviewing} onClick={() => onReviewDeletion(true)}>Approve Delete</button>
-              <button type="button" className="reject" disabled={reviewing} onClick={() => onReviewDeletion(false)}>Reject</button>
+              <button type="button" disabled={reviewing} onClick={() => onReviewDeletion(true)}>{t("Approve Delete")}</button>
+              <button type="button" className="reject" disabled={reviewing} onClick={() => onReviewDeletion(false)}>{t("Reject")}</button>
             </div>
           ) : null}
         </div>
@@ -635,6 +641,8 @@ function StackedCard({
   onExpand: () => void;
   onDismissAll: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const key = typeKeyFor(latest);
   const tint = colorForType(key);
   return (
@@ -651,13 +659,13 @@ function StackedCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="notif-card-header">
             <span className="notif-stack-title">
-              {typeLabel(key)} <span className="notif-count-pill">{count}</span>
+              {t(typeLabel(key))} <span className="notif-count-pill">{count}</span>
             </span>
-            <span className="notif-time">{timeText(latest.createdAtMillis, sectionId)}</span>
+            <span className="notif-time">{timeText(latest.createdAtMillis, sectionId, language)}</span>
           </div>
           {latest.title && <div className="notif-stack-sub">{latest.title}</div>}
           {latest.message && <div className="notif-body">{latest.message}</div>}
-          <span className="notif-expand-pill">Tap to show {count} notifications ▾</span>
+          <span className="notif-expand-pill">{t("Tap to show {count} notifications").replace("{count}", String(count))} ▾</span>
         </div>
       </div>
     </div>
@@ -713,13 +721,13 @@ function senderHeader(item: StudioActivityNotification): string {
   return item.title || "Notification";
 }
 
-function timeText(ms: number, sectionId: string): string {
+function timeText(ms: number, sectionId: string, language: string): string {
   if (!ms) return "";
   const d = new Date(ms);
   if (sectionId === "today" || sectionId === "yesterday") {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(studioLocaleTag(language), { hour: "2-digit", minute: "2-digit" });
   }
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString(studioLocaleTag(language), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function DrawerStyles() {

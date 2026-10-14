@@ -101,7 +101,7 @@ const orders = fs.readFileSync(path.join(root, "lib/studioflow/orders.ts"), "utf
 expect("the callable is registerTracking", /registerOrderTrackingFromWeb[\s\S]{0,700}httpsCallable<[\s\S]{0,120}?>\(functions, "registerTracking"\)/.test(orders), true);
 
 // ---- 3. every sentence the panel prints, in all eleven languages, through studioT
-for (const [rel, out] of [["lib/studioflow/macTranslations.ts", "macTranslations.mjs"], ["lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs"], ["lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs"], ["lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs"]]) compile(rel, out);
+for (const [rel, out] of [["lib/studioflow/macTranslations.ts", "macTranslations.mjs"], ["lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs"], ["lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs"], ["lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs"], ["lib/studioflow/screenGapTranslations.ts", "screenGapTranslations.mjs"]]) compile(rel, out);
 const { studioT } = await import(pathToFileURL(compile("lib/studioflow/language.ts", "language.mjs")).href);
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const panel = read("app/orders/OrderLiveTrackingPanel.tsx");

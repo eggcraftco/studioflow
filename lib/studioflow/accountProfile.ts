@@ -4,6 +4,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, functions, storage } from "@/lib/firebase/client";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { ACCOUNT_AVATAR_UPLOAD_SOURCE, uploadPolicyForSource } from "@/lib/studioflow/uploadPolicy";
 
 const ACCOUNT_AVATAR_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 export const ACCOUNT_AVATAR_ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,.webp";
@@ -161,6 +162,10 @@ export async function uploadAccountAvatar(workspace: WorkspaceContext, file: Fil
   const storedFileName = newAccountAvatarFileName(extension);
   const storageRef = ref(storage, `companies/${workspace.id}/design_images/${storedFileName}`);
   const uploadedAt = new Date();
+  // A personal avatar is outside the workspace client-file upload policy (owner decision 9 Oct 2026, 4a): no
+  // prompt, no acceptance written and no policy keys — whatever the workspace requires and whatever this browser
+  // accepted for client files. Same on iOS and Android (vectors kind "scope").
+  const avatarPolicy = uploadPolicyForSource(ACCOUNT_AVATAR_UPLOAD_SOURCE, true, null);
 
   const downloadURL = await withWebSyncStatus(async () => {
     await uploadBytes(storageRef, file, {
@@ -170,12 +175,13 @@ export async function uploadAccountAvatar(workspace: WorkspaceContext, file: Fil
         uploadedByUid: user.uid,
         uploadedByEmail: user.email || "unknown",
         originalFileName: file.name,
-        source: "account_avatar",
+        source: ACCOUNT_AVATAR_UPLOAD_SOURCE,
         orderId: "",
         uploadedAt: uploadedAt.toISOString(),
         fileType: contentType,
         fileSize: String(file.size),
-        storagePath: storageRef.fullPath
+        storagePath: storageRef.fullPath,
+        ...avatarPolicy.metadata
       }
     });
     return getDownloadURL(storageRef);

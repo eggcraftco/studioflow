@@ -29,6 +29,7 @@ import {
 } from "@/components/home/HomeCardBodies";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
+import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   loadWorkspaceContext,
@@ -366,7 +367,7 @@ export default function HomePage() {
 
   function renderBody(id: HomeCardId, size: HomeCardSize, period: HomeCardPeriod) {
     const props: CardBodyProps = {
-      size, period, data, t, locale: studioLocaleTag(language),
+      size, period, data, t, locale: studioLocaleTag(language), language,
       moneySettings, hideNumbers, onQuickAction: handleQuickAction,
       // "New order" is hidden from a member who only works inside assigned
       // projects (canCreateOrders); the toolbar hides its button the same way.
@@ -493,7 +494,7 @@ export default function HomePage() {
                     // How many files there are belongs beside the heading, as
                     // the sheet reads it.
                     : placement.id === "files" && drawnOf(index) !== "1x1"
-                      ? `${data.files.length} ${t("files")}`
+                      ? studioCountLabel(data.files.length, "file", language)
                       // Both week cards name which week beside the heading; the
                       // 1x1 has no week to name.
                       : placement.id === "schedule" && drawnOf(index) !== "1x1"

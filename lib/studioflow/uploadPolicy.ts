@@ -287,3 +287,82 @@ export function uploadPolicyMetadata(stamp: UploadPolicyStamp): Record<string, s
   if (stamp.policyVersion) metadata.policyVersion = stamp.policyVersion;
   return metadata;
 }
+
+// ---------------------------------------------------------------------------
+// Scope (owner decision 9 Oct 2026, item 4a). The workspace upload policy is
+// the CLIENT-FILE policy: client files, order previews and the workspace logo.
+// A personal account avatar is not under it — no prompt, no acceptance written,
+// no policy keys on the object; the text shown and the acceptance stored must
+// belong to the same scope, and no avatar notice exists. Same rule on iOS and
+// Android; vectors kind "scope" in docs/native/upload-policy-stamp-vectors.json.
+// ---------------------------------------------------------------------------
+
+export const ACCOUNT_AVATAR_UPLOAD_SOURCE = "account_avatar";
+
+/** Whether the workspace client-file policy governs an upload from this source. */
+export function uploadPolicyAppliesToSource(source: string) {
+  return source !== ACCOUNT_AVATAR_UPLOAD_SOURCE;
+}
+
+export type UploadPolicySourceDecision = {
+  /** Show the policy prompt before this upload. */
+  asks: boolean;
+  /** The upload may start now. */
+  allowed: boolean;
+  /** The policy keys written on the object ({} when the policy does not apply). */
+  metadata: Record<string, string>;
+};
+
+/** One decision per upload source: the client-file gate and stamp where the
+ *  workspace policy applies; nothing at all (no prompt, no keys) where it does not. */
+export function uploadPolicyForSource(
+  source: string,
+  required: boolean,
+  acceptance: UploadPolicyAcceptance | null | undefined
+): UploadPolicySourceDecision {
+  if (!uploadPolicyAppliesToSource(source)) return { asks: false, allowed: true, metadata: {} };
+  const allowed = uploadPolicyAllows(required, acceptance);
+  return { asks: !allowed, allowed, metadata: uploadPolicyMetadata(uploadPolicyStamp(required, acceptance)) };
+}
+
+// ---------------------------------------------------------------------------
+// Settings ▸ Safety & Uploads visibility (owner decision 9 Oct 2026, item 4b).
+// Everyone who can upload client files sees THEIR OWN acceptance on this
+// browser there (status, date, short version) and can forget it — no settings
+// permission needed (it used to sit under Preferences, behind settingsGeneral).
+// The policy's admin controls stay with the owner and with admins/members given
+// the Safety & Uploads permission; workflow-only and view-only never get them.
+// Vectors kind "card" (same file); iOS and Android run the same rule.
+// ---------------------------------------------------------------------------
+
+export type UploadPolicySettingsAccessInput = {
+  role: string;
+  /** The plan has Client Files (entitlements.features.client_files). */
+  clientFilesPlan: boolean;
+  /** memberAccess.clientFiles !== false */
+  clientFilesAccess: boolean;
+  /** memberAccess.settingsSafetyUploads !== false */
+  settingsSafetyUploads: boolean;
+};
+
+export type UploadPolicySettingsAccess = {
+  showsSection: boolean;
+  showsAcceptanceCard: boolean;
+  showsAdminControls: boolean;
+};
+
+function uploadPolicyRoleKey(role: string) {
+  const compact = String(role ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (compact === "workflowonly") return "workflow";
+  if (compact === "viewonly" || compact === "readonly") return "viewer";
+  return compact;
+}
+
+export function uploadPolicySettingsAccess(input: UploadPolicySettingsAccessInput): UploadPolicySettingsAccess {
+  const role = uploadPolicyRoleKey(input.role);
+  const canUpload = input.clientFilesPlan && input.clientFilesAccess
+    && (role === "owner" || role === "admin" || role === "member" || role === "workflow");
+  const showsAdminControls = role === "owner" || ((role === "admin" || role === "member") && input.settingsSafetyUploads);
+  const showsSection = canUpload || showsAdminControls;
+  return { showsSection, showsAcceptanceCard: showsSection, showsAdminControls };
+}

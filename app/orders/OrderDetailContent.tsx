@@ -151,9 +151,9 @@ const ORDER_HEADER_SHOW_DELIVERY_TIME_KEY = "orderDetailHeaderShowDeliveryTime";
 const ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY = "orderDetailHeaderShowUpcomingSchedule";
 const ORDER_HEADER_SHOW_ORDER_VALUE_KEY = "orderDetailHeaderShowOrderValue";
 
-function formatDate(date: Date | null) {
+function formatDate(date: Date | null, locale = "en-GB") {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function normalizeOrderCustomerName(value: string) {
@@ -169,9 +169,9 @@ function formatShortDate(date: Date | null) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(date);
 }
 
-function formatDateTime(date: Date | null) {
+function formatDateTime(date: Date | null, locale = "en-GB") {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -180,9 +180,9 @@ function formatDateTime(date: Date | null) {
   }).format(date);
 }
 
-function formatTime(date: Date | null) {
+function formatTime(date: Date | null, locale = "en-GB") {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function workSessionDurationSeconds(session: WorkSessionDetail, now = new Date()) {
@@ -1196,9 +1196,18 @@ function summaryDeliveryLabel(order: OrderDetail) {
 // place and the words follow the language.
 function localizedDeliveryLabel(label: string, t: (text: string) => string) {
   const days = /^(\d+) days$/.exec(label);
-  if (days) return `${days[1]} ${t("days")}`;
+  if (days) return t("{count} days").replace("{count}", days[1]);
   const late = /^Late \((\d+) days\)$/.exec(label);
-  if (late) return `${t("Late")} (${late[1]} ${t("days")})`;
+  if (late) return `${t("Late")} (${t("{count} days").replace("{count}", late[1])})`;
+  const daysLate = /^(\d+) days late$/.exec(label);
+  if (daysLate) return t("{count} days late").replace("{count}", daysLate[1]);
+  return label === "-" ? label : t(label);
+}
+
+// scheduleRelativeLabel builds English ("Overdue 3h", "In 2d"); printed through this.
+function localizedScheduleRelativeLabel(label: string, t: (text: string) => string) {
+  const match = /^(Overdue|In) (\d+)(h|d)$/.exec(label);
+  if (match) return t(`${match[1]} {count}${match[3]}`).replace("{count}", match[2]);
   return label === "-" ? label : t(label);
 }
 
@@ -1373,6 +1382,7 @@ function ShopifySourceStrip({
   order: { customFields: Record<string, string>; isDispatched: boolean };
   workspaceCurrency?: string;
 }) {
+  const t = useDetailT();
   const cf = order.customFields || {};
   if ((cf["Source"] || "").trim() !== "Shopify") return null;
   const domain = (cf["Shopify Domain"] || "").trim();
@@ -1393,20 +1403,20 @@ function ShopifySourceStrip({
   return (
     <div className="shopify-source-strip">
       <span className="shopify-source-badge">Shopify</span>
-      <span className="shopify-source-item">{cf["Shopify Store"] || domain || "Shopify store"}</span>
+      <span className="shopify-source-item">{cf["Shopify Store"] || domain || t("Shopify store")}</span>
       {cf["Shopify Order Number"] ? (
         <span className="shopify-source-item">· {cf["Shopify Order Number"]}</span>
       ) : null}
       {cf["Shopify Status"] ? (
-        <span className="shopify-source-item">· Payment: {cf["Shopify Status"]}</span>
+        <span className="shopify-source-item">· {t("Payment: {status}").replace("{status}", cf["Shopify Status"])}</span>
       ) : null}
       {originalAmount ? (
         <span className="shopify-source-item">· {originalAmount}</span>
       ) : null}
-      <span className="shopify-source-item">· {order.isDispatched ? "Fulfilled" : "Unfulfilled"}</span>
+      <span className="shopify-source-item">· {order.isDispatched ? t("Fulfilled") : t("Unfulfilled")}</span>
       {adminUrl ? (
         <a className="shopify-source-link" href={adminUrl} target="_blank" rel="noreferrer">
-          View in Shopify ↗
+          {t("View in Shopify ↗")}
         </a>
       ) : null}
     </div>
@@ -2049,6 +2059,7 @@ export function OrderDetailContent({
   const { hideNumbers } = usePricePrivacy();
   const detailLanguage = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, detailLanguage);
+  const detailLocale = studioLocaleTag(detailLanguage);
   const [fileActionStatus, setFileActionStatus] = useState<string | null>(null);
   const [fileActionError, setFileActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
@@ -3030,7 +3041,7 @@ export function OrderDetailContent({
     // The workshop's own word wins over ours. Set during setup from the trades
     // chosen there, so a jeweller sees "Metals & Stones" where a baker sees
     // "Ingredients" — same card, same data, their vocabulary.
-    return moneySettings?.orderCardLabels?.[cardId] || CARD_LABELS[cardId];
+    return t(moneySettings?.orderCardLabels?.[cardId] || CARD_LABELS[cardId]);
   }
 
   function cardIcon(cardId: OrderDetailCardId): CardIcon {
@@ -5082,15 +5093,15 @@ export function OrderDetailContent({
   function todoAssigneeLabel(task: ToDoDetail) {
     const assignedUid = task.assignedToUid.trim();
     const assignedEmail = task.assignedToEmail.trim();
-    if (!assignedUid && !assignedEmail) return "Unassigned";
-    if (assignedUid === user?.uid) return user.displayName || user.email || "Me";
+    if (!assignedUid && !assignedEmail) return t("Unassigned");
+    if (assignedUid === user?.uid) return user.displayName || user.email || t("Me");
     const member = teamMembers.find(item => item.id === assignedUid);
     if (member) return member.displayName || member.email || member.id;
     return assignedEmail || assignedUid;
   }
 
   function todoDueLabel(date: Date | null) {
-    return date ? formatDate(date) : "No due date";
+    return date ? formatDate(date, detailLocale) : t("No due date");
   }
 
   function todoPriorityClass(priority: string) {
@@ -5528,7 +5539,7 @@ export function OrderDetailContent({
                         disabled={!canEditCardLayout || savingLayout || index === 0}
                         onClick={() => moveCard(cardId, -1)}
                       >
-                        Move Up
+                        {t("Move Up")}
                       </button>
                       <button
                         className="button secondary"
@@ -5536,7 +5547,7 @@ export function OrderDetailContent({
                         disabled={!canEditCardLayout || savingLayout || index === customizeCardOrder.length - 1}
                         onClick={() => moveCard(cardId, 1)}
                       >
-                        Move Down
+                        {t("Move Down")}
                       </button>
                     </div>
                   ) : null}
@@ -6170,16 +6181,15 @@ export function OrderDetailContent({
                   render, and the card just blinked. */}
               {estimateNotice ? <p className="estimate-card-note">{t(estimateNotice)}</p> : null}
               {!canSeeFinance ? (
-                <p className="estimate-card-note">Hidden on this workspace role.</p>
+                <p className="estimate-card-note">{t("Hidden on this workspace role.")}</p>
               ) : !currentEstimate ? (
                 <>
                   <p className="estimate-card-note">
-                    No estimate yet. Create one from the invoice lines, send the link, and the customer&apos;s
-                    approval is recorded here.
+                    {t("No estimate yet. Create one from the invoice lines, send the link, and the customer's approval is recorded here.")}
                   </p>
                   {canInlineEditFullDetails ? (
                     <button type="button" className="estimate-card-primary" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
-                      {estimateBusy ? "Working…" : "Create estimate"}
+                      {t(estimateBusy ? "Working…" : "Create estimate")}
                     </button>
                   ) : null}
                 </>
@@ -6224,17 +6234,17 @@ export function OrderDetailContent({
 
                   {decided ? (
                     <div className="estimate-card-approval">
-                      <span className="estimate-card-approval-title">Approval Details</span>
+                      <span className="estimate-card-approval-title">{t("Approval Details")}</span>
                       <div className="estimate-card-line">
-                        <span>{approved ? "Approved by" : "Declined by"}</span>
+                        <span>{t(approved ? "Approved by" : "Declined by")}</span>
                         <strong>{decisionName || "-"}</strong>
                       </div>
                       <div className="estimate-card-line">
-                        <span>{approved ? "Approved at" : "Declined at"}</span>
-                        <strong>{decisionAtMs > 0 ? formatDateTime(new Date(decisionAtMs)) : "-"}</strong>
+                        <span>{t(approved ? "Approved at" : "Declined at")}</span>
+                        <strong>{decisionAtMs > 0 ? formatDateTime(new Date(decisionAtMs), detailLocale) : "-"}</strong>
                       </div>
                       <div className="estimate-card-line">
-                        <span>Approval Method</span>
+                        <span>{t("Approval Method")}</span>
                         <strong>{decisionMethodLabel}</strong>
                       </div>
                       {approval?.approvedByEmail ? (
@@ -6245,26 +6255,26 @@ export function OrderDetailContent({
                       ) : null}
                       {approval?.signatureDownloadUrl ? (
                         <div className="estimate-card-signature">
-                          <span>Customer Signature</span>
+                          <span>{t("Customer Signature")}</span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={approval.signatureDownloadUrl} alt="Customer signature" />
+                          <img src={approval.signatureDownloadUrl} alt={t("Customer signature")} />
                         </div>
                       ) : null}
                       {approval?.declineReason ? (
                         <p className="estimate-card-note">{approval.declineReason}</p>
                       ) : null}
                       {awaitingEvidence && currentEstimate?.hasSignature ? (
-                        <p className="estimate-card-note">Loading the signature…</p>
+                        <p className="estimate-card-note">{t("Loading the signature…")}</p>
                       ) : null}
                     </div>
                   ) : null}
 
                   {estimateLinkUrl && linkLive && !decided ? (
                     <div className="estimate-card-link">
-                      <span className="estimate-card-approval-title">Customer Link</span>
+                      <span className="estimate-card-approval-title">{t("Customer Link")}</span>
                       <div className="estimate-card-link-row">
                         <input type="text" readOnly value={estimateLinkUrl} onFocus={event => event.currentTarget.select()} />
-                        <button type="button" onClick={() => void copyEstimateLink()}>Copy link</button>
+                        <button type="button" onClick={() => void copyEstimateLink()}>{t("Copy link")}</button>
                       </div>
                     </div>
                   ) : null}
@@ -6273,7 +6283,7 @@ export function OrderDetailContent({
                       the estimate as paper; only editors can send or revise it. */}
                   <div className="estimate-card-actions">
                     <button type="button" onClick={openEstimatePdf} disabled={!estimateRecord}>
-                      View Estimate PDF
+                      {t("View Estimate PDF")}
                     </button>
                   </div>
 
@@ -6281,23 +6291,23 @@ export function OrderDetailContent({
                     <div className="estimate-card-actions">
                       {!decided && currentEstimate.status !== "superseded" ? (
                         <button type="button" onClick={() => void shareEstimateLink()} disabled={estimateBusy}>
-                          {linkLive ? "Create a fresh link" : "Send to customer"}
+                          {t(linkLive ? "Create a fresh link" : "Send to customer")}
                         </button>
                       ) : null}
                       {linkLive && !decided ? (
                         <button type="button" onClick={() => void revokeEstimateLink()} disabled={estimateBusy}>
-                          Revoke link
+                          {t("Revoke link")}
                         </button>
                       ) : null}
                       <button type="button" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
-                        Create new estimate
+                        {t("Create new estimate")}
                       </button>
                     </div>
                   ) : null}
 
                   {estimates.length > 1 ? (
                     <div className="estimate-card-history">
-                      <span className="estimate-card-approval-title">Estimate History</span>
+                      <span className="estimate-card-approval-title">{t("Estimate History")}</span>
                       {estimates.map(row => (
                         <div key={row.id} className="estimate-card-line">
                           <span>{row.number || `#${row.version}`}</span>
@@ -6335,35 +6345,34 @@ export function OrderDetailContent({
             <div className="app-card-panel portal-card">
               <div className="portal-section">
                 <div className="portal-section-head">
-                  <span className="portal-section-title">Portal Access</span>
+                  <span className="portal-section-title">{t("Portal Access")}</span>
                   <span className={`portal-chip ${portal.active ? "is-active" : "is-off"}`}>
-                    {portal.active ? "Active" : "Off"}
+                    {t(portal.active ? "Active" : "Off")}
                   </span>
                 </div>
 
                 {portal.active && portalUrl ? (
                   <div className="portal-link-row">
                     <input type="text" readOnly value={portalUrl} onFocus={event => event.currentTarget.select()} />
-                    <button type="button" onClick={() => void copyPortalLink()}>Copy Link</button>
+                    <button type="button" onClick={() => void copyPortalLink()}>{t("Copy Link")}</button>
                     <a className="portal-open" href={portalUrl} target="_blank" rel="noopener noreferrer">
-                      Open Portal
+                      {t("Open Portal")}
                     </a>
                   </div>
                 ) : (
                   <p className="portal-empty">
-                    No portal link yet. Create one and send it to your customer — they can open it
-                    without signing in.
+                    {t("No portal link yet. Create one and send it to your customer — they can open it without signing in.")}
                   </p>
                 )}
 
                 {canEditPortal ? (
                   <div className="portal-actions">
                     <button type="button" onClick={() => void createPortalLink()} disabled={portalBusy}>
-                      {portal.active ? "Create a fresh link" : "Create portal link"}
+                      {t(portal.active ? "Create a fresh link" : "Create portal link")}
                     </button>
                     {portal.active ? (
                       <button type="button" onClick={() => void turnOffPortalLink()} disabled={portalBusy}>
-                        Turn off
+                        {t("Turn off")}
                       </button>
                     ) : null}
                   </div>
@@ -6373,7 +6382,7 @@ export function OrderDetailContent({
               </div>
 
               <div className="portal-section">
-                <span className="portal-section-title">Customer Sees</span>
+                <span className="portal-section-title">{t("Customer Sees")}</span>
                 <div className="portal-sees">
                   {seesRows.map(row => (
                     <button
@@ -6384,18 +6393,18 @@ export function OrderDetailContent({
                       onClick={() => toggleSees(row.key)}
                     >
                       <span className="portal-tick" aria-hidden="true">{shows[row.key] ? "\u2713" : "\u2013"}</span>
-                      <span>{row.label}</span>
+                      <span>{t(row.label)}</span>
                     </button>
                   ))}
                 </div>
                 <p className="portal-hint">
-                  Internal notes, costs, supplier and profit are never shown, whatever is switched on here.
+                  {t("Internal notes, costs, supplier and profit are never shown, whatever is switched on here.")}
                 </p>
               </div>
 
               <div className="portal-section">
                 <div className="portal-section-head">
-                  <span className="portal-section-title">Automatic Updates</span>
+                  <span className="portal-section-title">{t("Automatic Updates")}</span>
                   <button
                     type="button"
                     className={`portal-switch ${auto.enabled ? "is-on" : ""}`}
@@ -6407,7 +6416,7 @@ export function OrderDetailContent({
                   </button>
                 </div>
                 <p className="portal-hint">
-                  Sent when the order&apos;s status moves — estimate ready, work started, ready for collection.
+                  {t("Sent when the order's status moves — estimate ready, work started, ready for collection.")}
                 </p>
                 <div className="portal-channels">
                   <span>Email</span>
@@ -6417,7 +6426,7 @@ export function OrderDetailContent({
                     disabled={!canEditPortal || !auto.enabled}
                     onClick={() => void savePortalPreferences(shows, { ...auto, email: !auto.email })}
                   >
-                    {auto.email ? "ON" : "OFF"}
+                    {t(auto.email ? "ON" : "OFF")}
                   </button>
                   <span>SMS</span>
                   <button
@@ -6426,7 +6435,7 @@ export function OrderDetailContent({
                     disabled={!canEditPortal || !auto.enabled || workspaceSms?.available !== true}
                     onClick={() => void savePortalPreferences(shows, { ...auto, sms: !auto.sms })}
                   >
-                    {auto.sms ? "ON" : "OFF"}
+                    {t(auto.sms ? "ON" : "OFF")}
                   </button>
                 </div>
                 <p className="portal-hint">
@@ -6464,7 +6473,7 @@ export function OrderDetailContent({
               {repairIntakeFieldRows.map(row => (
                 <InlineValueRow
                   key={row.id}
-                  label={row.title}
+                  label={t(row.title)}
                   labelRaw={row.title}
                   value={repairIntake?.fields?.[row.id] ?? ""}
                   disabled={intakeDisabled}
@@ -6505,14 +6514,14 @@ export function OrderDetailContent({
               {canSeeIntakePhotos ? (
                 <div className="repair-intake-block">
                   <div className="repair-intake-photos-head">
-                    <span className="repair-intake-block-title">Intake Photos</span>
+                    <span className="repair-intake-block-title">{t("Intake Photos")}</span>
                     {canInlineEditFullDetails ? (
                       <button
                         type="button"
                         className="repair-intake-photo-add"
                         onClick={() => clientFileInputRef.current?.click()}
                       >
-                        Add photos
+                        {t("Add photos")}
                       </button>
                     ) : null}
                   </div>
@@ -6553,11 +6562,11 @@ export function OrderDetailContent({
 
               <div className="repair-intake-footer">
                 <div className="repair-intake-row">
-                  <span>Received</span>
-                  <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt) : "—"}</strong>
+                  <span>{t("Received")}</span>
+                  <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt, detailLocale) : "—"}</strong>
                 </div>
                 <div className="repair-intake-row">
-                  <span>Received By</span>
+                  <span>{t("Received By")}</span>
                   <strong>{repairIntake?.receivedByName || "—"}</strong>
                 </div>
               </div>
@@ -6581,11 +6590,11 @@ export function OrderDetailContent({
                 }}
               />
               {order.designLink && isProbablyImageUrl(order.designLink) ? (
-                <img src={order.designLink} alt={order.designName || "Order preview"} className="app-preview-image" />
+                <img src={order.designLink} alt={order.designName || t("Order preview")} className="app-preview-image" />
               ) : (
                 <div className="app-preview-empty">
                   <span className="app-preview-icon image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>
-                  <strong>No preview image provided.</strong>
+                  <strong>{t("No preview image provided.")}</strong>
                 </div>
               )}
               {previewLinkEditing ? (
@@ -6641,7 +6650,7 @@ export function OrderDetailContent({
                         disabled={!canInlineEditFullDetails || Boolean(previewActioning)}
                         onClick={() => previewFileInputRef.current?.click()}
                       >
-                        {order.designLink ? "Replace Image" : "Upload Image"}
+                        {t(order.designLink ? "Replace Image" : "Upload Image")}
                       </button>
                       <button
                         type="button"
@@ -6652,7 +6661,7 @@ export function OrderDetailContent({
                           setPreviewMenuOpen(false);
                         }}
                       >
-                        {order.designLink ? "Edit photo link" : "Paste photo link..."}
+                        {t(order.designLink ? "Edit photo link" : "Paste photo link...")}
                       </button>
                       {order.designLink ? (
                         <a href={order.designLink} target="_blank" rel="noopener noreferrer" data-preview-open-link="1">
@@ -6668,7 +6677,7 @@ export function OrderDetailContent({
                             void removePreviewImage();
                           }}
                         >
-                          Remove Preview Image
+                          {t("Remove Preview Image")}
                         </button>
                       ) : null}
                     </div>
@@ -6691,46 +6700,46 @@ export function OrderDetailContent({
             <div className="app-card-panel app-summary-panel">
               <div className="app-summary-top">
                 <div className="app-summary-value">
-                  <span>Order Value</span>
-                  <strong>{canSeeFinance ? money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : "Hidden"}</strong>
+                  <span>{t("Order Value")}</span>
+                  <strong>{canSeeFinance ? money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
                 </div>
                 <div className="app-summary-status-list">
                   <div className="app-summary-status-row">
-                    <span>{summaryStep1}</span>
-                    <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue1)}`}>{summaryValue1}</b>
+                    <span>{t(summaryStep1)}</span>
+                    <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue1)}`}>{t(summaryValue1)}</b>
                   </div>
                   <div className="app-summary-status-row">
-                    <span>{summaryStep2}</span>
-                    <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue2)}`}>{summaryValue2}</b>
+                    <span>{t(summaryStep2)}</span>
+                    <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue2)}`}>{t(summaryValue2)}</b>
                   </div>
                 </div>
               </div>
               <div className="app-card-divider" />
               <div className="app-summary-order-type">
-                <span>Order Type</span>
+                <span>{t("Order Type")}</span>
                 {canInlineEditFullDetails ? (
                   <select
                     value={order.orderType === "repair" ? "repair" : "custom"}
                     onChange={event => void saveDetailsPatch({ orderType: event.target.value }, "Order type")}
                   >
-                    <option value="custom">Custom Order</option>
-                    <option value="repair">Repair / Service</option>
+                    <option value="custom">{t("Custom Order")}</option>
+                    <option value="repair">{t("Repair / Service")}</option>
                   </select>
                 ) : (
-                  <strong>{order.orderType === "repair" ? "Repair / Service" : "Custom Order"}</strong>
+                  <strong>{order.orderType === "repair" ? t("Repair / Service") : t("Custom Order")}</strong>
                 )}
               </div>
               <div className="app-card-divider" />
               <div className="app-summary-bottom">
                 <div className="app-summary-date-block">
-                  <span>Placed On</span>
+                  <span>{t("Placed On")}</span>
                   <strong>
                     <CardIconGlyph icon="calendar" />
                     {formatShortDate(order.paymentDate)}
                   </strong>
                 </div>
                 <div className="app-summary-date-block">
-                  <span>Delivery In</span>
+                  <span>{t("Delivery In")}</span>
                   <strong className={`app-summary-delivery ${deliveryTone}`}>
                     <CardIconGlyph icon="historyClock" />
                     {localizedDeliveryLabel(summaryDeliveryLabel(order), t)}
@@ -6758,7 +6767,7 @@ export function OrderDetailContent({
                   return (
                     <InlineYesNoRow
                       key={item.id}
-                      label={item.title}
+                      label={t(item.title)}
                       labelRaw={item.title}
                       onLabelSave={canInlineEditFullDetails ? value => renameMaterialCheck(index, value) : undefined}
                       value={materialDefaultCheckValue(order, index, item.title)}
@@ -6777,7 +6786,7 @@ export function OrderDetailContent({
                       return (
                         <InlineYesNoRow
                           key={toggle.id || title}
-                          label={title || "Material Check"}
+                          label={title ? t(title) : t("Material Check")}
                           value={materialToggleValue(order, title)}
                           disabled={!canInlineEditFullDetails}
                           saving={savingInlineField === fieldKey}
@@ -6881,8 +6890,8 @@ export function OrderDetailContent({
               <div className={`app-time-remaining is-${deliveryTone}`}>
                 <span>◔</span>
                 <div>
-                  <strong>Time Remaining</strong>
-                  <b>{remainingDaysLabel(order.dueDate)}</b>
+                  <strong>{t("Time Remaining")}</strong>
+                  <b>{localizedDeliveryLabel(remainingDaysLabel(order.dueDate), t)}</b>
                 </div>
               </div>
               <div className="app-calendar-card">
@@ -6892,11 +6901,11 @@ export function OrderDetailContent({
                   onClick={handleDownloadCalendarEvent}
                   disabled={!canUseCalendarExport || !order.paymentDate || !order.dueDate}
                 >
-                  ▦ Add to Calendar
+                  {t("▦ Add to Calendar")}
                 </button>
-                <p>Downloads an all-day calendar file from the created date to the delivery due date.</p>
+                <p>{t("Downloads an all-day calendar file from the created date to the delivery due date.")}</p>
                 {!canUseCalendarExport ? (
-                  <p className="app-calendar-status muted-copy">Available from NivaDesk Starter.</p>
+                  <p className="app-calendar-status muted-copy">{t("Available from NivaDesk Starter.")}</p>
                 ) : null}
                 {calendarStatus ? <p className="app-calendar-status success-copy">{t(calendarStatus)}</p> : null}
                 {calendarError ? <p className="app-calendar-status layout-error">{t(calendarError)}</p> : null}
@@ -6905,7 +6914,7 @@ export function OrderDetailContent({
               <InlineValueRow
                 label={t("Delivery Time")}
                 value={order.deliveryTime > 0 ? String(order.deliveryTime) : ""}
-                displayValue={order.deliveryTime > 0 ? `${order.deliveryTime} days` : "-"}
+                displayValue={order.deliveryTime > 0 ? t("{count} days").replace("{count}", String(order.deliveryTime)) : "-"}
                 inputType="number"
                 tone={deliveryValueTone}
                 disabled={!canEditWorkflowFields || !canEditDates}
@@ -6915,7 +6924,7 @@ export function OrderDetailContent({
               <InlineValueRow
                 label={t("Delivery Due")}
                 value={dateInputValue(order.dueDate)}
-                displayValue={formatDate(order.dueDate)}
+                displayValue={formatDate(order.dueDate, detailLocale)}
                 inputType="date"
                 disabled={!canEditWorkflowFields || !canEditDates}
                 saving={savingInlineField === "Delivery Due"}
@@ -6924,7 +6933,7 @@ export function OrderDetailContent({
               <InlineValueRow
                 label={t("Created Date")}
                 value={dateInputValue(order.paymentDate)}
-                displayValue={formatDate(order.paymentDate)}
+                displayValue={formatDate(order.paymentDate, detailLocale)}
                 inputType="date"
                 disabled={!canEditOrderFully || !canEditDates}
                 saving={savingInlineField === "Created Date"}
@@ -6963,7 +6972,7 @@ export function OrderDetailContent({
                   onClick={() => void handleExportInvoice()}
                   style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 >
-                  Invoice PDF
+                  {t("Invoice PDF")}
                 </button>
               ) : null}
             </div>
@@ -6997,7 +7006,7 @@ export function OrderDetailContent({
                 .map(field => (
                   <InlineValueRow
                     key={field.id || field.title}
-                    label={field.title}
+                    label={t(field.title)}
                     value={order.customFields[field.title] || ""}
                     disabled={!canInlineEditFullDetails}
                     saving={savingInlineField === field.title}
@@ -7007,7 +7016,7 @@ export function OrderDetailContent({
               {showCommunicationSection ? (
                 <>
                   <div className="app-card-divider" />
-                  <div className="app-subsection-title"><span>▱</span><strong>Communication</strong></div>
+                  <div className="app-subsection-title"><span>▱</span><strong>{t("Communication")}</strong></div>
                 </>
               ) : null}
               {showCommunicationTelephone ? (
@@ -7041,7 +7050,7 @@ export function OrderDetailContent({
               {showCommunicationChannel ? (
                 <>
                   <div className="app-value-row">
-                    <span>Channel</span>
+                    <span>{t("Channel")}</span>
                     <div className="app-channel-pills">
                       {visibleCommunicationChannels.map(item => (
                         <button
@@ -7096,7 +7105,7 @@ export function OrderDetailContent({
                   {canSeeAdvancedFinance ? (
                   <>
                     <FinanceInlineRow
-                      label="Paid"
+                      label={t("Paid")}
                       displayValue={money(order.paidAmount, hideNumbers)}
                       value={order.paidAmount}
                       tone="positive"
@@ -7132,7 +7141,7 @@ export function OrderDetailContent({
                         return (
                           <FinanceInlineRow
                             key={`remaining-${item.id}`}
-                            label={item.title}
+                            label={t(item.title)}
                             labelRaw={item.title}
                             onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id, value) : undefined}
                             onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
@@ -7148,7 +7157,7 @@ export function OrderDetailContent({
                     })()}
                     {canInlineEditFinance ? (
                       <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderRemainingItemsJSON", orderRemainingHeadings(), "Remaining")}>
-                        + Remaining
+                        {t("+ Remaining")}
                       </button>
                     ) : null}
                     <FinancePaymentReceivedRow
@@ -7199,7 +7208,7 @@ export function OrderDetailContent({
                             disabled={savingFinanceField === "Payment"}
                             onClick={() => void recordManualPayment()}
                           >
-                            {savingFinanceField === "Payment" ? "Saving..." : "Add"}
+                            {t(savingFinanceField === "Payment" ? "Saving..." : "Add")}
                           </button>
                         </div>
                       ) : null}
@@ -7241,7 +7250,7 @@ export function OrderDetailContent({
                                 </span>
                               ) : (
                                 <span className="finance-payments-meta">
-                                  {payment.date ? payment.date.toLocaleDateString() : ""}
+                                  {payment.date ? payment.date.toLocaleDateString(detailLocale) : ""}
                                   {payment.method ? ` · ${payment.method}` : ""}
                                   {/* The two fixed sentences the Payment Links rail writes on a
                                       TEST row are shown in the reader's language; every other
@@ -7333,7 +7342,7 @@ export function OrderDetailContent({
                     })()}
                     {canInlineEditFinance ? (
                       <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderExpenseItemsJSON", orderExpenseHeadings(), "Spending")}>
-                        + Spending
+                        {t("+ Spending")}
                       </button>
                     ) : null}
                     <FinanceInlineRow
@@ -7377,7 +7386,7 @@ export function OrderDetailContent({
                     <DetailRow label={t("VAT Amount")} value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
-                      <span>Order Value</span>
+                      <span>{t("Order Value")}</span>
                       <strong>{money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}</strong>
                     </div>
                     {corporationTaxEnabled ? (
@@ -7485,7 +7494,7 @@ export function OrderDetailContent({
                   return (
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
-                      label={stepTitle}
+                      label={t(stepTitle)}
                       labelRaw={stepTitle}
                       onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.designStatus || "Not Yet"}
@@ -7501,7 +7510,7 @@ export function OrderDetailContent({
                   return (
                     <InlineSelectRow
                       key={`${stepTitle}-${index}`}
-                      label={stepTitle}
+                      label={t(stepTitle)}
                       labelRaw={stepTitle}
                       onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                       value={order.status || "Not Yet"}
@@ -7516,7 +7525,7 @@ export function OrderDetailContent({
                 return (
                   <InlineSelectRow
                     key={step.id || `${stepTitle}-${index}`}
-                    label={stepTitle}
+                    label={t(stepTitle)}
                     labelRaw={stepTitle}
                     onLabelSave={canInlineEditFullDetails ? value => renameStatusStep(index, value) : undefined}
                     value={statusStepValue(step)}
@@ -7657,7 +7666,7 @@ export function OrderDetailContent({
               {scheduleStatus ? <p className="layout-status finance-inline-message">{t(scheduleStatus)}</p> : null}
               {scheduleError ? <p className="layout-error finance-inline-message">{t(scheduleError)}</p> : null}
               <div className="app-schedule-quick-row">
-                <span>Quick Reminder</span>
+                <span>{t("Quick Reminder")}</span>
                 <select
                   className="input app-schedule-quick-select"
                   value=""
@@ -7667,9 +7676,9 @@ export function OrderDetailContent({
                     if (selected) applyQuickReminder(selected);
                   }}
                 >
-                  <option value="">Select reminder</option>
+                  <option value="">{t("Select reminder")}</option>
                   {quickReminderOptions.map(item => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
+                    <option key={item.id} value={item.id}>{t(item.title)}</option>
                   ))}
                 </select>
               </div>
@@ -7683,7 +7692,7 @@ export function OrderDetailContent({
                 />
                 <div className="app-schedule-inline-controls">
                   <label className="app-schedule-date-control">
-                    <span>Date & Time</span>
+                    <span>{t("Date & Time")}</span>
                     <input
                       className="input"
                       type="datetime-local"
@@ -7693,21 +7702,21 @@ export function OrderDetailContent({
                     />
                   </label>
                   <label className="app-schedule-priority-control">
-                    <span>Priority</span>
+                    <span>{t("Priority")}</span>
                     <select
                       className="input"
                       value={newSchedulePriority}
                       disabled={!canEditScheduleItems}
                       onChange={event => setNewSchedulePriority(event.target.value as NonNullable<SchedulePatch["priority"]>)}
                     >
-                      <option value="Low">Low</option>
-                      <option value="Normal">Normal</option>
-                      <option value="High">High</option>
-                      <option value="Urgent">Urgent</option>
+                      <option value="Low">{t("Low")}</option>
+                      <option value="Normal">{t("Normal")}</option>
+                      <option value="High">{t("High")}</option>
+                      <option value="Urgent">{t("Urgent")}</option>
                     </select>
                   </label>
                   <label className="todo-switch app-schedule-notify">
-                    <span>Notify</span>
+                    <span>{t("Notify")}</span>
                     <input
                       type="checkbox"
                       checked={newScheduleNotify}
@@ -7730,19 +7739,19 @@ export function OrderDetailContent({
                   disabled={!canEditScheduleItems || savingScheduleAction === "Add reminder"}
                   onClick={addScheduleReminder}
                 >
-                  + Add Reminder
+                  {t("+ Add Reminder")}
                 </button>
                 {!canNotifyScheduleItems ? (
-                  <p className="muted-copy app-schedule-note-copy">Calendar and reminder notifications are available from NivaDesk Starter.</p>
+                  <p className="muted-copy app-schedule-note-copy">{t("Calendar and reminder notifications are available from NivaDesk Starter.")}</p>
                 ) : null}
               </div>
               <div className="app-schedule-list-block">
                 <div className="app-schedule-heading-row">
-                  <strong>Upcoming</strong>
+                  <strong>{t("Upcoming")}</strong>
                   <span>{activeScheduleItems.length}</span>
                 </div>
                 {activeScheduleItems.length === 0 ? (
-                  <div className="app-schedule-empty">No active reminders yet.</div>
+                  <div className="app-schedule-empty">{t("No active reminders yet.")}</div>
                 ) : (
                   <div className="app-schedule-list">
                     {activeScheduleItems.slice(0, 6).map(item => {
@@ -7752,10 +7761,10 @@ export function OrderDetailContent({
                           <span className="app-schedule-dot" />
                           <div className="app-schedule-item-main">
                             <div className="app-schedule-item-title">
-                              <strong>{item.title}</strong>
-                              <span className={`app-schedule-priority tone-${schedulePriorityTone(item.priority)}`}>{item.priority}</span>
+                              <strong>{t(item.title)}</strong>
+                              <span className={`app-schedule-priority tone-${schedulePriorityTone(item.priority)}`}>{t(item.priority)}</span>
                             </div>
-                            <p>{formatDateTime(item.dueAt)} · {scheduleRelativeLabel(item)}</p>
+                            <p>{formatDateTime(item.dueAt, detailLocale)} · {localizedScheduleRelativeLabel(scheduleRelativeLabel(item), t)}</p>
                             {item.note ? <small>{item.note}</small> : null}
                           </div>
                           <div className="app-schedule-menu">
@@ -7772,16 +7781,16 @@ export function OrderDetailContent({
                             {openScheduleMenuId === item.id ? (
                             <div className="app-schedule-menu-panel">
                               <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "complete", reminderId: item.id }, "Reminder")}>
-                                <span>✓</span> Mark Done
+                                <span>✓</span> {t("Mark Done")}
                               </button>
                               <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 1 }, "Reminder")}>
-                                <span>◷</span> Snooze 1 hour
+                                <span>◷</span> {t("Snooze 1 hour")}
                               </button>
                               <button type="button" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "snooze", reminderId: item.id, hours: 24 }, "Reminder")}>
-                                <span>◷</span> Snooze 1 day
+                                <span>◷</span> {t("Snooze 1 day")}
                               </button>
                               <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => { if (!window.confirm(t("Delete this reminder? This cannot be undone."))) return; void saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder"); }}>
-                                <span>⌫</span> Delete
+                                <span>⌫</span> {t("Delete")}
                               </button>
                             </div>
                             ) : null}
@@ -7795,7 +7804,7 @@ export function OrderDetailContent({
               {completedScheduleItems.length > 0 ? (
                 <div className="app-schedule-list-block">
                   <div className="app-schedule-heading-row">
-                    <strong>Recently completed</strong>
+                    <strong>{t("Recently completed")}</strong>
                     <span>{completedScheduleItems.length}</span>
                   </div>
                   <div className="app-schedule-list">
@@ -7806,7 +7815,7 @@ export function OrderDetailContent({
                           <div className="app-schedule-item-title">
                             <strong>{item.title}</strong>
                           </div>
-                          <p>{formatDateTime(item.completedAt || item.dueAt)}</p>
+                          <p>{formatDateTime(item.completedAt || item.dueAt, detailLocale)}</p>
                         </div>
                         <div className="app-schedule-menu">
                           <button
@@ -7822,7 +7831,7 @@ export function OrderDetailContent({
                           {openScheduleMenuId === item.id ? (
                           <div className="app-schedule-menu-panel">
                             <button type="button" className="danger" disabled={!canEditScheduleItems || Boolean(savingScheduleAction)} onClick={() => saveSchedulePatch({ action: "delete", reminderId: item.id }, "Reminder")}>
-                              <span>⌫</span> Delete
+                              <span>⌫</span> {t("Delete")}
                             </button>
                           </div>
                           ) : null}
@@ -7845,15 +7854,15 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-work-time-panel">
               <div className="app-work-total">
-                <span>Total Work Time</span>
+                <span>{t("Total Work Time")}</span>
                 <strong>{formatWorkDuration(totalSeconds)}</strong>
               </div>
               {runningSession ? (
                 <div className="app-work-active">
                   <div>
-                    <span>Running now</span>
+                    <span>{t("Running now")}</span>
                     <strong>{runningSession.title}</strong>
-                    <small>{formatTime(runningSession.startedAt)} started</small>
+                    <small>{t("{time} started").replace("{time}", formatTime(runningSession.startedAt, detailLocale))}</small>
                   </div>
                   <b>{formatWorkDuration(workSessionDurationSeconds(runningSession, workTimeNow))}</b>
                 </div>
@@ -7872,24 +7881,24 @@ export function OrderDetailContent({
                   />
                   {runningSession ? (
                     <button type="button" className="danger" disabled={Boolean(savingWorkTimeAction)} onClick={() => stopWorkTimer(runningSession)}>
-                      Stop
+                      {t("Stop")}
                     </button>
                   ) : (
                     <button type="button" disabled={Boolean(savingWorkTimeAction)} onClick={startWorkTimer}>
-                      Start
+                      {t("Start")}
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="app-work-locked">Your workspace role can view Work Time but cannot edit it.</div>
+                <div className="app-work-locked">{t("Your workspace role can view Work Time but cannot edit it.")}</div>
               )}
               {workTimeStatus ? <p className="file-action-status">{t(workTimeStatus)}</p> : null}
               {workTimeError ? <p className="file-action-error">{t(workTimeError)}</p> : null}
               {groups.length === 0 ? (
                 <div className="app-work-empty">
                   <span>◷</span>
-                  <strong>No work sessions yet.</strong>
-                  <p>Start a timer when you begin work on this order.</p>
+                  <strong>{t("No work sessions yet.")}</strong>
+                  <p>{t("Start a timer when you begin work on this order.")}</p>
                 </div>
               ) : (
                 <div className="app-work-session-list">
@@ -7905,7 +7914,7 @@ export function OrderDetailContent({
                           <article key={session.id} className="app-work-session-row">
                             <div>
                               <strong>{session.title}</strong>
-                              <p>{formatTime(session.startedAt)} → {session.endedAt ? formatTime(session.endedAt) : "Running"}</p>
+                              <p>{formatTime(session.startedAt, detailLocale)} → {session.endedAt ? formatTime(session.endedAt, detailLocale) : t("Running")}</p>
                               <small>{session.createdByEmail || session.source || "NivaDesk"}</small>
                             </div>
                             <b>{formatWorkDuration(workSessionDurationSeconds(session, workTimeNow))}</b>
@@ -7927,7 +7936,7 @@ export function OrderDetailContent({
                                     className="danger"
                                     disabled={Boolean(savingWorkTimeAction)}
                                     onClick={() => stopWorkTimer(session)}
-                                    title="Stop"
+                                    title={t("Stop")}
                                     aria-label={t("Stop work session")}
                                   >
                                     <WorkTimeActionIcon name="stop" />
@@ -7963,11 +7972,11 @@ export function OrderDetailContent({
             {canUseLiteWorkspaceCards ? (
               <div className="app-card-panel app-history-panel">
                 <div className="app-history-heading">
-                  <strong>Recent important changes</strong>
+                  <strong>{t("Recent important changes")}</strong>
                   <span>{order.historyLog.length}</span>
                 </div>
                 {order.historyLog.length === 0 ? (
-                  <div className="app-history-empty">No history entries found for this order.</div>
+                  <div className="app-history-empty">{t("No history entries found for this order.")}</div>
                 ) : null}
                 <div className="app-history-list">
                   {order.historyLog.map(item => {
@@ -7978,7 +7987,7 @@ export function OrderDetailContent({
                         <span className="app-history-clock">◔</span>
                         <div>
                           <strong>{item.title}</strong>
-                          <p>{formatDateTime(item.createdAt)}</p>
+                          <p>{formatDateTime(item.createdAt, detailLocale)}</p>
                           <b className="app-history-change-row" title={`${oldValue} -> ${newValue}`}>
                             <span className="app-history-value" title={oldValue}>{oldValue}</span>
                             <span className="app-history-arrow">→</span>
@@ -8030,9 +8039,9 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-todo-panel">
               <div className="app-todo-stats">
-                <StatCard label="Open" value={openTasks.length} tone="blue" />
+                <StatCard label={t("Open")} value={openTasks.length} tone="blue" />
                 <StatCard label={t("Overdue")} value={overdueTasks.length} tone="gray" />
-                <StatCard label="Done" value={doneTasks.length} tone="green" />
+                <StatCard label={t("Done")} value={doneTasks.length} tone="green" />
               </div>
               {todoStatus ? <p className="layout-status finance-inline-message">{t(todoStatus)}</p> : null}
               {todoError ? <p className="layout-error finance-inline-message">{t(todoError)}</p> : null}
@@ -8041,7 +8050,7 @@ export function OrderDetailContent({
                   <input
                     className="input"
                     value={newTodoTitle}
-                    placeholder={canEditToDoItems ? "Add a task..." : "To Do editing is locked for your role."}
+                    placeholder={t(canEditToDoItems ? "Add a task..." : "To Do editing is locked for your role.")}
                     readOnly={!canEditToDoItems}
                     disabled={!canEditToDoItems || Boolean(savingTodoAction)}
                     onChange={event => setNewTodoTitle(event.target.value)}
@@ -8059,7 +8068,7 @@ export function OrderDetailContent({
                 </div>
                 <div className="app-todo-controls">
                   <span>
-                    <strong>Assign</strong>
+                    <strong>{t("Assign")}</strong>
                     {canSeeTeamAssignment ? (
                       <select
                         value={newTodoAssignedToUid}
@@ -8067,21 +8076,21 @@ export function OrderDetailContent({
                         onChange={event => setNewTodoAssignedToUid(event.target.value)}
                       >
                         {todoAssigneeOptions.map(option => (
-                          <option key={option.uid || "unassigned"} value={option.uid}>{option.label}</option>
+                          <option key={option.uid || "unassigned"} value={option.uid}>{option.uid ? option.label : t(option.label)}</option>
                         ))}
                       </select>
                     ) : (
-                      <b>Team only</b>
+                      <b>{t("Team only")}</b>
                     )}
                   </span>
                   <span>
-                    <strong>Priority</strong>
+                    <strong>{t("Priority")}</strong>
                     <select value={newTodoPriority} disabled={!canEditToDoItems || Boolean(savingTodoAction)} onChange={event => setNewTodoPriority(event.target.value)}>
-                      {PRIORITY_OPTIONS.map(priority => <option key={priority}>{priority}</option>)}
+                      {PRIORITY_OPTIONS.map(priority => <option key={priority} value={priority}>{t(priority)}</option>)}
                     </select>
                   </span>
                   <span>
-                    <strong>Due</strong>
+                    <strong>{t("Due")}</strong>
                     <label className="todo-switch">
                       <input
                         type="checkbox"
@@ -8120,7 +8129,7 @@ export function OrderDetailContent({
               {filteredTasks.length === 0 ? (
                 <div className="app-todo-empty">
                   <span>✓</span>
-                  <strong>No tasks here</strong>
+                  <strong>{t("No tasks here")}</strong>
                 </div>
               ) : (
                 <div className="app-todo-task-list">
@@ -8165,7 +8174,7 @@ export function OrderDetailContent({
                             className="app-todo-check"
                             type="button"
                             disabled={!canEditToDoItems || Boolean(savingTodoAction)}
-                            aria-label={task.isDone ? "Reopen task" : "Mark task done"}
+                            aria-label={t(task.isDone ? "Reopen task" : "Mark task done")}
                             onClick={() => saveTodoPatch({ action: "toggle", taskId: task.id, isDone: !task.isDone }, task.isDone ? "Task reopened" : "Task completed")}
                           >
                             {task.isDone ? "✓" : ""}
@@ -8192,7 +8201,7 @@ export function OrderDetailContent({
                               disabled={!canEditToDoItems || Boolean(savingTodoAction)}
                               draggable={false}
                               onClick={() => startEditingTodoTitle(task)}
-                              title={canEditToDoItems ? "Edit task title" : undefined}
+                              title={canEditToDoItems ? t("Edit task title") : undefined}
                             >
                               <strong className="app-todo-task-title">{task.title}</strong>
                             </button>
@@ -8224,24 +8233,24 @@ export function OrderDetailContent({
                                   {todoMenuPanel === "main" ? (
                                     <>
                                       <button type="button" onClick={() => saveTodoPatch({ action: "toggle", taskId: task.id, isDone: !task.isDone }, task.isDone ? "Task reopened" : "Task completed")}>
-                                        <span>◎</span>{task.isDone ? "Reopen" : "Mark Done"}
+                                        <span>◎</span>{t(task.isDone ? "Reopen" : "Mark Done")}
                                       </button>
                                       <button type="button" onClick={() => downloadTodoReminder(task)}>
-                                        <span>♢</span>Add Reminder
+                                        <span>♢</span>{t("Add Reminder")}
                                       </button>
                                       <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("move")}>
-                                        <span>↕</span>Move
+                                        <span>↕</span>{t("Move")}
                                       </button>
                                       {canSeeTeamAssignment ? (
                                         <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("assign")}>
-                                          <span>◎</span>Assign
+                                          <span>◎</span>{t("Assign")}
                                         </button>
                                       ) : null}
                                       <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("due")}>
-                                        <span>▦</span>Due date
+                                        <span>▦</span>{t("Due date")}
                                       </button>
                                       <button type="button" className="has-chevron" onClick={() => setTodoMenuPanel("priority")}>
-                                        <span>⚑</span>Priority
+                                        <span>⚑</span>{t("Priority")}
                                       </button>
                                       <button className="is-danger" type="button" onClick={() => { if (!window.confirm(t("Delete this task? This cannot be undone."))) return; void saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted"); }}>
                                         <span>⌫</span>Delete
@@ -8252,19 +8261,19 @@ export function OrderDetailContent({
                                   {todoMenuPanel === "move" ? (
                                     <>
                                       <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
-                                        <span>‹</span>Move
+                                        <span>‹</span>{t("Move")}
                                       </button>
-                                      <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "up")}>Move Up</button>
-                                      <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "down")}>Move Down</button>
-                                      <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "top")}>Move to Top</button>
-                                      <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "bottom")}>Move to Bottom</button>
+                                      <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "up")}>{t("Move Up")}</button>
+                                      <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "down")}>{t("Move Down")}</button>
+                                      <button type="button" disabled={taskIndex <= 0} onClick={() => moveTodoTask(task, "top")}>{t("Move to Top")}</button>
+                                      <button type="button" disabled={taskIndex < 0 || taskIndex >= todoItems.length - 1} onClick={() => moveTodoTask(task, "bottom")}>{t("Move to Bottom")}</button>
                                     </>
                                   ) : null}
 
                                   {todoMenuPanel === "assign" ? (
                                     <>
                                       <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
-                                        <span>‹</span>Assign
+                                        <span>‹</span>{t("Assign")}
                                       </button>
                                       {todoAssigneeOptions.map(option => {
                                         const isCurrentAssignee = option.uid
@@ -8283,7 +8292,7 @@ export function OrderDetailContent({
                                   {todoMenuPanel === "due" ? (
                                     <>
                                       <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
-                                        <span>‹</span>Due date
+                                        <span>‹</span>{t("Due date")}
                                       </button>
                                       {[
                                         { label: "No due date", value: "" },
@@ -8303,7 +8312,7 @@ export function OrderDetailContent({
                                   {todoMenuPanel === "priority" ? (
                                     <>
                                       <button type="button" className="app-todo-menu-back" onClick={() => setTodoMenuPanel("main")}>
-                                        <span>‹</span>Priority
+                                        <span>‹</span>{t("Priority")}
                                       </button>
                                       {PRIORITY_OPTIONS.map(priority => (
                                         <button
@@ -8312,7 +8321,7 @@ export function OrderDetailContent({
                                           onClick={() => saveTodoPatch({ action: "update", taskId: task.id, priority }, "Task priority")}
                                         >
                                           <span>{task.priority.trim().toLowerCase() === priority.toLowerCase() ? "✓" : ""}</span>
-                                          {priority}
+                                          {t(priority)}
                                         </button>
                                       ))}
                                     </>
@@ -8329,7 +8338,7 @@ export function OrderDetailContent({
                             </span>
                           ) : null}
                           <span className={`app-todo-meta-pill priority-${priorityClass}`}>
-                            <b>⚑</b>{task.priority || "Normal"}
+                            <b>⚑</b>{t(task.priority || "Normal")}
                           </span>
                           <span className={`app-todo-meta-item due-${dueClass}`}>
                             <b>▦</b>{todoDueLabel(task.dueAt)}
@@ -8357,8 +8366,8 @@ export function OrderDetailContent({
             >
               <div className="app-client-files-intro">
                 <div>
-                  <strong>PDF, image, PSD, PSB and ZIP files for this order.</strong>
-                  <p>Visible to workspace members who can open this order.</p>
+                  <strong>{t("PDF, image, PSD, PSB and ZIP files for this order.")}</strong>
+                  <p>{t("Visible to workspace members who can open this order.")}</p>
                 </div>
                 {canManageClientFiles ? (
                   <>
@@ -8380,7 +8389,7 @@ export function OrderDetailContent({
                       disabled={clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy}
                       onClick={() => clientFileInputRef.current?.click()}
                     >
-                      {clientFileUploads.isActive ? "Uploading..." : "⇧ Upload File"}
+                      {clientFileUploads.isActive ? t("Uploading...") : <>⇧ {t("Upload File")}</>}
                     </button>
                   </>
                 ) : null}
@@ -8391,14 +8400,14 @@ export function OrderDetailContent({
                     disabled={downloadingOrderFiles}
                     onClick={handleDownloadOrderFiles}
                   >
-                    {downloadingOrderFiles ? "Preparing…" : "⬇ Download all"}
+                    {downloadingOrderFiles ? t("Preparing…") : <>⬇ {t("Download all")}</>}
                   </button>
                 ) : null}
               </div>
               {canManageClientFiles && canUseClientFiles ? (
                 <div className="upload-safety-panel" style={{ marginBottom: 14 }}>
-                  <span className="studio-pill">Max {clientFileMaxUploadSizeMB} MB</span>
-                  <span className="studio-pill">Safe work files only</span>
+                  <span className="studio-pill">{t("Max {size} MB").replace("{size}", String(clientFileMaxUploadSizeMB))}</span>
+                  <span className="studio-pill">{t("Safe work files only")}</span>
                   {clientFileRequiresPolicyAcceptance ? (
                     <>
                       {/* The sentence the box refers to is always on screen:
@@ -8433,8 +8442,8 @@ export function OrderDetailContent({
               {clientFileItems.length === 0 ? (
                 <div className="app-client-files-empty">
                   <span>▱</span>
-                  <strong>No client files yet.</strong>
-                  <p>Upload PDF, image, PSD, PSB or ZIP files that belong to this client order.</p>
+                  <strong>{t("No client files yet.")}</strong>
+                  <p>{t("Upload PDF, image, PSD, PSB or ZIP files that belong to this client order.")}</p>
                 </div>
               ) : (
                 <div className={["app-client-files-list", "compact-list-grid", clientFileItems.length <= 3 ? "is-static" : "is-scrollable"].join(" ")}>
@@ -8458,7 +8467,7 @@ export function OrderDetailContent({
               )}
               {orderLibraryFiles && orderLibraryFiles.length > 0 ? (
                 <div className="order-library-files">
-                  <strong className="order-library-files-title">From the Files library</strong>
+                  <strong className="order-library-files-title">{t("From the Files library")}</strong>
                   <ul>
                     {orderLibraryFiles.map(file => {
                       const orderLink = file.links.find(link => link.kind === "order" && link.id === order.id);
@@ -8476,19 +8485,19 @@ export function OrderDetailContent({
                             {orderLink?.displayName || file.displayName}
                           </button>
                           {audience === "portal" ? (
-                            <span className="studio-pill">Client portal</span>
+                            <span className="studio-pill">{t("Client portal")}</span>
                           ) : audience === "internal" ? (
-                            <span className="studio-pill">Internal only</span>
+                            <span className="studio-pill">{t("Internal only")}</span>
                           ) : null}
                         </li>
                       );
                     })}
                   </ul>
-                  <a href="/files">Manage in the Files library</a>
+                  <a href="/files">{t("Manage in the Files library")}</a>
                 </div>
               ) : null}
               <p className="app-client-files-note">
-                Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. The size limit follows Settings &gt; Safety &amp; Uploads.
+                {t("Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. The size limit follows Settings > Safety & Uploads.")}
               </p>
             </div>
           </section>
@@ -8559,7 +8568,7 @@ export function OrderDetailContent({
                           {note.title.trim() || note.text.slice(0, 60) || t("Linked note")}
                         </button>
                         {note.reminderDateMillis ? (
-                          <span className="studio-pill">⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}</span>
+                          <span className="studio-pill">⏰ {new Date(note.reminderDateMillis).toLocaleDateString(detailLocale)}</span>
                         ) : null}
                       </li>
                     ))}
@@ -8703,7 +8712,7 @@ export function OrderDetailContent({
         onDragOver={event => handleCardInsertDragOver(event, cardId, insertAfter)}
         onDrop={event => handleCardInsertDrop(event, cardId, insertAfter)}
       >
-        <span>Drop card here</span>
+        <span>{t("Drop card here")}</span>
       </div>
     );
   }
@@ -9012,7 +9021,7 @@ export function OrderDetailContent({
         {headerShowUpcomingSchedule && headerScheduleItem ? (
           <span className={`order-header-meta-pill ${scheduleToneName}`}>
             <CardIconGlyph icon="bellBadge" />
-            {`${headerScheduleItem.title.trim() || t("Reminder")} · ${scheduleRelativeLabel(headerScheduleItem)}`}
+            {`${headerScheduleItem.title.trim() ? t(headerScheduleItem.title.trim()) : t("Reminder")} · ${localizedScheduleRelativeLabel(scheduleRelativeLabel(headerScheduleItem), t)}`}
           </span>
         ) : null}
         {headerShowDeliveryTime ? (
@@ -9238,7 +9247,7 @@ export function OrderDetailContent({
                     exportOrderPdf();
                   }}
                 >
-                  Export PDF
+                  {t("Export PDF")}
                 </button>
                 {canSeeFinance ? (
                   <button
@@ -9248,7 +9257,7 @@ export function OrderDetailContent({
                       void handleExportInvoice();
                     }}
                   >
-                    Invoice PDF
+                    {t("Invoice PDF")}
                   </button>
                 ) : null}
                 <div className="order-actions-menu-divider" />
@@ -9270,7 +9279,7 @@ export function OrderDetailContent({
                     }
                   }}
                 >
-                  Customize cards
+                  {t("Customize cards")}
                 </button>
                 {order.orderType === "repair" && workspace.role === "owner" ? (
                   <>
@@ -9484,12 +9493,12 @@ export function OrderDetailContent({
                 <CardTitle
                   icon={isOrderCardLayoutIndependent ? "folderPerson" : "storage"}
                   eyebrow={t("Workspace Customization")}
-                  title={isOrderCardLayoutIndependent ? "This order uses its own layout" : "This order uses the shared layout"}
+                  title={t(isOrderCardLayoutIndependent ? "This order uses its own layout" : "This order uses the shared layout")}
                 />
                 <p>
-                  {isOrderCardLayoutIndependent
+                  {t(isOrderCardLayoutIndependent
                     ? "Card order, visibility, colours and sizes saved here affect only this order."
-                    : "Make this order independent when one order needs a separate card setup."}
+                    : "Make this order independent when one order needs a separate card setup.")}
                 </p>
                 <div className="workspace-layout-mode-actions">
                   {isOrderCardLayoutIndependent ? (
@@ -9497,12 +9506,12 @@ export function OrderDetailContent({
                       {/* Changes autosave; a manual Save next to autosave only
                           confused people (report §8). Rejoin is the one real action. */}
                       <button className="button secondary" type="button" disabled={savingLayout || !canEditCardLayout} onClick={() => void rejoinSharedCardLayout()}>
-                        Rejoin shared
+                        {t("Rejoin shared")}
                       </button>
                     </>
                   ) : (
                     <button className="button secondary" type="button" disabled={savingLayout || !canEditCardLayout} onClick={() => void makeCurrentOrderIndependent()}>
-                      Make this order independent
+                      {t("Make this order independent")}
                     </button>
                   )}
                 </div>
@@ -9510,17 +9519,17 @@ export function OrderDetailContent({
             ) : null}
 
             <div className="customize-templates">
-              <p className="customize-card-group">Templates</p>
+              <p className="customize-card-group">{t("Templates")}</p>
               <div className="customize-templates-row">
                 {CARD_TEMPLATES.map(template => (
                   <button
                     key={template.label}
                     type="button"
                     disabled={!canEditCardLayout || savingLayout}
-                    title={template.hint}
+                    title={t(template.hint)}
                     onClick={() => applyCardTemplate(template)}
                   >
-                    {template.label}
+                    {t(template.label)}
                   </button>
                 ))}
               </div>
@@ -9544,14 +9553,14 @@ export function OrderDetailContent({
                 if (groupIds.length === 0) return null;
                 return (
                   <Fragment key={group.label}>
-                    <p className="customize-card-group">{group.label}</p>
+                    <p className="customize-card-group">{t(group.label)}</p>
                     {groupIds.map(cardId => renderCustomizeRow(cardId, customizeCardOrder.indexOf(cardId)))}
                   </Fragment>
                 );
               })}
             </div>
 
-            {savingLayout ? <p className="layout-status">Saving card layout...</p> : null}
+            {savingLayout ? <p className="layout-status">{t("Saving card layout...")}</p> : null}
             {layoutStatus ? <p className="layout-status">{t(layoutStatus)}</p> : null}
             {layoutError ? <p className="layout-error">{t(layoutError)}</p> : null}
           </section>
@@ -9571,7 +9580,7 @@ export function OrderDetailContent({
         <div className="order-detail-mobile-stack is-visible">
           <section className="card order-detail-card">
             <CardTitle icon="orders" eyebrow={t("Cards hidden")} title={t("All cards are hidden")} />
-            <p className="muted-copy">Open Customize cards to show cards again.</p>
+            <p className="muted-copy">{t("Open Customize cards to show cards again.")}</p>
           </section>
         </div>
       ) : (
@@ -9636,7 +9645,7 @@ export function OrderDetailContent({
                         ].join(" ")}
                         aria-hidden="true"
                       >
-                        Drop card here
+                        {t("Drop card here")}
                       </div>
                     ) : null}
                   </div>
@@ -9777,8 +9786,8 @@ function OrderEditModal({
       <section className="card add-order-modal order-edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-order-title">
         <div className="add-order-header">
           <div>
-            <p className="orders-kicker">Order Management</p>
-            <h2 id="edit-order-title">Edit Order</h2>
+            <p className="orders-kicker">{t("Order Management")}</p>
+            <h2 id="edit-order-title">{t("Edit Order")}</h2>
             <p>{normalizeOrderCustomerName(order.customerName)} - {order.designName}</p>
           </div>
           <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label={t("Close Edit Order")}>
@@ -9796,33 +9805,33 @@ function OrderEditModal({
           {canEditFullOrder ? (
             <>
               <label>
-                Customer name
+                {t("Customer name")}
                 <input className="input" value={form.customerName} onChange={event => updateField("customerName", event.target.value)} disabled={saving} />
               </label>
               <label>
-                Design name
+                {t("Design name")}
                 <input className="input" value={form.designName} onChange={event => updateField("designName", event.target.value)} disabled={saving} />
               </label>
               <div className="add-order-two-col">
                 <label>
-                  Order value
+                  {t("Order value")}
                   <input className="input" type="number" min="0" step="0.01" value={form.orderValue} onChange={event => updateField("orderValue", Number(event.target.value))} disabled={saving} />
                 </label>
                 <label>
-                  Paid amount
+                  {t("Paid amount")}
                   <input className="input" type="number" min="0" step="0.01" value={form.paidAmount} onChange={event => updateField("paidAmount", Number(event.target.value))} disabled={saving} />
                 </label>
               </div>
               <label>
-                Delivery due date
-                <input className="input" type="date" value={form.deliveryDueDate} onChange={event => updateField("deliveryDueDate", event.target.value)} disabled={saving || !canEditOrderDates(workspace)} title={canEditOrderDates(workspace) ? undefined : "This field is read-only for your role."} />
+                {t("Delivery due date")}
+                <input className="input" type="date" value={form.deliveryDueDate} onChange={event => updateField("deliveryDueDate", event.target.value)} disabled={saving || !canEditOrderDates(workspace)} title={canEditOrderDates(workspace) ? undefined : t("This field is read-only for your role.")} />
               </label>
             </>
           ) : null}
 
           <div className="add-order-two-col">
             <label>
-              Design status
+              {t("Design status")}
               <select className="input" value={form.designStatus} onChange={event => updateField("designStatus", event.target.value)} disabled={saving || !canEditStatus}>
                 {Array.from(new Set([form.designStatus, ...statusOptions].map(option => option.trim()).filter(Boolean))).map(option => (
                   <option key={option}>{option}</option>
@@ -9830,7 +9839,7 @@ function OrderEditModal({
               </select>
             </label>
             <label>
-              Painting status
+              {t("Painting status")}
               <select className="input" value={form.paintingStatus} onChange={event => updateField("paintingStatus", event.target.value)} disabled={saving || !canEditStatus}>
                 {Array.from(new Set([form.paintingStatus, ...statusOptions].map(option => option.trim()).filter(Boolean))).map(option => (
                   <option key={option}>{option}</option>
@@ -9841,7 +9850,7 @@ function OrderEditModal({
 
           {canEditFullOrder ? (
             <label>
-              Notes
+              {t("Notes")}
               <textarea className="input add-order-notes" value={form.notes} onChange={event => updateField("notes", event.target.value)} disabled={saving} />
             </label>
           ) : null}
@@ -9852,7 +9861,7 @@ function OrderEditModal({
           <div className="add-order-actions">
             <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>
             <button className="button" type="submit" disabled={saving || !canEditStatus}>
-              {saving ? "Saving..." : "Save Changes"}
+              {t(saving ? "Saving..." : "Save Changes")}
             </button>
           </div>
         </form>
@@ -10152,10 +10161,10 @@ function BlockHeadingsModal({
         <div className="compact-row-head">
           <strong>{label}</strong>
           <button className="button secondary" type="button" disabled={saving || !canSave} onClick={() => addItem(key, addLabel)}>
-            Add
+            {t("Add")}
           </button>
         </div>
-        {items.length === 0 ? <p className="muted-copy">No headings yet.</p> : null}
+        {items.length === 0 ? <p className="muted-copy">{t("No headings yet.")}</p> : null}
         <div className="block-heading-list">
           {items.map((item, index) => {
             const primaryLocked = lockedPrimary && item.id === PRIMARY_SPECIAL_NOTE_ID;
@@ -10174,7 +10183,7 @@ function BlockHeadingsModal({
                   disabled={saving || !canSave || primaryLocked}
                   onClick={() => removeItem(key, item.id)}
                 >
-                  Remove
+                  {t("Remove")}
                 </button>
               </div>
             );
@@ -10192,13 +10201,13 @@ function BlockHeadingsModal({
     if (!supported) {
       return (
         <div className="mini-panel compact-mini-panel">
-          <p className="muted-copy" style={{ margin: 0 }}>Block heading editing for this card is not available on web yet.</p>
+          <p className="muted-copy" style={{ margin: 0 }}>{t("Block heading editing for this card is not available on web yet.")}</p>
         </div>
       );
     }
 
     if (loading || !settings) {
-      return <p className="muted-copy">Loading block headings...</p>;
+      return <p className="muted-copy">{t("Loading block headings...")}</p>;
     }
 
     switch (cardId) {
@@ -10206,7 +10215,7 @@ function BlockHeadingsModal({
         return (
           <>
             <section className="block-heading-section">
-              <strong>Spending / Cost Headings</strong>
+              <strong>{t("Spending / Cost Headings")}</strong>
               {renderToggleSetting("Show base cost field", "financialShowBaseCost")}
               {renderTextSetting("Base cost label", "financialBaseCostLabel")}
               {renderList("Extra spending headings", "financialExpenseItems", "Spending")}
@@ -10219,9 +10228,9 @@ function BlockHeadingsModal({
                 disabled={saving || !canSave}
                 onChange={event => setFinancialSetAsDefault(event.target.checked)}
               />
-              <span>Set as default for new orders</span>
+              <span>{t("Set as default for new orders")}</span>
             </label>
-            <p className="muted-copy">These spending and remaining headings apply to this order. New orders keep the workspace default unless you tick the box above.</p>
+            <p className="muted-copy">{t("These spending and remaining headings apply to this order. New orders keep the workspace default unless you tick the box above.")}</p>
           </>
         );
       case "materials":
@@ -10230,7 +10239,7 @@ function BlockHeadingsModal({
             {renderList("Default material checks", "materialsDefaultChecks", "Material Check")}
             {renderList("Extra Yes / No checks", "materialsToggles", "Material Check")}
             <section className="block-heading-section">
-              <strong>Notes / Supplier Field</strong>
+              <strong>{t("Notes / Supplier Field")}</strong>
               {renderToggleSetting("Show Notes / Supplier", "showMaterialsNotesSupplier")}
               {renderTextSetting("Heading", "materialsNotesSupplierLabel")}
             </section>
@@ -10241,7 +10250,7 @@ function BlockHeadingsModal({
           <>
             {renderList("Status dropdown headings", "customSteps", "Step")}
             <section className="block-heading-section">
-              <strong>Order Summary / Small Order Badges</strong>
+              <strong>{t("Order Summary / Small Order Badges")}</strong>
               {renderTextSetting("Summary 1", "summaryStep1")}
               {renderTextSetting("Summary 2", "summaryStep2")}
               {renderTextSetting("Badge 1", "orderListStep1")}
@@ -10249,7 +10258,7 @@ function BlockHeadingsModal({
             </section>
             {renderList("Extra Yes / No checks", "customToggles", "Check")}
             <section className="block-heading-section">
-              <strong>Notes / Supplier Field</strong>
+              <strong>{t("Notes / Supplier Field")}</strong>
               {renderToggleSetting("Show Notes / Supplier", "showStatusNotesSupplier")}
               {renderTextSetting("Heading", "statusNotesSupplierLabel")}
             </section>
@@ -10258,7 +10267,7 @@ function BlockHeadingsModal({
       case "summary":
         return (
           <section className="block-heading-section">
-            <strong>Order Summary Status Rows</strong>
+            <strong>{t("Order Summary Status Rows")}</strong>
             {renderTextSetting("Summary 1", "summaryStep1")}
             {renderTextSetting("Summary 2", "summaryStep2")}
           </section>
@@ -10268,7 +10277,7 @@ function BlockHeadingsModal({
           <>
             {renderList("Customer & Design Fields", "customFields", "Custom Field")}
             <section className="block-heading-section">
-              <strong>Visible Communication Fields</strong>
+              <strong>{t("Visible Communication Fields")}</strong>
               {renderToggleSetting("Telephone", "communicationShowTelephone")}
               {renderToggleSetting("Email", "communicationShowEmail")}
               {renderToggleSetting("Address", "communicationShowAddress")}
@@ -10277,7 +10286,7 @@ function BlockHeadingsModal({
             </section>
             <section className="block-heading-section">
               <div className="compact-row-head">
-                <strong>Channel Button Names</strong>
+                <strong>{t("Channel Button Names")}</strong>
                 <button
                   className="button secondary"
                   type="button"
@@ -10307,7 +10316,7 @@ function BlockHeadingsModal({
                       disabled={saving || !canSave}
                       onClick={() => updateSetting("communicationChannelLabels", settings.communicationChannelLabels.filter((_, itemIndex) => itemIndex !== index))}
                     >
-                      Remove
+                      {t("Remove")}
                     </button>
                   </div>
                 ))}
@@ -10328,11 +10337,10 @@ function BlockHeadingsModal({
           <>
             <section className="block-heading-section">
               <div className="compact-row-head">
-                <strong>Start from a trade</strong>
+                <strong>{t("Start from a trade")}</strong>
               </div>
               <p className="muted-copy">
-                Different trades take in different things. Pick the closest one to replace the rows
-                below — you can still rename, add and remove any of them afterwards.
+                {t("Different trades take in different things. Pick the closest one to replace the rows below — you can still rename, add and remove any of them afterwards.")}
               </p>
               <select
                 className="input"
@@ -10346,10 +10354,10 @@ function BlockHeadingsModal({
                   updateList("repairIntakeFields", preset.fields.map(field => ({ ...field })));
                 }}
               >
-                {currentPresetId ? null : <option value="">Custom rows</option>}
+                {currentPresetId ? null : <option value="">{t("Custom rows")}</option>}
                 {REPAIR_INTAKE_PRESETS.map(preset => (
                   <option key={preset.id} value={preset.id}>
-                    {preset.label}{preset.id === suggestedPresetId ? " — suggested for your business" : ""}
+                    {preset.id === suggestedPresetId ? t("{label} — suggested for your business").replace("{label}", t(preset.label)) : t(preset.label)}
                   </option>
                 ))}
               </select>
@@ -10376,8 +10384,8 @@ function BlockHeadingsModal({
       <section className="card add-order-modal block-headings-modal" role="dialog" aria-modal="true" aria-labelledby="block-heading-title">
         <div className="add-order-header">
           <div>
-            <p className="orders-kicker">Workspace Blocks</p>
-            <h2 id="block-heading-title">Edit Block Headings</h2>
+            <p className="orders-kicker">{t("Workspace Blocks")}</p>
+            <h2 id="block-heading-title">{t("Edit Block Headings")}</h2>
             <p>{title}</p>
           </div>
           <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label={t("Close Edit Block Headings")}>
@@ -10387,7 +10395,7 @@ function BlockHeadingsModal({
 
         {!canSave && canCustomizeCards && supported ? (
           <div className="mini-panel compact-mini-panel">
-            <p className="muted-copy" style={{ margin: 0 }}>Your workspace role cannot edit block headings.</p>
+            <p className="muted-copy" style={{ margin: 0 }}>{t("Your workspace role cannot edit block headings.")}</p>
           </div>
         ) : null}
 
@@ -10399,10 +10407,10 @@ function BlockHeadingsModal({
         {error ? <p className="layout-error">{t(error)}</p> : null}
 
         <div className="add-order-actions">
-          <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Close</button>
+          <button className="button secondary" type="button" onClick={onClose} disabled={saving}>{t("Close")}</button>
           {supported && cardId !== "invoiceItems" ? (
             <button className="button" type="button" onClick={handleSave} disabled={saving || loading || !settings || !canSave}>
-              {saving ? "Saving..." : "Save Headings"}
+              {t(saving ? "Saving..." : "Save Headings")}
             </button>
           ) : null}
         </div>
@@ -10438,10 +10446,11 @@ function DetailRow({
 }
 
 function DetailLink({ label, href }: { label: string; href: string }) {
+  const t = useDetailT();
   return (
     <div className="detail-row">
       <span>{label}</span>
-      <a href={href} target="_blank" rel="noreferrer">Open link</a>
+      <a href={href} target="_blank" rel="noreferrer">{t("Open link")}</a>
     </div>
   );
 }
@@ -10522,14 +10531,14 @@ function CompanyNumbersEditor({
   return (
     <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Company invoice numbers</span>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>{t("Company invoice numbers")}</span>
         {!disabled ? (
           <button
             type="button"
             onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), title: "New Number", value: "" }])}
             style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
           >
-            + Add
+            {t("+ Add")}
           </button>
         ) : null}
       </div>
@@ -10597,7 +10606,7 @@ function InvoiceFooterEditor({
         style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: 0.8 }}
       >
         <span style={{ fontSize: 16, lineHeight: 1 }}>{expanded ? "−" : "+"}</span>
-        Invoice Note
+        {t("Invoice Note")}
       </button>
       {expanded ? (
         <textarea
@@ -10657,7 +10666,7 @@ function LineItemsEditor({
   return (
     <div style={{ marginTop: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Invoice Items</span>
+        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>{t("Invoice Items")}</span>
         {draft.length > 0 && showMoney ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
       </div>
       {draft.map((it, index) => (
@@ -10715,7 +10724,7 @@ function LineItemsEditor({
           onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), name: "", quantity: 1, unitPrice: 0, lineTotal: 0 }])}
           style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
         >
-          + Add Item
+          {t("+ Add Item")}
         </button>
       ) : null}
     </div>
@@ -10746,7 +10755,7 @@ function InlineEditableLabel({
     if (!editing) setDraft(rawValue);
   }, [editing, rawValue]);
 
-  if (!editable) return <span>{display}</span>;
+  if (!editable) return <span>{t(display)}</span>;
 
   function commit() {
     if (cancellingRef.current) return;
@@ -10787,7 +10796,7 @@ function InlineEditableLabel({
 
   return (
     <button type="button" className="app-inline-label" title={t("Rename")} onClick={() => setEditing(true)}>
-      <span>{display}</span>
+      <span>{t(display)}</span>
       <svg className="app-inline-label-pencil" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 20h9" />
         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
@@ -10889,6 +10898,7 @@ function InlineValueRow({
   labelRaw?: string;
   onLabelSave?: (value: string) => Promise<void> | void;
 }) {
+  const t = useDetailT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const cancellingRef = useRef(false);
@@ -10960,9 +10970,9 @@ function InlineValueRow({
           onClick={() => {
             if (!disabled && !saving) setEditing(true);
           }}
-          title={disabled ? "This field is read-only for your role." : "Click to edit"}
+          title={t(disabled ? "This field is read-only for your role." : "Click to edit")}
         >
-          {saving ? "Saving..." : (displayValue ?? value)}
+          {saving ? t("Saving...") : (displayValue ?? value)}
         </button>
       )}
     </div>
@@ -10998,7 +11008,7 @@ function InlineNotesField({
 
   return (
     <div className="app-notes-section">
-      <div className="app-notes-heading">{title}</div>
+      <div className="app-notes-heading">{t(title)}</div>
       {editing && !disabled ? (
         <div className="app-notes-editor">
           <textarea
@@ -11021,7 +11031,7 @@ function InlineNotesField({
           />
           <div className="app-notes-actions">
             <button type="button" onClick={() => { setDraft(value); setEditing(false); }} disabled={saving}>Cancel</button>
-            <button type="button" onClick={() => { void submit(); }} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+            <button type="button" onClick={() => { void submit(); }} disabled={saving}>{t(saving ? "Saving..." : "Save")}</button>
           </div>
         </div>
       ) : (
@@ -11032,9 +11042,9 @@ function InlineNotesField({
           onClick={() => {
             if (!disabled && !saving) setEditing(true);
           }}
-          title={disabled ? "This field is read-only for your role." : "Click to edit"}
+          title={t(disabled ? "This field is read-only for your role." : "Click to edit")}
         >
-          {saving ? "Saving..." : (value || "Add note here...")}
+          {saving ? t("Saving...") : (value || t("Add note here..."))}
         </button>
       )}
     </div>
@@ -11067,6 +11077,7 @@ function InlineSelectRow({
     const merged = cleanedValue ? [cleanedValue, ...options] : options;
     return Array.from(new Set(merged.map(option => option.trim()).filter(Boolean)));
   }, [options, value]);
+  const t = useDetailT();
 
   return (
     <div className="app-value-row">
@@ -11082,9 +11093,9 @@ function InlineSelectRow({
         onChange={event => {
           void onSave(event.target.value);
         }}
-        title={disabled ? "This field is read-only for your role." : "Select a value"}
+        title={t(disabled ? "This field is read-only for your role." : "Select a value")}
       >
-        {selectOptions.map(option => <option key={option} value={option}>{option}</option>)}
+        {selectOptions.map(option => <option key={option} value={option}>{t(option)}</option>)}
       </select>
     </div>
   );
@@ -11107,6 +11118,7 @@ function InlineYesNoRow({
   labelRaw?: string;
   onLabelSave?: (value: string) => Promise<void> | void;
 }) {
+  const t = useDetailT();
   return (
     <div className="app-value-row">
       <InlineEditableLabel display={label} rawValue={labelRaw ?? label} editable={Boolean(onLabelSave)} onSave={onLabelSave ?? (() => {})} />
@@ -11118,9 +11130,9 @@ function InlineYesNoRow({
           onClick={() => {
             void onSave(true);
           }}
-          title={disabled ? "This field is read-only for your role." : "Set to Yes"}
+          title={t(disabled ? "This field is read-only for your role." : "Set to Yes")}
         >
-          {saving ? "Saving..." : "Yes"}
+          {saving ? t("Saving...") : t("Yes")}
         </button>
         <button
           className={!value ? "is-selected is-no" : ""}
@@ -11129,9 +11141,9 @@ function InlineYesNoRow({
           onClick={() => {
             void onSave(false);
           }}
-          title={disabled ? "This field is read-only for your role." : "Set to No"}
+          title={t(disabled ? "This field is read-only for your role." : "Set to No")}
         >
-          No
+          {t("No")}
         </button>
       </div>
     </div>
@@ -11304,9 +11316,9 @@ function FinanceInlineRow({
       type="button"
       disabled={disabled || saving}
       onClick={startEditing}
-      title={disabled ? "This field is read-only for your role or plan." : "Click to edit"}
+      title={t(disabled ? "This field is read-only for your role or plan." : "Click to edit")}
     >
-      {saving ? "Saving..." : displayValue}
+      {saving ? t("Saving...") : displayValue}
     </button>
   );
 
@@ -11342,16 +11354,17 @@ function FinancePaymentReceivedRow({
   saving: boolean;
   onSave: () => Promise<void> | void;
 }) {
+  const t = useDetailT();
   const paidInFull = remainingAmount <= 0;
   return (
     <div className="detail-row finance-inline-row">
-      <span>Full Payment Received?</span>
+      <span>{t("Full Payment Received?")}</span>
       <div className="finance-binary-row">
         <button className={paidInFull ? "is-selected" : ""} type="button" disabled={disabled || saving || paidInFull} onClick={onSave}>
-          {saving ? "Saving..." : "Yes"}
+          {saving ? t("Saving...") : t("Yes")}
         </button>
         <button className={!paidInFull ? "is-selected is-no" : ""} type="button" disabled>
-          No
+          {t("No")}
         </button>
       </div>
     </div>
@@ -11469,6 +11482,7 @@ function ClientFileCard({
   const canUseAsPreview = canManageClientFiles && canPreviewImage;
   const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
   const byline = clientFileByline(file);
+  const detailLocale = useDetailLocale();
 
   return (
     <article className="client-file-list-row">
@@ -11477,7 +11491,7 @@ function ClientFileCard({
         type="button"
         disabled={!canOpenPreview}
         onClick={onPreview}
-        title={canOpenPreview ? "Preview file" : "Preview is locked for this plan."}
+        title={t(canOpenPreview ? "Preview file" : "Preview is locked for this plan.")}
       >
         {canPreviewImage ? (
           <img src={file.downloadURL} alt={file.fileName} className="file-preview compact-file-preview" />
@@ -11490,7 +11504,7 @@ function ClientFileCard({
         <div className="client-file-main">
           <strong>{file.fileName}</strong>
           <p className="muted-copy">
-            {clientFileSizeLabel(file.fileSize)} · Uploaded {formatDate(file.uploadedAt)}
+            {clientFileSizeLabel(file.fileSize)} · {t("Uploaded {date}").replace("{date}", formatDate(file.uploadedAt, detailLocale))}
           </p>
           {byline ? <p className="muted-copy">{byline}</p> : null}
         </div>
@@ -11503,10 +11517,10 @@ function ClientFileCard({
               <ClientFileActionIcon name="download" />
             </a>
           ) : (
-            <span className="client-file-locked-pill">No URL</span>
+            <span className="client-file-locked-pill">{t("No URL")}</span>
           )
         ) : (
-          <span className="client-file-locked-pill">Locked</span>
+          <span className="client-file-locked-pill">{t("Locked")}</span>
         )}
 
         {canUseAsPreview ? (
@@ -11533,7 +11547,7 @@ function ClientFileCard({
             ) : null}
           </>
         ) : canUseClientFiles ? (
-          <span className="client-file-locked-pill">Edit locked</span>
+          <span className="client-file-locked-pill">{t("Edit locked")}</span>
         ) : null}
       </div>
     </article>
@@ -11605,8 +11619,8 @@ function ClientFilePreviewModal({
           ) : (
             <div className="client-file-preview-unavailable">
               <span>{fileBadge(activeFile)}</span>
-              <strong>Preview is not available for this file type.</strong>
-              <p>Use Open or Download to view this file in another app.</p>
+              <strong>{t("Preview is not available for this file type.")}</strong>
+              <p>{t("Use Open or Download to view this file in another app.")}</p>
             </div>
           )}
         </div>
@@ -11618,7 +11632,7 @@ function ClientFilePreviewModal({
             disabled={currentIndex <= 0}
             onClick={() => onSelect(files[currentIndex - 1].id)}
           >
-            Previous
+            {t("Previous")}
           </button>
           <button
             className="button secondary"
@@ -11626,16 +11640,16 @@ function ClientFilePreviewModal({
             disabled={currentIndex >= files.length - 1}
             onClick={() => onSelect(files[currentIndex + 1].id)}
           >
-            Next
+            {t("Next")}
           </button>
           <span className="client-file-preview-spacer" />
           {canUseAsPreview ? (
             <button className="button secondary" type="button" disabled={actionDisabled} onClick={onUseAsPreview}>
-              {actioning ? "Working..." : "Use in Preview"}
+              {t(actioning ? "Working..." : "Use in Preview")}
             </button>
           ) : null}
           <a className="button secondary" href={maskFileUrl(activeFile.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}>Open</a>
-          <a className="button" href={maskFileUrl(activeFile.downloadURL, brandedHost)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName, brandedHost); }}>Download</a>
+          <a className="button" href={maskFileUrl(activeFile.downloadURL, brandedHost)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName, brandedHost); }}>{t("Download")}</a>
         </footer>
       </section>
     </div>
@@ -11665,7 +11679,7 @@ function ClientFilesUpgradeHint() {
       <span aria-hidden="true" style={{ display: "inline-flex", width: 12, height: 12 }}>
         <CardIconGlyph icon="lock" />
       </span>
-      <span>Client Files available on Pro</span>
+      <span>{t("Client Files available on Pro")}</span>
       <span aria-hidden="true">›</span>
     </Link>
   );
@@ -11695,7 +11709,7 @@ function FinanceUpgradeHint() {
       <span aria-hidden="true" style={{ display: "inline-flex", width: 12, height: 12 }}>
         <CardIconGlyph icon="lock" />
       </span>
-      <span>Advanced finance</span>
+      <span>{t("Advanced finance")}</span>
       <span className="studio-pill" style={{ padding: "2px 7px", fontSize: 10 }}>Pro</span>
       <span aria-hidden="true">›</span>
     </Link>
@@ -11708,7 +11722,7 @@ function LockedInline({ title, note }: { title: string; note: string }) {
     <div className="mini-panel locked-panel compact-mini-panel">
       <CardTitle icon="lock" eyebrow={t("Locked")} title={title} />
       <p className="muted-copy">{note}</p>
-      <Link className="button secondary" href="/dashboard" style={{ display: "inline-flex", marginTop: 10 }}>View plan</Link>
+      <Link className="button secondary" href="/dashboard" style={{ display: "inline-flex", marginTop: 10 }}>{t("View plan")}</Link>
     </div>
   );
 }

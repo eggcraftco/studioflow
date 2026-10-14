@@ -90,7 +90,7 @@ expect("the dispatch caveat is on the message", /not proof of dispatch/.test(dia
 expect("a resend is explicit on the request", /resend: willResend/.test(dialog), true);
 
 // ---- 3. every sentence the two components print, in all eleven languages, through studioT
-for (const [rel, out] of [["lib/studioflow/macTranslations.ts", "macTranslations.mjs"], ["lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs"], ["lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs"], ["lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs"]]) {
+for (const [rel, out] of [["lib/studioflow/macTranslations.ts", "macTranslations.mjs"], ["lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs"], ["lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs"], ["lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs"], ["lib/studioflow/screenGapTranslations.ts", "screenGapTranslations.mjs"]]) {
   if (exists(rel)) compile(rel, out); else failures.push(`${rel} does not exist`);
 }
 const { studioT } = await import(pathToFileURL(compile("lib/studioflow/language.ts", "language.mjs")).href);

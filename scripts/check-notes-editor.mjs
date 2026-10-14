@@ -91,7 +91,7 @@ check(/role="dialog"\n        aria-modal="true"\n        aria-labelledby="note-e
 check(/if \(event\.key === "Escape"\) escapeRef\.current\(\);/.test(editor) && /escapeRef\.current = \(\) => \{ if \(!saving\) discardAndClose\(\); \};/.test(editor), "Escape is Cancel");
 check(/aria-label=\{`\$\{t\("Color"\)\}: /.test(editor) && /aria-label=\{t\("Reminder"\)\}/.test(editor), "colour swatches and the reminder date have accessible names");
 for (const w of ["COLOR", "REMINDER", "LABELS", "COLLABORATORS", "IMAGE"]) check(!editor.includes(`>${w}</div>`), `${w} goes through t()`);
-check(/=== 1 \? t\("note"\) : t\("notes"\)/.test(page), "the note count goes through t()");
+check(/studioCountLabel\([^)]*"note"/.test(page), "the note count takes the plural form for the app language (studioCountLabel)");
 
 check(!/background: "white"/.test(editor.slice(0, editor.indexOf("\nfunction ProjectNotesView"))) && !/background: [^,]*\? [^,]*: "white"/.test(editor.slice(0, editor.indexOf("\nfunction ProjectNotesView"))), "the editor uses theme tokens, not literal white (dark mode)");
 if (failures) { console.error(`${failures} of ${checks} notes-editor checks failed.`); process.exit(1); }

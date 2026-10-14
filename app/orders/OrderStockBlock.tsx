@@ -125,7 +125,7 @@ export function OrderStockBlock({
         {canEdit ? (
           <span className="order-stock-actions">
             <button type="button" className="inventory-link" onClick={() => setPicking(true)}>
-              + Reserve stock
+              {t("+ Reserve stock")}
             </button>
             <button type="button" className="inventory-link" onClick={() => setRecipePicking(true)}>
               {t("Use a recipe…")}
@@ -326,7 +326,7 @@ function ReserveStockModal({
           ) : choices.length === 0 ? (
             <p className="inventory-note">
               {items.length === 0
-                ? "There is nothing in inventory yet."
+                ? t("There is nothing in inventory yet.")
                 : t("Nothing available to reserve — everything is either used, sold or already promised.")}
             </p>
           ) : (
