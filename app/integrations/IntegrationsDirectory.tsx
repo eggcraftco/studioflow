@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { PublicShell } from "@/components/PublicMarketing";
 import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
+import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import styles from "./integrations.module.css";
 
@@ -30,9 +31,14 @@ type Category = typeof categories[number];
  *   "comingSoon"  not available to customers: not deployed, or deployed only
  *                 against the provider's test environment.
  *
- * Today: 5 live (WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 10 limited
- * (Shopify, Etsy, Xero, QuickBooks, Twilio, WhatsApp, Instagram Direct,
- * Amazon, DHL Express, eBay since 1 October 2026) — 15 cards. The evidence per row
+ * Today: 6 live (Shopify since 14 October 2026, WooCommerce, Square, PayPal,
+ * TrueLayer, ChatGPT), 9 limited (Etsy, Xero, QuickBooks, Twilio, WhatsApp,
+ * Instagram Direct, Amazon, DHL Express, eBay since 1 October 2026) — 15 cards.
+ * Shopify: the app was published on the Shopify App Store on 12 October 2026
+ * (Shopify's e-mail, relayed by the owner); no per-workspace switch stands in
+ * front of the connect (shopifyCompleteConnect checks the install and the
+ * one-time code only). Its card links to the listing, because a Shopify
+ * connection starts in the merchant's Shopify admin, not in Settings. The evidence per row
  * is in docs/deploys/site-integrations-2026-09-28/README.md and, for the
  * second pass that added Instagram Direct and DHL Express and corrected the
  * Shopify sentence, docs/deploys/site-integrations-update-2026-09-28/README.md.
@@ -69,7 +75,7 @@ const STATE_LABEL: Record<AvailabilityState, PublicSiteTranslationKey> = {
 };
 
 const integrations: Integration[] = [
-  { name: "Shopify", logo: "/integration-logos/shopify.svg", website: "https://www.shopify.com/", category: "Commerce", summary: "Bring your online shop orders into your workshop.", detail: { key: "integrations.detail.shopify" }, state: "limited", note: "integrations.note.shopify" },
+  { name: "Shopify", logo: "/integration-logos/shopify.svg", website: "https://www.shopify.com/", category: "Commerce", summary: "Bring your online shop orders into your workshop.", detail: { key: "integrations.detail.shopify" }, state: "live", note: "integrations.note.shopify" },
   { name: "Etsy", logo: "/integration-logos/etsy.svg", website: "https://www.etsy.com/", category: "Commerce", summary: "From handmade marketplace orders to work ready to organise.", detail: "The Etsy connection is live: orders, updates and shipping events arrive from Etsy as they happen, and you preview before anything is imported. Our Etsy app holds personal access today; the commercial access that other sellers' shops need is being arranged with Etsy, so shops are connected on request until then. Nothing is written back to your shop.", state: "limited", note: "integrations.note.etsy" },
   { name: "WooCommerce", logo: "/integration-logos/woocommerce.svg", website: "https://woocommerce.com/", category: "Commerce", summary: "Connect your WordPress shop with the work behind each order.", detail: "Approve NivaDesk at your store once; orders, customers and status changes then sync on their own, with a preview before any import. Product publishing and stock updates are separate capabilities and are not part of this connection.", state: "live" },
   { name: "Xero", logo: "/integration-logos/xero.svg", website: "https://www.xero.com/", category: "Accounting & banking", summary: "Give your accounting workflow a connection to your daily work.", detail: "A read-only Xero connection: NivaDesk reads your organisation, chart of accounts, VAT rates, contacts and items, and never writes anything back. So far it has run against Xero's demo company only, so the first customer organisations are connected with us, on request. Xero also limits an app like ours to a small number of organisations.", state: "limited", note: "integrations.note.xero" },
@@ -148,6 +154,8 @@ function IntegrationsDirectoryContent() {
       <div className={styles.layout}><aside className={styles.filters}><label htmlFor="integration-search">Find an integration</label><div className={styles.search}><span aria-hidden="true">⌕</span><input id="integration-search" type="search" placeholder="Search tools…" value={query} onChange={e => setQuery(e.target.value)} /></div><div className={styles.categoryList} role="group" aria-label="Integration category">{categories.map(c => <button key={c} aria-pressed={category === c} onClick={() => setCategory(c)}>{c}<span>{c === "All integrations" ? integrations.length : integrations.filter(i => i.category === c).length}</span></button>)}</div><p className={styles.filterNote}>Looking for something else?<br /><Link href="/contact">Tell us what you use ↗</Link></p></aside>
       <div><p className={styles.results} role="status">{filtered.length} {filtered.length === 1 ? "integration" : "integrations"}{query && ` matching “${query}”`}</p><div className={styles.grid}>{filtered.map(item => <article key={item.name} className={styles.card}><div className={styles.cardTop}><a className={`${styles.brand} ${logoVariants[item.name] ?? ""}`} href={item.website} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} official website`}>{item.logo ? <img src={item.logo} alt={`${item.name} logo`} width={112} height={48} loading="lazy" /> : <span className={styles.brandMark} aria-hidden="true">{item.mark}</span>}</a><span className={styles.category}>{item.category}</span></div><h3>{item.name}</h3><p className={styles.summary} {...cardLang(item.summary)}>{cardText(item.summary)}</p><span className={`${styles.status} ${stateClass[item.state]}`} lang={locale} dir="auto">{t(STATE_LABEL[item.state])}</span>{item.note && <p className={styles.note} lang={locale} dir="auto">{t(item.note)}</p>}{item.name === "Amazon" && <Link className={styles.cardLink} href="/integrations/amazon" lang={locale} dir="auto">{t("integrations.action.amazonPage")} →</Link>}<details className={styles.detail}><summary>What to expect <span aria-hidden="true">+</span></summary><p {...cardLang(item.detail)}>{cardText(item.detail)}</p>{item.name === "ChatGPT"
         ? <Link href="/chatgpt" lang={locale} dir="auto">{t("integrations.action.chatgpt")} ↗</Link>
+        : item.name === "Shopify"
+          ? <a href={SHOPIFY_APP_STORE_URL} target="_blank" rel="noopener noreferrer" lang={locale} dir="auto">{t("integrations.action.shopifyAppStore")} ↗</a>
         : item.state === "live"
           ? <Link href="/login" lang={locale} dir="auto">{t("integrations.action.connect")} ↗</Link>
           : <Link href="/contact" lang={locale} dir="auto">{t(item.state === "limited" ? "integrations.action.request" : "integrations.action.ask")} ↗</Link>}</details></article>)}</div>{!filtered.length && <div className={styles.empty}><h3>No matching integrations</h3><p>Try another name or explore all categories.</p><button onClick={() => {setQuery("");setCategory("All integrations");}}>Clear filters</button></div>}</div></div>

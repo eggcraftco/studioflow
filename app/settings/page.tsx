@@ -4,6 +4,7 @@ import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";
 import { PLAN_ORDER_RULE_HINT, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
 import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 import Link from "next/link";
@@ -5994,7 +5995,11 @@ function ShopifyConnectedStoresCard({ workspace, language = "English" }: { works
         <p className="muted-copy">{t("Loading…")}</p>
       ) : stores.length === 0 ? (
         <p className="muted-copy">
-          {t("No stores connected yet. Install “NivaDesk – Custom Order Management” from the Shopify App Store, then press Connect inside the app.")}
+          {t("No stores connected yet. Install “NivaDesk Order Management” from the Shopify App Store, then press Connect inside the app.")}
+          {" "}
+          <a href={SHOPIFY_APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+            {t("Open NivaDesk Order Management on the Shopify App Store")} ↗
+          </a>
         </p>
       ) : (
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
