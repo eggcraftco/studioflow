@@ -50,7 +50,8 @@
     "test:messaging-access": "node scripts/check-messaging-access.mjs",
     "test:message-uploader-uid": "node scripts/check-message-uploader-uid.mjs",
     "test:team-schedule-key": "node scripts/check-team-schedule-key.mjs",
-    "test:access-watch": "node scripts/check-access-watch.mjs"
+    "test:access-watch": "node scripts/check-access-watch.mjs",
+    "test:workspace-lists-warm": "node scripts/check-workspace-lists-warm.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
