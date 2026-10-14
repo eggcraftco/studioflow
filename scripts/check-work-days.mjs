@@ -78,7 +78,7 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
 const DICTIONARY_FILES = ["language", ...[...read("lib/studioflow/language.ts").matchAll(/from "\.\/(\w+)"/g)].map((m) => m[1])];
 for (const name of DICTIONARY_FILES) fs.writeFileSync(path.join(tmp, `${name}.mjs`), transpile(read(`lib/studioflow/${name}.ts`)));
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
-const { WORK_DAY_TRANSLATIONS } = await import(pathToFileURL(path.join(tmp, "workDayTranslations.mjs")).href);
+const { WORK_DAY_TRANSLATIONS } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
 const used = ["Day entry", "Full day", "Half day", "Note (optional)", "Save day", "Days worked", "Day saved.", "Day entry deleted.", "Delete day entry", "Could not save the day entry."];
 for (const key of used) check(`string used by the card is in the table: ${key}`, Boolean(WORK_DAY_TRANSLATIONS[key]) && detail.includes(`"${key}"`));
 for (const key of Object.keys(WORK_DAY_TRANSLATIONS)) {
