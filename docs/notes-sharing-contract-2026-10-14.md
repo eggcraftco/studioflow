@@ -74,7 +74,9 @@ All paths below are under `companies/{companyId}/`.
 | `pendingCollaboratorUserIds` | server only (source only) | Invited people who have not answered yet. |
 | `sharedWith`, `collaboratorEmails` | server, plus the store apps | Legacy display lists. Kept because iOS 2.0 and Android vc11/12 read them. Never used to decide who receives a note, except as a bridge (an e-mail that matches a member counts as that member's uid). |
 | `pendingCollaboratorEmails` | server only | Legacy pending list. |
-| `title`, `text`, `colorName`, `links`, `reminderDate`, `noteType`, `linked*`, `visibility` | each person's own save; then the server copies them to the others | Shared content. |
+| `title`, `text`, `colorName`, `links`, `reminderDate` | each person's own save; then the server copies them to the others | Shared content. |
+| `noteType`, `linked*` | the owner's save, copied to the others; a collaborator's copy never changes them | What the note is about. |
+| `visibility` | the owner only; never copied | The owner's sharing setting. A collaborator's "only me" copy once switched the owner's note off during acceptance (fixed before release). |
 | `isPinned`, `isArchived`, `isDeleted`, `manualOrder`, `labels` | each person's own save | Belong to that person. **Never copied** to anyone else. |
 
 **Clients never write the four collaborator lists.**
