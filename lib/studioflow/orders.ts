@@ -10,6 +10,7 @@ import {
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import type { WorkDayPatch } from "@/lib/studioflow/workDays";
 import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/uploadPolicy";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
@@ -167,6 +168,8 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     sessionId?: string;
     newSessionId?: string;
   };
+  /** A full/half day entry for the signed-in member (lib/studioflow/workDays.ts). */
+  workDay?: WorkDayPatch;
 };
 
 export type UpdateOrderResult = {
@@ -242,6 +245,8 @@ function friendlyUpdateOrderError(error: unknown) {
   if (/assigned_only_cannot_change_dates/i.test(message)) return ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE;
   if (/assigned_only_cannot_create/i.test(message)) return ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE;
   if (/^Your current role/i.test(message)) return message;
+  // Day entries (functions/workDays.js): the server's own sentence is the clearest one.
+  if (/day entr|own days|Full day or Half day/i.test(message)) return message;
   if (/workflow/i.test(message)) return "Workflow Only can edit order details, but cannot edit finance fields.";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit this order.";
   return message ? friendlyErrorMessage(error, text => text) : "Could not update the order. Please try again.";

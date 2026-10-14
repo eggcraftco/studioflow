@@ -139,6 +139,7 @@ import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
+import { applyWorkDayPatchLocally, formatWorkDays, localDateKey, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
@@ -2468,6 +2469,12 @@ export function OrderDetailContent({
   const [workTimeNow, setWorkTimeNow] = useState(() => new Date());
   const [optimisticWorkSessions, setOptimisticWorkSessions] = useState<WorkSessionDetail[] | null>(null);
   const pendingWorkTimeActionRef = useRef<{ action: NonNullable<UpdateOrderInput["workTime"]>["action"]; sessionId: string } | null>(null);
+  // Day entries (full / half day) beside the timer — lib/studioflow/workDays.ts.
+  const [workDayDateInput, setWorkDayDateInput] = useState(() => localDateKey());
+  const [workDayKindInput, setWorkDayKindInput] = useState<WorkDayKind>("full_day");
+  const [workDayNoteInput, setWorkDayNoteInput] = useState("");
+  const [savingWorkDay, setSavingWorkDay] = useState(false);
+  const [optimisticWorkDays, setOptimisticWorkDays] = useState<WorkDayDetail[] | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [workspaceStatusOptions, setWorkspaceStatusOptions] = useState<string[]>(DEFAULT_STATUS_OPTIONS);
   const independentCardLayout = useMemo(
@@ -2735,7 +2742,14 @@ export function OrderDetailContent({
   useEffect(() => {
     setOptimisticWorkSessions(null);
     pendingWorkTimeActionRef.current = null;
+    setOptimisticWorkDays(null);
   }, [order.id]);
+
+  const serverWorkDaysSignature = (order.workDays ?? []).map(entry => `${entry.id}:${entry.kind}:${entry.note}`).join("|");
+  useEffect(() => {
+    // The server's copy arrived (or changed): it replaces what the last tap drew.
+    setOptimisticWorkDays(null);
+  }, [serverWorkDaysSignature]);
 
   useEffect(() => {
     const pending = pendingWorkTimeActionRef.current;
@@ -5371,6 +5385,46 @@ export function OrderDetailContent({
     }
   }
 
+  async function saveWorkDayPatch(patch: WorkDayPatch) {
+    if (!canEditWorkTime || !user?.uid) {
+      setWorkTimeError("Your workspace role cannot edit Work Time.");
+      setWorkTimeStatus(null);
+      return;
+    }
+    const previous = optimisticWorkDays ?? order.workDays ?? [];
+    setWorkTimeError(null);
+    setWorkTimeStatus(null);
+    setSavingWorkDay(true);
+    setOptimisticWorkDays(applyWorkDayPatchLocally(previous, patch, user.uid, user.email || ""));
+    const before = previous.find(entry => entry.memberUid === (patch.memberUid || user.uid) && entry.date === patch.date);
+    const expectsChange = patch.action === "delete" || !before || before.kind !== patch.kind || before.note !== (patch.note ?? "").trim();
+    try {
+      const result = await updateOrderFromWeb(workspace, {
+        orderId: order.id,
+        workDay: { ...patch, source: "web" }
+      });
+      // A server that does not know day entries answers ok and changes nothing; never show that as saved.
+      if (expectsChange && result?.changed === false) throw new Error("Could not save the day entry.");
+      setWorkTimeStatus(patch.action === "delete" ? "Day entry deleted." : "Day saved.");
+      if (patch.action === "set") setWorkDayNoteInput("");
+    } catch (saveFailure) {
+      setOptimisticWorkDays(null);
+      setWorkTimeStatus(null);
+      setWorkTimeError(saveFailure instanceof Error ? saveFailure.message : "Could not save the day entry.");
+    } finally {
+      setSavingWorkDay(false);
+    }
+  }
+
+  function saveWorkDay(kind: WorkDayKind = workDayKindInput, date = workDayDateInput, note = workDayNoteInput) {
+    if (!date) return;
+    void saveWorkDayPatch({ action: "set", date, kind, note: note.trim() });
+  }
+
+  function deleteWorkDay(entry: WorkDayDetail) {
+    void saveWorkDayPatch({ action: "delete", date: entry.date, memberUid: entry.memberUid });
+  }
+
   function startWorkTimer() {
     const title = newWorkSessionTitle.trim() || "Work session";
     void saveWorkTimePatch({ action: "start", title, newSessionId: localWorkSessionId() }, "Start");
@@ -7848,6 +7902,14 @@ export function OrderDetailContent({
         const runningSession = sessions.find(session => Boolean(session.startedAt && !session.endedAt));
         const totalSeconds = sessions.reduce((sum, session) => sum + workSessionDurationSeconds(session, workTimeNow), 0);
         const groups = groupWorkSessionsByDate(sessions);
+        const workDays = optimisticWorkDays ?? order.workDays ?? [];
+        const myUid = user?.uid ?? "";
+        const isWorkspaceManager = ["owner", "admin"].includes(normalizeWorkspaceRole(workspace.role));
+        const daysWorked = totalWorkDays(workDays);
+        const workDayLabel = (date: string) => {
+          const parsed = workDayDate(date);
+          return parsed ? new Intl.DateTimeFormat(detailLocale, { day: "2-digit", month: "short", year: "numeric" }).format(parsed) : date;
+        };
         return (
           <section key={cardId} className="card order-detail-card is-work-time-card">
             {renderCardTitle(cardId)}
@@ -7855,6 +7917,11 @@ export function OrderDetailContent({
               <div className="app-work-total">
                 <span>{t("Total Work Time")}</span>
                 <strong>{formatWorkDuration(totalSeconds)}</strong>
+                {workDays.length > 0 ? (
+                  <small className="app-work-days-total" data-testid="work-days-total">
+                    {t("Days worked")}: <b>{formatWorkDays(daysWorked, detailLocale)}</b>
+                  </small>
+                ) : null}
               </div>
               {runningSession ? (
                 <div className="app-work-active">
@@ -7891,15 +7958,104 @@ export function OrderDetailContent({
               ) : (
                 <div className="app-work-locked">{t("Your workspace role can view Work Time but cannot edit it.")}</div>
               )}
+              {canEditWorkTime ? (
+                <div className="app-work-day-entry" data-testid="work-day-entry">
+                  <strong>{t("Day entry")}</strong>
+                  <div className="app-work-day-row">
+                    <input
+                      type="date"
+                      aria-label={t("Date")}
+                      value={workDayDateInput}
+                      max={localDateKey(new Date(Date.now() + 86400000))}
+                      onChange={event => setWorkDayDateInput(event.target.value)}
+                      disabled={savingWorkDay}
+                    />
+                    <div className="app-work-day-kinds" role="radiogroup" aria-label={t("Day entry")}>
+                      {(["full_day", "half_day"] as WorkDayKind[]).map(kind => (
+                        <button
+                          key={kind}
+                          type="button"
+                          role="radio"
+                          aria-checked={workDayKindInput === kind}
+                          className={workDayKindInput === kind ? "is-selected" : ""}
+                          disabled={savingWorkDay}
+                          onClick={() => setWorkDayKindInput(kind)}
+                        >
+                          {t(kind === "full_day" ? "Full day" : "Half day")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="app-work-day-row">
+                    <input
+                      type="text"
+                      value={workDayNoteInput}
+                      maxLength={280}
+                      onChange={event => setWorkDayNoteInput(event.target.value)}
+                      onKeyDown={event => {
+                        if ((event.key === "Enter" || event.code === "NumpadEnter") && !savingWorkDay) saveWorkDay();
+                      }}
+                      placeholder={t("Note (optional)")}
+                      disabled={savingWorkDay}
+                    />
+                    <button type="button" disabled={savingWorkDay || !workDayDateInput} onClick={() => saveWorkDay()}>
+                      {t("Save day")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {workDays.length > 0 ? (
+                <div className="app-work-day-list" data-testid="work-day-list">
+                  {workDays.map(entry => {
+                    const isMine = Boolean(myUid) && entry.memberUid === myUid;
+                    const canDelete = canEditWorkTime && (isMine || isWorkspaceManager);
+                    return (
+                      <article key={entry.id} className="app-work-day-item" data-kind={entry.kind}>
+                        <div>
+                          <strong>{workDayLabel(entry.date)} · {t(entry.kind === "half_day" ? "Half day" : "Full day")}</strong>
+                          <small>{entry.memberEmail || entry.memberUid}{entry.note ? ` · ${entry.note}` : ""}</small>
+                        </div>
+                        <b>{formatWorkDays(entry.kind === "half_day" ? 0.5 : 1, detailLocale)}</b>
+                        {canEditWorkTime && (isMine || canDelete) ? (
+                          <div className="app-work-session-actions">
+                            {isMine ? (
+                              <button
+                                type="button"
+                                disabled={savingWorkDay}
+                                onClick={() => saveWorkDay(entry.kind === "half_day" ? "full_day" : "half_day", entry.date, entry.note)}
+                                title={t(entry.kind === "half_day" ? "Full day" : "Half day")}
+                              >
+                                {t(entry.kind === "half_day" ? "Full day" : "Half day")}
+                              </button>
+                            ) : null}
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                className="danger subtle"
+                                disabled={savingWorkDay}
+                                onClick={() => deleteWorkDay(entry)}
+                                title={t("Delete")}
+                                aria-label={t("Delete day entry")}
+                              >
+                                <WorkTimeActionIcon name="delete" />
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
               {workTimeStatus ? <p className="file-action-status">{t(workTimeStatus)}</p> : null}
               {workTimeError ? <p className="file-action-error">{t(workTimeError)}</p> : null}
-              {groups.length === 0 ? (
+              {groups.length === 0 && workDays.length === 0 ? (
                 <div className="app-work-empty">
                   <span>◷</span>
                   <strong>{t("No work sessions yet.")}</strong>
                   <p>{t("Start a timer when you begin work on this order.")}</p>
                 </div>
-              ) : (
+              ) : groups.length === 0 ? null : (
                 <div className="app-work-session-list">
                   {groups.map(group => {
                     const groupSeconds = group.items.reduce((sum, item) => sum + workSessionDurationSeconds(item, workTimeNow), 0);

@@ -27,6 +27,7 @@ import {
   type WorkspaceStoredRead,
 } from "@/lib/studioflow/workspaceResolution";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
+import { mapWorkDays, type WorkDayDetail } from "@/lib/studioflow/workDays";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -681,6 +682,8 @@ export type OrderDetail = {
   clientFiles: ClientFileDetail[];
   todoItems: ToDoDetail[];
   workSessions: WorkSessionDetail[];
+  /** Full/half day entries beside the timer (lib/studioflow/workDays.ts). */
+  workDays?: WorkDayDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
@@ -2517,6 +2520,7 @@ function mapOrderDetailSnapshot(
     }),
     todoItems: mapTodoItems(data.todoItems),
     workSessions: mapWorkSessions(data.workSessions),
+    workDays: mapWorkDays(data.workDays),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),

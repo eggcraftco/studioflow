@@ -4,6 +4,7 @@ import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
+import { WORK_DAY_TRANSLATIONS } from "./workDayTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -8699,6 +8700,7 @@ mergeIntoTranslations(SHIPPING_TRANSLATIONS);
 // "Send the tracking details to the customer by e-mail?" (trackingEmailTranslations.ts):
 // the Shipping card's question, the preview dialog and the result line. Same per-language merge.
 mergeIntoTranslations(TRACKING_EMAIL_TRANSLATIONS);
+mergeIntoTranslations(WORK_DAY_TRANSLATIONS);
 
 // Production board (Round 202): the Done lane's summary, and the order page when
 // a link names another workspace or the role has no orders access. The three
