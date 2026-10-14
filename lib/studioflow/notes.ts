@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -9,8 +10,10 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes, uploadBytesResumable } from "firebase/storage";
-import { db, storage } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions, storage } from "@/lib/firebase/client";
 import { keepNoteDocumentFields, keepNoteFromDoc, type StudioKeepNote } from "./noteDocument";
+import { noteInvitesFromResponse, noteMembersFromCompany, type NoteInvite, type NoteWorkspaceMember } from "./noteSharing";
 
 // The type and the document converters live in noteDocument.ts (pure, no
 // Firebase client) so the round-trip test can import them from Node.
@@ -65,13 +68,15 @@ export async function saveKeepNote(
   const ref = doc(notesCollection(companyId, userId), note.id);
   // Field list and values come from keepNoteDocumentFields — the text is
   // written exactly as given. Only the two server timestamps are added here.
+  // merge: the collaborator lists on the document belong to the sharing
+  // callables (notes sharing contract, 14 Oct 2026) and must survive a save.
   await setDoc(ref, {
     ...keepNoteDocumentFields(note),
     createdAt: note.createdAtMillis
       ? Timestamp.fromMillis(note.createdAtMillis)
       : serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 }
 
 export async function uploadKeepNoteImage(
@@ -164,6 +169,8 @@ export function newKeepNote(
     ownerName,
     sharedWith: [],
     collaboratorEmails: [],
+    collaboratorUserIds: [],
+    pendingCollaboratorUserIds: [],
     activeEditorUserId: "",
     activeEditorEmail: "",
     activeEditorUpdatedAtMillis: null,
@@ -224,3 +231,60 @@ export const NOTE_COLORS = [
   "purple",
   "pink",
 ];
+
+// ------------------------------------------------------------------
+// Sharing (docs/notes-sharing-contract-2026-10-14.md). Every change to who
+// holds a note goes through these callables; the client never writes the
+// collaborator lists itself.
+// ------------------------------------------------------------------
+
+/** The workspace's people for the member picker (owner + members map, suspended flagged). */
+export async function loadNoteWorkspaceMembers(companyId: string): Promise<NoteWorkspaceMember[]> {
+  if (!companyId) return [];
+  const snap = await getDoc(doc(db, "companies", companyId));
+  return noteMembersFromCompany((snap.data() ?? {}) as Record<string, unknown>);
+}
+
+export async function listNoteInvites(companyId: string): Promise<NoteInvite[]> {
+  if (!companyId) return [];
+  const result = await httpsCallable(functions, "listPersonalNoteCollaborationInvites")({ companyId });
+  return noteInvitesFromResponse(result.data);
+}
+
+export async function acceptNoteInvite(companyId: string, inviteId: string): Promise<void> {
+  await httpsCallable(functions, "acceptPersonalNoteCollaborationInvite")({ companyId, inviteId });
+}
+
+export async function declineNoteInvite(companyId: string, inviteId: string): Promise<void> {
+  await httpsCallable(functions, "declinePersonalNoteCollaborationInvite")({ companyId, inviteId });
+}
+
+/** Invites one member by uid. Idempotent on the server: a pending or accepted person is not asked again. */
+export async function inviteNoteMember(companyId: string, noteId: string, targetUserId: string, targetEmail = ""): Promise<void> {
+  await httpsCallable(functions, "createPersonalNoteCollaborationInvite")({ companyId, noteId, targetUserId, targetEmail });
+}
+
+/** Revoke (owner, accepted or pending) or leave (a collaborator with their own uid). */
+export async function removeNoteMember(companyId: string, noteId: string, targetUserId: string, targetEmail = ""): Promise<void> {
+  await httpsCallable(functions, "removeSharedPersonalNoteFromWorkspaceMember")({ companyId, noteId, targetUserId, targetEmail });
+}
+
+/** Sends this copy's shared fields to the other copies (owner and accepted collaborators). */
+export async function syncSharedNote(companyId: string, note: StudioKeepNote): Promise<void> {
+  await httpsCallable(functions, "syncSharedPersonalNoteContent")({
+    companyId,
+    noteId: note.id,
+    note: {
+      title: note.title,
+      text: note.text,
+      colorName: note.colorName,
+      links: note.links,
+      reminderDateMillis: note.reminderDateMillis ?? 0,
+      noteType: note.noteType,
+      linkedOrderId: note.linkedOrderId,
+      linkedOrderLabel: note.linkedOrderLabel,
+      linkedCustomerName: note.linkedCustomerName,
+      visibility: note.visibility,
+    },
+  });
+}

@@ -30,7 +30,7 @@ const check = (ok: boolean, what: string) => { checks += 1; if (!ok) { failures 
 function note(overrides: Partial<StudioKeepNote> = {}): StudioKeepNote {
   return {
     id: "n1", title: "Title", text: "Body", colorName: "yellow", ownerUserId: "u1", ownerEmail: "a@b.c", ownerName: "A",
-    sharedWith: [], collaboratorEmails: [], activeEditorUserId: "", activeEditorEmail: "", activeEditorUpdatedAtMillis: null,
+    sharedWith: [], collaboratorEmails: [], collaboratorUserIds: [], pendingCollaboratorUserIds: [], activeEditorUserId: "", activeEditorEmail: "", activeEditorUpdatedAtMillis: null,
     isPinned: false, isArchived: false, isDeleted: false, labels: ["x"], links: [], reminderDateMillis: null, manualOrder: 5,
     createdAtMillis: 1000, updatedAtMillis: 2000, noteType: "personal", linkedOrderId: "", linkedOrderLabel: "", linkedCustomerName: "",
     visibility: "only_me", ...overrides,
