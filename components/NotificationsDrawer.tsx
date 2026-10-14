@@ -250,6 +250,12 @@ export function NotificationsDrawer({
     } else if (route === "supportticket" || n.ticketId.trim()) {
       router.push("/settings?section=support-tickets");
       onClose();
+    } else if (route === "notes" || n.type === "personal_note_collaboration_invite" || n.type === "shared_note") {
+      // A note invitation or share: the Notes page, which lists the waiting
+      // invitations (Accept / Decline) above the notes.
+      router.push("/notes");
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("studio-notes-invites-refresh"));
+      onClose();
     } else if (route === "order" || n.orderId.trim()) {
       // Landing on the order list and leaving the reader to find the order
       // again is not opening the notification.

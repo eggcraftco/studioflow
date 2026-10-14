@@ -46,6 +46,9 @@ self.addEventListener("notificationclick", (event) => {
   if (data.route === "customerInbox") {
     // A customer wrote: the customer inbox, on that conversation.
     targetUrl = data.conversationId ? "/inbox?conversation=" + encodeURIComponent(data.conversationId) : "/inbox";
+  } else if (data.route === "notes" || data.inviteId || data.noteId) {
+    // A note invitation or share: Notes lists the waiting invitations first.
+    targetUrl = "/notes";
   } else if (data.threadId) targetUrl = "/messages";
   else if (data.ticketId) targetUrl = "/settings?section=support";
   else if (data.orderId) targetUrl = "/orders";

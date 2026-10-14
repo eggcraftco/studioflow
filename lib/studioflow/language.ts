@@ -3,6 +3,7 @@ import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
+import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -8991,6 +8992,11 @@ mergeIntoTranslations({
   "note": {"Türkçe": "not", "Deutsch": "Notiz", "Français": "note", "Italiano": "nota", "Español (Spanish)": "nota", "Português": "nota", "Русский (Russian)": "заметка", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظة", "हिन्दी (Hindi)": "नोट"},
   "notes": {"Türkçe": "not", "Deutsch": "Notizen", "Français": "notes", "Italiano": "note", "Español (Spanish)": "notas", "Português": "notas", "Русский (Russian)": "заметок", "日本語 (Japanese)": "件のメモ", "中文 (Chinese)": "条笔记", "العربية (Arabic)": "ملاحظات", "हिन्दी (Hindi)": "नोट"},
 });
+
+// Notes sharing (14 Oct 2026): fill-only — a cell the table already has is kept.
+for (const [source, langs] of Object.entries(NOTES_SHARING_TRANSLATIONS)) {
+  TRANSLATIONS[source] = { ...langs, ...(TRANSLATIONS[source] ?? {}) };
+}
 
 // Owner item 6 (9 Oct 2026): the in-use screens' missing and same-as-English cells. Deep merge,
 // placed after every table above so none of them can hide these cells (see screenGapTranslations.ts).

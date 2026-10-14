@@ -12,9 +12,6 @@ import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/loca
 import { loadWorkspaceContext, loadRecentOrders, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
-import { doc, getDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { db, functions } from "@/lib/firebase/client";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import {
   clearNoteDraft,
@@ -38,7 +35,25 @@ import {
   isOwnKeepNoteImage,
   NOTE_COLORS,
   type StudioKeepNote,
+  loadNoteWorkspaceMembers,
+  listNoteInvites,
+  acceptNoteInvite,
+  declineNoteInvite,
+  inviteNoteMember,
+  removeNoteMember,
+  syncSharedNote,
 } from "@/lib/studioflow/notes";
+import {
+  isSharedNote,
+  noteCollaboratorUids,
+  noteMemberLabel,
+  noteUnmatchedCollaboratorEmails,
+  pickableNoteMembers,
+  workspaceInviteTargets,
+  sharedContentSignature,
+  type NoteInvite,
+  type NoteWorkspaceMember,
+} from "@/lib/studioflow/noteSharing";
 
 type Section = "notes" | "reminders" | "archive" | "trash";
 type TopTab = "personal" | "project";
@@ -59,6 +74,11 @@ export default function NotesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPhone, setIsPhone] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Notes sharing (docs/notes-sharing-contract-2026-10-14.md): the workspace's
+  // people for the picker, and the invitations waiting for this person.
+  const [members, setMembers] = useState<NoteWorkspaceMember[]>([]);
+  const [invites, setInvites] = useState<NoteInvite[]>([]);
+  const [inviteBusy, setInviteBusy] = useState<string>("");
   // Unsaved drafts on this device for this workspace + user (noteDrafts.ts).
   // Refreshed from storage whenever the editor closes, another tab writes, or
   // a notes snapshot arrives (which also clears drafts the server now matches).
@@ -170,6 +190,77 @@ export default function NotesPage() {
     const unsub = listenToKeepNotes(workspace.id, user.uid, setNotes);
     return unsub;
   }, [workspace, user]);
+
+  // Members and pending invitations: on open, when the tab comes back, and every
+  // 30 s while it is visible. An accepted invitation needs nothing else — the
+  // server writes the copy into this person's own collection and the listener
+  // above shows it.
+  async function refreshSharing() {
+    if (!workspace || !user) return;
+    const companyId = workspace.id;
+    try {
+      setMembers(await loadNoteWorkspaceMembers(companyId));
+    } catch (membersError) {
+      console.warn("note members load failed:", membersError);
+    }
+    try {
+      setInvites(await listNoteInvites(companyId));
+    } catch (inviteError) {
+      console.warn("note invitations load failed:", inviteError);
+    }
+  }
+  useEffect(() => {
+    if (!workspace || !user) return;
+    void refreshSharing();
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshSharing(); };
+    const timer = window.setInterval(onVisible, 30000);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("studio-notes-invites-refresh", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("studio-notes-invites-refresh", onVisible);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace, user]);
+
+  async function respondToInvite(invite: NoteInvite, accept: boolean) {
+    if (!workspace || inviteBusy) return;
+    setInviteBusy(invite.inviteId);
+    try {
+      if (accept) await acceptNoteInvite(invite.companyId || workspace.id, invite.inviteId);
+      else await declineNoteInvite(invite.companyId || workspace.id, invite.inviteId);
+      setInvites((prev) => prev.filter((item) => item.inviteId !== invite.inviteId));
+    } catch (respondError) {
+      alert(`${t(accept ? "Could not accept the invitation." : "Could not decline the invitation.")} ${respondError instanceof Error ? respondError.message : ""}`.trim());
+    } finally {
+      setInviteBusy("");
+      void refreshSharing();
+    }
+  }
+
+  async function inviteToNote(noteId: string, member: NoteWorkspaceMember) {
+    if (!workspace) return;
+    try {
+      await inviteNoteMember(workspace.id, noteId, member.uid, member.email);
+    } catch (inviteError) {
+      alert(`${t("Could not invite collaborator.")} ${inviteError instanceof Error ? inviteError.message : ""}`.trim());
+      throw inviteError;
+    }
+  }
+
+  async function removeFromNote(noteId: string, targetUid: string, targetEmail: string, leaving: boolean) {
+    if (!workspace) return;
+    if (!window.confirm(t(leaving ? "Leave this note? Your copy will be deleted." : "Take this person off the note? Their copy will be deleted."))) return;
+    try {
+      await removeNoteMember(workspace.id, noteId, targetUid, targetEmail);
+      if (leaving) setEditing(null);
+    } catch (removeError) {
+      alert(`${t("Could not remove collaborator.")} ${removeError instanceof Error ? removeError.message : ""}`.trim());
+    }
+  }
 
   // A draft is redundant once the server copy carries the same content —
   // drop it then, and never before (a pending offline write may still be
@@ -324,32 +415,41 @@ export default function NotesPage() {
       if (!options.quiet) alert(`${t("The note could not be saved.")} ${saveError instanceof Error ? saveError.message : ""}`.trim());
       throw saveError;
     }
-    // Visibility is a separate axis from type: "workspace" fans the note out
-    // through the existing collaboration invites (each member gets the same
-    // record mirrored — the Files model, not a copy-paste).
-    if (finalized.visibility === "workspace") {
+    // Visibility is a separate axis from type: "workspace" invites every
+    // member (not suspended, not already in or invited) to the same note; each
+    // accepts on any app and the server writes their copy. Only the owner's
+    // save does this.
+    if (finalized.visibility === "workspace" && finalized.ownerUserId === user.uid && !finalized.isDeleted) {
       void shareNoteWithWorkspace(finalized).catch((shareError) => {
         alert(`${t("The note was saved, but sharing with the team failed.")} ${shareError instanceof Error ? shareError.message : ""}`.trim());
+      });
+    }
+    // A shared note's content goes to the other copies through the server
+    // (owner and accepted collaborators only). Pin, archive, trash and order
+    // stay on this copy, so those saves send nothing.
+    const previous = notes.find((n) => n.id === finalized.id);
+    if (isSharedNote(finalized, user.uid, members) && (!previous || sharedContentSignature(previous) !== sharedContentSignature(finalized))) {
+      void syncSharedNote(workspace.id, finalized).catch((syncError) => {
+        console.warn("shared note sync failed:", syncError);
       });
     }
   }
 
   async function shareNoteWithWorkspace(note: StudioKeepNote) {
     if (!workspace || !user) return;
-    const companySnap = await getDoc(doc(db, "companies", workspace.id));
-    const members = (companySnap.data()?.members ?? {}) as Record<string, unknown>;
-    const targets = Object.keys(members).filter((memberUid) => memberUid && memberUid !== user.uid);
-    if (!targets.length) return;
-    const invite = httpsCallable(functions, "createPersonalNoteCollaborationInvite");
-    const alreadyShared = new Set(note.sharedWith);
+    const people = members.length ? members : await loadNoteWorkspaceMembers(workspace.id);
+    const targets = workspaceInviteTargets(note, people, user.uid);
+    let failures = 0;
     for (const targetUserId of targets) {
-      if (alreadyShared.has(targetUserId)) continue;
+      const member = people.find((person) => person.uid === targetUserId);
       try {
-        await invite({ companyId: workspace.id, noteId: note.id, targetUserId, note: { title: note.title, text: note.text, colorName: note.colorName } });
+        await inviteNoteMember(workspace.id, note.id, targetUserId, member?.email ?? "");
       } catch (inviteError) {
+        failures += 1;
         console.warn("note share invite failed:", targetUserId, inviteError);
       }
     }
+    if (failures > 0 && failures === targets.length) throw new Error(t("Could not invite collaborator."));
   }
 
   // The editor's save: refuses to overwrite a newer copy from another device
@@ -392,7 +492,6 @@ export default function NotesPage() {
       colorName: draft.colorName,
       labels: [...draft.labels],
       links: [...draft.links],
-      collaboratorEmails: [...draft.collaboratorEmails],
       reminderDateMillis: draft.reminderDateMillis,
       noteType: draft.noteType,
       linkedOrderId: draft.linkedOrderId,
@@ -639,6 +738,28 @@ export default function NotesPage() {
               }}
             />
 
+            {/* Invitations to someone else's note, waiting for this person */}
+            {section === "notes" && topTab === "personal" && !labelFilter && invites.length > 0 && (
+              <>
+                <SectionHeader title={t("Collaboration invitations").toLocaleUpperCase(studioLocaleTag(language))} />
+                <div data-testid="note-invites" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 12, marginBottom: 12 }}>
+                  {invites.map((invite) => (
+                    <div key={invite.inviteId} data-invite-id={invite.inviteId} style={{ background: "var(--surface)", border: "1px solid #93c5fd", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, overflowWrap: "anywhere" }}>{invite.title || t("Untitled note")}</div>
+                      <div style={{ fontSize: 12, color: "#6b7280" }}>{invite.sourceName || t("A teammate")} {t("invited you to collaborate on this note.")}</div>
+                      {invite.preview.trim() && (
+                        <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{notePreviewText(invite.preview, 240)}</div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                        <button disabled={Boolean(inviteBusy)} onClick={() => void respondToInvite(invite, false)} style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}>{t("Decline")}</button>
+                        <button disabled={Boolean(inviteBusy)} onClick={() => void respondToInvite(invite, true)} style={{ padding: "6px 14px", border: "none", background: "#2D7BF4", color: "#fff", borderRadius: 8, fontWeight: 800, cursor: "pointer" }}>{inviteBusy === invite.inviteId ? "…" : t("Accept")}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* Unsaved drafts of notes the server does not have yet */}
             {section === "notes" && !labelFilter && orphanDrafts.length > 0 && (
               <>
@@ -742,6 +863,9 @@ export default function NotesPage() {
             onClose={() => { setEditing(null); refreshDrafts(); }}
             onSave={(n, force) => saveFromEditor(n, editing, force)}
             onKeepBoth={saveDraftAsNewNote}
+            members={members}
+            onInvite={inviteToNote}
+            onRemovePerson={removeFromNote}
           />
         )}
         </div>
@@ -1225,8 +1349,8 @@ function NoteCard({
           ⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}
         </div>
       )}
-      {note.collaboratorEmails.length > 0 && (
-        <div style={{ fontSize: 11, color: "#6b7280" }}>👥 {note.collaboratorEmails.length} shared</div>
+      {(note.collaboratorUserIds.length > 0 || note.collaboratorEmails.length > 0) && (
+        <div style={{ fontSize: 11, color: "#6b7280" }}>👥 {t("Shared")} · {Math.max(note.collaboratorUserIds.length, note.collaboratorEmails.length)}</div>
       )}
       {note.linkedOrderLabel && (
         <div style={{ fontSize: 11, color: "#2D7BF4", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {note.linkedOrderLabel}</div>
@@ -1366,6 +1490,9 @@ function NoteEditor({
   onClose,
   onSave,
   onKeepBoth,
+  members,
+  onInvite,
+  onRemovePerson,
 }: {
   note: StudioKeepNote;
   /** The note as the live listener currently has it (undefined for a new note). */
@@ -1378,6 +1505,10 @@ function NoteEditor({
   onSave: (n: StudioKeepNote, force: boolean) => Promise<"saved" | "pending">;
   /** Conflict → "Keep both": this device's version becomes a separate new note. */
   onKeepBoth: (n: StudioKeepNote) => Promise<void>;
+  /** The workspace's people (notes sharing contract): the picker offers these, by uid. */
+  members: NoteWorkspaceMember[];
+  onInvite: (noteId: string, member: NoteWorkspaceMember) => Promise<void>;
+  onRemovePerson: (noteId: string, targetUid: string, targetEmail: string, leaving: boolean) => Promise<void>;
 }) {
   // A draft left on this device (closed tab, reload, lost connection, failed
   // save) is picked up when it still differs from the note. For a never-saved
@@ -1400,8 +1531,8 @@ function NoteEditor({
   const [visibility, setVisibility] = useState<StudioKeepNote["visibility"]>(initial.visibility);
   const [labels, setLabels] = useState<string[]>(initial.labels);
   const [labelInput, setLabelInput] = useState("");
-  const [collabs, setCollabs] = useState<string[]>(initial.collaboratorEmails);
-  const [collabInput, setCollabInput] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [inviting, setInviting] = useState("");
   const [reminderMillis, setReminderMillis] = useState<number | null>(initial.reminderDateMillis);
   // Images live in the editor until Save (B1): an upload adds its URL here,
   // Save writes it, Cancel deletes the uploaded object and writes nothing.
@@ -1437,7 +1568,6 @@ function NoteEditor({
       text: text.trim(),
       colorName,
       labels,
-      collaboratorEmails: collabs,
       reminderDateMillis: reminderMillis,
       noteType,
       linkedOrderId: noteType === "order" ? linkedOrderId : "",
@@ -1453,7 +1583,7 @@ function NoteEditor({
   // Mirror every change to the device (memory + localStorage) while editing.
   // Untouched again → the mirror goes; a never-saved note keeps its draft for
   // as long as it has any content.
-  const draftSignature = JSON.stringify([title, text, colorName, labels, collabs, reminderMillis, noteType, linkedOrderId, customerName, visibility, links]);
+  const draftSignature = JSON.stringify([title, text, colorName, labels, reminderMillis, noteType, linkedOrderId, customerName, visibility, links]);
   useEffect(() => {
     if (saving) return;
     // Untrimmed title/text: the draft restores exactly what was typed.
@@ -1558,7 +1688,6 @@ function NoteEditor({
     setCustomerName(base.linkedCustomerName);
     setVisibility(base.visibility);
     setLabels(base.labels);
-    setCollabs(base.collaboratorEmails);
     setReminderMillis(base.reminderDateMillis);
     setLinks(base.links);
     setRestoredHint(false);
@@ -1582,7 +1711,6 @@ function NoteEditor({
     setCustomerName(theirs.linkedCustomerName);
     setVisibility(theirs.visibility);
     setLabels(theirs.labels);
-    setCollabs(theirs.collaboratorEmails);
     setReminderMillis(theirs.reminderDateMillis);
     setRestoredHint(false);
     setStaleDraft(false);
@@ -1872,34 +2000,86 @@ function NoteEditor({
         )}
 
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Collaborators").toLocaleUpperCase(studioLocaleTag(language))}</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-          <input
-            type="email"
-            value={collabInput}
-            onChange={(e) => setCollabInput(e.target.value)}
-            placeholder={t("Email")}
-            style={{ flex: 1, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
-          />
-          <button
-            onClick={() => {
-              const v = collabInput.trim().toLowerCase();
-              if (v && v.includes("@") && !collabs.includes(v)) setCollabs([...collabs, v]);
-              setCollabInput("");
-            }}
-            style={{ padding: "6px 14px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}
-          >
-            {t("Add")}
-          </button>
-        </div>
-        {collabs.length > 0 && (
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
-            {collabs.map((e) => (
-              <span key={e} style={{ fontSize: 11, background: "#f3f4f6", padding: "4px 10px", borderRadius: 999, cursor: "pointer" }} onClick={() => setCollabs(collabs.filter((x) => x !== e))}>
-                {e} ×
-              </span>
-            ))}
-          </div>
-        )}
+        {(() => {
+          // Notes sharing contract: people are picked from the workspace, never typed.
+          const live = liveNote ?? note;
+          const iOwnIt = !live.ownerUserId || live.ownerUserId === userId;
+          const accepted = noteCollaboratorUids(live, members);
+          const pending = (live.pendingCollaboratorUserIds ?? []).filter((uid) => !accepted.includes(uid));
+          const strays = noteUnmatchedCollaboratorEmails(live, members);
+          const byUid = new Map(members.map((member) => [member.uid, member]));
+          const ownerMember = byUid.get(live.ownerUserId);
+          const query = memberSearch.trim().toLowerCase();
+          const candidates = pickableNoteMembers(members, userId)
+            .filter((member) => !accepted.includes(member.uid) && !pending.includes(member.uid))
+            .filter((member) => !query || noteMemberLabel(member).toLowerCase().includes(query) || member.email.includes(query) || member.role.toLowerCase().includes(query));
+          const chip = (key: string, label: string, sub: string, action?: { label: string; run: () => void }) => (
+            <div key={key} data-collaborator={key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 10, marginBottom: 6 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+                {sub && <div style={{ fontSize: 11, color: "#6b7280" }}>{sub}</div>}
+              </div>
+              {action && <button onClick={action.run} style={{ padding: "4px 10px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{action.label}</button>}
+            </div>
+          );
+          return (
+            <div style={{ marginBottom: 14 }} data-testid="note-collaborators">
+              {!iOwnIt && chip(`owner-${live.ownerUserId}`, ownerMember ? noteMemberLabel(ownerMember) : (live.ownerName || live.ownerEmail || t("Owner")), t("Owner"))}
+              {accepted.map((uid) => {
+                const member = byUid.get(uid);
+                const isMe = uid === userId;
+                return chip(uid, member ? noteMemberLabel(member) : uid.slice(0, 6), member ? (member.suspended ? t("No longer a member") : t("Shared")) : t("No longer a member"),
+                  iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", false) }
+                    : isMe ? { label: t("Leave this note"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", true) } : undefined);
+              })}
+              {pending.map((uid) => {
+                const member = byUid.get(uid);
+                return chip(`pending-${uid}`, member ? noteMemberLabel(member) : uid.slice(0, 6), t("Waiting for them to accept"),
+                  iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", false) } : undefined);
+              })}
+              {strays.map((email) => chip(`email-${email}`, email, t("No longer a member"),
+                iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, "", email, false) } : undefined))}
+              {iOwnIt ? (
+                <>
+                  <div style={{ fontSize: 12, color: "#6b7280", margin: "6px 0" }}>{t("Add people from your workspace")}</div>
+                  <input
+                    type="search"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder={t("Search members")}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6 }}
+                  />
+                  {candidates.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#6b7280" }}>{t("No other members to add.")}</div>
+                  ) : (
+                    <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                      {candidates.map((member) => chip(`pick-${member.uid}`, noteMemberLabel(member), member.isOwner ? t("Owner") : member.role, {
+                        label: inviting === member.uid ? "…" : t("Invite"),
+                        run: () => {
+                          if (inviting) return;
+                          setInviting(member.uid);
+                          void (async () => {
+                            try {
+                              // The server only invites to a saved note: a new note is saved first.
+                              if (isNew) await onSave(buildDraft(), false);
+                              await onInvite(live.id, member);
+                            } catch {
+                              // onInvite already told the person.
+                            } finally {
+                              setInviting("");
+                            }
+                          })();
+                        },
+                      }))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Only the note's owner can add or remove people.")}</div>
+              )}
+            </div>
+          );
+        })()}
 
         {error && (
           <div role="alert" style={{ marginBottom: 10, fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 10px" }}>
