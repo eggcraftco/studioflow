@@ -1774,6 +1774,38 @@ export const ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE = "Members with access to assig
 /** The sentence shown when an assigned-only member reaches a date write (the server's assigned_only_cannot_change_dates). */
 export const ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE = "Members with access to assigned projects only cannot change the created date or the due date.";
 
+// --- Order deletion needs the owner's approval (15 Oct 2026) -----------------
+//
+// The same scope (requiresAssignedToSelfFilter) is the server's
+// usesRestrictedAssignedProjectScope. Such a member does not move an order to
+// Trash, merge it, restore it from Trash or delete it for good —
+// deleteWebOrder, mergeOrders, restoreWebOrder and purgeWebOrders refuse them —
+// they ask the owner instead (requestWorkflowOrderDeletion), and only while
+// their Orders key is on (canRequestApprovedOrderDeletion; Workflow orders
+// contract, 9 Oct 2026). Every delete, merge, restore and "Request Deletion"
+// control reads these helpers so no button is offered that the server refuses.
+
+/** Roles that may delete orders at all (before the owner-approval rule). */
+export function roleCanDeleteOrders(role: string) {
+  const normalized = normalizeWorkspaceRole(role);
+  return normalized === "owner" || normalized === "admin" || normalized === "member";
+}
+
+/** May this member move an order to Trash, merge orders, restore from Trash or delete for good?
+ *  The server also refuses every one of these with the Orders key off. */
+export function canDeleteOrRestoreOrders(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null) {
+  if (!workspace) return false;
+  if (!roleCanDeleteOrders(workspace.role)) return false;
+  if (!workspaceAccessAllows(workspace.memberAccess, "orders")) return false;
+  return !requiresAssignedToSelfFilter(workspace);
+}
+
+/** May this member ask the owner to delete one of their assigned orders ("Request Deletion")? */
+export function canRequestOrderDeletionApproval(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null) {
+  if (!workspace) return false;
+  return requiresAssignedToSelfFilter(workspace) && workspaceAccessAllows(workspace.memberAccess, "orders");
+}
+
 const workflowViewSyncByWorkspace = new Map<string, Promise<void>>();
 
 async function ensureWorkflowAssignedOrderViews(companyId: string, workspace?: WorkspaceContext | null) {

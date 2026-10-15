@@ -24,6 +24,9 @@ import {
   subscribeOrderDetail,
   workspaceAssignedProjectsOnly,
   workspaceAccessAllows, ordersScreenAllows,
+  canDeleteOrRestoreOrders,
+  canRequestOrderDeletionApproval,
+  requiresAssignedToSelfFilter,
   type OrderDetail,
   type OrderListItem,
   type TeamMemberDetail,
@@ -636,10 +639,7 @@ export default function OrdersPage() {
   async function deleteSelectedOrders() {
     if (!workspace || !user) return;
     const uid = user.uid;
-    const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
-      || (workspace.memberAccess.assignedProjectsOnly === true
-        && workspace.memberAccess.manageProjectAssignments !== true);
-    if (requiresOwnerApproval || !canDeleteOrdersForRole(workspace.role)) {
+    if (!canDeleteOrRestoreOrders(workspace)) {
       setOrderActionError("Your workspace role cannot delete the selected orders.");
       return;
     }
@@ -771,10 +771,13 @@ export default function OrdersPage() {
   async function deleteOrderFromMenu(order: OrderListItem) {
     if (!workspace || !user) return;
     const uid = user.uid;
-    const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
-      || (workspace.memberAccess.assignedProjectsOnly === true
-        && workspace.memberAccess.manageProjectAssignments !== true);
-    if (requiresOwnerApproval) {
+    if (requiresAssignedToSelfFilter(workspace)) {
+      // Owner-approval scope: only a request, and only with the Orders key on
+      // (Workflow orders contract, 9 Oct 2026) — the server refuses the rest.
+      if (!canRequestOrderDeletionApproval(workspace)) {
+        setOrderActionError("Your workspace role cannot delete orders.");
+        return;
+      }
       const confirmed = window.confirm(
         t("Request deletion of \"{name}\"? The order will be deleted only after owner approval.")
           .replace("{name}", displayOrderTitle(order.customerName, t))
@@ -792,7 +795,7 @@ export default function OrdersPage() {
       }
       return;
     }
-    if (!canDeleteOrdersForRole(workspace.role)) {
+    if (!canDeleteOrRestoreOrders(workspace)) {
       setOrderActionError("Your workspace role cannot delete orders.");
       return;
     }
@@ -823,7 +826,7 @@ export default function OrdersPage() {
   }
 
   async function handleRestoreOrder(order: OrderListItem) {
-    if (!workspace) return;
+    if (!workspace || !canDeleteOrders) return;
     setOrderActionError(null);
     setOrderActionStatus("Restoring order...");
     setDeletedOrders(current => current.filter(item => item.id !== order.id));
@@ -920,12 +923,11 @@ export default function OrdersPage() {
     ? mergePrimaryId
     : (mergeCandidates[0]?.id ?? "");
   const canUseOrderContextActions = workspace ? canEditOrderStatusForRole(workspace.role) : false;
-  const canRequestOrderDeletion = workspace
-    ? normalizeWorkspaceRole(workspace.role) === "workflow"
-      || (workspace.memberAccess.assignedProjectsOnly === true
-        && workspace.memberAccess.manageProjectAssignments !== true)
-    : false;
-  const canDeleteOrders = workspace ? canDeleteOrdersForRole(workspace.role) && !canRequestOrderDeletion : false;
+  // One rule for every delete control (lib/studioflow/firestore.ts): Trash,
+  // merge, Restore and Delete permanently need canDeleteOrRestoreOrders; the
+  // owner-approval scope sees "Request Deletion" only while its Orders key is on.
+  const canDeleteOrders = canDeleteOrRestoreOrders(workspace);
+  const canRequestOrderDeletion = canRequestOrderDeletionApproval(workspace);
   const canAssignOrders = workspace ? normalizeWorkspaceAssignmentAccess(workspace) : false;
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
@@ -1137,6 +1139,7 @@ export default function OrdersPage() {
           ) : null}
           <div
             className="orders-list"
+            data-order-delete-access={canDeleteOrders ? "delete" : canRequestOrderDeletion ? "request" : "none"}
             ref={ordersListRef}
             onScroll={event => { ordersListScrollTopRef.current = event.currentTarget.scrollTop; }}
           >
@@ -1162,7 +1165,7 @@ export default function OrdersPage() {
                   multiSelected={selectedOrderIds.has(order.id)}
                   selectionActive={selectionActive}
                 />
-                {orderFilter === "trash" ? (
+                {orderFilter === "trash" && canDeleteOrders ? (
                   <button type="button" className="button secondary" style={{ margin: "4px 14px 10px", fontSize: 12 }} onClick={() => handleRestoreOrder(order)}>
                     ↩ {t("Restore")}
                   </button>
@@ -1202,6 +1205,7 @@ export default function OrdersPage() {
                     <span aria-hidden="true">{contextOrderSelected ? "−" : "☑"}</span>
                     {contextOrderSelected ? t("Deselect") : t("Select")}
                   </button>
+                  {canDeleteOrders ? (<>
                   <button
                     role="menuitem"
                     type="button"
@@ -1216,7 +1220,6 @@ export default function OrdersPage() {
                     role="menuitem"
                     type="button"
                     className="order-list-context-row danger"
-                    disabled={!canDeleteOrders}
                     onClick={() => {
                       setOrderContextMenu(null);
                       const ids = selectedOrderIds.has(contextOrder.id) && selectedOrderIds.size > 0
@@ -1229,6 +1232,7 @@ export default function OrdersPage() {
                     <span aria-hidden="true">🗑</span>
                     {t("Delete permanently")}
                   </button>
+                  </>) : null}
                 </>
               ) : null}
               {!inTrash ? (<>
@@ -1315,6 +1319,7 @@ export default function OrdersPage() {
                 <span aria-hidden="true">×</span>
                 {t("Cancel Order")}
               </button>
+              {canDeleteOrders || canRequestOrderDeletion ? (<>
               <div className="order-list-context-divider" />
               {selectionActive && canDeleteOrders ? (
                 <>
@@ -1353,12 +1358,12 @@ export default function OrdersPage() {
                 role="menuitem"
                 type="button"
                 className="order-list-context-row danger"
-                disabled={!canDeleteOrders && !canRequestOrderDeletion}
                 onClick={() => void deleteOrderFromMenu(contextOrder)}
               >
                 <span aria-hidden="true">⌫</span>
                 {canRequestOrderDeletion ? t("Request Deletion") : t("Delete")}
               </button>
+              </>) : null}
               </>) : null}
             </div>
           ) : null}

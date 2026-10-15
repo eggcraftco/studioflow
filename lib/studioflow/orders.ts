@@ -5,8 +5,11 @@ import {
   ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE,
   ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE,
   canCreateOrders,
+  canDeleteOrRestoreOrders,
+  canRequestOrderDeletionApproval,
   normalizeWorkspaceRole,
   roleCanCreateOrders,
+  roleCanDeleteOrders,
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
@@ -199,9 +202,11 @@ export function canEditOrderFullyForRole(role: string) {
   return canCreateOrdersForRole(role);
 }
 
+/** Role-only half of the delete gate. Controls and the callables below read
+ *  canDeleteOrRestoreOrders(workspace), which also applies the owner-approval
+ *  rule (assigned-projects-only members only request deletion). */
 export function canDeleteOrdersForRole(role: string) {
-  const normalized = normalizeWorkspaceRole(role);
-  return normalized === "owner" || normalized === "admin" || normalized === "member";
+  return roleCanDeleteOrders(role);
 }
 
 export function canEditOrderStatusForRole(role: string) {
@@ -443,11 +448,10 @@ export async function assignInvoiceNumberFromWeb(workspace: WorkspaceContext, or
 }
 
 export async function requestWorkflowOrderDeletionFromWeb(workspace: WorkspaceContext, orderId: string) {
-  const requiresOwnerApproval = normalizeWorkspaceRole(workspace.role) === "workflow"
-    || (workspace.memberAccess.assignedProjectsOnly === true
-      && workspace.memberAccess.manageProjectAssignments !== true);
-  if (!requiresOwnerApproval) {
-    throw new Error("This role does not use owner-approved project deletion.");
+  if (!canRequestOrderDeletionApproval(workspace)) {
+    throw new Error(canDeleteOrRestoreOrders(workspace)
+      ? "This role does not use owner-approved project deletion."
+      : "Your workspace role cannot delete orders.");
   }
   return await withWebSyncStatus(async () => {
     const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "requestWorkflowOrderDeletion");
@@ -458,7 +462,7 @@ export async function requestWorkflowOrderDeletionFromWeb(workspace: WorkspaceCo
 }
 
 export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
-  if (!canDeleteOrdersForRole(workspace.role)) {
+  if (!canDeleteOrRestoreOrders(workspace)) {
     throw new Error("Your workspace role cannot delete orders.");
   }
 
@@ -484,7 +488,7 @@ export type PurgeOrdersResult = { ok?: boolean; purged?: number; skipped?: strin
 /** Empties the Trash now rather than in thirty days. Only ever reaches orders
  *  that are already in it — the server refuses anything still live. */
 export async function purgeOrdersFromWeb(workspace: WorkspaceContext, orderIds: string[]) {
-  if (!canDeleteOrdersForRole(workspace.role)) {
+  if (!canDeleteOrRestoreOrders(workspace)) {
     throw new Error("Your workspace role cannot delete orders.");
   }
   return await withWebSyncStatus(async () => {
@@ -498,7 +502,7 @@ export async function purgeOrdersFromWeb(workspace: WorkspaceContext, orderIds: 
 }
 
 export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
-  if (!canDeleteOrdersForRole(workspace.role)) {
+  if (!canDeleteOrRestoreOrders(workspace)) {
     throw new Error("Your workspace role cannot restore orders.");
   }
   return await withWebSyncStatus(async () => {
@@ -553,7 +557,7 @@ export async function mergeOrders(
   primaryOrderId: string,
   sourceOrderIds: string[]
 ): Promise<MergeOrdersResult> {
-  if (!canDeleteOrdersForRole(workspace.role)) {
+  if (!canDeleteOrRestoreOrders(workspace)) {
     throw new Error("Your workspace role cannot merge orders.");
   }
   return await withWebSyncStatus(async () => {
