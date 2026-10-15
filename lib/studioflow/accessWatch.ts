@@ -87,3 +87,20 @@ export function accessWatchStep(baseline: string | null, event: AccessWatchEvent
 export function mayReloadForAccess(previousReloadsMs: number[], nowMs: number, max = 3, windowMs = 60_000): boolean {
   return previousReloadsMs.filter(at => nowMs - at < windowMs).length < max;
 }
+
+/**
+ * The member is no longer in the workspace at all (removed, suspended, document gone) — as opposed to a
+ * narrower access. Then the browser's Firestore copy of what they could read (shared notes included) is
+ * wiped before the reload, so a later offline visit cannot show it (measured 15 Oct: a removed member's
+ * shared note came back offline from the cache).
+ */
+export function accessLost(fingerprint: string): boolean {
+  if (fingerprint === "absent") return true;
+  if (fingerprint === "owner") return false;
+  try {
+    const parsed = JSON.parse(fingerprint) as { member?: unknown; suspended?: unknown };
+    return parsed.member !== true || parsed.suspended === true;
+  } catch {
+    return false;
+  }
+}

@@ -9,7 +9,7 @@ import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
-import { loadWorkspaceContext, loadRecentOrders, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, loadRecentOrders, roleLabel, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
@@ -46,9 +46,11 @@ import {
 import {
   isSharedNote,
   noteCollaboratorUids,
+  noteMemberIdentity,
   noteMemberLabel,
   noteUnmatchedCollaboratorEmails,
   pickableNoteMembers,
+  workspaceFanOutDue,
   workspaceInviteTargets,
   sharedContentSignature,
   type NoteInvite,
@@ -187,9 +189,35 @@ export default function NotesPage() {
 
   useEffect(() => {
     if (!workspace || !user) return;
-    const unsub = listenToKeepNotes(workspace.id, user.uid, setNotes);
+    const unsub = listenToKeepNotes(workspace.id, user.uid, setNotes, (listenError) => {
+      // Refused (removed, suspended, Notes switched off): nothing read under the old access stays on
+      // screen — the list and an open note go. A network failure is not a refusal and keeps them.
+      const code = (listenError as { code?: string } | null)?.code ?? "";
+      if (code === "permission-denied" || code === "unauthenticated") {
+        setNotes([]);
+        setEditing(null);
+      }
+    });
     return unsub;
   }, [workspace, user]);
+
+  // A shared note that leaves this person's list while it is open — the owner took them off, they left on
+  // another device, or their access ended — closes, and the device's draft of it goes too: their copy no
+  // longer exists, so a save could only fail (measured 15 Oct: the editor stayed open after a revoke).
+  // Only someone else's note: my own note never disappears from under me this way.
+  const seenNoteIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const n of notes) seenNoteIdsRef.current.add(n.id);
+    if (!editing || !workspace || !user) return;
+    const sharedCopy = Boolean(editing.ownerUserId) && editing.ownerUserId !== user.uid;
+    if (!sharedCopy || !seenNoteIdsRef.current.has(editing.id)) return;
+    if (notes.some((n) => n.id === editing.id)) return;
+    clearNoteDraft(workspace.id, user.uid, editing.id);
+    setEditing(null);
+    refreshDrafts();
+    dispatchStudioToast({ message: t("This note is no longer shared with you."), durationMs: 8000 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, editing, workspace, user]);
 
   // Members and pending invitations: on open, when the tab comes back, and every
   // 30 s while it is visible. An accepted invitation needs nothing else — the
@@ -276,6 +304,9 @@ export default function NotesPage() {
         // updatedAt is null while the copy is only this device's pending
         // write (serverTimestamp not yet resolved) — not confirmed, not cleared.
         if (live && live.updatedAtMillis != null && !noteDraftIsDirty(draft.note, live)) clearNoteDraft(ws, uid, draft.noteId);
+        // A draft of someone else's note whose copy has left this list (taken off, left, access ended)
+        // is not kept: this person can never save it, and it would show their old copy as an "unsaved draft".
+        else if (!live && draft.note.ownerUserId && draft.note.ownerUserId !== uid && seenNoteIdsRef.current.has(draft.noteId)) clearNoteDraft(ws, uid, draft.noteId);
       }
       setDrafts(listNoteDrafts(ws, uid));
     };
@@ -290,7 +321,8 @@ export default function NotesPage() {
   // Drafts of notes that do not exist on the server yet (a new note whose
   // editor was closed by a reload, a lost tab or a failed save) are offered
   // as cards at the top of Notes so the typed text is one click away.
-  const orphanDrafts = drafts.filter((d) => !notes.some((n) => n.id === d.noteId) && (d.note.title.trim() || d.note.text.trim()));
+  // Someone else's note can never be "new" on this device: a draft of one without its copy is not offered.
+  const orphanDrafts = drafts.filter((d) => !notes.some((n) => n.id === d.noteId) && (!d.note.ownerUserId || d.note.ownerUserId === user?.uid) && (d.note.title.trim() || d.note.text.trim()));
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -394,6 +426,8 @@ export default function NotesPage() {
 
   async function save(note: StudioKeepNote, options: { quiet?: boolean } = {}) {
     if (!workspace || !user) return;
+    // The stored version before this save: decides whether this save invites the workspace.
+    const stored = notes.find((n) => n.id === note.id);
     const finalized: StudioKeepNote =
       note.ownerUserId.trim() === ""
         ? {
@@ -419,7 +453,7 @@ export default function NotesPage() {
     // member (not suspended, not already in or invited) to the same note; each
     // accepts on any app and the server writes their copy. Only the owner's
     // save does this.
-    if (finalized.visibility === "workspace" && finalized.ownerUserId === user.uid && !finalized.isDeleted) {
+    if (workspaceFanOutDue(stored, finalized, user.uid)) {
       void shareNoteWithWorkspace(finalized).catch((shareError) => {
         alert(`${t("The note was saved, but sharing with the team failed.")} ${shareError instanceof Error ? shareError.message : ""}`.trim());
       });
@@ -493,11 +527,13 @@ export default function NotesPage() {
       labels: [...draft.labels],
       links: [...draft.links],
       reminderDateMillis: draft.reminderDateMillis,
-      noteType: draft.noteType,
+      // The kept copy is private to this person (15 Oct: a copy of a "Workspace members" note was
+      // created with that visibility and invited the whole workspace to it).
+      noteType: draft.noteType === "team" ? "personal" : draft.noteType,
       linkedOrderId: draft.linkedOrderId,
       linkedOrderLabel: draft.linkedOrderLabel,
       linkedCustomerName: draft.linkedCustomerName,
-      visibility: draft.visibility,
+      visibility: "only_me",
     };
     lastWrittenRef.current.set(next.id, next);
     await save(next, { quiet: true });
@@ -747,6 +783,12 @@ export default function NotesPage() {
                     <div key={invite.inviteId} data-invite-id={invite.inviteId} style={{ background: "var(--surface)", border: "1px solid #93c5fd", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                       <div style={{ fontWeight: 800, fontSize: 15, overflowWrap: "anywhere" }}>{invite.title || t("Untitled note")}</div>
                       <div style={{ fontSize: 12, color: "#6b7280" }}>{invite.sourceName || t("A teammate")} {t("invited you to collaborate on this note.")}</div>
+                      {(() => {
+                        // Two people can share a name: the inviter's e-mail (members map first) tells them apart.
+                        const from = members.find((member) => member.uid === invite.sourceUserId);
+                        const identity = from ? noteMemberIdentity(from) : invite.sourceEmail;
+                        return identity ? <div data-invite-from={invite.sourceUserId} style={{ fontSize: 11, color: "#6b7280", overflowWrap: "anywhere" }}>{identity}</div> : null;
+                      })()}
                       {invite.preview.trim() && (
                         <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{notePreviewText(invite.preview, 240)}</div>
                       )}
@@ -1359,7 +1401,7 @@ function NoteCard({
         <div style={{ fontSize: 11, color: "#0e7a55", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>◉ {note.linkedCustomerName}</div>
       )}
       {note.visibility === "workspace" && (
-        <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>\u2302 {t("Workspace")}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{"\u2302"} {t("Workspace")}</div>
       )}
       {/* Bottom action row — Mac parity (not rendered at all on phones) */}
       <div
@@ -1797,78 +1839,100 @@ function NoteEditor({
           style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
         />
 
-        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-          {([["personal", "Personal"], ["order", "Order"], ["customer", "Customer"], ["team", "Team"]] as const).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => {
-                setNoteType(value);
-                if (value === "team") setVisibility("workspace");
-              }}
-              style={{ padding: "5px 14px", borderRadius: 999, border: noteType === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: noteType === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-            >
-              {t(label)}
-            </button>
-          ))}
-        </div>
-        {noteType === "order" && (
-          <div style={{ marginBottom: 10 }}>
-            <input
-              type="search"
-              value={orderSearch}
-              onChange={(e) => setOrderSearch(e.target.value)}
-              placeholder={t("Search orders")}
-              style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6, fontSize: 12 }}
-            />
-            <select
-              value={linkedOrderId}
-              onChange={(e) => setLinkedOrderId(e.target.value)}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
-            >
-              <option value="">{t("Not linked")}</option>
-              {orders
-                .filter((o) => !orderSearch.trim() || `${o.customerName} ${o.designName}`.toLowerCase().includes(orderSearch.trim().toLowerCase()))
-                .slice(0, 50)
-                .map((o) => (
-                  <option key={o.id} value={o.id}>{o.customerName}{o.designName && o.designName !== "Untitled design" ? ` · ${o.designName}` : ""}</option>
-                ))}
-              {linkedOrderId && !orders.some((o) => o.id === linkedOrderId) ? <option value={linkedOrderId}>{note.linkedOrderLabel || t("Order")}</option> : null}
-            </select>
+        {(() => {
+          // Someone else's note (a shared copy): who it belongs to is said plainly, and its type and
+          // visibility are the owner's — never shown as "Personal / Only me" choices on this copy
+          // (measured 15 Oct: a member saw "Only me" on a note the owner shared with everyone).
+          const live = liveNote ?? note;
+          if (!live.ownerUserId || live.ownerUserId === userId) return null;
+          const owner = members.find((member) => member.uid === live.ownerUserId);
+          const ownerLabel = owner ? noteMemberLabel(owner) : (live.ownerName || live.ownerEmail || t("Owner"));
+          return (
+            <div data-testid="note-shared-by" style={{ fontSize: 12, color: "var(--text)", background: "rgba(45,123,244,0.06)", border: "1px solid rgba(45,123,244,0.25)", borderRadius: 10, padding: "8px 10px", marginBottom: 14 }}>
+              <div style={{ fontWeight: 700 }}>{t("Shared with you by")} {ownerLabel}{owner ? ` · ${noteMemberIdentity(owner)}` : ""}</div>
+              <div style={{ color: "#6b7280", marginTop: 2 }}>{t("Only the owner sets the type and who sees this note.")}</div>
+            </div>
+          );
+        })()}
+        {(!(liveNote ?? note).ownerUserId || (liveNote ?? note).ownerUserId === userId) && (
+          <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {([["personal", "Personal"], ["order", "Order"], ["customer", "Customer"], ["team", "Team"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => {
+                  setNoteType(value);
+                  if (value === "team") setVisibility("workspace");
+                }}
+                style={{ padding: "5px 14px", borderRadius: 999, border: noteType === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: noteType === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              >
+                {t(label)}
+              </button>
+            ))}
           </div>
-        )}
-        {noteType === "customer" && (
-          <div style={{ marginBottom: 10 }}>
-            <input
-              type="text"
-              list="note-customer-names"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder={t("Customer name")}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
-            />
-            <datalist id="note-customer-names">
-              {Array.from(new Set(orders.map((o) => o.customerName).filter(Boolean))).slice(0, 100).map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </div>
-        )}
-        <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Visibility").toUpperCase()}</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
-          {([["only_me", "Only me"], ["workspace", "Workspace members"]] as const).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setVisibility(value)}
-              style={{ padding: "5px 14px", borderRadius: 999, border: visibility === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: visibility === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
-            >
-              {t(label)}
-            </button>
-          ))}
-          {visibility === "workspace" && (
-            <span style={{ fontSize: 11, color: "#6b7280" }}>{t("Every member gets an invite to this same note — one record, not copies.")}</span>
+          {noteType === "order" && (
+            <div style={{ marginBottom: 10 }}>
+              <input
+                type="search"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder={t("Search orders")}
+                style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6, fontSize: 12 }}
+              />
+              <select
+                value={linkedOrderId}
+                onChange={(e) => setLinkedOrderId(e.target.value)}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
+              >
+                <option value="">{t("Not linked")}</option>
+                {orders
+                  .filter((o) => !orderSearch.trim() || `${o.customerName} ${o.designName}`.toLowerCase().includes(orderSearch.trim().toLowerCase()))
+                  .slice(0, 50)
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>{o.customerName}{o.designName && o.designName !== "Untitled design" ? ` · ${o.designName}` : ""}</option>
+                  ))}
+                {linkedOrderId && !orders.some((o) => o.id === linkedOrderId) ? <option value={linkedOrderId}>{note.linkedOrderLabel || t("Order")}</option> : null}
+              </select>
+            </div>
           )}
-        </div>
+          {noteType === "customer" && (
+            <div style={{ marginBottom: 10 }}>
+              <input
+                type="text"
+                list="note-customer-names"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder={t("Customer name")}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 6 }}
+              />
+              <datalist id="note-customer-names">
+                {Array.from(new Set(orders.map((o) => o.customerName).filter(Boolean))).slice(0, 100).map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </div>
+          )}
+          <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Visibility").toUpperCase()}</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
+            {([["only_me", "Only me"], ["workspace", "Workspace members"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setVisibility(value)}
+                style={{ padding: "5px 14px", borderRadius: 999, border: visibility === value ? "2px solid #2D7BF4" : "1px solid var(--border)", background: visibility === value ? "rgba(45,123,244,0.08)" : "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+              >
+                {t(label)}
+              </button>
+            ))}
+            {visibility === "workspace" && (
+              <span style={{ fontSize: 11, color: "#6b7280" }}>{t("Every member gets an invite to this same note — one record, not copies.")}</span>
+            )}
+          </div>
+          {visibility === "only_me" && (noteCollaboratorUids(liveNote ?? note, members).length > 0 || ((liveNote ?? note).pendingCollaboratorUserIds ?? []).length > 0) && (
+            <div data-testid="note-still-shared" style={{ fontSize: 11, color: "#92400e", marginTop: -8, marginBottom: 14 }}>{t("Still shared with the people under Collaborators. Remove them to make this note private.")}</div>
+          )}
+          </>
+        )}
 
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Color").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -2024,17 +2088,17 @@ function NoteEditor({
           );
           return (
             <div style={{ marginBottom: 14 }} data-testid="note-collaborators">
-              {!iOwnIt && chip(`owner-${live.ownerUserId}`, ownerMember ? noteMemberLabel(ownerMember) : (live.ownerName || live.ownerEmail || t("Owner")), t("Owner"))}
+              {!iOwnIt && chip(`owner-${live.ownerUserId}`, ownerMember ? noteMemberLabel(ownerMember) : (live.ownerName || live.ownerEmail || t("Owner")), ownerMember ? `${t("Owner")} · ${noteMemberIdentity(ownerMember)}` : t("Owner"))}
               {accepted.map((uid) => {
                 const member = byUid.get(uid);
                 const isMe = uid === userId;
-                return chip(uid, member ? noteMemberLabel(member) : uid.slice(0, 6), member ? (member.suspended ? t("No longer a member") : t("Shared")) : t("No longer a member"),
+                return chip(uid, member ? noteMemberLabel(member) : uid.slice(0, 6), member ? `${member.suspended ? t("No longer a member") : t("Shared")} · ${noteMemberIdentity(member)}` : t("No longer a member"),
                   iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", false) }
                     : isMe ? { label: t("Leave this note"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", true) } : undefined);
               })}
               {pending.map((uid) => {
                 const member = byUid.get(uid);
-                return chip(`pending-${uid}`, member ? noteMemberLabel(member) : uid.slice(0, 6), t("Waiting for them to accept"),
+                return chip(`pending-${uid}`, member ? noteMemberLabel(member) : uid.slice(0, 6), member ? `${t("Waiting for them to accept")} · ${noteMemberIdentity(member)}` : t("Waiting for them to accept"),
                   iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, uid, member?.email ?? "", false) } : undefined);
               })}
               {strays.map((email) => chip(`email-${email}`, email, t("No longer a member"),
@@ -2053,7 +2117,7 @@ function NoteEditor({
                     <div style={{ fontSize: 12, color: "#6b7280" }}>{t("No other members to add.")}</div>
                   ) : (
                     <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                      {candidates.map((member) => chip(`pick-${member.uid}`, noteMemberLabel(member), member.isOwner ? t("Owner") : member.role, {
+                      {candidates.map((member) => chip(`pick-${member.uid}`, noteMemberLabel(member), [member.isOwner ? t("Owner") : roleLabel(member.role) === "Unknown" ? "" : t(roleLabel(member.role)), noteMemberIdentity(member)].filter(Boolean).join(" · "), {
                         label: inviting === member.uid ? "…" : t("Invite"),
                         run: () => {
                           if (inviting) return;

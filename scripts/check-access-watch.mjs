@@ -101,7 +101,9 @@ if (src) {
 const auth = fs.readFileSync(path.join(root, "lib/auth/AuthProvider.tsx"), "utf8");
 if (!/onSnapshot\(\s*doc\(db, "companies", companyId\),\s*\{ includeMetadataChanges: true \}/.test(auth)) failures.push("AuthProvider does not watch companies/{active} with metadata changes");
 if (!/memberAccessFingerprint\(/.test(auth) || !/accessWatchStep\(accessBaseline, \{ kind: "refused" \}\)/.test(auth)) failures.push("AuthProvider does not reduce the document to the access fingerprint / ignores a refusal");
-if (!/if \(step\.action === "reload"\) reloadForAccessChange\(companyId\)/.test(auth)) failures.push("AuthProvider does not reload on an access change");
+if (!/if \(step\.action === "reload"\) reloadForAccessChange\(companyId(, [^)]+\))?/.test(auth)) failures.push("AuthProvider does not reload on an access change");
+// 15 Oct: a lost access (removed / suspended / refused) wipes the browser's Firestore cache before the reload.
+if (!/reloadForAccessChange\(companyId, true\)/.test(auth) || !/reloadForAccessChange\(companyId, accessLost\(fingerprint\)\)/.test(auth)) failures.push("AuthProvider does not clear the cache when the access is lost");
 if (!/if \(unsubAccess\) unsubAccess\(\);/.test(auth)) failures.push("the access listener is not detached on sign-out");
 const fsrc = fs.readFileSync(path.join(root, "lib/studioflow/firestore.ts"), "utf8");
 // Workflow orders contract (9 Oct 2026): Workflow's Orders is the stored value (root, then inline, else off), never forced.

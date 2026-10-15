@@ -4,15 +4,15 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase/client";
+import { auth, clearFirestoreLocalCache, db } from "@/lib/firebase/client";
 import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
-import { accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
+import { accessLost, accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 
 const ACCESS_RELOADS_KEY = "nv_access_reloads";
 
 /** K2: the page was loaded under an access this member no longer has (or a wider one): load it again. */
-function reloadForAccessChange(companyId: string) {
+function reloadForAccessChange(companyId: string, lost = false) {
   try {
     const now = Date.now();
     let previous: number[] = [];
@@ -29,6 +29,12 @@ function reloadForAccessChange(companyId: string) {
   console.info(`[NivaDesk] access changed in ${companyId} — the page is loaded again under the new access`);
   // Nothing read under the old access may stay on screen: hide the page at once, then load it again.
   try { document.documentElement.style.visibility = "hidden"; } catch { /* not in a browser */ }
+  // Removed or suspended: the cached copy of this workspace (shared notes included) goes first, so an offline
+  // visit later cannot draw it. Best effort (another open tab can hold the cache); the reload happens either way.
+  if (lost) {
+    void clearFirestoreLocalCache().finally(() => window.location.reload());
+    return;
+  }
   window.location.reload();
 }
 
@@ -247,21 +253,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           { includeMetadataChanges: true },
           companySnap => {
             if (accessBaseline === null) bootMark("ws:access-watch", companySnap.metadata.fromCache ? "cache" : "server");
+            const fingerprint = memberAccessFingerprint(
+              companySnap.exists() ? (companySnap.data() as Record<string, unknown>) : null,
+              companyId,
+              user.uid
+            );
             const step = accessWatchStep(accessBaseline, {
               kind: "snapshot",
               fromCache: companySnap.metadata.fromCache,
-              fingerprint: memberAccessFingerprint(
-                companySnap.exists() ? (companySnap.data() as Record<string, unknown>) : null,
-                companyId,
-                user.uid
-              )
+              fingerprint
             });
             accessBaseline = step.baseline;
-            if (step.action === "reload") reloadForAccessChange(companyId);
+            if (step.action === "reload") reloadForAccessChange(companyId, accessLost(fingerprint));
           },
           () => {
             const step = accessWatchStep(accessBaseline, { kind: "refused" });
-            if (step.action === "reload") reloadForAccessChange(companyId);
+            if (step.action === "reload") reloadForAccessChange(companyId, true);
           }
         );
       }
