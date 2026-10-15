@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 import { DEFAULT_PRODUCTION_STAGES, type ProductionStage } from "@/lib/studioflow/production";
+import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";
 
 // The four questions worth asking before someone starts work.
 //
@@ -191,12 +192,11 @@ export type OnboardingIntegration = {
  *
  * A Shopify connection cannot start from this side: the merchant installs the
  * app in their own admin and presses Connect there, and the listing is the one
- * link that takes them straight to it. Leave it empty until the listing is
- * live — every candidate handle 404s while the app is in review, and sending
- * someone to a 404 is the dead end this whole change exists to remove. Empty
- * falls back to the Settings panel, which explains the install in words.
+ * link that takes them straight to it. The value lives in shopifyListing.ts
+ * (published 12 October 2026). Emptied, the tile below falls back to the
+ * Settings panel, which explains the install in words, and says "Coming soon".
  */
-export const SHOPIFY_APP_STORE_URL = "";
+export { SHOPIFY_APP_STORE_URL };
 
 export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
   {
@@ -207,10 +207,9 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     // opened BY the embedded app with ?shop= and a one-time nonce, and cold it
     // can only say so.
     href: SHOPIFY_APP_STORE_URL || "/settings?section=shopify",
-    // No listing, no button. Until the app is published there is nowhere to send
-    // anyone that is not a 404 or a page telling them to go somewhere else, and
-    // "Coming soon" is the true thing to say. Fill SHOPIFY_APP_STORE_URL in and
-    // this tile turns into a working Connect on its own.
+    // No listing, no button: with SHOPIFY_APP_STORE_URL empty the tile says
+    // "Coming soon". With the published listing it is a working Connect that
+    // opens the App Store page in a new tab.
     comingSoon: !SHOPIFY_APP_STORE_URL,
     logo: "/brand/integrations/shopify.svg",
     colour: "#5E8E3E",
