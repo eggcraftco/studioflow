@@ -27,7 +27,7 @@ import {
   type WorkspaceStoredRead,
 } from "@/lib/studioflow/workspaceResolution";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
-import { mapWorkDays, type WorkDayDetail } from "@/lib/studioflow/workDays";
+import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistoryDetail } from "@/lib/studioflow/workDays";
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
@@ -687,6 +687,8 @@ export type OrderDetail = {
   workSessions: WorkSessionDetail[];
   /** Full/half day entries beside the timer (lib/studioflow/workDays.ts). */
   workDays?: WorkDayDetail[];
+  /** The server's change log for day entries (since 15 Oct 2026), newest first. */
+  workDayHistory?: WorkDayHistoryDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
@@ -2576,6 +2578,7 @@ function mapOrderDetailSnapshot(
     todoItems: mapTodoItems(data.todoItems),
     workSessions: mapWorkSessions(data.workSessions),
     workDays: mapWorkDays(data.workDays),
+    workDayHistory: mapWorkDayHistory(data.workDayHistory),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),

@@ -11912,6 +11912,137 @@ body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-c
   white-space: nowrap;
 }
 
+/* Two measures side by side, never added together (15 Oct 2026). */
+.app-work-total.app-work-measures {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+
+.app-work-measure {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-work-measure.is-days strong {
+  color: #125fd7;
+}
+
+.app-work-measures-note {
+  grid-column: 1 / -1;
+  color: #6b6f76;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.app-work-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.app-work-list-heading strong {
+  color: #6b6f76;
+  font-size: 10.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.app-work-list-heading span {
+  color: #1285ff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.app-work-day-date {
+  display: inline-flex;
+  flex: 1 1 140px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-work-day-date span {
+  color: #6b6f76;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.app-work-day-row > button.secondary {
+  background: rgba(23, 25, 35, 0.08);
+  color: #24262d;
+}
+
+.app-work-day-entry.is-editing,
+.app-work-day-item.is-editing {
+  outline: 2px solid rgba(18, 133, 255, 0.45);
+  outline-offset: -2px;
+}
+
+.app-work-day-item small.app-work-day-changed {
+  color: #9a6400;
+}
+
+.app-work-day-item small.app-work-day-timer {
+  color: #1285ff;
+}
+
+.app-work-day-history {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+}
+
+.app-work-day-history-toggle {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: #6b6f76;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.app-work-day-history ol {
+  display: grid;
+  gap: 5px;
+  max-height: 160px;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.app-work-day-history li {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: #f7f7f8;
+}
+
+.app-work-day-history li strong {
+  color: #24262d;
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.app-work-day-history li span,
+.app-work-day-history li small {
+  overflow: hidden;
+  color: #6b6f76;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compact-list-grid {
   gap: 9px;
 }
@@ -13962,6 +14093,38 @@ body[data-studio-theme="dark"] .app-work-day-item strong {
 
 body[data-studio-theme="dark"] .app-work-total .app-work-days-total {
   color: #8fc1ff;
+}
+
+body[data-studio-theme="dark"] .app-work-measure.is-days strong,
+body[data-studio-theme="dark"] .app-work-list-heading span,
+body[data-studio-theme="dark"] .app-work-day-item small.app-work-day-timer {
+  color: #8fc1ff;
+}
+
+body[data-studio-theme="dark"] .app-work-measures-note,
+body[data-studio-theme="dark"] .app-work-list-heading strong,
+body[data-studio-theme="dark"] .app-work-day-date span,
+body[data-studio-theme="dark"] .app-work-day-history-toggle,
+body[data-studio-theme="dark"] .app-work-day-history li span,
+body[data-studio-theme="dark"] .app-work-day-history li small {
+  color: #a7a7a7;
+}
+
+body[data-studio-theme="dark"] .app-work-day-row > button.secondary {
+  background: rgba(255, 255, 255, 0.10);
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .app-work-day-history li {
+  background: #2a2a2a;
+}
+
+body[data-studio-theme="dark"] .app-work-day-history li strong {
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .app-work-day-item small.app-work-day-changed {
+  color: #e0b25a;
 }
 
 body[data-studio-theme="dark"] .app-work-active {
