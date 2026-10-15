@@ -45,6 +45,7 @@ import { canEditOrderStatusForRole, updateOrderFromWeb } from "@/lib/studioflow/
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
+import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 
 type ScheduleSpan = "weekly" | "monthly" | "threeMonths" | "sixMonths" | "yearly";
 type ScheduleFilter = OrderQuickFilterId;
@@ -292,12 +293,8 @@ function scheduleRangeText(order: ScheduleOrderItem) {
   return `${shortDate(orderStartDate(order))} - ${shortDate(orderDueDate(order))}`;
 }
 
-function titleForOrder(order: ScheduleOrderItem) {
-  const cleaned = order.customerName.trim();
-  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
-    return "New Project";
-  }
-  return cleaned;
+function titleForOrder(order: ScheduleOrderItem, t: (text: string) => string) {
+  return displayOrderTitle(order.customerName, t);
 }
 
 function designForOrder(order: ScheduleOrderItem) {
@@ -1439,7 +1436,7 @@ export default function SchedulePage() {
                               <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                               <span className="schedule-agenda-body">
                                 <span className="schedule-agenda-top">
-                                  <strong>{titleForOrder(order)}</strong>
+                                  <strong>{titleForOrder(order, t)}</strong>
                                   <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
                                 </span>
                                 <span className="schedule-agenda-meta">
@@ -1465,7 +1462,7 @@ export default function SchedulePage() {
                             <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                             <span className="schedule-agenda-body">
                               <span className="schedule-agenda-top">
-                                <strong>{titleForOrder(order)}</strong>
+                                <strong>{titleForOrder(order, t)}</strong>
                                 <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
                               </span>
                               <span className="schedule-agenda-meta"><span>{scheduleRangeText(order)}</span></span>
@@ -1527,7 +1524,7 @@ export default function SchedulePage() {
                                   onDoubleClick={() => openScheduleOrder(order)}
                                   title={scheduleOrderTooltip(order)}
                                 >
-                                  <strong>{titleForOrder(order)}</strong>
+                                  <strong>{titleForOrder(order, t)}</strong>
                                   <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
                                 </button>
                               );
@@ -1548,7 +1545,7 @@ export default function SchedulePage() {
                       <button key={order.id} type="button" className="team-upcoming-row" onClick={() => selectScheduleOrder(order)}>
                         <i className={`team-dot ${scheduleTone(order)}`} aria-hidden="true" />
                         <span className="team-upcoming-text">
-                          <strong>{titleForOrder(order)}</strong>
+                          <strong>{titleForOrder(order, t)}</strong>
                           <small>{assigneeLabelForOrder(order, teamMembers) || t("Unassigned")}</small>
                         </span>
                         {countdownText(order) ? <span className={orderIsLate(order) ? "team-count late" : "team-count"}>{countdownText(order)}</span> : null}
@@ -1563,7 +1560,7 @@ export default function SchedulePage() {
                         <div className="team-selected-head">
                           <i className={`team-bar-accent ${scheduleTone(selectedOrder)}`} aria-hidden="true" />
                           <div>
-                            <strong>{titleForOrder(selectedOrder)}</strong>
+                            <strong>{titleForOrder(selectedOrder, t)}</strong>
                             {designForOrder(selectedOrder) ? <small>{designForOrder(selectedOrder)}</small> : null}
                           </div>
                         </div>
@@ -1638,7 +1635,7 @@ export default function SchedulePage() {
                     <span className={`schedule-agenda-accent ${tone}`} aria-hidden="true" />
                     <span className="schedule-agenda-body">
                       <span className="schedule-agenda-top">
-                        <strong>{titleForOrder(order)}</strong>
+                        <strong>{titleForOrder(order, t)}</strong>
                         <span className={`schedule-status-badge ${statusTone(order)}`}>{scheduleStatusLabel(order)}</span>
                       </span>
                       {design ? <span className="schedule-agenda-design">{design}</span> : null}
@@ -1928,7 +1925,7 @@ function ScheduleTimelineRow({
           {order.previewImageUrl ? <img src={order.previewImageUrl} alt="" /> : <span className="image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
         </span>
         <span className="schedule-order-main">
-          <strong>{titleForOrder(order)}</strong>
+          <strong>{titleForOrder(order, t)}</strong>
           <small>{designForOrder(order)}</small>
           <span className="schedule-order-meta">
             <span className={statusClass}>{t(status)}</span>

@@ -109,6 +109,18 @@ export async function loadOrderEstimateRecord(workspace: WorkspaceContext, order
   );
 }
 
+/**
+ * The invoice lines an estimate can be built from: a line with a name or a
+ * non-zero total — the rule the server filters by. Empty means "Create
+ * estimate" has nothing to build from, and the card says so up front and
+ * offers the way to Invoice Items instead of waiting for the click (review N10).
+ * The rule itself is unchanged; it only moved here so the card and the click
+ * read the same one.
+ */
+export function estimateUsableLines<T extends { name: string; lineTotal: number }>(items: readonly T[]): T[] {
+  return items.filter(item => String(item.name ?? "").trim() || Math.abs(Number(item.lineTotal) || 0) > 0.005);
+}
+
 export function estimateStatusLabel(status: string) {
   switch (status) {
     case "sent": return "Sent";

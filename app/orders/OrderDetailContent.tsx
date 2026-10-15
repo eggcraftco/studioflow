@@ -14,6 +14,7 @@ import { db } from "@/lib/firebase/client";
 import {
   createOrderEstimate,
   estimateStatusLabel,
+  estimateUsableLines,
   loadOrderEstimateRecord,
   revokeOrderEstimateLink,
   sendOrderEstimate,
@@ -143,6 +144,7 @@ import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKe
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
+import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 
 /** The notes the Payment Links rail writes on a TEST row (functions/payments/orderLedger.js, S2). */
 const TEST_PAYMENT_NOTES = new Set(["Stripe TEST payment - no real money moved", "Stripe TEST refund - no real money moved"]);
@@ -5997,9 +5999,7 @@ export function OrderDetailContent({
     // Same rule the server filters by, applied here so the refusal is a sentence
     // rather than a rejected call. The old placeholder line silently minted a
     // real, permanent £0 "Repair work" estimate and burned a workspace number.
-    const usable = order.lineItems.filter(
-      item => item.name.trim() || Math.abs(item.lineTotal) > 0.005
-    );
+    const usable = estimateUsableLines(order.lineItems);
     if (usable.length === 0) {
       setEstimateNotice("Add an invoice item first — the estimate is built from them.");
       return;
@@ -6105,6 +6105,26 @@ export function OrderDetailContent({
     }
   }
 
+  // Review N10: "Create estimate" needs an invoice item, and on a phone the
+  // Invoice Items card is several screens away. This takes the person there and
+  // puts the focus on "+ Add Item"; nothing is added or saved for them. When the
+  // card is hidden on this order there is nothing to scroll to, so Customize
+  // cards opens instead, where it can be switched on.
+  function goToInvoiceItems() {
+    if (!cardLayout.visibility.invoiceItems) {
+      setCustomizeOpen(true);
+      return;
+    }
+    const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
+    const frame = refs.get("invoiceItems") ?? desktopCardFrameRefs.current.get("invoiceItems") ?? mobileCardFrameRefs.current.get("invoiceItems");
+    if (!frame) return;
+    // Centred, not "start": the order's header stays pinned over the top of
+    // the scroll area, so a card aligned to the top sat underneath it.
+    const addButton = frame.querySelector<HTMLButtonElement>("[data-line-items-add]");
+    (addButton ?? frame).scrollIntoView({ block: "center", behavior: "smooth" });
+    addButton?.focus({ preventScroll: true });
+  }
+
   // Photos taken at intake ride on the existing client-file pipeline rather than
   // getting a fourth upload path of their own — which means they inherit its
   // permission too. An owner who has taken client files away from a member meant
@@ -6188,7 +6208,26 @@ export function OrderDetailContent({
                   <p className="estimate-card-note">
                     {t("No estimate yet. Create one from the invoice lines, send the link, and the customer's approval is recorded here.")}
                   </p>
-                  {canInlineEditFullDetails ? (
+                  {canInlineEditFullDetails && estimateUsableLines(order.lineItems).length === 0 ? (
+                    // Review N10: the prerequisite is said before the click, with
+                    // the way to it, rather than after a press that does nothing.
+                    <div className="estimate-card-prereq" data-estimate-prereq="invoice-items">
+                      <p className="estimate-card-note" id={`estimate-prereq-${order.id}`}>
+                        <strong>{t("Needs an invoice item first.")}</strong>{" "}
+                        {t(cardLayout.visibility.invoiceItems
+                          ? "The estimate is built from this order's invoice items. Add at least one line (a name or a price), then come back here."
+                          : "The estimate is built from this order's invoice items, and the Invoice Items card is hidden on this order. Switch it on in Customize cards, add a line, then come back here.")}
+                      </p>
+                      <div className="estimate-card-actions">
+                        <button type="button" className="estimate-card-primary" onClick={goToInvoiceItems}>
+                          {t(cardLayout.visibility.invoiceItems ? "Go to Invoice Items" : "Customize cards")}
+                        </button>
+                        <button type="button" disabled aria-describedby={`estimate-prereq-${order.id}`}>
+                          {t("Create estimate")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : canInlineEditFullDetails ? (
                     <button type="button" className="estimate-card-primary" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
                       {t(estimateBusy ? "Working…" : "Create estimate")}
                     </button>
@@ -6197,15 +6236,15 @@ export function OrderDetailContent({
               ) : (
                 <>
                   <div className="estimate-card-head">
-                    <strong>Estimate {currentEstimate.number || `#${currentEstimate.version}`}</strong>
-                    <span className={`estimate-card-chip ${statusTone}`}>{estimateStatusLabel(currentEstimate.status)}</span>
+                    <strong>{t("Estimate")} {currentEstimate.number || `#${currentEstimate.version}`}</strong>
+                    <span className={`estimate-card-chip ${statusTone}`}>{t(estimateStatusLabel(currentEstimate.status))}</span>
                   </div>
 
                   {lines.length > 0 ? (
                     <div className="estimate-card-lines">
                       <div className="estimate-card-line is-head">
-                        <span>Item</span>
-                        <span>Amount</span>
+                        <span>{t("Item")}</span>
+                        <span>{t("Amount")}</span>
                       </div>
                       {lines.map((line, index) => (
                         <div key={`${line.name}-${index}`} className="estimate-card-line">
@@ -6218,17 +6257,17 @@ export function OrderDetailContent({
 
                   <div className="estimate-card-totals">
                     <div className="estimate-card-line">
-                      <span>Subtotal</span>
+                      <span>{t("Subtotal")}</span>
                       <span>{money(currentEstimate.subtotal, hideNumbers)}</span>
                     </div>
                     {showVat ? (
                       <div className="estimate-card-line">
-                        <span>VAT ({effectiveTaxRate}%)</span>
+                        <span>{t("VAT")} ({effectiveTaxRate}%)</span>
                         <span>{money(currentEstimate.taxAmount, hideNumbers)}</span>
                       </div>
                     ) : null}
                     <div className="estimate-card-line is-total">
-                      <span>Total</span>
+                      <span>{t("Total")}</span>
                       <span>{money(currentEstimate.total, hideNumbers)}</span>
                     </div>
                   </div>
@@ -6250,7 +6289,7 @@ export function OrderDetailContent({
                       </div>
                       {approval?.approvedByEmail ? (
                         <div className="estimate-card-line">
-                          <span>Email</span>
+                          <span>{t("Email")}</span>
                           <strong>{approval.approvedByEmail}</strong>
                         </div>
                       ) : null}
@@ -6987,7 +7026,7 @@ export function OrderDetailContent({
               <InlineValueRow
                 label={t("Customer Name")}
                 value={order.customerName}
-                displayValue={normalizeOrderCustomerName(order.customerName)}
+                displayValue={displayOrderTitle(order.customerName, t)}
                 disabled={!canInlineEditFullDetails}
                 saving={savingInlineField === "Customer Name"}
                 onSave={value => saveDetailsPatch({ customerName: normalizeOrderCustomerName(String(value)) }, "Customer Name")}
@@ -9233,7 +9272,7 @@ export function OrderDetailContent({
           </div>
           <div className="order-detail-identity-text">
             {showBackLink ? <Link className="studio-pill" href="/orders">{t("Back to orders")}</Link> : null}
-            <h1>{normalizeOrderCustomerName(order.customerName)}</h1>
+            <h1>{displayOrderTitle(order.customerName, t)}</h1>
             <p>{order.designName}</p>
             <div className="order-detail-facts">
               <span>
@@ -9951,7 +9990,7 @@ function OrderEditModal({
           <div>
             <p className="orders-kicker">{t("Order Management")}</p>
             <h2 id="edit-order-title">{t("Edit Order")}</h2>
-            <p>{normalizeOrderCustomerName(order.customerName)} - {order.designName}</p>
+            <p>{displayOrderTitle(order.customerName, t)} - {order.designName}</p>
           </div>
           <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label={t("Close Edit Order")}>
             x
@@ -10838,7 +10877,7 @@ function LineItemsEditor({
           <input
             className="input"
             style={{ flex: "1 1 130px", minWidth: 110 }}
-            placeholder="Item"
+            placeholder={t("Item")}
             value={it.name}
             disabled={disabled}
             onChange={e => updateRow(index, { name: e.target.value })}
@@ -10885,6 +10924,7 @@ function LineItemsEditor({
       {!disabled ? (
         <button
           type="button"
+          data-line-items-add="true"
           onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), name: "", quantity: 1, unitPrice: 0, lineTotal: 0 }])}
           style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
         >

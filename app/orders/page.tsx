@@ -61,6 +61,7 @@ import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
 import { OrderDetailContent } from "./OrderDetailContent";
 import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
+import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import {
   getFirstProjectGuideState,
   isFirstProjectGuideDeviceEligible,
@@ -776,7 +777,7 @@ export default function OrdersPage() {
     if (requiresOwnerApproval) {
       const confirmed = window.confirm(
         t("Request deletion of \"{name}\"? The order will be deleted only after owner approval.")
-          .replace("{name}", order.customerName.trim() || t("New Project"))
+          .replace("{name}", displayOrderTitle(order.customerName, t))
       );
       if (!confirmed) return;
       setOrderContextMenu(null);
@@ -797,7 +798,7 @@ export default function OrdersPage() {
     }
     const confirmed = window.confirm(
       t("Move \"{name}\" to Trash? You can restore it for 30 days.")
-        .replace("{name}", order.customerName.trim() || t("New Project"))
+        .replace("{name}", displayOrderTitle(order.customerName, t))
     );
     if (!confirmed) return;
 
@@ -1415,7 +1416,7 @@ export default function OrdersPage() {
                       >
                         <span aria-hidden="true" style={{ color: isPrimary ? "#2563eb" : "var(--muted)", fontSize: 16 }}>{isPrimary ? "●" : "○"}</span>
                         <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
-                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{candidate.customerName.trim() || t("New Project")}</strong>
+                          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayOrderTitle(candidate.customerName, t)}</strong>
                           <span className="muted-copy" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(candidate.designName || "").trim() || "—"}</span>
                         </span>
                         {isPrimary ? <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 12 }}>{t("Main")}</span> : null}
