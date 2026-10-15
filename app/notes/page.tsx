@@ -41,10 +41,12 @@ import {
   declineNoteInvite,
   inviteNoteMember,
   removeNoteMember,
+  saveKeepNotePersonalState,
   syncSharedNote,
 } from "@/lib/studioflow/notes";
 import {
   isSharedNote,
+  noteIsReadOnlyForMe,
   noteCollaboratorUids,
   noteMemberIdentity,
   noteMemberLabel,
@@ -157,6 +159,10 @@ export default function NotesPage() {
     if (labelFilter === label) setLabelFilter(null);
   }
   const [loading, setLoading] = useState(true);
+  // View Only (owner decision 15 Oct 2026): someone else's note is read-only for a View Only member.
+  // workspace.role is the effective role (custom role → its base); a role change reloads the page
+  // (AuthProvider access watch), so this always follows the server.
+  const readOnlyNote = (note: Pick<StudioKeepNote, "ownerUserId">) => Boolean(user && workspace && noteIsReadOnlyForMe(note, user.uid, workspace.role));
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -437,6 +443,16 @@ export default function NotesPage() {
             ownerName: user.displayName ?? "",
           }
         : note;
+    if (readOnlyNote(finalized)) {
+      // Pin, archive, trash, labels and order are this person's own; the shared content is not.
+      try {
+        await saveKeepNotePersonalState(workspace.id, user.uid, finalized);
+      } catch (saveError) {
+        if (!options.quiet) alert(`${t("The note could not be saved.")} ${saveError instanceof Error ? saveError.message : ""}`.trim());
+        throw saveError;
+      }
+      return;
+    }
     try {
       await saveKeepNote(workspace.id, user.uid, {
         ...finalized,
@@ -839,11 +855,11 @@ export default function NotesPage() {
             {pinned.length > 0 && (
               <>
                 <SectionHeader title={t("PINNED")} />
-                <NotesGrid notes={pinned} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                <NotesGrid notes={pinned} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
               </>
             )}
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
-            <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+            <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {search.trim()
@@ -905,6 +921,7 @@ export default function NotesPage() {
             onClose={() => { setEditing(null); refreshDrafts(); }}
             onSave={(n, force) => saveFromEditor(n, editing, force)}
             onKeepBoth={saveDraftAsNewNote}
+            readOnly={readOnlyNote(notes.find((n) => n.id === editing.id) ?? editing)}
             members={members}
             onInvite={inviteToNote}
             onRemovePerson={removeFromNote}
@@ -1109,6 +1126,7 @@ function SectionHeader({ title }: { title: string }) {
 
 function NotesGrid({
   notes,
+  isReadOnly,
   onClick,
   onSave,
   onDelete,
@@ -1123,6 +1141,7 @@ function NotesGrid({
   onToggleSelect,
 }: {
   notes: StudioKeepNote[];
+  isReadOnly: (n: StudioKeepNote) => boolean;
   onClick: (n: StudioKeepNote) => void;
   onSave: (n: StudioKeepNote) => void;
   onDelete: (id: string) => void;
@@ -1149,7 +1168,7 @@ function NotesGrid({
       }}
     >
       {notes.map((n) => (
-        <NoteCard key={n.id} note={n} onClick={() => onClick(n)} onSave={onSave} onDelete={onDelete} onOpenImage={onOpenImage} onMove={onMove} canDrag={canDrag} onDuplicate={onDuplicate} onCopy={onCopy} onToggleLabel={onToggleLabel} allLabels={allLabels} isSelected={selectedIds.has(n.id)} selectionActive={selectedIds.size > 0} onToggleSelect={() => onToggleSelect(n.id)} />
+        <NoteCard key={n.id} note={n} readOnly={isReadOnly(n)} onClick={() => onClick(n)} onSave={onSave} onDelete={onDelete} onOpenImage={onOpenImage} onMove={onMove} canDrag={canDrag} onDuplicate={onDuplicate} onCopy={onCopy} onToggleLabel={onToggleLabel} allLabels={allLabels} isSelected={selectedIds.has(n.id)} selectionActive={selectedIds.size > 0} onToggleSelect={() => onToggleSelect(n.id)} />
       ))}
     </div>
   );
@@ -1171,6 +1190,7 @@ function notesSectionHeadingColor(): string {
 
 function NoteCard({
   note,
+  readOnly,
   onClick,
   onSave,
   onDelete,
@@ -1186,6 +1206,8 @@ function NoteCard({
   onToggleSelect,
 }: {
   note: StudioKeepNote;
+  /** View Only member, someone else's note: no colour or reminder changes from the card. */
+  readOnly: boolean;
   onClick: () => void;
   onSave: (n: StudioKeepNote) => void;
   onDelete: (id: string) => void;
@@ -1403,6 +1425,9 @@ function NoteCard({
       {note.visibility === "workspace" && (
         <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{"\u2302"} {t("Workspace")}</div>
       )}
+      {readOnly && (
+        <div data-testid="note-card-read-only" style={{ fontSize: 10, color: "#6b7280", fontWeight: 800 }}>{t("Read only")}</div>
+      )}
       {/* Bottom action row — Mac parity (not rendered at all on phones) */}
       <div
         style={{
@@ -1417,6 +1442,7 @@ function NoteCard({
         }}
       >
         {/* Color */}
+        {!readOnly && (
         <div style={{ position: "relative" }}>
           <IconBtn title={t("Color")} onClick={(e) => { e.stopPropagation(); setColorOpen((v) => !v); setReminderOpen(false); setMenuOpen(false); }}>
             <Icon name="palette" />
@@ -1434,7 +1460,9 @@ function NoteCard({
             </div>
           )}
         </div>
+        )}
         {/* Reminder */}
+        {!readOnly && (
         <div style={{ position: "relative" }}>
           <IconBtn title={t("Reminder")} onClick={(e) => { e.stopPropagation(); setReminderOpen((v) => !v); setColorOpen(false); setMenuOpen(false); }}>
             <Icon name="bell" />
@@ -1461,6 +1489,7 @@ function NoteCard({
             </div>
           )}
         </div>
+        )}
         {/* Collaborators */}
         <IconBtn title={t("Collaborators")} onClick={(e) => { e.stopPropagation(); onClick(); }}>
           <Icon name="personPlus" />
@@ -1532,6 +1561,7 @@ function NoteEditor({
   onClose,
   onSave,
   onKeepBoth,
+  readOnly,
   members,
   onInvite,
   onRemovePerson,
@@ -1547,6 +1577,12 @@ function NoteEditor({
   onSave: (n: StudioKeepNote, force: boolean) => Promise<"saved" | "pending">;
   /** Conflict → "Keep both": this device's version becomes a separate new note. */
   onKeepBoth: (n: StudioKeepNote) => Promise<void>;
+  /**
+   * View Only member, someone else's note (owner decision 15 Oct 2026): shown, never changed. A draft this
+   * device holds is kept and shown, never sent; "Discard draft" drops it. Back to an editing role (the page
+   * reloads on any access change), the same draft is editable and saveable again.
+   */
+  readOnly: boolean;
   /** The workspace's people (notes sharing contract): the picker offers these, by uid. */
   members: NoteWorkspaceMember[];
   onInvite: (noteId: string, member: NoteWorkspaceMember) => Promise<void>;
@@ -1621,13 +1657,20 @@ function NoteEditor({
   }
   const draft = buildDraft();
   const dirty = isNew ? (!isNoteEmpty(draft) || draft.links.length > 0) : noteDraftIsDirty(draft, note);
+  // Read-only: a draft this device still holds for the note is shown (never sent) until "Discard draft";
+  // without one, the editor shows the shared version as it is now (the owner's edits arrive live).
+  const storedForReadOnly = readOnly ? readNoteDraft(workspaceId, userId, note.id) : null;
+  const keptDraft = Boolean(readOnly && storedForReadOnly && noteDraftIsDirty(storedForReadOnly.note, liveNote ?? note));
+  const shownTitle = readOnly && !keptDraft ? (liveNote ?? note).title : title;
+  const shownText = readOnly && !keptDraft ? (liveNote ?? note).text : text;
+  const shownLinks = readOnly && !keptDraft ? (liveNote ?? note).links : links;
 
   // Mirror every change to the device (memory + localStorage) while editing.
   // Untouched again → the mirror goes; a never-saved note keeps its draft for
   // as long as it has any content.
   const draftSignature = JSON.stringify([title, text, colorName, labels, reminderMillis, noteType, linkedOrderId, customerName, visibility, links]);
   useEffect(() => {
-    if (saving) return;
+    if (saving || readOnly) return;
     // Untrimmed title/text: the draft restores exactly what was typed.
     if (dirty) writeNoteDraft(workspaceId, userId, { ...draft, title, text }, baseUpdatedAtRef.current);
     else clearNoteDraft(workspaceId, userId, note.id);
@@ -1636,12 +1679,24 @@ function NoteEditor({
 
   // Closing the tab with unsaved typing: the draft is already on disk, but a
   // browser prompt still costs nothing and catches the accidental close.
+  // An access change (the owner made this person View Only, or back) reloads the page from AuthProvider:
+  // the draft is already on disk, so that reload must not stop on a "Leave site?" prompt over a hidden page.
+  const accessReloadRef = useRef(false);
   useEffect(() => {
-    if (!dirty || saving) return;
-    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const onAccessReload = () => { accessReloadRef.current = true; };
+    window.addEventListener("studio-access-reload", onAccessReload);
+    return () => window.removeEventListener("studio-access-reload", onAccessReload);
+  }, []);
+  useEffect(() => {
+    if (!dirty || saving || readOnly) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      if (accessReloadRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
-  }, [dirty, saving]);
+  }, [dirty, saving, readOnly]);
 
   // Leaving the editor mid-upload aborts it, so no object lands after Cancel.
   useEffect(() => () => { uploadCancelRef.current?.(); }, []);
@@ -1649,7 +1704,7 @@ function NoteEditor({
   // Escape is Cancel wherever focus is (asks first when something was typed,
   // deletes this editor's uploads); the backdrop click still saves.
   const escapeRef = useRef<() => void>(() => {});
-  escapeRef.current = () => { if (!saving) discardAndClose(); };
+  escapeRef.current = () => { if (readOnly) onClose(); else if (!saving) discardAndClose(); };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") escapeRef.current(); };
     window.addEventListener("keydown", onKey);
@@ -1682,6 +1737,7 @@ function NoteEditor({
   }
 
   async function submit(force = false) {
+    if (readOnly) { onClose(); return; }
     if (saving || upload) return;
     if (!dirty) { closeKeepingDraftIfNew(); return; }
     if (!force && staleDraft && liveNote) { setConflict(liveNote); return; }
@@ -1810,13 +1866,25 @@ function NoteEditor({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 14px" }}>
           <h2 id="note-editor-title" style={{ margin: 0, fontWeight: 800, flex: 1 }}>
-            {isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
+            {readOnly ? t("Note") : isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
           </h2>
-          <span aria-live="polite" style={{ fontSize: 11, fontWeight: 700, color: saving ? "#2D7BF4" : "#92400e", background: saving ? "rgba(45,123,244,0.08)" : (dirty ? "#fef3c7" : "transparent"), padding: "2px 8px", borderRadius: 999, visibility: saving || dirty ? "visible" : "hidden" }}>
+          <span aria-live="polite" style={{ fontSize: 11, fontWeight: 700, color: saving ? "#2D7BF4" : "#92400e", background: saving ? "rgba(45,123,244,0.08)" : (dirty ? "#fef3c7" : "transparent"), padding: "2px 8px", borderRadius: 999, visibility: !readOnly && (saving || dirty) ? "visible" : "hidden" }}>
             {saving ? t("Saving...") : t("Unsaved changes")}
           </span>
         </div>
-        {restoredHint && (
+        {readOnly && (
+          <div data-testid="note-read-only" role="status" style={{ background: "rgba(45,123,244,0.06)", border: "1px solid rgba(45,123,244,0.25)", borderRadius: 10, padding: "8px 10px", marginBottom: 10, fontSize: 12, color: "var(--text)" }}>
+            <div style={{ fontWeight: 800 }}>{t("Read only")}</div>
+            <div style={{ marginTop: 2 }}>{t("Your role in this workspace is View Only. You can read this note but not change it.")}</div>
+            {keptDraft && (
+              <div data-testid="note-read-only-draft" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px" }}>
+                <span style={{ flex: 1 }}>{t("Your unsaved changes are kept on this device but cannot be sent.")}</span>
+                <button type="button" onClick={discardDraft} style={{ border: "1px solid #fde68a", background: "var(--surface)", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#92400e" }}>{t("Discard draft")}</button>
+              </div>
+            )}
+          </div>
+        )}
+        {restoredHint && !readOnly && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px", marginBottom: 10, fontSize: 12, color: "#92400e" }}>
             <span style={{ flex: 1 }}>{t("An unsaved draft of this note was restored.")}</span>
             <button type="button" onClick={discardDraft} style={{ border: "1px solid #fde68a", background: "var(--surface)", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: "#92400e" }}>{t("Discard draft")}</button>
@@ -1824,16 +1892,20 @@ function NoteEditor({
         )}
         <input
           type="text"
-          value={title}
+          value={shownTitle}
           disabled={saving}
-          onChange={(e) => setTitle(e.target.value)}
+          readOnly={readOnly}
+          aria-readonly={readOnly || undefined}
+          onChange={(e) => { if (!readOnly) setTitle(e.target.value); }}
           placeholder={t("Title")}
           style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 10 }}
         />
         <textarea
-          value={text}
+          value={shownText}
           disabled={saving}
-          onChange={(e) => setText(e.target.value)}
+          readOnly={readOnly}
+          aria-readonly={readOnly || undefined}
+          onChange={(e) => { if (!readOnly) setText(e.target.value); }}
           placeholder={t("Note")}
           rows={6}
           style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
@@ -1934,6 +2006,7 @@ function NoteEditor({
           </>
         )}
 
+        {!readOnly && (<>
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Color").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {NOTE_COLORS.map((c) => (
@@ -1983,9 +2056,16 @@ function NoteEditor({
             </button>
           )}
         </div>
+        </>)}
+        {readOnly && (liveNote ?? note).reminderDateMillis != null && (
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 14 }}>{t("Reminder")}: {new Date((liveNote ?? note).reminderDateMillis as number).toLocaleDateString()}</div>
+        )}
 
+        {(!readOnly || shownLinks.length > 0) && (
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Image").toLocaleUpperCase(studioLocaleTag(language))}</div>
+        )}
         <div style={{ marginBottom: 14 }}>
+          {!readOnly && (
           <label
             style={{
               display: "inline-block",
@@ -2012,20 +2092,21 @@ function NoteEditor({
               }}
             />
           </label>
+          )}
           {upload && (
             <span role="status" aria-live="polite" style={{ marginInlineStart: 10, fontSize: 12, color: "#2D7BF4", fontWeight: 700 }}>
               {t("Uploading image…")} {upload.percent}%
             </span>
           )}
-          {!upload && links.length > 0 && (
+          {!upload && !readOnly && links.length > 0 && (
             <span style={{ marginInlineStart: 10, fontSize: 11, color: "#6b7280" }}>
               {links.length} {t("attachment(s)")}
             </span>
           )}
           {uploadError && <div role="alert" style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{uploadError}</div>}
-          {links.length > 0 && (
+          {shownLinks.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              {links.map((url) => (
+              {shownLinks.map((url) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img key={url} src={url} alt={t("Note image")} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
               ))}
@@ -2033,6 +2114,7 @@ function NoteEditor({
           )}
         </div>
 
+        {!readOnly && (<>
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Labels").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input
@@ -2062,6 +2144,7 @@ function NoteEditor({
             ))}
           </div>
         )}
+        </>)}
 
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Collaborators").toLocaleUpperCase(studioLocaleTag(language))}</div>
         {(() => {
@@ -2165,6 +2248,13 @@ function NoteEditor({
             </div>
           </div>
         )}
+        {readOnly ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" data-testid="note-read-only-close" onClick={onClose} style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: "pointer" }}>
+            {t("Close")}
+          </button>
+        </div>
+        ) : (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button type="button" disabled={saving} onClick={discardAndClose} style={{ padding: "8px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }}>
             {t("Cancel")}
@@ -2178,6 +2268,7 @@ function NoteEditor({
             {saving ? t("Saving...") : t("Save")}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

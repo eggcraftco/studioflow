@@ -7,13 +7,14 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes, uploadBytesResumable } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { keepNoteDocumentFields, keepNoteFromDoc, type StudioKeepNote } from "./noteDocument";
-import { noteInvitesFromResponse, noteMembersFromCompany, type NoteInvite, type NoteWorkspaceMember } from "./noteSharing";
+import { noteInvitesFromResponse, noteMembersFromCompany, personalNoteFields, type NoteInvite, type NoteWorkspaceMember } from "./noteSharing";
 
 // The type and the document converters live in noteDocument.ts (pure, no
 // Firebase client) so the round-trip test can import them from Node.
@@ -77,6 +78,22 @@ export async function saveKeepNote(
       : serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+}
+
+/**
+ * A read-only copy (View Only, someone else's note): only this person's own fields — pin, archive, trash,
+ * labels, order. updateDoc, not set(merge): a copy that is gone (taken off the note) is not re-created.
+ */
+export async function saveKeepNotePersonalState(
+  companyId: string,
+  userId: string,
+  note: StudioKeepNote
+): Promise<void> {
+  if (!companyId || !userId || !note.id) return;
+  await updateDoc(doc(notesCollection(companyId, userId), note.id), {
+    ...personalNoteFields(note),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function uploadKeepNoteImage(

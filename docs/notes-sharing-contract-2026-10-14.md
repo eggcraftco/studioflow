@@ -99,8 +99,8 @@ All paths below are under `companies/{companyId}/`.
 | Invite everyone | The owner, by setting visibility to "Workspace members" and saving. The client invites each member who is not already in and not pending. | same, once per person |
 | See pending invitations | The invited person, on any app | `listPersonalNoteCollaborationInvites(companyId)` |
 | Accept / decline | The invited person: `targetUserId == auth.uid`, never matched by e-mail | `accept…` / `decline…PersonalNoteCollaborationInvite(companyId, inviteId)` |
-| Send an edit to the others | The owner or an accepted collaborator | `syncSharedPersonalNoteContent(companyId, noteId, note)` |
-| Editing presence | Same as editing | `setSharedPersonalNoteEditingPresence` |
+| Send an edit to the others | The owner, or an accepted collaborator whose workspace role is not View Only (see View Only below) | `syncSharedPersonalNoteContent(companyId, noteId, note)` |
+| Editing presence | Same as editing (`isEditing: false` is allowed to anyone on the note, but only clears their own presence when they may not edit) | `setSharedPersonalNoteEditingPresence` |
 | Revoke (accepted or pending) | The owner | `removeSharedPersonalNoteFromWorkspaceMember(companyId, noteId, targetUserId)` |
 | Leave | The collaborator, passing their own uid | same callable |
 | Remove a leftover e-mail | The owner, passing `targetUserId: ""` and `targetEmail` | same callable |
@@ -142,6 +142,34 @@ All paths below are under `companies/{companyId}/`.
 - Adds the uid and the e-mail to the source.
 - Clears the pending entries, including a blank e-mail left by the old web code.
 - Writes the new list to every other existing copy.
+
+## View Only (owner decision, 15 Oct 2026)
+
+A member whose workspace role is **View Only** (stored `viewer`; a custom role counts by its base role) **reads** a
+note shared with them and never changes it. Being picked as a collaborator ("editor") does not override the role. The
+note's owner always edits their own note (a View Only member's own notes included). Owner, admin, member and workflow
+collaborators edit as before.
+
+- **Server.** `personalNoteSharing.sharedNoteWriteDecision` → `not_collaborator` / `notes_off` / `view_only` / `allow`.
+  - `syncSharedPersonalNoteContent`: `view_only` and `notes_off` are refused (`permission-denied`, `details.reason`).
+  - `setSharedPersonalNoteEditingPresence`: `isEditing: true` refused the same way; `isEditing: false` allowed, but a
+    caller who may not edit clears only their own presence (a role change can leave one behind).
+  - `acceptPersonalNoteCollaborationInvite`: works (they may read); the result carries `readOnly`.
+- **Rules.** On someone else's note in their own collection, a View Only member cannot change `title`, `text`,
+  `colorName`, `links` or `reminderDate` (the reminder compares by the millisecond). Pin, archive, trash, labels and
+  order stay theirs.
+- **Clients** (one predicate per side, its test imports it: web `noteIsReadOnlyForMe`, Android
+  `NoteViewOnly.readOnlySharedNote`, Apple `EGGcraft/NoteViewOnly.swift`):
+  - the editor is read-only, with a "Read only" banner and the reason; Close never saves; without a local draft it
+    shows the shared version live;
+  - no sync, no editing presence;
+  - pin / archive / trash / labels / order write only those fields (`update`, so a copy that is gone is not re-created);
+  - **draft: kept, shown, never sent.** A draft this device holds for the note stays on the device and is shown under
+    "Your unsaved changes are kept on this device but cannot be sent." with "Discard draft". When the role changes
+    back, the same draft is editable and saveable again.
+- **Role change while Notes is open.** Web: the access watch reloads the page (the open editor's draft is already on
+  disk, and the reload is no longer stopped by the "Leave site?" prompt). Android and Apple: the open editor flips to
+  or from read-only in place, the typed text stays.
 
 ## How a member sees a shared note
 
