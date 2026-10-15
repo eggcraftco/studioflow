@@ -63,8 +63,11 @@ their day, and (b) they read the `workflowOrders` view, which must carry the new
 
 | Lineage (live archive, read 14 Oct) | Functions | Change |
 |---|---|---|
-| A — `updateWebOrder` 00133 (archive = `nivadesk-deploy-2026-10-08/assigned/B`, index.js sha1 087106f1…) | `updateWebOrder` | `workDays.js` (new, pure) + 46-line index.js patch (`workDay` patch, gates, view list) |
-| B — `syncWorkflowSafeOrderView` 00020 / `ensureWorkflowAssignedOrderViews` 00020 (archive = `wfview/r2`, sha1 07f87abd…) | both | `"workDays"` added to `WORKFLOW_ORDER_VIEW_FIELDS` (1 line) |
+| A — `updateWebOrder` 00134-nos (live archive read 15 Oct = `workflow-view-leak/W1`, index.js sha1 b1edf6c3…, carries `workflowViewLeak.js`) | `updateWebOrder` | `workDays.js` (new, pure) + index.js +43/−3 (`workDay` patch, gates, view list) |
+| B — `syncWorkflowSafeOrderView` 00021-hiz / `ensureWorkflowAssignedOrderViews` 00021-nin (live archive = `workflow-view-leak/W2`, sha1 e95b05e3…) | both | `"workDays"` added to `WORKFLOW_ORDER_VIEW_FIELDS_BEFORE_LEAK_FIX` (+1/−1); the leak fix's hidden-field filter and scrub still apply after it |
+
+The first A/B trees (14 Oct, built on 00133/00020) predate the workflow view leak fix and are kept only as
+`SUPERSEDED-*-pre-leak-DO-NOT-DEPLOY`: deploying them would reopen the leak.
 
 Deploy trees: `~/Developer/nivadesk-deploy-2026-10-14/working-day/A` and `/B` (live archive + this change only,
 live-era firebase.json and dotfiles). **Order:** A and B first, then web, then native. Old clients ignore the
