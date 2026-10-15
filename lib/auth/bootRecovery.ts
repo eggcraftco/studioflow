@@ -8,6 +8,33 @@ import { bootMark } from "@/lib/studioflow/bootTrace";
 /** How long a loading screen waits before it offers Retry and Sign in again. */
 export const BOOT_STALL_MS = 12_000;
 
+/** How long a loading screen waits before it restarts the Firestore connection, once. */
+export const STREAM_RESTART_MS = 6_000;
+const STREAM_RESTART_GAP_MS = 20_000;
+let lastStreamRestart = 0;
+
+/**
+ * Restart Firestore's streams without reloading the page, keeping every pending read waiting for the server.
+ *
+ * Measured on the isolated stack (15 Oct 2026): after a 4 s connection drop the read stream's backchannel never came
+ * back — the client went on sending requests, nothing was answered, and every screen that read after it stayed on
+ * "Loading your workspace…" (60 s and more) until a refresh, which opens a new stream. Firestore restarts its streams
+ * when the browser reports the network back (it listens to window "online") and, unlike disableNetwork(), keeps the
+ * pending reads waiting for the server instead of answering them from this browser's copy. So this sends that same
+ * signal. The app's own "online" handlers only re-read navigator.onLine, which is true whenever this runs.
+ * At most once per STREAM_RESTART_GAP_MS; never while the browser itself says it is offline.
+ */
+export function restartFirestoreStreams(reason: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return false;
+  const now = Date.now();
+  if (now - lastStreamRestart < STREAM_RESTART_GAP_MS) return false;
+  lastStreamRestart = now;
+  bootMark("fs:restart", reason);
+  window.dispatchEvent(new Event("online"));
+  return true;
+}
+
 /** Settles when the promise does, or after ms — whichever is first. Never rejects. */
 function settleWithin<T>(promise: Promise<T>, ms: number): Promise<void> {
   return Promise.race([

@@ -3,23 +3,30 @@
 import { useContext, useEffect, useState } from "react";
 import { AppShellMountedContext } from "@/components/AppShellMounted";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { BOOT_STALL_MS, retryBoot, signInAgain } from "@/lib/auth/bootRecovery";
+import { BOOT_STALL_MS, STREAM_RESTART_MS, restartFirestoreStreams, retryBoot, signInAgain } from "@/lib/auth/bootRecovery";
 import { studioT } from "@/lib/studioflow/language";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 
 /**
  * Login/loading hang (15 Oct 2026): every wait in the app — the session, the workspace, a screen's own data —
- * shows this component, so this is where a wait is not allowed to last for ever. After BOOT_STALL_MS it keeps
- * loading but offers Retry (a fresh load, what a manual refresh did) and Sign in again.
+ * shows this component, so this is where a wait is not allowed to last for ever. After STREAM_RESTART_MS it
+ * reopens the Firestore connection once; after BOOT_STALL_MS it keeps loading but offers Retry (a fresh load, what
+ * a manual refresh did) and Sign in again.
  */
 function useStalled() {
   const [stalled, setStalled] = useState(false);
   useEffect(() => {
+    // First a quiet restart of the Firestore connection (a stream that went silent after a network drop answers
+    // nothing until it is reopened), then — if the wait still goes on — the choice is the person's.
+    const restart = window.setTimeout(() => restartFirestoreStreams(window.location.pathname), STREAM_RESTART_MS);
     const timer = window.setTimeout(() => {
       bootMark("page:stall-shown");
       setStalled(true);
     }, BOOT_STALL_MS);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(restart);
+      window.clearTimeout(timer);
+    };
   }, []);
   return stalled;
 }
