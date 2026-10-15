@@ -52,7 +52,8 @@
     "test:team-schedule-key": "node scripts/check-team-schedule-key.mjs",
     "test:access-watch": "node scripts/check-access-watch.mjs",
     "test:workspace-lists-warm": "node scripts/check-workspace-lists-warm.mjs",
-    "test:work-days": "node scripts/check-work-days.mjs"
+    "test:work-days": "node scripts/check-work-days.mjs",
+    "test:admin-insights": "node scripts/check-admin-insights-metrics.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
