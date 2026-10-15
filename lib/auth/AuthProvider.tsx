@@ -7,6 +7,7 @@ import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "fi
 import { auth, db } from "@/lib/firebase/client";
 import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
 import { accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
+import { bootMark } from "@/lib/studioflow/bootTrace";
 
 const ACCESS_RELOADS_KEY = "nv_access_reloads";
 
@@ -234,6 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           doc(db, "companies", companyId),
           { includeMetadataChanges: true },
           companySnap => {
+            if (accessBaseline === null) bootMark("ws:access-watch", companySnap.metadata.fromCache ? "cache" : "server");
             const step = accessWatchStep(accessBaseline, {
               kind: "snapshot",
               fromCache: companySnap.metadata.fromCache,
@@ -278,8 +280,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let authRun = 0;
+    bootMark("auth:wait");
     const unsubscribe = onAuthStateChanged(auth, currentUser => {
       const run = ++authRun;
+      bootMark("auth:state", currentUser ? "user" : "none");
       if (!currentUser) {
         setUser(null);
         setLoading(false);
@@ -299,6 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (alreadyReady) {
+        bootMark("auth:ready", "device-known");
         setUser(currentUser);
         setLoading(false);
         void ensurePersonalWorkspace(currentUser).catch(error => {
@@ -308,6 +313,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setLoading(true);
+      bootMark("auth:bootstrap-start");
       ensurePersonalWorkspace(currentUser)
         .then(() => {
           try {
@@ -320,7 +326,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn("Could not ensure NivaDesk workspace for signed-in user.", error);
         })
         .finally(() => {
+          bootMark("auth:bootstrap-end");
           if (!cancelled && run === authRun) {
+            bootMark("auth:ready", "first-on-device");
             setUser(currentUser);
             setLoading(false);
           }

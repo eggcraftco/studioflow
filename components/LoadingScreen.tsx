@@ -1,9 +1,10 @@
 "use client";
 
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { AppShellMountedContext } from "@/components/AppShellMounted";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { bootMark } from "@/lib/studioflow/bootTrace";
 
 export function LoadingScreen() {
   // Inside the app shell this is a page loading its own data after a sidebar
@@ -13,6 +14,11 @@ export function LoadingScreen() {
   const insideShell = useContext(AppShellMountedContext);
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  useEffect(() => {
+    const kind = insideShell ? "in-shell" : "full-screen";
+    bootMark("page:wait-start", kind);
+    return () => bootMark("page:wait-end", kind);
+  }, [insideShell]);
   if (insideShell) {
     return (
       <div className="app-content-loading" role="status" aria-live="polite" aria-busy="true">
