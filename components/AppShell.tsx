@@ -28,6 +28,7 @@ import { auth, db, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
   loadCustomerPickerOptions,
+  keepWorkspaceListsListening,
   loadDashboardFinanceOrders,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
@@ -1472,6 +1473,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [user, workspaceLoadAttempt]);
+
+  // Navigation delay (14 Oct 2026): the order and customer lists stay listening while this shell is on screen, so
+  // a screen's own getDocs of the same list joins a current target instead of downloading it again on every menu
+  // click (see keepWorkspaceListsListening). Keyed on what decides the queries, not on the workspace object.
+  const workspaceListsUid = user?.uid ?? "";
+  const workspaceListsKey = workspace
+    ? [workspace.id, workspace.role, workspaceAccessAllows(workspace.memberAccess, "orders"), workspaceAccessAllows(workspace.memberAccess, "customers"), workspace.memberAccess?.assignedProjectsOnly === true, workspace.memberAccess?.manageProjectAssignments === true].join("|")
+    : "";
+  const workspaceForLists = useRef<WorkspaceContext | null>(null);
+  workspaceForLists.current = workspace;
+  useEffect(() => {
+    if (!workspaceListsKey || !workspaceListsUid) return;
+    return keepWorkspaceListsListening(workspaceForLists.current, workspaceListsUid);
+  }, [workspaceListsKey, workspaceListsUid]);
 
   useEffect(() => {
     try {

@@ -20,6 +20,11 @@ export type StudioKeepNote = {
   ownerName: string;
   sharedWith: string[];
   collaboratorEmails: string[];
+  // Notes sharing contract (docs/notes-sharing-contract-2026-10-14.md): who
+  // a note is shared with is the uid list, written only by the server
+  // callables. The two email lists above are kept for the store apps.
+  collaboratorUserIds: string[];
+  pendingCollaboratorUserIds: string[];
   activeEditorUserId: string;
   activeEditorEmail: string;
   activeEditorUpdatedAtMillis: number | null;
@@ -60,6 +65,10 @@ export function tsToMillis(value: unknown): number | null {
   return null;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim() !== "") : [];
+}
+
 export function keepNoteFromDoc(id: string, data: Record<string, unknown>): StudioKeepNote {
   return {
     id,
@@ -73,6 +82,8 @@ export function keepNoteFromDoc(id: string, data: Record<string, unknown>): Stud
     collaboratorEmails: Array.isArray(data.collaboratorEmails)
       ? (data.collaboratorEmails as string[])
       : [],
+    collaboratorUserIds: stringList(data.collaboratorUserIds),
+    pendingCollaboratorUserIds: stringList(data.pendingCollaboratorUserIds),
     activeEditorUserId: (data.activeEditorUserId as string) || "",
     activeEditorEmail: (data.activeEditorEmail as string) || "",
     activeEditorUpdatedAtMillis: tsToMillis(data.activeEditorUpdatedAt),
@@ -94,7 +105,7 @@ export function keepNoteFromDoc(id: string, data: Record<string, unknown>): Stud
 }
 
 /**
- * Every field saveKeepNote writes except createdAt/updatedAt (those are
+ * Every field saveKeepNote writes (with merge) except createdAt/updatedAt (those are
  * server timestamps and added by the caller). The text and title are written
  * exactly as given — no trimming, no normalisation, no sanitising — so the
  * only place a note's content can change is the editor's own Save.
@@ -107,8 +118,9 @@ export function keepNoteDocumentFields(note: StudioKeepNote): Record<string, unk
     ownerUserId: note.ownerUserId,
     ownerEmail: note.ownerEmail,
     ownerName: note.ownerName,
-    sharedWith: note.sharedWith,
-    collaboratorEmails: note.collaboratorEmails,
+    // sharedWith, collaboratorEmails, collaboratorUserIds and the pending
+    // lists are not written here: the sharing callables own them, and the
+    // save merges, so a copy loaded before someone accepted cannot drop them.
     activeEditorUserId: note.activeEditorUserId,
     activeEditorEmail: note.activeEditorEmail,
     activeEditorUpdatedAt: note.activeEditorUpdatedAtMillis

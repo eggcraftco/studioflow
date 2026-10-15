@@ -37,7 +37,7 @@
     "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
     "test:count-labels": "npx tsx scripts/check-count-labels.ts",
     "test:i18n-gaps": "npx tsx scripts/i18n-gap-report.ts --fail-on-placeholders",
-    "test:notes": "node scripts/check-notes-editor.mjs && npx tsx scripts/check-notes-roundtrip.ts",
+    "test:notes": "node scripts/check-notes-editor.mjs && npx tsx scripts/check-notes-roundtrip.ts && npx tsx scripts/check-notes-sharing.ts",
     "test:pdf-export-preview": "node scripts/check-pdf-export-preview.mjs",
     "test:export-date-range": "node scripts/check-export-date-range.mjs",
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
@@ -50,7 +50,9 @@
     "test:messaging-access": "node scripts/check-messaging-access.mjs",
     "test:message-uploader-uid": "node scripts/check-message-uploader-uid.mjs",
     "test:team-schedule-key": "node scripts/check-team-schedule-key.mjs",
-    "test:access-watch": "node scripts/check-access-watch.mjs"
+    "test:access-watch": "node scripts/check-access-watch.mjs",
+    "test:workspace-lists-warm": "node scripts/check-workspace-lists-warm.mjs",
+    "test:work-days": "node scripts/check-work-days.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

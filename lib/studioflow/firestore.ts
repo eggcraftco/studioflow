@@ -27,6 +27,7 @@ import {
   type WorkspaceStoredRead,
 } from "@/lib/studioflow/workspaceResolution";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
+import { mapWorkDays, type WorkDayDetail } from "@/lib/studioflow/workDays";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -681,6 +682,8 @@ export type OrderDetail = {
   clientFiles: ClientFileDetail[];
   todoItems: ToDoDetail[];
   workSessions: WorkSessionDetail[];
+  /** Full/half day entries beside the timer (lib/studioflow/workDays.ts). */
+  workDays?: WorkDayDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
@@ -1414,6 +1417,58 @@ function financeBlockValue(raw: unknown): FinanceBlock | null {
   if (Number(block.engineVersion) !== FINANCE_ENGINE_VERSION) return null;
   if (typeof block.revenue !== "number" || typeof block.netProfit !== "number") return null;
   return block as FinanceBlock;
+}
+
+/**
+ * The workspace-wide lists a screen would open with getDocs, as the loaders build them. Nothing for a member whose
+ * orders are the ones assigned to them (their screens read a different query), and only the areas their access opens.
+ */
+export function workspaceListQueries(workspace: WorkspaceContext | null | undefined, uid: string) {
+  const companyId = workspace?.id?.trim() ?? "";
+  if (!companyId || !uid.trim() || usesAssignedOrderScope(workspace, uid) || isWorkflowAssignedView(workspace)) return [];
+  const lists = [];
+  if (workspaceAccessAllows(workspace?.memberAccess, "orders")) {
+    lists.push(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+  }
+  if (workspaceAccessAllows(workspace?.memberAccess, "customers")) {
+    lists.push(query(collection(db, "musteriler"), where("companyId", "==", companyId)));
+  }
+  return lists;
+}
+
+/**
+ * Navigation delay (owner report, 14 Oct 2026): keeps the workspace-wide order and customer lists listening while
+ * the app shell is on screen.
+ *
+ * Most screens read all of this workspace's orders (Customers and the customer pickers all of its customers) on
+ * mount with getDocs, which waits for the server. With nothing listening, every menu click started the query again on the
+ * one watch stream: a full download whenever the browser held no current copy — a private window right after
+ * sign-in, or a copy too old to resume — queued behind whatever the previous screen and the shell had asked for. The
+ * screen sat on "Loading your workspace…" for the whole transfer; after a reload the stored copy (and its resume
+ * point) made the same reads short, which is why a reload "fixed" it. Kept open, the same query is already current when a screen asks, so its getDocs joins the live
+ * target and answers without a round trip, and the list is downloaded once per sign-in instead of once per screen.
+ *
+ * Not the 1000-order sample of the counts (Insights, Settings, Plan): a limit is a query of its own, and keeping it too
+ * would add a second whole-list transfer to every sign-in, in front of the list the first screen is waiting for
+ * (measured: the first Orders open after sign-in went from one transfer to two).
+ *
+ * Reads nothing a screen of this member does not already read (the queries are the loaders' own, so Firestore
+ * shares one target). A refused listen simply ends; a changed access reloads the page (accessWatch), which ends
+ * these listeners with it.
+ */
+export function keepWorkspaceListsListening(workspace: WorkspaceContext | null | undefined, uid: string): () => void {
+  const stops = workspaceListQueries(workspace, uid).map(listQuery => {
+    let stop: (() => void) | null = null;
+    stop = onSnapshot(listQuery, () => undefined, () => {
+      if (stop) stop();
+      stop = null;
+    });
+    return () => {
+      if (stop) stop();
+      stop = null;
+    };
+  });
+  return () => stops.forEach(stop => stop());
 }
 
 export async function loadDashboardFinanceOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardFinanceOrder[]> {
@@ -2489,6 +2544,7 @@ function mapOrderDetailSnapshot(
     }),
     todoItems: mapTodoItems(data.todoItems),
     workSessions: mapWorkSessions(data.workSessions),
+    workDays: mapWorkDays(data.workDays),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),

@@ -11771,6 +11771,147 @@ body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-c
   font-weight: 800;
 }
 
+/* Day entries (full / half day) beside the timer — lib/studioflow/workDays.ts. */
+.app-work-total .app-work-days-total {
+  color: #125fd7;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.app-work-total .app-work-days-total b {
+  font-weight: 900;
+}
+
+.app-work-day-entry {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border-radius: 14px;
+  background: #f1f1f2;
+}
+
+.app-work-day-entry > strong {
+  color: #6b6f76;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.app-work-day-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.app-work-day-row input {
+  flex: 1 1 120px;
+  min-width: 0;
+  border: 1px solid rgba(23, 25, 35, 0.08);
+  border-radius: 11px;
+  background: #fff;
+  padding: 7px 9px;
+  color: #24262d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.app-work-day-row > button,
+.app-work-day-kinds button {
+  border: 0;
+  border-radius: 11px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.app-work-day-row > button {
+  background: #1285ff;
+  color: #fff;
+}
+
+.app-work-day-kinds {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(23, 25, 35, 0.06);
+}
+
+.app-work-day-kinds button {
+  background: transparent;
+  color: #4a4e56;
+}
+
+.app-work-day-kinds button.is-selected {
+  background: #fff;
+  color: #125fd7;
+  box-shadow: 0 1px 2px rgba(23, 25, 35, 0.12);
+}
+
+.app-work-day-row button:disabled,
+.app-work-day-row input:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.app-work-day-list {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
+
+.app-work-day-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid rgba(23, 25, 35, 0.08);
+  border-radius: 12px;
+  background: #f7f7f8;
+}
+
+.app-work-day-item div:first-child {
+  flex: 1 1 150px;
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-work-day-item strong {
+  color: #24262d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.app-work-day-item small {
+  overflow: hidden;
+  color: #858990;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-work-day-item > b {
+  color: #1285ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.app-work-day-item .app-work-session-actions button:not(.danger) {
+  width: auto;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
 .compact-list-grid {
   gap: 9px;
 }
@@ -13784,6 +13925,43 @@ body[data-studio-theme="dark"] .app-schedule-item.tone-gray {
 
 body[data-studio-theme="dark"] .app-work-total {
   background: rgba(37, 99, 235, 0.20);
+}
+
+body[data-studio-theme="dark"] .app-work-day-entry {
+  background: #2d2d2d;
+}
+
+body[data-studio-theme="dark"] .app-work-day-entry > strong,
+body[data-studio-theme="dark"] .app-work-day-kinds button {
+  color: #a7a7a7;
+}
+
+body[data-studio-theme="dark"] .app-work-day-row input {
+  background: #303030;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .app-work-day-kinds {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+body[data-studio-theme="dark"] .app-work-day-kinds button.is-selected {
+  background: #3a3a3a;
+  color: #58a6ff;
+}
+
+body[data-studio-theme="dark"] .app-work-day-item {
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+body[data-studio-theme="dark"] .app-work-day-item strong {
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .app-work-total .app-work-days-total {
+  color: #8fc1ff;
 }
 
 body[data-studio-theme="dark"] .app-work-active {
