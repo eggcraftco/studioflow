@@ -1866,7 +1866,7 @@ function NoteEditor({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 14px" }}>
           <h2 id="note-editor-title" style={{ margin: 0, fontWeight: 800, flex: 1 }}>
-            {readOnly ? t("Read only") : isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
+            {readOnly ? t("Note") : isNoteEmpty(note) ? t("New Note") : t("Edit Note")}
           </h2>
           <span aria-live="polite" style={{ fontSize: 11, fontWeight: 700, color: saving ? "#2D7BF4" : "#92400e", background: saving ? "rgba(45,123,244,0.08)" : (dirty ? "#fef3c7" : "transparent"), padding: "2px 8px", borderRadius: 999, visibility: !readOnly && (saving || dirty) ? "visible" : "hidden" }}>
             {saving ? t("Saving...") : t("Unsaved changes")}
