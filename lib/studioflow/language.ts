@@ -4,6 +4,7 @@ import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
+import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9025,6 +9026,9 @@ for (const [source, langs] of Object.entries(NOTES_SHARING_TRANSLATIONS)) {
 // Owner item 6 (9 Oct 2026): the in-use screens' missing and same-as-English cells. Deep merge,
 // placed after every table above so none of them can hide these cells (see screenGapTranslations.ts).
 mergeIntoTranslations(I18N_GAP_TRANSLATIONS as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// Login/loading hang (15 Oct 2026): the Retry / Sign in again panel a loading screen shows after BOOT_STALL_MS.
+mergeIntoTranslations(BOOT_RECOVERY_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

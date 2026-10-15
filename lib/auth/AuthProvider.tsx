@@ -88,6 +88,13 @@ async function ensurePersonalWorkspace(currentUser: User) {
   const [userSnapshot, companySnapshot] = await Promise.all([getDoc(userRef), getDoc(companyRef)]);
   const userData = userSnapshot.exists() ? userSnapshot.data() : {};
 
+  // A write only waits for the server when the screens cannot work without it (15 Oct 2026). A write resolves on
+  // the server's acknowledgement; a first sign-in on a browser — every private window — waited on a profile refresh
+  // of documents that already worked, for as long as the write path was slow and for ever when it was down.
+  const inBackground = (write: Promise<void>) => {
+    void write.catch(error => console.warn("Background workspace profile update failed.", error));
+  };
+
   // Only write when something actually changed — this runs on every app open,
   // so unconditional writes would add latency and Firestore write costs.
   const userNeedsWrite =
@@ -116,7 +123,10 @@ async function ensurePersonalWorkspace(currentUser: User) {
       const isPhone = /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua);
       userPayload.signupPlatform = isPhone ? "mobile" : "desktop";
     }
-    await setDoc(userRef, userPayload, { merge: true });
+    const userWrite = setDoc(userRef, userPayload, { merge: true });
+    // No user document or no workspace pointer yet: the workspace read needs it. Otherwise it is a profile refresh.
+    if (!userSnapshot.exists() || !cleanText(userData.activeCompanyId)) await userWrite;
+    else inBackground(userWrite);
   }
 
   const ownerMember = {
@@ -159,7 +169,8 @@ async function ensurePersonalWorkspace(currentUser: User) {
     if (!cleanText(data.ownerDisplayName)) companyPayload.ownerDisplayName = displayName;
     if (!cleanText(data.ownerPhotoURL)) companyPayload.ownerPhotoURL = photoURL;
     if (!members[uid]) companyPayload.members = { [uid]: ownerMember };
-    await setDoc(companyRef, companyPayload, { merge: true });
+    // The workspace document exists, so its screens can already be read; filling in missing fields can finish later.
+    inBackground(setDoc(companyRef, companyPayload, { merge: true }));
     return;
   }
 
