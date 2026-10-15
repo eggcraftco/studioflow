@@ -1,0 +1,15 @@
+/* /integrations/shopify — what this page adds to the Amazon page's module
+   (amazon.module.css): the channel badge, a dispatched tone, a green "live"
+   status band instead of the amber "under review" one, and anchor offsets so
+   the listing's #faq / #install links do not land under the sticky header.
+   Overrides of amazon.module.css rules use two classes, so they win whatever
+   order the two stylesheets load in. */
+.badgeShopify{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;white-space:nowrap;background:#e7f3e3;color:#2f5f23;border:1px solid #c9e2c0}
+.toneDispatched{background:#ece8f8;color:#4a3d86}
+.statusLive.statusLive{background:#f1f7ef;border-color:#d4e6cf}
+.statusLive .liveEyebrow{color:#4f7349}
+.statusLive .liveBadge{background:#e2f0de;color:#2f5f23}
+.statusLive .liveDot{background:#3f8a3a}
+.statusLive .liveBody{color:#3d5238}
+.anchor{scroll-margin-top:88px}
+.billingFacts.billingFacts{margin-top:24px}
