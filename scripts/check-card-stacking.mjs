@@ -9,8 +9,9 @@
 // 3. The order detail head and the schedule month header sit on
 //    --z-sticky-header; the native top bar on --z-topbar; the colour-labels
 //    modal on --z-modal.
-// 4. The order view closes both card popovers when the pane scrolls, so an
-//    open popover cannot slide over the sticky head.
+// 4. The order view closes the card "..." panel when the pane scrolls, so an
+//    open panel cannot slide over the sticky head. (The card "i" popover was
+//    removed 15 Oct, N13.)
 //
 //   node scripts/check-card-stacking.mjs
 import fs from "fs";
@@ -75,13 +76,12 @@ ok(".order-detail-head is sticky", /\.order-detail-head \{\s*position: sticky;/.
 ok(".schedule-month-header on --z-sticky-header", find(".schedule-month-header")?.raw === "var(--z-sticky-header)");
 ok(".app-toolbar-native on --z-topbar", find(".app-toolbar-native")?.raw === "var(--z-topbar)");
 ok(".block-custom-backdrop.is-modal on --z-modal", find(".block-custom-backdrop.is-modal")?.raw === "var(--z-modal)");
-ok(".order-card-purpose.is-popover on --z-local-popover", find(".order-card-purpose.is-popover")?.raw === "var(--z-local-popover)");
 ok(".order-card-menu-wrap on --z-content-control-raised", find(".order-card-menu-wrap")?.raw === "var(--z-content-control-raised)");
 
-// --- 4. popovers close on scroll
-ok("order view closes popovers on scroll (capture)", /window\.addEventListener\("scroll", onScroll, true\)/.test(tsx)
-  && /setOpenCardInfoId\(null\);\s*setOpenCardMenuId\(null\);/.test(tsx)
-  && /closest\("\.block-custom-panel, \.order-card-purpose"\)/.test(tsx));
+// --- 4. the "..." panel closes on scroll
+ok("order view closes the card panel on scroll (capture)", /window\.addEventListener\("scroll", onScroll, true\)/.test(tsx)
+  && /setOpenCardMenuId\(null\);/.test(tsx)
+  && /closest\("\.block-custom-panel"\)/.test(tsx));
 
 if (failures.length) {
   console.error(`check-card-stacking: ${failures.length} of ${checks} checks failed`);

@@ -5,8 +5,8 @@
 // the real studioT (deep merge, Mac table last), so the width chosen for the
 // sidebar is chosen from the real strings. The order-card "..." menu option
 // descriptions this script once checked were removed the same day (they read
-// as clutter); the card purposes that replaced them are checked by
-// scripts/check-card-purposes.mjs.
+// as clutter); the card purposes that replaced them were removed in turn on
+// 15 Oct (N13) — scripts/check-card-purposes.mjs keeps them gone.
 //
 //   node scripts/check-menu-card-strings.mjs            # pass/fail
 //   node scripts/check-menu-card-strings.mjs --labels   # also print the labels

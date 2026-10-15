@@ -1598,7 +1598,10 @@ export default function SchedulePage() {
                         </div>
                       );
                     })}
-                    <div className="team-detail-row total"><span>{t("Total active work")}</span><strong>{teamTotalActive}</strong></div>
+                    {/* N16 (15 Oct 2026): the total is memberActiveCount summed over the listed
+                        people, so a job nobody holds is not in it — the label says so. The count
+                        itself is unchanged. */}
+                    <div className="team-detail-row total"><span>{t("Assigned active work (unassigned not counted)")}</span><strong>{teamTotalActive}</strong></div>
                   </div>
                 </aside>
               </div>

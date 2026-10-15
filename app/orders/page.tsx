@@ -60,6 +60,7 @@ import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
 import { OrderDetailContent } from "./OrderDetailContent";
+import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
 import {
   getFirstProjectGuideState,
   isFirstProjectGuideDeviceEligible,
@@ -1272,8 +1273,12 @@ export default function OrdersPage() {
                     <span aria-hidden="true">○</span>
                     {t("Unassigned")}
                   </button>
-                  {teamMembers
-                    .filter(member => !member.isOwner)
+                  {projectAssigneeOptions(teamMembers, {
+                    uid: user?.uid ?? "",
+                    isOwner: Boolean(workspace && normalizeWorkspaceRole(workspace.role) === "owner"),
+                    email: user?.email,
+                    displayName: user?.displayName
+                  })
                     .map(member => (
                       <button
                         key={member.id}

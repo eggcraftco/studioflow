@@ -78,7 +78,7 @@ import {
   type OrderDetailCardLayout
 } from "@/lib/studioflow/cardLayouts";
 import { orderActionCardVisible, visibleActionCardsFor } from "@/lib/studioflow/orderActionCards";
-import { ORDER_CARD_PURPOSES, ORDER_CARD_PURPOSE_TOGGLE, orderCardPurposeId } from "@/lib/studioflow/orderCardPurposes";
+import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
 import {
   loadWorkspaceBlockHeadings,
   saveWorkspaceBlockHeadings,
@@ -2224,15 +2224,9 @@ export function OrderDetailContent({
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<OrderDetailCardId | null>(null);
-  // Card header "i": which card's purpose text is open (one at a time). On a
-  // desktop it is a popover anchored to the "i"; on a phone it is printed
-  // inline under the card title. Escape and an outside click close it and
-  // focus goes back to the "i" that opened it.
-  const [openCardInfoId, setOpenCardInfoId] = useState<OrderDetailCardId | null>(null);
-  // ≤768px: the purpose text goes inline under the card title; wider, a popover.
-  // Its own query, not isNarrowLayout (640px), which decides the whole layout.
-  const [cardInfoInline, setCardInfoInline] = useState(false);
-  const cardInfoButtonRefs = useRef<Partial<Record<OrderDetailCardId, HTMLButtonElement | null>>>({});
+  // N13 (15 Oct 2026, owner's decision): the card header "i" and its "What is
+  // this card for?" text (popover on a desktop, blue box under the title on a
+  // phone) are gone. Error, warning and required-action texts are untouched.
   // Workspace colour meanings (defaults overridable via Manage colour labels).
   const [colorMeanings, setColorMeanings] = useState<Record<string, string>>(CARD_COLOR_MEANINGS);
   const [colorLabelsOpen, setColorLabelsOpen] = useState(false);
@@ -2252,52 +2246,21 @@ export function OrderDetailContent({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [openCardMenuId, colorLabelsOpen]);
 
-  // The card purpose text closes on Escape and on a click outside it (the
-  // "i" itself toggles, so it is excluded), and focus returns to that "i".
+  // The card "..." panel is positioned inside the card, so it scrolls with it
+  // and would slide under the sticky order head (globals.css
+  // --z-sticky-header) — nothing may paint over that bar. Instead of clamping,
+  // close it as soon as the pane or page scrolls. A scroll INSIDE the panel
+  // (it has its own scrollbar) is not the pane moving, so it is ignored.
   useEffect(() => {
-    if (!openCardInfoId) return;
-    const cardId = openCardInfoId;
-    const closeAndRefocus = () => {
-      setOpenCardInfoId(null);
-      cardInfoButtonRefs.current[cardId]?.focus();
-    };
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        closeAndRefocus();
-      }
-    }
-    function onPointerDown(event: globalThis.PointerEvent) {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest(`[data-card-info="${cardId}"]`)) return;
-      closeAndRefocus();
-    }
-    window.addEventListener("keydown", onKeyDown, true);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-    };
-  }, [openCardInfoId]);
-
-  // Both card popovers (the purpose text and the "..." panel) are positioned
-  // inside the card, so they scroll with it and would slide under the sticky
-  // order head (globals.css --z-sticky-header) — nothing may paint over that
-  // bar. Instead of clamping, close them as soon as the pane or page scrolls.
-  // A scroll INSIDE the "..." panel (it has its own scrollbar) is not the pane
-  // moving, so it is ignored.
-  useEffect(() => {
-    if (!openCardInfoId && !openCardMenuId) return;
+    if (!openCardMenuId) return;
     function onScroll(event: Event) {
       const target = event.target;
-      if (target instanceof Element && target.closest(".block-custom-panel, .order-card-purpose")) return;
-      setOpenCardInfoId(null);
+      if (target instanceof Element && target.closest(".block-custom-panel")) return;
       setOpenCardMenuId(null);
     }
     window.addEventListener("scroll", onScroll, true);
     return () => window.removeEventListener("scroll", onScroll, true);
-  }, [openCardInfoId, openCardMenuId]);
+  }, [openCardMenuId]);
   const [headingEditorCardId, setHeadingEditorCardId] = useState<OrderDetailCardId | null>(null);
   const [financeStatus, setFinanceStatus] = useState<string | null>(null);
   const [financeError, setFinanceError] = useState<string | null>(null);
@@ -3089,30 +3052,8 @@ export function OrderDetailContent({
   }
 
   function renderCardTitle(cardId: OrderDetailCardId) {
-    const infoOpen = openCardInfoId === cardId;
     return (
-      <>
-        <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? moneySymbol(moneySettings) : undefined} />
-        {/* Phone: the purpose text is printed under the title (the popover
-            below is for a pointer). One element carries the id either way,
-            so the header "i" always has something to describe itself by. */}
-        {cardInfoInline ? renderCardPurpose(cardId, "inline", infoOpen) : null}
-      </>
-    );
-  }
-
-  function renderCardPurpose(cardId: OrderDetailCardId, mode: "inline" | "popover", open: boolean) {
-    return (
-      <div
-        id={orderCardPurposeId(cardId)}
-        className={`order-card-purpose is-${mode}${open ? " is-open" : ""}`}
-        data-card-info={cardId}
-        role={mode === "popover" ? "dialog" : undefined}
-        aria-label={mode === "popover" ? `${cardLabel(cardId)} — ${t(ORDER_CARD_PURPOSE_TOGGLE)}` : undefined}
-        hidden={!open}
-      >
-        <p>{t(ORDER_CARD_PURPOSES[cardId])}</p>
-      </div>
+      <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? moneySymbol(moneySettings) : undefined} />
     );
   }
 
@@ -3168,14 +3109,6 @@ export function OrderDetailContent({
     updateNarrowLayout();
     mediaQuery.addEventListener("change", updateNarrowLayout);
     return () => mediaQuery.removeEventListener("change", updateNarrowLayout);
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 768px)");
-    const update = () => setCardInfoInline(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener("change", update);
-    return () => mediaQuery.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -4696,10 +4629,17 @@ export function OrderDetailContent({
   }
 
   // Assignable members for the order-detail "Assign Project" control. Mirrors the
-  // orders-list menu: workspace team members minus the owner, plus an Unassigned row.
+  // orders-list menu (lib/studioflow/projectAssignees.ts, N16): the team minus
+  // the owner, except that the owner sees their own row first; plus Unassigned.
+  const viewerIsOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const assignableMembers = useMemo(
-    () => teamMembers.filter(member => !member.isOwner),
-    [teamMembers]
+    () => projectAssigneeOptions(teamMembers, {
+      uid: user?.uid ?? "",
+      isOwner: viewerIsOwner,
+      email: user?.email,
+      displayName: user?.displayName
+    }),
+    [teamMembers, user?.uid, user?.email, user?.displayName, viewerIsOwner]
   );
 
   const currentAssignee = useMemo(() => {
@@ -5697,35 +5637,12 @@ export function OrderDetailContent({
         : "Card layout is loading.";
     const sizeKey = activeCardSizeKey(cardId);
     const activeColor = cardProfileColor(cardLayout, cardId);
-    const infoOpen = openCardInfoId === cardId;
     const pdfIcon = (
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
     );
 
     return (
       <div className={menuOpen ? "order-card-menu-wrap is-open" : "order-card-menu-wrap"}>
-        {/* The card's "i": what THIS card is for (lib/studioflow/
-            orderCardPurposes.ts). Same 40 x 40 target as the "...", sitting
-            before it on the title row. On a pointer it opens a popover under
-            the button; on a phone the text appears under the card title
-            (renderCardTitle). aria-describedby names the text either way. */}
-        <button
-          ref={node => { cardInfoButtonRefs.current[cardId] = node; }}
-          type="button"
-          className={infoOpen ? "order-card-menu-button order-card-info-button is-on" : "order-card-menu-button order-card-info-button"}
-          data-card-info={cardId}
-          aria-label={`${cardLabel(cardId)}: ${t(ORDER_CARD_PURPOSE_TOGGLE)}`}
-          title={t(ORDER_CARD_PURPOSE_TOGGLE)}
-          aria-expanded={infoOpen}
-          aria-controls={orderCardPurposeId(cardId)}
-          aria-describedby={orderCardPurposeId(cardId)}
-          onClick={() => setOpenCardInfoId(current => current === cardId ? null : cardId)}
-        >
-          <span className="order-card-menu-face" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="M12 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><circle cx="12" cy="7.8" r="1.15" fill="currentColor" /></svg>
-          </span>
-        </button>
-        {!cardInfoInline ? renderCardPurpose(cardId, "popover", infoOpen) : null}
         {/* 40 x 40 hit area; the visible 32 px disc is the inner span, so the
             target meets the touch minimum without the disc growing. */}
         <button
