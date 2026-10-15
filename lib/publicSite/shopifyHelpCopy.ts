@@ -160,7 +160,7 @@ const EN: ShopifyHelpCopy = {
   trialNote: "Paid plans start with a free trial of up to 14 days, once per workspace. If your workspace already started a NivaDesk trial on the website, the days left carry over. Nothing is charged until the trial ends.",
   billingFacts: [
     ["Changing plan", "Choose another plan on the Plans page; Shopify shows the new charge for you to approve."],
-    ["Cancelling", "Uninstalling the app from Settings › Apps and sales channels in your Shopify admin cancels its charges. The workspace returns to Free and keeps the orders already in it."],
+    ["Cancelling", "Uninstalling the app from Settings › Apps in your Shopify admin cancels its charges. The workspace returns to Free and keeps the orders already in it."],
     ["One way to pay", "A Shopify-billed workspace cannot also buy a plan on nivadesk.app, the App Store or Google Play, and extra seats and storage add-ons are not available for it. A workspace that already pays NivaDesk directly keeps that plan when it connects a store; nothing is charged through Shopify."],
     ["Prices on nivadesk.app", "The prices in pounds on our pricing page are for workspaces billed directly by NivaDesk."]
   ],
@@ -268,7 +268,7 @@ const TR: ShopifyHelpCopy = {
   trialNote: "Ücretli planlar, çalışma alanı başına bir kez, en fazla 14 günlük ücretsiz denemeyle başlar. Çalışma alanınız web sitesinde bir NivaDesk denemesi başlattıysa kalan günler aktarılır. Deneme bitene kadar ücret alınmaz.",
   billingFacts: [
     ["Plan değiştirme", "Plans sayfasında başka bir plan seçin; Shopify yeni ücreti onayınıza sunar."],
-    ["İptal", "Uygulamayı Shopify yönetici panelinizde Settings › Apps and sales channels'tan kaldırmak ücretlerini iptal eder. Çalışma alanı Free'ye döner ve içindeki siparişleri korur."],
+    ["İptal", "Uygulamayı Shopify yönetici panelinizde Settings › Apps'ten kaldırmak ücretlerini iptal eder. Çalışma alanı Free'ye döner ve içindeki siparişleri korur."],
     ["Tek ödeme yolu", "Shopify'la faturalanan bir çalışma alanı nivadesk.app, App Store veya Google Play'den ayrıca plan alamaz; ek kullanıcı ve depolama eklentileri de bu alan için sunulmaz. Zaten doğrudan NivaDesk'e ödeyen bir çalışma alanı mağaza bağladığında planını korur; Shopify üzerinden ücret alınmaz."],
     ["nivadesk.app'teki fiyatlar", "Fiyat sayfamızdaki sterlin fiyatları, NivaDesk tarafından doğrudan faturalanan çalışma alanları içindir."]
   ],
@@ -376,7 +376,7 @@ const DE: ShopifyHelpCopy = {
   trialNote: "Bezahlte Tarife beginnen mit einer kostenlosen Testphase von bis zu 14 Tagen, einmal pro Arbeitsbereich. Hat dein Arbeitsbereich auf der Website schon eine NivaDesk-Testphase begonnen, werden die verbleibenden Tage übernommen. Bis zum Ende der Testphase wird nichts berechnet.",
   billingFacts: [
     ["Tarif wechseln", "Wähle auf der Plans-Seite einen anderen Tarif; Shopify zeigt dir die neue Belastung zur Bestätigung."],
-    ["Kündigen", "Wenn du die App in deinem Shopify-Adminbereich unter Settings › Apps and sales channels deinstallierst, enden ihre Belastungen. Der Arbeitsbereich wechselt zu Free und behält die Aufträge, die schon darin sind."],
+    ["Kündigen", "Wenn du die App in deinem Shopify-Adminbereich unter Settings › Apps deinstallierst, enden ihre Belastungen. Der Arbeitsbereich wechselt zu Free und behält die Aufträge, die schon darin sind."],
     ["Ein Zahlungsweg", "Ein über Shopify abgerechneter Arbeitsbereich kann nicht zusätzlich auf nivadesk.app, im App Store oder bei Google Play einen Tarif kaufen; zusätzliche Plätze und Speicher-Add-ons gibt es dafür nicht. Ein Arbeitsbereich, der NivaDesk schon direkt bezahlt, behält seinen Tarif, wenn er einen Shop verbindet; über Shopify wird nichts berechnet."],
     ["Preise auf nivadesk.app", "Die Pfund-Preise auf unserer Preisseite gelten für Arbeitsbereiche, die direkt von NivaDesk abgerechnet werden."]
   ],
@@ -484,7 +484,7 @@ const FR: ShopifyHelpCopy = {
   trialNote: "Les forfaits payants commencent par un essai gratuit de 14 jours maximum, une fois par espace de travail. Si votre espace avait déjà commencé un essai NivaDesk sur le site, les jours restants sont repris. Rien n'est facturé avant la fin de l'essai.",
   billingFacts: [
     ["Changer de forfait", "Choisissez un autre forfait sur la page Plans ; Shopify vous présente le nouveau débit à approuver."],
-    ["Résilier", "Désinstaller l'application depuis Settings › Apps and sales channels dans votre admin Shopify met fin à ses débits. L'espace repasse en Free et garde les commandes qu'il contient déjà."],
+    ["Résilier", "Désinstaller l'application depuis Settings › Apps dans votre admin Shopify met fin à ses débits. L'espace repasse en Free et garde les commandes qu'il contient déjà."],
     ["Un seul moyen de paiement", "Un espace facturé par Shopify ne peut pas acheter en plus un forfait sur nivadesk.app, l'App Store ou Google Play, et les places supplémentaires et options de stockage ne lui sont pas proposées. Un espace qui paie déjà NivaDesk directement garde son forfait lorsqu'il connecte une boutique ; rien n'est facturé via Shopify."],
     ["Prix sur nivadesk.app", "Les prix en livres sterling de notre page tarifs concernent les espaces facturés directement par NivaDesk."]
   ],
@@ -592,7 +592,7 @@ const IT: ShopifyHelpCopy = {
   trialNote: "I piani a pagamento iniziano con una prova gratuita fino a 14 giorni, una volta per spazio di lavoro. Se il tuo spazio aveva già iniziato una prova NivaDesk sul sito, i giorni rimasti vengono riportati. Non viene addebitato nulla prima della fine della prova.",
   billingFacts: [
     ["Cambiare piano", "Scegli un altro piano nella pagina Plans; Shopify ti mostra il nuovo addebito da approvare."],
-    ["Annullare", "Disinstallare l'app da Settings › Apps and sales channels nel pannello di controllo di Shopify annulla i suoi addebiti. Lo spazio torna a Free e conserva gli ordini che contiene già."],
+    ["Annullare", "Disinstallare l'app da Settings › Apps nel pannello di controllo di Shopify annulla i suoi addebiti. Lo spazio torna a Free e conserva gli ordini che contiene già."],
     ["Un solo modo di pagare", "Uno spazio fatturato da Shopify non può acquistare in più un piano su nivadesk.app, sull'App Store o su Google Play, e per esso non sono disponibili utenti aggiuntivi né spazio di archiviazione extra. Uno spazio che paga già NivaDesk direttamente mantiene il suo piano quando collega un negozio; tramite Shopify non viene addebitato nulla."],
     ["Prezzi su nivadesk.app", "I prezzi in sterline della nostra pagina prezzi valgono per gli spazi fatturati direttamente da NivaDesk."]
   ],
@@ -700,7 +700,7 @@ const ES: ShopifyHelpCopy = {
   trialNote: "Los planes de pago empiezan con una prueba gratuita de hasta 14 días, una vez por espacio de trabajo. Si tu espacio ya había empezado una prueba de NivaDesk en la web, se conservan los días que quedan. No se cobra nada hasta que termina la prueba.",
   billingFacts: [
     ["Cambiar de plan", "Elige otro plan en la página Plans; Shopify te muestra el nuevo cargo para que lo apruebes."],
-    ["Cancelar", "Desinstalar la app desde Settings › Apps and sales channels en tu administrador de Shopify cancela sus cargos. El espacio vuelve a Free y conserva los pedidos que ya tiene."],
+    ["Cancelar", "Desinstalar la app desde Settings › Apps en tu administrador de Shopify cancela sus cargos. El espacio vuelve a Free y conserva los pedidos que ya tiene."],
     ["Una sola forma de pago", "Un espacio facturado por Shopify no puede comprar además un plan en nivadesk.app, la App Store o Google Play, y no tiene disponibles puestos adicionales ni ampliaciones de almacenamiento. Un espacio que ya paga a NivaDesk directamente mantiene su plan al conectar una tienda; no se cobra nada a través de Shopify."],
     ["Precios en nivadesk.app", "Los precios en libras de nuestra página de precios son para los espacios que factura NivaDesk directamente."]
   ],
@@ -808,7 +808,7 @@ const PT: ShopifyHelpCopy = {
   trialNote: "Os planos pagos começam com uma avaliação gratuita de até 14 dias, uma vez por espaço de trabalho. Se o teu espaço já tinha começado uma avaliação do NivaDesk no site, os dias que faltam passam para a Shopify. Nada é cobrado antes do fim da avaliação.",
   billingFacts: [
     ["Mudar de plano", "Escolhe outro plano na página Plans; a Shopify mostra-te a nova cobrança para aprovares."],
-    ["Cancelar", "Desinstalar a aplicação em Settings › Apps and sales channels no admin da Shopify cancela as suas cobranças. O espaço volta ao Free e mantém os pedidos que já tem."],
+    ["Cancelar", "Desinstalar a aplicação em Settings › Apps no admin da Shopify cancela as suas cobranças. O espaço volta ao Free e mantém os pedidos que já tem."],
     ["Uma só forma de pagar", "Um espaço faturado pela Shopify não pode comprar também um plano em nivadesk.app, na App Store ou no Google Play, e não tem lugares extra nem extensões de armazenamento disponíveis. Um espaço que já paga diretamente ao NivaDesk mantém o seu plano ao ligar uma loja; nada é cobrado através da Shopify."],
     ["Preços em nivadesk.app", "Os preços em libras da nossa página de preços são para espaços faturados diretamente pelo NivaDesk."]
   ],
@@ -916,7 +916,7 @@ const RU: ShopifyHelpCopy = {
   trialNote: "Платные тарифы начинаются с бесплатного пробного периода до 14 дней — один раз на рабочее пространство. Если пространство уже начинало пробный период NivaDesk на сайте, оставшиеся дни переносятся. До конца пробного периода ничего не списывается.",
   billingFacts: [
     ["Смена тарифа", "Выберите другой тариф на странице Plans; Shopify покажет новое списание для подтверждения."],
-    ["Отмена", "Удаление приложения в разделе Settings › Apps and sales channels админки Shopify отменяет его списания. Пространство возвращается на Free и сохраняет уже имеющиеся заказы."],
+    ["Отмена", "Удаление приложения в разделе Settings › Apps админки Shopify отменяет его списания. Пространство возвращается на Free и сохраняет уже имеющиеся заказы."],
     ["Один способ оплаты", "Пространство, оплачиваемое через Shopify, не может дополнительно купить тариф на nivadesk.app, в App Store или Google Play; дополнительные места и хранилище для него недоступны. Пространство, которое уже платит NivaDesk напрямую, сохраняет свой тариф при подключении магазина; через Shopify ничего не списывается."],
     ["Цены на nivadesk.app", "Цены в фунтах на нашей странице тарифов действуют для пространств, оплачиваемых напрямую NivaDesk."]
   ],
@@ -1024,7 +1024,7 @@ const JA: ShopifyHelpCopy = {
   trialNote: "有料プランは最大 14 日間の無料トライアルから始まります（ワークスペースごとに 1 回）。ワークスペースがウェブサイトで NivaDesk のトライアルをすでに始めていた場合は、残りの日数が引き継がれます。トライアルが終わるまで請求はありません。",
   billingFacts: [
     ["プランの変更", "Plans ページで別のプランを選ぶと、Shopify が新しい請求を表示して承認を求めます。"],
-    ["解約", "Shopify 管理画面の Settings › Apps and sales channels からアプリをアンインストールすると、その請求は取り消されます。ワークスペースは Free に戻り、すでにある注文はそのまま残ります。"],
+    ["解約", "Shopify 管理画面の Settings › Apps からアプリをアンインストールすると、その請求は取り消されます。ワークスペースは Free に戻り、すでにある注文はそのまま残ります。"],
     ["支払い方法は 1 つ", "Shopify で請求されるワークスペースは、nivadesk.app、App Store、Google Play で別途プランを購入できず、追加シートやストレージのアドオンも利用できません。すでに NivaDesk に直接支払っているワークスペースは、ストアを接続してもそのプランのままで、Shopify 経由の請求は発生しません。"],
     ["nivadesk.app の価格", "料金ページのポンド建て価格は、NivaDesk が直接請求するワークスペース向けです。"]
   ],
@@ -1132,7 +1132,7 @@ const ZH: ShopifyHelpCopy = {
   trialNote: "付费套餐从最长 14 天的免费试用开始，每个工作区一次。如果你的工作区已在网站上开始过 NivaDesk 试用，剩余天数会延续过来。试用结束前不会收费。",
   billingFacts: [
     ["更改套餐", "在 Plans 页面选择其他套餐；Shopify 会显示新的费用请你确认。"],
-    ["取消", "在 Shopify 后台的 Settings › Apps and sales channels 中卸载应用即可取消其费用。工作区会回到 Free，并保留其中已有的订单。"],
+    ["取消", "在 Shopify 后台的 Settings › Apps 中卸载应用即可取消其费用。工作区会回到 Free，并保留其中已有的订单。"],
     ["只有一种付款方式", "由 Shopify 计费的工作区不能再在 nivadesk.app、App Store 或 Google Play 购买套餐，也无法购买额外席位和存储附加项。已经直接向 NivaDesk 付费的工作区在连接店铺后保留原套餐，不会通过 Shopify 收费。"],
     ["nivadesk.app 上的价格", "我们价格页面上的英镑价格适用于由 NivaDesk 直接计费的工作区。"]
   ],
@@ -1240,7 +1240,7 @@ const AR: ShopifyHelpCopy = {
   trialNote: "تبدأ الخطط المدفوعة بفترة تجربة مجانية تصل إلى 14 يومًا، مرة واحدة لكل مساحة عمل. إذا كانت مساحة عملك قد بدأت تجربة NivaDesk على الموقع، تنتقل الأيام المتبقية. لا يُحتسب أي شيء قبل انتهاء التجربة.",
   billingFacts: [
     ["تغيير الخطة", "اختر خطة أخرى في صفحة Plans؛ يعرض عليك Shopify الرسم الجديد للموافقة عليه."],
-    ["الإلغاء", "يؤدي إلغاء تثبيت التطبيق من Settings › Apps and sales channels في لوحة إدارة Shopify إلى إلغاء رسومه. تعود مساحة العمل إلى Free وتحتفظ بالطلبات الموجودة فيها."],
+    ["الإلغاء", "يؤدي إلغاء تثبيت التطبيق من Settings › Apps في لوحة إدارة Shopify إلى إلغاء رسومه. تعود مساحة العمل إلى Free وتحتفظ بالطلبات الموجودة فيها."],
     ["طريقة دفع واحدة", "لا يمكن لمساحة عمل يحتسبها Shopify شراء خطة إضافية من nivadesk.app أو App Store أو Google Play، ولا تتوفر لها مقاعد إضافية أو إضافات تخزين. أما مساحة العمل التي تدفع لـ NivaDesk مباشرة فتحتفظ بخطتها عند ربط متجر، ولا يُحتسب شيء عبر Shopify."],
     ["الأسعار على nivadesk.app", "الأسعار بالجنيه الإسترليني في صفحة الأسعار لدينا مخصّصة لمساحات العمل التي يحتسبها NivaDesk مباشرة."]
   ],
@@ -1348,7 +1348,7 @@ const HI: ShopifyHelpCopy = {
   trialNote: "पेड प्लान अधिकतम 14 दिन के मुफ़्त ट्रायल से शुरू होते हैं, हर वर्कस्पेस के लिए एक बार। अगर आपके वर्कस्पेस ने वेबसाइट पर NivaDesk ट्रायल पहले ही शुरू किया था, तो बचे हुए दिन आगे जुड़ जाते हैं। ट्रायल ख़त्म होने तक कोई शुल्क नहीं लिया जाता।",
   billingFacts: [
     ["प्लान बदलना", "Plans पेज पर दूसरा प्लान चुनें; Shopify नया शुल्क मंज़ूरी के लिए दिखाता है।"],
-    ["रद्द करना", "अपने Shopify एडमिन में Settings › Apps and sales channels से ऐप अनइंस्टॉल करने पर उसके शुल्क रद्द हो जाते हैं। वर्कस्पेस Free पर लौट आता है और उसमें पहले से मौजूद ऑर्डर बने रहते हैं।"],
+    ["रद्द करना", "अपने Shopify एडमिन में Settings › Apps से ऐप अनइंस्टॉल करने पर उसके शुल्क रद्द हो जाते हैं। वर्कस्पेस Free पर लौट आता है और उसमें पहले से मौजूद ऑर्डर बने रहते हैं।"],
     ["भुगतान का एक ही तरीका", "जिस वर्कस्पेस का बिल Shopify बनाता है, वह nivadesk.app, App Store या Google Play से अलग से प्लान नहीं खरीद सकता, और उसके लिए अतिरिक्त सीटें और स्टोरेज ऐड-ऑन उपलब्ध नहीं हैं। जो वर्कस्पेस पहले से NivaDesk को सीधे भुगतान करता है, वह स्टोर कनेक्ट करने पर अपना प्लान बनाए रखता है; Shopify के ज़रिए कुछ नहीं लिया जाता।"],
     ["nivadesk.app पर कीमतें", "हमारे प्राइसिंग पेज पर पाउंड में दी गई कीमतें उन वर्कस्पेस के लिए हैं जिनका बिल सीधे NivaDesk बनाता है।"]
   ],
