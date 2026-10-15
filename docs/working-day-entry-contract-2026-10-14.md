@@ -86,3 +86,84 @@ client writes); not part of this package.
 - App backup / restore (web export, iOS backup, `importWorkspaceBackup`): `workDays` is **not** in the backup
   yet — a restore brings orders back without day entries. Follow-up if wanted.
 - No per-member report screen; the card shows each entry (date · kind · member · note) and the total.
+
+## 7. 15 Oct 2026 — owner's six requirements (date picker, no conversion, two measures, boundaries, permissions, history)
+
+Branches: web `working-day2-web-2026-10-15` (on live `ffe0d065`), native + server source `working-day2-native-2026-10-15`
+(on candidate `99d71a18`). Server deploy tree: `~/Developer/nivadesk-deploy-2026-10-15/working-day2/A` (live
+`updateWebOrder` 00136-vab archive + this change). Optional rules package: `.../working-day2/R`. Nothing pushed or deployed.
+
+**1. Date picker.** All three clients already had one; it now stops at **today on the device** (web `max=today`, iOS
+`...Date()`, Android `SelectableDates` ≤ today; the server still accepts up to tomorrow UTC so UTC+14 can log its today).
+Past dates are picked freely. Edit: an entry's **kind and note** can be edited (date and member stay — to move a day,
+delete it and log the right date). Saving the same day again still **replaces** (one entry per member per day).
+
+**2. No conversion.** Verified across web, iOS/macOS, Android, live `updateWebOrder`, `exportOrders`, `chatgptMcp`, the
+finance engine, PDF/CSV export and backups: nothing turns a day entry into hours or money and nothing adds days to the
+timer. Timer hours do not reach money either. The full web JSON backup copies `workDays` as stored; the MCP passes the
+last 20 order-history lines, which can include "Work day logged · 2026-10-14 · Full day" (no hours, no money).
+Each client's tests and the server test assert the modules contain no hours/money arithmetic.
+
+**3. Two measures, never added.** The card shows two separate figures: **Timer total** (hours, from sessions) and
+**Days worked** (1 / 0.5 per entry), with "Timer hours and day entries are counted separately and never added
+together." Lists are headed **Day entries** and **Timer sessions**. When the same member also ran the timer on that
+day, the entry shows **Timer on this day: 2h 0m** — information only, never summed. No combined total is stored.
+
+**4. Midnight / time zone.** There is no workspace time zone. `date` is the **calendar day of the device that logged
+it**, stored as `YYYY-MM-DD` and never converted: Kiritimati (UTC+14) at 00:30 on the 17th stores the 17th; a UTC-12
+device at 22:30 on the 15th stores the 15th; London at 23:59:59 stores that day and at 00:00 the next. Other devices
+show the stored string as is. "Timer on this day" maps a session's start to the **viewer's** local day, so near
+midnight two viewers in different zones may see a different hint (never a different count). History times are shown in
+the viewer's local time. Web: the form's default date is set when the card opens (a tab left open over midnight keeps
+yesterday until a save or reload resets it); the date limit is recomputed every render.
+
+**5. Permissions — implemented (owner's proposal).**
+
+| Day entries | Owner | Admin | Member | Workflow Only (assigned orders) | Assigned-projects-only | View only |
+|---|---|---|---|---|---|---|
+| Log own day | yes (=) | yes (=) | yes (=) | yes (=) | yes, own orders (=) | no (=) |
+| Change / delete own entry | yes (=) | yes (=) | yes (=) | yes (=) | yes (=) | no (=) |
+| Change someone else's entry (kind, note) | **yes** (was: no) | no (=) | no (=) | no (=) | no (=) | no (=) |
+| Delete someone else's entry | yes (=) | **no** (was: yes) | no (=) | no (=) | no (=) | no (=) |
+| Log a NEW day for someone else | no (=) | no (=) | no (=) | no (=) | no (=) | no (=) |
+| Direct Firestore write of `workDays` / `workDayHistory` | today possible; **no** with package R | same | same | not possible (=) | today possible on own order; **no** with R | no (=) |
+
+"Owner" = the workspace owner (`uidIsCompanyOwner`), not a custom role. The owner's correction keeps the entry the
+member's (member, e-mail, created date) and stamps `updatedByUid/Email`; the card shows **Changed by** on it.
+Timer rules are **not** changed: anyone who may edit Work Time can stop or delete any session. Making the timer match
+would need the Apple apps to stop writing `workSessions` with the whole order (they write the array directly on paid
+plans), so it is not a trivial change — decision for the owner.
+
+**6. History.** Every change through `updateWebOrder` adds a row to the new server-only array `workDayHistory` (newest
+first, at most 500): `{id, at, action: logged|changed|deleted, entryId, date, memberUid, memberEmail, byUid, byEmail,
+before:{kind,note}|null, after:{kind,note}|null, source}`; the order's general history line also names whose entry it
+was when someone else changed it. Entries saved before this have **no** rows and no `updatedBy` stamp — nothing is made
+up. The card shows "Day entry history (n)". Workflow Only members do not get the array (their view is unchanged); they
+see "Changed by" on their own entries through `workDays`.
+
+**Deploy.** Server first (tree A, `updateWebOrder` only; the views already carry `workDays` and need no change), then
+web, then native. A live client without this change keeps working (the server stays compatible: same patch, plus the
+optional `memberUid` on set). Old web/native clients still offer admins a delete button for others' entries; the
+server now answers "You can delete only your own day entries." Optional R (rules) after the clients: live 05dd212c +
+2 conditions.
+
+**Verification (15 Oct 2026).**
+- Server: `functions/test/qa/work-days.test.js` 24/24 on tree A (11 red on the live archive); callable e2e on the
+  functions emulator 33/33 on tree A, 21/33 on the live archive (admin deleting a member's entry is accepted there).
+  Tree A: `patch -R` = live 00136 archive byte for byte; discovery manifest 415 endpoints identical to the live
+  archive's, `updateWebOrder` unchanged (callable, europe-west2, no secrets); all 40 declared secrets exist.
+- Rules R: 24/24 (live 05dd212c: 15/24 — direct writes of both fields accepted today).
+- Web: `test:work-days` 429/429 (live code: 34 of 273 red), tsc 0, `next build` 0 (same pre-existing CSS warning);
+  the other `test:*`: 31 green, 11 red — the same 11 are red on live `ffe0d065` (8 × missing
+  notesSharingTranslations in their transpile list, customer-card, team-schedule-key, finance).
+- Android: `testDebugUnitTest` 473/0 (WorkDaysTest 13/13), `assembleDebug` OK. iOS: the real `WorkDays.swift`
+  compiled with a stub check 23/23 (the candidate's file does not compile against it); iOS QA build and macOS build
+  BUILD SUCCEEDED, 0 errors (macOS .app removed after the build).
+- Isolated acceptance `demo-nivadesk-wd15` (auth 9861, firestore 8861, functions 5861, storage 9863), tree A in the
+  functions emulator, live rules text, heartbeat OFF (Android launcher read it; iOS QA build has it compiled off):
+  web owner corrected a member's entry (Half day + note → `updatedByUid` owner, history row, order history names the
+  member) and logged 10 Oct with the date picker; web admin sees no Edit/Delete on others, logs/re-saves own (one
+  entry); web member sees "Changed by", Edit/Delete only on own; iPhone member edited own entry (source ios); Android
+  member2 edited own (source android) and logged 12 Oct with the picker (16 Oct not selectable); iPhone owner deleted
+  that Android entry (history: deleted by owner, ios) and logged 6 Oct with the picker (16 Oct disabled). Each step
+  read back from Firestore. Timer total stayed 2h 0m (7200 s) throughout while days went 1.5 → 4.5 (5 entries, 11 history rows).
