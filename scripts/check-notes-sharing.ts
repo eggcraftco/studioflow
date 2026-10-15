@@ -13,6 +13,10 @@ import path from "path";
 import { keepNoteDocumentFields, keepNoteFromDoc, type StudioKeepNote } from "../lib/studioflow/noteDocument";
 import {
   isSharedNote,
+  isViewOnlyWorkspaceRole,
+  noteIsReadOnlyForMe,
+  personalNoteFields,
+  PERSONAL_NOTE_FIELD_NAMES,
   noteCollaboratorUids,
   noteInvitesFromResponse,
   noteMemberIdentity,
@@ -139,6 +143,41 @@ check(page.includes("data-invite-from="), "the invitation inbox names the invite
 check(!page.includes('"createPersonalNoteCollaborationInvite"'), "the page does not call the invite callable without the shared wrapper");
 const invites = noteInvitesFromResponse({ invites: [{ id: "i1", companyId: "c", noteId: "n1", sourceEmail: "olive@x.test", notePreview: { title: "Plan", text: "Body" } }] });
 check(invites.length === 1 && invites[0].sourceName === "olive" && invites[0].title === "Plan", "an older server's invitation (no sourceName) still reads");
+
+// 5b. View Only (owner decision 15 Oct 2026): a shared note is read-only for a View Only member, whatever the
+// note's collaborator list says; the owner of a note is never read-only on it; no other role is affected.
+const shared = note({ ownerUserId: "own", collaboratorUserIds: ["ali", "vic"] });
+check(!noteIsReadOnlyForMe(shared, "own", "owner"), "view only: the owner edits their own note");
+check(!noteIsReadOnlyForMe(shared, "ali", "member") && !noteIsReadOnlyForMe(shared, "ali", "admin") && !noteIsReadOnlyForMe(shared, "ali", "workflow"), "view only: member / admin / workflow collaborators edit");
+for (const spelling of ["viewer", "viewOnly", "readonly", "View Only", "view_only"]) {
+  check(noteIsReadOnlyForMe(shared, "vic", spelling), `view only: a "${spelling}" collaborator only reads`);
+}
+check(!noteIsReadOnlyForMe(note({ ownerUserId: "vic" }), "vic", "viewer"), "view only: a View Only member edits a note of their own");
+check(!noteIsReadOnlyForMe(note({ ownerUserId: "" }), "vic", "viewer"), "view only: a new (ownerless) note is theirs");
+check(!isViewOnlyWorkspaceRole("member") && !isViewOnlyWorkspaceRole("") && !isViewOnlyWorkspaceRole(undefined), "view only: other roles are not View Only");
+const personal = personalNoteFields(note({ isPinned: true, labels: ["x"], manualOrder: 3, title: "T", text: "B", colorName: "yellow", reminderDateMillis: 5 }));
+check(Object.keys(personal).sort().join(",") === [...PERSONAL_NOTE_FIELD_NAMES].sort().join(","), `view only: a read-only copy writes only ${Object.keys(personal).sort().join(",")}`);
+for (const content of ["title", "text", "colorName", "links", "reminderDate", "noteType", "linkedOrderId", "visibility", "ownerUserId"]) {
+  check(!(content in personal), `view only: the personal write leaves ${content} alone`);
+}
+const notesLib = read("lib/studioflow/notes.ts");
+const personalSave = notesLib.slice(notesLib.indexOf("export async function saveKeepNotePersonalState"), notesLib.indexOf("export async function uploadKeepNoteImage"));
+check(/updateDoc\(/.test(personalSave) && !/setDoc\(/.test(personalSave) && /personalNoteFields\(note\)/.test(personalSave), "view only: the personal write is an update (a revoked copy is not re-created) of the personal fields only");
+const saveBody = page.slice(page.indexOf("async function save(note: StudioKeepNote"), page.indexOf("async function shareNoteWithWorkspace"));
+const roIndex = saveBody.indexOf("if (readOnlyNote(finalized))");
+check(roIndex >= 0 && roIndex < saveBody.indexOf("saveKeepNote(") && roIndex < saveBody.indexOf("syncSharedNote(") && roIndex < saveBody.indexOf("workspaceFanOutDue("), "view only: save() routes a read-only copy to the personal write before any content save, sync or invite");
+check(/saveKeepNotePersonalState\(workspace\.id, user\.uid, finalized\)/.test(saveBody) && /return;\n    \}/.test(saveBody.slice(roIndex)), "view only: the read-only branch returns after the personal write");
+check(/noteIsReadOnlyForMe\(note, user\.uid, workspace\.role\)/.test(page), "view only: the page reads the workspace's effective role");
+check(/readOnly=\{readOnlyNote\(notes\.find\(\(n\) => n\.id === editing\.id\) \?\? editing\)\}/.test(page), "view only: the editor is told, from the live copy");
+const editor = page.slice(page.indexOf("function NoteEditor("), page.indexOf("function ProjectNotesView("));
+check(editor.includes('data-testid="note-read-only"') && editor.includes('t("Your role in this workspace is View Only. You can read this note but not change it.")'), "view only: the editor says why it is read-only");
+check(/readOnly=\{readOnly\}/.test(editor) && (editor.match(/onChange=\{\(e\) => \{ if \(!readOnly\)/g) ?? []).length === 2, "view only: title and body are read-only inputs (still selectable)");
+check(/if \(saving \|\| readOnly\) return;/.test(editor), "view only: the draft mirror never writes or clears a draft while read-only");
+check(/async function submit\(force = false\) \{\n    if \(readOnly\) \{ onClose\(\); return; \}/.test(editor), "view only: closing never saves");
+check(editor.includes('data-testid="note-read-only-draft"') && editor.includes('t("Your unsaved changes are kept on this device but cannot be sent.")') && /onClick=\{discardDraft\}/.test(editor), "view only: a kept draft is shown, never sent, and can be discarded");
+check(/accessReloadRef\.current/.test(editor) && /studio-access-reload/.test(editor) && /dispatchEvent\(new Event\("studio-access-reload"\)\)/.test(provider), "view only: a role-change reload does not stop on the leave-page prompt");
+const card = page.slice(page.indexOf("function NoteCard("), page.indexOf("function localDateInputValue("));
+check(/\{!readOnly && \(\n        <div style=\{\{ position: "relative" \}\}>/.test(card) && card.includes('data-testid="note-card-read-only"'), "view only: the card offers no colour / reminder change and says Read only");
 
 // 6. Bell + push
 check(/route === "notes"/.test(read("components/NotificationsDrawer.tsx")), "the bell opens Notes for a note invitation");

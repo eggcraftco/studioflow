@@ -88,7 +88,7 @@ check(/if \(saving \|\| upload\) return;/.test(editor), "Save waits for the uplo
 check(/isNew \? \(!isNoteEmpty\(draft\) \|\| draft\.links\.length > 0\)/.test(editor), "an image-only new note still counts as a change");
 check(/uploadBytesResumable\(ref, file/.test(notesLib) && /deleteObject\(storageRef\(storage, url\)\)/.test(notesLib), "notes.ts has the resumable upload and the delete");
 check(/role="dialog"\n        aria-modal="true"\n        aria-labelledby="note-editor-title"/.test(editor), "the editor is a labelled modal dialog");
-check(/if \(event\.key === "Escape"\) escapeRef\.current\(\);/.test(editor) && /escapeRef\.current = \(\) => \{ if \(!saving\) discardAndClose\(\); \};/.test(editor), "Escape is Cancel");
+check(/if \(event\.key === "Escape"\) escapeRef\.current\(\);/.test(editor) && /escapeRef\.current = \(\) => \{ if \(readOnly\) onClose\(\); else if \(!saving\) discardAndClose\(\); \};/.test(editor), "Escape is Cancel (a read-only note just closes, its kept draft untouched)");
 check(/aria-label=\{`\$\{t\("Color"\)\}: /.test(editor) && /aria-label=\{t\("Reminder"\)\}/.test(editor), "colour swatches and the reminder date have accessible names");
 for (const w of ["COLOR", "REMINDER", "LABELS", "COLLABORATORS", "IMAGE"]) check(!editor.includes(`>${w}</div>`), `${w} goes through t()`);
 check(/studioCountLabel\([^)]*"note"/.test(page), "the note count takes the plural form for the app language (studioCountLabel)");

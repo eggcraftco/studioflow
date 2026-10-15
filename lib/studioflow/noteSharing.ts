@@ -164,6 +164,36 @@ export function noteInvitesFromResponse(data: unknown): NoteInvite[] {
     .filter((invite) => invite.inviteId);
 }
 
+/**
+ * Owner decision, 15 Oct 2026: a member whose workspace role is View Only READS a note shared with them
+ * and never changes it — being on the note's collaborator list does not override the role. The role is
+ * the workspace's effective role (a custom role counts by its base role; WorkspaceContext.role already
+ * resolves it). The note's owner is never read-only on their own note. The server (sync / presence) and
+ * the rules (their copy's content) refuse the same thing; this only keeps the screen honest.
+ */
+export function isViewOnlyWorkspaceRole(role: string | null | undefined): boolean {
+  const compact = String(role ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  return compact === "viewer" || compact === "viewonly" || compact === "readonly";
+}
+
+export function noteIsReadOnlyForMe(note: Pick<StudioKeepNote, "ownerUserId">, selfUid: string, workspaceRole: string | null | undefined): boolean {
+  const owner = clean(note.ownerUserId);
+  return Boolean(owner) && owner !== clean(selfUid) && isViewOnlyWorkspaceRole(workspaceRole);
+}
+
+/** What a read-only copy may still write: this person's own pin, archive, trash, labels and order. Never content. */
+export const PERSONAL_NOTE_FIELD_NAMES = ["isPinned", "isArchived", "isDeleted", "labels", "manualOrder"] as const;
+
+export function personalNoteFields(note: Pick<StudioKeepNote, (typeof PERSONAL_NOTE_FIELD_NAMES)[number]>): Record<string, unknown> {
+  return {
+    isPinned: note.isPinned,
+    isArchived: note.isArchived,
+    isDeleted: note.isDeleted,
+    labels: note.labels,
+    manualOrder: note.manualOrder,
+  };
+}
+
 /** The fields every copy of a shared note carries; a save that changes none of them sends nothing. */
 export function sharedContentSignature(note: StudioKeepNote): string {
   return JSON.stringify([

@@ -27,6 +27,9 @@ function reloadForAccessChange(companyId: string, lost = false) {
     /* sessionStorage unavailable: reload anyway, the baseline after it is the new server value */
   }
   console.info(`[NivaDesk] access changed in ${companyId} — the page is loaded again under the new access`);
+  // Open editors keep their draft on disk already; this tells them the reload is the access watch's, so no
+  // "Leave site?" prompt stops it over the hidden page (a View Only switch while a note is open, 15 Oct).
+  try { window.dispatchEvent(new Event("studio-access-reload")); } catch { /* not in a browser */ }
   // Nothing read under the old access may stay on screen: hide the page at once, then load it again.
   try { document.documentElement.style.visibility = "hidden"; } catch { /* not in a browser */ }
   // Removed or suspended: the cached copy of this workspace (shared notes included) goes first, so an offline
