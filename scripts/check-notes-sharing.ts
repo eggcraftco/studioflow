@@ -15,11 +15,15 @@ import {
   isSharedNote,
   noteCollaboratorUids,
   noteInvitesFromResponse,
+  noteMemberIdentity,
+  noteMemberLabel,
   noteMembersFromCompany,
   noteUnmatchedCollaboratorEmails,
   pickableNoteMembers,
+  workspaceFanOutDue,
   workspaceInviteTargets,
 } from "../lib/studioflow/noteSharing";
+import { accessLost, memberAccessFingerprint } from "../lib/studioflow/accessWatch";
 import { NOTES_SHARING_TRANSLATIONS } from "../lib/studioflow/notesSharingTranslations";
 import { studioT } from "../lib/studioflow/language";
 
@@ -61,6 +65,23 @@ check(pick.join(",") === "ali,bea", `owner's picker = other active members (${pi
 check(!pickableNoteMembers(members, "ali").some((m) => m.uid === "ali"), "nobody is offered themselves");
 check(pickableNoteMembers(members, "ali").some((m) => m.uid === "own"), "a member can pick the owner");
 
+// 1b. Two people with the same name (15 Oct): the picker offers both, and every row tells them apart
+const twins = noteMembersFromCompany({
+  ownerUid: "own",
+  members: {
+    own: { email: "owner@studio.test", displayName: "Olive", role: "owner" },
+    a1: { email: "ali.k@studio.test", displayName: "Ali", role: "workflow" },
+    a2: { email: "ali.y@studio.test", displayName: "Ali", role: "workflow" },
+    a3: { displayName: "Ali", role: "member" },
+  },
+});
+const twinPick = pickableNoteMembers(twins, "own");
+check(twinPick.length === 3 && new Set(twinPick.map(noteMemberLabel)).size === 1, "same-name members are all offered (same label)");
+check(new Set(twinPick.map(noteMemberIdentity)).size === 3, `each same-name member has its own identity line (${twinPick.map(noteMemberIdentity).join(" | ")})`);
+check(noteMemberIdentity(twins.find((m) => m.uid === "a3")!) === "ID a3", "a member without an e-mail is told apart by a short id");
+const twinInvite = noteInvitesFromResponse({ invites: [{ inviteId: "i2", sourceUserId: "a1", sourceName: "Ali", sourceEmail: "ali.k@studio.test" }] });
+check(twinInvite[0].sourceEmail === "ali.k@studio.test", "an invitation keeps the inviter's e-mail for the inbox");
+
 // 2. Collaborators as uids
 check(noteCollaboratorUids(note({ collaboratorUserIds: ["bea"], collaboratorEmails: ["ALI@studio.test", "gone@x.test"] }), members).join(",") === "bea,ali", "uid list + store-app emails bridged to uids");
 check(noteUnmatchedCollaboratorEmails(note({ collaboratorEmails: ["ali@studio.test", "gone@x.test"] }), members).join(",") === "gone@x.test", "an email no member carries is reported, not guessed");
@@ -71,6 +92,24 @@ check(isSharedNote(note(), "ali", members), "someone else's note in my list = sh
 // 3. Workspace fan-out
 check(workspaceInviteTargets(note({ visibility: "workspace" }), members, "own").join(",") === "ali,bea", "workspace: every active member but me");
 check(workspaceInviteTargets(note({ visibility: "workspace", collaboratorUserIds: ["ali"], pendingCollaboratorUserIds: ["bea"] }), members, "own").length === 0, "workspace: nobody already in or pending is asked again");
+
+// 3b. The fan-out runs only when the owner's note BECOMES "Workspace members" (15 Oct: every save
+// re-invited a member who had declined, and would re-invite one the owner removed or who left)
+check(workspaceFanOutDue(undefined, note({ visibility: "workspace" }), "own"), "fan-out: a new workspace note invites");
+check(workspaceFanOutDue(note({ visibility: "only_me" }), note({ visibility: "workspace" }), "own"), "fan-out: Only me → Workspace members invites");
+check(!workspaceFanOutDue(note({ visibility: "workspace" }), note({ visibility: "workspace", text: "edited" }), "own"), "fan-out: an ordinary edit of a workspace note invites nobody (a decline / removal / leave sticks)");
+check(!workspaceFanOutDue(note({ visibility: "workspace" }), note({ visibility: "workspace", isPinned: true }), "own"), "fan-out: a pin does not invite");
+check(!workspaceFanOutDue(undefined, note({ visibility: "workspace", ownerUserId: "own" }), "ali"), "fan-out: never from someone else's copy");
+check(!workspaceFanOutDue(undefined, note({ visibility: "workspace", isDeleted: true }), "own"), "fan-out: never for a trashed note");
+
+// 3c. Access lost (removed / suspended / gone) wipes the browser cache before the reload; a narrower access does not
+const accessCompany = { ownerUid: "own", members: { ali: { role: "workflow" } }, memberAccess: { ali: { notes: true } } };
+check(!accessLost(memberAccessFingerprint(accessCompany, "c", "ali")), "access: a current member has not lost access");
+check(accessLost(memberAccessFingerprint({ ownerUid: "own", members: {} }, "c", "ali")), "access: removed from the members map = lost");
+check(accessLost(memberAccessFingerprint({ ...accessCompany, suspendedMembers: { ali: { at: 1 } } }, "c", "ali")), "access: suspended = lost");
+check(accessLost("absent") && !accessLost("owner"), "access: a missing workspace document = lost; the owner never");
+const provider = read("lib/auth/AuthProvider.tsx");
+check(/reloadForAccessChange\(companyId, true\)/.test(provider) && /clearFirestoreLocalCache\(\)\.finally/.test(provider), "access: a refused watch clears the Firestore cache, then reloads");
 
 // 4. Save fields
 const written = keepNoteDocumentFields(note({ collaboratorUserIds: ["ali"], sharedWith: ["ali@studio.test"], collaboratorEmails: ["ali@studio.test"] }));
@@ -88,6 +127,15 @@ check(page.includes("listNoteInvites(") && page.includes("acceptNoteInvite(") &&
 check(page.includes('data-testid="note-invites"'), "the invitation inbox is rendered");
 check(page.includes("removeNoteMember(") && page.includes("inviteNoteMember("), "invite and revoke go through the callables");
 check(page.includes("syncSharedNote("), "edits to a shared note are sent to the other copies");
+check((page.match(/noteMemberIdentity\(/g) ?? []).length >= 5, "picker, collaborator, pending, owner and inbox rows all show the identity line");
+check(/workspaceFanOutDue\(stored, finalized, user\.uid\)/.test(page), "the page invites the workspace only through workspaceFanOutDue");
+check(/listenToKeepNotes\(workspace\.id, user\.uid, setNotes, \(/.test(page) && /permission-denied/.test(page), "a refused Notes listener empties the list and closes the editor");
+check(page.includes('t("This note is no longer shared with you.")') && page.includes("clearNoteDraft(workspace.id, user.uid, editing.id)"), "an open shared note whose copy is gone closes, its draft dropped");
+check(page.includes('data-testid="note-shared-by"'), "a shared copy names its owner instead of Type / Visibility choices");
+const keepBoth = page.slice(page.indexOf("async function saveDraftAsNewNote"), page.indexOf("async function destroy("));
+check(/visibility: "only_me"/.test(keepBoth) && /draft\.noteType === "team" \? "personal"/.test(keepBoth), "a conflict copy (Keep both) is private: Only me, never a Team note");
+check(!page.includes(">\\u2302 {"), "no raw \\u2302 escape in JSX text");
+check(page.includes("data-invite-from="), "the invitation inbox names the inviter's identity, not only the name");
 check(!page.includes('"createPersonalNoteCollaborationInvite"'), "the page does not call the invite callable without the shared wrapper");
 const invites = noteInvitesFromResponse({ invites: [{ id: "i1", companyId: "c", noteId: "n1", sourceEmail: "olive@x.test", notePreview: { title: "Plan", text: "Body" } }] });
 check(invites.length === 1 && invites[0].sourceName === "olive" && invites[0].title === "Plan", "an older server's invitation (no sourceName) still reads");

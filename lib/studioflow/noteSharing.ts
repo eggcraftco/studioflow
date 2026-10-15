@@ -61,6 +61,15 @@ export function noteMemberLabel(member: Pick<NoteWorkspaceMember, "name" | "emai
   return member.name || (member.email ? member.email.split("@")[0] : "") || member.uid.slice(0, 6);
 }
 
+/**
+ * The line that tells two people with the same name apart (15 Oct): the e-mail the
+ * workspace holds for them, or a short id when the members map has none. Every row
+ * that names a person (picker, collaborators, pending, owner) shows it under the name.
+ */
+export function noteMemberIdentity(member: Pick<NoteWorkspaceMember, "email" | "uid">): string {
+  return member.email || `ID ${member.uid.slice(0, 6)}`;
+}
+
 /** The people the signed-in person may pick: not themselves, not suspended, by name. */
 export function pickableNoteMembers(members: NoteWorkspaceMember[], selfUid: string): NoteWorkspaceMember[] {
   return members
@@ -95,6 +104,24 @@ export function isSharedNote(note: StudioKeepNote, selfUid: string, members: Not
   return noteCollaboratorUids(note, members).length > 0;
 }
 
+/**
+ * Does this save invite the workspace? Only when the owner's note BECOMES "Workspace members"
+ * (a new note, or one that was "Only me"). Measured 15 Oct on the live web: re-running the fan-out
+ * on every save re-invited a member who had declined (a second bell, the note pending again), and
+ * would do the same to someone the owner had just removed or who had left the note. Choosing
+ * "Workspace members" again is the explicit way to ask everyone (that includes new members); one
+ * person is added from the picker.
+ */
+export function workspaceFanOutDue(
+  previous: Pick<StudioKeepNote, "visibility"> | undefined,
+  next: Pick<StudioKeepNote, "visibility" | "isDeleted" | "ownerUserId">,
+  selfUid: string
+): boolean {
+  if (next.visibility !== "workspace" || next.isDeleted) return false;
+  if (next.ownerUserId && next.ownerUserId !== selfUid) return false;
+  return !previous || previous.visibility !== "workspace";
+}
+
 /** "Workspace members" visibility: who still needs an invitation (not me, not suspended, not already in or pending). */
 export function workspaceInviteTargets(note: StudioKeepNote, members: NoteWorkspaceMember[], selfUid: string): string[] {
   const inOrPending = new Set([...noteCollaboratorUids(note, members), ...(note.pendingCollaboratorUserIds ?? [])]);
@@ -107,6 +134,8 @@ export type NoteInvite = {
   noteId: string;
   sourceUserId: string;
   sourceName: string;
+  /** The inviter's e-mail as the server stored it; shown with the name so two people of the same name differ. */
+  sourceEmail: string;
   title: string;
   preview: string;
   createdAtMillis: number | null;
@@ -126,6 +155,7 @@ export function noteInvitesFromResponse(data: unknown): NoteInvite[] {
         noteId: clean(row.noteId),
         sourceUserId: clean(row.sourceUserId),
         sourceName: clean(row.sourceName) || (sourceEmail ? sourceEmail.split("@")[0] : ""),
+        sourceEmail,
         title: clean(preview.title),
         preview: typeof preview.text === "string" ? preview.text : "",
         createdAtMillis: typeof row.createdAtMillis === "number" ? row.createdAtMillis : null,
