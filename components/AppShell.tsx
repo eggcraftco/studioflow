@@ -75,6 +75,8 @@ import {
 import {
   EMPTY_QUICK_CREATE_PROJECT_FORM,
   QuickCreateProjectDialog,
+  defaultQuickCreateDueDate,
+  quickCreateDefaultDays,
   quickCreateCustomerName,
   type QuickCreateProjectForm,
 } from "@/components/QuickCreateProjectDialog";
@@ -2415,7 +2417,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
     setQuickCreateForm({
       ...EMPTY_QUICK_CREATE_PROJECT_FORM,
-      dueDate: payload.deliveryDueDate ?? "",
+      // A raiser with its own date (the Schedule board's fortnight) keeps it;
+      // every other entry opens on the workspace's default delivery time, so
+      // the date in the box is the date that is saved.
+      dueDate: payload.deliveryDueDate || defaultQuickCreateDueDate(settings?.defaultDeliveryTime),
     });
     setQuickCreateOrigin(payload.origin ?? "toolbar");
     setQuickCreateError("");
@@ -2488,7 +2493,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       if (quickCreateForm.customerId && !quickCreateForm.newCustomerOpen) {
         input.customerId = quickCreateForm.customerId;
       }
-      if (quickCreateForm.dueDate) input.deliveryDueDate = quickCreateForm.dueDate;
+      // Always a date. A cleared box means the default the hint names, worked
+      // out here, rather than a server fallback the form never showed.
+      input.deliveryDueDate = quickCreateForm.dueDate || defaultQuickCreateDueDate(settings?.defaultDeliveryTime);
 
       const result = await createOrderFromWeb(currentWorkspace, input);
       const orderId = result.orderId || "";
@@ -2872,7 +2879,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <div
                   className="toolbar-net-strip"
                   aria-label={t("Workspace gross margin")}
-                  title={t("Sales minus base cost, fees and shipping. VAT and extra spending are not deducted — the Dashboard shows Net Profit.")}
+                  // The figure is the Finance Engine's gross margin (revenue −
+                  // base cost, product decision §2). This sentence used to say
+                  // fees and shipping were taken off too; they never were.
+                  title={t("Gross margin: sales minus base cost, for orders paid this month and this year. Platform fees, shipping, VAT, extra spending and refunds are not deducted, and cancelled or refunded orders are left out — the Dashboard shows Net Profit.")}
                 >
                   <span>
                     {t("Month Margin")}{" "}
@@ -3351,6 +3361,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       {quickCreateOpen && workspace ? (
         <QuickCreateProjectDialog
           form={quickCreateForm}
+          defaultDays={quickCreateDefaultDays(settings?.defaultDeliveryTime)}
           options={customerOptions}
           optionsLoading={customerOptionsLoading}
           saving={creatingOrder}

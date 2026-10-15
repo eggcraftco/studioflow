@@ -24358,15 +24358,34 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
   .bank-layout--drawer {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+  /* The panel's inline align-self: start is for the desktop column, where it
+     keeps the sticky panel at the top of the grid row. On a fixed sheet it
+     switches off the top/bottom stretch, so the sheet took its CONTENT's height
+     instead of the screen's: Chromium drew it 11px taller than a 390x844 screen
+     (footer buttons cut), and with less content the sheet stopped part-way down
+     with the list still showing under it — the narrow strip seen on a phone. */
   .bank-layout--drawer .bank-drawer {
     position: fixed !important;
     top: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
+    align-self: stretch !important;
+    height: auto !important;
     width: min(420px, 100vw);
     max-height: none !important;
     border-radius: 0 !important;
     z-index: 60;
+  }
+  .bank-layout--drawer .bank-drawer > div:nth-child(2) {
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+}
+/* A phone is narrower than the 420px panel plus a useful slice of the list:
+   at 430px a 10px strip of rows showed beside the sheet. Take the screen. */
+@media (max-width: 480px) {
+  .bank-layout--drawer .bank-drawer {
+    width: 100vw;
   }
 }
 

@@ -12,6 +12,7 @@ import { db } from "@/lib/firebase/client";
 import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
+  loadWorkspaceProductionStages,
   loadWorkspaceSettingsOverview,
   loadWorkspaceContext,
   workspaceAccessAllows,
@@ -22,12 +23,15 @@ import {
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
+import { productionStagesFromSettings } from "@/lib/studioflow/production";
+import { loadWorkspaceBlockHeadings } from "@/lib/studioflow/blockHeadings";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
   customExpenseTotal,
   customPendingTotal,
   dashboardCostTotal,
+  orderFinanceBlock,
   orderSalesTotal
 } from "@/lib/studioflow/finance";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
@@ -56,6 +60,11 @@ type FinanceTotals = {
   // nothing rolled in from hidden cards): they reconcile exactly to netProfit.
   breakdownBaseCost: number;
   expenses: number;
+  /** Money returned to customers on these orders; Net Profit deducts it. */
+  refunded: number;
+  /** Tax a marketplace collected (or nobody has claimed yet): on the order,
+   *  never in VAT due, so never deducted from profit. Shown, not reconciled. */
+  platformTax: number;
 };
 
 type ChartPoint = {
@@ -366,7 +375,12 @@ function totalsForOrders(
   settings: WorkspaceSettingsOverview | null,
   visibility: DashboardWidgetVisibility
 ): FinanceTotals {
-  return orders.reduce<FinanceTotals>((totals, order) => ({
+  // Platform Fee, Shipping, VAT and Refunds come from the same engine block as
+  // Net Profit, so the rows of the breakdown add up to it (review N02). They
+  // used to read the stored paymentFee / deliveryCost / taxAmount fields.
+  return orders.reduce<FinanceTotals>((totals, order) => {
+    const block = orderFinanceBlock(order, settings);
+    return {
     received: totals.received + order.paidAmount,
     baseCost: totals.baseCost + order.watchPurchasePrice,
     basicBalance: totals.basicBalance + order.paidAmount - order.watchPurchasePrice,
@@ -377,16 +391,19 @@ function totalsForOrders(
       showShipping: visibility.shipping,
       showTax: visibility.tax
     }),
-    fee: totals.fee + order.paymentFee,
-    shipping: totals.shipping + order.deliveryCost,
-    tax: totals.tax + order.taxAmount,
-    netProfit: totals.netProfit + adjustedDashboardNetProfit(order, settings),
+    fee: totals.fee + block.platformFee,
+    shipping: totals.shipping + block.deliveryCost,
+    tax: totals.tax + block.vatDue,
+    netProfit: totals.netProfit + block.netProfit,
     corporationTax: totals.corporationTax + (settings?.corporationTaxEnabled
       ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * (settings.corporationTaxRate ?? 19)) / 100
       : 0),
     breakdownBaseCost: totals.breakdownBaseCost + baseCostTotal(order, settings),
-    expenses: totals.expenses + customExpenseTotal(order, settings)
-  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0, corporationTax: 0, breakdownBaseCost: 0, expenses: 0 });
+    expenses: totals.expenses + customExpenseTotal(order, settings),
+    refunded: totals.refunded + (block.refunded || 0),
+    platformTax: totals.platformTax + (block.platformCollectedTax || 0)
+    };
+  }, { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0, corporationTax: 0, breakdownBaseCost: 0, expenses: 0, refunded: 0, platformTax: 0 });
 }
 
 function startOfDay(date: Date) {
@@ -647,8 +664,18 @@ export default function DashboardPage() {
           router.replace(pageAccessRedirectFor("/dashboard", loadedWorkspace.memberAccess));
           return;
         }
+        // "Active orders" is the Production board's live work, so the pill
+        // needs the board's stages and steps (review N04). A failed read
+        // leaves the default board, never a blank pill.
+        const production = Promise.all([
+          loadWorkspaceProductionStages(loadedWorkspace.id).catch(() => null),
+          loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null)
+        ]).then(([rawStages, headings]) => ({
+          stages: productionStagesFromSettings(rawStages),
+          steps: (headings?.customSteps ?? []).filter(step => Boolean(step.title?.trim()))
+        }));
         const [loadedCounts, loadedFinanceOrders, loadedSettings] = await Promise.all([
-          loadDashboardCounts(loadedWorkspace.id),
+          production.then(board => loadDashboardCounts(loadedWorkspace.id, undefined, "", board)),
           loadDashboardFinanceOrders(loadedWorkspace.id),
           loadWorkspaceSettingsOverview(loadedWorkspace.id)
         ]);
@@ -889,11 +916,11 @@ export default function DashboardPage() {
               <h1>{workspace.name}</h1>
               <p>
                 {workspace.billingPlanName} · {workspace.roleLabel} ·{" "}
-                <span title={t("Excludes Done, Completed and Cancelled orders.")}>{counts.activeOrderCount} {t("active orders")}</span>
+                <span title={t("Work still in the workshop: not delivered, not cancelled and not in the Production board's Done lane — the same count as Home and Production.")}>{counts.activeOrderCount} {t("active orders")}</span>
               </p>
             </div>
             <div className="compact-pill-row">
-              <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Open the orders list")}>{t("Orders")} {counts.orderCount}</button>
+              <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Every order outside Trash — the Orders list's All count.")}>{t("Orders")} {counts.orderCount}</button>
               <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/customers")} title={t("Open the customer directory")}>{t("Customers")} {counts.customerCount}</button>
               <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Delivery due within the next 14 days, excluding closed orders.")}>{t("Due soon")} {counts.dueSoonCount}</button>
               {canExportData ? (
@@ -1083,7 +1110,7 @@ export default function DashboardPage() {
                     {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} hint={t("VAT recorded on these orders and set aside — not yet paid to HMRC.")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT.")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
@@ -1159,6 +1186,17 @@ export default function DashboardPage() {
                     </div>
                     <div className="financial-breakdown-col">
                       <BreakdownRow label={t("VAT Amount")} amount={totals.tax} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      {/* Net Profit has always taken refunds off; the row did
+                          not exist, so the column could not be added up. */}
+                      {totals.refunded > 0.005 ? (
+                        <BreakdownRow label={t("Refunds")} amount={totals.refunded} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      ) : null}
+                      {/* Visibility line, not part of the sum: tax a shop says
+                          it charged that is not the studio's VAT (or nobody has
+                          said whose it is yet). It is never deducted. */}
+                      {totals.platformTax > 0.005 ? (
+                        <BreakdownRow label={t("Tax collected by a platform or awaiting review (not deducted)")} amount={totals.platformTax} hideNumbers={hideNumbers} settings={settings} />
+                      ) : null}
                       {settings?.corporationTaxEnabled ? (
                         <>
                           <BreakdownRow label={t("Profit before Corporation Tax")} amount={totals.netProfit} tone="green" hideNumbers={hideNumbers} settings={settings} />
@@ -1500,7 +1538,7 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
 }
 
 // Tax set-aside — built from the SAME per-order figures the dashboard already
-// aggregates (order taxAmount = output VAT, plus the Corporation Tax estimate
+// aggregates (the engine's VAT due = output VAT, plus the Corporation Tax estimate
 // from workspace settings), minus the reclaimable input VAT found in the bank
 // feed's VAT treatments — not a rough percentage of bank inflows. Bank
 // payments the owner categorised as "Tax" count as already paid.
@@ -1526,10 +1564,13 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
     for (const order of orders) {
       if (!order.paymentDate || order.paymentDate.getFullYear() !== year) continue;
       const ct = ctEnabled ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * ctRate) / 100 : 0;
-      vatYtd += order.taxAmount;
+      // VAT due from the engine, the figure the VAT card shows — not the
+      // stored taxAmount, which can hold a shop's tax that is not the studio's.
+      const vatDue = orderFinanceBlock(order, settings).vatDue;
+      vatYtd += vatDue;
       ctYtd += ct;
       if (order.paymentDate.getMonth() === month) {
-        vatMonth += order.taxAmount;
+        vatMonth += vatDue;
         ctMonth += ct;
       }
     }
@@ -2075,10 +2116,13 @@ function ExtraSpendingSection({
           });
         }
       };
-      if (incBase) push(t("Base Cost"), t("Purchase price"), o.watchPurchasePrice);
-      if (incShipping) push(t("Shipping"), t("Delivery cost"), o.deliveryCost);
-      if (incFee) push(t("Platform Fee"), t("Payment fee"), o.paymentFee);
-      if (incTax) push(t("Tax"), t("VAT / Tax"), o.taxAmount);
+      // The same engine figures the Dashboard's Platform Fee / Shipping / VAT
+      // cards show (review N02), not the order's stored fields.
+      const block = orderFinanceBlock(o, settings);
+      if (incBase) push(t("Base Cost"), t("Purchase price"), block.directCost);
+      if (incShipping) push(t("Shipping"), t("Delivery cost"), block.deliveryCost);
+      if (incFee) push(t("Platform Fee"), t("Payment fee"), block.platformFee);
+      if (incTax) push(t("Tax"), t("VAT / Tax"), block.vatDue);
       // Per-order spending headings (this order's own list, else workspace template).
       const orderExpenseRaw = (o.customFields["orderExpenseItemsJSON"] ?? "").trim();
       const titlesForOrder = orderExpenseRaw ? parseCustomExpenseTitles(orderExpenseRaw) : customTitles;
@@ -2102,7 +2146,7 @@ function ExtraSpendingSection({
       }
     }
     return out.sort((a, b) => b.total - a.total);
-  }, [filteredOrders, incBase, incShipping, incFee, incTax, customTitles, t]);
+  }, [filteredOrders, incBase, incShipping, incFee, incTax, customTitles, settings, t]);
 
   const totalAmount = useMemo(() => groups.reduce((s, g) => s + g.total, 0), [groups]);
   const entryCount = useMemo(() => groups.reduce((s, g) => s + g.entries.length, 0), [groups]);

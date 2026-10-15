@@ -52,6 +52,51 @@ export function quickCreateCustomerName(form: QuickCreateProjectForm): string {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** The date a new project is due when the person does not pick one: today plus
+ *  the workspace's "Default delivery time" (Settings › Defaults for new orders),
+ *  in the person's own timezone, never earlier than tomorrow.
+ *
+ *  The form used to open with the date EMPTY and leave the choice to the
+ *  server, which then wrote 45 days — a figure shown nowhere, and not the
+ *  setting either. Safari draws an empty date box with today's date in it, so
+ *  the form read "today" and saved six weeks out. The default is now in the
+ *  box before Create is pressed, and it is what is sent. */
+export function defaultQuickCreateDueDate(defaultDeliveryDays: number | null | undefined, now: Date = new Date()): string {
+  const raw = Number(defaultDeliveryDays);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(Math.max(Math.round(raw), 1), 730) : 30;
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  const month = String(day.getMonth() + 1).padStart(2, "0");
+  const date = String(day.getDate()).padStart(2, "0");
+  return `${day.getFullYear()}-${month}-${date}`;
+}
+
+/** The day count the default above stands for, for the hint under the field. */
+export function quickCreateDefaultDays(defaultDeliveryDays: number | null | undefined): number {
+  const raw = Number(defaultDeliveryDays);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(Math.max(Math.round(raw), 1), 730) : 30;
+}
+
+/** Whole days from the person's today to a yyyy-MM-dd date, or null. */
+function daysFromToday(value: string, now: Date = new Date()): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const due = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((due.getTime() - today.getTime()) / 86400000);
+}
+
+/** The sentence under the date: what the date in the box means, in days. */
+export function quickCreateDueHint(dueDate: string, defaultDays: number, t: (text: string) => string): string {
+  const days = daysFromToday(dueDate);
+  if (!dueDate || days === defaultDays) {
+    return t("Starts at your default delivery time ({days} days from today). Pick another date if you need to.")
+      .replace("{days}", String(defaultDays));
+  }
+  if (days === null) return "";
+  if (days === 1) return t("Tomorrow");
+  return t("Due {days} days from today.").replace("{days}", String(days));
+}
+
 /** Tomorrow, in the person's own timezone. An order's due date is stored as a
  * count of days after the payment date and zero already means "no due date", so
  * the schema's earliest expressible date is tomorrow. The picker says so rather
@@ -66,6 +111,7 @@ function earliestDueDate(): string {
 
 export function QuickCreateProjectDialog({
   form,
+  defaultDays,
   options,
   optionsLoading,
   saving,
@@ -76,6 +122,8 @@ export function QuickCreateProjectDialog({
   onSubmit
 }: {
   form: QuickCreateProjectForm;
+  /** The workspace's default delivery time in days — what an untouched date means. */
+  defaultDays: number;
   options: CustomerPickerOption[];
   optionsLoading: boolean;
   saving: boolean;
@@ -335,6 +383,9 @@ export function QuickCreateProjectDialog({
               disabled={saving}
               onChange={event => update({ dueDate: event.target.value })}
             />
+            <span className="quick-create-hints">
+              <span>{quickCreateDueHint(form.dueDate, defaultDays, t)}</span>
+            </span>
           </label>
 
           {error ? <p className="layout-error" style={{ margin: 0 }}>{t(error)}</p> : null}

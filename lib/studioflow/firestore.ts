@@ -28,6 +28,9 @@ import {
 } from "@/lib/studioflow/workspaceResolution";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
 import { mapWorkDays, type WorkDayDetail } from "@/lib/studioflow/workDays";
+import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
+import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
+import { orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -1307,13 +1310,25 @@ export function workspaceOrderScope(workspace: WorkspaceContext | null | undefin
   return requiresAssignedToSelfFilter(workspace) ? "assigned" : "workspace";
 }
 
-export async function loadDashboardCounts(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardCounts> {
-  if (usesAssignedOrderScope(workspace, uid)) return loadAssignedDashboardCounts(companyId, workspace, uid);
+/** The workspace's production board, for counting live work the board's way. */
+export type DashboardProductionContext = { stages: ProductionStage[]; steps: HeadingItem[] };
+
+export async function loadDashboardCounts(
+  companyId: string,
+  workspace?: WorkspaceContext | null,
+  uid = "",
+  production?: DashboardProductionContext | null
+): Promise<DashboardCounts> {
+  if (usesAssignedOrderScope(workspace, uid)) return loadAssignedDashboardCounts(companyId, workspace, uid, production);
   const ordersQuery = query(collection(db, "siparisler"), where("companyId", "==", companyId));
   const customersQuery = query(collection(db, "musteriler"), where("companyId", "==", companyId));
 
-  const [ordersCountSnapshot, customersCountSnapshot, sampledOrdersSnapshot] = await Promise.all([
+  const [ordersCountSnapshot, trashCountSnapshot, customersCountSnapshot, sampledOrdersSnapshot] = await Promise.all([
     getCountFromServer(ordersQuery),
+    // Trash is not an order the person has: the Orders list leaves it out, and
+    // the pill counted it (86 on the Dashboard beside 82 in the list — review
+    // N04). The same aggregate Plan & Access already reads for its total.
+    getCountFromServer(query(collection(db, "siparisler"), where("companyId", "==", companyId), where("isDeleted", "==", true))),
     getCountFromServer(customersQuery),
     // 1000, not 200: the pills silently understated for workspaces past the
     // sample size (the dashboard report's caveat). Count aggregates stay exact.
@@ -1321,9 +1336,9 @@ export async function loadDashboardCounts(companyId: string, workspace?: Workspa
   ]);
 
   return {
-    orderCount: ordersCountSnapshot.data().count,
+    orderCount: Math.max(0, ordersCountSnapshot.data().count - trashCountSnapshot.data().count),
     customerCount: customersCountSnapshot.data().count,
-    ...tallyDashboardOrders(sampledOrdersSnapshot.docs),
+    ...tallyDashboardOrders(sampledOrdersSnapshot.docs, production),
     sampledOrderCount: sampledOrdersSnapshot.size
   };
 }
@@ -1333,7 +1348,7 @@ export async function loadDashboardCounts(companyId: string, workspace?: Workspa
  * Every order in that scope is read, so the counts are exact. The customer count is
  * asked only when the member's Customers area is on — Workflow Only has it off.
  */
-async function loadAssignedDashboardCounts(companyId: string, workspace: WorkspaceContext | null | undefined, uid: string): Promise<DashboardCounts> {
+async function loadAssignedDashboardCounts(companyId: string, workspace: WorkspaceContext | null | undefined, uid: string, production?: DashboardProductionContext | null): Promise<DashboardCounts> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const [ordersSnapshot, customerCount] = await Promise.all([
     getDocs(workspaceOrderQuery(companyId, workspace, uid)),
@@ -1342,14 +1357,14 @@ async function loadAssignedDashboardCounts(companyId: string, workspace: Workspa
       : Promise.resolve(0)
   ]);
   return {
-    orderCount: ordersSnapshot.size,
+    orderCount: ordersSnapshot.docs.filter(orderDocument => orderDocument.data().isDeleted !== true).length,
     customerCount,
-    ...tallyDashboardOrders(ordersSnapshot.docs),
+    ...tallyDashboardOrders(ordersSnapshot.docs, production),
     sampledOrderCount: ordersSnapshot.size
   };
 }
 
-function tallyDashboardOrders(orderDocuments: QueryDocumentSnapshot<DocumentData>[]) {
+function tallyDashboardOrders(orderDocuments: QueryDocumentSnapshot<DocumentData>[], production?: DashboardProductionContext | null) {
   let activeOrderCount = 0;
   let completedOrderCount = 0;
   let cancelledOrderCount = 0;
@@ -1364,14 +1379,30 @@ function tallyDashboardOrders(orderDocuments: QueryDocumentSnapshot<DocumentData
     const status = stringValue(data.status, "").toLowerCase();
     if (status === "cancelled" || status === "canceled") cancelledOrderCount += 1;
     if (status === "done" || status === "completed") completedOrderCount += 1;
-    if (!ACTIVE_CLOSED_STATUSES.has(status)) activeOrderCount += 1;
+    // With the board's stages at hand, "active" is the board's live work —
+    // the rule Home and Production use (productionWorkIsLive): not cancelled,
+    // not delivered, not in the Done lane. Without them, the old status-word
+    // rule stands for the screens that still call this without the board.
+    const live = production
+      ? !orderIsCancelled({ status: stringValue(data.status, "") } as FilterableOrder) &&
+        productionWorkIsLive({
+          designStatus: stringValue(data.designStatus, ""),
+          status: stringValue(data.status, ""),
+          extraStatuses: stringMapValue(data.extraStatuses),
+          isDelivered: booleanValue(data.isDelivered, false),
+          isDispatched: booleanValue(data.isDispatched, false),
+          productionStageOverride: stringValue(data.productionStageOverride, ""),
+          productionBlocker: productionBlockerValue(data.productionBlocker)
+        }, production.stages, production.steps)
+      : !ACTIVE_CLOSED_STATUSES.has(status);
+    if (live) activeOrderCount += 1;
 
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
     const dueDate = paymentDate && deliveryTime > 0
       ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
       : null;
-    if (dueDate && dueDate >= now && dueDate <= inFourteenDays && !ACTIVE_CLOSED_STATUSES.has(status)) {
+    if (dueDate && dueDate >= now && dueDate <= inFourteenDays && live) {
       dueSoonCount += 1;
     }
 

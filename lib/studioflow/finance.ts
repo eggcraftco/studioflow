@@ -200,6 +200,23 @@ export function adjustedDashboardNetProfit(order: DashboardFinanceOrder, setting
   return blockFor(order, settings).netProfit;
 }
 
+/**
+ * The whole engine block for one order — what a screen should add up when it
+ * shows the parts of Net Profit next to Net Profit.
+ *
+ * The Dashboard used to take the profit from the engine and its Platform Fee,
+ * Shipping and VAT cards from the order's stored `paymentFee`, `deliveryCost`
+ * and `taxAmount`. Those stored fields are whatever a client wrote at the time
+ * (a fee worked out on a deposit, VAT on the full price of a margin-scheme sale,
+ * a shop's tax that is not the studio's to declare), and refunds were deducted
+ * from the profit without a row of their own. So "Revenue − the rows" did not
+ * come to the profit printed under it (review N02). Every row now comes from
+ * the same block the profit does.
+ */
+export function orderFinanceBlock(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
+  return blockFor(order, settings);
+}
+
 export function dashboardCostTotal(
   order: DashboardFinanceOrder,
   settings: WorkspaceSettingsOverview | null,

@@ -2,13 +2,14 @@
 
 import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
-import { resolveProductionStage } from "@/lib/studioflow/production";
+import { productionWorkIsLive, resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeActivityIcon, HomeTileIcon, type HomeActionIconName, type HomeActivityIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
 import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
   customExpenseTotal,
+  orderFinanceBlock,
   orderSalesTotal,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
@@ -122,9 +123,14 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   // Home was leaving the extra spending out and reporting a higher profit than
   // the Dashboard for the same orders.
   const costs = orders.reduce((sum, o) => sum + baseCostTotal(o, data.settings) + customExpenseTotal(o, data.settings), 0);
-  const fees = orders.reduce((sum, o) => sum + o.paymentFee, 0);
-  const shipping = orders.reduce((sum, o) => sum + o.deliveryCost, 0);
-  const vat = orders.reduce((sum, o) => sum + o.taxAmount, 0);
+  // Fee, shipping, VAT and refunds from the engine block the profit comes
+  // from, so "Revenue − these = Net profit" holds on the card (review N02/N18).
+  // They used to read the order's stored paymentFee / deliveryCost / taxAmount.
+  const blocks = orders.map((o) => orderFinanceBlock(o, data.settings));
+  const fees = blocks.reduce((sum, b) => sum + b.platformFee, 0);
+  const shipping = blocks.reduce((sum, b) => sum + b.deliveryCost, 0);
+  const vat = blocks.reduce((sum, b) => sum + b.vatDue, 0);
+  const refunds = blocks.reduce((sum, b) => sum + (b.refunded || 0), 0);
   const profit = orders.reduce((sum, o) => sum + adjustedDashboardNetProfit(o, data.settings), 0);
 
   // 1x1: the one number, the two that qualify it, and how much of revenue the
@@ -161,6 +167,9 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
     { label: "Platform fees", value: fees },
     { label: "Shipping", value: shipping },
     { label: "VAT", value: vat },
+    // Net profit has always deducted refunds; without the row the waterfall
+    // did not add up whenever an order had one.
+    ...(refunds > 0.005 ? [{ label: "Refunds", value: refunds }] : []),
   ];
 
   // 2x1: the four headline figures, then how revenue becomes profit.
@@ -210,7 +219,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
       <div className="home-money-panels">
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Revenue & profit")}</p>
-          <RevenueProfitChart orders={orders} t={t} moneySettings={moneySettings} />
+          <RevenueProfitChart orders={orders} settings={data.settings} t={t} moneySettings={moneySettings} />
         </div>
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Cost breakdown")}</p>
@@ -274,8 +283,9 @@ function MoneyTile({
  *  what the courier took, what the taxman is owed. */
 const COST_ICONS: HomeTileIconName[] = ["order", "percent", "out", "calculator"];
 
-function RevenueProfitChart({ orders, t, moneySettings }: {
+function RevenueProfitChart({ orders, settings, t, moneySettings }: {
   orders: HomeData["financeOrders"];
+  settings: HomeData["settings"];
   t: (text: string) => string;
   moneySettings: StudioMoneySettings;
 }) {
@@ -293,9 +303,10 @@ function RevenueProfitChart({ orders, t, moneySettings }: {
     const weeksAgo = Math.floor((now.getTime() - order.paymentDate.getTime()) / (7 * 24 * 3600 * 1000));
     if (weeksAgo < 0 || weeksAgo >= weeks) continue;
     const bucket = buckets[weeks - 1 - weeksAgo];
-    const value = order.paidAmount + order.remainingAmount;
-    bucket.revenue += value;
-    bucket.profit += value - order.watchPurchasePrice - order.paymentFee - order.deliveryCost - order.taxAmount;
+    // The engine's revenue and Net Profit — the card's own headline figures —
+    // not a third formula that skipped extra spending, refunds and receivables.
+    bucket.revenue += orderSalesTotal(order);
+    bucket.profit += adjustedDashboardNetProfit(order, settings);
   }
 
   if (buckets.every((b) => b.revenue === 0)) {
@@ -902,6 +913,14 @@ function Donut({ share }: { share: number }) {
 
 /* ------------------------------------------------------ Orders/production */
 
+/** The orders Home counts as work: not delivered, not in the Production board's
+ *  Done lane (cancelled and Trash never reach `scheduleOrders`). One rule for
+ *  the Orders & production card, its heading count and the Schedule card. */
+export function homeLiveWork(data: Pick<HomeData, "scheduleOrders" | "productionStages" | "productionSteps">) {
+  return data.scheduleOrders.filter((order) =>
+    productionWorkIsLive(order, data.productionStages, data.productionSteps));
+}
+
 /** A stage's colour follows its kind, not its position — a workspace may define
  *  any number of lanes and an index-keyed palette runs out. */
 const STAGE_TONE: Record<string, string> = {
@@ -917,7 +936,9 @@ const STAGE_ICON: Record<string, HomeTileIconName> = {
 };
 
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
-  const open = data.scheduleOrders.filter((order) => !order.isDelivered);
+  // Live work by the board's rule: not delivered and not in its Done lane. A job
+  // that left the workshop is neither "active" nor late (review N04).
+  const open = homeLiveWork(data);
   if (open.length === 0) return null;
 
   // The stage is derived from the order's own steps against the workspace's own
@@ -1098,8 +1119,10 @@ export function homeWeekRangeLabel(locale?: string) {
 }
 
 export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
-  // Dates and deadlines only — never production status again (§10).
-  const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
+  // Dates and deadlines only — never production status again (§10). Which
+  // orders are still due is the board's question, though: a job that has left
+  // the workshop has no deadline left to miss (review N04).
+  const open = homeLiveWork(data).filter((order) => order.dueDate);
   if (open.length === 0) return null;
   const upcoming = [...open].sort((a, b) => (a.dueDate!.getTime()) - (b.dueDate!.getTime()));
 
@@ -1407,7 +1430,7 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
   const returning = customers.filter((customer) => (customer.orderCount ?? 0) > 1).length;
   const existing = Math.max(0, customers.length - newThisMonth - returning);
   const activeNames = new Set(
-    data.scheduleOrders.filter((order) => !order.isDelivered).map((order) => order.customerName.toLowerCase()),
+    homeLiveWork(data).map((order) => order.customerName.toLowerCase()),
   );
   const withActive = customers.filter((customer) => activeNames.has(customer.name.toLowerCase())).length;
 

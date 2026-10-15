@@ -195,14 +195,16 @@ export function ProductionContent({
           partsReady: materialValues.length > 0 && materialValues.every(Boolean),
           delivered: resolved.delivered,
           dueDate,
-          isLate: daysLeft !== null && daysLeft < 0 && !order.isDelivered,
+          // A job in Done has left the workshop: it has no deadline left to
+          // miss, so the Overdue filter no longer lists it (review N04).
+          isLate: daysLeft !== null && daysLeft < 0 && !order.isDelivered && resolved.stageId !== doneStageId,
           // At risk: due within three days and demonstrably not finished, or
           // flagged by hand on the order.
           isAtRisk: (order.risk !== "" && order.risk !== "None")
             || (daysLeft !== null && daysLeft >= 0 && daysLeft <= 3 && !finished && !order.isDelivered)
         };
       });
-  }, [orders, stages, steps, showDone]);
+  }, [orders, stages, steps, showDone, doneStageId]);
 
   const filteredCards = useMemo(() => {
     const query = search.trim().toLowerCase();

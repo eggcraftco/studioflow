@@ -21,6 +21,7 @@ import {
   QuickActionsCardBody,
   RecentActivityCardBody,
   ScheduleCardBody,
+  homeLiveWork,
   homeWeekRangeLabel,
   type CardBodyProps,
   type QuickActionId,
@@ -414,10 +415,11 @@ export default function HomePage() {
       }
       case "banking": return data.bankTransactions.length === 0;
       case "inventory": return !data.inventory;
-      // Both read scheduleOrders, so the empty test must ask that list, not the
-      // lighter one — otherwise a card renders empty while its own data is there.
-      case "ordersProduction":
-      case "schedule": return data.scheduleOrders.length === 0;
+      // Both draw the live work (homeLiveWork), so the empty test asks exactly
+      // that — a card whose orders have all left the workshop says "Nothing
+      // here yet" rather than rendering blank.
+      case "ordersProduction": return homeLiveWork(data).length === 0;
+      case "schedule": return homeLiveWork(data).every((order) => !order.dueDate);
       case "recentActivity": return data.activity.length === 0;
       case "customers": return data.customers.length === 0;
       case "files": return data.files.length === 0;
@@ -486,7 +488,7 @@ export default function HomePage() {
                 // heading, exactly as the sheet reads it.
                 placement.id === "ordersProduction" && drawnOf(index) !== "1x1"
                   ? t("{count} active").replace("{count}",
-                      String(data.scheduleOrders.filter((order) => !order.isDelivered).length))
+                      String(homeLiveWork(data).length))
                   // The wide stock card names what it is a view of, as the
                   // sheet does — the figures alone do not say.
                   : placement.id === "inventory" && drawnOf(index) !== "1x1"

@@ -220,6 +220,28 @@ export function resolveProductionStage(
   return { ...base, stageId: firstActive.id, source: "auto", blocker: null };
 }
 
+/**
+ * Whether an order is still work in the workshop — the board's own answer.
+ *
+ * Done on the board means the job LEFT the workshop (dispatched, or moved to
+ * Done by hand); delivered means it arrived. Neither is work to do, and neither
+ * is late. Home counted every undelivered order as "active" and as overdue, so
+ * a 2024 job that went out long ago and was never marked delivered sat on Home
+ * as "744d late" while the Production board filed it under Done (review N04).
+ * Home, its Schedule card and the Dashboard pill now ask this, so the three
+ * agree with the board. Cancelled orders and Trash are the caller's to drop
+ * first: they never reach a lane.
+ */
+export function productionWorkIsLive(
+  order: ProductionOrderLike,
+  stages: ProductionStage[],
+  steps: HeadingItem[]
+): boolean {
+  if (order.isDelivered === true) return false;
+  const resolved = resolveProductionStage(order, stages, steps);
+  return stages.find(stage => stage.id === resolved.stageId)?.kind !== "done";
+}
+
 /** Green under 80% of the WIP limit, amber approaching it, red over. */
 export function wipLoadLevel(count: number, limit: number): "none" | "ok" | "near" | "over" {
   if (!limit || limit <= 0) return "none";

@@ -136,6 +136,9 @@ const LOADERS = {
 const WHOLE = {
   loadDashboardCounts: [
     { op: "count", path: "siparisler", filters: [["companyId", "==", WS]], limit: null },
+    // 15 Oct (review N04): the Orders pill leaves Trash out — the same
+    // workspace-wide aggregate Plan & Access reads. Still the whole workspace.
+    { op: "count", path: "siparisler", filters: [["companyId", "==", WS], ["isDeleted", "==", true]], limit: null },
     { op: "count", path: "musteriler", filters: [["companyId", "==", WS]], limit: null },
     { op: "getDocs", path: "siparisler", filters: [["companyId", "==", WS]], limit: 1000 }
   ],
